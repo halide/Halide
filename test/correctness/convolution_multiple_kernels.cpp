@@ -41,7 +41,8 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        blur.gpu_tile(x, y, 16, 16);
+        Var tx("tx"), ty("ty");
+        blur.gpu_tile(x, y, tx, ty, 16, 16);
     } else if (target.has_feature(Target::HVX_64)) {
         blur.hexagon().vectorize(x, 32);
     } else if (target.has_feature(Target::HVX_128)) {

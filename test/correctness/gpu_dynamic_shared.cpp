@@ -9,13 +9,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Func f, g;
-    Var x;
+    Func f("f"), g("g");
+    Var x("x"), tx("tx");
 
     f(x) = x;
     g(x) = f(x) + f(2*x);
 
-    Var tx;
     g.gpu_tile(x, tx, 16);
     f.compute_at(g, x).gpu_threads(x);
 

@@ -152,7 +152,11 @@ ostream &operator<<(ostream &out, const ForType &type) {
     case ForType::Vectorized:
         out << "vectorized";
         break;
-    default:
+    case ForType::GPUBlock:
+        out << "gpu_block";
+        break;
+    case ForType::GPUThread:
+        out << "gpu_thread";
         break;
     }
     return out;

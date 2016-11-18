@@ -11,6 +11,7 @@
 #include "Bounds.h"
 #include "BoundsInference.h"
 #include "CSE.h"
+#include "CanonicalizeGPUVars.h"
 #include "Debug.h"
 #include "DebugToFile.h"
 #include "DeepCopy.h"
@@ -100,6 +101,10 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     debug(1) << "Creating initial loop nests...\n";
     Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
+
+    debug(1) << "Canonicalizing GPU var names...\n";
+    s = canonicalize_gpu_vars(s);
+    debug(2) << "Lowering after canonicalizing GPU var names:\n" << s << '\n';
 
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";

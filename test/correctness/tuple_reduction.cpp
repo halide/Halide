@@ -61,15 +61,15 @@ int main(int argc, char **argv) {
             f.hexagon(y).vectorize(x, 32);
         }
         for (int i = 0; i < 10; i ++) {
-	    if (i & 1) {
+            if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, bx, by, tx, ty, 16, 16);
                 } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
                     f.update(i).hexagon(y).vectorize(x, 32);
                 }
-	    } else {
-		f.update(i);
-	    }
+            } else {
+                f.update(i);
+            }
         }
 
         Realization result = f.realize(1024, 1024);

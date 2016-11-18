@@ -282,7 +282,9 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].is_pure() && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
+            if (!dims[i].is_pure() && var.is_rvar &&
+                (t == ForType::Vectorized || t == ForType::Parallel ||
+                 t == ForType::GPUBlock || t == ForType::GPUThread)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << stage_name
                     << ", marking var " << var.name()
@@ -1429,15 +1431,12 @@ Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
 Stage &Stage::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_type(tx, ForType::GPUThread);
-    parallel(tx);
     return *this;
 }
 
 Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
-    parallel(tx);
-    parallel(ty);
     return *this;
 }
 
@@ -1448,16 +1447,12 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI de
     set_dim_type(tx, ForType::GPUThread);
     set_dim_type(ty, ForType::GPUThread);
     set_dim_type(tz, ForType::GPUThread);
-    parallel(tx);
-    parallel(ty);
-    parallel(tz);
     return *this;
 }
 
 Stage &Stage::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
     set_dim_device_api(bx, device_api);
     set_dim_type(bx, ForType::GPUBlock);
-    parallel(bx);
     return *this;
 }
 
@@ -1466,8 +1461,6 @@ Stage &Stage::gpu_blocks(VarOrRVar bx, VarOrRVar by, DeviceAPI device_api) {
     set_dim_device_api(by, device_api);
     set_dim_type(bx, ForType::GPUBlock);
     set_dim_type(by, ForType::GPUBlock);
-    parallel(bx);
-    parallel(by);
     return *this;
 }
 
@@ -1478,16 +1471,13 @@ Stage &Stage::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI dev
     set_dim_type(bx, ForType::GPUBlock);
     set_dim_type(by, ForType::GPUBlock);
     set_dim_type(bz, ForType::GPUBlock);
-    parallel(bx);
-    parallel(by);
-    parallel(bz);
     return *this;
 }
 
 Stage &Stage::gpu_single_thread(VarOrRVar block, DeviceAPI device_api) {
     split(Var::outermost(), Var::outermost(), block, 1);
     set_dim_device_api(block, device_api);
-    parallel(block);
+    set_dim_type(block, ForType::GPUBlock);
     return *this;
 }
 
@@ -1513,8 +1503,6 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
     set_dim_device_api(tx, device_api);
     set_dim_type(bx, ForType::GPUBlock);
     set_dim_type(tx, ForType::GPUThread);
-    parallel(bx);
-    parallel(tx);
     return *this;
 }
 
@@ -1539,10 +1527,6 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
     set_dim_type(by, ForType::GPUBlock);
     set_dim_type(tx, ForType::GPUThread);
     set_dim_type(ty, ForType::GPUThread);
-    parallel(bx);
-    parallel(by);
-    parallel(tx);
-    parallel(ty);
     return *this;
 }
 
@@ -1578,19 +1562,13 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
     set_dim_device_api(tz, device_api);
+
     set_dim_type(bx, ForType::GPUBlock);
     set_dim_type(by, ForType::GPUBlock);
     set_dim_type(bz, ForType::GPUBlock);
     set_dim_type(tx, ForType::GPUThread);
     set_dim_type(ty, ForType::GPUThread);
     set_dim_type(tz, ForType::GPUThread);
-
-    parallel(bx);
-    parallel(by);
-    parallel(bz);
-    parallel(tx);
-    parallel(ty);
-    parallel(tz);
     return *this;
 }
 

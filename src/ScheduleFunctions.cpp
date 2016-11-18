@@ -759,6 +759,8 @@ private:
             loop_level = LoopLevel(it->second, Var(var));
         }
         Site s = {f->for_type == ForType::Parallel ||
+                  f->for_type == ForType::GPUBlock ||
+                  f->for_type == ForType::GPUThread ||
                   f->for_type == ForType::Vectorized,
                   loop_level};
         sites.push_back(s);

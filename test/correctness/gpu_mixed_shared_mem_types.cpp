@@ -30,9 +30,9 @@ int main(int argc, char **argv) {
                     Float(32)};
     Func funcs[n_types];
 
-    Var x, tx;
+    Var x("x"), tx("tx");
 
-    Func out;
+    Func out("out");
 
     Type result_type;
     if (t.has_feature(Target::Metal)) {

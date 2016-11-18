@@ -216,7 +216,9 @@ private:
         // threads outside the loop, and increment it inside the
         // body.
         bool update_active_threads = (op->device_api == DeviceAPI::Hexagon ||
-                                      op->for_type == ForType::Parallel);
+                                      op->for_type == ForType::Parallel ||
+                                      op->for_type == ForType::GPUBlock ||
+                                      op->for_type == ForType::GPUThread);
 
         Expr state = Variable::make(Handle(), "profiler_state");
         Stmt incr_active_threads =
