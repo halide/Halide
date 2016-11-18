@@ -2,23 +2,25 @@
 
 namespace {
 
+// TODO: convert to new-style once Input<Buffer> added
 class ReactionDiffusion2Init : public Halide::Generator<ReactionDiffusion2Init> {
 public:
-    Input<float> cx{"cx"};
-    Input<float> cy{"cy"};
-    Output<Func> initial{"initial", Float(32), 3};
+    Param<float> cx{"cx"};
+    Param<float> cy{"cy"};
 
-    void generate() {
-        // The initial state is a quantity of three chemicals present
-        // at each pixel near the boundaries
-        Expr dx = (x - cx), dy = (y - cy);
-        Expr r = dx * dx + dy * dy;
-        Expr mask = r < 200 * 200;
+    Func build() {
+        Func initial;
         initial(x, y, c) = Halide::random_float();
-    }
 
-    void schedule() {
-        // nothing
+        // schedule 
+        if (get_target().has_gpu_feature()) {
+            initial.reorder(c, x, y).bound(c, 0, 3).vectorize(c).gpu_tile(x, y, 4, 4);
+            initial.output_buffer().set_bounds(2, 0, 3);
+            initial.output_buffer().set_stride(0, 3);
+            initial.output_buffer().set_stride(2, 1);
+        }
+        
+        return initial;
     }
 
 private:
@@ -104,17 +106,34 @@ public:
         new_state(clobber.x, clobber.y, c) = select(radius < 400.0f, 1.0f, new_state(clobber.x, clobber.y, c));
 
         // schedule
+        state.set_bounds(2, 0, 3);
         new_state.reorder(c, x, y).bound(c, 0, 3).unroll(c);
 
-        Var yi;
-        new_state.split(y, y, yi, 64).parallel(y);
+        if (get_target().has_gpu_feature()) {
+            blur.reorder(c, x, y).vectorize(c);
+            blur.compute_at(new_state, Var::gpu_threads());
+            new_state.gpu_tile(x, y, 8, 2);
+            new_state.update(0).reorder(c, x).unroll(c);
+            new_state.update(1).reorder(c, x).unroll(c);
+            new_state.update(2).reorder(c, y).unroll(c);
+            new_state.update(3).reorder(c, y).unroll(c);
+            new_state.update(4).reorder(c, clobber.x).unroll(c);
 
-        blur.compute_at(new_state, yi);
-        clamped.store_at(new_state, y).compute_at(new_state, yi);
+            new_state.update(0).gpu_tile(x, 8);
+            new_state.update(1).gpu_tile(x, 8);
+            new_state.update(2).gpu_tile(y, 8);
+            new_state.update(3).gpu_tile(y, 8);
+            new_state.update(4).gpu_tile(clobber.x, clobber.y, 1, 1);
+        } else {
+            Var yi;
+            new_state.split(y, y, yi, 64).parallel(y);
 
-        new_state.vectorize(x, 4);
-        blur.vectorize(x, 4);
-        state.set_bounds(2, 0, 3);
+            blur.compute_at(new_state, yi);
+            clamped.store_at(new_state, y).compute_at(new_state, yi);
+
+            new_state.vectorize(x, 4);
+            blur.vectorize(x, 4);
+        }
 
         return new_state;
     }
@@ -126,12 +145,14 @@ private:
 
 HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Update, "reaction_diffusion_2_update")
 
+// TODO: convert to new-style once Input<Buffer> added
 class ReactionDiffusion2Render : public Halide::Generator<ReactionDiffusion2Render> {
 public:
-    Input<Func> state{"state", Float(32), 3};
-    Output<Func> render{"render", Int(32), 2};
+    ImageParam state{Float(32), 3, "state"};
 
-    void generate() {
+    Func build() {
+        Func render;
+
         Func contour;
         contour(x, y, c) = pow(state(x, y, c) * (1 - state(x, y, c)) * 4, 8);
 
@@ -141,18 +162,31 @@ public:
         Expr G = (c0 + c1 + c2)/3;
         Expr B = max(c0, max(c1, c2));
 
+        // TODO: ugly hack to rearrange output
+        const int32_t kRFactor = get_target().has_gpu_feature() ? (1 << 16) : (1 << 0);
+        const int32_t kGFactor = get_target().has_gpu_feature() ? (1 << 8) : (1 << 8);
+        const int32_t kBFactor = get_target().has_gpu_feature() ? (1 << 0) : (1 << 16);
+
         Expr alpha = cast<int32_t>(255 << 24);
-        Expr red = cast<int32_t>(R * 255) * (1 << 0);
-        Expr green = cast<int32_t>(G * 255) * (1 << 8);
-        Expr blue = cast<int32_t>(B * 255) * (1 << 16);
+        Expr red = cast<int32_t>(R * 255) * kRFactor;
+        Expr green = cast<int32_t>(G * 255) * kGFactor;
+        Expr blue = cast<int32_t>(B * 255) * kBFactor;
 
         render(x, y) = cast<int32_t>(alpha + red + green + blue);
-    }
 
-    void schedule() {
-        Func(render).vectorize(x, natural_vector_size<int32_t>());
-        Var yi;
-        Func(render).split(y, y, yi, 64).parallel(y);
+        // schedule
+        if (get_target().has_gpu_feature()) {
+            state.set_bounds(2, 0, 3);
+            state.set_stride(2, 1);
+            state.set_stride(0, 3);
+            render.gpu_tile(x, y, 32, 4);
+        } else {
+            render.vectorize(x, 4);
+            Var yi;
+            render.split(y, y, yi, 64).parallel(y);
+        }
+
+        return render;
     }
 
 private:
