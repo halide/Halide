@@ -211,8 +211,8 @@ extern "C" {
 // - A call to halide_acquire_metal_context is followed by a matching call to
 //   halide_release_metal_context. halide_acquire_metal_context should block while a
 //   previous call (if any) has not yet been released via halide_release_metal_context.
-WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_ret,
-                                      mtl_command_queue *&queue_ret, bool create) {
+WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
+                                      mtl_command_queue **queue_ret, bool create) {
     halide_assert(user_context, &thread_lock != NULL);
     while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
@@ -243,8 +243,8 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
     // ensure the queue has as well.
     halide_assert(user_context, (device == 0) || (queue != 0));
 
-    device_ret = device;
-    queue_ret = queue;
+    *device_ret = device;
+    *queue_ret = queue;
     return 0;
 }
 
@@ -277,7 +277,7 @@ public:
 WEAK void MetalContextHolder::save(void *user_context_arg, bool create) {
     user_context = user_context_arg;
     pool = create_autorelease_pool();
-    error = halide_metal_acquire_context(user_context, device, queue, create);
+    error = halide_metal_acquire_context(user_context, &device, &queue, create);
 }
 
 WEAK void MetalContextHolder::restore() {
@@ -495,7 +495,7 @@ WEAK int halide_metal_device_release(void *user_context) {
     int error;
     mtl_device *acquired_device;
     mtl_command_queue *acquired_queue;
-    error = halide_metal_acquire_context(user_context, acquired_device, acquired_queue, false);
+    error = halide_metal_acquire_context(user_context, &acquired_device, &acquired_queue, false);
     if (error != 0) {
         return error;
     }
