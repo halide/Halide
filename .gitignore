@@ -52,6 +52,10 @@ src/test_*.s
 *.dSYM
 .*.swp
 Doxyfile
+tools/objc/BUILD
+tools/objc/*.mobileprovision
+*.xcworkspacedata
+
 
 *.txt.user*
 .idea
