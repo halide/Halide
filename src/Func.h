@@ -216,6 +216,7 @@ public:
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                       VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
                       DeviceAPI device_api = DeviceAPI::Default_GPU);
+
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, VarOrRVar tx, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);

@@ -1437,6 +1437,8 @@ Stage &Stage::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
 Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
+    set_dim_type(tx, ForType::GPUThread);
+    set_dim_type(ty, ForType::GPUThread);
     return *this;
 }
 
