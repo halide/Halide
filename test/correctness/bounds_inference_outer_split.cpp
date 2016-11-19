@@ -7,6 +7,8 @@ using namespace Halide::Internal;
 
 class CheckAllocationSize : public IRVisitor {
     
+    using IRVisitor::visit;
+	
     void visit(const Allocate *op) {
         if (op->name == "input_cpy") {
             result = op->extents[0];
