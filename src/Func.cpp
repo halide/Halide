@@ -1605,8 +1605,8 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
 }
 
 Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    VarOrRVar bx("__block_id_x", x.is_rvar),
-        tx("__thread_id_x", x.is_rvar);
+    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
+        tx("__deprecated_thread_id_x", x.is_rvar);
     split(x, bx, tx, x_size, tail);
     set_dim_device_api(bx, device_api);
     set_dim_device_api(tx, device_api);
@@ -1620,10 +1620,10 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
                        Expr x_size, Expr y_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
-    VarOrRVar bx("__block_id_x", x.is_rvar),
-        by("__block_id_y", y.is_rvar),
-        tx("__thread_id_x", x.is_rvar),
-        ty("__thread_id_y", y.is_rvar);
+    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
+        by("__deprecated_block_id_y", y.is_rvar),
+        tx("__deprecated_thread_id_x", x.is_rvar),
+        ty("__deprecated_thread_id_y", y.is_rvar);
     return gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, tail, device_api);
 }
 
@@ -1631,12 +1631,12 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                        Expr x_size, Expr y_size, Expr z_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
-    VarOrRVar bx("__block_id_x", x.is_rvar),
-        by("__block_id_y", y.is_rvar),
-        bz("__block_id_z", z.is_rvar),
-        tx("__thread_id_x", x.is_rvar),
-        ty("__thread_id_y", y.is_rvar),
-        tz("__thread_id_z", z.is_rvar);
+    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
+        by("__deprecated_block_id_y", y.is_rvar),
+        bz("__deprecated_block_id_z", z.is_rvar),
+        tx("__deprecated_thread_id_x", x.is_rvar),
+        ty("__deprecated_thread_id_y", y.is_rvar),
+        tz("__deprecated_thread_id_z", z.is_rvar);
     return gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
 }
 
