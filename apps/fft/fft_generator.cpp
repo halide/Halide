@@ -79,7 +79,7 @@ public:
     // Dim0: extent = 2, stride = 1 -- real followed by imaginary components
     // Dim1: extent = size0, stride = 2
     // Dim2: extent = size1, stride = size0 * 2
-    ImageParam input;
+    ImageParam input{Float(32), 2, "input"};  // dummy: will be overridden, but name must be specified
 
     Func build() {
         Var c{"c"}, x{"x"}, y{"y"};
