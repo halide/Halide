@@ -12,7 +12,7 @@ public class HalideYuvBufferT implements AutoCloseable {
 
     // Load native Halide shared library.
     static {
-        System.loadLibrary("native");
+        System.loadLibrary("HelloAndroidCamera2");
     }
 
     private long mHandle;

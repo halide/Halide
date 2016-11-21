@@ -183,9 +183,6 @@ class InjectBufferCopies : public IRMutator {
           case DeviceAPI::OpenGLCompute:
             interface_name = "halide_openglcompute_device_interface";
             break;
-          case DeviceAPI::Renderscript:
-            interface_name = "halide_renderscript_device_interface";
-            break;
           case DeviceAPI::Hexagon:
             interface_name = "halide_hexagon_device_interface";
             break;
@@ -420,7 +417,7 @@ class InjectBufferCopies : public IRMutator {
             }
         } else if (op->is_intrinsic(Call::image_load)) {
             // counts as a device read
-            internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
+            internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
@@ -430,7 +427,7 @@ class InjectBufferCopies : public IRMutator {
             IRMutator::visit(op);
         } else if (op->is_intrinsic(Call::image_store)) {
             // counts as a device store
-            internal_assert(device_api == DeviceAPI::GLSL || device_api == DeviceAPI::Renderscript);
+            internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));

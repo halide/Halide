@@ -285,7 +285,6 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
                                 Target::OpenCL,
                                 Target::OpenGL,
                                 Target::OpenGLCompute,
-                                Target::Renderscript,
                                 Target::Metal})) {
 #ifdef WITH_X86
         if (target.arch == Target::X86) {
@@ -1693,13 +1692,13 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
         }
     }
 
+    llvm::MDBuilder builder(*context);
+
     // Add type-based-alias-analysis metadata to the pointer, so that
     // loads and stores to different buffers can get reordered.
-    llvm::Metadata *root_buffer_type[] = {MDString::get(*context, "Halide buffer")};
-    MDNode *tbaa = MDNode::get(*context, root_buffer_type);
+    MDNode *tbaa = builder.createTBAARoot("Halide buffer");
 
-    llvm::Metadata *this_buffer_type[] = {MDString::get(*context, buffer), tbaa};
-    tbaa = MDNode::get(*context, this_buffer_type);
+    tbaa = builder.createTBAAScalarTypeNode(buffer, tbaa);
 
     // We also add metadata for constant indices to allow loads and
     // stores to the same buffer to get reordered.
@@ -1709,10 +1708,11 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
-            llvm::Metadata *this_level_type[] = {MDString::get(*context, level.str()), tbaa};
-            tbaa = MDNode::get(*context, this_level_type);
+            tbaa = builder.createTBAAScalarTypeNode(level.str(), tbaa);
         }
     }
+
+    tbaa = builder.createTBAAStructTagNode(tbaa, tbaa, 0);
 
     inst->setMetadata("tbaa", tbaa);
 }
