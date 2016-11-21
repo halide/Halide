@@ -70,16 +70,10 @@ void unpack_closure(const Closure& closure,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    LLVMContext &context = builder->getContext();
     vector<string> nm = closure.names();
     for (size_t i = 0; i < nm.size(); i++) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr);
-        if (load->getType()->isPointerTy()) {
-            // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            llvm::Metadata *md_args[] = {MDString::get(context, nm[i])};
-            load->setMetadata("tbaa", MDNode::get(context, md_args));
-        }
         dst.push(nm[i], load);
         load->setName(nm[i]);
     }
@@ -148,7 +142,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_run",
         "halide_opengl_run",
         "halide_openglcompute_run",
-        "halide_renderscript_run",
         "halide_metal_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
@@ -167,7 +160,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
-        "halide_renderscript_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_get_gpu_device",
     };

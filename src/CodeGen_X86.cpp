@@ -408,6 +408,11 @@ void CodeGen_X86::visit(const Call *op) {
 }
 
 string CodeGen_X86::mcpu() const {
+    #if LLVM_VERSION >= 40
+    if (target.has_feature(Target::AVX512_Cannonlake)) return "cannonlake";
+    if (target.has_feature(Target::AVX512_Skylake)) return "skylake-avx512";
+    if (target.has_feature(Target::AVX512_KNL)) return "knl";        
+    #endif
     if (target.has_feature(Target::AVX2)) return "haswell";
     if (target.has_feature(Target::AVX)) return "corei7-avx";
     // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
@@ -431,6 +436,25 @@ string CodeGen_X86::mattrs() const {
         features += separator + "+f16c";
         separator = ",";
     }
+    #if LLVM_VERSION >= 40
+    if (target.has_feature(Target::AVX512) ||
+        target.has_feature(Target::AVX512_KNL) ||
+        target.has_feature(Target::AVX512_Skylake) ||
+        target.has_feature(Target::AVX512_Cannonlake)) {
+        features += separator + "+avx512f,+avx512cd";
+        separator = ",";
+        if (target.has_feature(Target::AVX512_KNL)) {
+            features += ",+avx512pf,+avx512er";
+        }
+        if (target.has_feature(Target::AVX512_Skylake) ||
+            target.has_feature(Target::AVX512_Cannonlake)) {
+            features += ",+avx512vl,+avx512bw,+avx512dq";
+        }
+        if (target.has_feature(Target::AVX512_Cannonlake)) {
+            features += ",+avx512ifma,+avx512vbmi";
+        }
+    }
+    #endif
     return features;
 }
 
@@ -439,7 +463,9 @@ bool CodeGen_X86::use_soft_float_abi() const {
 }
 
 int CodeGen_X86::native_vector_bits() const {
-    if (target.has_feature(Target::AVX)) {
+    if (target.has_feature(Target::AVX512)) {
+        return 512;
+    } else if (target.has_feature(Target::AVX)) {
         return 256;
     } else {
         return 128;
