@@ -643,7 +643,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 modules.push_back(get_initmod_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
-                modules.push_back(get_initmod_profiler(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -653,7 +652,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
-                modules.push_back(get_initmod_profiler(c, bits_64, debug));
             } else if (t.os == Target::Android) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -669,7 +667,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 modules.push_back(get_initmod_thread_pool(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
-                modules.push_back(get_initmod_profiler(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -683,7 +680,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.has_feature(Target::MinGW)) {
                     modules.push_back(get_initmod_mingw_math(c, bits_64, debug));
                 }
-                modules.push_back(get_initmod_profiler(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -692,7 +688,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_ios_io(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
-                modules.push_back(get_initmod_profiler(c, bits_64, debug));
             } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -701,7 +696,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 // TODO: Replace fake thread pool with a real implementation.
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
-                modules.push_back(get_initmod_profiler(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // No externally resolved symbols are allowed here.
                 modules.push_back(get_initmod_noos(c, bits_64, debug));
@@ -737,6 +731,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
+
+            if (t.arch != Target::MIPS && t.os != Target::NoOS) {
+                // MIPS doesn't support the atomics the profiler requires.
+                modules.push_back(get_initmod_profiler(c, bits_64, debug));
+            }
 
             if (t.has_feature(Target::MSAN)) {
                 modules.push_back(get_initmod_msan(c, bits_64, debug));
