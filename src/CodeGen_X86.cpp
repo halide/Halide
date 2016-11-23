@@ -411,7 +411,7 @@ string CodeGen_X86::mcpu() const {
     #if LLVM_VERSION >= 40
     if (target.has_feature(Target::AVX512_Cannonlake)) return "cannonlake";
     if (target.has_feature(Target::AVX512_Skylake)) return "skylake-avx512";
-    if (target.has_feature(Target::AVX512_KNL)) return "knl";        
+    if (target.has_feature(Target::AVX512_KNL)) return "knl";
     #endif
     if (target.has_feature(Target::AVX2)) return "haswell";
     if (target.has_feature(Target::AVX)) return "corei7-avx";
@@ -463,9 +463,13 @@ bool CodeGen_X86::use_soft_float_abi() const {
 }
 
 int CodeGen_X86::native_vector_bits() const {
-    if (target.has_feature(Target::AVX512)) {
+    if (target.has_feature(Target::AVX512) ||
+        target.has_feature(Target::AVX512_Skylake) ||
+        target.has_feature(Target::AVX512_KNL) ||
+        target.has_feature(Target::AVX512_Cannonlake)) {
         return 512;
-    } else if (target.has_feature(Target::AVX)) {
+    } else if (target.has_feature(Target::AVX) ||
+               target.has_feature(Target::AVX2)) {
         return 256;
     } else {
         return 128;
