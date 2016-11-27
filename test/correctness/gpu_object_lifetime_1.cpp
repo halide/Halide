@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
         }
         f.set_custom_print(halide_print);
 
-        Image<int32_t> result = f.realize(256, target);
+        Buffer<int32_t> result = f.realize(256, target);
         for (int i = 0; i < 256; i++) {
             if (result(i) != i) {
                 std::cout << "Error! " << result(i) << " != " << i << std::endl;

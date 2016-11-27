@@ -14,7 +14,7 @@ namespace Halide {
 namespace Internal {
 
 struct BufferContents {
-    Image<> image;
+    Buffer<> image;
     std::string name;
     mutable RefCount ref_count;
 };
@@ -30,7 +30,7 @@ EXPORT void destroy<BufferContents>(const BufferContents *p) {
 }
 
 namespace {
-std::string make_buffer_name(const std::string &n, const Image<> &image) {
+std::string make_buffer_name(const std::string &n, const Buffer<> &image) {
     if (n.empty()) {
         // Embedded images are deduped by name, so it's important that
         // the same image always gets the same name.
@@ -51,21 +51,21 @@ std::string make_buffer_name(const std::string &n, const Image<> &image) {
 }
 }
 
-BufferPtr::BufferPtr(const Image<> &buf, std::string name) :
+BufferPtr::BufferPtr(const Buffer<> &buf, std::string name) :
     contents(new Internal::BufferContents) {
-    contents->image = Image<>(buf);
+    contents->image = Buffer<>(buf);
     contents->name = make_buffer_name(name, contents->image);
 }
 
 BufferPtr::BufferPtr(Type t, const buffer_t &buf, std::string name) :
     contents(new Internal::BufferContents) {
-    contents->image = Image<>(t, buf);
+    contents->image = Buffer<>(t, buf);
     contents->name = make_buffer_name(name, contents->image);
 }
 
 BufferPtr::BufferPtr(Type t, const std::vector<int> &size, std::string name) :
     contents(new Internal::BufferContents) {
-    contents->image = Image<>(t, size);
+    contents->image = Buffer<>(t, size);
     contents->name = make_buffer_name(name, contents->image);
 }
 
@@ -73,11 +73,11 @@ bool BufferPtr::same_as(const BufferPtr &other) const {
     return contents.same_as(other.contents);
 }
 
-Image<> &BufferPtr::get() {
+Buffer<> &BufferPtr::get() {
     return contents->image;
 }
 
-const Image<> &BufferPtr::get() const {
+const Buffer<> &BufferPtr::get() const {
     return contents->image;
 }
 
@@ -97,7 +97,7 @@ int BufferPtr::dimensions() const {
     return contents->image.dimensions();
 }
 
-Image<>::Dimension BufferPtr::dim(int i) const {
+Buffer<>::Dimension BufferPtr::dim(int i) const {
     return contents->image.dim(i);
 }
 

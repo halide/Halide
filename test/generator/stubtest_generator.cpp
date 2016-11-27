@@ -52,25 +52,7 @@ private:
     Func intermediate{"intermediate"};
 };
 
-}  // namespace
-
-namespace StubNS1 {
-namespace StubNS2 {
-
-// must forward-declare the name we want for the stub, inside the proper namespace(s).
-// None of the namespace(s) may be anonymous (if you do, failures will occur at Halide
-// compilation time).
-class StubTest;
-
-
-}  // namespace StubNS2
-}  // namespace StubNS1
-
-namespace {
-
-// If the fully-qualified stub name specified for third argument hasn't been declared
-// properly, a compile error will result. The fully-qualified name *must* have at least one
-// namespace (i.e., a name at global scope is not acceptable).
-HALIDE_REGISTER_GENERATOR(StubTest, "stubtest", StubNS1::StubNS2::StubTest)
+HALIDE_REGISTER_GENERATOR(StubTest, "StubNS1::StubNS2::StubTest")
 
 }  // namespace
+

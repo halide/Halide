@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     // the condition into the C function.
     factors(x) = list_maybe_insert(factors(x), x%r == 0, r);
 
-    Image<std::list<int> *> result = factors.realize(100);
+    Buffer<std::list<int> *> result = factors.realize(100);
 
     // Inspect the results for correctness
     for (int i = 0; i < 100; i++) {

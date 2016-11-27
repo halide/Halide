@@ -9,7 +9,7 @@ typedef std::function<int(int,int,int)> FuncChecker;
 
 int check_image(const Realization &r, const std::vector<FuncChecker> &funcs) {
     for (size_t idx = 0; idx < funcs.size(); idx++) {
-        const Image<int> &im = r[idx];
+        const Buffer<int> &im = r[idx];
         for (int z = 0; z < im.channels(); z++) {
             for (int y = 0; y < im.height(); y++) {
                 for (int x = 0; x < im.width(); x++) {

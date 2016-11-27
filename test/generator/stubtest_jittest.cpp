@@ -5,7 +5,7 @@
 using Halide::Argument;
 using Halide::Expr;
 using Halide::Func;
-using Halide::Image;
+using Halide::Buffer;
 using Halide::JITGeneratorContext;
 using Halide::LoopLevel;
 using Halide::Var;
@@ -16,8 +16,8 @@ const int kSize = 32;
 Halide::Var x, y, c;
 
 template<typename Type>
-Image<Type> make_image(int extra) {
-    Image<Type> im(kSize, kSize, 3);
+Buffer<Type> make_image(int extra) {
+    Buffer<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -29,7 +29,7 @@ Image<Type> make_image(int extra) {
 }
 
 template<typename InputType, typename OutputType>
-void verify(const Image<InputType> &input, float float_arg, int int_arg, const Image<OutputType> &output) {
+void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const Buffer<OutputType> &output) {
     if (input.width() != output.width() ||
         input.height() != output.height()) {
         fprintf(stderr, "size mismatch\n");
@@ -50,10 +50,10 @@ void verify(const Image<InputType> &input, float float_arg, int int_arg, const I
     }
 }
 
-int main(int argc, char **argv) {    
+int main(int argc, char **argv) {
     constexpr int kArrayCount = 2;
 
-    Image<float> src[kArrayCount] = {
+    Buffer<float> src[kArrayCount] = {
         make_image<float>(0),
         make_image<float>(1)
     };
@@ -64,16 +64,16 @@ int main(int argc, char **argv) {
     std::vector<Expr> int_args_expr(int_args.begin(), int_args.end());
 
     auto gen = StubTest(
-        JITGeneratorContext(Halide::get_target_from_environment()), 
+        JITGeneratorContext(Halide::get_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
             { Func(src[0]), Func(src[1]) },
-            1.234f, 
+            1.25f,
             int_args_expr
         });
 
     StubTest::ScheduleParams sp;
-    // This generator defaults intermediate_level to "undefined", 
+    // This generator defaults intermediate_level to "undefined",
     // so we *must* specify something for it (else we'll crater at
     // Halide compile time). We'll use this:
     sp.intermediate_level = LoopLevel(gen.f, gen.f.args().at(1));
@@ -84,14 +84,14 @@ int main(int argc, char **argv) {
     gen.schedule(sp);
 
     Halide::Realization f_realized = gen.realize(kSize, kSize, 3);
-    Image<float> f0 = f_realized[0];
-    Image<float> f1 = f_realized[1];
-    verify(src[0], 1.234f, 0, f0);
-    verify(src[0], 1.234f, 33, f1);
+    Buffer<float> f0 = f_realized[0];
+    Buffer<float> f1 = f_realized[1];
+    verify(src[0], 1.25f, 0, f0);
+    verify(src[0], 1.25f, 33, f1);
 
     for (int i = 0; i < kArrayCount; ++i) {
         Halide::Realization g_realized = gen.g[i].realize(kSize, kSize, gen.get_target());
-        Image<int16_t> g0 = g_realized;
+        Buffer<int16_t> g0 = g_realized;
         verify(src[i], 1.0f, int_args[i], g0);
     }
 

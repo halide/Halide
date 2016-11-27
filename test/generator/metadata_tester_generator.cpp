@@ -71,5 +71,4 @@ public:
 
 }  // namespace
 
-namespace Halide { namespace Internal { class MetadataTesterStub; }}
-HALIDE_REGISTER_GENERATOR(MetadataTester, "metadata_tester", Halide::Internal::MetadataTesterStub)
+HALIDE_REGISTER_GENERATOR(MetadataTester, "metadata_tester")

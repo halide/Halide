@@ -102,7 +102,9 @@ public:
      * throw an error. rfactor() will automatically infer the associative reduction
      * operator and identity of the operator. If it can't prove the operation
      * is associative or if it cannot find an identity for that operator, this
-     * will throw an error.
+     * will throw an error. In addition, commutativity of the operator is required
+     * if rfactor() is called on the inner dimension but excluding the outer
+     * dimensions.
      *
      * rfactor() takes as input 'preserved', which is a list of <RVar, Var> pairs.
      * The rvars not listed in 'preserved' are removed from the original Func and
@@ -472,9 +474,9 @@ public:
      * Function object. */
     EXPORT explicit Func(Internal::Function f);
 
-    /** Construct a new Func to wrap an Image. */
+    /** Construct a new Func to wrap a Buffer. */
     template<typename T, int D>
-    NO_INLINE explicit Func(const Image<T, D> &im) : Func() {
+    NO_INLINE explicit Func(const Buffer<T, D> &im) : Func() {
         (*this)(_) = im(_);
     }
 
@@ -484,11 +486,11 @@ public:
      * been called. If the final stage of the pipeline is on the GPU,
      * data is copied back to the host before being returned. The
      * returned Realization should probably be instantly converted to
-     * an Image class of the appropriate type. That is, do this:
+     * a Buffer class of the appropriate type. That is, do this:
      *
      \code
      f(x) = sin(x);
-     Image<float> im = f.realize(...);
+     Buffer<float> im = f.realize(...);
      \endcode
      *
      * If your Func has multiple values, because you defined it using
@@ -499,8 +501,8 @@ public:
      \code
      f(x) = Tuple(x, sin(x));
      Realization r = f.realize(...);
-     Image<int> im0 = r[0];
-     Image<float> im1 = r[1];
+     Buffer<int> im0 = r[0];
+     Buffer<float> im1 = r[1];
      \endcode
      *
      */
@@ -527,7 +529,7 @@ public:
     EXPORT void realize(Realization dst, const Target &target = Target());
 
     template<typename T, int D>
-    NO_INLINE void realize(Image<T, D> &dst, const Target &target = Target()) {
+    NO_INLINE void realize(Buffer<T, D> &dst, const Target &target = Target()) {
         Realization r(dst);
         realize(r, target);
         dst = r[0];
@@ -544,10 +546,10 @@ public:
     EXPORT void infer_input_bounds(Realization dst);
 
     template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Image<T, D> &im) {
+    NO_INLINE void infer_input_bounds(Buffer<T, D> &im) {
         // It's possible for bounds inference to also manipulate
         // output buffers if their host pointer is null, so we must
-        // take Images by reference and communicate the bounds query
+        // take Buffers by reference and communicate the bounds query
         // result by modifying the argument.
         Realization r(im);
         infer_input_bounds(r);
@@ -1458,7 +1460,7 @@ public:
     // @}
 
     /** Schedule for execution using coordinate-based hardware api.
-     * GLSL and Renderscript are examples of those. Conceptually, this is
+     * GLSL is an example of this. Conceptually, this is
      * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
      * individual output pixels in parallel) and vectorization over 'c'
      * (since GLSL/RS implicitly vectorizes the color channel). */
@@ -1880,7 +1882,7 @@ inline void check_types(const Tuple &t, int idx) {
 template <typename Last>
 inline void assign_results(Realization &r, int idx, Last last) {
     using T = typename std::remove_pointer<typename std::remove_reference<Last>::type>::type;
-    *last = Image<T>(r[idx])();
+    *last = Buffer<T>(r[idx])();
 }
 
 template <typename First, typename Second, typename... Rest>
@@ -1902,7 +1904,7 @@ NO_INLINE T evaluate(Expr e) {
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
     f() = e;
-    Image<T> im = f.realize();
+    Buffer<T> im = f.realize();
     return im();
 }
 
@@ -1916,6 +1918,7 @@ NO_INLINE void evaluate(Tuple t, First first, Rest&&... rest) {
     Realization r = f.realize();
     Internal::assign_results(r, 0, first, rest...);
 }
+
 
 namespace Internal {
 
@@ -1945,7 +1948,7 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
     Func f;
     f() = e;
     Internal::schedule_scalar(f);
-    Image<T> im = f.realize();
+    Buffer<T> im = f.realize();
     return im();
 }
 

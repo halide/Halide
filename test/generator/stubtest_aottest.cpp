@@ -4,13 +4,13 @@
 #include "HalideBuffer.h"
 #include "stubtest.h"
 
-using Halide::Image;
+using Halide::Buffer;
 
 const int kSize = 32;
 
 template<typename Type>
-Image<Type> make_image(int extra) {
-    Image<Type> im(kSize, kSize, 3);
+Buffer<Type> make_image(int extra) {
+    Buffer<Type> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -22,7 +22,7 @@ Image<Type> make_image(int extra) {
 }
 
 template<typename InputType, typename OutputType>
-void verify(const Image<InputType> &input, float float_arg, int int_arg, const Image<OutputType> &output) {
+void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const Buffer<OutputType> &output) {
     if (input.width() != output.width() ||
         input.height() != output.height()) {
         fprintf(stderr, "size mismatch: %dx%d vs %dx%d\n",input.width(),input.height(),output.width(),output.height());
@@ -44,10 +44,10 @@ void verify(const Image<InputType> &input, float float_arg, int int_arg, const I
 }
 
 int main(int argc, char **argv) {
-    Image<float> in0 = make_image<float>(0);
-    Image<float> in1 = make_image<float>(1);
-    Image<float> f0(kSize, kSize, 3), f1(kSize, kSize, 3);
-    Image<int16_t> g0(kSize, kSize), g1(kSize, kSize);
+    Buffer<float> in0 = make_image<float>(0);
+    Buffer<float> in1 = make_image<float>(1);
+    Buffer<float> f0(kSize, kSize, 3), f1(kSize, kSize, 3);
+    Buffer<int16_t> g0(kSize, kSize), g1(kSize, kSize);
 
     stubtest(in0, in1, 1.25f, 33, 66, f0, f1, g0, g1);
 

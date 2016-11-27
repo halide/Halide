@@ -129,6 +129,9 @@ class Buffer {
      * own the memory. */
     AllocationHeader *alloc = nullptr;
 
+    /** A reference count for the device allocation owned by this buffer. */
+    mutable std::atomic<int> *dev_ref_count = nullptr;
+
     /** True if T is of type void or const void */
     static const bool T_is_void = std::is_same<typename std::remove_const<T>::type, void>::value;
 
@@ -154,28 +157,62 @@ class Buffer {
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
 
+    /** Is this Buffer responsible for managing its own memory */
+    bool manages_memory() const {
+        return alloc != nullptr;
+    }
+    
     /** Increment the reference count of any owned allocation */
-    void incref() {
+    void incref() const {
+        if (!manages_memory()) return;
         if (alloc) {
             alloc->ref_count++;
+        }
+        if (buf.dev) {
+            if (!dev_ref_count) {
+                // I seem to have a non-zero dev field but no
+                // reference count for it. I must have been given a
+                // device allocation by a Halide pipeline, and have
+                // never been copied from since. Take sole ownership
+                // of it.
+                dev_ref_count = new std::atomic<int>(1);
+            }
+            (*dev_ref_count)++;
         }
     }
 
     /** Decrement the reference count of any owned allocation and free host
      * and device memory if it hits zero. Sets alloc to nullptr. */
     void decref() {
+        if (!manages_memory()) return;
         if (alloc) {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
-                if (buf.dev) {
-                    device_free();
-                }
                 void (*fn)(void *) = alloc->deallocate_fn;
                 fn(alloc);
             }
-            alloc = nullptr;
-            buf.host = nullptr;
         }
+        decref_dev();
+        buf.host = nullptr;
+        alloc = nullptr;
+    }
+
+    void decref_dev() {
+        if (!manages_memory() || buf.dev == 0) return;
+        int new_count = 0;
+        if (dev_ref_count) {
+            new_count = --(*dev_ref_count);
+        }
+        if (new_count == 0) {
+            halide_device_free_t fn = halide_get_device_free_fn();
+            assert(fn && "Buffer has a device allocation but no Halide Runtime linked");
+            (*fn)(nullptr, &buf);
+            if (dev_ref_count) {
+                delete dev_ref_count;
+                dev_ref_count = nullptr;
+            }
+        }
+        buf.dev = 0;
     }
 
     /** A temporary helper function to get the number of dimensions in
@@ -436,18 +473,20 @@ public:
      * mismatch. */
     template<typename T2, int D2>
     Buffer(const Buffer<T2, D2> &other) : buf(other.buf),
-                                        dims(other.dims),
-                                        ty(other.ty),
-                                        alloc(other.alloc) {
-        incref();
+                                          dims(other.dims),
+                                          ty(other.ty),
+                                          alloc(other.alloc) {
         assert_can_convert_from(other);
+        other.incref();
+        dev_ref_count = other.dev_ref_count;
     }
 
     Buffer(const Buffer<T, D> &other) : buf(other.buf),
-                                      dims(other.dims),
-                                      ty(other.ty),
-                                      alloc(other.alloc) {
-        incref();
+                                        dims(other.dims),
+                                        ty(other.ty),
+                                        alloc(other.alloc) {
+        other.incref();
+        dev_ref_count = other.dev_ref_count;
     }
 
     /** Move-construct an Buffer from another Buffer of
@@ -456,17 +495,21 @@ public:
      * mismatch. */
     template<typename T2, int D2>
     Buffer(Buffer<T2, D2> &&other) : buf(other.buf),
-                                   dims(other.dims),
-                                   ty(other.ty),
-                                   alloc(other.alloc) {
-        other.alloc = nullptr;
+                                     dims(other.dims),
+                                     ty(other.ty),
+                                     alloc(other.alloc),
+                                     dev_ref_count(other.dev_ref_count) {
         assert_can_convert_from(other);
+        other.dev_ref_count = nullptr;
+        other.alloc = nullptr;
     }
 
     Buffer(Buffer<T, D> &&other) : buf(other.buf),
                                    dims(other.dims),
                                    ty(other.ty),
-                                   alloc(other.alloc) {
+                                   alloc(other.alloc),
+                                   dev_ref_count(other.dev_ref_count) {
+        other.dev_ref_count = nullptr;
         other.alloc = nullptr;
     }
 
@@ -476,13 +519,10 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
         assert_can_convert_from(other);
-        if (alloc != other.alloc) {
-            // Drop existing allocation
-            decref();
-            // Share other allocation
-            alloc = other.alloc;
-            incref();
-        }
+        other.incref();
+        decref();
+        dev_ref_count = other.dev_ref_count;
+        alloc = other.alloc;
         ty = other.ty;
         dims = other.dims;
         buf = other.buf;
@@ -490,13 +530,10 @@ public:
     }
 
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
-        if (alloc != other.alloc) {
-            // Drop existing allocation
-            decref();
-            // Share other allocation
-            alloc = other.alloc;
-            incref();
-        }
+        other.incref();
+        decref();
+        dev_ref_count = other.dev_ref_count;
+        alloc = other.alloc;
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
@@ -509,13 +546,8 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
         assert_can_convert_from(other);
-        if (alloc != other.alloc) {
-            // Drop existing allocation
-            decref();
-            // Steal other allocation
-            alloc = other.alloc;
-            other.alloc = nullptr;
-        }
+        std::swap(alloc, other.alloc);
+        std::swap(dev_ref_count, other.dev_ref_count);
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
@@ -523,13 +555,8 @@ public:
     }
 
     Buffer<T, D> &operator=(Buffer<T, D> &&other) {
-        if (alloc != other.alloc) {
-            // Drop existing allocation
-            decref();
-            // Steal other allocation
-            alloc = other.alloc;
-            other.alloc = nullptr;
-        }
+        std::swap(alloc, other.alloc);
+        std::swap(dev_ref_count, other.dev_ref_count);
         buf = other.buf;
         ty = other.ty;
         dims = other.dims;
@@ -562,7 +589,7 @@ public:
         }
 
         // Drop any existing allocation
-        decref();
+        deallocate();
 
         // Conservatively align images to 128 bytes. This is enough
         // alignment for all the platforms we might use.
@@ -576,12 +603,21 @@ public:
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
     }
 
-    /** Drop reference to any owned memory, freeing it. Retains the
-     * shape of the buffer. */
+    /** Drop reference to any owned memory, possibly freeing it, if
+     * this buffer held the last reference to it. Retains the shape of
+     * the buffer. Does nothing if this buffer did not allocate its
+     * own memory. */
     void deallocate() {
         decref();
     }
 
+    /** Drop reference to any owned device memory, possibly freeing it
+     * if this buffer held the last reference to it. Does nothing if
+     * this buffer did not allocate its own memory. */
+    void device_deallocate() {
+        decref_dev();
+    }
+    
     /** Allocate a new image of the given size with a runtime
      * type. Only used when you do know what size you want but you
      * don't know statically what type the elements are. Pass zeroes
@@ -656,7 +692,7 @@ public:
      * host_dirty flag. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(halide_type_t t, void *data, int first, Args&&... rest) {
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args&&... rest) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
@@ -679,17 +715,46 @@ public:
         static_assert(sizeof...(rest) < D,
                       "Too many arguments to constructor. Use Buffer<T, D>, "
                       "where D is at least the desired number of dimensions");
-        ty = halide_type_of<typename std::remove_cv<T>::type>();
+        ty = static_halide_type();
         initialize_shape(0, first, int(rest)...);
         buf.elem_size = ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
     }
 
+    /** Initialize an Buffer from a pointer and a vector of
+     * sizes. Assumes dense row-major packing and a min coordinate of
+     * zero. Does not take ownership of the data and does not set the
+     * host_dirty flag. */
+    explicit Buffer(T *data, const std::vector<int> &sizes) {
+        assert(sizes.size() <= D);
+        initialize_shape(sizes);
+        ty = static_halide_type();
+        buf.elem_size = ty.bytes();
+        dims = (int)sizes.size();
+        buf.host = (uint8_t *)data;
+    }
+
+    /** Initialize an Buffer of runtime type from a pointer and a
+     * vector of sizes. Assumes dense row-major packing and a min
+     * coordinate of zero. Does not take ownership of the data and
+     * does not set the host_dirty flag. */
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, const std::vector<int> &sizes) {
+        if (!T_is_void) {
+            assert(static_halide_type() == t);
+        }
+        assert(sizes.size() <= D);
+        initialize_shape(sizes);
+        ty = t;
+        buf.elem_size = ty.bytes();
+        dims = (int)sizes.size();
+        buf.host = (uint8_t *)data;
+    }
+
     /** Initialize an Buffer from a pointer to the min coordinate and
      * an array describing the shape.  Does not take ownership of the
      * data, and does not set the host_dirty flag. */
-    explicit Buffer(halide_type_t t, void *data, int d, const halide_dimension_t *shape) {
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int d, const halide_dimension_t *shape) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
@@ -903,9 +968,6 @@ public:
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Buffer<T, D> im = *this;
-        // Drop the reference to any device allocation. It won't be
-        // valid for the cropped image.
-        im.buf.dev = 0;
         im.crop(d, min, extent);
         return im;
     }
@@ -915,7 +977,9 @@ public:
         // assert(dim(d).min() <= min);
         // assert(dim(d).max() >= min + extent - 1);
         int shift = min - dim(d).min();
-        assert(buf.dev == 0 || shift == 0);
+        if (shift) {
+            device_deallocate();
+        }
         buf.host += shift * dim(d).stride() * buf.elem_size;
         buf.min[d] = min;
         buf.extent[d] = extent;
@@ -930,7 +994,6 @@ public:
         Buffer<T, D> im = *this;
         // Drop the reference to any device allocation. It won't be
         // valid for the cropped image.
-        im.buf.dev = 0;
         im.crop(rect);
         return im;
     }
@@ -948,13 +1011,13 @@ public:
      * coordinate system. Drops any device handle. */
     Buffer<T, D> translated(int d, int dx) const {
         Buffer<T, D> im = *this;
-        im.buf.dev = 0;
         im.translate(d, dx);
         return im;
     }
 
     /** Translate an image in-place along one dimension */
     void translate(int d, int delta) {
+        device_deallocate();
         buf.min[d] += delta;
     }
 
@@ -962,13 +1025,13 @@ public:
      * the first N dimensions. */
     void translated(const std::vector<int> &delta) {
         Buffer<T, D> im = *this;
-        im.buf.dev = 0;
         im.translate(delta);
         return im;
     }
 
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
+        device_deallocate();
         for (size_t i = 0; i < delta.size(); i++) {
             translate(i, delta[i]);
         }
@@ -979,6 +1042,7 @@ public:
     void set_min(Args... args) {
         static_assert(sizeof...(args) <= D, "Too many arguments for dimensionality of Buffer");
         assert(sizeof...(args) <= (size_t)dimensions());
+        device_deallocate();
         const int x[] = {args...};
         for (size_t i = 0; i < sizeof...(args); i++) {
             buf.min[i] = x[i];
@@ -1001,10 +1065,9 @@ public:
     }
 
     /** Make a lower-dimensional image that refers to one slice of this
-     * image. Drops any device handle. */
+     * image. */
     Buffer<T, D-1> sliced(int d, int pos) const {
         Buffer<T, D> im = *this;
-        im.buf.dev = 0;
         im.slice(d, pos);
         return Buffer<T, D-1>(std::move(im));
     }
@@ -1012,6 +1075,7 @@ public:
     /** Slice an image in-place */
     void slice(int d, int pos) {
         // assert(pos >= dim(d).min() && pos <= dim(d).max());
+        device_deallocate();
         dims--;
         int shift = pos - dim(d).min();
         assert(buf.dev == 0 || shift == 0);
@@ -1026,9 +1090,8 @@ public:
 
     /** Make a new image that views this image as a single slice in a
      * higher-dimensional space. The new dimension has extent one and
-     * the given min. Drops any device handle. This operation is the
-     * opposite of slice. As an example, the following condition is
-     * true:
+     * the given min. This operation is the opposite of slice. As an
+     * example, the following condition is true:
      *
      \code
      im2 = im.embedded(1, 17);
@@ -1038,7 +1101,6 @@ public:
     Buffer<T, D+1> embedded(int d, int pos) const {
         assert(d >= 0 && d <= dimensions());
         Buffer<T, D+1> im(*this);
-        im.buf.dev = 0;
         im.add_dimension();
         im.translate(im.dimensions() - 1, pos);
         for (int i = im.dimensions(); i > d; i--) {
@@ -1127,7 +1189,20 @@ public:
     }
 
     int device_free(void *ctx = nullptr) {
-        return halide_device_free(ctx, &buf);
+        if (dev_ref_count) {
+            // Multiple people may be holding onto this dev field
+            assert(*dev_ref_count == 1 &&
+                   "Multiple Halide::Buffer objects share this device "
+                   "allocation. Freeing it would create dangling references. "
+                   "Don't call device_free on Halide buffers that you have copied or "
+                   "passed by value.");
+        }        
+        int ret = halide_device_free(ctx, &buf);
+        if (dev_ref_count) {
+            delete dev_ref_count;
+            dev_ref_count = nullptr;
+        }
+        return ret;
     }
 
     int device_sync(void *ctx = nullptr) {
@@ -1561,7 +1636,7 @@ void for_each_element(const buffer_t &buf, Fn &&f) {
     for_each_element_helpers<Fn>::for_each_element(0, buf, std::forward<Fn>(f));
 }
 
-// Temporary code to make Image an alias for Buffer. Will be deprecated very soon.
+// Image is an alias for Buffer. Will be deprecated.
 template<typename T = void, int D = 4> using Image = Buffer<T, D>;
 
 

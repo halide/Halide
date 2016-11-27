@@ -1,5 +1,8 @@
 import org.apache.tools.ant.taskdefs.condition.Os
 
+// Avoid conflicts with Bazel on case-insensitive filesystems
+buildDir = 'gradle_build' 
+
 repositories {
     jcenter()
 }
@@ -18,13 +21,13 @@ buildscript {
 // Use gradle's native C++ plugin to build the Halide generator.
 //
 // sources: defines all the C++ source files. We only have one SourceSet called
-// halide_generator.
+// hello_generator.
 //
-// executables: we only make one binary called halide_generator. Here is where
+// executables: we only make one binary called hello_generator. Here is where
 // we pass compiler and linker flags.
 //
 // binaries.withType: binaries is a collection, which in our case is just the
-// halide_generator executable. withType() filters the collection by type.
+// hello_generator executable. withType() filters the collection by type.
 // binary is the iteration variable. -> defines the body of the lambda:
 // for each binary:
 //     for each halide_target / Android ABI mapping:
@@ -35,28 +38,28 @@ buildscript {
 apply plugin: "cpp"
 
 sources {
-    halide_generator {
+    hello_generator {
         cpp(CppSourceSet) {
             source {
-                srcDirs "jni/"
-                include "halide.cpp"
+                srcDirs "jni/", "${projectDir}/../../tools/"
+                include "hello_generator.cpp", "GenGen.cpp"
             }
         }
     }
 }
 
 executables {
-    halide_generator {
+    hello_generator {
         binaries.all {
             cppCompiler.args "-std=c++11", "-g", "-Wall", "-fno-rtti", "-I", "${projectDir}/../../include", "-I", "${projectDir}/../../build/include"
+            // "/bin" assumes Makefile build for Halide; "/build/lib" assumes CMake build
             linker.args "-lHalide", "-ldl", "-lpthread", "-lz", "-L", "${projectDir}/../../bin", "-L", "${projectDir}/../../build/lib"
         }
     }
 }
 
 binaries.withType(NativeExecutableBinary) { binary ->
-    def jnis = "${projectDir}/jni"
-    def halideRoot = "${projectDir}/../../"
+    def bin = "${projectDir}/bin"
     def linkTask = binary.tasks.link
     println "linktask output file is " + linkTask.outputFile
     Map<String, String> archs = [
@@ -73,15 +76,14 @@ binaries.withType(NativeExecutableBinary) { binary ->
         def android_abi = arch.key
         def hl_target = arch.value
         def task_name = "generate_halide_binary_${binary.name.capitalize()}_${android_abi}"
-        def destDir = new File(jnis, "/halide_generated_${android_abi}")
+        def destDir = new File(bin, "${android_abi}")
         def generateHalideTask = task(task_name) {
             dependsOn linkTask
             doFirst {
                 println "Executing: " + linkTask.outputFile + " ..."
                 destDir.mkdirs()
-                def envVars = [ "HL_TARGET=${hl_target}", "DYLD_LIBRARY_PATH=${projectDir}/../../bin", "LD_LIBRARY_PATH=${projectDir}/../../bin" ]
-                def proc = [linkTask.outputFile]
-                    .execute(envVars, destDir)
+                def envVars = [ "DYLD_LIBRARY_PATH=${projectDir}/../../bin", "LD_LIBRARY_PATH=${projectDir}/../../bin" ]
+                def proc = [linkTask.outputFile, "-o", "${destDir}", "target=${hl_target}"].execute(envVars, destDir)
                 proc.waitFor()
                 if (proc.exitValue() != 0) {
                     println "return code: ${proc.exitValue()}"
@@ -111,7 +113,7 @@ android {
     buildToolsVersion "21.1.2"
 
     defaultConfig {
-        applicationId "com.example.helloandroid"
+        applicationId "com.example.hellohalide"
         minSdkVersion 21
         targetSdkVersion 21
         versionCode 1
@@ -130,7 +132,7 @@ android {
             // which would use parameters defined in build.gradle. Use our own
             // task (ndkBuild) below.
             jni.srcDirs = []
-            jniLibs.srcDirs = ["libs/"] // default is src/main/jniLibs
+            jniLibs.srcDirs = ["bin/lib/"] // default is src/main/jniLibs
             manifest.srcFile "AndroidManifest.xml"
             res.srcDirs = ["res/"] // default is src/main/res
         }
@@ -146,7 +148,7 @@ android {
         } else {
             ndkBuildCmd = "ndk-build"
         }
-        commandLine "$ndkDir/$ndkBuildCmd", '-C', file('jni').absolutePath
+        commandLine "$ndkDir/$ndkBuildCmd", "NDK_GEN_OUT=./bin/gen", "NDK_LIBS_OUT=./bin/lib", "NDK_OUT=./bin/obj"
     }
 
     tasks.withType(JavaCompile) {

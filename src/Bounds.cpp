@@ -1553,7 +1553,7 @@ void bounds_test() {
     vector<Expr> input_site_2 = {2*x+1};
     vector<Expr> output_site = {x+1};
 
-    Image<int32_t, 1> in(10);
+    Buffer<int32_t, 1> in(10);
     BufferPtr in_buf(in, "input");
 
     Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,

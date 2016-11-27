@@ -30,9 +30,7 @@ std::string output_name(const string &filename, const Module &m, const char* ext
 
 Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.static_library(filename_prefix + ".a");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.static_library(filename_prefix + ".lib");
     } else {
         outputs = outputs.static_library(filename_prefix + ".a");
@@ -277,9 +275,7 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
 
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.bitcode(filename_prefix + ".bc");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.object(filename_prefix + ".obj");
     } else {
         outputs = outputs.object(filename_prefix + ".o");
@@ -765,13 +761,13 @@ const JITHandlers &Pipeline::jit_handlers() {
 Realization Pipeline::realize(vector<int32_t> sizes,
                               const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    vector<Image<>> bufs;
+    vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
     realize(r, target);
-    for (Image<> &im : r) {
+    for (Buffer<> &im : r) {
         im.copy_to_host();
     }
     return r;
@@ -984,7 +980,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (const Image<> &buf : dst) {
+    for (const Buffer<> &buf : dst) {
         arg_values.push_back(buf.raw_buffer());
         const void *ptr = arg_values.back();
         debug(1) << "JIT output buffer @ " << ptr << "\n";
@@ -1236,7 +1232,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
                            << buf.min[2] + buf.extent[2] << ","
                            << buf.min[3] + buf.extent[3] << ")\n";
 
-        Image<> im(ia.param.type(), buf);
+        Buffer<> im(ia.param.type(), buf);
         im.allocate();
         ia.param.set_buffer(im);
     }
@@ -1251,7 +1247,7 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
     if (z_size) size.push_back(z_size);
     if (w_size) size.push_back(w_size);
 
-    vector<Image<>> bufs;
+    vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, size);
     }

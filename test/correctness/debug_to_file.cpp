@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
             h.compute_root().debug_to_file("h.tmp");
         }
 
-        Image<float> im = h.realize(10, 10, target);
+        Buffer<float> im = h.realize(10, 10, target);
     }
 
     FILE *f = fopen("f.tmp", "rb");

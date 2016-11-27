@@ -6,7 +6,6 @@
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
-#include "CodeGen_Renderscript_Dev.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Debug.h"
@@ -97,16 +96,12 @@ private:
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
     // For the default GPU, the order of preferences is: Metal,
-    // OpenCL, CUDA, OpenGLCompute, Renderscript, and OpenGL last.
+    // OpenCL, CUDA, OpenGLCompute, and OpenGL last.
     // The code is in reverse order to allow later tests to override
     // earlier ones.
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
-    }
-    if (target.has_feature(Target::Renderscript)) {
-        debug(1) << "Constructing Renderscript device codegen\n";
-        cgdev[DeviceAPI::Renderscript] = new CodeGen_Renderscript_Dev(target);
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
@@ -288,10 +283,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // Determine the arguments that must be passed into the halide function
         vector<DeviceArgument> closure_args = c.arguments();
 
-        if (loop->device_api == DeviceAPI::Renderscript) {
-            closure_args.insert(closure_args.begin(), DeviceArgument(".rs_slot_offset", false, Int(32), 0));
-        }
-
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
         if (loop->device_api == DeviceAPI::GLSL) {
@@ -324,12 +315,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         }
 
         CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
-        int slots_taken = 0;
-        if (target.has_feature(Target::Renderscript)) {
-            slots_taken = gpu_codegen->slots_taken();
-            debug(4) << "Slots taken = " << slots_taken << "\n";
-        }
-
         user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
@@ -384,11 +369,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 // to keep it in sync with the argument names encoded in the
                 // shader header
                 val = ConstantInt::get(target_size_t_type, 1);
-            } else if (name.compare(".rs_slot_offset") == 0) {
-                user_assert(target.has_feature(Target::Renderscript)) <<
-                    ".rs_slot_offset variable is used by Renderscript only.";
-                // First argument for Renderscript _run method is slot offset.
-                val = ConstantInt::get(target_size_t_type, slots_taken);
             } else {
                 // Otherwise just look up the symbol
                 val = sym_get(name);
@@ -538,10 +518,6 @@ template class CodeGen_GPU_Host<CodeGen_MIPS>;
 
 #ifdef WITH_POWERPC
 template class CodeGen_GPU_Host<CodeGen_PowerPC>;
-#endif
-
-#ifdef WITH_NATIVE_CLIENT
-template class CodeGen_GPU_Host<CodeGen_PNaCl>;
 #endif
 
 }}

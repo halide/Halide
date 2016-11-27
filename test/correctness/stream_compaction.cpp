@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     // for Halide to prove:
     ones.update().allow_race_conditions().parallel(r, 50);
 
-    Image<int> result = ones.realize(1001);
+    Buffer<int> result = ones.realize(1001);
     int next = 0;
     for (int i = 0; i < result.width(); i++) {
         if (result(i) != next) {

@@ -76,7 +76,7 @@ struct Argument {
     }
 
     template<typename T, int D>
-    Argument(const Image<T, D> &im) :
+    Argument(const Buffer<T, D> &im) :
         name(Internal::BufferPtr(im).name()),
         kind(InputBuffer),
         dimensions(im.dimensions()),
