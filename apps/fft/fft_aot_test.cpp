@@ -19,28 +19,28 @@ const int32_t kSize = 16;
 
 using Halide::Buffer;
 
-Buffer<float, 2> real_buffer(int32_t y_size = kSize) {
-    return Buffer<float, 2>(kSize, y_size);
+Buffer<float, 3> real_buffer(int32_t y_size = kSize) {
+    return Buffer<float, 3>::make_interleaved(kSize, y_size, 1);
 }
 
 Buffer<float, 3> complex_buffer(int32_t y_size = kSize) {
-    return Buffer<float, 3>(2, kSize, y_size);
+    return Buffer<float, 3>::make_interleaved(kSize, y_size, 2);
 }
 
 float &re(Buffer<float, 3> &b, int x, int y) {
-    return b(0, x, y);
+    return b(x, y, 0);
 }
 
 float &im(Buffer<float, 3> &b, int x, int y) {
-    return b(1, x, y);
+    return b(x, y, 1);
 }
 
 float re(const Buffer<float, 3> &b, int x, int y) {
-    return b(0, x, y);
+    return b(x, y, 0);
 }
 
 float im(const Buffer<float, 3> &b, int x, int y) {
-    return b(1, x, y);
+    return b(x, y, 1);
 }
 
 int main(int argc, char **argv) {
