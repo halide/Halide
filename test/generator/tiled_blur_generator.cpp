@@ -2,9 +2,16 @@
 
 namespace {
 
+Halide::Expr is_interleaved(const Halide::OutputImageParam &p, int channels = 3) {
+    return p.stride(0) == channels && p.stride(2) == 1 && p.extent(2) == channels;
+}
+
+Halide::Expr is_planar(const Halide::OutputImageParam &p, int channels = 3) {
+    return p.stride(0) == 1 && p.extent(2) == channels;
+}
+
 class TiledBlur : public Halide::Generator<TiledBlur> {
 public:
-    GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
     ImageParam input{ Int(32), 3, "input" };
 
     Func build() {
@@ -20,7 +27,7 @@ public:
 
         Func tiled_blur;
         tiled_blur.define_extern(
-            is_interleaved ? "tiled_blur_blur_interleaved" : "tiled_blur_blur",
+            "tiled_blur_blur",
             { brighter1, input.width(), input.height() },
             Float(32), 3);
 
@@ -38,13 +45,18 @@ public:
         // 33x33 near the boundaries
         brighter1.trace_realizations();
 
-        if (is_interleaved) {
-            brighter1.reorder_storage(c, x, y);
-            tiled_blur.reorder_storage(tiled_blur.args()[2], tiled_blur.args()[0],
-                                       tiled_blur.args()[1]);
-            input.set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
-            brighter2.output_buffer().set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
-        }
+        // Unset default constraints so that specialization works.
+        input.set_stride(0, Expr());
+        brighter2.output_buffer().set_stride(0, Expr());
+
+        // Add specialization for input and output buffers that are both planar.
+        brighter2.specialize(is_planar(input) && is_planar(brighter2.output_buffer()));
+
+        // Add specialization for input and output buffers that are both interleaved.
+        brighter2.specialize(is_interleaved(input) && is_interleaved(brighter2.output_buffer()));
+
+        // Note that other combinations (e.g. interleaved -> planar) will work
+        // but be relatively unoptimized.
 
         return brighter2;
     }
