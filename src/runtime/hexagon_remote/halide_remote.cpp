@@ -237,7 +237,7 @@ int halide_hexagon_remote_power_hvx_on_perf(
     int set_latency,
     int latency)
 {
-    int rval = 0;
+    int result = 0;
     if (power_ref_count == 0) {
         halide_hvx_power_perf_t perf;
         uint64_t bwBytePerSec = 0;
@@ -254,18 +254,20 @@ int halide_hexagon_remote_power_hvx_on_perf(
         perf.set_latency    = set_latency;
         perf.latency        = latency;
 
-        rval = halide_hexagon_HAP_power_hvx_on(&perf);
+        result = halide_hexagon_HAP_power_hvx_on(&perf);
+        if (result)
+            return result;
     }
     power_ref_count++;
-    return rval;
+    return result;
 }
 
 int halide_hexagon_remote_power_hvx_on_mode(int mode) {
-    int rval = 0;
+    int result = 0;
     if (power_ref_count == 0) {
         halide_hvx_power_perf_t perf;
         switch (mode) {
-            case halide_hvx_power_svs:
+            case halide_hvx_power_low:
                 perf.set_mips               = TRUE;
                 perf.mipsPerThread          = 200;
                 perf.mipsTotal              = 400;
@@ -288,15 +290,17 @@ int halide_hexagon_remote_power_hvx_on_mode(int mode) {
                 break;
             case halide_hvx_power_turbo:
             default:
-                rval = halide_hexagon_get_turbo_perf(&perf);
+                result = halide_hexagon_get_turbo_perf(&perf);
+                if (result)
+                    return result;
                 break;
         }
-        if (rval == 0) {
-            rval = halide_hexagon_HAP_power_hvx_on(&perf);
-        }
+        result = halide_hexagon_HAP_power_hvx_on(&perf);
+        if (result)
+            return result;
     }
     power_ref_count++;
-    return rval;
+    return result;
 }
 
 int halide_hexagon_remote_power_hvx_on() {
