@@ -38,6 +38,7 @@ function(tests folder)
     halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
     list(APPEND TEST_NAMES "${folder}_${name}")
     target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_SOURCE_DIR}")
+    target_compile_definitions("${folder}_${name}"  PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
   endforeach()
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
@@ -292,16 +293,6 @@ if (WITH_TEST_GENERATORS)
   halide_add_aot_test_dependency(tiled_blur
                                  GENERATOR_TARGET tiled_blur_blur
                                  AOT_LIBRARY_TARGET tiled_blur_blur)
-
-  halide_define_aot_test(tiled_blur_interleaved OMIT_DEFAULT_GENERATOR)
-  halide_add_aot_test_dependency(tiled_blur_interleaved
-                                 GENERATOR_TARGET tiled_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_interleaved
-                                 GENERATOR_ARGS is_interleaved=true)
-  halide_add_aot_test_dependency(tiled_blur_interleaved
-                                 GENERATOR_TARGET tiled_blur_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_blur_interleaved
-                                 GENERATOR_ARGS is_interleaved=true)
 
   halide_define_aot_test(cxx_mangling_define_extern
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-user_context
