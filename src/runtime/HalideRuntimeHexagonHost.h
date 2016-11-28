@@ -51,7 +51,7 @@ extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer
  * powered on, subsequent calls to power HVX on will be cheap. */
 
 typedef enum halide_hvx_power_mode_t {
-    halide_hvx_power_svs    = 0,
+    halide_hvx_power_low    = 0,
     halide_hvx_power_normal = 1,
     halide_hvx_power_turbo  = 2
 } halide_hvx_power_mode_t;
