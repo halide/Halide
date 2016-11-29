@@ -865,9 +865,18 @@ $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -f pyramid -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET) levels=10
 
-METADATA_TESTER_GENERATOR_ARGS=input.type=uint8 input.dim=3 output.type=float32,float32 output.dim=3 \
-	input_not_nod.type=uint8 input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 \
-	array_i8.size=2 array_i16.size=2 array_i32.size=2 array_h.size=2 array_outputs.size=2
+METADATA_TESTER_GENERATOR_ARGS=\
+	input.type=uint8 input.dim=3 \
+	output.type=float32,float32 output.dim=3 \
+	input_not_nod.type=uint8 input_not_nod.dim=3 \
+	input_nod.dim=3 \
+	input_not.type=uint8 \
+	array_input.size=2 \
+	array_i8.size=2 \
+	array_i16.size=2 \
+	array_i32.size=2 \
+	array_h.size=2 \
+	array_outputs.size=2
 
 # metadata_tester is built with and without user-context
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
