@@ -58,7 +58,7 @@ inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr>> &collect
 
 template <typename ...Bounds>
 inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr>> &collected_bounds,
-                                     Expr min, Expr extent, Bounds... bounds) {
+                                     Expr min, Expr extent, const Bounds &...bounds) {
     collected_bounds.push_back(std::make_pair(min, extent));
     collect_bounds(collected_bounds, bounds...);
 }
@@ -68,7 +68,7 @@ inline const Func &func_like_to_func(const Func &func) {
 }
 
 template <typename T>
-inline NO_INLINE Func func_like_to_func(T func_like) {
+inline NO_INLINE Func func_like_to_func(const T &func_like) {
     return lambda(_, func_like(_));
 }
 
@@ -96,7 +96,7 @@ EXPORT Func constant_exterior(const Func &source, Expr value,
                               const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Tuple value) {
+inline NO_INLINE Func constant_exterior(const T &func_like, Tuple value) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -105,20 +105,20 @@ inline NO_INLINE Func constant_exterior(T func_like, Tuple value) {
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
 }
 template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value) {
+inline NO_INLINE Func constant_exterior(const T &func_like, Expr value) {
     return constant_exterior(func_like, Tuple(value));
 }
 
 template <typename T, typename ...Bounds>
-inline NO_INLINE Func constant_exterior(T func_like, Tuple value,
-                                        Bounds... bounds) {
+inline NO_INLINE Func constant_exterior(const T &func_like, Tuple value,
+                                        const Bounds &...bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
 }
 template <typename T, typename ...Bounds>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value,
-                                        Bounds... bounds) {
+inline NO_INLINE Func constant_exterior(const T &func_like, Expr value,
+                                        const Bounds &...bounds) {
     return constant_exterior(func_like, Tuple(value), bounds...);
 }
 // @}
@@ -140,7 +140,7 @@ EXPORT Func repeat_edge(const Func &source,
                         const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func repeat_edge(T func_like) {
+inline NO_INLINE Func repeat_edge(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -151,7 +151,7 @@ inline NO_INLINE Func repeat_edge(T func_like) {
 
 
 template <typename T, typename ...Bounds>
-inline NO_INLINE Func repeat_edge(T func_like, Bounds... bounds) {
+inline NO_INLINE Func repeat_edge(const T &func_like, const Bounds &...bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return repeat_edge(Internal::func_like_to_func(func_like), collected_bounds);
@@ -175,7 +175,7 @@ EXPORT Func repeat_image(const Func &source,
                          const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func repeat_image(T func_like) {
+inline NO_INLINE Func repeat_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -185,7 +185,7 @@ inline NO_INLINE Func repeat_image(T func_like) {
 }
 
 template <typename T, typename ...Bounds>
-inline NO_INLINE Func repeat_image(T func_like, Bounds... bounds) {
+inline NO_INLINE Func repeat_image(const T &func_like, const Bounds &...bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return repeat_image(Internal::func_like_to_func(func_like), collected_bounds);
@@ -209,7 +209,7 @@ EXPORT Func mirror_image(const Func &source,
                          const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func mirror_image(T func_like) {
+inline NO_INLINE Func mirror_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -219,7 +219,7 @@ inline NO_INLINE Func mirror_image(T func_like) {
 }
 
 template <typename T, typename ...Bounds>
-inline NO_INLINE Func mirror_image(T func_like, Bounds... bounds) {
+inline NO_INLINE Func mirror_image(const T &func_like, const Bounds &...bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return mirror_image(Internal::func_like_to_func(func_like), collected_bounds);
@@ -246,7 +246,7 @@ EXPORT Func mirror_interior(const Func &source,
                             const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func mirror_interior(T func_like) {
+inline NO_INLINE Func mirror_interior(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -256,7 +256,7 @@ inline NO_INLINE Func mirror_interior(T func_like) {
 }
 
 template <typename T, typename ...Bounds>
-inline NO_INLINE Func mirror_interior(T func_like, Bounds... bounds) {
+inline NO_INLINE Func mirror_interior(const T &func_like, const Bounds &...bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
     ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return mirror_interior(Internal::func_like_to_func(func_like), collected_bounds);
