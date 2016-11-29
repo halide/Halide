@@ -209,20 +209,6 @@ halide_library(
 )
 
 halide_library(
-    name = "tiled_blur_interleaved",
-    generator = ":tiled_blur_generator",
-    generator_args = "is_interleaved=true",
-    includes = ["."],
-)
-
-halide_library(
-    name = "tiled_blur_blur_interleaved",
-    generator = ":tiled_blur_blur_generator",
-    generator_args = "is_interleaved=true",
-    includes = ["."],
-)
-
-halide_library(
     name = "user_context",
     generator = ":user_context_generator",
     halide_target_features = ["user_context"],
@@ -332,16 +318,13 @@ cc_test(
     ],
 )
 
-[cc_test(
-    name = "tiled_blur%s_aottest" % suffix,
-    srcs = ["tiled_blur%s_aottest.cpp" % suffix],
+cc_test(
+    name = "tiled_blur_aottest",
+    srcs = ["tiled_blur_aottest.cpp"],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        ":tiled_blur%s" % suffix,
-        ":tiled_blur_blur%s" % suffix,
+        ":tiled_blur",
+        ":tiled_blur_blur",
         "@halide//:language",
     ],
-) for suffix in [
-    "",
-    "_interleaved",
-]]
+)

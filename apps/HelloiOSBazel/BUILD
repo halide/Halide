@@ -2,7 +2,7 @@
 #
 #     bazel build :ios-app
 #
-# then, in XCode, open the project directory 
+# then, in XCode, open the project directory
 #
 #      bazel-bin/apps/HelloiOSBazel/ios-app.xcodeproj
 #
@@ -12,9 +12,9 @@
 #
 #     bazel build --ios_multi_cpus=armv7,arm64 :ios-app
 #
-# The easiest way to install the app on the device is to launch Xcode and use 
-# the Windows > Devices command. Select your plugged in device from the list on 
-# the left, and then add the app by clicking on the "plus" sign under installed 
+# The easiest way to install the app on the device is to launch Xcode and use
+# the Windows > Devices command. Select your plugged in device from the list on
+# the left, and then add the app by clicking on the "plus" sign under installed
 # apps and selecting the .ipa that you built.
 
 load(
