@@ -8,6 +8,8 @@ enum class SomeEnum { Foo,
 class MetadataTester : public Halide::Generator<MetadataTester> {
 public:
     Input<Func> input{ "input", Int(16), 2 };  // must be overridden to {UInt(8), 3}
+    Input<Buffer<uint8_t, 3>> input_buffer1{ "input_buffer1" };
+    Input<Buffer<>> input_buffer2{ "input_buffer2" };  // must be overridden to {UInt(8), 3}
     Input<bool> b{ "b", true };
     Input<int8_t> i8{ "i8", 8, -8, 127 }; 
     Input<int16_t> i16{ "i16", 16, -16, 127 };
@@ -36,6 +38,8 @@ public:
     Input<void *[]> array_h{ "array_h", nullptr };  // must specify size=2
 
     Output<Func> output{ "output", {Int(16), UInt(8)}, 2 };  // must be overridden to {{Float(32), Float(32)}, 3}
+    Output<Buffer<float, 3>> output_buffer1{ "output_buffer1" };
+    Output<Buffer<>> output_buffer2{ "output_buffer2" };  // must be overridden to {Float(32), 3}
     Output<float> output_scalar{ "output_scalar" };
     Output<Func[]> array_outputs{ "array_outputs", Float(32), 3 };  // must specify size=2
     Output<Func[2]> array_outputs2{ "array_outputs2", Float(32), 3 };
@@ -56,6 +60,8 @@ public:
         f2(x, y, c) = cast<float>(f1(x, y, c) + 1);
 
         output(x, y, c) = Tuple(f1(x, y, c), f2(x, y, c));
+        output_buffer1(x, y, c) = f1(x, y, c);
+        output_buffer2(x, y, c) = f2(x, y, c);
         output_scalar() = 1234.25f;
         for (size_t i = 0; i < array_outputs.size(); ++i) {
             array_outputs[i](x, y, c) = (i + 1) * 1.5f;

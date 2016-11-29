@@ -286,6 +286,24 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "input_buffer1",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "input_buffer2",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "b",
           halide_argument_kind_input_scalar,
           0,
@@ -601,6 +619,24 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "output_buffer1",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "output_buffer2",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "output_scalar",
           halide_argument_kind_output_buffer,
           0,
@@ -690,6 +726,8 @@ int main(int argc, char **argv) {
 
     Buffer<float> output0(kSize, kSize, 3);
     Buffer<float> output1(kSize, kSize, 3);
+    Buffer<float> output_buffer1(kSize, kSize, 3);
+    Buffer<float> output_buffer2(kSize, kSize, 3);
     Buffer<float> output_scalar = Buffer<float>::make_scalar();
     Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array2[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
@@ -697,6 +735,8 @@ int main(int argc, char **argv) {
 
     result = metadata_tester(
         input,             // Input<Func>
+        input,             // Input<Buffer<uint8_t, 3>>
+        input,             // Input<Buffer<>>
         false,             // Input<bool>
         0,                 // Input<i8>
         0,                 // Input<i16>
@@ -722,6 +762,8 @@ int main(int argc, char **argv) {
         0, 0,              // Input<int32_t[2]>
         nullptr, nullptr,  // Input<void*[]>
         output0, output1,  // Output<Tuple(Func, Func)>
+        output_buffer1,    // Output<Buffer<float, 3>>
+        output_buffer2,    // Output<Buffer<>>
         output_scalar,     // Output<float>
         output_array[0], output_array[1],   // Output<Func[]>
         output_array2[0], output_array2[1], // Output<Func[2]>
@@ -732,6 +774,8 @@ int main(int argc, char **argv) {
     result = metadata_tester_ucon(
         user_context, 
         input,             // Input<Func>
+        input,             // Input<Buffer<uint8_t, 3>>
+        input,             // Input<Buffer<>>
         false,             // Input<bool>
         0,                 // Input<i8>
         0,                 // Input<i16>
@@ -757,6 +801,8 @@ int main(int argc, char **argv) {
         0, 0,              // Input<int32_t[2]>
         nullptr, nullptr,  // Input<void*[]>
         output0, output1,  // Output<Tuple(Func, Func)>
+        output_buffer1,    // Output<Buffer<float, 3>>
+        output_buffer2,    // Output<Buffer<>>
         output_scalar,     // Output<float>
         output_array[0], output_array[1],    // Output<Func[]>
         output_array2[0], output_array2[1], // Output<Func[2]>

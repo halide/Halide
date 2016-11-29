@@ -202,11 +202,13 @@
 #include <vector>
 
 #include "Func.h"
-#include "ObjectInstanceRegistry.h"
 #include "Introspection.h"
+#include "ObjectInstanceRegistry.h"
 #include "Target.h"
 
 namespace Halide {
+
+template<typename T, int D> class Buffer;
 
 namespace Internal {
 
@@ -909,6 +911,8 @@ public:
     EXPORT const std::vector<Func> &funcs() const;
     EXPORT const std::vector<Expr> &exprs() const;
 
+    EXPORT virtual bool is_buffer() const;
+
 protected:
     EXPORT GIOBase(size_t array_size, 
                    const std::string &name, 
@@ -1046,6 +1050,117 @@ public:
 };
 
 template<typename T>
+class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func> {
+private:
+    using Super = GeneratorInputImpl<T, Func>;
+
+    // TODO: this logic to create vars based on specific name
+    // patterns is already replicated in several places across Halide;
+    // we should really centralize it into one place, as it seems likely
+    // to be fragile.
+    Expr MakeInt32Var(const char* c, int d) const {
+        const auto &p = this->parameters_.at(0);
+        std::ostringstream s;
+        s << p.name() << c << d;
+        return Variable::make(Int(32), s.str(), p);
+    }
+
+protected:
+    using TBase = typename Super::TBase;
+
+public:
+    GeneratorInput_Buffer(const std::string &name)
+        : Super(name, IOKind::Function,
+                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, 
+                T::has_static_halide_type() ? T::static_halide_max_dimensions() : -1) {
+    }
+
+    template <typename... Args>
+    Expr operator()(Args&&... args) const {
+        return this->funcs().at(0)(std::forward<Args>(args)...);
+    }
+
+    Expr operator()(std::vector<Expr> args) const {
+        return this->funcs().at(0)(args);
+    }
+
+    GeneratorInput_Buffer<T> &set_min_constraint(int i, Expr e) {
+        this->parameters_.at(0).set_min_constraint(i, e);
+        return *this;
+    }
+
+    GeneratorInput_Buffer<T> &set_extent_constraint(int i, Expr e) {
+        this->parameters_.at(0).set_extent_constraint(i, e);
+        return *this;
+    }
+
+    GeneratorInput_Buffer<T> &set_stride_constraint(int i, Expr e) {
+        this->parameters_.at(0).set_stride_constraint(i, e);
+        return *this;
+    }
+
+    GeneratorInput_Buffer<T> &set_host_alignment_constraint(int e) {
+        this->parameters_.at(0).set_host_alignment(e);
+        return *this;
+    }
+
+    Expr min(int i) const {
+        return MakeInt32Var(".min.", i);
+    }
+
+    Expr extent(int i) const {
+        return MakeInt32Var(".extent.", i);
+    }
+
+    Expr stride(int i) const {
+        return MakeInt32Var(".stride.", i);
+    }
+
+    Expr width() const {
+        return extent(0);
+    }
+
+    Expr height() {
+        return extent(1);
+    }
+
+    Expr channels() const {
+        return extent(2);
+    }
+
+    int host_alignment() const {
+        return this->parameters_.at(0).host_alignment();
+    }
+
+    // This is a minimal definition of "Dimension" that is just enough to satisfy
+    // the needs of a "func-like" in BoundaryConditions.
+    struct Dimension {
+        const Expr min_, extent_, stride_;
+
+        Expr min() const { return min_; }
+        Expr extent() const { return extent_; }
+        Expr stride() const { return stride_; }
+        Expr max() const { return min() + extent(); }
+    };
+    const Dimension dim(int i) const {
+        return { min(i), extent(i), stride(i) };
+    }
+
+    operator Func() const { 
+        return this->funcs().at(0); 
+    }
+
+    int dimensions() const {
+        return this->funcs().at(0).dimensions(); 
+    }
+
+    bool is_buffer() const override {
+        return true;
+    }
+};
+
+
+template<typename T>
 class GeneratorInput_Func : public GeneratorInputImpl<T, Func> {
 private:
     using Super = GeneratorInputImpl<T, Func>;
@@ -1103,6 +1218,10 @@ public:
 
     operator Func() const { 
         return this->funcs().at(0); 
+    }
+
+    int dimensions() const {
+        return this->funcs().at(0).dimensions(); 
     }
 };
 
@@ -1199,12 +1318,22 @@ public:
     }
 };
 
+template<typename> 
+struct type_sink { typedef void type; };
+
+template<typename T2, typename = void> 
+struct has_static_halide_type_method : std::false_type {}; 
+
+template<typename T2> 
+struct has_static_halide_type_method<T2, typename type_sink<decltype(T2::static_halide_type())>::type> : std::true_type {};
+
 template<typename T, typename TBase = typename std::remove_all_extents<T>::type> 
 using GeneratorInputImplBase =
     typename select_type<
-        cond<std::is_same<TBase, Func>::value, GeneratorInput_Func<T>>,
-        cond<std::is_arithmetic<TBase>::value, GeneratorInput_Arithmetic<T>>,
-        cond<std::is_scalar<TBase>::value,     GeneratorInput_Scalar<T>>
+        cond<has_static_halide_type_method<TBase>::value, GeneratorInput_Buffer<T>>,
+        cond<std::is_same<TBase, Func>::value,            GeneratorInput_Func<T>>,
+        cond<std::is_arithmetic<TBase>::value,            GeneratorInput_Arithmetic<T>>,
+        cond<std::is_scalar<TBase>::value,                GeneratorInput_Scalar<T>>
     >::type;
 
 }  // namespace Internal
@@ -1353,6 +1482,11 @@ public:
         return get_values<ValueType>().at(0); 
     }
 
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    int dimensions() const {
+        return get_values<ValueType>().at(0).dimensions(); 
+    }
+
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     size_t size() const {
         return get_values<ValueType>().size();
@@ -1386,6 +1520,64 @@ public:
         GeneratorOutputBase::resize(size);
     }
 };
+
+template<typename T>
+class GeneratorOutput_Buffer : public GeneratorOutputImpl<T> {
+private:
+    using Super = GeneratorOutputImpl<T>;
+
+protected:
+    using TBase = typename Super::TBase;
+
+protected:
+    GeneratorOutput_Buffer(const std::string &name)
+        : Super(name, 
+                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, 
+                T::has_static_halide_type() ? T::static_halide_max_dimensions() : -1) {
+    }
+
+public:
+    GeneratorOutput_Buffer<T> &set_min_constraint(int i, Expr e) {
+        this->funcs().at(0).output_buffer().set_min(i, e);
+        return *this;
+    }
+
+    GeneratorOutput_Buffer<T> &set_extent_constraint(int i, Expr e) {
+        this->funcs().at(0).output_buffer().set_extent(i, e);
+        return *this;
+    }
+
+    GeneratorOutput_Buffer<T> &set_stride_constraint(int i, Expr e) {
+        this->funcs().at(0).output_buffer().set_stride(i, e);
+        return *this;
+    }
+
+    GeneratorOutput_Buffer<T> &set_host_alignment_constraint(int e) {
+        this->funcs().at(0).output_buffer().set_host_alignment(e);
+        return *this;
+    }
+
+    Expr min(int i) const {
+        return this->funcs().at(0).output_buffer().min(i);
+    }
+
+    Expr extent(int i) const {
+        return this->funcs().at(0).output_buffer().extent(i);
+    }
+
+    Expr stride(int i) const {
+        return this->funcs().at(0).output_buffer().stride(i);
+    }
+
+    int host_alignment() const {
+        return this->funcs().at(0).output_buffer().host_alignment();
+    }
+
+    bool is_buffer() const override {
+        return true;
+    }
+};
+
 
 template<typename T>
 class GeneratorOutput_Func : public GeneratorOutputImpl<T> {
@@ -1426,6 +1618,7 @@ protected:
 template<typename T, typename TBase = typename std::remove_all_extents<T>::type> 
 using GeneratorOutputImplBase =
     typename select_type<
+        cond<has_static_halide_type_method<TBase>::value, GeneratorOutput_Buffer<T>>,
         cond<std::is_same<TBase, Func>::value, GeneratorOutput_Func<T>>,
         cond<std::is_arithmetic<TBase>::value, GeneratorOutput_Arithmetic<T>>
     >::type;

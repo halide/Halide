@@ -356,7 +356,26 @@ void StubEmitter::emit() {
         // on the other hand, since this file is just a couple of comments, it's
         // really not an issue if it's included multiple times.
         stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
-        stream << "/* There is no Stub for the Generator named " << generator_name << " */\n";
+        stream << "/* The Generator named " << generator_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
+        return;
+    }
+
+    bool uses_buffer = false;
+    for (auto input : inputs) {
+        if (input->is_buffer()) {
+            uses_buffer = true;
+            break;
+        }
+    }
+    for (auto output : outputs) {
+        if (output->is_buffer()) {
+            uses_buffer = true;
+            break;
+        }
+    }
+    if (uses_buffer) {
+        stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
+        stream << "/* The Generator named " << generator_name << " uses Input<Buffer> or Output<Buffer>, thus cannot have a Stub generated. */\n";
         return;
     }
 
@@ -1267,6 +1286,10 @@ size_t GIOBase::array_size() const {
 
 bool GIOBase::is_array() const { 
     internal_error << "Unimplemented"; return false; 
+}
+
+bool GIOBase::is_buffer() const {
+    return false;
 }
 
 const std::string &GIOBase::name() const { 

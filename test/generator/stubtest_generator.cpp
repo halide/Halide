@@ -18,8 +18,10 @@ public:
     Input<Func[]> input{ "input", 3 };  // require a 3-dimensional Func but leave Type and ArraySize unspecified
     Input<float> float_arg{ "float_arg", 1.0f, 0.0f, 100.0f }; 
     Input<int32_t[]> int_arg{ "int_arg", 1 };  // leave ArraySize unspecified
+    //Input<Buffer<float, 3>> fff{ "fff" };  // leave ArraySize unspecified
 
     Output<Func> f{"f", 3};  // require a 3-dimensional Func but leave Type(s) unspecified
+    //Output<Buffer<float, 3>> f{"f"};
     Output<Func[]> g{ "g", Int(16), 2};   // leave ArraySize unspecified
 
     void generate() {
