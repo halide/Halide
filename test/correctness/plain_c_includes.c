@@ -17,4 +17,5 @@
 
 int main(int argc, char **argv) {
     printf("Success!");
+    return 0;
 }
