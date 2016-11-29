@@ -363,6 +363,15 @@ private:
             def = p.get_scalar_expr();
             min = p.get_min_value();
             max = p.get_max_value();
+            visit_expr(def);
+            visit_expr(min);
+            visit_expr(max);
+        } else {
+            for (int i = 0; i < p.dimensions(); i++) {
+                visit_expr(p.min_constraint(i));
+                visit_expr(p.extent_constraint(i));
+                visit_expr(p.stride_constraint(i));
+            }
         }
         InferredArgument a = {
             Argument(p.name(),
@@ -371,6 +380,7 @@ private:
             p,
             BufferPtr()};
         args.push_back(a);
+
     }
 
     void include_buffer(BufferPtr b) {
