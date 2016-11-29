@@ -363,6 +363,18 @@ private:
             def = p.get_scalar_expr();
             min = p.get_min_value();
             max = p.get_max_value();
+        }
+
+        InferredArgument a = {
+            Argument(p.name(),
+                     p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
+                     p.type(), p.dimensions(), def, min, max),
+            p,
+            BufferPtr()};
+        args.push_back(a);
+
+        // Visit child expressions
+        if (!p.is_buffer()) {
             visit_expr(def);
             visit_expr(min);
             visit_expr(max);
@@ -373,14 +385,6 @@ private:
                 visit_expr(p.stride_constraint(i));
             }
         }
-        InferredArgument a = {
-            Argument(p.name(),
-                     p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                     p.type(), p.dimensions(), def, min, max),
-            p,
-            BufferPtr()};
-        args.push_back(a);
-
     }
 
     void include_buffer(BufferPtr b) {
