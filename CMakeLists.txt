@@ -87,6 +87,13 @@ option(HALIDE_ENABLE_RTTI "Build with RTTI enabled" OFF)
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
+  if (MSVC)
+  else()
+    target_compile_options("${name}" PUBLIC "-std=c++11") # Halide clients need C++11
+    if(NOT HALIDE_ENABLE_RTTI)
+      target_compile_options("${name}" PUBLIC "-fno-rtti")
+    endif()
+  endif()
   target_link_libraries("${name}" PRIVATE Halide)
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
