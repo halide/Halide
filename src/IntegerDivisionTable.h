@@ -1,6 +1,8 @@
 #ifndef HALIDE_INTEGER_DIVISION_TABLE_H
 #define HALIDE_INTEGER_DIVISION_TABLE_H
 
+#include <cstdint>
+
 /** \file
  * Tables telling us how to do integer division via fixed-point
  * multiplication for various small constants.
