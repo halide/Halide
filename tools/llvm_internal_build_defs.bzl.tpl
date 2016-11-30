@@ -9,6 +9,9 @@ _components_map = {
   "x86" : "WITH_X86",
 }
 
+def get_llvm_executable_extension():
+  return %{llvm_executable_extension}
+
 def get_llvm_version():
   return %{llvm_version}
 
