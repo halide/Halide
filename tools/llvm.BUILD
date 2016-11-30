@@ -7,16 +7,22 @@ package(
     default_visibility = ["//visibility:public"],
 )
 
-load("//:llvm_internal_build_defs.bzl", "get_llvm_copts", "get_llvm_linkopts", "get_llvm_static_libs")
+load(
+    "//:llvm_internal_build_defs.bzl", 
+    "get_llvm_copts", 
+    "get_llvm_executable_extension", 
+    "get_llvm_linkopts", 
+    "get_llvm_static_libs"
+)
 
 filegroup(
     name = "llvm-as",
-    srcs = ["bin/llvm-as"],
+    srcs = ["bin/llvm-as%s" % get_llvm_executable_extension()],
 )
 
 filegroup(
     name = "clang",
-    srcs = ["bin/clang"],
+    srcs = ["bin/clang%s" % get_llvm_executable_extension()],
 )
 
 cc_library(
