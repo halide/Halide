@@ -19,14 +19,29 @@ const int32_t kSize = 16;
 
 using Halide::Buffer;
 
-Buffer<float, 2> real_buffer(int32_t y_size = kSize) {
-    return Buffer<float, 2>(kSize, y_size);
+Buffer<float, 3> real_buffer(int32_t y_size = kSize) {
+    return Buffer<float, 3>::make_interleaved(kSize, y_size, 1);
 }
 
 Buffer<float, 3> complex_buffer(int32_t y_size = kSize) {
-    return Buffer<float, 3>(2, kSize, y_size);
+    return Buffer<float, 3>::make_interleaved(kSize, y_size, 2);
 }
 
+float &re(Buffer<float, 3> &b, int x, int y) {
+    return b(x, y, 0);
+}
+
+float &im(Buffer<float, 3> &b, int x, int y) {
+    return b(x, y, 1);
+}
+
+float re(const Buffer<float, 3> &b, int x, int y) {
+    return b(x, y, 0);
+}
+
+float im(const Buffer<float, 3> &b, int x, int y) {
+    return b(x, y, 1);
+}
 
 int main(int argc, char **argv) {
     std::cout << std::fixed << std::setprecision(2);
@@ -61,8 +76,8 @@ int main(int argc, char **argv) {
 
         for (size_t i = 1; i < 5; i++) {
             // Check horizontal bins
-            float real = out(0, i, 0);
-            float imaginary = out(1, i, 0);
+            float real = re(out, i, 0);
+            float imaginary = im(out, i, 0);
             float magnitude = sqrt(real * real + imaginary * imaginary);
             if (fabs(magnitude - .5f) > .001) {
                 std::cerr << "fft_forward_r2c bad magnitude for horizontal bin " << i << ":" << magnitude << std::endl;
@@ -74,8 +89,8 @@ int main(int argc, char **argv) {
                 exit(1);
             }
             // Check vertical bins
-            real = out(0, 0, i);
-            imaginary = out(1, 0, i);
+            real = re(out, 0, i);
+            imaginary = im(out, 0, i);
             magnitude = sqrt(real * real + imaginary * imaginary);
             if (fabs(magnitude - .5f) > .001) {
                 std::cerr << "fft_forward_r2c bad magnitude for vertical bin " << i << ":" << magnitude << std::endl;
@@ -96,8 +111,8 @@ int main(int argc, char **argv) {
                 // negative frequency components as well.
                 if (!((j == 0 && ((i > 0 && i < 5) || (i > kSize - 5))) ||
                       (i == 0 && j > 0 && j < 5))) {
-                    float real = out(0, i, j);
-                    float imaginary = out(1, i, j);
+                    float real = re(out, i, j);
+                    float imaginary = im(out, i, j);
                     if (fabs(real) > .001) {
                         std::cerr << "fft_forward_r2c real component at (" << i << ", " << j << ") is non-zero: " << real << std::endl;
                         exit(1);
@@ -115,7 +130,7 @@ int main(int argc, char **argv) {
     {
         std::cout << "Inverse complex to real test." << std::endl;
 
-        Buffer<float, 3> in(2, kSize, kSize);
+        auto in = complex_buffer();
         in.fill(0);
 
         // There are four components that get summed to form the magnitude, which we want to be 1.
@@ -123,11 +138,11 @@ int main(int argc, char **argv) {
         // real and complex components. The +/- frequencies sum algebraically and the complex
         // components contribute to the magnitude as the sides of triangle like any 2D vector.
         float term_magnitude = 1.0f / (2.0f * sqrt(2.0f));
-        in(0, 1, 0) = term_magnitude;
-        in(1, 1, 0) = term_magnitude;
+        re(in, 1, 0) = term_magnitude;
+        im(in, 1, 0) = term_magnitude;
         // Negative frequencies count backward from end, no DC term
-        in(0, kSize - 1, 0) = term_magnitude;
-        in(1, kSize - 1, 0) = -term_magnitude; // complex conjugate
+        re(in, kSize - 1, 0) = term_magnitude;
+        im(in, kSize - 1, 0) = -term_magnitude; // complex conjugate
 
         auto out = real_buffer();
 
@@ -169,8 +184,8 @@ int main(int argc, char **argv) {
 
         for (int j = 0; j < kSize; j++) {
             for (int i = 0; i < kSize; i++) {
-                in(0, i, j) = signal_1d_real[i] + signal_1d_real[j];
-                in(1, i, j) = signal_1d_complex[i] + signal_1d_complex[j];
+                re(in, i, j) = signal_1d_real[i] + signal_1d_real[j];
+                im(in, i, j) = signal_1d_complex[i] + signal_1d_complex[j];
             }
         }
 
@@ -185,8 +200,8 @@ int main(int argc, char **argv) {
 
         for (size_t i = 1; i < 5; i++) {
             // Check horizontal bins
-            float real = out(0, i, 0);
-            float imaginary = out(1, i, 0);
+            float real = re(out, i, 0);
+            float imaginary = im(out, i, 0);
             float magnitude = sqrt(real * real + imaginary * imaginary);
             if (fabs(magnitude - 1.0f) > .001) {
                 std::cerr << "fft_forward_c2c bad magnitude for horizontal bin " << i << ":" << magnitude << std::endl;
@@ -198,8 +213,8 @@ int main(int argc, char **argv) {
                 exit(1);
             }
             // Check vertical bins
-            real = out(0, 0, i);
-            imaginary = out(1, 0, i);
+            real = re(out, 0, i);
+            imaginary = im(out, 0, i);
             magnitude = sqrt(real * real + imaginary * imaginary);
             if (fabs(magnitude - 1.0f) > .001) {
                 std::cerr << "fft_forward_c2c bad magnitude for vertical bin " << i << ":" << magnitude << std::endl;
@@ -221,8 +236,8 @@ int main(int argc, char **argv) {
                 // interference of the real and complex parts.
               if (!((j == 0 && (i > 0 && i < 5)) ||
                     (i == 0 && j > 0 && j < 5))) {
-                    float real = out(0, i, j);
-                    float imaginary = out(1, i, j);
+                    float real = re(out, i, j);
+                    float imaginary = im(out, i, j);
                     if (fabs(real) > .001) {
                         std::cerr << "fft_forward_c2c real component at (" << i << ", " << j << ") is non-zero: " << real << std::endl;
                         exit(1);
@@ -243,10 +258,10 @@ int main(int argc, char **argv) {
         auto in = complex_buffer();
         in.fill(0);
 
-        in(0, 1, 0) = .5f;
-        in(1, 1, 0) = .5f;
-        in(0, kSize - 1, 0) = .5f;
-        in(1, kSize - 1, 0) = .5f; // Not conjugate. Result will not be real
+        re(in, 1, 0) = .5f;
+        im(in, 1, 0) = .5f;
+        re(in, kSize - 1, 0) = .5f;
+        im(in, kSize - 1, 0) = .5f; // Not conjugate. Result will not be real
 
         auto out = complex_buffer();
 
@@ -259,8 +274,8 @@ int main(int argc, char **argv) {
 
         for (size_t j = 0; j < kSize; j++) {
             for (size_t i = 0; i < kSize; i++) {
-                float real_sample = out(0, i, j);
-                float imaginary_sample = out(1, i, j);
+                float real_sample = re(out, i, j);
+                float imaginary_sample = im(out, i, j);
                 float real_expected = 1 / sqrt(2) * (cos(2 * kPi * (i / 16.0f + .125)) + cos(2 * kPi * (i * (kSize - 1) / 16.0f + .125)));
                 float imaginary_expected = 1 / sqrt(2) * (sin(2 * kPi * (i / 16.0f + .125)) +  sin(2 * kPi * (i * (kSize - 1) / 16.0f + .125)));
 
