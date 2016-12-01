@@ -193,8 +193,6 @@ struct Prefetch {
     Expr offset;
 };
 
-class ReductionDomain;
-
 struct FunctionContents;
 
 /** A schedule for a single stage of a Halide pipeline. Right now this
