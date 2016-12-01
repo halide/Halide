@@ -295,7 +295,7 @@ struct halide_trace_event {
     const char *func;
     enum halide_trace_event_code event;
     int32_t parent_id;
-    halide_type_t type;
+    struct halide_type_t type;
     int32_t value_index;
     void *value;
     int32_t dimensions;
@@ -397,7 +397,7 @@ extern int halide_device_free(void *user_context, struct buffer_t *buf);
  * mechanism on different platforms. */
 typedef int (*halide_device_free_t)(void *, struct buffer_t *);
 #ifdef _MSC_VER
-extern const __declspec(selectany) void *halide_dummy_device_free = nullptr;
+extern const __declspec(selectany) void *halide_dummy_device_free = NULL;
 extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 // The following pragma tells the windows linker to make
 // halide_device_free_weak the same symbol as halide_dummy_device_free
@@ -409,7 +409,7 @@ extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 #endif
 inline halide_device_free_t halide_get_device_free_fn() {
     if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
-        return nullptr;
+        return NULL;
     } else {
         return &halide_weak_device_free;
     }
@@ -768,7 +768,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
     halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
     halide_target_feature_avx512 = 38, ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
-    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER. 
+    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
     halide_target_feature_end = 42 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
@@ -920,7 +920,7 @@ struct halide_filter_argument_t {
     const char *name;       // name of the argument; will never be null or empty.
     int32_t kind;           // actually halide_argument_kind_t
     int32_t dimensions;     // always zero for scalar arguments
-    halide_type_t type;
+    struct halide_type_t type;
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
     // there is no def/min/max specified for this argument.)

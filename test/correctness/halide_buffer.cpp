@@ -1,4 +1,5 @@
-#include "Halide.h"
+// Don't include Halide.h: it is not necessary for this test.
+#include "HalideBuffer.h"
 
 using namespace Halide;
 

@@ -12,7 +12,7 @@ public class AndroidBufferUtilities {
 
     // Load native Halide shared library.
     static {
-        System.loadLibrary("native");
+        System.loadLibrary("HelloAndroidCamera2");
     }
 
     /**

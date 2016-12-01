@@ -2757,8 +2757,8 @@ private:
             }
         } else if (no_overflow(op->type) &&
                    sub_a &&
-                   is_const(sub_a->a) &&
-                   is_const(b)) {
+                   is_simple_const(sub_a->a) &&
+                   is_simple_const(b)) {
             // max(8 - x, 3) -> 8 - min(x, 5)
             expr = mutate(sub_a->a - min(sub_a->b, sub_a->a - b));
         } else if (select_a &&
