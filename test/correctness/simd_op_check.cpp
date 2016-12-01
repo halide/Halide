@@ -1770,7 +1770,9 @@ void check_hvx_all() {
 
     check("vmpy(v*.h,v*.h):<<1:rnd:sat", hvx_width/2, i16_sat((i32(i16_1)*i32(i16_2) + 16384)/32768));
     check("vmpy(v*.h,r*.h):<<1:sat", hvx_width/2, i16_sat((i32(i16_1)*32767)/32768));
+    check("vmpy(v*.h,r*.h):<<1:sat", hvx_width/2, i16_sat((32767*i32(i16_1))/32768));
     check("vmpy(v*.h,r*.h):<<1:rnd:sat", hvx_width/2, i16_sat((i32(i16_1)*32767 + 16384)/32768));
+    check("vmpy(v*.h,r*.h):<<1:rnd:sat", hvx_width/2, i16_sat((32767*i32(i16_1) + 16384)/32768));
 
     check("v*.w += vasl(v*.w,r*)", hvx_width/4, u32_1 + (u32_2 * 8));
     check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 * 8));
