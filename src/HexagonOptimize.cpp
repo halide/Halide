@@ -533,6 +533,13 @@ private:
             { "halide.hexagon.trunc_satuh_rnd.vw", u16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
             { "halide.hexagon.trunc_sath_rnd.vw",  i16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
 
+            // Scalar multiply keep high half, with multiplication by 2.
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((wild_i32x*bc(wild_i32))/32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((wild_i32x*bc(wild_i32) + 16384)/32768), Pattern::NarrowOps },
+
+            // Vector multiply keep high half, with multiplication by 2.
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat((wild_i32x*wild_i32x + 16384)/32768), Pattern::NarrowOps },
+
             // Saturating narrowing casts
             { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
@@ -540,16 +547,6 @@ private:
             { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
             { "halide.hexagon.trunc_sath_shr.vw.w",  i16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
-
-            // Scalar multiply keep high half, with multiplication by 2.
-            // TODO: We should also be able to match multiplication by
-            // constants, without the multiply by 2, where the
-            // constant is divisible by 2.
-            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16(i32_sat(i64(wild_i32x*bc(wild_i32))*2)/65536), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16(i32_sat(i64(wild_i32x*bc(wild_i32))*2 + 32768)/65536), Pattern::NarrowOps },
-
-            // Vector multiply keep high half, with multiplication by 2.
-            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16(i32_sat(i64(wild_i32x*wild_i32x)*2 + 32768)/65536), Pattern::NarrowOps },
 
             // For some of the following narrowing casts, we have the choice of
             // non-interleaving or interleaving instructions. Because we don't
