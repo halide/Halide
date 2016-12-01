@@ -1,4 +1,3 @@
-# TODO apps/HelloAndroid
 # TODO apps/HelloAndroidCamera2
 # TODO apps/HelloAndroidGL
 # TODO apps/HelloAppleMetal
