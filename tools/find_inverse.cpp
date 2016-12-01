@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
                     for (int shift = 0; shift < 8; shift++) {
                         int64_t mul = (1L << (bits+shift)) / den + 1;
                         if (u_method_1(den, mul, shift, bits)) {
-                            printf("    {%d, 1, %ldULL, %d},\n", den, mul, shift);
+                            printf("    {%d, 1, %lldULL, %d},\n", den, (long long) mul, shift);
                             goto next_unsigned;
                         }
                     }
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
                 for (int shift = 0; shift < 8; shift++) {
                     int64_t mul = (1L << (bits+shift+1)) / den - (1L << bits) + 1;
                     if (u_method_2(den, mul, shift, bits)) {
-                        printf("    {%d, 2, %ldULL, %d},\n", den, mul, shift);
+                        printf("    {%d, 2, %lldULL, %d},\n", den, (long long) mul, shift);
                         goto next_unsigned;
                     }
                 }
@@ -185,7 +185,7 @@ int main(int argc, char **argv) {
                 for (int shift = 0; shift < 8; shift++) {
                     int64_t mul = (1L << (shift + bits)) / den + 1;
                     if (s_method_1(den, mul, shift, bits)) {
-                        printf("    {%d, 1, %ldLL, %d},\n", den, mul, shift);
+                        printf("    {%d, 1, %lldLL, %d},\n", den, (long long) mul, shift);
                         goto next_signed;
                     }
                 }
