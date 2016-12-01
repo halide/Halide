@@ -9,7 +9,7 @@
  * expensive method, while the compile-time set uses
  * the cheapest method for the given divisor.
  */
-#include <stdint.h>
+#include <cstdint>
 namespace Halide {
 namespace Internal {
 namespace IntegerDivision {
