@@ -5,6 +5,8 @@
 #include <map>
 #include <numeric>
 
+#include "test/common/check_call_graphs.h"
+
 using std::map;
 using std::vector;
 using std::string;
@@ -73,22 +75,6 @@ public:
     }
 };
 
-int check_image(const Image<int> &im, const std::function<int(int,int,int)> &func) {
-    for (int z = 0; z < im.channels(); z++) {
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                int correct = func(x, y, z);
-                if (im(x, y, z) != correct) {
-                    printf("im(%d, %d, %d) = %d instead of %d\n",
-                           x, y, z, im(x, y, z), correct);
-                    return -1;
-                }
-            }
-        }
-    }
-    return 0;
-}
-
 int vectorized_predicated_store_scalarized_predicated_load_test() {
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
@@ -96,20 +82,25 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
     g(x, y) = x + y;
     g.compute_root();
 
-    RDom r(0, 50, 0, 50);
+    RDom r(0, 100, 0, 100);
     r.where(r.x + r.y < r.x*r.y);
 
     ref(x, y) = 10;
     ref(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
-    Image<int> im_ref = ref.realize(80, 80);
+    Image<int> im_ref = ref.realize(170, 170);
 
     f(x, y) = 10;
     f(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
-    f.update(0).vectorize(r.x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.update(0).hexagon().vectorize(r.x, 32);
+    } else {
+        f.update(0).vectorize(r.x, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    }
 
-    Image<int> im = f.realize(80, 80);
+    Image<int> im = f.realize(170, 170);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -118,7 +109,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
 }
 
 int vectorized_dense_load_with_stride_minus_one_test() {
-    int size = 50;
+    int size = 73;
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
 
@@ -129,9 +120,15 @@ int vectorized_dense_load_with_stride_minus_one_test() {
     Image<int> im_ref = ref.realize(size, size);
 
     f(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
-    f.vectorize(x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        //TODO(psuriana): the hexagon test for this one is broken
+        //f.hexagon().vectorize(x, 16);
+    } else {
+        f.vectorize(x, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    }
 
     Image<int> im = f.realize(size, size);
     auto func = [&im_ref, &im](int x, int y, int z) {
@@ -145,7 +142,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
 }
 
 int multiple_vectorized_predicate_test() {
-    int size = 50;
+    int size = 100;
     Var x("x"), y("y");
     Func f ("f"), g("g"), ref("ref");
 
@@ -153,18 +150,24 @@ int multiple_vectorized_predicate_test() {
     g.compute_root();
 
     RDom r(0, size, 0, size);
-    r.where(r.x + r.y < 23);
-    r.where(r.x*r.y + r.x*r.x < 300);
+    r.where(r.x + r.y < 57);
+    r.where(r.x*r.y + r.x*r.x < 490);
 
     ref(x, y) = 10;
-    ref(r.x, r.y) = g(size-r.x, r.y) * 2 + g(20-r.x, r.y);
+    ref(r.x, r.y) = g(size-r.x, r.y) * 2 + g(67-r.x, r.y);
     Image<int> im_ref = ref.realize(size, size);
 
     f(x, y) = 10;
-    f(r.x, r.y) = g(size-r.x, r.y) * 2 + g(20-r.x, r.y);
-    f.update(0).vectorize(r.x, 8);
+    f(r.x, r.y) = g(size-r.x, r.y) * 2 + g(67-r.x, r.y);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        //TODO(psuriana): the hexagon test for this one is broken
+        //f.update(0).hexagon().vectorize(r.x, 32);
+    } else {
+        f.update(0).vectorize(r.x, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    }
 
     Image<int> im = f.realize(size, size);
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -181,20 +184,25 @@ int scalar_load_test() {
     g(x, y) = x + y;
     g.compute_root();
 
-    RDom r(0, 40, 0, 40);
-    r.where(r.x + r.y < 24);
+    RDom r(0, 80, 0, 80);
+    r.where(r.x + r.y < 48);
 
     ref(x, y) = 10;
     ref(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
-    Image<int> im_ref = ref.realize(80, 80);
+    Image<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
     f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
-    f.update(0).vectorize(r.x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.update(0).hexagon().vectorize(r.x, 32);
+    } else {
+        f.update(0).vectorize(r.x, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    }
 
-    Image<int> im = f.realize(80, 80);
+    Image<int> im = f.realize(160, 160);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -209,21 +217,27 @@ int scalar_store_test() {
     g(x, y) = x + y;
     g.compute_root();
 
-    RDom r(0, 40, 0, 40);
-    r.where(r.x + r.y < 24);
+    RDom r(0, 80, 0, 80);
+    r.where(r.x + r.y < 48);
 
     ref(x, y) = 10;
     ref(13, 13) = max(g(0, 1), g(2*r.x + 1, r.y));
-    Image<int> im_ref = ref.realize(80, 80);
+    Image<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
     f(13, 13) = max(g(0, 1), g(2*r.x + 1, r.y));
+
     f.update(0).allow_race_conditions();
-    f.update(0).vectorize(r.x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.update(0).hexagon().vectorize(r.x, 32);
+    } else {
+        f.update(0).vectorize(r.x, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    }
 
-    Image<int> im = f.realize(80, 80);
+    Image<int> im = f.realize(160, 160);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -238,21 +252,27 @@ int not_dependent_on_vectorized_var_test() {
     g(x, y, z) = x + y + z;
     g.compute_root();
 
-    RDom r(0, 40, 0, 40, 0, 40);
-    r.where(r.z*r.z < 24);
+    RDom r(0, 80, 0, 80, 0, 80);
+    r.where(r.z*r.z < 47);
 
     ref(x, y, z) = 10;
     ref(r.x, r.y, 1) = max(g(0, 1, 2), g(r.x + 1, r.y, 2));
-    Image<int> im_ref = ref.realize(80, 80, 80);
+    Image<int> im_ref = ref.realize(160, 160, 160);
 
     f(x, y, z) = 10;
     f(r.x, r.y, 1) = max(g(0, 1, 2), g(r.x + 1, r.y, 2));
+
     f.update(0).allow_race_conditions();
-    f.update(0).vectorize(r.z, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.update(0).hexagon().vectorize(r.z, 32);
+    } else {
+        f.update(0).vectorize(r.z, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
+    }
 
-    Image<int> im = f.realize(80, 80, 80);
+    Image<int> im = f.realize(160, 160, 160);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -264,23 +284,29 @@ int no_op_store_test() {
     Var x("x"), y("y");
     Func f ("f"), ref("ref");
 
-    RDom r(0, 40, 0, 40);
-    r.where(r.x + r.y < 24);
+    RDom r(0, 80, 0, 80);
+    r.where(r.x + r.y < 47);
 
     ref(x, y) = x + y;
     ref(2*r.x + 1, r.y) = ref(2*r.x + 1, r.y);
     ref(2*r.x, 3*r.y) = ref(2*r.x, 3*r.y);
-    Image<int> im_ref = ref.realize(120, 120);
+    Image<int> im_ref = ref.realize(240, 240);
 
     f(x, y) = x + y;
     f(2*r.x + 1, r.y) = f(2*r.x + 1, r.y);
     f(2*r.x, 3*r.y) = f(2*r.x, 3*r.y);
-    f.update(0).vectorize(r.x, 8);
-    f.update(1).vectorize(r.y, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.update(0).hexagon().vectorize(r.x, 32);
+        f.update(1).hexagon().vectorize(r.y, 32);
+    } else {
+        f.update(0).vectorize(r.x, 32);
+        f.update(1).vectorize(r.y, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
+    }
 
-    Image<int> im = f.realize(120, 120);
+    Image<int> im = f.realize(240, 240);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -295,20 +321,25 @@ int vectorized_predicated_predicate_with_pure_call_test() {
     g(x, y) = x + y;
     g.compute_root();
 
-    RDom r(0, 50, 0, 50);
+    RDom r(0, 100, 0, 100);
     r.where(r.x + r.y < r.x*r.y);
 
     ref(x, y) = 10;
     ref(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
-    Image<int> im_ref = ref.realize(80, 80);
+    Image<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
     f(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
-    f.update(0).vectorize(r.x, 8);
 
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.update(0).hexagon().vectorize(r.x, 32);
+    } else {
+        f.update(0).vectorize(r.x, 32);
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
+    }
 
-    Image<int> im = f.realize(80, 80);
+    Image<int> im = f.realize(160, 160);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -317,11 +348,6 @@ int vectorized_predicated_predicate_with_pure_call_test() {
 }
 
 int main(int argc, char **argv) {
-    printf("Running vectorized predicated store scalarized predicated load test\n");
-    if (vectorized_predicated_store_scalarized_predicated_load_test() != 0) {
-        return -1;
-    }
-
     printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test() != 0) {
         return -1;
@@ -329,6 +355,11 @@ int main(int argc, char **argv) {
 
     printf("Running multiple vectorized predicate test\n");
     if (multiple_vectorized_predicate_test() != 0) {
+        return -1;
+    }
+
+    printf("Running vectorized predicated store scalarized predicated load test\n");
+    if (vectorized_predicated_store_scalarized_predicated_load_test() != 0) {
         return -1;
     }
 

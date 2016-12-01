@@ -1401,6 +1401,8 @@ void CodeGen_Hexagon::codegen_predicated_vector_store(const Call *op) {
         return;
     }
 
+    Type value_type = op->args[2].type().element_of();
+
     // We need to scalarize the predicated store since masked store/load on
     // hexagon is not handled by the LLVM
     debug(4) << "Scalarize predicated vector store on hexagon\n";
@@ -1419,23 +1421,18 @@ void CodeGen_Hexagon::codegen_predicated_vector_store(const Call *op) {
         Value *idx = builder->CreateExtractElement(vindex, lane);
         internal_assert(p && v && idx);
 
-        string pred_name = unique_name("pred");
-        string val_name = unique_name("val");
-        string idx_name = unique_name("idx");
-        Expr pred = Variable::make(op->args[1].type().element_of(), pred_name);
-        Expr val = Variable::make(op->args[2].type().element_of(), val_name);
-        Expr store_idx = Variable::make(load->index.type().element_of(), idx_name);
+        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+        builder->CreateCondBr(p, true_bb, after_bb);
 
-        sym_push(pred_name, p);
-        sym_push(val_name, v);
-        sym_push(idx_name, idx);
+        builder->SetInsertPoint(true_bb);
 
-        Stmt store = Store::make(load->name, val, store_idx, load->param);
-        codegen(IfThenElse::make(pred, store));
+        // Scalar
+        Value *ptr = codegen_buffer_pointer(load->name, value_type, idx);
+        builder->CreateAlignedStore(v, ptr, value_type.bytes());
 
-        sym_pop(pred_name);
-        sym_pop(val_name);
-        sym_pop(idx_name);
+        builder->CreateBr(after_bb);
+        builder->SetInsertPoint(after_bb);
     }
 }
 
