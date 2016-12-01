@@ -123,12 +123,14 @@ template<typename T>
 struct ExprNode : public BaseExprNode {
     EXPORT void accept(IRVisitor *v) const;
     virtual IRNodeType type_info() const {return T::_type_info;}
+    virtual ~ExprNode() {}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     EXPORT void accept(IRVisitor *v) const;
     virtual IRNodeType type_info() const {return T::_type_info;}
+    virtual ~StmtNode() {}
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
