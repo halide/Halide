@@ -6,14 +6,6 @@ option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 option(WITH_TEST_OPENGL "Build OpenGL tests" ON)
 option(WITH_TEST_GENERATORS "Build Generator tests" ON)
 
-if (MSVC)
-else()
-  # src/CMakeLists.txt always enables C++11 for non-Windows,
-  # so we'll give the same courtesy to tests
-  add_definitions("-std=c++11")
-  add_definitions("-fno-rtti")
-endif()
-
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
   halide_project(test_internal internal internal.cpp)
@@ -25,6 +17,15 @@ if (WITH_TEST_INTERNAL)
 else()
   message(WARNING "Internal tests disabled")
 endif()
+
+function(test_plain_c_includes)
+  set(folder "correctness")
+  set(name "plain_c_includes")
+  set(TEST_NAMES "${folder}_${name}")
+  add_executable("${folder}_${name}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/${name}.c")
+  target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_BINARY_DIR}/include")
+  set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
+endfunction(test_plain_c_includes)
 
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp")
@@ -38,12 +39,14 @@ function(tests folder)
     halide_project("${folder}_${name}" "${folder}" "${folder}/${file}")
     list(APPEND TEST_NAMES "${folder}_${name}")
     target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_SOURCE_DIR}")
+    target_compile_definitions("${folder}_${name}"  PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
   endforeach()
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
 
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
+  test_plain_c_includes()
 endif()
 if (WITH_TEST_ERROR)
   tests(error)
@@ -119,6 +122,10 @@ function(halide_define_aot_test NAME)
   set(TARGET "generator_aot_${NAME}")
 
   add_executable("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_aottest.cpp")
+  if (MSVC)
+  else()
+    target_compile_options("${TARGET}" PUBLIC "-std=c++11") # HalideBuffer.h needs C++11
+  endif()
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
@@ -292,16 +299,6 @@ if (WITH_TEST_GENERATORS)
   halide_add_aot_test_dependency(tiled_blur
                                  GENERATOR_TARGET tiled_blur_blur
                                  AOT_LIBRARY_TARGET tiled_blur_blur)
-
-  halide_define_aot_test(tiled_blur_interleaved OMIT_DEFAULT_GENERATOR)
-  halide_add_aot_test_dependency(tiled_blur_interleaved
-                                 GENERATOR_TARGET tiled_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_interleaved
-                                 GENERATOR_ARGS is_interleaved=true)
-  halide_add_aot_test_dependency(tiled_blur_interleaved
-                                 GENERATOR_TARGET tiled_blur_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_blur_interleaved
-                                 GENERATOR_ARGS is_interleaved=true)
 
   halide_define_aot_test(cxx_mangling_define_extern
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-user_context

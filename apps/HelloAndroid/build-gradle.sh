@@ -6,4 +6,4 @@
 # that it's only used by ant).
 # However, if you run "android update" (say, via build.sh), this variable will
 # be clobbered.
-./gradlew build && adb install -r build/outputs/apk/HelloAndroid-debug.apk && adb shell am start com.example.hellohalide/com.example.hellohalide.CameraActivity
+./gradlew build && adb install -r gradle_build/outputs/apk/HelloAndroid-debug.apk && adb shell am start com.example.hellohalide/com.example.hellohalide.CameraActivity

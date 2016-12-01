@@ -74,12 +74,13 @@ public:
     // For a real input FFT, this should have the following shape:
     // Dim0: extent = size0, stride = 1
     // Dim1: extent = size1 / 2 - 1, stride = size0
+    // Dim2: extent = 1, stride = 1
     //
     // For a complex input FFT, this should have the following shape:
-    // Dim0: extent = 2, stride = 1 -- real followed by imaginary components
-    // Dim1: extent = size0, stride = 2
-    // Dim2: extent = size1, stride = size0 * 2
-    ImageParam input;
+    // Dim0: extent = size0, stride = 2
+    // Dim1: extent = size1, stride = size0 * 2
+    // Dim2: extent = 2, stride = 1 (real followed by imaginary components)
+    ImageParam input{Float(32), 3, "input"};
 
     Func build() {
         Var c{"c"}, x{"x"}, y{"y"};
@@ -92,55 +93,66 @@ public:
         desc.vector_width = vector_width;
 
         // The logic below calls the specialized r2c or c2r version if
-        // applicable to take advantae of better scheduling. It is
+        // applicable to take advantage of better scheduling. It is
         // assumed that projecting a real Func to a ComplexFunc and
         // immediately back has zero cost.
 
-        Func result;
+        const int sign = (direction == FFTDirection::SamplesToFrequency) ? -1 : 1;
+
+        const int input_comps = (input_number_type == FFTNumberType::Real) ? 1 : 2;
+        const int output_comps = (output_number_type == FFTNumberType::Real) ? 1 : 2;
+
+        Func real_result;
         ComplexFunc complex_result;
         if (input_number_type == FFTNumberType::Real) {
-            input = ImageParam(Float(32), 2, "input");
-
             if (direction == FFTDirection::SamplesToFrequency) {
                 // TODO: Not sure why this is necessary as ImageParam
                 // -> Func conversion should happen, It may not work
                 // with implicit dimension (use of _) logic in FFT.
-                Func input_real;
-                input_real(x, y) = input(x, y);
+                Func in;
+                in(x, y) = input(x, y, 0);
 
-                complex_result = fft2d_r2c(input_real, size0, size1, target, desc);
+                complex_result = fft2d_r2c(in, size0, size1, target, desc);
             } else {
                 ComplexFunc in;
-                in(x, y) = ComplexExpr(input(x, y), 0);
+                in(x, y) = ComplexExpr(input(x, y, 0), 0);
 
-                complex_result = fft2d_c2c(in, size0, size1, 1, target, desc);
+                complex_result = fft2d_c2c(in, size0, size1, sign, target, desc);
             }
         } else {
-            input = ImageParam(Float(32), 3, "input");
-            input.set_bounds(0, 0, 2);
-            input.set_stride(1, 2);
-
             ComplexFunc in;
-            in(x, y) = ComplexExpr(input(0, x, y), input(1, x, y));
+            in(x, y) = ComplexExpr(input(x, y, 0), input(x, y, 1));
             if (output_number_type == FFTNumberType::Real &&
                 direction == FFTDirection::FrequencyToSamples) {
-                result = fft2d_c2r(in, size0, size1, target, desc);
+                real_result = fft2d_c2r(in, size0, size1, target, desc);
             } else {
-                complex_result = fft2d_c2c(in, size0, size1, 
-                                           (direction == FFTDirection::SamplesToFrequency) ? -1 : 1,
-                                           target, desc);
+                complex_result = fft2d_c2c(in, size0, size1, sign, target, desc);
             }
         }
 
+        Func result("result");
         if (output_number_type == FFTNumberType::Real) {
-            if (!result.defined()) {
-                 result(x, y) = re(complex_result(x, y));
+            if (real_result.defined()) {
+                 result(x, y, c) = real_result(x, y);
+                 real_result.compute_at(result, y);
+            } else {
+                 result(x, y, c) = re(complex_result(x, y));
             }
         } else {
-            result(c, x, y) = select(c == 0, re(complex_result(x, y)), im(complex_result(x, y)));
-            result.output_buffer().set_bounds(0, 0, 2);
-            result.output_buffer().set_stride(1, 2);
+            result(x, y, c) = select(c == 0, 
+                                     re(complex_result(x, y)), 
+                                     im(complex_result(x, y)));
         }
+
+        input.set_stride(0, input_comps)
+             .set_min(2, 0)
+             .set_extent(2, input_comps)
+             .set_stride(2, 1);
+
+        result.output_buffer().set_stride(0, output_comps)
+                              .set_min(2, 0)
+                              .set_extent(2, output_comps)
+                              .set_stride(2, 1);
 
         return result;
     }
