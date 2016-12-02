@@ -29,19 +29,35 @@ int my_halide_trace(void *user_context, const halide_trace_event *ev) {
     return 0;
 }
 
-int main(int argc, char **argv) {
-    halide_set_custom_trace(&my_halide_trace);
+Buffer<float> buffer_factory_planar(int w, int h, int c) {
+    return Buffer<float>(w, h, c);
+}
 
-    Buffer<float> input(W, H);
+Buffer<float> buffer_factory_interleaved(int w, int h, int c) {
+    return Buffer<float>::make_interleaved(w, h, c);
+}
+
+void test(Buffer<float> (*factory)(int w, int h, int c)) {
+    Buffer<float> input = factory(W, H, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             input(x, y) = (float)(x * y);
         }
     }
-    Buffer<float> output(W, H);
+    Buffer<float> output = factory(W, H, 3);
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
     tiled_blur(input, output);
+}
+
+int main(int argc, char **argv) {
+    halide_set_custom_trace(&my_halide_trace);
+
+    printf("Testing planar buffer...\n");
+    test(buffer_factory_planar);
+
+    printf("Testing interleaved buffer...\n");
+    test(buffer_factory_interleaved);
 
     printf("Success!\n");
     return 0;
