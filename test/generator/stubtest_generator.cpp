@@ -49,6 +49,23 @@ public:
         if (vectorize) {
             intermediate.vectorize(x, natural_vector_size<float>());
         }
+
+        if (input.has_buffer()) {
+            for (size_t i = 0; i < input.size(); ++i) {
+                input.set_stride_constraint(i, 0, 1);
+            }
+        }
+        if (simple_output.has_buffer()) {
+            simple_output.set_stride_constraint(0, 1);
+        }
+        if (tuple_output.has_buffer()) {
+            tuple_output.set_stride_constraint(0, 1);
+        }
+        if (array_output.has_buffer()) {
+            for (size_t i = 0; i < array_output.size(); ++i) {
+                array_output.set_stride_constraint(i, 0, 1);
+            }
+        }
     }
 
 private:
