@@ -935,6 +935,69 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
                    << dump_argument_list();
     }
 
+    if (tail == TailStrategy::Auto) {
+        // Select a tail strategy
+        if (exact) {
+            tail = TailStrategy::GuardWithIf;
+        } else if (!definition.is_init()) {
+            tail = TailStrategy::RoundUp;
+        } else {
+            // We should employ ShiftInwards when we can to prevent
+            // overcompute and adding constraints to the bounds of
+            // inputs and outputs. However, if we're already covered
+            // by an earlier ShiftInwards split, there's no point - it
+            // just complicates the IR and confuses bounds inference. An example of this is:
+            //
+            // f.vectorize(x, 8).unroll(x, 4);
+            //
+            // The vectorize-induced split is ShiftInwards. There's no
+            // point also applying ShiftInwards to the unroll-induced
+            // split.
+            //
+            // Note that we'll still partition the outermost loop to
+            // avoid the overhead of the min we placed in the inner
+            // loop with the vectorize, because that's how loop
+            // partitioning works. The steady-state will be just as
+            // efficient as:
+            //
+            // f.split(x, x, xi, 32).vectorize(xi, 8).unroll(xi);
+            //
+            // It's only the tail/epilogue that changes.
+            
+            std::set<string> descends_from_shiftinwards_outer;
+            for (const Split &s : definition.schedule().splits()) {
+                if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
+                    descends_from_shiftinwards_outer.insert(s.outer);
+                } else if (s.is_split() && descends_from_shiftinwards_outer.count(s.old_var)) {
+                    descends_from_shiftinwards_outer.insert(s.inner);
+                    descends_from_shiftinwards_outer.insert(s.outer);
+                } else if ((s.is_rename() || s.is_purify()) &&
+                           descends_from_shiftinwards_outer.count(s.old_var)) {
+                    descends_from_shiftinwards_outer.insert(s.outer);
+                }
+            }
+            if (descends_from_shiftinwards_outer.count(old_name)) {
+                tail = TailStrategy::RoundUp;
+            } else {
+                tail = TailStrategy::ShiftInwards;
+            }
+        }
+    }
+    
+    if (!definition.is_init()) {
+        user_assert(tail != TailStrategy::ShiftInwards)
+            << "When splitting Var " << old_name
+            << " ShiftInwards is not a legal tail strategy for update definitions, as"
+            << " it may change the meaning of the algorithm\n";
+    }
+
+    if (exact) {
+        user_assert(tail == TailStrategy::GuardWithIf)
+            << "When splitting Var " << old_name
+            << " the tail strategy must be GuardWithIf or Auto. "
+            << "Anything else may change the meaning of the algorithm\n";
+    }
+
     // Add the split to the splits list
     Split split = {old_name, outer_name, inner_name, factor, exact, tail, Split::SplitVar};
     definition.schedule().splits().push_back(split);
@@ -1018,7 +1081,7 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
     }
 
     // Add the fuse to the splits list
-    Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::Auto, Split::FuseVars};
+    Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
     definition.schedule().splits().push_back(split);
     return *this;
 }
@@ -1096,7 +1159,7 @@ Stage &Stage::purify(VarOrRVar old_var, VarOrRVar new_var) {
             << dump_argument_list();
     }
 
-    Split split = {old_name, new_name, "", 1, false, TailStrategy::Auto, Split::PurifyRVar};
+    Split split = {old_name, new_name, "", 1, false, TailStrategy::RoundUp, Split::PurifyRVar};
     definition.schedule().splits().push_back(split);
     return *this;
 }
@@ -1279,7 +1342,7 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
     }
 
     if (!found) {
-        Split split = {old_name, new_name, "", 1, old_var.is_rvar, TailStrategy::Auto, Split::RenameVar};
+        Split split = {old_name, new_name, "", 1, old_var.is_rvar, TailStrategy::RoundUp, Split::RenameVar};
         definition.schedule().splits().push_back(split);
     }
 
