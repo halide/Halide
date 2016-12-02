@@ -202,8 +202,8 @@
 #include <vector>
 
 #include "Func.h"
-#include "ObjectInstanceRegistry.h"
 #include "Introspection.h"
+#include "ObjectInstanceRegistry.h"
 #include "Target.h"
 
 namespace Halide {
@@ -931,6 +931,8 @@ protected:
     std::vector<Func> funcs_;
     std::vector<Expr> exprs_;
 
+    bool is_stub_usage_{false};
+
     EXPORT std::string array_name(size_t i) const;
 
     EXPORT virtual void verify_internals() const;
@@ -1053,7 +1055,33 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
+    // TODO: this logic to create vars based on specific name
+    // patterns is already replicated in several places across Halide;
+    // we should really centralize it into one place, as it seems likely
+    // to be fragile.
+    Expr MakeInt32Var(size_t array_index, const char* c, int d) const {
+        const auto &p = this->parameters_.at(array_index);
+        std::ostringstream s;
+        s << p.name() << c << d;
+        return Variable::make(Int(32), s.str(), p);
+    }
+
+    void check_has_buffer() const {
+        user_assert(has_buffer()) << "This operation requires an Input<Func> that is backed by a Buffer.\n";
+    }
+
 public:
+    // This is a minimal definition of "Dimension" that is just enough to satisfy
+    // the needs of a "func-like" in BoundaryConditions.
+    struct Dimension {
+        const Expr min_, extent_, stride_;
+
+        Expr min() const { return min_; }
+        Expr extent() const { return extent_; }
+        Expr stride() const { return stride_; }
+        Expr max() const { return min() + extent(); }
+    };
+
     GeneratorInput_Func(const std::string &name, const Type &t, int d)
         : Super(name, IOKind::Function, {t}, d) {
     }
@@ -1103,6 +1131,172 @@ public:
 
     operator Func() const { 
         return this->funcs().at(0); 
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    int dimensions() const {
+        return this->funcs().at(0).dimensions(); 
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorInput_Func<T> &set_min_constraint(int i, Expr e) {
+        check_has_buffer();
+        this->parameters_.at(0).set_min_constraint(i, e);
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorInput_Func<T> &set_extent_constraint(int i, Expr e) {
+        check_has_buffer();
+        this->parameters_.at(0).set_extent_constraint(i, e);
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorInput_Func<T> &set_stride_constraint(int i, Expr e) {
+        check_has_buffer();
+        this->parameters_.at(0).set_stride_constraint(i, e);
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorInput_Func<T> &set_host_alignment_constraint(int e) {
+        check_has_buffer();
+        this->parameters_.at(0).set_host_alignment(e);
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr min(int i) const {
+        check_has_buffer();
+        return MakeInt32Var(0, ".min.", i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr extent(int i) const {
+        check_has_buffer();
+        return MakeInt32Var(0, ".extent.", i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr stride(int i) const {
+        check_has_buffer();
+        return MakeInt32Var(0, ".stride.", i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr width() const {
+        check_has_buffer();
+        return extent(0);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr height() {
+        check_has_buffer();
+        return extent(1);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr channels() const {
+        check_has_buffer();
+        return extent(2);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    int host_alignment() const {
+        check_has_buffer();
+        return this->parameters_.at(0).host_alignment();
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    const Dimension dim(int i) const {
+        check_has_buffer();
+        return { min(i), extent(i), stride(i) };
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    int dimensions(size_t array_index) const {
+        return this->funcs().at(array_index).dimensions(); 
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    GeneratorInput_Func<T> &set_min_constraint(size_t array_index, int i, Expr e) {
+        check_has_buffer();
+        this->parameters_.at(array_index).set_min_constraint(i, e);
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    GeneratorInput_Func<T> &set_extent_constraint(size_t array_index, int i, Expr e) {
+        check_has_buffer();
+        this->parameters_.at(array_index).set_extent_constraint(i, e);
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    GeneratorInput_Func<T> &set_stride_constraint(size_t array_index, int i, Expr e) {
+        check_has_buffer();
+        this->parameters_.at(array_index).set_stride_constraint(i, e);
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    GeneratorInput_Func<T> &set_host_alignment_constraint(size_t array_index, int e) {
+        check_has_buffer();
+        this->parameters_.at(array_index).set_host_alignment(e);
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr min(size_t array_index, int i) const {
+        check_has_buffer();
+        return MakeInt32Var(array_index, ".min.", i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr extent(size_t array_index, int i) const {
+        check_has_buffer();
+        return MakeInt32Var(array_index, ".extent.", i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr stride(size_t array_index, int i) const {
+        check_has_buffer();
+        return MakeInt32Var(array_index, ".stride.", i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr width(size_t array_index) const {
+        check_has_buffer();
+        return extent(array_index, 0);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr height(size_t array_index) {
+        check_has_buffer();
+        return extent(array_index, 1);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr channels(size_t array_index) const {
+        check_has_buffer();
+        return extent(array_index, 2);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    int host_alignment(size_t array_index) const {
+        check_has_buffer();
+        return this->parameters_.at(array_index).host_alignment();
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    const Dimension dim(size_t array_index, int i) const {
+        check_has_buffer();
+        return { min(array_index, i), extent(array_index, i), stride(array_index, i) };
+    }
+
+    bool has_buffer() const {
+        return !this->is_stub_usage_;
     }
 };
 
@@ -1337,6 +1531,10 @@ protected:
         : GeneratorOutputBase(-1, name, t, d) {
     }
 
+    void check_has_buffer() const {
+        user_assert(has_buffer()) << "This operation requires an Output<Func> that is backed by a Buffer.\n";
+    }
+
 public:
     template <typename... Args, typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
     FuncRef operator()(Args&&... args) const {
@@ -1351,6 +1549,16 @@ public:
     template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
     operator Func() const { 
         return get_values<ValueType>().at(0); 
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    int dimensions(size_t array_index) const {
+        return get_values<ValueType>().at(array_index).dimensions(); 
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    int dimensions() const {
+        return get_values<ValueType>().at(0).dimensions(); 
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
@@ -1384,6 +1592,131 @@ public:
     >::type * = nullptr>
     void resize(size_t size) {
         GeneratorOutputBase::resize(size);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutputImpl<T> &set_min_constraint(int i, Expr e) {
+        check_has_buffer();
+        for (auto ob : this->funcs().at(0).output_buffers()) {
+            ob.set_min(i, e);
+        }
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutputImpl<T> &set_extent_constraint(int i, Expr e) {
+        check_has_buffer();
+        for (auto ob : this->funcs().at(0).output_buffers()) {
+            ob.set_extent(i, e);
+        }
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutputImpl<T> &set_stride_constraint(int i, Expr e) {
+        check_has_buffer();
+        for (auto ob : this->funcs().at(0).output_buffers()) {
+            ob.set_stride(i, e);
+        }
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutputImpl<T> &set_host_alignment_constraint(int e) {
+        check_has_buffer();
+        for (auto ob : this->funcs().at(0).output_buffers()) {
+            ob.set_host_alignment(e);
+        }
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr min(int i) const {
+        check_has_buffer();
+        return this->funcs().at(0).output_buffers().at(0).min(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr extent(int i) const {
+        check_has_buffer();
+        return this->funcs().at(0).output_buffers().at(0).extent(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    Expr stride(int i) const {
+        check_has_buffer();
+        return this->funcs().at(0).output_buffers().at(0).stride(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    int host_alignment() const {
+        check_has_buffer();
+        return this->funcs().at(0).output_buffers().at(0).host_alignment();
+    }
+
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutputImpl<T> &set_min_constraint(size_t array_index, int i, Expr e) {
+        check_has_buffer();
+        for (auto ob : this->funcs().at(array_index).output_buffers()) {
+            ob.set_min(i, e);
+        }
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutputImpl<T> &set_extent_constraint(size_t array_index, int i, Expr e) {
+        check_has_buffer();
+        for (auto ob : this->funcs().at(array_index).output_buffers()) {
+            ob.set_extent(i, e);
+        }
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutputImpl<T> &set_stride_constraint(size_t array_index, int i, Expr e) {
+        check_has_buffer();
+        for (auto ob : this->funcs().at(array_index).output_buffers()) {
+            ob.set_stride(i, e);
+        }
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutputImpl<T> &set_host_alignment_constraint(size_t array_index, int e) {
+        check_has_buffer();
+        for (auto ob : this->funcs().at(array_index).output_buffers()) {
+            ob.set_host_alignment(e);
+        }
+        return *this;
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr min(size_t array_index, int i) const {
+        check_has_buffer();
+        return this->funcs().at(array_index).output_buffers().at(0).min(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr extent(size_t array_index, int i) const {
+        check_has_buffer();
+        return this->funcs().at(array_index).output_buffers().at(0).extent(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Expr stride(size_t array_index, int i) const {
+        check_has_buffer();
+        return this->funcs().at(array_index).output_buffers().at(0).stride(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    int host_alignment(size_t array_index) const {
+        check_has_buffer();
+        return this->funcs().at(array_index).output_buffers().at(0).host_alignment();
+    }
+
+    bool has_buffer() const {
+        return !this->is_stub_usage_;
     }
 };
 

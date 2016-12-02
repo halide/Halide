@@ -356,7 +356,7 @@ void StubEmitter::emit() {
         // on the other hand, since this file is just a couple of comments, it's
         // really not an issue if it's included multiple times.
         stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
-        stream << "/* There is no Stub for the Generator named " << generator_name << " */\n";
+        stream << "/* The Generator named " << generator_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
         return;
     }
 
@@ -1161,6 +1161,12 @@ void GeneratorBase::set_inputs(const std::vector<std::vector<FuncOrExpr>> &input
             << " inputs but got " << inputs.size() << "\n";
     for (size_t i = 0; i < filter_inputs.size(); ++i) {
         filter_inputs[i]->set_inputs(inputs[i]);
+    }
+    for (auto input : filter_inputs) {
+        input->is_stub_usage_ = true;
+    }
+    for (auto output : filter_outputs) {
+        output->is_stub_usage_ = true;
     }
     inputs_set = true;
 }
