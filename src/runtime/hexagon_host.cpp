@@ -668,9 +668,9 @@ WEAK int halide_hexagon_power_hvx_on_mode(void *user_context, halide_hvx_power_m
 
     debug(user_context) << "halide_hexagon_power_hvx_on_mode\n";
     if (!remote_power_hvx_on_mode) {
-        // The function is not available in this version of the
-        // runtime, this runtime always powers HVX on.
-        return 0;
+        // The power on mode function is not available in this version of the
+        // runtime.  Fallback to the default power on function.
+        return halide_hexagon_power_hvx_on(user_context);
     }
 
     #ifdef DEBUG_RUNTIME
@@ -699,9 +699,9 @@ WEAK int halide_hexagon_power_hvx_on_perf(void *user_context, halide_hvx_power_p
 
     debug(user_context) << "halide_hexagon_power_hvx_on_perf\n";
     if (!remote_power_hvx_on_perf) {
-        // The function is not available in this version of the
-        // runtime, this runtime always powers HVX on.
-        return 0;
+        // The power on perf function is not available in this version of the
+        // runtime.  Fallback to the default power on function.
+        return halide_hexagon_power_hvx_on(user_context);
     }
 
     #ifdef DEBUG_RUNTIME
