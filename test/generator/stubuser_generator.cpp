@@ -25,7 +25,7 @@ public:
         stub = StubTest(this, inputs);
 
         const float kOffset = 2.f;
-        output(x, y, c) = cast<uint8_t>(stub.f(x, y, c)[1] + kOffset);
+        output(x, y, c) = cast<uint8_t>(stub.tuple_output(x, y, c)[1] + kOffset);
     }
 
     void schedule() {
