@@ -277,7 +277,6 @@ int halide_hexagon_remote_power_hvx_on_mode(int mode) {
                 perf.set_latency            = TRUE;
                 perf.latency                = 1;
                 break;
-                break;
             case halide_hvx_power_normal:
                 perf.set_mips               = TRUE;
                 perf.mipsPerThread          = 300;
