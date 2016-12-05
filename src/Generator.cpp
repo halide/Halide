@@ -1091,6 +1091,9 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
     }
     std::map<std::string, GIOBase *> type_names, dim_names, array_size_names;
     for (auto i : filter_inputs) {
+        if (!i->allow_synthetic_generator_params()) {
+            continue;
+        }
         if (i->kind() == IOKind::Function) {
             type_names[i->name() + ".type"] = i;
             dim_names[i->name() + ".dim"] = i;
@@ -1100,6 +1103,9 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
         }
     }
     for (auto o : filter_outputs) {
+        if (!o->allow_synthetic_generator_params()) {
+            continue;
+        }
         if (o->kind() == IOKind::Function) {
             type_names[o->name() + ".type"] = o;
             dim_names[o->name() + ".dim"] = o;
@@ -1139,7 +1145,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
                 continue;
             }
         }
-        user_error << "Generator has no GeneratorParam named: " << key;
+        user_error << "Generator has no GeneratorParam named: " << key << "\n";
     }
     generator_params_set = true;
 }
@@ -1156,7 +1162,7 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
         const std::string &key = key_value.first;
         const std::string &value = key_value.second;
         auto p = m.find(key);
-        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
+        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key << "\n";
         // It's not OK to set non-schedule params here.
         user_assert(p->second->is_schedule_param()) << "GeneratorParam cannot be specified for: " << key;
         p->second->set_from_string(value);
@@ -1165,7 +1171,7 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
         const std::string &key = key_value.first;
         const LoopLevel &value = key_value.second;
         auto p = m.find(key);
-        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
+        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key << "\n";
         user_assert(p->second->is_schedule_param()) << "LoopLevel param cannot be specified for: " << key;
         static_cast<GeneratorParam<LoopLevel> *>(p->second)->set(value);
     }

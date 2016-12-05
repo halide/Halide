@@ -945,6 +945,10 @@ protected:
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
 
+    virtual bool allow_synthetic_generator_params() const {
+        return true;
+    }
+
 private:
     explicit GIOBase(const GIOBase &) = delete;
     void operator=(const GIOBase &) = delete;
@@ -1067,6 +1071,10 @@ private:
 
 protected:
     using TBase = typename Super::TBase;
+
+    bool allow_synthetic_generator_params() const override {
+        return !T::has_static_halide_type();
+    }
 
 public:
     GeneratorInput_Buffer(const std::string &name)
