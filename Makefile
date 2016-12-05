@@ -334,6 +334,7 @@ SOURCE_FILES = \
   RDom.cpp \
   RealizationOrder.cpp \
   Reduction.cpp \
+  RegisterPromotion.cpp \
   RemoveDeadAllocations.cpp \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
@@ -464,6 +465,7 @@ HEADER_FILES = \
   RealizationOrder.h \
   RDom.h \
   Reduction.h \
+  RegisterPromotion.h \
   RemoveDeadAllocations.h \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \

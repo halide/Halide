@@ -36,6 +36,7 @@
 #include "Profiling.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
+#include "RegisterPromotion.h"
 #include "RemoveDeadAllocations.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
@@ -264,6 +265,10 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
         debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
     }
 
+    debug(1) << "Promoting values to registers...\n";
+    s = register_promotion(s);
+    debug(2) << "Lowering after promoting values to registers:\n" << s << "\n\n";
+    
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
 

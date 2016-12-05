@@ -2785,7 +2785,9 @@ private:
         const Sub *sub = delta.as<Sub>();
         const Mul *mul = delta.as<Mul>();
         const Select *sel = delta.as<Select>();
-
+        const Max *max = delta.as<Max>();
+        const Min *min = delta.as<Min>();        
+        
         Expr zero = make_zero(delta.type());
 
         if (is_zero(delta)) {
@@ -2862,6 +2864,12 @@ private:
                    (is_positive_const(sel->false_value) || is_negative_const(sel->false_value))) {
             // select(c, t, 4) == 0 -> c && (t == 0)
             expr = mutate((sel->condition) && (sel->true_value == zero));
+        } else if (max && is_positive_const(max->b)) {
+            // max(x, 8) == 0 -> false
+            expr = make_zero(op->type);
+        } else if (min && is_negative_const(min->b)) {
+            // min(x, -8) == 0 -> false
+            expr = make_zero(op->type);            
         } else {
             expr = (delta == make_zero(delta.type()));
         }
