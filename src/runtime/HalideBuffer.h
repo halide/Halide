@@ -210,7 +210,7 @@ class Buffer {
                        "Implicitly freeing a dirty device allocation while a host allocation still lives. "
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
-                       "before the device allocation is freed."
+                       "before the device allocation is freed.");
                 (*fn)(nullptr, &buf);
             }
             if (dev_ref_count) {
@@ -482,9 +482,12 @@ public:
         dev_ref_count = other.dev_ref_count;
     }
 
-    /** Construct a Buffer from a Buffer of different
-     * dimensionality and type. Asserts that the dimensionality and
-     * type is compatible at runtime. */
+    /** Construct a Buffer from a Buffer of different dimensionality
+     * and type. Asserts that the dimensionality and type is
+     * compatible at runtime. Note that this constructor is
+     * implicit. This, for example, lets you pass things like
+     * Buffer<T> or Buffer<const void> to functions expected
+     * Buffer<const T>. */
     template<typename T2, int D2>
     Buffer(const Buffer<T2, D2> &other) : buf(other.buf),
                                           dims(other.dims),
