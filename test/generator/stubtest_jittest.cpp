@@ -76,22 +76,26 @@ int main(int argc, char **argv) {
     // This generator defaults intermediate_level to "undefined",
     // so we *must* specify something for it (else we'll crater at
     // Halide compile time). We'll use this:
-    sp.intermediate_level = LoopLevel(gen.f, gen.f.args().at(1));
+    sp.intermediate_level = LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1));
     // ...but any of the following would also be OK:
     // sp.intermediate_level = LoopLevel::root();
-    // sp.intermediate_level = LoopLevel(gen.f, Var("x"));
-    // sp.intermediate_level = LoopLevel(gen.f, Var("c"));
+    // sp.intermediate_level = LoopLevel(gen.tuple_output, Var("x"));
+    // sp.intermediate_level = LoopLevel(gen.tuple_output, Var("c"));
     gen.schedule(sp);
 
-    Halide::Realization f_realized = gen.realize(kSize, kSize, 3);
-    Buffer<float> f0 = f_realized[0];
-    Buffer<float> f1 = f_realized[1];
+    Halide::Realization simple_output_realized = gen.realize(kSize, kSize, 3);
+    Buffer<float> s0 = simple_output_realized;
+    verify(src[0], 1.f, 0, s0);
+
+    Halide::Realization tuple_output_realized = gen.tuple_output.realize(kSize, kSize, 3);
+    Buffer<float> f0 = tuple_output_realized[0];
+    Buffer<float> f1 = tuple_output_realized[1];
     verify(src[0], 1.25f, 0, f0);
     verify(src[0], 1.25f, 33, f1);
 
     for (int i = 0; i < kArrayCount; ++i) {
-        Halide::Realization g_realized = gen.g[i].realize(kSize, kSize, gen.get_target());
-        Buffer<int16_t> g0 = g_realized;
+        Halide::Realization array_output_realized = gen.array_output[i].realize(kSize, kSize, gen.get_target());
+        Buffer<int16_t> g0 = array_output_realized;
         verify(src[i], 1.0f, int_args[i], g0);
     }
 

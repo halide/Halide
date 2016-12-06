@@ -283,7 +283,7 @@ if (WITH_TEST_GENERATORS)
   # concrete via generator args.
   halide_define_aot_test(stubtest
                          GENERATOR_NAME StubNS1::StubNS2::StubTest
-                         GENERATOR_ARGS input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32)
+                         GENERATOR_ARGS input.type=float32 input.size=2 int_arg.size=2 tuple_output.type=float32,float32)
 
   # Tests that require additional dependencies, args, etc
   set(MDTEST_GEN_ARGS input.type=uint8 input.dim=3 output.type=float32,float32 output.dim=3 input_not_nod.type=uint8 input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 array_i8.size=2 array_i16.size=2 array_i32.size=2 array_h.size=2 array_outputs.size=2)

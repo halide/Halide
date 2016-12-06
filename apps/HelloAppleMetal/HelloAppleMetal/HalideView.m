@@ -147,7 +147,7 @@
             pixel_buf.elem_size = sizeof(uint32_t);
             pixel_buf.host = (uint8_t *)malloc(4 * pixel_buf.stride[1] * pixel_buf.extent[1]);
 
-            NSLog(@"Calling reaction_diffusion_2_init size (%u x % u)", buf1.extent[0], buf1.extent[1]);
+            NSLog(@"Calling reaction_diffusion_2_init size (%u x %u)", buf1.extent[0], buf1.extent[1]);
             reaction_diffusion_2_init((__bridge void *)self, cx, cy, &buf1);
             NSLog(@"Returned from reaction_diffusion_2_init");
             
@@ -250,11 +250,13 @@
 
 @end
 
-int halide_metal_acquire_context(void *user_context, halide_metal_device *&device_ret,
-                                        halide_metal_command_queue *&queue_ret, bool create) {
+extern "C" {
+
+int halide_metal_acquire_context(void *user_context, halide_metal_device **device_ret,
+                                 halide_metal_command_queue **queue_ret, bool create) {
     HalideView *view = (__bridge HalideView *)user_context;
-    device_ret = (__bridge halide_metal_device *)view.device;
-    queue_ret = (__bridge halide_metal_command_queue *)view.commandQueue;
+    *device_ret = (__bridge halide_metal_device *)view.device;
+    *queue_ret = (__bridge halide_metal_command_queue *)view.commandQueue;
     return 0;
 }
 
@@ -262,3 +264,4 @@ int halide_metal_release_context(void *user_context) {
     return 0;
 }
 
+}
