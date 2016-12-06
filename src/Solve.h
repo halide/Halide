@@ -11,8 +11,8 @@ namespace Halide {
 namespace Internal {
 
 struct SolverResult {
-	Expr result;
-	bool fully_solved;
+        Expr result;
+        bool fully_solved;
 };
 
 /** Attempts to collect all instances of a variable in an expression
@@ -24,8 +24,8 @@ struct SolverResult {
  * in the result. If it is false, the expression has only been partially
  * solved, and there are still multiple instances of the variable. */
 EXPORT SolverResult solve_expression(
-	Expr e, const std::string &variable,
-	const Scope<Expr> &scope = Scope<Expr>::empty_scope());
+        Expr e, const std::string &variable,
+        const Scope<Expr> &scope = Scope<Expr>::empty_scope());
 
 /** Find the smallest interval such that the condition is either true
  * or false inside of it, but definitely false outside of it. Never

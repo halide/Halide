@@ -96,12 +96,12 @@ Target calculate_host_target() {
 
     int info[4];
     cpuid(info, 1, 0);
-    bool have_sse41 = info[2] & (1 << 19);
-    bool have_sse2 = info[3] & (1 << 26);
-    bool have_avx = info[2] & (1 << 28);
-    bool have_f16c = info[2] & (1 << 29);
+    bool have_sse41  = info[2] & (1 << 19);
+    bool have_sse2   = info[3] & (1 << 26);
+    bool have_avx    = info[2] & (1 << 28);
+    bool have_f16c   = info[2] & (1 << 29);
     bool have_rdrand = info[2] & (1 << 30);
-    bool have_fma = info[2] & (1 << 12);
+    bool have_fma    = info[2] & (1 << 12);
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -119,13 +119,37 @@ Target calculate_host_target() {
     if (have_fma)   initial_features.push_back(Target::FMA);
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
-        // So far, so good.  AVX2?
+        // So far, so good.  AVX2/512?
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
-        bool have_avx2 = info2[1] & (1 << 5);
-        if (have_avx2) {
-            initial_features.push_back(Target::AVX2);
+        const uint32_t avx2 = 1U << 5;
+        const uint32_t avx512f = 1U << 16;
+        const uint32_t avx512dq = 1U << 17;
+        const uint32_t avx512pf = 1U << 26;
+        const uint32_t avx512er = 1U << 27;
+        const uint32_t avx512cd = 1U << 28;
+        const uint32_t avx512bw = 1U << 30;
+        const uint32_t avx512vl = 1U << 31;
+        const uint32_t avx512ifma = 1U << 21;
+        const uint32_t avx512 = avx512f | avx512cd;
+        const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
+        const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
+        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
+        if ((info2[1] & avx2) == avx2) {
+            initial_features.push_back(Target::AVX2);            
+        }
+        if ((info2[1] & avx512) == avx512) {
+            initial_features.push_back(Target::AVX512);
+            if ((info2[1] & avx512_knl) == avx512_knl) {
+                initial_features.push_back(Target::AVX512_KNL);
+            }
+            if ((info2[1] & avx512_skylake) == avx512_skylake) {
+                initial_features.push_back(Target::AVX512_Skylake);
+            }
+            if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
+                initial_features.push_back(Target::AVX512_Cannonlake);
+            }
         }
     }
 #ifdef _WIN32
@@ -179,7 +203,6 @@ const std::map<std::string, Target::OS> os_name_map = {
     {"osx", Target::OSX},
     {"android", Target::Android},
     {"ios", Target::IOS},
-    {"nacl", Target::NaCl},
     {"qurt", Target::QuRT},
     {"noos", Target::NoOS},
 };
@@ -197,7 +220,6 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
-    {"pnacl", Target::PNaCl},
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
@@ -236,7 +258,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
-    {"renderscript", Target::Renderscript},
     {"user_context", Target::UserContext},
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
@@ -248,7 +269,13 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},
-    {"fuzz_float_stores", Target::FuzzFloatStores}
+    {"fuzz_float_stores", Target::FuzzFloatStores},
+    {"soft_float_abi", Target::SoftFloatABI},
+    {"msan", Target::MSAN},
+    {"avx512", Target::AVX512},
+    {"avx512_knl", Target::AVX512_KNL},
+    {"avx512_skylake", Target::AVX512_Skylake},
+    {"avx512_cannonlake", Target::AVX512_Cannonlake},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -300,7 +327,7 @@ bool merge_string(Target &t, const std::string &target) {
     }
     tokens.push_back(rest);
 
-    bool os_specified = false, arch_specified = false, bits_specified = false;
+    bool os_specified = false, arch_specified = false, bits_specified = false, features_specified = false;
 
     for (size_t i = 0; i < tokens.size(); i++) {
         const string &tok = tokens[i];
@@ -312,7 +339,7 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             t = get_host_target();
-        } else if (tok == "32" || tok == "64") {
+        } else if (tok == "32" || tok == "64" || tok == "0") {
             if (bits_specified) {
                 return false;
             }
@@ -330,6 +357,7 @@ bool merge_string(Target &t, const std::string &target) {
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
             t.set_feature(feature);
+            features_specified = true;
         } else {
             return false;
         }
@@ -339,12 +367,12 @@ bool merge_string(Target &t, const std::string &target) {
         return false;
     }
 
-    // If arch is PNaCl, require explicit setting of os and bits as well.
-    if (arch_specified && t.arch == Target::PNaCl) {
-        if (!os_specified || t.os != Target::NaCl) {
-            return false;
-        }
-        if (!bits_specified || t.bits != 32) {
+    if (bits_specified && t.bits == 0) {
+        // bits == 0 is allowed iff arch and os are "unknown" and no features are set,
+        // to allow for roundtripping the string for default Target() ctor.
+        if (!(arch_specified && t.arch == Target::ArchUnknown) ||
+            !(os_specified && t.os == Target::OSUnknown) ||
+            features_specified) {
             return false;
         }
     }
@@ -380,14 +408,19 @@ void bad_target_string(const std::string &target) {
         }
     }
     user_error << "Did not understand Halide target " << target << "\n"
-               << "Expected format is arch-os-feature1-feature2-...\n"
-               << "Where arch is " << architectures << " .\n"
-               << "Os is " << oses << " .\n"
-               << "If arch or os are omitted, they default to the host.\n"
-               << "Features are " << features << " .\n"
+               << "Expected format is arch-bits-os-feature1-feature2-...\n"
+               << "Where arch is: " << architectures << ".\n"
+               << "bits is either 32 or 64.\n"
+               << "os is: " << oses << ".\n"
+               << "\n"
+               << "If arch, bits, or os are omitted, they default to the host.\n"
+               << "\n"
+               << "Features are: " << features << ".\n"
+               << "\n"
                << "The target can also begin with \"host\", which sets the "
                << "host's architecture, os, and feature set, with the "
                << "exception of the GPU runtimes, which default to off.\n"
+               << "\n"
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
 }
 
@@ -449,14 +482,10 @@ std::string Target::to_string() const {
 /** Was libHalide compiled with support for this target? */
 bool Target::supported() const {
     bool bad = false;
-#if !defined(WITH_NATIVE_CLIENT)
-    bad |= (arch == Target::PNaCl || os == Target::NaCl);
-#endif
 #if !defined(WITH_ARM)
     bad |= arch == Target::ARM && bits == 32;
 #endif
-#if !defined(WITH_AARCH64) || defined(WITH_NATIVE_CLIENT)
-    // In pnacl llvm, the aarch64 backend is crashy.
+#if !defined(WITH_AARCH64)
     bad |= arch == Target::ARM && bits == 64;
 #endif
 #if !defined(WITH_X86)
@@ -480,9 +509,6 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_RENDERSCRIPT)
-    bad |= has_feature(Target::Renderscript);
-#endif
 #if !defined(WITH_OPENGL)
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
@@ -505,7 +531,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::CUDA:          return Target::CUDA;
     case DeviceAPI::OpenCL:        return Target::OpenCL;
     case DeviceAPI::GLSL:          return Target::OpenGL;
-    case DeviceAPI::Renderscript:  return Target::Renderscript;
     case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
     case DeviceAPI::Metal:         return Target::Metal;
     default:                       return Target::FeatureEnd;
@@ -520,6 +545,7 @@ EXPORT void target_test() {
         t.set_feature(feature.second);
     }
     for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
+        if (i == halide_target_feature_unused_23) continue;
         internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
     }
     std::cout << "Target test passed" << std::endl;

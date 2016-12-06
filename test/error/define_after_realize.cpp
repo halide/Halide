@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
 
     f(x) = x;
 
-    Image<int> im = f.realize(10);
+    Buffer<int> im = f.realize(10);
 
     // Now try to add an update definition to f
     f(x) += 1;

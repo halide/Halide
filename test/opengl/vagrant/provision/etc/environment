@@ -1,0 +1,7 @@
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"
+LC_ALL=C
+DISPLAY=:0.0
+LLVM_CONFIG=/usr/bin/llvm-config-3.8
+CLANG=/usr/bin/clang-3.8
+HL_TARGET=host-opengl
+HL_JIT_TARGET=host-opengl

@@ -797,7 +797,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32),
-                                                 { ExternFuncArgument(42), ExternFuncArgument(Buffer()) }, target));
+                                                 { ExternFuncArgument(42), ExternFuncArgument(BufferPtr()) }, target));
 
     halide_handle_cplusplus_type enclosed_type_info(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),
@@ -811,8 +811,8 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32),
-                                                 { ExternFuncArgument(42), ExternFuncArgument(Buffer()),
-                                                   ExternFuncArgument(Buffer()) }, target));
+                                                 { ExternFuncArgument(42), ExternFuncArgument(BufferPtr()),
+                                                   ExternFuncArgument(BufferPtr()) }, target));
 
     halide_handle_cplusplus_type qual1(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),

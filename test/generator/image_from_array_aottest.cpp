@@ -1,4 +1,4 @@
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 #include <stdint.h>
 #include <iostream>
@@ -7,7 +7,7 @@
 #include <vector>
 
 using namespace std;
-using namespace Halide::Tools;
+using namespace Halide;
 
 //-----------------------------------------------------------------------------
 // Returns the dimension sizes of a statically sized array from inner to outer.
@@ -93,7 +93,7 @@ void compare_extents(const Image &img, int reference, int dimension) {
 
 template<typename Array, typename T = typename remove_all_extents<Array>::type>
 void verify_image_construction_from_array(Array &vals) {
-    Image<T> img(vals);
+    Buffer<T> img(vals);
     vector<int> sizes(dimension_sizes(vals));
     int dims = (int)sizes.size();
     int n = 1;

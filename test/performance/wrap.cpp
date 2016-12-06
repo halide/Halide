@@ -122,26 +122,23 @@ int main(int argc, char **argv) {
     use_l1.compile_jit();
     use_wrap_for_shared.compile_jit();
 
-    Image<int> out1(1000, 1000);
-    Image<int> out2(1000, 1000);
-    Image<int> out3(1000, 1000);
-    Buffer buf1(out1);
-    Buffer buf2(out2);
-    Buffer buf3(out3);
+    Buffer<int> out1(1000, 1000);
+    Buffer<int> out2(1000, 1000);
+    Buffer<int> out3(1000, 1000);
 
     double shared_time = benchmark(5, 5, [&]() {
-            use_shared.realize(buf1);
-            buf1.device_sync();
+            use_shared.realize(out1);
+            out1.device_sync();
         });
 
     double l1_time = benchmark(5, 5, [&]() {
-            use_l1.realize(buf2);
-            buf2.device_sync();
+            use_l1.realize(out2);
+            out2.device_sync();
         });
 
     double wrap_time = benchmark(5, 5, [&]() {
-            use_wrap_for_shared.realize(buf3);
-            buf3.device_sync();
+            use_wrap_for_shared.realize(out3);
+            out3.device_sync();
         });
 
     // Check correctness of the wrapper version

@@ -3,12 +3,12 @@
 #include <stdio.h>
 
 #include "mandelbrot.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 int main(int argc, char **argv) {
-    Image<int> output(100, 30);
+    Buffer<int> output(100, 30);
     const char *code = " .:-~*={}&%#@";
     const int iters = strlen(code) - 1;
 

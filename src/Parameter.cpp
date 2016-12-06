@@ -13,7 +13,7 @@ struct ParameterContents {
     const int dimensions;
     const std::string name;
     const std::string handle_type;
-    Buffer buffer;
+    BufferPtr buffer;
     uint64_t data;
     int host_alignment;
     Expr min_constraint[4];
@@ -24,7 +24,7 @@ struct ParameterContents {
     const bool is_explicit_name;
     const bool is_registered;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
-        : type(t), dimensions(d), name(n), buffer(Buffer()), data(0), 
+        : type(t), dimensions(d), name(n), buffer(BufferPtr()), data(0), 
           host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
@@ -167,12 +167,12 @@ Expr Parameter::get_scalar_expr() const {
     return Expr();
 }
 
-Buffer Parameter::get_buffer() const {
+BufferPtr Parameter::get_buffer() const {
     check_is_buffer();
     return contents->buffer;
 }
 
-void Parameter::set_buffer(Buffer b) {
+void Parameter::set_buffer(BufferPtr b) {
     check_is_buffer();
     if (b.defined()) {
         user_assert(contents->type == b.type())

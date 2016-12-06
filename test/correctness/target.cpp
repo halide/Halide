@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     // Target("") should be exactly like get_host_target().
     t1 = get_host_target();
     t2 = Target("");
-    if (t2 != t1){
+    if (t2 != t1) {
        printf("parse_from_string failure: %s\n", ts.c_str());
        return -1;
     }
@@ -21,9 +21,13 @@ int main(int argc, char **argv) {
        printf("to_string failure: %s\n", ts.c_str());
        return -1;
     }
-    // We expect from_string() to fail, since it doesn't know about 'unknown'
-    if (Target::validate_target_string(ts)) {
+    if (!Target::validate_target_string(ts)) {
        printf("validate_target_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+    t2 = Target(ts);
+    if (t2 != t1) {
+       printf("roundtrip failure: %s\n", ts.c_str());
        return -1;
     }
 
@@ -42,22 +46,10 @@ int main(int argc, char **argv) {
     // Full specification round-trip, crazy features
     t1 = Target(Target::Android, Target::ARM, 32,
                 {Target::JIT, Target::SSE41, Target::AVX, Target::AVX2,
-                 Target::CUDA, Target::OpenCL, Target::OpenGL, Target::OpenGLCompute, Target::Renderscript,
+                 Target::CUDA, Target::OpenCL, Target::OpenGL, Target::OpenGLCompute,
                  Target::Debug});
     ts = t1.to_string();
-    if (ts != "arm-32-android-avx-avx2-cuda-debug-jit-opencl-opengl-openglcompute-renderscript-sse41") {
-       printf("to_string failure: %s\n", ts.c_str());
-       return -1;
-    }
-    if (!Target::validate_target_string(ts)) {
-       printf("validate_target_string failure: %s\n", ts.c_str());
-       return -1;
-    }
-
-    // Full specification round-trip, PNacl
-    t1 = Target(Target::NaCl, Target::PNaCl, 32);
-    ts = t1.to_string();
-    if (ts != "pnacl-32-nacl") {
+    if (ts != "arm-32-android-avx-avx2-cuda-debug-jit-opencl-opengl-openglcompute-sse41") {
        printf("to_string failure: %s\n", ts.c_str());
        return -1;
     }
@@ -74,6 +66,20 @@ int main(int argc, char **argv) {
     }
 
     ts = "x86-23";
+    if (Target::validate_target_string(ts)) {
+       printf("validate_target_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+
+    // bits == 0 is allowed only if arch_unknown and os_unknown are specified,
+    // and no features are set
+    ts = "x86-0";
+    if (Target::validate_target_string(ts)) {
+       printf("validate_target_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+
+    ts = "0-arch_unknown-os_unknown-sse41";
     if (Target::validate_target_string(ts)) {
        printf("validate_target_string failure: %s\n", ts.c_str());
        return -1;

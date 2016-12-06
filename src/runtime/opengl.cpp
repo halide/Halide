@@ -227,8 +227,8 @@ WEAK GlobalState global_state;
 class GLStateSaver {
     public:
 
-    GLStateSaver() { save(); }
-    ~GLStateSaver() { restore(); }
+    __attribute__((always_inline)) GLStateSaver() { save(); }
+    __attribute__((always_inline)) ~GLStateSaver() { restore(); }
 
     private:
 
