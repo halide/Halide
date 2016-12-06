@@ -85,7 +85,7 @@ class InjectHexagonRpc : public IRMutator {
     Expr state_var(const std::string& name, Type type) {
         Expr& var = state_vars[name];
         if (!var.defined()) {
-            Buffer<void *> storage = Buffer<void *>::make_scalar();
+            auto storage = Buffer<void *>::make_scalar();
             storage() = nullptr;
             BufferPtr buf(storage, name + "_buf");
             var = Load::make(type_of<void*>(), name + "_buf", 0, buf, Parameter());
