@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
         RVar rxy, rxyo, rxyi;
         g.update(0).fuse(r.x, r.y, rxy).split(rxy, rxyo, rxyi, 2);
 
-        Image<int> Rg = g.realize(4, 4);
+        Buffer<int> Rg = g.realize(4, 4);
 
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         RVar ro, ri, roi;
         g.update(0).split(r, ro, ri, 2).fuse(ro, ri, roi);
 
-        Image<int> Rg = g.realize(16);
+        Buffer<int> Rg = g.realize(16);
 
         for (int i = 0; i < 16; i++) {
             if (Rg(i) != i) {

@@ -211,8 +211,8 @@ extern "C" {
 // - A call to halide_acquire_metal_context is followed by a matching call to
 //   halide_release_metal_context. halide_acquire_metal_context should block while a
 //   previous call (if any) has not yet been released via halide_release_metal_context.
-WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_ret,
-                                      mtl_command_queue *&queue_ret, bool create) {
+WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
+                                      mtl_command_queue **queue_ret, bool create) {
     halide_assert(user_context, &thread_lock != NULL);
     while (__sync_lock_test_and_set(&thread_lock, 1)) { }
 
@@ -243,8 +243,8 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device *&device_re
     // ensure the queue has as well.
     halide_assert(user_context, (device == 0) || (queue != 0));
 
-    device_ret = device;
-    queue_ret = queue;
+    *device_ret = device;
+    *queue_ret = queue;
     return 0;
 }
 
@@ -261,21 +261,29 @@ class MetalContextHolder {
     objc_id pool;
     void *user_context;
 
+    // Define these out-of-line as WEAK, to avoid LLVM error "MachO doesn't support COMDATs"
+    void save(void *user_context, bool create);
+    void restore();
+
 public:
     mtl_device *device;
     mtl_command_queue *queue;
     int error;
 
-    MetalContextHolder(void *user_context, bool create) : user_context(user_context) {
-        pool = create_autorelease_pool();
-        error = halide_metal_acquire_context(user_context, device, queue, create);
-    }
-
-    ~MetalContextHolder() {
-        halide_metal_release_context(user_context);
-        drain_autorelease_pool(pool);
-    }
+    __attribute__((always_inline)) MetalContextHolder(void *user_context, bool create) { save(user_context, create); }
+    __attribute__((always_inline)) ~MetalContextHolder() { restore(); }
 };
+
+WEAK void MetalContextHolder::save(void *user_context_arg, bool create) {
+    user_context = user_context_arg;
+    pool = create_autorelease_pool();
+    error = halide_metal_acquire_context(user_context, &device, &queue, create);
+}
+
+WEAK void MetalContextHolder::restore() {
+    halide_metal_release_context(user_context);
+    drain_autorelease_pool(pool);
+}
 
 struct command_buffer_completed_handler_block_descriptor_1 {
     unsigned long reserved;
@@ -447,7 +455,7 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 
 namespace {
 
-inline void halide_metal_device_sync_internal(mtl_command_queue *queue, struct buffer_t *buffer) {
+WEAK void halide_metal_device_sync_internal(mtl_command_queue *queue, struct buffer_t *buffer) {
     mtl_command_buffer *sync_command_buffer = new_command_buffer(queue);
     if (buffer != NULL) {
         mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
@@ -487,7 +495,7 @@ WEAK int halide_metal_device_release(void *user_context) {
     int error;
     mtl_device *acquired_device;
     mtl_command_queue *acquired_queue;
-    error = halide_metal_acquire_context(user_context, acquired_device, acquired_queue, false);
+    error = halide_metal_acquire_context(user_context, &acquired_device, &acquired_queue, false);
     if (error != 0) {
         return error;
     }

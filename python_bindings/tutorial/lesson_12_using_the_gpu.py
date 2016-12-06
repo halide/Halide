@@ -42,7 +42,7 @@ class MyPipeline:
 
     def __init__(self, input):
 
-        assert type(input) == Image_uint8
+        assert type(input) == Buffer_uint8
 
         self.lut = Func("lut")
         self.padded = Func("padded")
@@ -74,8 +74,6 @@ class MyPipeline:
 
         # Then apply the LUT.
         self.curved[x, y, c] = self.lut[self.sharpen[x, y, c]]
-
-        return
 
 
     # Now we define methods that give our pipeline several different
@@ -217,32 +215,13 @@ class MyPipeline:
 
         self.curved.compile_jit(target)
 
-        return
-
     def test_performance(self):
         # Test the performance of the scheduled MyPipeline.
 
-        # If we realize curved into a Halide::Image, that will
-        # unfairly penalize GPU performance by including a GPU->CPU
-        # copy in every run. Halide::Image objects always exist on
-        # the CPU.
-
-        # Halide::Buffer, however, represents a buffer that may
-        # exist on either CPU or GPU or both.
-        output = Buffer(UInt(8), \
-                        self.input.width(),
-                        self.input.height(),
-                        self.input.channels())
-        output = Buffer(UInt(8), \
-                        self.input.width(),
-                        self.input.height(),
-                        self.input.channels(),
-                        name="output")
-        output = Buffer(UInt(8), \
-                        x_size=self.input.width(),
-                        y_size=self.input.height(),
-                        z_size=self.input.channels(),
-                        name="output")
+        output = Buffer(UInt(8),
+                       self.input.width(),
+                       self.input.height(),
+                       self.input.channels())
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)
@@ -269,17 +248,13 @@ class MyPipeline:
 
         print("%1.4f milliseconds" % (best_time * 1000))
 
-        return
-
-
     def test_correctness(self, reference_output):
 
-        assert type(reference_output) == Image_uint8
-        output_r = self.curved.realize(self.input.width(), self.input.height(),
-                                  self.input.channels())
-        assert type(output_r) == Realization
-        output = Image(UInt(8), output_r)
-        assert type(output) == Image_uint8
+        assert type(reference_output) == Buffer_uint8
+        output = self.curved.realize(self.input.width(),
+                                     self.input.height(),
+                                     self.input.channels())
+        assert type(output) == Buffer_uint8
 
         # Check against the reference output.
         for c in range(self.input.channels()):
@@ -287,24 +262,24 @@ class MyPipeline:
                 for x in range(self.input.width()):
                     if output(x, y, c) != reference_output(x, y, c):
                         print(
-                        "Mismatch between output (%d) and "
-                               "reference output (%d) at %d, %d, %d" % (
-                               output(x, y, c),
-                               reference_output(x, y, c),
-                               x, y, c))
+                            "Mismatch between output (%d) and "
+                            "reference output (%d) at %d, %d, %d" % (
+                                output(x, y, c),
+                                reference_output(x, y, c),
+                                x, y, c))
                         return
 
         print("CPU and GPU outputs are consistent.")
-        return
+
 
 def main():
     # Load an input image.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
     input_data = imread(image_path)
-    input = Image(input_data)
+    input = Buffer(input_data)
 
     # Allocated an image that will store the correct output
-    reference_output = Image(UInt(8), input.width(), input.height(), input.channels())
+    reference_output = Buffer(UInt(8), input.width(), input.height(), input.channels())
 
     print("Testing performance on CPU:")
     p1 = MyPipeline(input)
@@ -321,7 +296,7 @@ def main():
     else:
         print("Not testing performance on GPU, "
               "because I can't find the opencl library")
-    
+
     return 0
 
 

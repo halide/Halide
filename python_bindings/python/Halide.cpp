@@ -2,19 +2,17 @@
 
 #include "Argument.h"
 #include "BoundaryConditions.h"
-#include "Buffer.h"
 #include "Error.h"
 #include "Expr.h"
 #include "Func.h"
 #include "Function.h"
+#include "IROperator.h"
 #include "Image.h"
 #include "InlineReductions.h"
-#include "IROperator.h"
 #include "Lambda.h"
 #include "Param.h"
 #include "RDom.h"
 #include "Target.h"
-#include "Tuple.h"
 #include "Type.h"
 #include "Var.h"
 
@@ -40,8 +38,7 @@ void defineLlvmHelpers()
 }
 */
 
-BOOST_PYTHON_MODULE(halide)
-{
+BOOST_PYTHON_MODULE(halide) {
     using namespace boost::python;
 
     // we include all the pieces and bits from the Halide API
@@ -52,14 +49,12 @@ BOOST_PYTHON_MODULE(halide)
     defineExpr();
     defineExternFuncArgument();
     defineFunc();
-    defineImage();
     defineInlineReductions();
     defineLambda();
     defineOperators();
     defineParam();
     defineRDom();
     defineTarget();
-    defineTuple();
     defineType();
     defineVar();
 

@@ -2,9 +2,16 @@
 
 namespace {
 
+Halide::Expr is_interleaved(const Halide::OutputImageParam &p, int channels = 3) {
+    return p.stride(0) == channels && p.stride(2) == 1 && p.extent(2) == channels;
+}
+
+Halide::Expr is_planar(const Halide::OutputImageParam &p, int channels = 3) {
+    return p.stride(0) == 1 && p.extent(2) == channels;
+}
+
 class TiledBlurBlur : public Halide::Generator<TiledBlurBlur> {
 public:
-    GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
     ImageParam input{ Int(32), 3, "input" };
     Param<int> width{ "width" };
     Param<int> height{ "height" };
@@ -21,16 +28,27 @@ public:
 
         Var x("x"), y("y"), c("c");
 
+        Func input_clamped = Halide::BoundaryConditions::repeat_edge(input, 0, width, 0, height);
+
         Func blur("blur");
-        blur(x, y, c) =
-            (input(clamp(x - 1, 0, width - 1), y, c) + input(clamp(x + 1, 0, width - 1), y, c) +
-             input(x, clamp(y - 1, 0, height - 1), c) + input(x, clamp(y + 1, 0, height - 1), c)) /
+        blur(x, y, c) = 
+            (input_clamped(x - 1, y, c) + input_clamped(x + 1, y, c) +
+             input_clamped(x, y - 1, c) + input_clamped(x, y + 1, c)) /
             4.0f;
 
-        if (is_interleaved) {
-            input.set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
-            blur.output_buffer().set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
-        }
+        // Unset default constraints so that specialization works.
+        input.set_stride(0, Expr());
+        blur.output_buffer().set_stride(0, Expr());
+
+        // Add specialization for input and output buffers that are both planar.
+        blur.specialize(is_planar(input) && is_planar(blur.output_buffer()));
+
+        // Add specialization for input and output buffers that are both interleaved.
+        blur.specialize(is_interleaved(input) && is_interleaved(blur.output_buffer()));
+
+        // Note that other combinations (e.g. interleaved -> planar) will work
+        // but be relatively unoptimized.
+
         return blur;
     }
 };

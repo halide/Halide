@@ -2220,7 +2220,8 @@ private:
             // min(max(x, y), min(y, x)) -> min(x, y)
             expr = mutate(min(max_a->a, max_a->b));
         } else if (max_a &&
-                   equal(max_a->b, b)) {
+                   (equal(max_a->a, b) || equal(max_a->b, b))) {
+            // min(max(x, y), x) -> x
             // min(max(x, y), y) -> y
             expr = b;
         } else if (min_a &&
@@ -2582,7 +2583,8 @@ private:
             // max(min(x, y), max(y, x)) -> max(x, y)
             expr = mutate(max(min_a->a, min_a->b));
         } else if (min_a &&
-                   equal(min_a->b, b)) {
+                   (equal(min_a->a, b) || equal(min_a->b, b))) {
+            // max(min(x, y), x) -> x
             // max(min(x, y), y) -> y
             expr = b;
         } else if (max_a &&
@@ -2755,8 +2757,8 @@ private:
             }
         } else if (no_overflow(op->type) &&
                    sub_a &&
-                   is_const(sub_a->a) &&
-                   is_const(b)) {
+                   is_simple_const(sub_a->a) &&
+                   is_simple_const(b)) {
             // max(8 - x, 3) -> 8 - min(x, 5)
             expr = mutate(sub_a->a - min(sub_a->b, sub_a->a - b));
         } else if (select_a &&
@@ -2849,13 +2851,15 @@ private:
         } else if (sel && is_zero(sel->true_value)) {
             // select(c, 0, f) == 0 -> c || (f == 0)
             expr = mutate(sel->condition || (sel->false_value == zero));
-        } else if (sel && is_const(sel->true_value)) {
+        } else if (sel &&
+                   (is_positive_const(sel->true_value) || is_negative_const(sel->true_value))) {
             // select(c, 4, f) == 0 -> !c && (f == 0)
             expr = mutate((!sel->condition) && (sel->false_value == zero));
         } else if (sel && is_zero(sel->false_value)) {
             // select(c, t, 0) == 0 -> !c || (t == 0)
             expr = mutate((!sel->condition) || (sel->true_value == zero));
-        } else if (sel && is_const(sel->false_value)) {
+        } else if (sel &&
+                   (is_positive_const(sel->false_value) || is_negative_const(sel->false_value))) {
             // select(c, t, 4) == 0 -> c && (t == 0)
             expr = mutate((sel->condition) && (sel->true_value == zero));
         } else {
@@ -3003,7 +3007,8 @@ private:
                 expr = mutate(sub_b->b < make_zero(sub_b->b.type()));
             } else if (sub_b &&
                        is_const(a) &&
-                       is_const(sub_b->a)) {
+                       is_const(sub_b->a) &&
+                       !is_const(sub_b->b)) {
                 // (c1 < c2 - x) -> (x < c2 - c1)
                 expr = mutate(sub_b->b < (sub_b->a - a));
             } else if (mul_a &&
@@ -4500,48 +4505,15 @@ private:
         }
     }
 
-
     void visit(const ProducerConsumer *op) {
-        Stmt produce = mutate(op->produce);
-        Stmt update = op->update;
-        if (update.defined()) {
-            update = mutate(update);
-            if (is_no_op(update)) {
-                update = Stmt();
-            }
-        }
-        Stmt consume = mutate(op->consume);
+        Stmt body = mutate(op->body);
 
-        const IfThenElse *produce_if = produce.as<IfThenElse>();
-        const IfThenElse *update_if  = update.as<IfThenElse>();
-        const IfThenElse *consume_if = consume.as<IfThenElse>();
-
-        if (is_no_op(produce) &&
-            is_no_op(consume) &&
-            is_no_op(update)) {
+        if (is_no_op(body)) {
             stmt = Evaluate::make(0);
-        } else if (produce_if &&
-                   !produce_if->else_case.defined() &&
-                   consume_if &&
-                   !consume_if->else_case.defined() &&
-                   equal(produce_if->condition, consume_if->condition) &&
-                   (!update.defined() ||
-                    (update_if &&
-                     !update_if->else_case.defined() &&
-                     equal(produce_if->condition, update_if->condition)))) {
-            // All parts are guarded by the same condition. Lift it outwards.
-            Expr condition = produce_if->condition;
-            produce = produce_if->then_case;
-            if (update_if) update = update_if->then_case;
-            consume = consume_if->then_case;
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
-            stmt = IfThenElse::make(condition, stmt);
-        } else if (produce.same_as(op->produce) &&
-                   update.same_as(op->update) &&
-                   consume.same_as(op->consume)) {
+        } else if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         }
     }
 
@@ -4555,8 +4527,10 @@ private:
         const IfThenElse *if_first = first.as<IfThenElse>();
         const IfThenElse *if_rest = rest.as<IfThenElse>();
 
-        // Check if first is a no-op.
-        if (is_no_op(first)) {
+        if (is_no_op(first) &&
+            is_no_op(rest)) {
+            stmt = Evaluate::make(0);
+        } else if (is_no_op(first)) {
             stmt = rest;
         } else if (is_no_op(rest)) {
             stmt = first;
@@ -4567,15 +4541,14 @@ private:
             // Do both first and rest start with the same let statement (occurs when unrolling).
             Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
 
-            // We're just going to use the first name, so if the
-            // second name is different we need to rewrite it.
-            if (let_rest->name != let_first->name) {
-                new_block = substitute(let_rest->name,
-                                       Variable::make(let_first->value.type(), let_first->name),
-                                       new_block);
-            }
+            // We need to make a new name since we're pulling it out to a
+            // different scope.
+            string var_name = unique_name('t');
+            Expr new_var = Variable::make(let_first->value.type(), var_name);
+            new_block = substitute(let_first->name, new_var, new_block);
+            new_block = substitute(let_rest->name, new_var, new_block);
 
-            stmt = LetStmt::make(let_first->name, let_first->value, new_block);
+            stmt = LetStmt::make(var_name, let_first->value, new_block);
         } else if (if_first &&
                    if_rest &&
                    equal(if_first->condition, if_rest->condition)) {
@@ -4986,6 +4959,26 @@ void check_vectors() {
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
+
+    {
+        Expr test = select(ramp(const_true(), const_true(), 2),
+                           ramp(const_false(), const_true(), 2),
+                           broadcast(const_false(), 2)) ==
+                    broadcast(const_false(), 2);
+        Expr expected = !(ramp(const_true(), const_true(), 2)) ||
+                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        check(test, expected);
+    }
+
+    {
+        Expr test = select(ramp(const_true(), const_true(), 2),
+                           broadcast(const_true(), 2),
+                           ramp(const_false(), const_true(), 2)) ==
+                    broadcast(const_false(), 2);
+        Expr expected = (!ramp(const_true(), const_true(), 2)) &&
+                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        check(test, expected);
+    }
 }
 
 void check_bounds() {
@@ -5154,6 +5147,12 @@ void check_bounds() {
     check(x - max(2, x), min(x + -2, 0));
     check(min(2, x) - x, 2 - max(x, 2));
     check(max(2, x) - x, 2 - min(x, 2));
+
+    check(max(min(x, y), x), x);
+    check(max(min(x, y), y), y);
+    check(min(max(x, y), x), x);
+    check(min(max(x, y), y), y);
+    check(max(min(x, y), x) + y, x + y);
 
     check(max(min(max(x, y), z), y), max(min(x, z), y));
     check(max(min(z, max(x, y)), y), max(min(x, z), y));
@@ -5730,7 +5729,7 @@ void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
 
 void check_indeterminate() {
     const int32_t values[] = {
-        -2147483648,
+        int32_t(0x80000000),
         -2147483647,
         -2,
         -1,
@@ -5898,9 +5897,9 @@ void simplify_test() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer(), Parameter());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer(), Parameter());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer(), Parameter());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), BufferPtr(), Parameter());
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), BufferPtr(), Parameter());
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), BufferPtr(), Parameter());
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -5908,7 +5907,7 @@ void simplify_test() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer(), Parameter());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), BufferPtr(), Parameter());
         e = interleave_vectors({load1, load3});
         check(e, e);
 
@@ -5922,6 +5921,13 @@ void simplify_test() {
             e = max(e, 1)/2;
         }
         check(e, e);
+    }
+
+    // This expression is used to cause infinite recursion.
+    {
+        Expr e = Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2));
+        Expr expected = Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2));
+        check(e, expected);
     }
 
     std::cout << "Simplify test passed" << std::endl;

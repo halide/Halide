@@ -59,31 +59,33 @@ struct device_copy {
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
 
-    inline void copy_memory(void *user_context) const {
-        // If this is a zero copy buffer, these pointers will be the same.
-        if (src != dst) {
-            // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-            // in case negative strides.
-            for (int w = 0; w < (int)extent[3]; w++) {
-                for (int z = 0; z < (int)extent[2]; z++) {
-                    for (int y = 0; y < (int)extent[1]; y++) {
-                        for (int x = 0; x < (int)extent[0]; x++) {
-                            uint64_t off = (x * stride_bytes[0] +
-                                            y * stride_bytes[1] +
-                                            z * stride_bytes[2] +
-                                            w * stride_bytes[3]);
-                            const void *from = (void *)(src + off);
-                            void *to = (void *)(dst + off);
-                            memcpy(to, from, chunk_size);
-                        }
+    void copy_memory(void *user_context) const;
+};
+
+WEAK void device_copy::copy_memory(void *user_context) const {
+    // If this is a zero copy buffer, these pointers will be the same.
+    if (src != dst) {
+        // TODO: Is this 32-bit or 64-bit? Leaving signed for now
+        // in case negative strides.
+        for (int w = 0; w < (int)extent[3]; w++) {
+            for (int z = 0; z < (int)extent[2]; z++) {
+                for (int y = 0; y < (int)extent[1]; y++) {
+                    for (int x = 0; x < (int)extent[0]; x++) {
+                        uint64_t off = (x * stride_bytes[0] +
+                                        y * stride_bytes[1] +
+                                        z * stride_bytes[2] +
+                                        w * stride_bytes[3]);
+                        const void *from = (void *)(src + off);
+                        void *to = (void *)(dst + off);
+                        memcpy(to, from, chunk_size);
                     }
                 }
             }
-        } else {
-            debug(user_context) << "device_copy::copy_memory: no copy needed as pointers are the same.\n";
         }
+    } else {
+        debug(user_context) << "device_copy::copy_memory: no copy needed as pointers are the same.\n";
     }
-};
+}
 
 WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     // Make a copy job representing copying the first pixel only.

@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     g.compute_at(h, y);
     f.compute_root();
 
-    Image<int> imh = h.realize(32, 32);
+    Buffer<int> imh = h.realize(32, 32);
 
     bool success = true;
 

@@ -36,9 +36,9 @@ Var x, y, c, i;
 class MyPipeline {
 public:
     Func lut, padded, padded16, sharpen, curved;
-    Image<uint8_t> input;
+    Buffer<uint8_t> input;
 
-    MyPipeline(Image<uint8_t> in) : input(in) {
+    MyPipeline(Buffer<uint8_t> in) : input(in) {
         // For this lesson, we'll use a two-stage pipeline that sharpens
         // and then applies a look-up-table (LUT).
 
@@ -162,7 +162,7 @@ public:
         // Use the GPU threads for the x and y coordinates of the
         // padded input.
         padded.gpu_threads(x, y);
-        
+
         // JIT-compile the pipeline for the GPU. CUDA, OpenCL, or
         // Metal are not enabled by default. We have to construct a
         // Target object, enable one of them, and then pass that
@@ -201,14 +201,7 @@ public:
     void test_performance() {
         // Test the performance of the scheduled MyPipeline.
 
-        // If we realize curved into a Halide::Image, that will
-        // unfairly penalize GPU performance by including a GPU->CPU
-        // copy in every run. Halide::Image objects always exist on
-        // the CPU.
-
-        // Halide::Buffer, however, represents a buffer that may
-        // exist on either CPU or GPU or both.
-        Buffer output(UInt(8), input.width(), input.height(), input.channels());
+        Buffer<uint8_t> output(input.width(), input.height(), input.channels());
 
         // Run the filter once to initialize any GPU runtime state.
         curved.realize(output);
@@ -238,8 +231,8 @@ public:
         printf("%1.4f milliseconds\n", best_time);
     }
 
-    void test_correctness(Image<uint8_t> reference_output) {
-        Image<uint8_t> output =
+    void test_correctness(Buffer<uint8_t> reference_output) {
+        Buffer<uint8_t> output =
             curved.realize(input.width(), input.height(), input.channels());
 
         // Check against the reference output.
@@ -265,10 +258,10 @@ bool have_opencl_or_metal();
 
 int main(int argc, char **argv) {
     // Load an input image.
-    Image<uint8_t> input = load_image("images/rgb.png");
+    Buffer<uint8_t> input = load_image("images/rgb.png");
 
     // Allocated an image that will store the correct output
-    Image<uint8_t> reference_output(input.width(), input.height(), input.channels());
+    Buffer<uint8_t> reference_output(input.width(), input.height(), input.channels());
 
     printf("Testing performance on CPU:\n");
     MyPipeline p1(input);

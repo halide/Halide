@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         // race.  Halide's not smart enough to understand this.
         f.update().allow_race_conditions().parallel(r);
 
-        Image<int> out = f.realize(100);
+        Buffer<int> out = f.realize(100);
         for (int i = 0; i < 100; i++) {
             int correct = (i < 50) ? i : 0;
             if (out(i) != correct) {
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         f(permuted) = r;
         f.update().allow_race_conditions().vectorize(r, 4).parallel(r);
 
-        Image<int> out = f.realize(256);
+        Buffer<int> out = f.realize(256);
 
         // Sort the output.
         std::sort(&out(0), &out(256));

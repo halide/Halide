@@ -1,11 +1,11 @@
 // This header defines several methods useful for debugging programs that
-// operate on the Image class supporting images with arbitrary dimensions.
+// operate on the Buffer class supporting images with arbitrary dimensions.
 //
-//   Image<uint16_t> input = load_image(argv[1]);
+//   Buffer<uint16_t> input = load_image(argv[1]);
 //
-//   info(input, "input");  // Output the Image header info
-//   dump(input, "input");  // Dump the Image data
-//   stats(input, "input"); // Report statistics for the Image
+//   info(input, "input");  // Output the Buffer header info
+//   dump(input, "input");  // Dump the Buffer data
+//   stats(input, "input"); // Report statistics for the Buffer
 //
 //
 #ifndef HALIDE_TOOLS_IMAGE_INFO_H
@@ -22,7 +22,7 @@
 
 #include "HalideRuntime.h"
 
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 namespace Halide {
 namespace Tools {
@@ -70,7 +70,7 @@ static inline void print_memalign(intptr_t val) {
 }
 
 template<typename T>
-void info(Image<T> &img, const char *tag = "Image") {
+void info(Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -78,7 +78,7 @@ void info(Image<T> &img, const char *tag = "Image") {
     int dim = img.dimensions();
     int img_bpp = buf->elem_size;
     int img_tsize = sizeof(T);
-    int img_csize = sizeof(Image<T>);
+    int img_csize = sizeof(Buffer<T>);
     int img_bsize = sizeof(buffer_t);
     int32_t size = 1;
     uint64_t dev = buf->dev;
@@ -87,7 +87,7 @@ void info(Image<T> &img, const char *tag = "Image") {
 
     std::cout << std::endl
               << "-----------------------------------------------------------------------------";
-    std::cout << std::endl << "Image info: " << tag
+    std::cout << std::endl << "Buffer info: " << tag
               << " dim:" << dim << " bpp:" << img_bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
@@ -167,7 +167,7 @@ void info(Image<T> &img, const char *tag = "Image") {
 }
 
 template<typename T>
-void dump(Image<T> &img, const char *tag = "Image") {
+void dump(Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -176,7 +176,7 @@ void dump(Image<T> &img, const char *tag = "Image") {
     int bpp = buf->elem_size;
     int32_t size = 1;
 
-    std::cout << std::endl << "Image dump: " << tag
+    std::cout << std::endl << "Buffer dump: " << tag
               << " dim:" << dim << " bpp:" << bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
@@ -231,7 +231,7 @@ void dump(Image<T> &img, const char *tag = "Image") {
 }
 
 template<typename T>
-void stats(Image<T> &img, const char *tag = "Image") {
+void stats(Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -239,7 +239,7 @@ void stats(Image<T> &img, const char *tag = "Image") {
     int dim = img.dimensions();
     int bpp = buf->elem_size;
     int32_t size = 1;
-    std::cout << std::endl << "Image stats: " << tag
+    std::cout << std::endl << "Buffer stats: " << tag
               << " dim:" << dim << " bpp:" << bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);

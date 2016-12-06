@@ -27,8 +27,8 @@ int main(int argc, char **argv) {
     const int32_t buffer_size = 12345678;
     const int iterations = 50;
 
-    Image<uint8_t> input(buffer_size);
-    Image<uint8_t> output(buffer_size);
+    Buffer<uint8_t> input(buffer_size);
+    Buffer<uint8_t> output(buffer_size);
 
     src.set(input);
 

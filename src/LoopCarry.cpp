@@ -385,7 +385,7 @@ class LoopCarryOverLoop : public IRMutator {
             for (size_t i = 0; i < c.size(); i++) {
                 const Load *orig_load = loads[c[i]][0];
                 Expr scratch_idx = scratch_index(i, orig_load->type);
-                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx, Buffer(), Parameter());
+                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx, BufferPtr(), Parameter());
                 for (const Load *l : loads[c[i]]) {
                     core = graph_substitute(l, load_from_scratch, core);
                 }
@@ -493,12 +493,14 @@ class LoopCarry : public IRMutator {
     Scope<int> in_consume;
 
     void visit(const ProducerConsumer *op) {
-        Stmt produce = mutate(op->produce);
-        Stmt update = mutate(op->update);
-        in_consume.push(op->name, 0);
-        Stmt consume = mutate(op->consume);
-        in_consume.pop(op->name);
-        stmt = ProducerConsumer::make(op->name, produce, update, consume);
+        if (op->is_producer) {
+            IRMutator::visit(op);
+        } else {
+            in_consume.push(op->name, 0);
+            Stmt body = mutate(op->body);
+            in_consume.pop(op->name);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+        }
     }
 
     void visit(const For *op) {

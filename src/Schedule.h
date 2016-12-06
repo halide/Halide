@@ -73,7 +73,7 @@ enum class TailStrategy {
 class LoopLevel {
     // Note: func_ is nullptr for inline or root.
     Internal::IntrusivePtr<Internal::FunctionContents> function_contents;
-    // TODO: these two fields should really be VarOrRVar, 
+    // TODO: these two fields should really be VarOrRVar,
     // but cyclical include dependencies make this challenging.
     std::string var_name;
     bool is_rvar;
@@ -123,6 +123,8 @@ public:
 
     /** Check if two loop levels are exactly the same. */
     EXPORT bool operator==(const LoopLevel &other) const;
+
+    bool operator!=(const LoopLevel &other) const { return !(*this == other); }
 };
 
 namespace Internal {
@@ -186,7 +188,10 @@ struct StorageDim {
     bool fold_forward;
 };
 
-class ReductionDomain;
+struct Prefetch {
+    std::string var;
+    Expr offset;
+};
 
 struct FunctionContents;
 
@@ -268,6 +273,13 @@ public:
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
+    // @}
+
+    /** You may perform prefetching in some of the dimensions of a
+     * function. See \ref Func::prefetch */
+    // @{
+    const std::vector<Prefetch> &prefetches() const;
+    std::vector<Prefetch> &prefetches();
     // @}
 
     /** Mark calls of a function by 'f' to be replaced with its wrapper
