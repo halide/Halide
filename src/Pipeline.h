@@ -59,7 +59,7 @@ class Pipeline {
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
     std::vector<Internal::BufferPtr> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
-    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
+    std::vector<const void *> prepare_jit_call_arguments(BufferRefCollection &dst, const Target &target);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
@@ -353,13 +353,11 @@ public:
     EXPORT Realization realize(int x_size,
                                const Target &target = Target());
     EXPORT Realization realize(const Target &target = Target());
-    EXPORT void realize(Realization dst, const Target &target = Target());
 
+    EXPORT void realize(BufferRefCollection bufs, const Target &target = Target());
     template<typename T, int D>
-    NO_INLINE void realize(Buffer<T, D> &dst, const Target &target = Target()) {
-        Realization r(dst);
-        realize(r, target);
-        dst = r[0];
+    NO_INLINE void realize(Buffer<T, D> &buf, const Target &target = Target()) {
+        realize({buf}, target);
     }
     // @}
 
@@ -370,17 +368,10 @@ public:
      * ImageParams. */
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(Realization dst);
-
+    EXPORT void infer_input_bounds(BufferRefCollection bufs);
     template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Buffer<T, D> &im) {
-        // It's possible for bounds inference to also manipulate
-        // output buffers if their host pointer is null, so we must
-        // take Images by reference and communicate the bounds query
-        // result by modifying the argument.
-        Realization r(im);
-        infer_input_bounds(r);
-        im = r[0];
+    NO_INLINE void infer_input_bounds(Buffer<T, D> &buf) {
+        infer_input_bounds({buf});
     }
     // @}
 
