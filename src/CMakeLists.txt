@@ -257,6 +257,7 @@ set(HEADER_FILES
   FastIntegerDivide.h
   FindCalls.h
   Float16.h
+  FragmentAllocations.h
   Func.h
   Function.h
   FuseGPUThreadLoops.h
@@ -403,6 +404,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
+  FragmentAllocations.cpp
   Float16.cpp
   Func.cpp
   Function.cpp

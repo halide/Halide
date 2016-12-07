@@ -393,10 +393,13 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
     // Create the module itself if necessary.
     if (!(*state)->module) {
         debug(user_context) <<  "    cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
-        //CUresult err = cuModuleLoadData(&(*state)->module, ptx_src);
 
         CUjit_option options[] = { CU_JIT_MAX_REGISTERS };
-        unsigned int max_regs_per_thread = 32;
+        unsigned int max_regs_per_thread = 64;
+
+        // A hack to enable control over max register count for
+        // testing. This should be surfaced in the schedule somehow
+        // instead.
         char *regs = getenv("HL_CUDA_JIT_MAX_REGISTERS");
         if (regs) {
             max_regs_per_thread = atoi(regs);

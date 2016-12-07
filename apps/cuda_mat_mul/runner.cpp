@@ -1,22 +1,25 @@
-#include "cuda_mat_mul.h"
+#include "bin/mat_mul.h"
 #include "benchmark.h"
 #include "HalideBuffer.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
 int main(int argc, char **argv) {
-    const int size = 1024;
+    int size = 1024;
+    if (argc > 1) {
+         size = atoi(argv[1]);
+    }
+
     {
         Halide::Buffer<float> A(size, size), B(size, size), C(size, size);
         double t = benchmark(10, 10, [&]() {
                                          mat_mul(A, B, C);
                                          C.device_sync();
                                      });
-        printf("%f\n", t);
+        printf("Halide time: %f\n", t);
     }
 
     {
-        // Now check cublas
         float *A, *B, *C;
         cudaMalloc((void **)&A, size*size*4);
         cudaMalloc((void **)&B, size*size*4);
@@ -34,7 +37,7 @@ int main(int argc, char **argv) {
         cudaFree(B);
         cudaFree(C);
         cublasDestroy(handle);
-        printf("%f\n", t);
+        printf("cublas time: %f\n", t);
     }
     return 0;
 }
