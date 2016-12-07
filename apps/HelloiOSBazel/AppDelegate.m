@@ -35,6 +35,16 @@
         output_image.backgroundColor = [UIColor blackColor];
         [ self.window addSubview: output_image ];
         [ output_image setUserInteractionEnabled:true ];
+        // TODO(srj):
+        // TODO(srj):
+        // TODO(srj):
+        // TODO(srj):
+        // TODO(srj):
+        // TODO(srj):
+        // This should be connected to a button in the UI;
+        // as it is, this means we always use metal when possible,
+        // falling back to CPU when not.
+        output_image.use_metal = true;
     }
     halide_view_controller.halide_view = output_image;
     
