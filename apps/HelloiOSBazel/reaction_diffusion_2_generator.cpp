@@ -124,6 +124,13 @@ public:
             new_state.update(2).gpu_tile(y, 8);
             new_state.update(3).gpu_tile(y, 8);
             new_state.update(4).gpu_tile(clobber.x, clobber.y, 1, 1);
+
+            state.set_stride(0, 3);
+            state.set_stride(2, 1);
+            state.set_extent(2, 3);
+            new_state.output_buffer().set_stride(0, 3);
+            new_state.output_buffer().set_stride(2, 1);
+            new_state.output_buffer().set_extent(2, 3);
         } else {
             Var yi;
             new_state.split(y, y, yi, 64).parallel(y);
