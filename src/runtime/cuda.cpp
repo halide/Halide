@@ -393,7 +393,17 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
     // Create the module itself if necessary.
     if (!(*state)->module) {
         debug(user_context) <<  "    cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
-        CUresult err = cuModuleLoadData(&(*state)->module, ptx_src);
+        //CUresult err = cuModuleLoadData(&(*state)->module, ptx_src);
+
+        CUjit_option options[] = { CU_JIT_MAX_REGISTERS };
+        unsigned int max_regs_per_thread = 32;
+        char *regs = getenv("HL_CUDA_JIT_MAX_REGISTERS");
+        if (regs) {
+            max_regs_per_thread = atoi(regs);
+        }
+        void *optionValues[] = { (void*)(uintptr_t) max_regs_per_thread };
+        CUresult err = cuModuleLoadDataEx(&(*state)->module, ptx_src, 1, options, optionValues);
+
         if (err != CUDA_SUCCESS) {
             debug(user_context) << get_error_name(err) << "\n";
             error(user_context) << "CUDA: cuModuleLoadData failed: "
