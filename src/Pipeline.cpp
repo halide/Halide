@@ -920,7 +920,7 @@ struct JITFuncCallContext {
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
+vector<const void *> Pipeline::prepare_jit_call_arguments(BufferRefCollection &dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     compile_jit(target);
@@ -994,8 +994,8 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (const Buffer<> &buf : dst) {
-        arg_values.push_back(buf.raw_buffer());
+    for (size_t i = 0; i < dst.size(); i++) {
+        arg_values.push_back(dst[i].raw_buffer());
         const void *ptr = arg_values.back();
         debug(1) << "JIT output buffer @ " << ptr << "\n";
     }
@@ -1052,7 +1052,7 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-void Pipeline::realize(Realization dst, const Target &t) {
+void Pipeline::realize(BufferRefCollection dst, const Target &t) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -1165,7 +1165,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(Realization dst) {
+void Pipeline::infer_input_bounds(BufferRefCollection dst) {
 
     Target target = get_jit_target_from_environment();
 
