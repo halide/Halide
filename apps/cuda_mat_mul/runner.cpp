@@ -7,15 +7,15 @@
 int main(int argc, char **argv) {
     int size = 1024;
     if (argc > 1) {
-         size = atoi(argv[1]);
+        size = atoi(argv[1]);
     }
 
     {
         Halide::Buffer<float> A(size, size), B(size, size), C(size, size);
         double t = benchmark(10, 10, [&]() {
-                                         mat_mul(A, B, C);
-                                         C.device_sync();
-                                     });
+            mat_mul(A, B, C);
+            C.device_sync();
+        });
         printf("Halide time: %f\n", t);
     }
 
@@ -27,12 +27,11 @@ int main(int argc, char **argv) {
         cublasHandle_t handle;
         cublasCreate(&handle);
         float alpha = 1.0f, beta = 1.0f;
-        double t =
-            benchmark(3, 3, [&]() {
-                                cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
-                                            size, size, size, &alpha, A, size, B, size, &beta, C, size);
-                                cudaDeviceSynchronize();
-                            });
+        double t = benchmark(10, 10, [&]() {
+            cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                        size, size, size, &alpha, A, size, B, size, &beta, C, size);
+            cudaDeviceSynchronize();
+        });
         cudaFree(A);
         cudaFree(B);
         cudaFree(C);
