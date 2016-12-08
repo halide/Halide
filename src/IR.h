@@ -476,7 +476,7 @@ struct Call : public ExprNode<Call> {
         extract_buffer_max,
         extract_buffer_host,
         set_host_dirty,
-        set_dev_dirty,
+        set_device_dirty,
         popcount,
         count_leading_zeros,
         count_trailing_zeros,

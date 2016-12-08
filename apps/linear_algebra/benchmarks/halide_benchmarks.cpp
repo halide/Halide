@@ -37,7 +37,7 @@ struct BenchmarksBase {
     }
 
     Vector random_vector(int N) {
-        Vector buff(Halide::type_of<T>(), N);
+        Vector buff(Halide::type_of<T>(), {N});
         Scalar *x = (Scalar*)buff.host_ptr();
         for (int i=0; i<N; ++i) {
             x[i] = random_scalar();
@@ -46,7 +46,7 @@ struct BenchmarksBase {
     }
 
     Matrix random_matrix(int N) {
-        Matrix buff(Halide::type_of<T>(), N, N);
+        Matrix buff(Halide::type_of<T>(), {N, N});
         Scalar *A = (Scalar*)buff.host_ptr();
         for (int i=0; i<N*N; ++i) {
             A[i] = random_scalar();
@@ -101,7 +101,7 @@ struct BenchmarksBase {
 struct BenchmarksFloat : public BenchmarksBase<float> {
     BenchmarksFloat(std::string n) :
             BenchmarksBase(n),
-            result(Halide::Float(32), 1)
+            result(Halide::Float(32), {1})
     {}
 
     Halide::Buffer result;
@@ -136,7 +136,7 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 struct BenchmarksDouble : public BenchmarksBase<double> {
     BenchmarksDouble(std::string n) :
             BenchmarksBase(n),
-            result(Halide::Float(64), 1)
+            result(Halide::Float(64), {1})
     {}
 
     Halide::Buffer result;

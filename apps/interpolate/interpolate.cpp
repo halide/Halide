@@ -6,7 +6,7 @@ using namespace Halide;
 #include <limits>
 
 #include "benchmark.h"
-#include "halide_image_io.h"
+#include "HalideImageIO.h"
 
 using namespace Halide;
 
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     ImageParam input(Float(32), 3);
 
     // Input must have four color channels - rgba
-    input.set_bounds(2, 0, 4);
+    input.dim(2).set_bounds(0, 4);
 
     const int levels = 10;
 

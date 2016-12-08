@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
     {
         // Specialize for interleaved vs planar inputs
         ImageParam im(Float(32), 1);
-        im.set_stride(0, Expr()); // unconstrain the stride
+        im.dim(0).set_stride(Expr()); // unconstrain the stride
 
         Func f;
         Var x;
@@ -216,14 +216,14 @@ int main(int argc, char **argv) {
         f(x) = im(x);
 
         // If we have a stride of 1 it's worth vectorizing, but only if the width is also > 8.
-        f.specialize(im.stride(0) == 1 && im.width() >= 8).vectorize(x, 8);
+        f.specialize(im.dim(0).stride() == 1 && im.width() >= 8).vectorize(x, 8);
 
         f.trace_stores();
         f.set_custom_trace(&my_trace);
 
         // Check bounds inference is still cool with widths < 8
         f.infer_input_bounds(5);
-        int m = im.get().min(0), e = im.get().extent(0);
+        int m = im.get().dim(0).min(), e = im.get().dim(0).extent();
         if (m != 0 || e != 5) {
             printf("min, extent = %d, %d instead of 0, 5\n", m, e);
             return -1;
@@ -262,7 +262,7 @@ int main(int argc, char **argv) {
 
         param.set(true);
         f.infer_input_bounds(100);
-        int m = im.get().min(0);
+        int m = im.get().dim(0).min();
         if (m != 10) {
             printf("min %d instead of 10\n", m);
             return -1;
@@ -270,7 +270,7 @@ int main(int argc, char **argv) {
         param.set(false);
         im.reset();
         f.infer_input_bounds(100);
-        m = im.get().min(0);
+        m = im.get().dim(0).min();
         if (m != -10) {
             printf("min %d instead of -10\n", m);
             return -1;
@@ -343,12 +343,12 @@ int main(int argc, char **argv) {
         // Confirm that the unrolling applies to both cases using bounds inference:
         f.infer_input_bounds(3, 1);
 
-        if (im.get().extent(0) != 3) {
-            printf("extent(0) was supposed to be 3.\n");
+        if (im.get().dim(0).extent() != 3) {
+            printf("dim(0).extent() was supposed to be 3.\n");
             return -1;
         }
 
-        if (im.get().extent(1) != 2) {
+        if (im.get().dim(1).extent() != 2) {
             // Height is 2, because the unrolling also happens in the
             // specialized case.
             printf("extent(1) was supposed to be 2.\n");
@@ -367,8 +367,8 @@ int main(int argc, char **argv) {
         h(x) = g(x);
         out(x) = h(x);
 
-        Expr w = out.output_buffer().extent(0);
-        out.output_buffer().set_min(0, 0);
+        Expr w = out.output_buffer().dim(0).extent();
+        out.output_buffer().dim(0).set_min(0);
 
         f.compute_root().specialize(w >= 4).vectorize(x, 4);
         g.compute_root().vectorize(x, 4);

@@ -86,19 +86,20 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
     Buffer<value_t> result(zero_extent, one_extent, weight_extent);
     lerp_test.realize(result);
 
-    for (int32_t i = 0; i < result.extent(0); i++) {
-        for (int32_t j = 0; j < result.extent(1); j++) {
-            for (int32_t k = 0; k < result.extent(2); k++) {
+    for (int32_t i = 0; i < result.dim(0).extent(); i++) {
+        for (int32_t j = 0; j < result.dim(1).extent(); j++) {
+            for (int32_t k = 0; k < result.dim(2).extent(); k++) {
                 value_t zero_verify = ((i + zero_min) * zero_scale + zero_offset);
                 value_t one_verify =  ((j + one_min) * one_scale + one_offset);
                 weight_t weight_verify = (weight_t)((k + weight_min) * weight_scale + weight_offset);
                 double actual_weight = weight_verify / weight_type_scale<weight_t>();
 
                 double verify_val_full = zero_verify * (1.0 - actual_weight) + one_verify * actual_weight;
-                if (verify_val_full < 0)
+                if (verify_val_full < 0) {
                     verify_val_full -= conversion_rounding<value_t>();
-                else
+                } else {
                     verify_val_full += conversion_rounding<value_t>();
+                }
 
                 value_t verify_val = convert_to_value<value_t>(verify_val_full);
                 value_t computed_val = result(i, j, k);

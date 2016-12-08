@@ -21,7 +21,7 @@
 #include "Halide.h"
 
 // Include some support code for loading pngs.
-#include "halide_image_io.h"
+#include "HalideImageIO.h"
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {

@@ -8,22 +8,26 @@
 #endif
 
 // An extern stage that translates.
-extern "C" DLLEXPORT int translate(buffer_t *in, int dx, int dy, buffer_t *out) {
+extern "C" DLLEXPORT int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
 
     if (in->host == nullptr) {
-        in->min[0] = out->min[0] + dx;
-        in->min[1] = out->min[1] + dy;
-        in->extent[0] = out->extent[0];
-        in->extent[1] = out->extent[1];
+        in->dim[0].min = out->dim[0].min + dx;
+        in->dim[1].min = out->dim[1].min + dy;
+        in->dim[0].extent = out->dim[0].extent;
+        in->dim[1].extent = out->dim[1].extent;
     } else {
-        assert(in->elem_size == 1);
-        assert(out->elem_size == 1);
-        for (int y = out->min[1]; y < out->min[1] + out->extent[1]; y++) {
-            for (int x = out->min[0]; x < out->min[0] + out->extent[0]; x++) {
+        assert(in->type == halide_type_of<uint8_t>());
+        assert(out->type == halide_type_of<uint8_t>());
+        for (int y = out->dim[1].min; y < out->dim[1].min + out->dim[1].extent; y++) {
+            for (int x = out->dim[0].min; x < out->dim[0].min + out->dim[0].extent; x++) {
                 int in_x = x + dx;
                 int in_y = y + dy;
-                uint8_t *in_ptr = in->host + (in_x - in->min[0])*in->stride[0] + (in_y - in->min[1])*in->stride[1];
-                uint8_t *out_ptr = out->host + (x - out->min[0])*out->stride[0] + (y - out->min[1])*out->stride[1];
+                uint8_t *in_ptr = (in->host +
+                                   (in_x - in->dim[0].min)*in->dim[0].stride +
+                                   (in_y - in->dim[1].min)*in->dim[1].stride);
+                uint8_t *out_ptr = (out->host +
+                                    (x - out->dim[0].min)*out->dim[0].stride +
+                                    (y - out->dim[1].min)*out->dim[1].stride);
                 *out_ptr = *in_ptr;
             }
         }
@@ -40,12 +44,13 @@ void check(ImageParam im, int x, int w, int y, int h) {
         printf("Bounds inference didn't occur!\n");
         abort();
     }
-    if (buf.min(0) != x || buf.extent(0) != w ||
-        buf.min(1) != y || buf.extent(1) != h) {
+    if (buf.dim(0).min() != x || buf.dim(0).extent() != w ||
+        buf.dim(1).min() != y || buf.dim(1).extent() != h) {
         printf("Incorrect bounds inference result:\n"
                "Result: %d %d %d %d\n"
                "Correct: %d %d %d %d\n",
-               buf.min(0), buf.extent(0), buf.min(1), buf.extent(1),
+               buf.dim(0).min(), buf.dim(0).extent(),
+               buf.dim(1).min(), buf.dim(1).extent(),
                x, w, y, h);
         abort();
     }

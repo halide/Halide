@@ -1881,9 +1881,10 @@ EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_v
  * on the digest. */
 // @{
 template<typename ...Args>
-inline NO_INLINE Expr memoize_tag(Expr result, Args&&... args) {
-    std::vector<Expr> collected_args{std::forward<Args>(args)...};
-    return Internal::memoize_tag_helper(result, collected_args);
+inline NO_INLINE Expr memoize_tag(Expr result, Args... args) {
+    std::vector<Expr> collected_args;
+    Internal::collect_args(collected_args, args...);
+    return memoize_tag(result, collected_args);
 }
 // @}
 

@@ -570,10 +570,14 @@ void IRPrinter::visit(const Allocate *op) {
         print(op->condition);
     }
     if (op->new_expr.defined()) {
-        stream << "\n custom_new { " << op->new_expr << " }";
+        stream << "\n";
+        do_indent();
+        stream << " custom_new { " << op->new_expr << " }";
     }
     if (!op->free_function.empty()) {
-        stream << "\n custom_delete { " << op->free_function << "(<args>); }";
+        stream << "\n";
+        do_indent();
+        stream << " custom_delete { " << op->free_function << "(<args>); }";
     }
     stream << "\n";
     print(op->body);

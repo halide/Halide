@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     cdf.compute_root();
 
     // Scale the result back to 8-bit
-    int pixels = in.extent(0)*in.extent(1);
+    int pixels = in.width() * in.height();
     rescaled(i, _) = cast<uint8_t>((equalized(i, _)*256)/pixels);
 
     Buffer<uint8_t> out = rescaled.realize(in.width(), in.height());

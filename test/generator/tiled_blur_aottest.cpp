@@ -5,6 +5,7 @@
 #include <assert.h>
 
 #include "tiled_blur.h"
+#include "halide_image.h"
 
 using namespace Halide;
 

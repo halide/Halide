@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
         Buffer<float> in_buf = in.get();
 
-        assert(in_buf.min(0) == 10 && in_buf.extent(0) == 11);
+        assert(in_buf.dim(0).min() == 10 && in_buf.dim(0).extent() == 11);
 
     }
 
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 
         Buffer<float> in_buf = in.get();
 
-        assert(in_buf.min(0) == 10 && in_buf.extent(0) == 11);
+        assert(in_buf.dim(0).min() == 10 && in_buf.dim(0).extent() == 11);
 
     }
 
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
         h.infer_input_bounds(output);
         Buffer<float> in_buf = in.get();
 
-        assert(in_buf.min(0) == 0 && in_buf.extent(0) == 91);
+        assert(in_buf.dim(0).min() == 0 && in_buf.dim(0).extent() == 91);
     }
 
     {
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
         h.infer_input_bounds(output);
         Buffer<float> in_buf = in.get();
 
-        assert(in_buf.min(0) == -1049600 && in_buf.extent(0) == 2097153);
+        assert(in_buf.dim(0).min() == -1049600 && in_buf.dim(0).extent() == 2097153);
     }
 
     printf("Success!\n");

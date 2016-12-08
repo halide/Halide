@@ -1,5 +1,4 @@
 #include "HalideRuntime.h"
-#include "HalideBuffer.h"
 
 #include <math.h>
 #include <stdio.h>

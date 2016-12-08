@@ -45,9 +45,9 @@ int test_lut1d() {
 
     out0.copy_to_host();
 
-    for (int c = 0; c != out0.extent(2); ++c) {
-        for (int y = 0; y != out0.extent(1); ++y) {
-            for (int x = 0; x != out0.extent(0); ++x) {
+    for (int c = 0; c != out0.channels(); ++c) {
+        for (int y = 0; y != out0.height(); ++y) {
+            for (int x = 0; x != out0.width(); ++x) {
                 float expected = std::numeric_limits<float>::infinity();
                 switch (c) {
                 case 0:

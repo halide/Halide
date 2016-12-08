@@ -432,6 +432,12 @@ bool apply_split(const Split &s, vector<ReductionVariable> &rvars,
     internal_assert(s.is_split());
     const auto it = std::find_if(rvars.begin(), rvars.end(),
         [&s](const ReductionVariable& rv) { return (s.old_var == rv.var); });
+    if (iter != rvars.end()) {
+        debug(4) << "  Splitting " << iter->var << " into " << s.outer << " and " << s.inner << "\n";
+        Expr old_extent = iter->extent;
+        iter->var = s.inner;
+        iter->min = 0;
+        iter->extent = s.factor;
 
     Expr old_max, old_min, old_extent;
 
@@ -682,6 +688,12 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
     RDom intm_rdom(intm_rvars);
 
+    // We need to apply the split directives on the reduction vars, so that we can
+    // correctly lift the RVars not in 'rvars_kept'
+    for (const Split &s : splits) {
+        apply_split_directive(s, rvars);
+    }
+
     // Sort the Rvars kept and their Vars replacement based on the RVars of
     // the reduction domain AFTER applying the split directives, so that we
     // can have a consistent args order for the update definition of the
@@ -721,6 +733,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         rvars.swap(temp);
     }
     RDom f_rdom(rvars);
+
 
     // Init definition of the intermediate Func
 
@@ -772,6 +785,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     }
 
     // Compute the predicates for the intermediate Func and the new update definition
+    const vector<Expr> predicates = definition.split_predicate();
     for (const Expr &pred : predicates) {
         Expr subs_pred = substitute(substitution_map, pred);
         intm_rdom.where(subs_pred);
@@ -2120,6 +2134,7 @@ Func &Func::fold_storage(Var dim, Expr factor, bool fold_forward) {
 
 Func &Func::compute_at(LoopLevel loop_level) {
     invalidate_cache();
+    LoopLevel loop_level(f.name(), var.name());
     func.schedule().compute_level() = loop_level;
     if (func.schedule().store_level().is_inline()) {
         func.schedule().store_level() = loop_level;
@@ -2199,6 +2214,14 @@ Func::operator Stage() const {
     return Stage(func.definition(), name(), args(), func.schedule().storage_dims());
 }
 
+FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
+    implicit_placeholder_pos = placeholder_pos;
+    args.resize(a.size());
+    for (size_t i = 0; i < a.size(); i++) {
+        args[i] = a[i].name();
+    }
+}
+
 namespace {
 class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
@@ -2249,6 +2272,12 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     }
 
     CountImplicitVars count(e);
+    // TODO: Check if there is a test case for this and add one if not.
+    // Implicit vars are also allowed in the lhs of an update. E.g.:
+    // f(x, y, z) = x+y
+    // g(x, y, z) = 0
+    // g(f(r.x, _), _) = 1   (this means g(f(r.x, _0, _1), _0, _1) = 1)
+
     for (size_t i = 0; i < a.size(); i++) {
         a[i].accept(&count);
     }

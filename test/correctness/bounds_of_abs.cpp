@@ -9,11 +9,11 @@ void check(Func f, ImageParam in, int min, int extent) {
 
     in.reset();
     f.infer_input_bounds(output);
-    Buffer<int> im = in.get();
-    
-    if (im.extent(0) != extent || im.min(0) != min) {
+    Image<int> im = in.get();
+
+    if (im.dim(0).extent() != extent || im.dim(0).min() != min) {
         printf("Inferred size was [%d, %d] instead of [%d, %d]\n",
-               im.min(0), im.extent(0), min, extent);
+               im.dim(0).min(), im.dim(0).extent(), min, extent);
         exit(-1);
     }
 }

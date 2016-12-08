@@ -1,8 +1,6 @@
 #include <stdio.h>
 
 #include "HalideRuntime.h"
-#include "HalideBuffer.h"
-
 #include <assert.h>
 #include <string.h>
 
@@ -33,18 +31,7 @@ int main(int argc, char **argv) {
 
     const void *user_context = nullptr;
     int ptr_arg = 42;
-    int *int_ptr = &ptr_arg;
-    const int *const_int_ptr = &ptr_arg;
-    void *void_ptr = nullptr;
-    const void *const_void_ptr = nullptr;
-    std::string *string_ptr = nullptr;
-    const std::string *const_string_ptr = nullptr;
-    int r = HalideTest::cxx_mangling_define_extern(user_context, input, int_ptr, const_int_ptr, 
-        void_ptr, const_void_ptr, string_ptr, const_string_ptr, result);
-    if (r != 0) {
-        fprintf(stderr, "Failure!\n");
-        exit(1);
-    }
+    assert(HalideTest::cxx_mangling_define_extern(input, &ptr_arg, &ptr_arg, result) == 0);
 
     printf("Success!\n");
     return 0;

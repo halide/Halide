@@ -100,6 +100,8 @@ void test_interleave(bool fast) {
     }
 
     // Allocate two 16 megapixel, 3 channel, 8-bit images -- input and output
+    const int32_t buffer_side_length = (1 << 12);
+    const int32_t buffer_size = buffer_side_length * buffer_side_length;
 
     // Setup src to be planar
     Buffer<uint8_t> src_image(1 << 12, 1 << 12, 3);

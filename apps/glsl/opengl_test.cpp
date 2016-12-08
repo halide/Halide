@@ -15,28 +15,32 @@ public:
         Interleaved, Planar
     };
 
-    buffer_t buf;
+    halide_buffer_t buf;
+    halide_dimension_t shape[3];
 
-    Image(int w, int h, int c, int elem_size, Layout layout = Interleaved) {
-        memset(&buf, 0, sizeof(buffer_t));
-        buf.extent[0] = w;
-        buf.extent[1] = h;
-        buf.extent[2] = c;
-        buf.elem_size = elem_size;
+    Image(int w, int h, int c, Layout layout = Interleaved) {
+        memset(&buf, 0, sizeof(buf));
+        memset(&shape, 0, sizeof(shape));
+        buf.dim = shape;
+        shape[0].extent = w;
+        shape[1].extent = h;
+        shape[2].extent = c;
+        buf.type = halide_type_of<uint8_t>();
+        buf.dimensions = 3;
 
         if (layout == Interleaved) {
-            buf.stride[0] = buf.extent[2];
-            buf.stride[1] = buf.extent[0] * buf.stride[0];
-            buf.stride[2] = 1;
+            shape[0].stride = shape[2].extent;
+            shape[1].stride = shape[0].extent * shape[0].stride;
+            shape[2].stride = 1;
         } else {
-            buf.stride[0] = 1;
-            buf.stride[1] = buf.extent[0] * buf.stride[0];
-            buf.stride[2] = buf.extent[1] * buf.stride[1];
+            shape[0].stride = 1;
+            shape[1].stride = shape[0].extent * shape[0].stride;
+            shape[2].stride = shape[1].extent * shape[1].stride;
         }
-        size_t size = w * h * c * elem_size;
+        size_t size = w * h * c;
         buf.host = (uint8_t*)malloc(size);
         memset(buf.host, 0, size);
-        buf.host_dirty = true;
+        buf.set_host_dirty(true);
     }
     ~Image() {
         free(buf.host);
@@ -45,8 +49,8 @@ public:
 
 void test_blur() {
     const int W = 12, H = 32, C = 3;
-    Image input(W, H, C, sizeof(uint8_t), Image::Planar);
-    Image output(W, H, C, sizeof(uint8_t), Image::Planar);
+    Image input(W, H, C, Image::Planar);
+    Image output(W, H, C, Image::Planar);
 
     fprintf(stderr, "test_blur\n");
     halide_blur_glsl(&input.buf, &output.buf);
@@ -55,8 +59,8 @@ void test_blur() {
 
 void test_ycc() {
     const int W = 12, H = 32, C = 3;
-    Image input(W, H, C, sizeof(uint8_t), Image::Planar);
-    Image output(W, H, C, sizeof(uint8_t), Image::Planar);
+    Image input(W, H, C, Image::Planar);
+    Image output(W, H, C, Image::Planar);
 
     fprintf(stderr, "test_ycc\n");
     halide_ycc_glsl(&input.buf, &output.buf);

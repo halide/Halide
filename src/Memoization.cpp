@@ -310,17 +310,17 @@ public:
                                   {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), BufferPtr(), Parameter())},
                                   Call::PureIntrinsic));
         args.push_back(key_size());
-        args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
+        args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
-            buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+            buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
-        args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
+        args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
         return Call::make(Int(32), "halide_memoization_cache_lookup", args, Call::Extern);
     }
@@ -333,17 +333,17 @@ public:
                                   {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), BufferPtr(), Parameter())},
                                   Call::PureIntrinsic));
         args.push_back(key_size());
-        args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
+        args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
-            buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+            buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
-        args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
+        args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
         return Evaluate::make(Call::make(Int(32), "halide_memoization_cache_store", args, Call::Extern));
@@ -425,7 +425,7 @@ private:
                 computed_bounds_args.push_back(0); // TODO: Verify there is no use for the stride.
             }
 
-            Expr computed_bounds = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+            Expr computed_bounds = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t,
                                               computed_bounds_args,
                                               Call::Intrinsic);
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
@@ -545,7 +545,7 @@ private:
                         // Everything matches, rewrite create_buffer_t to use a nullptr handle for address.
                         std::vector<Expr> args = call->args;
                         args[0] = Call::make(Handle(), Call::null_handle, {}, Call::PureIntrinsic);
-                        expr = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
+                        expr = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
                         return;
                     }
                 }
@@ -569,7 +569,7 @@ private:
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::extract_buffer_host,
-                                                 { Variable::make(type_of<struct buffer_t *>(), allocation->name + ".buffer") }, Call::Intrinsic),
+                                                 { Variable::make(type_of<struct halide_buffer_t *>(), allocation->name + ".buffer") }, Call::Intrinsic),
                                       "halide_memoization_cache_release");
             }
 

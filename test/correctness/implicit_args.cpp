@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     assert(f.dimensions() == 4);
 
     Func g;
-    g(_) = f(2, 2, _) + im2(Expr(1), _);
+    g(_) = f(2, 2, _) + im2(1, _);
     f.compute_root();
     // Equivalent to
     // g(i, j) = f(2, 2, i, j) + im2(1, i);

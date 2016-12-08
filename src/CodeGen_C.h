@@ -44,8 +44,8 @@ public:
 protected:
     /** Emit a declaration. */
     // @{
-    virtual void compile(const LoweredFunc &func);
-    virtual void compile(const BufferPtr &buffer);
+    virtual void compile(const LoweredFunc &func, const Target &target);
+    virtual void compile(const Buffer &buffer, const Target &target);
     // @}
 
     /** An ID for the most recently generated ssa variable */
@@ -108,7 +108,7 @@ protected:
     void close_scope(const std::string &comment);
 
     /** Unpack a buffer into its constituent parts and push it on the allocations stack. */
-    void push_buffer(Type t, const std::string &buffer_name);
+    void push_buffer(Type t, int dimensions, const std::string &buffer_name);
 
     /** Pop a buffer from the stack. */
     void pop_buffer(const std::string &buffer_name);

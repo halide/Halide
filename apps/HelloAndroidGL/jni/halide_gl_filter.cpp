@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
                select(c == 1, cos(pi * v),
                       sin(pi * v)) * 80 + (255 - 80)));
 
-    result.output_buffer().set_stride(0, 4);
+    result.output_buffer().dim(0).set_stride(4);
     result.bound(c, 0, 4);
     result.glsl(x, y, c);
 

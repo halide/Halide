@@ -1,7 +1,6 @@
 #include <math.h>
 #include <stdio.h>
 #include "HalideRuntime.h"
-#include "HalideBuffer.h"
 #include <assert.h>
 
 #if COMPILING_FOR_CUDA
@@ -11,6 +10,8 @@
 #endif
 
 #include "gpu_object_lifetime.h"
+#include "halide_image.h"
+#include "../common/gpu_object_lifetime.h"
 
 #include "test/common/gpu_object_lifetime_tracker.h"
 

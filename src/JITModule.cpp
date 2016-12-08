@@ -414,11 +414,11 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     // Struct types are uniqued on the context, but the lookup API is only available
     // on the Module, not the Context.
     llvm::Module dummy_module("ThisIsRidiculous", jit_module->context);
-    llvm::Type *buffer_t = dummy_module.getTypeByName("struct.buffer_t");
-    if (buffer_t == nullptr) {
-        buffer_t = llvm::StructType::create(jit_module->context, "struct.buffer_t");
+    llvm::Type *halide_buffer_t = dummy_module.getTypeByName("struct.halide_buffer_t");
+    if (halide_buffer_t == nullptr) {
+        halide_buffer_t = llvm::StructType::create(jit_module->context, "struct.halide_buffer_t");
     }
-    llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
+    llvm::Type *halide_buffer_t_star = llvm::PointerType::get(halide_buffer_t, 0);
 
     llvm::Type *ret_type;
     if (signature.is_void_return) {
@@ -430,7 +430,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     std::vector<llvm::Type *> llvm_arg_types;
     for (const ScalarOrBufferT &scalar_or_buffer_t : signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
-            llvm_arg_types.push_back(buffer_t_star);
+            llvm_arg_types.push_back(halide_buffer_t_star);
         } else {
             llvm_arg_types.push_back(llvm_type_of(&jit_module->context, scalar_or_buffer_t.scalar_type));
         }

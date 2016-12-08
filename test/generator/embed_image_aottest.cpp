@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 #include "embed_image.h"
-#include "HalideBuffer.h"
+#include "halide_image.h"
 
 using namespace Halide;
 

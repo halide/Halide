@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     Buffer<float> output_ref(matrix_size, matrix_size);
     Buffer<float> output_halide(matrix_size, matrix_size);
 
-    simple_version(mat_A.data(), mat_B.data(), output_ref.data(), mat_A.width(), mat_A.stride(1));
+    simple_version(mat_A.data(), mat_B.data(), output_ref.data(), mat_A.width(), mat_A.dim(1).stride());
     matrix_mul.realize(output_halide);
 
     bool halide_correct = true;

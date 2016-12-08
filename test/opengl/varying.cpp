@@ -91,9 +91,9 @@ int main() {
     // Check for correct result values
     out0.copy_to_host();
 
-    for (int c=0; c != out0.extent(2); ++c) {
-        for (int y=0; y != out0.extent(1); ++y) {
-            for (int x=0; x != out0.extent(0); ++x) {
+    for (int c=0; c != out0.channels(); ++c) {
+        for (int y=0; y != out0.height(); ++y) {
+            for (int x=0; x != out0.width(); ++x) {
                 float expected;
                 switch (c) {
                     case 0:
@@ -161,9 +161,9 @@ int main() {
 
     // Check for correct result values
     out1.copy_to_host();
-    for (int c=0; c != out1.extent(2); ++c) {
-        for (int y=0; y != out1.extent(1); ++y) {
-            for (int x=0; x != out1.extent(0); ++x) {
+    for (int c=0; c != out1.channels(); ++c) {
+        for (int y=0; y != out1.height(); ++y) {
+            for (int x=0; x != out1.width(); ++x) {
                 float expected;
                 switch (c) {
                     case 0:
@@ -221,9 +221,9 @@ int main() {
     // Check for correct result values
     out2.copy_to_host();
 
-    for (int c=0; c != out2.extent(2); ++c) {
-        for (int y=0; y != out2.extent(1); ++y) {
-            for (int x=0; x != out2.extent(0); ++x) {
+    for (int c=0; c != out2.channels(); ++c) {
+        for (int y=0; y != out2.height(); ++y) {
+            for (int x=0; x != out2.width(); ++x) {
                 float expected;
                 switch (c) {
                     case 0:
@@ -292,9 +292,9 @@ int main() {
     // Check for correct result values
     out3.copy_to_host();
 
-    for (int c=0; c != out3.extent(2); ++c) {
-        for (int y=0; y != out3.extent(1); ++y) {
-            for (int x=0; x != out3.extent(0); ++x) {
+    for (int c=0; c != out3.channels(); ++c) {
+        for (int y=0; y != out3.height(); ++y) {
+            for (int x=0; x != out3.width(); ++x) {
                 float expected;
                 switch (c) {
                     case 0:
