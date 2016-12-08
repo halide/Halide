@@ -275,6 +275,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
+    optimize_module();
+
     llvm::Triple triple(module->getTargetTriple());
 
     // Allocate target machine
