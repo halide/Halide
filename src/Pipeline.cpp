@@ -30,9 +30,7 @@ std::string output_name(const string &filename, const Module &m, const char* ext
 
 Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.static_library(filename_prefix + ".a");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.static_library(filename_prefix + ".lib");
     } else {
         outputs = outputs.static_library(filename_prefix + ".a");
@@ -50,7 +48,7 @@ Outputs static_library_outputs(const string &filename_prefix, const Target &targ
 struct InferredArgument {
     Argument arg;
     Parameter param;
-    Buffer buffer;
+    BufferPtr buffer;
 
     bool operator<(const InferredArgument &other) const {
         if (arg.is_buffer() && !other.arg.is_buffer()) {
@@ -106,7 +104,9 @@ struct PipelineContents {
 
     PipelineContents() :
         module("", Target()) {
-        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, Handle(), 0);
+        // user_context needs to be a const void * (not a non-const void *)
+        // to maintain backwards compatibility with existing code.
+        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context",
                                            /*is_explicit_name*/ true, /*register_instance*/ false);
     }
@@ -146,14 +146,12 @@ bool Pipeline::defined() const {
 }
 
 Pipeline::Pipeline(Func output) : contents(new PipelineContents) {
-    output.compute_root().store_root();
     output.function().freeze();
     contents->outputs.push_back(output.function());
 }
 
 Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents) {
     for (Func f: outputs) {
-        f.compute_root().store_root();
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -253,8 +251,9 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
 
 void Pipeline::compile_to_static_library(const string &filename_prefix,
                                          const vector<Argument> &args,
+                                         const std::string &fn_name,
                                          const Target &target) {
-    Module m = compile_to_module(args, filename_prefix, target);
+    Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = static_library_outputs(filename_prefix, target);
     m.compile(outputs);
 }
@@ -271,13 +270,12 @@ void Pipeline::compile_to_multitarget_static_library(const std::string &filename
 
 void Pipeline::compile_to_file(const string &filename_prefix,
                                const vector<Argument> &args,
+                               const std::string &fn_name,
                                const Target &target) {
-    Module m = compile_to_module(args, filename_prefix, target);
+    Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
 
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.bitcode(filename_prefix + ".bc");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.object(filename_prefix + ".obj");
     } else {
         outputs = outputs.object(filename_prefix + ".o");
@@ -366,16 +364,30 @@ private:
             min = p.get_min_value();
             max = p.get_max_value();
         }
+
         InferredArgument a = {
             Argument(p.name(),
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                      p.type(), p.dimensions(), def, min, max),
             p,
-            Buffer()};
+            BufferPtr()};
         args.push_back(a);
+
+        // Visit child expressions
+        if (!p.is_buffer()) {
+            visit_expr(def);
+            visit_expr(min);
+            visit_expr(max);
+        } else {
+            for (int i = 0; i < p.dimensions(); i++) {
+                visit_expr(p.min_constraint(i));
+                visit_expr(p.extent_constraint(i));
+                visit_expr(p.stride_constraint(i));
+            }
+        }
     }
 
-    void include_buffer(Buffer b) {
+    void include_buffer(BufferPtr b) {
         if (!b.defined()) return;
         if (already_have(b.name())) return;
 
@@ -448,10 +460,10 @@ vector<Argument> Pipeline::infer_arguments() {
 
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are returned. */
-vector<Buffer> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
+vector<BufferPtr> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
     infer_arguments(body);
 
-    vector<Buffer> images_to_embed;
+    vector<BufferPtr> images_to_embed;
 
     for (const InferredArgument &arg : contents->inferred_args) {
 
@@ -579,7 +591,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = build_public_args(args, target);
 
-    vector<Buffer> global_images = validate_arguments(public_args, private_body);
+    vector<BufferPtr> global_images = validate_arguments(public_args, private_body);
 
     // Create a module with all the global images in it.
     Module module(simple_new_fn_name, target);
@@ -587,7 +599,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Add all the global images to the module, and add the global
     // images used to the private argument list.
     vector<Argument> private_args = public_args;
-    for (Buffer buf : global_images) {
+    for (BufferPtr buf : global_images) {
         module.append(buf);
         private_args.push_back(Argument(buf.name(),
                                         Argument::InputBuffer,
@@ -760,19 +772,18 @@ const JITHandlers &Pipeline::jit_handlers() {
     return contents->jit_handlers;
 }
 
-void Pipeline::realize(Buffer b, const Target &target) {
-    realize(Realization({b}), target);
-}
-
 Realization Pipeline::realize(vector<int32_t> sizes,
                               const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    vector<Buffer> bufs;
+    vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.push_back(Buffer(t, sizes));
+        bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
     realize(r, target);
+    for (Buffer<> &im : r) {
+        im.copy_to_host();
+    }
     return r;
 }
 
@@ -799,9 +810,8 @@ Realization Pipeline::realize(int x_size,
     return realize(v, target);
 }
 
-
 Realization Pipeline::realize(const Target &target) {
-    return realize(std::vector<int32_t>(), target);
+    return realize(vector<int32_t>(), target);
 }
 
 namespace {
@@ -909,7 +919,7 @@ struct JITFuncCallContext {
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
-// params. Unbound image params produce null values.
+// params.
 vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -943,16 +953,14 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
         Type type = output_buffer_types[i].type;
         user_assert(dst[i].dimensions() == dims)
             << "Can't realize Func \"" << func.name()
-            << "\" into Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" is " << dst[i].dimensions() << "-dimensional"
-            << ", but Func \"" << func.name()
+            << "\" into Buffer at " << (void *)dst[i].host_ptr()
+            << " because Buffer is " << dst[i].dimensions()
+            << "-dimensional, but Func \"" << func.name()
             << "\" is " << dims << "-dimensional.\n";
         user_assert(dst[i].type() == type)
             << "Can't realize Func \"" << func.name()
-            << "\" into Buffer \"" << dst[i].name()
-            << "\" because Buffer \"" << dst[i].name()
-            << "\" has type " << dst[i].type()
+            << "\" into Buffer at " << (void *)dst[i].host_ptr()
+            << " because Buffer has type " << Type(dst[i].type())
             << ", but Func \"" << func.name()
             << "\" has type " << type << ".\n";
     }
@@ -965,7 +973,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     for (InferredArgument arg : input_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
-            Buffer buf = arg.param.get_buffer();
+            BufferPtr buf = arg.param.get_buffer();
             if (buf.defined()) {
                 arg_values.push_back(buf.raw_buffer());
             } else {
@@ -986,12 +994,10 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (Buffer buf : dst.as_vector()) {
-        internal_assert(buf.defined()) << "Can't realize into an undefined Buffer\n";
+    for (const Buffer<> &buf : dst) {
         arg_values.push_back(buf.raw_buffer());
         const void *ptr = arg_values.back();
-        debug(1) << "JIT output buffer " << buf.name()
-                 << " @ " << ptr << "\n";
+        debug(1) << "JIT output buffer @ " << ptr << "\n";
     }
 
     return arg_values;
@@ -1165,44 +1171,20 @@ void Pipeline::infer_input_bounds(Realization dst) {
 
     vector<const void *> args = prepare_jit_call_arguments(dst, target);
 
-    struct BoundsQueryBuffer {
-        halide_buffer_t buf = {0};
-        vector<halide_dimension_t> dims;
-        BoundsQueryBuffer(int d) : dims(d, {0, 0, 0, 0}) {
-            buf.dimensions = d;
-            buf.dim = &dims[0];
-        }
-
-        BoundsQueryBuffer() {}
-
-        bool operator!=(const BoundsQueryBuffer &other) const {
-            if (memcmp(&buf, &other.buf, sizeof(halide_buffer_t))) {
-                return true;
-            }
-            for (int i = 0; i < buf.dimensions; i++) {
-                if (dims[i] != other.dims[i]) return true;
-            }
-            return false;
-        }
-    };
-
     struct TrackedBuffer {
-        // The query buffer, and a backup to check for changes.
-        BoundsQueryBuffer query, orig;
-
+        // The query buffer.
+        buffer_t query;
+        // A backup copy of it to test if it changed.
+        buffer_t orig;
     };
     vector<TrackedBuffer> tracked_buffers(args.size());
 
     vector<size_t> query_indices;
-    for (size_t i = 0; i < contents->inferred_args.size(); i++) {
+    for (size_t i = 0; i < args.size(); i++) {
         if (args[i] == nullptr) {
             query_indices.push_back(i);
-            InferredArgument ia = contents->inferred_args[i];
-            internal_assert(ia.param.defined() && ia.param.is_buffer());
-            // Make some empty halide_buffer_t's
-            tracked_buffers[i].query = BoundsQueryBuffer(ia.param.dimensions());
-            tracked_buffers[i].orig = BoundsQueryBuffer(ia.param.dimensions());
-            args[i] = &(tracked_buffers[i].query.buf);
+            memset(&tracked_buffers[i], 0, sizeof(TrackedBuffer));
+            args[i] = &tracked_buffers[i].query;
         }
     }
 
@@ -1219,7 +1201,6 @@ void Pipeline::infer_input_bounds(Realization dst) {
     for (iter = 0; iter < max_iters; iter++) {
         // Make a copy of the buffers that might be mutated
         for (TrackedBuffer &tb : tracked_buffers) {
-            // Make a copy of the buffer sizes, etc.
             tb.orig = tb.query;
         }
 
@@ -1229,9 +1210,9 @@ void Pipeline::infer_input_bounds(Realization dst) {
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
 
-        // Check if there were any changes
+        // Check if there were any changed
         for (TrackedBuffer &tb : tracked_buffers) {
-            if (tb.query != tb.orig) {
+            if (memcmp(&tb.query, &tb.orig, sizeof(buffer_t))) {
                 changed = true;
             }
         }
@@ -1253,56 +1234,39 @@ void Pipeline::infer_input_bounds(Realization dst) {
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
         internal_assert(!ia.param.get_buffer().defined());
-        halide_buffer_t *buf = &(tracked_buffers[i].query.buf);
+        buffer_t buf = tracked_buffers[i].query;
 
-        // Figure out how much memory to allocate for this buffer
-        size_t min_idx = 0, max_idx = 0;
-        for (int d = 0; d < buf->dimensions; d++) {
-            if (buf->dim[d].stride > 0) {
-                min_idx += buf->dim[d].min * buf->dim[d].stride;
-                max_idx += (buf->dim[d].min + buf->dim[d].extent - 1) * buf->dim[d].stride;
-            } else {
-                max_idx += buf->dim[d].min * buf->dim[d].stride;
-                min_idx += (buf->dim[d].min + buf->dim[d].extent - 1) * buf->dim[d].stride;
-            }
-        }
-        size_t total_size = (max_idx - min_idx);
-        while (total_size & 0x1f) total_size++;
+        Internal::debug(1) << "Inferred bounds for " << ia.param.name() << ": ("
+                           << buf.min[0] << ","
+                           << buf.min[1] << ","
+                           << buf.min[2] << ","
+                           << buf.min[3] << ")..("
+                           << buf.min[0] + buf.extent[0] << ","
+                           << buf.min[1] + buf.extent[1] << ","
+                           << buf.min[2] + buf.extent[2] << ","
+                           << buf.min[3] + buf.extent[3] << ")\n";
 
-        vector<int> sizes(buf->dimensions, 1);
-        sizes[0] = total_size;
-
-        // Allocate enough memory with the right type and dimensionality.
-        Buffer buffer(ia.param.type(), sizes);
-
-        // Rewrite the buffer dimension fields to match the ones returned
-        for (int d = 0; d < buf->dimensions; d++) {
-            buffer.raw_buffer()->dim[d] = buf->dim[d];
-        }
-
-        // The reason we didn't just allocate a Buffer with the mins
-        // and extents returned is in case there's some funky stride
-        // constraint.
-
-        // Bind this parameter to this buffer
-        ia.param.set_buffer(buffer);
+        Buffer<> im(ia.param.type(), buf);
+        im.allocate();
+        ia.param.set_buffer(im);
     }
 }
 
-void Pipeline::infer_input_bounds(const std::vector<int> &sizes) {
+void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
 
-    vector<Buffer> bufs;
+    vector<int> size;
+    if (x_size) size.push_back(x_size);
+    if (y_size) size.push_back(y_size);
+    if (z_size) size.push_back(z_size);
+    if (w_size) size.push_back(w_size);
+
+    vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.push_back(Buffer(t, sizes));
+        bufs.emplace_back(t, size);
     }
     Realization r(bufs);
     infer_input_bounds(r);
-}
-
-
-void Pipeline::infer_input_bounds(Buffer dst) {
-    infer_input_bounds(Realization({dst}));
 }
 
 void Pipeline::invalidate_cache() {

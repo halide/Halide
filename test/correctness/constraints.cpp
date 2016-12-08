@@ -13,8 +13,8 @@ int main(int argc, char **argv) {
     Func f, g;
     Var x, y;
     ImageParam param(Int(32), 2);
-    Image<int> image1(128, 73);
-    Image<int> image2(144, 23);
+    Buffer<int> image1(128, 73);
+    Buffer<int> image2(144, 23);
 
     f(x, y) = param(x, y)*2;
 

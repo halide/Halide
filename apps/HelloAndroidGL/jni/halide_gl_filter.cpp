@@ -37,9 +37,7 @@ int main(int argc, char **argv) {
     result.bound(c, 0, 4);
     result.glsl(x, y, c);
 
-    std::vector<Argument> args;
-    args.push_back(time);
-    result.compile_to_file("halide_gl_filter", args);
+    result.compile_to_file("halide_gl_filter", {time}, "halide_gl_filter");
 
     return 0;
 }

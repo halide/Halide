@@ -4,11 +4,10 @@
 using namespace Halide;
 
 void check(Func f, ImageParam in, int min, int extent) {
-    Image<int> output(12345);
+    Buffer<int> output(12345);
     output.set_min(-1234);
 
-    Buffer buf;
-    in.set(buf);
+    in.reset();
     f.infer_input_bounds(output);
     Image<int> im = in.get();
 

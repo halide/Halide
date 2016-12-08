@@ -3,4 +3,4 @@
 
 void defineLambda();
 
-#endif // LAMBDA_H
+#endif  // LAMBDA_H

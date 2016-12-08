@@ -2,14 +2,14 @@
 #include <stdio.h>
 
 #include "pyramid.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 #include <vector>
 using std::vector;
-using namespace Halide::Tools;
+using namespace Halide;
 
 int main(int argc, char **argv) {
-    Image<float> input(1024, 1024);
+    Buffer<float> input(1024, 1024);
 
     // Put some junk in the input. Keep it to small integers so the float averaging stays exact.
     for (int y = 0; y < input.height(); y++) {
@@ -18,16 +18,16 @@ int main(int argc, char **argv) {
         }
     }
 
-    vector<Image<float>> levels(10);
+    vector<Buffer<float>> levels(10);
 
     for (int l = 0; l < 10; l++) {
-        levels[l] = Image<float>(1024 >> l, 1024 >> l);
+        levels[l] = Buffer<float>(1024 >> l, 1024 >> l);
     }
 
     // Will throw a compiler error if we didn't compile the generator with 10 levels.
-    pyramid(&input,
-            &levels[0], &levels[1], &levels[2], &levels[3], &levels[4],
-            &levels[5], &levels[6], &levels[7], &levels[8], &levels[9]);
+    pyramid(input,
+            levels[0], levels[1], levels[2], levels[3], levels[4],
+            levels[5], levels[6], levels[7], levels[8], levels[9]);
 
     // The bottom level should be the input
     for (int y = 0; y < input.height(); y++) {

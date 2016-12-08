@@ -14,6 +14,7 @@ namespace Halide {
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
+
     /** Func representation of the ImageParam.
      * All call to ImageParam is equivalent to call to its intrinsic Func
      * representation. */
@@ -22,7 +23,10 @@ class ImageParam : public OutputImageParam {
     /** Helper function to initialize the Func representation of this ImageParam. */
     EXPORT void init_func();
 
+    EXPORT void set(Internal::BufferPtr b);
+    
 public:
+
     /** Construct a nullptr image parameter handle. */
     ImageParam() : OutputImageParam() {}
 
@@ -34,29 +38,36 @@ public:
      * dimensionality, with the given name */
     EXPORT ImageParam(Type t, int d, const std::string &n);
 
-    /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
-    EXPORT void set(Buffer b);
+    /** Bind an Image to this ImageParam. Only relevant for jitting */
+    // @{
+    template<typename T, int D>
+    NO_INLINE void set(const Buffer<T, D> &im) {
+        set(Internal::BufferPtr(im));
+    }
+    // @}
 
-    /** Get the buffer bound to this ImageParam. Only relevant for jitting */
-    EXPORT Buffer get() const;
+    /** Get the Image bound to this ImageParam. Only relevant for jitting */
+    // @{
+    EXPORT const Buffer<> &get() const;
+    EXPORT Buffer<> &get();
+    // @}
 
+    /** Unbind any bound Image */
+    EXPORT void reset();
+    
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
      * variables to match the dimensionality of the image
      * (see \ref Var::implicit)
      */
     // @{
+    template <typename... Args>
+    NO_INLINE Expr operator()(Args&&... args) const {
+        return func(std::forward<Args>(args)...);
+    }
     EXPORT Expr operator()(std::vector<Expr>) const;
     EXPORT Expr operator()(std::vector<Var>) const;
-
-    template <typename ...Args>
-    NO_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, Expr>::type
-    operator()(Args... args) const {
-        std::vector<Expr> exprs = {Expr(args)...};
-        return (*this)(exprs);
-    };
     // @}
-
 
     /** Return the intrinsic Func representation of this ImageParam. This allows
      * an ImageParam to be implicitly converted to a Func.
@@ -115,7 +126,6 @@ public:
     EXPORT Func in(const std::vector<Func> &fs);
     EXPORT Func in();
     // @}
-
 };
 
 }

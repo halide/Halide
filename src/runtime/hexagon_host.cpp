@@ -86,7 +86,7 @@ WEAK void get_remote_profiler_state(int *func, int *threads) {
 }
 
 template <typename T>
-void get_symbol(void *user_context, const char* name, T &sym, bool required = true) {
+__attribute__((always_inline)) void get_symbol(void *user_context, const char* name, T &sym, bool required = true) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
     sym = (T)halide_hexagon_host_get_symbol(user_context, name);
     debug(user_context) << "        " << (void *)sym << "\n";

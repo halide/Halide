@@ -9,27 +9,27 @@ bool test_type() {
     Func f;
     Var x;
     f(x) = cast<T>(1);
-    Image<T> im = f.realize(10);
+    Buffer<T> im = f.realize(10);
 
     if (f.value().type() != t) {
         std::cout << "Function was defined with type " << t << " but has type " << f.value().type() << "\n";
         return false;
     }
 
-    Expr add_one = im(x) + 1;
+    Expr add_one = im(_) + 1;
     if (add_one.type() != t) {
         std::cout << "Add 1 changed type from " << t << " to " << add_one.type() << "\n";
         return false;
     }
 
-    Expr one_add = 1 + im(x);
+    Expr one_add = 1 + im(_);
     if (one_add.type() != t) {
         std::cout << "Pre-add 1 changed type from " << t << " to " << one_add.type() << "\n";
         return false;
     }
 
     /*
-      The following will indeed change the type
+      The following will indeed change the type, because we don't do early constant folding
     Expr add_exp = im() + (Expr(1) + 1);
     if (add_exp.type() != t) {
         std::cout << "Add constant expression changed type from " << t << " to " << add_exp.type() << "\n";

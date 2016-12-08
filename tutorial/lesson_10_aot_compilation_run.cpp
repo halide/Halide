@@ -112,12 +112,12 @@ int main(int argc, char **argv) {
     // our function. Looking down the bottom of the the header file,
     // its signature is:
 
-    // int lesson_10_halide(halide_buffer_t *_input_buffer, uint8_t _offset, halide_buffer_t *_brighter_buffer);
+    // int brighter(halide_buffer_t *_input_buffer, uint8_t _offset, halide_buffer_t *_brighter_buffer);
 
     // The return value is an error code. It's zero on success.
 
     int offset = 5;
-    int error = lesson_10_halide(&input_buf, offset, &output_buf);
+    int error = brighter(&input_buf, offset, &output_buf);
 
     if (error) {
         printf("Halide returned an error: %d\n", error);
@@ -128,8 +128,8 @@ int main(int argc, char **argv) {
     // supposed to add the offset to every input pixel.
     for (int y = 0; y < 480; y++) {
         for (int x = 0; x < 640; x++) {
-            uint8_t input_val = input[y * 640 + 480];
-            uint8_t output_val = output[y * 640 + 480];
+            uint8_t input_val = input[y * 640 + x];
+            uint8_t output_val = output[y * 640 + x];
             uint8_t correct_val = input_val + offset;
             if (output_val != correct_val) {
                 printf("output(%d, %d) was %d instead of %d\n",

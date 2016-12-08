@@ -11,8 +11,6 @@ extern "C" void aglDestroyPixelFormat(void *);
 extern "C" unsigned char aglSetCurrentContext(void *);
 #endif
 
-extern "C" {
-
 #if !USE_AGL
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
@@ -27,6 +25,8 @@ WEAK int (*CGLSetCurrentContext)(void *);
 
 using namespace Halide::Runtime::Internal::OpenGL;
 #endif
+
+extern "C" {
 
 WEAK void *halide_opengl_get_proc_address(void *user_context, const char *name) {
     static void *dylib = NULL;

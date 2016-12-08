@@ -54,7 +54,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
 
 // Version for a one argument function.
 #define fun_1(type_ret, type, name, c_name)                                   \
-    void test_##type##_##name(Image<type> in) {                               \
+    void test_##type##_##name(Buffer<type> in) {                             \
         Target target = get_jit_target_from_environment();                    \
         if (!target.supports_type(type_of<type>())) {                         \
             return;                                                           \
@@ -64,21 +64,22 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         test_##name(x) = name(in(x));                                         \
         if (target.has_gpu_feature()) {                                       \
             test_##name.gpu_tile(x, 8);                                       \
-        }                                                                     \
-        Image<type_ret> result = test_##name.realize(in.width(), target);     \
-        for (int i = 0; i < in.width(); i++) {                                \
-            type_ret c_result = c_name(in(i));                                \
-	    if (!relatively_equal(c_result, result(i)))		              \
-	        printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", \
-                       (double)in(i), (double)c_result, (double)result(i));   \
-            assert(relatively_equal(c_result, result(i)) &&                   \
-                   "Failure on function " #name);                             \
-        }                                                                     \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
+            test_##name.hexagon();                                                  \
+        }                                                                           \
+        Buffer<type_ret> result = test_##name.realize(in_buf->extent[0], target);  \
+        for (int i = 0; i < in_buf->extent[0]; i++) {                         \
+            type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]); \
+	    if (!relatively_equal(c_result, result(i)))			\
+                printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)reinterpret_cast<type *>(in_buf->host)[i], (double)c_result, (double)result(i)); \
+            assert(relatively_equal(c_result, result(i)) &&             \
+                   "Failure on function " #name);                       \
+        }                                                               \
     }
 
 // Version for a one argument function
 #define fun_2(type_ret, type, name, c_name)                                         \
-    void test_##type##_##name(Image<type> in) {                                     \
+    void test_##type##_##name(Buffer<type> in) {                                     \
         Target target = get_jit_target_from_environment();                          \
         if (!target.supports_type(type_of<type>())) {                               \
             return;                                                                 \
@@ -87,7 +88,9 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         Var x("x");                                                                 \
         test_##name(x) = name(in(0, x), in(1, x));                                  \
         if (target.has_gpu_feature()) {                                             \
-          test_##name.gpu_tile(x, 8);                                               \
+            test_##name.gpu_tile(x, 8);                                             \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
+            test_##name.hexagon();                                                  \
         }                                                                           \
         Image<type_ret> result = test_##name.realize(in.height(), target);          \
         for (int i = 0; i < in.height(); i++) {                                     \
@@ -156,7 +159,7 @@ fun_2(uint32_t, uint32_t, absd, absd)
 
 template <typename T>
 struct TestArgs {
-    Image<T> data;
+    Buffer<T> data;
 
     TestArgs(int steps, T start, T end)
       : data(steps) {

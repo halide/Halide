@@ -2,10 +2,17 @@
 
 namespace {
 
+Halide::Expr is_interleaved(const Halide::OutputImageParam &p, int channels = 3) {
+    return p.stride(0) == channels && p.stride(2) == 1 && p.extent(2) == channels;
+}
+
+Halide::Expr is_planar(const Halide::OutputImageParam &p, int channels = 3) {
+    return p.stride(0) == 1 && p.extent(2) == channels;
+}
+
 class TiledBlur : public Halide::Generator<TiledBlur> {
 public:
-    GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
-    ImageParam input{ Float(32), 3, "input" };
+    ImageParam input{ Int(32), 3, "input" };
 
     Func build() {
         // This is the outermost pipeline, so input width and height
@@ -18,15 +25,11 @@ public:
         Func brighter1("brighter1");
         brighter1(x, y, c) = input(x, y, c) * 1.2f;
 
-        Func tiled_blur = call_extern_by_name(
-            /* generator_name */
+        Func tiled_blur;
+        tiled_blur.define_extern(
             "tiled_blur_blur",
-            /* ExternFuncArguments */
             { brighter1, input.width(), input.height() },
-            /* optional: function name */
-            is_interleaved ? "tiled_blur_blur_interleaved" : "tiled_blur_blur",
-            /* optional: generator_args */
-            { { "is_interleaved", is_interleaved ? "true" : "false" } });
+            Float(32), 3);
 
         Func brighter2("brighter2");
         brighter2(x, y, c) = tiled_blur(x, y, c) * 1.2f;
@@ -42,16 +45,18 @@ public:
         // 33x33 near the boundaries
         brighter1.trace_realizations();
 
-        if (is_interleaved) {
-            brighter1.reorder_storage(c, x, y);
-            tiled_blur.reorder_storage(tiled_blur.args()[2], tiled_blur.args()[0],
-                                       tiled_blur.args()[1]);
-            input.dim(0).set_stride(3);
-            input.dim(2).set_stride(1).set_bounds(0, 3);
-            brighter2.output_buffer().dim(0).set_stride(3);
-            brighter2.output_buffer().dim(2).set_stride(1).set_bounds(0, 3);
+        // Unset default constraints so that specialization works.
+        input.set_stride(0, Expr());
+        brighter2.output_buffer().set_stride(0, Expr());
 
-        }
+        // Add specialization for input and output buffers that are both planar.
+        brighter2.specialize(is_planar(input) && is_planar(brighter2.output_buffer()));
+
+        // Add specialization for input and output buffers that are both interleaved.
+        brighter2.specialize(is_interleaved(input) && is_interleaved(brighter2.output_buffer()));
+
+        // Note that other combinations (e.g. interleaved -> planar) will work
+        // but be relatively unoptimized.
 
         return brighter2;
     }

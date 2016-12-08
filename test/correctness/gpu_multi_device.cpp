@@ -37,11 +37,11 @@ struct MultiDevicePipeline {
         }
     }
 
-    void run(Image<float> &result) {
+    void run(Buffer<float> &result) {
         stage[current_stage - 1].realize(result);
     }
 
-    bool verify(const Image<float> &result, size_t stages, const char * test_case) {
+    bool verify(const Buffer<float> &result, size_t stages, const char * test_case) {
         for (int i = 0; i < 100; i++) {
             for (int j = 0; j < 100; j++) {
                 for (int k = 0; k < 3; k++) {
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
             return 0;
         }
 
-        Image<float> output1(100, 100, 3);
+        Buffer<float> output1(100, 100, 3);
         pipe1.run(output1);
 
         if (!pipe1.verify(output1, pipe1.current_stage - 1, "const input")) {
@@ -86,10 +86,10 @@ int main(int argc, char **argv) {
         buf_input(x, y, c) = gpu_buffer(x, y, c);
         MultiDevicePipeline pipe3(buf_input);
 
-        Image<float> output2(100, 100, 3);
+        Buffer<float> output2(100, 100, 3);
         pipe2.run(output2);
 
-        Image<float> output3(100, 100, 3);
+        Buffer<float> output3(100, 100, 3);
         gpu_buffer.set(output2);
         pipe3.run(output3);
 

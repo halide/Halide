@@ -64,6 +64,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
                                     "Halide HVX internal compiler\n");
 
         std::vector<const char *> options = {
+            "halide-hvx-be",
             // Don't put small objects into .data sections, it causes
             // issues with position independent code.
             "-hexagon-small-data-threshold=0"
@@ -139,7 +140,9 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Optimizing shuffles...\n";
-    body = optimize_hexagon_shuffles(body);
+    // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
+    const int lut_alignment = 64;
+    body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
     debug(1) << "Aligning loads for HVX....\n";
@@ -224,6 +227,12 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsb), i16v2,  "sxt.vb",  {i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsh), i32v2,  "sxt.vh",  {i16v1} },
 
+        // Similar to zxt/sxt, but without deinterleaving the result.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackub), u16v2, "unpack.vub", {u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackuh), u32v2, "unpack.vuh", {u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackb),  i16v2, "unpack.vb",  {i8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vunpackh),  i32v2, "unpack.vh",  {i16v1} },
+
         // Truncation:
         // (Yes, there really are two fs in the b versions, and 1 f in
         // the h versions.)
@@ -248,6 +257,9 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackwh_sat),  i16v1, "pack_sath.vw",  {i32v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeb),      i8v1,  "pack.vh",       {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vpackeh),      i16v1, "pack.vw",       {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackob),      i8v1,  "packhi.vh",     {i16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vpackoh),      i16v1, "packhi.vw",     {i32v2} },
+
 
         // Adds/subtracts:
         // Note that we just use signed arithmetic for unsigned
@@ -259,12 +271,24 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddh_dv),  i16v2, "add.vh.vh.dv",  {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddw_dv),  i32v2, "add.vw.vw.dv",  {i32v2, i32v2} },
 
+        // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
+        // To differentiate those from the widening ones, we encode the return type in the name here.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubh), u16v2, "add_vuh.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhw), i32v2, "add_vw.vh.vh", {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhw), u32v2, "add_vuw.vuh.vuh", {u16v1, u16v1} },
+
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb),     i8v1,  "sub.vb.vb",     {i8v1,  i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh),     i16v1, "sub.vh.vh",     {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw),     i32v1, "sub.vw.vw",     {i32v1, i32v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb_dv),  i8v2,  "sub.vb.vb.dv",  {i8v2,  i8v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh_dv),  i16v2, "sub.vh.vh.dv",  {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubw_dv),  i32v2, "sub.vw.vw.dv",  {i32v2, i32v2} },
+
+        // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
+        // To differentiate those from the widening ones, we encode the return type in the name here.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), u16v2, "sub_vuh.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhw), i32v2, "sub_vw.vh.vh", {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), u32v2, "sub_vuw.vuh.vuh", {u16v1, u16v1} },
 
 
         // Adds/subtract of unsigned values with saturation.
@@ -351,6 +375,11 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuh_acc),   u32v2, "add_mpy.vuw.vuh.uh",   {u32v2, u16v1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybus_acc),  i16v2, "add_mpy.vh.vub.b",     {i16v2, u8v1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhsat_acc), i32v2, "satw_add_mpy.vw.vh.h", {i32v2, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+
+        // Multiply keep high half, with multiplication by 2.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhvsrs), i16v1, "trunc_satw_mpy2_rnd.vh.vh", {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhss), i16v1, "trunc_satw_mpy2.vh.h", {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhsrs), i16v1, "trunc_satw_mpy2_rnd.vh.h", {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
 
         // Select/conditionals. Conditions are always signed integer
         // vectors (so widening sign extends).
@@ -941,6 +970,16 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     for (int i = 0; i < idx_elements; i += native_idx_elements) {
         Value *idx_i = slice_vector(idx, i, native_idx_elements);
 
+        if (lut_ty->getScalarSizeInBits() == 16) {
+            // vlut16 deinterleaves its output. We can either
+            // interleave the result, or the indices.  It's slightly
+            // cheaper to interleave the indices (they are single
+            // vectors, vs. the result which is a double vector), and
+            // if the indices are constant (which is true for boundary
+            // conditions) this should get lifted out of any loops.
+            idx_i = call_intrin_cast(idx_i->getType(), IPICK(is_128B, Intrinsic::hexagon_V6_vshuffb), {idx_i});
+        }
+
         Value *result_i = nullptr;
         for (int j = 0; j < static_cast<int>(lut_slices.size()); j++) {
             for (int k = 0; k < lut_passes; k++) {
@@ -964,17 +1003,6 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
                     }
                 }
             }
-        }
-
-        if (native_result_ty->getScalarSizeInBits() == 16) {
-            // If we used vlut16, the result is a deinterleaved double
-            // vector. Reinterleave it.
-            // TODO: We might be able to do this to the indices
-            // instead of the result. However, I think that requires a
-            // non-native vector width deinterleave, so it's probably
-            // not faster, except where the indices are compile time
-            // constants.
-            result_i = call_intrin(native_result_ty, "halide.hexagon.interleave.vh", {result_i});
         }
 
         result.push_back(result_i);
@@ -1157,11 +1185,12 @@ string CodeGen_Hexagon::mcpu() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
+    std::stringstream attrs("+hvx");
     if (target.has_feature(Halide::Target::HVX_128)) {
-        return "+hvx,+hvx-double";
-    } else {
-        return "+hvx";
+        attrs << ",+hvx-double";
     }
+    attrs << ",+long-calls";
+    return attrs.str();
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
@@ -1310,6 +1339,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
         { Call::popcount, { "halide.hexagon.popcount", false } },
     };
 
+    if (is_native_interleave(op) || is_native_deinterleave(op)) {
+        user_assert(op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0)
+            << "Interleave or deinterleave will result in miscompilation, "
+            << "see https://github.com/halide/Halide/issues/1582\n" << Expr(op) << "\n";
+    }
+
     if (starts_with(op->name, "halide.hexagon.")) {
         // Handle all of the intrinsics we generated in
         // hexagon_optimize.  I'm not sure why this is different than
@@ -1344,8 +1379,52 @@ void CodeGen_Hexagon::visit(const Call *op) {
             Value *idx = codegen(op->args[1]);
             value = vlut(lut, idx, *min_index, *max_index);
             return;
+        } else if (op->is_intrinsic(Call::select_mask)) {
+            internal_assert(op->args.size() == 3);
+            // eliminate_bool_vectors has replaced all boolean vectors
+            // with integer vectors of the appropriate size, so we
+            // just need to convert the select_mask intrinsic to a
+            // hexagon mux intrinsic.
+            value = call_intrin(op->type,
+                                "halide.hexagon.mux" +
+                                type_suffix(op->args[1], op->args[2], false),
+                                op->args);
+            return;
+        } else if (op->is_intrinsic(Call::bool_to_mask)) {
+            internal_assert(op->args.size() == 1);
+            if (op->args[0].type().is_vector()) {
+                // The argument is already a mask of the right width.
+                op->args[0].accept(this);
+            } else {
+                // The argument is a scalar bool. Converting it to
+                // all-ones or all-zeros is sufficient for HVX masks
+                // (mux just looks at the LSB of each byte).
+                Expr equiv = -Cast::make(op->type, op->args[0]);
+                equiv.accept(this);
+            }
+            return;
+        } else if (op->is_intrinsic(Call::cast_mask)) {
+            internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
     }
+
+    if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {
+        llvm::Function *prefetch_fn = module->getFunction("halide_" + op->name);
+        internal_assert(prefetch_fn);
+        vector<llvm::Value *> args;
+        for (Expr i : op->args) {
+            args.push_back(codegen(i));
+        }
+        // The first argument is a pointer, which has type i8*. We
+        // need to cast the argument, which might be a pointer to a
+        // different type.
+        llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
+        args[0] = builder->CreateBitCast(args[0], ptr_type);
+
+        value = builder->CreateCall(prefetch_fn, args);
+        return;
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -1367,9 +1446,15 @@ void CodeGen_Hexagon::visit(const Max *op) {
                             "halide.hexagon.max" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
-        if (value) return;
+        if (!value) {
+            Expr equiv =
+                Call::make(op->type, Call::select_mask, {op->a > op->b, op->a, op->b}, Call::PureIntrinsic);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+        }
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Min *op) {
@@ -1378,54 +1463,25 @@ void CodeGen_Hexagon::visit(const Min *op) {
                             "halide.hexagon.min" + type_suffix(op->a, op->b),
                             {op->a, op->b},
                             true /*maybe*/);
-        if (value) return;
+        if (!value) {
+            Expr equiv =
+                Call::make(op->type, Call::select_mask, {op->a > op->b, op->b, op->a}, Call::PureIntrinsic);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+        }
+    } else {
+        CodeGen_Posix::visit(op);
     }
-    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_Hexagon::visit(const Select *op) {
-    if (op->type.is_vector() && op->condition.type().is_vector()) {
-        // eliminate_bool_vectors has replaced all boolean vectors
-        // with integer vectors of the appropriate size, and this
-        // condition is of the form 'cond != 0'. We just need to grab
-        // cond and use that as the operand for vmux.
-        Expr cond = op->condition;
-        const NE *cond_ne_0 = cond.as<NE>();
-        if (cond_ne_0) {
-            internal_assert(is_zero(cond_ne_0->b));
-            cond = cond_ne_0->a;
-        }
-        Expr t = op->true_value;
-        Expr f = op->false_value;
-        value = call_intrin(op->type,
-                            "halide.hexagon.mux" + type_suffix(t, f, false),
-                            {cond, t, f});
-    } else if (op->type.is_vector()) {
-        // Implement scalar conditions with if-then-else.
-        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-        BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-        builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
+    internal_assert(op->condition.type().is_scalar()) << Expr(op) << "\n";
 
-        builder->SetInsertPoint(true_bb);
-        Value *true_value = codegen(op->true_value);
-        builder->CreateBr(after_bb);
-        // The true value might have jumped to a new block (e.g. if there was a
-        // nested select). To generate a correct PHI node, grab the current
-        // block.
-        BasicBlock *true_pred = builder->GetInsertBlock();
-
-        builder->SetInsertPoint(false_bb);
-        Value *false_value = codegen(op->false_value);
-        builder->CreateBr(after_bb);
-        BasicBlock *false_pred = builder->GetInsertBlock();
-
-        builder->SetInsertPoint(after_bb);
-        PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-        phi->addIncoming(true_value, true_pred);
-        phi->addIncoming(false_value, false_pred);
-
-        value = phi;
+    if (op->type.is_vector()) {
+        // Implement scalar conditions on vector values with if-then-else.
+        value = codegen(Call::make(op->type, Call::if_then_else,
+                                   {op->condition, op->true_value, op->false_value},
+                                   Call::Intrinsic));
     } else {
         CodeGen_Posix::visit(op);
     }

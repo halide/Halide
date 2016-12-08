@@ -13,6 +13,11 @@ extern void free(void *);
 
 namespace Halide { namespace Runtime { namespace Internal {
 
+struct device_handle_wrapper {
+    uint64_t device_handle;
+    const halide_device_interface *interface;
+};
+
 // TODO: Coarser grained locking, also consider all things that need
 // to be atomic with respect to each other. At present only
 // halide_copy_to_host and halide_copy_to_device are atomic with
@@ -22,27 +27,28 @@ namespace Halide { namespace Runtime { namespace Internal {
 WEAK halide_mutex device_copy_mutex;
 
 WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t *buf) {
-    int result = 0;
+    if (!buf->dev_dirty) {
+        return 0;  // my, that was easy
+    }
 
-    if (buf->device_dirty()) {
-        debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty is true\n";
-        const halide_device_interface_t *interface = buf->device_interface;
-        if (buf->host_dirty()) {
-            error(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty and host_dirty are true\n";
-            result = halide_error_code_copy_to_host_failed;
-        } else if (interface == NULL) {
-            error(user_context) << "copy_to_host_already_locked " << buf << " interface is NULL\n";
-            result = halide_error_code_no_device_interface;
+    debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty is true\n";
+    const halide_device_interface_t *interface = buf->device_interface;
+    if (buf->host_dirty()) {
+        error(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty and host_dirty are true\n";
+        result = halide_error_code_copy_to_host_failed;
+    } else if (interface == NULL) {
+        error(user_context) << "copy_to_host_already_locked " << buf << " interface is NULL\n";
+        result = halide_error_code_no_device_interface;
+    } else {
+        result = interface->copy_to_host(user_context, buf);
+        if (result == 0) {
+            buf->set_device_dirty(false);
         } else {
-            result = interface->copy_to_host(user_context, buf);
-            if (result == 0) {
-                buf->set_device_dirty(false);
-            } else {
-                debug(user_context) << "copy_to_host_already_locked " << buf << " device copy_to_host returned an error\n";
-                result = halide_error_code_copy_to_host_failed;
-            }
+            debug(user_context) << "copy_to_host_already_locked " << buf << " device copy_to_host returned an error\n";
+            result = halide_error_code_copy_to_host_failed;
         }
     }
+    halide_msan_annotate_buffer_is_initialized(user_context, buf);
 
     return result;
 }
@@ -206,6 +212,8 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
             halide_assert(user_context, buf->device == 0);
             if (result) {
                 return halide_error_code_device_free_failed;
+            } else {
+                return 0;
             }
         }
     }

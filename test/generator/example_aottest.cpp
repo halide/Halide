@@ -1,16 +1,15 @@
 #include "HalideRuntime.h"
-#include "HalideImage.h"
 
 #include <math.h>
 #include <stdio.h>
 
 #include "example.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 const int kSize = 32;
 
-void verify(const Image<int> &img, float compiletime_factor, float runtime_factor, int channels) {
+void verify(const Buffer<int> &img, float compiletime_factor, float runtime_factor, int channels) {
     for (int i = 0; i < kSize; i++) {
         for (int j = 0; j < kSize; j++) {
             for (int c = 0; c < channels; c++) {
@@ -26,7 +25,7 @@ void verify(const Image<int> &img, float compiletime_factor, float runtime_facto
 
 int main(int argc, char **argv) {
 
-  Image<int32_t> output(kSize, kSize, 3);
+  Buffer<int32_t> output(kSize, kSize, 3);
 
   // For Ahead-of-time compilation, we don't get to customize any GeneratorParams:
   // they were baked into the object code by our build system. These are the default values
@@ -35,10 +34,10 @@ int main(int argc, char **argv) {
   const int channels = 3;
 
   // We can, of course, pass whatever values for Param/ImageParam that we like.
-  example(3.3245f, &output);
+  example(3.3245f, output);
   verify(output, compiletime_factor, 3.3245f, channels);
 
-  example(-1.234f, &output);
+  example(-1.234f, output);
   verify(output, compiletime_factor, -1.234f, channels);
 
   printf("Success!\n");

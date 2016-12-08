@@ -4,7 +4,6 @@
 #ifndef COMPILING_HALIDE_RUNTIME
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 #include <stdbool.h>
 #else
 #include "runtime_internal.h"
@@ -51,7 +50,7 @@ extern "C" {
 
 // Forward-declare to suppress warnings if compiling as C.
 #ifndef BUFFER_T_DEFINED
-struct halide_buffer_t;
+struct buffer_t;
 #endif
 
 /** Print a message to stderr. Main use is to support HL_TRACE
@@ -145,7 +144,21 @@ extern struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closur
 extern void halide_join_thread(struct halide_thread *);
 
 /** Set the number of threads used by Halide's thread pool. Returns
- * the old number. No effect on OS X or iOS. */
+ * the old number.
+ *
+ * n < 0  : error condition
+ * n == 0 : use a reasonable system default (typically, number of cpus online).
+ * n == 1 : use exactly one thread; this will always enforce serial execution
+ * n > 1  : use a pool of exactly n threads.
+ *
+ * Note that the default iOS and OSX behavior will treat n > 1 like n == 0;
+ * that is, any positive value other than 1 will use a system-determined number
+ * of threads.
+ *
+ * (Note that this is only guaranteed when using the default implementations
+ * of halide_do_par_for(); custom implementations may completely ignore values
+ * passed to halide_set_num_threads().)
+ */
 extern int halide_set_num_threads(int n);
 
 /** Halide calls these functions to allocate and free memory. To
@@ -170,6 +183,20 @@ extern halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc);
 extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 //@}
 
+/** Halide calls these functions to interact with the underlying
+ * system runtime functions. To replace in AOT code on platforms that
+ * support weak linking, define these functions yourself.
+ *
+ * halide_load_library and halide_get_library_symbol are equivalent to
+ * dlopen and dlsym. halide_get_symbol(sym) is equivalent to
+ * dlsym(RTLD_DEFAULT, sym).
+ */
+//@{
+extern void *halide_get_symbol(const char *name);
+extern void *halide_load_library(const char *name);
+extern void *halide_get_library_symbol(void *lib, const char *name);
+//@}
+
 /** Called when debug_to_file is used inside %Halide code.  See
  * Func::debug_to_file for how this is called
  *
@@ -177,7 +204,7 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
  */
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
                                     int32_t type_code,
-                                    struct halide_buffer_t *buf);
+                                    struct buffer_t *buf);
 
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats (of various bit-widths), or a handle (which is always 64-bits).
@@ -237,10 +264,7 @@ struct halide_type_t {
      * instances. */
     halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
-    /** Size in bytes for a single element, even if width is not 1, of this type. */
-    int bytes() const { return (bits + 7) / 8; }
-
-    /** Compare two types for equality */
+    /** Compare two types for equality. */
     bool operator==(const halide_type_t &other) const {
         return (code == other.code &&
                 bits == other.bits &&
@@ -250,6 +274,9 @@ struct halide_type_t {
     bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
+
+    /** Size in bytes for a single element, even if width is not 1, of this type. */
+    size_t bytes() { return (bits + 7) / 8; }
 #endif
 };
 
@@ -258,18 +285,17 @@ enum halide_trace_event_code {halide_trace_load = 0,
                               halide_trace_begin_realization = 2,
                               halide_trace_end_realization = 3,
                               halide_trace_produce = 4,
-                              halide_trace_update = 5,
-                              halide_trace_consume = 6,
-                              halide_trace_end_consume = 7,
-                              halide_trace_begin_pipeline = 8,
-                              halide_trace_end_pipeline = 9};
+                              halide_trace_consume = 5,
+                              halide_trace_end_consume = 6,
+                              halide_trace_begin_pipeline = 7,
+                              halide_trace_end_pipeline = 8};
 
 #pragma pack(push, 1)
 struct halide_trace_event {
     const char *func;
     enum halide_trace_event_code event;
     int32_t parent_id;
-    halide_type_t type;
+    struct halide_type_t type;
     int32_t value_index;
     void *value;
     int32_t dimensions;
@@ -364,7 +390,42 @@ extern int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
 extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
                                 const struct halide_device_interface_t *device_interface);
 
+/** Free device memory. */
 extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
+
+/** Get a pointer to halide_device_free if a Halide runtime has been
+ * linked in. Returns null if it has not. This requires a different
+ * mechanism on different platforms. */
+typedef int (*halide_device_free_t)(void *, struct buffer_t *);
+#ifdef _MSC_VER
+extern const __declspec(selectany) void *halide_dummy_device_free = NULL;
+extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+// The following pragma tells the windows linker to make
+// halide_device_free_weak the same symbol as halide_dummy_device_free
+// if it can't resolve halide_weak_device_free normally
+#ifdef _WIN64
+#pragma comment(linker, "/alternatename:halide_weak_device_free=halide_dummy_device_free")
+#else
+#pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
+#endif
+inline halide_device_free_t halide_get_device_free_fn() {
+    if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
+        return NULL;
+    } else {
+        return &halide_weak_device_free;
+    }
+};
+#elif __MINGW32__
+inline halide_device_free_t halide_get_device_free_fn() {
+    // There is no workable mechanism for doing this that we know of on mingw.
+    return &halide_device_free;
+}
+#else
+extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+inline halide_device_free_t halide_get_device_free_fn() {
+    return &halide_weak_device_free;
+}
+#endif
 
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
@@ -461,6 +522,25 @@ extern void halide_memoization_cache_cleanup();
 extern int halide_create_temp_file(void *user_context,
   const char *prefix, const char *suffix,
   char *path_buf, size_t path_buf_size);
+
+/** Annotate that a given range of memory has been initialized;
+ * only used when Target::MSAN is enabled.
+ *
+ * The default implementation uses the LLVM-provided AnnotateMemoryIsInitialized() function.
+ */
+extern void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
+
+/** Mark the data pointed to by the buffer_t as initialized (but *not* the buffer_t itself),
+ * using halide_msan_annotate_memory_is_initialized() for marking.
+ *
+ * The default implementation takes pains to only mark the active memory ranges
+ * (skipping padding), and sorting into ranges to always mark the smallest number of
+ * ranges, in monotonically increasing memory order.
+ *
+ * Most client code should never need to replace the default implementation.
+ */
+extern void halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
+extern void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *buffer);
 
 /** The error codes that may be returned by a Halide pipeline. */
 enum halide_error_code_t {
@@ -637,6 +717,7 @@ extern int halide_error_out_of_memory(void *user_context);
 extern int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
+extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
 extern int halide_error_failed_to_upgrade_buffer_t(void *user_context,
                                                    const char *input_name,
                                                    const char *reason);
@@ -689,29 +770,33 @@ typedef enum halide_target_feature_t {
     halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_renderscript = 23, ///< Enable the Renderscript runtime.
+    halide_target_feature_unused_23 = 23, ///< Unused. (Formerly: Enable the RenderScript runtime.)
 
     halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_register_metadata = 25,  ///< Generated code registers metadata for use with halide_enumerate_registered_filters
+    halide_target_feature_matlab = 25,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
-    halide_target_feature_matlab = 26,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
+    halide_target_feature_profile = 26, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_no_runtime = 27, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
-    halide_target_feature_profile = 27, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
-    halide_target_feature_no_runtime = 28, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+    halide_target_feature_metal = 28, ///< Enable the (Apple) Metal runtime.
+    halide_target_feature_mingw = 29, ///< For Windows compile to MinGW toolset rather then Visual Studio
 
-    halide_target_feature_metal = 29, ///< Enable the (Apple) Metal runtime.
-    halide_target_feature_mingw = 30, ///< For Windows compile to MinGW toolset rather then Visual Studio
+    halide_target_feature_c_plus_plus_mangling = 30, ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_c_plus_plus_mangling = 31, ///< Generate C++ mangled names for result function, et al
+    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
 
-    halide_target_feature_large_buffers = 32, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
-
-    halide_target_feature_hvx_64 = 33, ///< Enable HVX 64 byte mode.
-    halide_target_feature_hvx_128 = 34, ///< Enable HVX 128 byte mode.
-    halide_target_feature_hvx_v62 = 35, ///< Enable Hexagon v62 architecture.
-
-    halide_target_feature_end = 36 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_64 = 32, ///< Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_v62 = 34, ///< Enable Hexagon v62 architecture.
+    halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
+    halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
+    halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
+    halide_target_feature_avx512 = 38, ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
+    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
+    halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
+    halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
+    halide_target_feature_end = 42 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
@@ -989,7 +1074,7 @@ struct halide_filter_argument_t {
     const char *name;       // name of the argument; will never be null or empty.
     int32_t kind;           // actually halide_argument_kind_t
     int32_t dimensions;     // always zero for scalar arguments
-    halide_type_t type;
+    struct halide_type_t type;
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
     // there is no def/min/max specified for this argument.)
@@ -1018,31 +1103,6 @@ struct halide_filter_metadata_t {
     /** The function name of the filter. */
     const char* name;
 };
-
-/** enumerate_func_t is a callback for halide_enumerate_registered_filters; it
- * is called once per registered filter discovered. Return 0 to continue
- * the enumeration, or nonzero to terminate the enumeration. enumerate_context
- * is an arbitrary pointer you can use to provide a callback argument. */
-typedef int (*enumerate_func_t)(void* enumerate_context,
-    const struct halide_filter_metadata_t *metadata, int (*argv_func)(void **args));
-
-/** If a filter is compiled with Target::RegisterMetadata, it will register itself
- * in an internal list at load time; halide_enumerate_registered_filters() allows
- * you to enumerate all such filters at runtime. This allows you to link together
- * arbitrary AOT-compiled filters and introspect/call them easily. Note:
- *
- * -- Only filters compiled with Target::RegisterMetadata enabled will be enumerated.
- * -- This function should not be called before or after main() (i.e., must not
- * be called from static ctors or dtors).
- * -- Filters will be enumerated in an unpredictable order; it is essential
- * you do not rely on a particular order of enumeration.
- * -- It is *not* guaranteed that the names in an enumeration are unique!
- *
- * The return value is zero if the enumerate_func_t always returns zero;
- * if the enumerate_func_t returns a nonzero value, enumeration will
- * terminate early and return that nonzero result.
- */
-extern int halide_enumerate_registered_filters(void *user_context, void* enumerate_context, enumerate_func_t func);
 
 /** The functions below here are relevant for pipelines compiled with
  * the -profile target flag, which runs a sampling profiler thread

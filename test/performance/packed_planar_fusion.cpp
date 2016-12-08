@@ -6,26 +6,26 @@
 
 using namespace Halide;
 
-double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
+double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
     Var x, y, c;
     Func f;
     f(x, y, c) = src(x, y, c);
 
     for (int i = 0; i < 3; i++) {
-        f.output_buffer().dim(i)
-            .set_min(dst.dim(i).min())
-            .set_extent(dst.dim(i).extent())
-            .set_stride(dst.dim(i).stride());
+        f.output_buffer()
+            .set_stride(i, dst.stride(i))
+            .set_extent(i, dst.extent(i))
+            .set_min(i, dst.min(i));
     }
 
-    if (dst.dim(0).stride() == 1 && src.dim(0).stride() == 1) {
+    if (dst.stride(0) == 1 && src.stride(0) == 1) {
         // packed -> packed
         f.vectorize(x, 16);
-    } else if (dst.dim(0).stride() == 3 && src.dim(0).stride() == 3) {
+    } else if (dst.stride(0) == 3 && src.stride(0) == 3) {
         // packed -> packed
         Var fused("fused");
         f.reorder(c, x, y).fuse(c, x, fused).vectorize(fused, 16);
-    } else if (dst.dim(0).stride() == 3) {
+    } else if (dst.stride(0) == 3) {
         // planar -> packed
         f.reorder(c, x, y).unroll(c).vectorize(x, 16);
     } else {
@@ -38,28 +38,12 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
     return benchmark(5, 10, [&]() { return f.realize(dst); });
 }
 
-Image<uint8_t> make_packed(uint8_t *host, int W, int H) {
-    halide_buffer_t buf = {0};
-    halide_dimension_t shape[] = {{0, W, 3},
-                                  {0, H, 3*W},
-                                  {0, 3, 1}};
-    buf.host = host;
-    buf.dim = shape;
-    buf.dimensions = 3;
-    buf.type = UInt(8);
-    return Image<uint8_t>(&buf);
+Buffer<uint8_t> make_packed(uint8_t *host, int W, int H) {
+    return Buffer<uint8_t>::make_interleaved(host, W, H, 3);
 }
 
-Image<uint8_t> make_planar(uint8_t *host, int W, int H) {
-    halide_buffer_t buf = {0};
-    halide_dimension_t shape[] = {{0, W, 1},
-                                  {0, H, W},
-                                  {0, 3, W*H}};
-    buf.host = host;
-    buf.dim = shape;
-    buf.dimensions = 3;
-    buf.type = UInt(8);
-    return Image<uint8_t>(&buf);
+Buffer<uint8_t> make_planar(uint8_t *host, int W, int H) {
+    return Buffer<uint8_t>(host, W, H, 3);
 }
 
 int main(int argc, char **argv) {

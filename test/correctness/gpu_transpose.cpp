@@ -35,11 +35,11 @@ int main(int argc, char **argv) {
         .gpu_blocks(subtile_idx, tile_idx)
         .gpu_threads(xii, yii);
 
-    Image<uint8_t> input(256, 256);
+    Buffer<uint8_t> input(256, 256);
     lambda(x, y, cast<uint8_t>(x * 17 + y)).realize(input);
     in.set(input);
 
-    Image<uint8_t> output = out.realize(256, 256);
+    Buffer<uint8_t> output = out.realize(256, 256);
 
     for (int y = 0; y < 256; y++) {
         for (int x = 0; x < 256; x++) {

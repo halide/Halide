@@ -44,15 +44,14 @@ def main():
     x, y = Var ("x"), Var ("y")
 
     # Load a grayscale image to use as an input.
-    #Image<uint8_t> input = load<uint8_t>("images/gray.png")
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/gray.png")
     input_data = imread(image_path)
     if True:
          # making the image smaller to go faster
         input_data = input_data[:160, :150]
     assert input_data.dtype == np.uint8
-    input = Image(input_data)
-    
+    input = Buffer(input_data)
+
     # You can define a Func in multiple passes. Let's see a toy
     # example first.
     if True:
@@ -126,15 +125,15 @@ def main():
         for yy in range(4):
             for xx in range(4):
                 result[yy][xx] = xx + yy
-            
-        
+
+
         # First update definition
         result[1][2] = 42
         # Second update definition
         for xx in range(4):
             result[0][xx] = result[1][xx]
     # end of section
-    
+
 
     # Putting update passes inside loops.
     if True:
@@ -154,30 +153,29 @@ def main():
         # Or equivalently using a compile-time loop in our C++:
         # for (int i = 0 i < 50 i++) {
         #   f[x, i) = f[x, i) * f[x, i)
-        # 
+        #
 
         # But it's more manageable and more flexible to put the loop
         # in the generated code. We do this by defining a "reduction
         # domain" and using it inside an update definition:
         r = RDom(0, 50)
         f[x, r] = f[x, r] * f[x, r]
-        halide_realization = f.realize(100, 100)
-        halide_result = Image(Int(32), halide_realization)
+        halide_result = f.realize(100, 100)
 
         # The equivalent C is:
         c_result = np.empty((100, 100), dtype=np.int)
         for yy in range(100):
             for xx in range(100):
                 c_result[yy][xx] = xx + yy
-            
+
         for xx in range(100):
             for rr in range(50):
                 # The loop over the reduction domain occurs inside of
                 # the loop over any pure variables used in the update
                 # step:
                 c_result[rr][xx] = c_result[rr][xx] * c_result[rr][xx]
-            
-        
+
+
 
         # Check the results match:
         for yy in range(100):
@@ -186,10 +184,10 @@ def main():
                     raise Exception("halide_result(%d, %d) = %d instead of %d" % (
                            xx, yy, halide_result(xx, yy), c_result[yy][xx]))
                     return -1
-                
-            
-        
-    
+
+
+
+
 
     # Now we'll examine a real-world use for an update definition:
     # computing a histogram.
@@ -213,8 +211,7 @@ def main():
         # input image at that point.
         histogram[input[r.x, r.y]] += 1
 
-        halide_realization = histogram.realize(256)
-        halide_result = Image(Int(32), halide_realization)
+        halide_result = histogram.realize(256)
 
         # The equivalent C is:
         c_result = np.empty((256), dtype=np.int)
@@ -224,8 +221,8 @@ def main():
         for r_y in range(input.height()):
             for r_x in range(input.width()):
                 c_result[input_data[r_x, r_y]] += 1
-            
-        
+
+
 
         # Check the answers agree:
         for xx in range(256):
@@ -233,9 +230,9 @@ def main():
                 raise Exception("halide_result(%d) = %d instead of %d" % (
                        xx, halide_result(xx), c_result[xx]))
                 return -1
-            
-        
-    
+
+
+
 
     # Scheduling update steps
     if True:
@@ -272,13 +269,12 @@ def main():
         yo, yi = Var("yo"), Var("yi")
         f.update(1).split(y, yo, yi, 4).parallel(yo)
 
-        halide_realization = f.realize(16, 16)
-        halide_result = Image(Int(32), halide_realization)
+        halide_result = f.realize(16, 16)
 
 
         # Here's the equivalent (serial) C:
         c_result = np.empty((16, 16), dtype=np.int)
-        
+
 
         # Pure step. Vectorized in x and parallelized in y.
         for yy in range( 16): # Should be a parallel for loop
@@ -288,8 +284,8 @@ def main():
                 c_result[yy][xx[1]] = xx[1] * yy
                 c_result[yy][xx[2]] = xx[2] * yy
                 c_result[yy][xx[3]] = xx[3] * yy
-            
-        
+
+
 
         # First update. Vectorized in x.
         for x_vec in range(4):
@@ -298,15 +294,15 @@ def main():
             c_result[1][xx[1]] = c_result[0][xx[1]]
             c_result[1][xx[2]] = c_result[0][xx[2]]
             c_result[1][xx[3]] = c_result[0][xx[3]]
-        
+
 
         # Second update. Parallelized in chunks of size 4 in y.
         for yo in range(4): # Should be a parallel for loop
             for yi in range(4):
                 yy = yo*4 + yi
                 c_result[yy][1] = c_result[yy][0] + 2
-            
-        
+
+
 
         # Check the C and Halide results match:
         for yy in range( 16):
@@ -315,10 +311,10 @@ def main():
                     raise Exception("halide_result(%d, %d) = %d instead of %d" % (
                            xx, yy, halide_result(xx, yy), c_result[yy][xx]))
                     return -1
-                
-            
-        
-    
+
+
+
+
 
     # That covers how to schedule the variables within a Func that
     # uses update steps, but what about producer-consumer
@@ -334,8 +330,7 @@ def main():
         producer[x] = x*17
         producer[x] += 1
         consumer[x] = 2 * producer[x]
-        halide_realization = consumer.realize(10)
-        halide_result = Image(Int(32), halide_realization)
+        halide_result = consumer.realize(10)
 
         # The equivalent C is:
         c_result = np.empty((10), dtype=np.int)
@@ -347,7 +342,7 @@ def main():
             producer_storage[0] = producer_storage[0] + 1
             # Pure step for consumer
             c_result[xx] = 2 * producer_storage[0]
-        
+
 
         # Check the results match
         for xx in range( 10 ):
@@ -355,13 +350,13 @@ def main():
                 raise Exception("halide_result(%d) = %d instead of %d" % (
                        xx, halide_result(xx), c_result[xx]))
                 return -1
-            
-        
+
+
 
         # For all other compute_at/store_at options, the reduction
         # gets placed where you would expect, somewhere in the loop
         # nest of the consumer.
-    
+
 
     # Now let's consider a reduction as a consumer in a
     # producer-consumer pair. This is a little more involved.
@@ -392,8 +387,7 @@ def main():
 
             producer.compute_at(consumer, x)
 
-            halide_realization = consumer.realize(10)
-            halide_result = Image(Int(32), halide_realization)
+            halide_result = consumer.realize(10)
 
 
             # The equivalent C is:
@@ -405,11 +399,11 @@ def main():
                 producer_storage = np.empty((1), dtype=np.int)
                 producer_storage[0] = xx * 17
                 c_result[xx] = 2 * producer_storage[0]
-            
+
             # Update step for the consumer
             for xx in range( 10 ):
                 c_result[xx] += 1
-            
+
 
             # All of the pure step is evaluated before any of the
             # update step, so there are two separate loops over x.
@@ -420,9 +414,9 @@ def main():
                     raise Exception("halide_result(%d) = %d instead of %d" % (
                            xx, halide_result(xx), c_result[xx]))
                     return -1
-                
-            
-        
+
+
+
 
         if True:
             # Case 2: The consumer references the producer in the update step only
@@ -445,8 +439,7 @@ def main():
             # the Vars of a Func are shared across the pure and
             # update steps.
 
-            halide_realization = consumer.realize(10)
-            halide_result = Image(Int(32), halide_realization)
+            halide_result = consumer.realize(10)
 
 
             # The equivalent C is:
@@ -454,14 +447,14 @@ def main():
             # Pure step for the consumer
             for xx in range( 10 ):
                 c_result[xx] = xx
-            
+
             # Update step for the consumer
             for xx in range( 10 ):
                 # Pure step for producer
                 producer_storage = np.empty((1), dtype=np.int)
                 producer_storage[0] = xx * 17
                 c_result[xx] += producer_storage[0]
-            
+
 
 
             # Check the results match
@@ -470,9 +463,9 @@ def main():
                     raise Exception("halide_result(%d) = %d instead of %d" % (
                            xx, halide_result(xx), c_result[xx]))
                     return -1
-                
-            
-        
+
+
+
 
         if True:
             # Case 3: The consumer references the producer in
@@ -489,8 +482,7 @@ def main():
             # redundant work occurs.
             producer.compute_at(consumer, x)
 
-            halide_realization = consumer.realize(10)
-            halide_result = Image(Int(32), halide_realization)
+            halide_result = consumer.realize(10)
 
             # The equivalent C is:
             c_result = np.empty((10), dtype=np.int)
@@ -500,14 +492,14 @@ def main():
                 producer_storage = np.empty((1), dtype=np.int)
                 producer_storage[0] = xx * 17
                 c_result[xx] = producer_storage[0] * xx
-            
+
             # Update step for the consumer
             for xx in range( 10 ):
                 # Another copy of the pure step for producer
                 producer_storage = np.empty((1), dtype=np.int)
                 producer_storage[0] = xx * 17
                 c_result[xx] += producer_storage[0]
-            
+
 
             # Check the results match
             for xx in range( 10 ):
@@ -515,9 +507,9 @@ def main():
                     raise Exception("halide_result(%d) = %d instead of %d" % (
                            xx, halide_result(xx), c_result[xx]))
                     return -1
-                
-            
-        
+
+
+
 
         if True:
             # Case 4: The consumer references the producer in
@@ -555,29 +547,29 @@ def main():
             producer_wrapper_1.compute_at(consumer_2, x)
             producer_wrapper_2.compute_at(consumer_2, y)
 
-            halide_result = Image(Int(32), consumer_2.realize(10, 10))
+            halide_result = consumer_2.realize(10, 10)
 
             # The equivalent C is:
             c_result = np.empty((10, 10), dtype=np.int)
-            
+
             # Pure step for the consumer
             for yy in range( 10):
                 for xx in range( 10 ):
                     c_result[yy][xx] = xx + yy
-                
-            
+
+
             # First update step for consumer
             for xx in range( 10 ):
                 producer_wrapper_1_storage = np.empty((1), dtype=np.int)
                 producer_wrapper_1_storage[0] = xx * (xx-1)
                 c_result[0][xx] += producer_wrapper_1_storage[0]
-            
+
             # Second update step for consumer
             for yy in range( 10):
                 producer_wrapper_2_storage = np.empty((1), dtype=np.int)
                 producer_wrapper_2_storage[0] = yy * (yy-1)
                 c_result[yy][0] += producer_wrapper_2_storage[0]
-            
+
 
             # Check the results match
             for yy in range( 10):
@@ -586,10 +578,10 @@ def main():
                         print("halide_result(%d, %d) = %d instead of %d",
                                xx, yy, halide_result(xx, yy), c_result[yy][xx])
                         return -1
-                    
-                
-            
-        
+
+
+
+
 
         if True:
             # Case 5: Scheduling a producer under a reduction domain
@@ -610,15 +602,14 @@ def main():
 
             producer.compute_at(consumer, r)
 
-            halide_realization = consumer.realize(10)
-            halide_result = Image(Int(32), halide_realization)
+            halide_result = consumer.realize(10)
 
             # The equivalent C is:
             c_result = np.empty((10), dtype=np.int)
             # Pure step for the consumer.
             for xx in range(10):
                 c_result[xx] = xx + 10
-            
+
             # Update step for the consumer.
             for xx in range( 10 ):
                 for rr in range(5): # The loop over the reduction domain is always the inner loop.
@@ -630,7 +621,7 @@ def main():
 
                     # Now use it in the update step of the consumer.
                     c_result[xx] += rr + producer_storage[0]
-                
+
 
             # Check the results match
             for xx in range( 10 ):
@@ -638,7 +629,7 @@ def main():
                     raise Exception("halide_result(%d) = %d instead of %d" % (
                            xx, halide_result(xx), c_result[xx]))
                     return -1
-                
+
 
     # A real-world example of a reduction inside a producer-consumer chain.
     if True:
@@ -662,8 +653,7 @@ def main():
         blurry = Func("blurry")
         blurry[x, y] = cast(UInt(8), local_sum[x, y] / 25)
 
-        halide_realization = blurry.realize(input.width(), input.height())
-        halide_result = Image(UInt(8), halide_realization)
+        halide_result = blurry.realize(input.width(), input.height())
 
         # The default schedule will inline 'clamped' into the update
         # step of 'local_sum', because clamped only has a pure
@@ -675,7 +665,7 @@ def main():
         #cast_to_uint8 = lambda x_: np.array([x_], dtype=np.uint8)[0]
         local_sum = np.empty((1), dtype=np.int32)
 
-        c_result = Image(UInt(8), input.width(), input.height())
+        c_result = Buffer(UInt(8), input.width(), input.height())
         for yy in range(input.height()):
             for xx in range(input.width()):
                 # FIXME this loop is quite slow
@@ -702,7 +692,7 @@ def main():
                                     % (xx, yy,
                                        halide_result(xx, yy), c_result(xx, yy)))
                     return -1
-                
+
 
     # Reduction helpers.
     if True:
@@ -723,8 +713,8 @@ def main():
         # So even though f1 references a reduction domain, it is a
         # pure function. The reduction domain has been swallowed to
         # define the inner anonymous reduction.
-        halide_result_1 = Image(Int(32), f1.realize(10))
-        halide_result_2 = Image(Int(32), f2.realize(10))
+        halide_result_1 = f1.realize(10)
+        halide_result_2 = f2.realize(10)
 
         # The equivalent C is:
         c_result = np.empty((10), dtype=np.int)
@@ -733,9 +723,9 @@ def main():
             anon[0] = 0
             for rr in range(100):
                 anon[0] += rr + xx
-            
+
             c_result[xx] = anon[0] * 7
-        
+
 
         # Check they all match.
         for xx in range( 10 ):
@@ -748,9 +738,9 @@ def main():
                 print("halide_result_2(%d) = %d instead of %d",
                        x, halide_result_2(x), c_result[x])
                 return -1
-            
-        
-    
+
+
+
 
 
     # A complex example that uses reduction helpers.
@@ -788,8 +778,8 @@ def main():
         # as we need it in a circular buffer (see lesson 08).
         clamped.store_at(spread, yo).compute_at(spread, yi)
 
-        halide_result = Image(UInt(8), spread.realize(input.width(), input.height()))
-        
+        halide_result = spread.realize(input.width(), input.height())
+
 
         # The C equivalent is almost too horrible to contemplate (and
         # took me a long time to debug). This time I want to time
@@ -800,7 +790,7 @@ def main():
         #ifdef __SSE2__
 
         # Don't include the time required to allocate the output buffer.
-        c_result = Image(UInt(8), input.width(), input.height())
+        c_result = Buffer(UInt(8), input.width(), input.height())
 
         #ifdef _OPENMP
         t1 = datetime.now()
@@ -923,14 +913,14 @@ def main():
                     raise Exception("halide_result(%d, %d) = %d instead of %d" % (
                            xx, yy, halide_result(xx, yy), c_result(xx, yy)))
                     return -1
-                
-            
+
+
 
         #endif # __SSE2__
     else:
         print("(Skipped the SSE2 section of the code, "
               "since non-sense in python world.)")
-    
+
     print("Success!")
     return 0
 

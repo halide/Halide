@@ -10,6 +10,8 @@
 #include "Inline.h"
 #include "CodeGen_GPU_Dev.h"
 #include "IRPrinter.h"
+#include "Func.h"
+#include "ApplySplit.h"
 
 namespace Halide {
 namespace Internal {
@@ -73,150 +75,41 @@ Stmt build_provide_loop_nest_helper(string func_name,
     // Make the (multi-dimensional multi-valued) store node.
     Stmt stmt = Provide::make(func_name, values, site);
 
-    // The dimensions for which we have a known static size.
-    map<string, Expr> known_size_dims;
+    // A map of the dimensions for which we know the extent is a
+    // multiple of some Expr. This can happen due to a bound, or
+    // align_bounds directive, or if a dim comes from the inside
+    // of a split.
+    map<string, Expr> dim_extent_alignment;
+
     // First hunt through the bounds for them.
     for (const Bound &i : s.bounds()) {
-        known_size_dims[i.var] = i.extent;
+        if (i.extent.defined()) {
+            dim_extent_alignment[i.var] = i.extent;
+        }
+        if (i.modulus.defined()) {
+            dim_extent_alignment[i.var] = i.modulus;
+        }
     }
     // Then use any reduction domain.
     for (const ReductionVariable &i : s.rvars()) {
-        known_size_dims[i.var] = i.extent;
+        dim_extent_alignment[i.var] = i.extent;
     }
 
     vector<Split> splits = s.splits();
 
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
-        Expr outer = Variable::make(Int(32), prefix + split.outer);
-        Expr outer_max = Variable::make(Int(32), prefix + split.outer + ".loop_max");
-        if (split.is_split()) {
-            Expr inner = Variable::make(Int(32), prefix + split.inner);
-            Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
-            Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
-            Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
+        vector<ApplySplitResult> splits_result = apply_split(split, is_update, prefix, dim_extent_alignment);
 
-            known_size_dims[split.inner] = split.factor;
-
-            Expr base = outer * split.factor + old_min;
-            string base_name = prefix + split.inner + ".base";
-            Expr base_var = Variable::make(Int(32), base_name);
-            string old_var_name = prefix + split.old_var;
-            Expr old_var = Variable::make(Int(32), old_var_name);
-
-            map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
-
-            if (is_update) {
-                user_assert(split.tail != TailStrategy::ShiftInwards)
-                    << "When splitting Var " << split.old_var
-                    << " ShiftInwards is not a legal tail strategy for update definitions, as"
-                    << " it may change the meaning of the algorithm\n";
-            }
-
-            if (split.exact) {
-                user_assert(split.tail == TailStrategy::Auto ||
-                            split.tail == TailStrategy::GuardWithIf)
-                    << "When splitting Var " << split.old_var
-                    << " the tail strategy must be GuardWithIf or Auto. "
-                    << "Anything else may change the meaning of the algorithm\n";
-            }
-
-            TailStrategy tail = split.tail;
-            if (tail == TailStrategy::Auto) {
-                if (split.exact) {
-                    tail = TailStrategy::GuardWithIf;
-                } else if (is_update) {
-                    tail = TailStrategy::RoundUp;
-                } else {
-                    tail = TailStrategy::ShiftInwards;
-                }
-            }
-
-            if ((iter != known_size_dims.end()) &&
-                is_zero(simplify(iter->second % split.factor))) {
-                // We have proved that the split factor divides the
-                // old extent. No need to adjust the base or add an if
-                // statement.
-                known_size_dims[split.outer] = iter->second / split.factor;
-            } else if (is_negative_const(split.factor) || is_zero(split.factor)) {
-                user_error << "Can't split " << split.old_var << " by " << split.factor
-                           << ". Split factors must be strictly positive\n";
-            } else if (is_one(split.factor)) {
-                // The split factor trivially divides the old extent,
-                // but we know nothing new about the outer dimension.
-            } else if (tail == TailStrategy::GuardWithIf) {
-                // It's an exact split but we failed to prove that the
-                // extent divides the factor. Use predication.
-
-                // Make a var representing the original var minus its
-                // min. It's important that this is a single Var so
-                // that bounds inference has a chance of understanding
-                // what it means for it to be limited by the if
-                // statement's condition.
-                Expr rebased = outer * split.factor + inner;
-                string rebased_var_name = prefix + split.old_var + ".rebased";
-                Expr rebased_var = Variable::make(Int(32), rebased_var_name);
-                stmt = substitute(prefix + split.old_var, rebased_var + old_min, stmt);
-
-                // Tell Halide to optimize for the case in which this
-                // condition is true by partitioning some outer loop.
-                Expr cond = likely(rebased_var < old_extent);
-                stmt = IfThenElse::make(cond, stmt, Stmt());
-                stmt = LetStmt::make(rebased_var_name, rebased, stmt);
-
-            } else if (tail == TailStrategy::ShiftInwards) {
-                // Adjust the base downwards to not compute off the
-                // end of the realization.
-
-                // We'll only mark the base as likely (triggering a loop
-                // partition) if we're at or inside the innermost
-                // non-trivial loop.
-                base = likely_if_innermost(base);
-
-                base = Min::make(base, old_max + (1 - split.factor));
+        for (const auto &res : splits_result) {
+            if (res.is_substitution()) {
+                stmt = substitute(res.name, res.value, stmt);
+            } else if (res.is_let()) {
+                stmt = LetStmt::make(res.name, res.value, stmt);
             } else {
-                internal_assert(tail == TailStrategy::RoundUp);
+                internal_assert(res.is_predicate());
+                stmt = IfThenElse::make(res.value, stmt, Stmt());
             }
-
-            // Substitute in the new expression for the split variable ...
-            stmt = substitute(old_var_name, base_var + inner, stmt);
-            // ... but also define it as a let for the benefit of bounds inference.
-            stmt = LetStmt::make(old_var_name, base_var + inner, stmt);
-            stmt = LetStmt::make(base_name, base, stmt);
-
-        } else if (split.is_fuse()) {
-            // Define the inner and outer in terms of the fused var
-            Expr fused = Variable::make(Int(32), prefix + split.old_var);
-            Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".loop_min");
-            Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
-            Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
-
-            // If the inner extent is zero, the loop will never be
-            // entered, but the bounds expressions lifted out might
-            // contain divides or mods by zero. In the cases where
-            // simplification of inner and outer matter, inner_extent
-            // is a constant, so the max will simplify away.
-            Expr factor = max(inner_extent, 1);
-            Expr inner = fused % factor + inner_min;
-            Expr outer = fused / factor + outer_min;
-
-            stmt = substitute(prefix + split.inner, inner, stmt);
-            stmt = substitute(prefix + split.outer, outer, stmt);
-            stmt = LetStmt::make(prefix + split.inner, inner, stmt);
-            stmt = LetStmt::make(prefix + split.outer, outer, stmt);
-
-            // Maintain the known size of the fused dim if
-            // possible. This is important for possible later splits.
-            map<string, Expr>::iterator inner_dim = known_size_dims.find(split.inner);
-            map<string, Expr>::iterator outer_dim = known_size_dims.find(split.outer);
-            if (inner_dim != known_size_dims.end() &&
-                outer_dim != known_size_dims.end()) {
-                known_size_dims[split.old_var] = inner_dim->second*outer_dim->second;
-            }
-        } else {
-            // rename or purify
-            stmt = substitute(prefix + split.old_var, outer, stmt);
-            stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
         }
     }
 
@@ -237,12 +130,11 @@ Stmt build_provide_loop_nest_helper(string func_name,
         stmt = let->body;
     }
 
-    // Put all the reduction domain predicate into the containers vector.
-    // Put all the reduction domain predicate into the containers vector.
+    // Put all the reduction domain predicates into the containers vector.
     int n_predicates = predicates.size();
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
-        Container c = {Container::If, 0, "", pred};
+        Container c = {Container::If, 0, "", likely(pred)};
         nest.push_back(c);
     }
 
@@ -293,7 +185,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
         } else if (nest[i].type == Container::If) {
             internal_assert(nest[i].value.defined());
-            stmt = IfThenElse::make(likely(nest[i].value), stmt, Stmt());
+            stmt = IfThenElse::make(nest[i].value, stmt, Stmt());
         } else {
             internal_assert(nest[i].type == Container::For);
             const Dim &dim = s.dims()[nest[i].dim_idx];
@@ -308,32 +200,11 @@ Stmt build_provide_loop_nest_helper(string func_name,
     // from the dims instead.
     for (size_t i = splits.size(); i > 0; i--) {
         const Split &split = splits[i-1];
-        Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
-        Expr old_var_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
-        Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
-        if (split.is_split()) {
-            Expr inner_extent = split.factor;
-            Expr outer_extent = (old_var_max - old_var_min + split.factor)/split.factor;
-            stmt = LetStmt::make(prefix + split.inner + ".loop_min", 0, stmt);
-            stmt = LetStmt::make(prefix + split.inner + ".loop_max", inner_extent-1, stmt);
-            stmt = LetStmt::make(prefix + split.inner + ".loop_extent", inner_extent, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".loop_min", 0, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".loop_max", outer_extent-1, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".loop_extent", outer_extent, stmt);
-        } else if (split.is_fuse()) {
-            // Define bounds on the fused var using the bounds on the inner and outer
-            Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
-            Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".loop_extent");
-            Expr fused_extent = inner_extent * outer_extent;
-            stmt = LetStmt::make(prefix + split.old_var + ".loop_min", 0, stmt);
-            stmt = LetStmt::make(prefix + split.old_var + ".loop_max", fused_extent - 1, stmt);
-            stmt = LetStmt::make(prefix + split.old_var + ".loop_extent", fused_extent, stmt);
-        } else if (split.is_rename()) {
-            stmt = LetStmt::make(prefix + split.outer + ".loop_min", old_var_min, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".loop_max", old_var_max, stmt);
-            stmt = LetStmt::make(prefix + split.outer + ".loop_extent", old_var_extent, stmt);
+
+        vector<std::pair<string, Expr>> let_stmts = compute_loop_bounds_after_split(split, prefix);
+        for (size_t j = 0; j < let_stmts.size(); j++) {
+            stmt = LetStmt::make(let_stmts[j].first, let_stmts[j].second, stmt);
         }
-        // Do nothing for purify
     }
 
     // Define the bounds on the outermost dummy dimension.
@@ -422,7 +293,7 @@ Stmt build_provide_loop_nest(string func_name,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(Function f) {
+Stmt build_produce(Function f, const Target &target) {
 
     if (f.has_extern_definition()) {
         // Call the external function
@@ -438,6 +309,8 @@ Stmt build_produce(Function f) {
         // Iterate through all of the input args to the extern
         // function building a suitable argument list for the
         // extern function call.
+        vector<Expr> buffers_to_annotate;
+        vector<Expr> buffers_contents_to_annotate;
         for (const ExternFuncArgument &arg : args) {
             if (arg.is_expr()) {
                 extern_call_args.push_back(arg.expr);
@@ -451,17 +324,26 @@ Stmt build_produce(Function f) {
                     buf_name += ".buffer";
                     Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
+                    buffers_to_annotate.push_back(buffer);
+                    buffers_contents_to_annotate.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
-                Buffer b = arg.buffer;
+                BufferPtr b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
                 Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
+                buffers_to_annotate.push_back(buf);
+                buffers_contents_to_annotate.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
                 Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
+                // Do not annotate ImageParams: both the buffer_t itself,
+                // and the contents it points to, should be filled by the caller;
+                // if we mark it here, we might mask a missed initialization.
+                // buffers_to_annotate.push_back(buf);
+                // buffers_contents_to_annotate.push_back(buf);
             } else {
                 internal_error << "Bad ExternFuncArgument type\n";
             }
@@ -481,6 +363,9 @@ Stmt build_produce(Function f) {
                 buf_name += ".buffer";
                 Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
+                // Since this is a temporary, internal-only buffer, make sure it's marked.
+                // (but not the contents! callee is expected to fill that in.)
+                buffers_to_annotate.push_back(buffer);
             }
         } else {
             // Store level doesn't match compute level. Make an output
@@ -520,7 +405,36 @@ Stmt build_produce(Function f) {
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
                 extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
+                // Since this is a temporary, internal-only buffer, make sure it's marked.
+                // (but not the contents! callee is expected to fill that in.)
+                buffers_to_annotate.push_back(extern_call_args.back());
                 lets.push_back(make_pair(buf_name, output_buffer_t));
+            }
+        }
+
+        Stmt annotate;
+        if (target.has_feature(Target::MSAN)) {
+            // Mark the buffers as initialized before calling out.
+            for (const auto &buffer: buffers_to_annotate) {
+                // Return type is really 'void', but no way to represent that in our IR.
+                // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
+                Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
+                Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                if (annotate.defined()) {
+                    annotate = Block::make(annotate, mark_buffer);
+                } else {
+                    annotate = mark_buffer;
+                }
+            }
+            for (const auto &buffer: buffers_contents_to_annotate) {
+                // Return type is really 'void', but no way to represent that in our IR.
+                // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
+                Stmt mark_contents = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
+                if (annotate.defined()) {
+                    annotate = Block::make(annotate, mark_contents);
+                } else {
+                    annotate = mark_contents;
+                }
             }
         }
 
@@ -540,6 +454,9 @@ Stmt build_produce(Function f) {
             check = LetStmt::make(lets[i].first, lets[i].second, check);
         }
 
+        if (annotate.defined()) {
+            check = Block::make(annotate, check);
+        }
         return check;
     } else {
 
@@ -567,8 +484,8 @@ vector<Stmt> build_update(Function f) {
     return updates;
 }
 
-pair<Stmt, Stmt> build_production(Function func) {
-    Stmt produce = build_produce(func);
+pair<Stmt, Stmt> build_production(Function func, const Target &target) {
+    Stmt produce = build_produce(func, target);
     vector<Stmt> updates = build_update(func);
 
     // Combine the update steps
@@ -591,6 +508,10 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr max_var = Variable::make(Int(32), max_name);
             if (!b.min.defined()) {
                 b.min = min_var;
+            }
+            if (!b.extent.defined()) {
+                // This is just a bounds alignment, which always expands the region computed.
+                continue;
             }
 
             Expr max_val = (b.extent + b.min) - 1;
@@ -657,9 +578,21 @@ private:
     string producing;
 
     Stmt build_pipeline(Stmt s) {
-        pair<Stmt, Stmt> realization = build_production(func);
+        pair<Stmt, Stmt> realization = build_production(func, target);
 
-        return ProducerConsumer::make(func.name(), realization.first, realization.second, s);
+        Stmt producer;
+        if (realization.first.defined() && realization.second.defined()) {
+            producer = Block::make(realization.first, realization.second);
+        } else if (realization.first.defined()) {
+            producer = realization.first;
+        } else {
+            internal_assert(realization.second.defined());
+            producer = realization.second;
+        }
+        producer = ProducerConsumer::make(func.name(), true, producer);
+        Stmt consumer = ProducerConsumer::make(func.name(), false, s);
+
+        return Block::make(producer, consumer);
     }
 
     Stmt build_realize(Stmt s) {
@@ -689,22 +622,19 @@ private:
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        string old = producing;
-        producing = op->name;
-        Stmt produce = mutate(op->produce);
-        Stmt update;
-        if (op->update.defined()) {
-            update = mutate(op->update);
-        }
-        producing = old;
-        Stmt consume = mutate(op->consume);
+        if (op->is_producer) {
+            string old = producing;
+            producing = op->name;
+            Stmt body = mutate(op->body);
+            producing = old;
 
-        if (produce.same_as(op->produce) &&
-            update.same_as(op->update) &&
-            consume.same_as(op->consume)) {
-            stmt = op;
+            if (body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+            }
         } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            IRMutator::visit(op);
         }
     }
 
@@ -799,7 +729,7 @@ public:
     };
     vector<Site> sites_allowed;
 
-    ComputeLegalSchedules(Function f) : func(f), found(false) {}
+    ComputeLegalSchedules(Function f, const map<string, Function> &env) : func(f), found(false), env(env) {}
 
 private:
     using IRVisitor::visit;
@@ -807,6 +737,7 @@ private:
     vector<Site> sites;
     Function func;
     bool found;
+    const map<string, Function> &env;
 
     void visit(const For *f) {
         f->min.accept(this);
@@ -816,9 +747,18 @@ private:
         internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
+        LoopLevel loop_level;
+        if (func.empty()) {
+            internal_assert(!var.empty());
+            loop_level = LoopLevel::root();
+        } else {
+            auto it = env.find(func);
+            internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
+            loop_level = LoopLevel(it->second, Var(var));
+        }
         Site s = {f->for_type == ForType::Parallel ||
                   f->for_type == ForType::Vectorized,
-                  LoopLevel(func, var)};
+                  loop_level};
         sites.push_back(s);
         f->body.accept(this);
         sites.pop_back();
@@ -870,25 +810,25 @@ string schedule_to_source(Function f,
     if (compute_at.is_inline()) {
         ss << ".compute_inline()";
     } else {
-        string store_var_name = store_at.var;
-        string compute_var_name = compute_at.var;
-        if (store_var_name == Var::outermost().name()) {
-            store_var_name = "Var::outermost()";
-        }
-        if (compute_var_name == Var::outermost().name()) {
-            compute_var_name = "Var::outermost()";
-        }
         if (!store_at.match(compute_at)) {
             if (store_at.is_root()) {
                 ss << ".store_root()";
             } else {
-                ss << ".store_at(" << store_at.func << ", " << store_var_name << ")";
+                string store_var_name = store_at.var().name();
+                if (store_var_name == Var::outermost().name()) {
+                    store_var_name = "Var::outermost()";
+                }
+                ss << ".store_at(" << store_at.func().name() << ", " << store_var_name << ")";
             }
         }
         if (compute_at.is_root()) {
             ss << ".compute_root()";
         } else {
-            ss << ".compute_at(" << compute_at.func << ", " << compute_var_name << ")";
+            string compute_var_name = compute_at.var().name();
+            if (compute_var_name == Var::outermost().name()) {
+                compute_var_name = "Var::outermost()";
+            }
+            ss << ".compute_at(" << compute_at.func().name() << ", " << compute_var_name << ")";
         }
     }
     ss << ";";
@@ -925,7 +865,7 @@ class PrintUsesOfFunc : public IRVisitor {
 
     void visit(const For *op) {
         if (ends_with(op->name, Var::outermost().name()) ||
-            ends_with(op->name, LoopLevel::root().var)) {
+            ends_with(op->name, LoopLevel::root().to_string())) {
             IRVisitor::visit(op);
         } else {
 
@@ -952,14 +892,14 @@ class PrintUsesOfFunc : public IRVisitor {
     }
 
     void visit(const ProducerConsumer *op) {
-        string old_caller = caller;
-        caller = op->name;
-        op->produce.accept(this);
-        if (op->update.defined()) {
-            op->update.accept(this);
+        if (op->is_producer) {
+            string old_caller = caller;
+            caller = op->name;
+            op->body.accept(this);
+            caller = old_caller;
+        } else {
+            IRVisitor::visit(op);
         }
-        caller = old_caller;
-        op->consume.accept(this);
     }
 
     void visit(const Call *op) {
@@ -976,7 +916,7 @@ public:
     PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
 };
 
-void validate_schedule(Function f, Stmt s, const Target &target, bool is_output) {
+void validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -1062,7 +1002,7 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
     }
 
     // Otherwise inspect the uses to see what's ok.
-    ComputeLegalSchedules legal(f);
+    ComputeLegalSchedules legal(f, env);
     s.accept(&legal);
 
     bool store_at_ok = false, compute_at_ok = false;
@@ -1087,7 +1027,7 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output)
             if (sites[i].is_parallel) {
                 err << "Func \"" << f.name()
                     << "\" is stored outside the parallel loop over "
-                    << sites[i].loop_level.func << "." << sites[i].loop_level.var
+                    << sites[i].loop_level.to_string()
                     << " but computed within it. This is a potential race condition.\n";
                 store_at_ok = compute_at_ok = false;
             }
@@ -1139,7 +1079,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
 
-    string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
+    string root_var = LoopLevel::root().to_string();
     Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
@@ -1152,7 +1092,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             is_output |= o.same_as(f);
         }
 
-        validate_schedule(f, s, target, is_output);
+        validate_schedule(f, s, target, is_output, env);
 
         if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {

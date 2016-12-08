@@ -16,7 +16,7 @@ using std::pair;
 class FindBuffers : public IRGraphVisitor {
 public:
     struct Result {
-        Buffer image;
+        BufferPtr image;
         Parameter param;
         Type type;
         int dimensions;
@@ -139,7 +139,7 @@ Stmt add_image_checks(Stmt s,
 
     for (pair<const string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
-        Buffer &image = buf.second.image;
+        BufferPtr &image = buf.second.image;
         Parameter &param = buf.second.param;
         Type type = buf.second.type;
         int dimensions = buf.second.dimensions;

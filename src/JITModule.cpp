@@ -3,6 +3,10 @@
 #include <mutex>
 #include <set>
 
+#ifndef _WIN32
+#include <sys/mman.h>
+#endif
+
 #include "CodeGen_Internal.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
@@ -145,12 +149,6 @@ EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
 
 namespace {
 
-#ifdef __arm__
-// On ARM we need to track the addresses of all the functions we
-// retrieve so that we can flush the icache.
-char *start, *end;
-#endif
-
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
@@ -164,16 +162,6 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
 
     debug(2) << "Function " << name << " is at " << f << "\n";
 
-#ifdef __arm__
-    if (start == nullptr) {
-        start = (char *)f;
-        end = (char *)f;
-    } else {
-        start = std::min(start, (char *)f);
-        end = std::max(end, (char *)f + 32);
-    }
-#endif
-
     return symbol;
 }
 
@@ -181,11 +169,13 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
 // TODO: Does this need to be conditionalized to llvm 3.6?
 class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<JITModule> modules;
+    std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
+
     HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
 
-    virtual uint64_t getSymbolAddress(const std::string &name) {
+    virtual uint64_t getSymbolAddress(const std::string &name) override {
         for (size_t i = 0; i < modules.size(); i++) {
             const JITModule &m = modules[i];
             std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
@@ -197,6 +187,47 @@ public:
             }
         }
         return SectionMemoryManager::getSymbolAddress(name);
+    }
+
+    virtual uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
+        uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
+        code_pages.push_back({result, size});
+        return result;
+    }
+
+    void work_around_llvm_bugs() {
+
+        for (auto p : code_pages) {
+            uint8_t *start = p.first;
+            uint8_t *end = p.first + p.second;
+
+            (void)start;
+            (void)end;
+#ifdef __arm__
+            // Flush each function from the dcache so that it gets pulled into
+            // the icache correctly.
+
+            // finalizeMemory should have done the trick, but as of Aug 28
+            // 2013, it doesn't work unless we also manually flush the
+            // cache. Otherwise the icache's view of the code is missing the
+            // relocations, which gets really confusing to debug, because
+            // gdb's view of the code uses the dcache, so the disassembly
+            // isn't right.
+            debug(2) << "Flushing cache from " << (void *)start
+                     << " to " << (void *)end << "\n";
+            __builtin___clear_cache(start, end);
+#endif
+
+#ifndef _WIN32
+            // As of November 2016, llvm doesn't always mark the right pages
+            // as executable either.
+            // https://llvm.org/bugs/show_bug.cgi?id=30905
+
+            start = (uint8_t *)(((uintptr_t)start) & ~4095);
+            end = (uint8_t *)(((uintptr_t)end + 4095) & ~4095);
+            mprotect((void *)start, end - start, PROT_READ | PROT_EXEC);
+#endif
+        }
     }
 };
 
@@ -230,59 +261,37 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     llvm::TargetOptions options;
     get_target_options(*m, options, mcpu, mattrs);
 
-    #if LLVM_VERSION >= 37
     DataLayout initial_module_data_layout = m->getDataLayout();
-    #endif
     string module_name = m->getModuleIdentifier();
 
-    #if LLVM_VERSION > 35
     llvm::EngineBuilder engine_builder((std::move(m)));
-    #else
-    llvm::EngineBuilder engine_builder(m.release());
-    #endif
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(llvm::EngineKind::JIT);
-    #if LLVM_VERSION < 36
-    // >= 3.6 there is only mcjit.
-    engine_builder.setUseMCJIT(true);
-    //JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
-    //engine_builder.setJITMemoryManager(memory_manager);
     HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
-    engine_builder.setMCJITMemoryManager(memory_manager);
-    #else
-    engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
-    #endif
+    engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(memory_manager));
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(mcpu);
     std::vector<string> mattrs_array = {mattrs};
     engine_builder.setMAttrs(mattrs_array);
 
-    #if LLVM_VERSION >= 37
-        TargetMachine *tm = engine_builder.selectTarget();
-        #if LLVM_VERSION == 37
-            DataLayout target_data_layout(*(tm->getDataLayout()));
-        #else
-            DataLayout target_data_layout(tm->createDataLayout());
-        #endif
-        if (initial_module_data_layout != target_data_layout) {
-                internal_error << "Warning: data layout mismatch between module ("
-                               << initial_module_data_layout.getStringRepresentation()
-                               << ") and what the execution engine expects ("
-                               << target_data_layout.getStringRepresentation() << ")\n";
-        }
-        ExecutionEngine *ee = engine_builder.create(tm);
+    TargetMachine *tm = engine_builder.selectTarget();
+    #if LLVM_VERSION == 37
+    DataLayout target_data_layout(*(tm->getDataLayout()));
     #else
-        ExecutionEngine *ee = engine_builder.create();
+    DataLayout target_data_layout(tm->createDataLayout());
     #endif
+    if (initial_module_data_layout != target_data_layout) {
+        internal_error << "Warning: data layout mismatch between module ("
+                       << initial_module_data_layout.getStringRepresentation()
+                       << ") and what the execution engine expects ("
+                       << target_data_layout.getStringRepresentation() << ")\n";
+    }
+    ExecutionEngine *ee = engine_builder.create(tm);
 
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
-
-    #ifdef __arm__
-    start = end = nullptr;
-    #endif
 
     // Do any target-specific initialization
     std::vector<llvm::JITEventListener *> listeners;
@@ -318,6 +327,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
+    memory_manager->work_around_llvm_bugs();
 
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
@@ -325,21 +335,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         delete listeners[i];
     }
     listeners.clear();
-
-#ifdef __arm__
-    // Flush each function from the dcache so that it gets pulled into
-    // the icache correctly.
-
-    // finalizeMemory should have done the trick, but as of Aug 28
-    // 2013, it doesn't work unless we also manually flush the
-    // cache. Otherwise the icache's view of the code is missing the
-    // relocations, which gets really confusing to debug, because
-    // gdb's view of the code uses the dcache, so the disassembly
-    // isn't right.
-    debug(2) << "Flushing cache from " << (void *)start
-             << " to " << (void *)end << "\n";
-    __builtin___clear_cache(start, end);
-#endif
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
     ee->runStaticConstructorsDestructors(false);

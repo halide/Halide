@@ -20,10 +20,31 @@ using std::vector;
 using std::ostringstream;
 using std::map;
 
-// The contents of HalideRuntime.h -- declarations for the stuff in the initmods.
-extern "C" unsigned char halide_internal_initmod_declarations[];
-
 namespace {
+const string buffer_t_definition =
+    "#ifndef HALIDE_ATTRIBUTE_ALIGN\n"
+    "  #ifdef _MSC_VER\n"
+    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))\n"
+    "  #else\n"
+    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))\n"
+    "  #endif\n"
+    "#endif\n"
+    "#ifndef BUFFER_T_DEFINED\n"
+    "#define BUFFER_T_DEFINED\n"
+    "#include <stdbool.h>\n"
+    "#include <stdint.h>\n"
+    "typedef struct buffer_t {\n"
+    "    uint64_t dev;\n"
+    "    uint8_t* host;\n"
+    "    int32_t extent[4];\n"
+    "    int32_t stride[4];\n"
+    "    int32_t min[4];\n"
+    "    int32_t elem_size;\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;\n"
+    "    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];\n"
+    "} buffer_t;\n"
+    "#endif\n";
 
 const string headers =
     "#include <iostream>\n"
@@ -36,11 +57,19 @@ const string headers =
 
 const string globals =
     "extern \"C\" {\n"
+    "void *halide_malloc(void *ctx, size_t);\n"
+    "void halide_free(void *ctx, void *ptr);\n"
+    "void *halide_print(void *ctx, const void *str);\n"
+    "void *halide_error(void *ctx, const void *str);\n"
+    "int halide_debug_to_file(void *ctx, const char *filename, int, struct buffer_t *buf);\n"
+    "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
     "void halide_profiler_pipeline_end(void *, void *);\n"
     "}\n"
     "\n"
 
+    // TODO: this next chunk is copy-pasted from posix_math.cpp. A
+    // better solution for the C runtime would be nice.
     "#ifdef _WIN32\n"
     "float roundf(float);\n"
     "double round(double);\n"
@@ -109,10 +138,30 @@ const string globals =
     // it. Compilers understand memcpy and will convert it to a no-op
     // when used in this way. See http://blog.regehr.org/archives/959
     // for a detailed comparison of type-punning methods.
-    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n";
+    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
+    "\n"
+    "static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
+    "                           int32_t min0, int32_t extent0, int32_t stride0,\n"
+    "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
+    "                           int32_t min2, int32_t extent2, int32_t stride2,\n"
+    "                           int32_t min3, int32_t extent3, int32_t stride3) {\n"
+    " b->min[0] = min0;\n"
+    " b->min[1] = min1;\n"
+    " b->min[2] = min2;\n"
+    " b->min[3] = min3;\n"
+    " b->extent[0] = extent0;\n"
+    " b->extent[1] = extent1;\n"
+    " b->extent[2] = extent2;\n"
+    " b->extent[3] = extent3;\n"
+    " b->stride[0] = stride0;\n"
+    " b->stride[1] = stride1;\n"
+    " b->stride[2] = stride2;\n"
+    " b->stride[3] = stride3;\n"
+    " return true;\n"
+    "}\n";
 }
 
-CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind) {
+CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind), extern_c_open(false) {
     if (is_header()) {
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
@@ -120,11 +169,19 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
     }
 
     if (!is_header()) {
-        stream
-            << headers
-            << globals;
+        stream << headers;
     }
-    stream << halide_internal_initmod_declarations << '\n';
+
+    // Throw in a definition of a buffer_t
+    stream << buffer_t_definition;
+
+    // halide_filter_metadata_t just gets a forward declaration
+    // (include HalideRuntime.h for the full goodness)
+    stream << "struct halide_filter_metadata_t;\n";
+
+    if (!is_header()) {
+        stream << globals;
+    }
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
     // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
@@ -141,11 +198,7 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
 }
 
 CodeGen_C::~CodeGen_C() {
-    if (!is_c_plus_plus_interface()) {
-        stream << "#ifdef __cplusplus\n";
-        stream << "}  // extern \"C\"\n";
-        stream << "#endif\n";
-    }
+    switch_to_c_or_c_plus_plus(COrCPlusPlus::Default);
 
     if (is_header()) {
         stream << "#endif\n";
@@ -211,10 +264,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
                 }
                 if (modifier & halide_handle_cplusplus_type::Pointer) {
                     oss << " *";
-                } else {
-                    break;
                 }
-
             }
         }
     } else {
@@ -234,6 +284,20 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
         oss << " ";
     return oss.str();
 }
+}
+
+void CodeGen_C::switch_to_c_or_c_plus_plus(COrCPlusPlus mode) {
+    if (extern_c_open && mode != COrCPlusPlus::C) {
+        stream << "\n#ifdef __cplusplus\n";
+        stream << "}  // extern \"C\"\n";
+        stream << "#endif\n";
+        extern_c_open = false;
+    } else if (!extern_c_open && mode == COrCPlusPlus::C) {
+        stream << "#ifdef __cplusplus\n";
+        stream << "extern \"C\" {\n";
+        stream << "#endif\n";
+        extern_c_open = true;
+    }
 }
 
 string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
@@ -269,8 +333,15 @@ string CodeGen_C::print_name(const string &name) {
 
 namespace {
 class ExternCallPrototypes : public IRGraphVisitor {
-    ostream &stream;
-    std::set<string> &emitted;
+    struct NamespaceOrCall {
+        const Call *call; // nullptr if this is a subnamespace
+        std::map<string, NamespaceOrCall> names;
+        NamespaceOrCall(const Call *call = nullptr) : call(call) { }
+    };
+    std::map<string, NamespaceOrCall> c_plus_plus_externs;
+    std::map<string, const Call *> c_externs;
+    std::set<std::string> &emitted;
+
     using IRGraphVisitor::visit;
     // TODO: This class should likely be able to signal an error if C++
     // code shows up and started_in_c_plus_plus isn't true, but the logic
@@ -291,55 +362,60 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
-        if (op->call_type == Call::Extern ||
-            op->call_type == Call::ExternCPlusPlus) {
-            switch_calling_convention(op->call_type == Call::ExternCPlusPlus);
-            // TODO: optimize generation of namespacing to reuse namespace decls.
-            int32_t namespace_count = 0;
-            std::string name;
-            if (op->call_type == Call::ExternCPlusPlus) {
-                std::vector<std::string> namespaces;
-                name = extract_namespaces(op->name, namespaces);
-                for (const auto &ns : namespaces) {
-                    stream << "namespace " << ns << " { ";
-                }
-                namespace_count = namespaces.size();
-            } else {
-                name = op->name;
-            }
 
-            if (!starts_with(op->name, "halide_") &&
-                !emitted.count(name)) {
-                stream << type_to_c_type(op->type, true) << " " << name << "(";
-                if (function_takes_user_context(name)) {
-                    stream << "void *";
-                    if (op->args.size()) {
-                        stream << ", ";
-                    }
+        if (!emitted.count(op->name)) {
+            if (op->call_type == Call::Extern) {
+                c_externs.insert({op->name, op});
+            } else if (op->call_type == Call::ExternCPlusPlus) {
+                std::vector<std::string> namespaces;
+                std::string name = extract_namespaces(op->name, namespaces);
+                std::map<string, NamespaceOrCall> *namespace_map(&c_plus_plus_externs);
+                for (const auto &ns : namespaces) {
+                    auto insertion = namespace_map->insert({ns, NamespaceOrCall()});
+                    namespace_map = &insertion.first->second.names;
                 }
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    if (i > 0) {
-                        stream << ", ";
-                    }
-                    if (op->args[i].as<StringImm>()) {
-                        stream << "const char *";
-                    } else {
-                      stream << type_to_c_type(op->args[i].type(), true);
-                    }
-                }
-                stream << ");";
-                for (int32_t i = 0; i < namespace_count; i++) {
-                    stream << " }";
-                }
-                stream << "\n";
-                emitted.insert(op->name); // Keep namespacing here.
+                namespace_map->insert({name, NamespaceOrCall(op)});
             }
+            emitted.insert(op->name);
+        }
+    }
+
+    void emit_function_decl(ostream &stream, const Call *op, const std::string &name) {
+        stream << type_to_c_type(op->type, true) << " " << name << "(";
+        if (function_takes_user_context(name)) {
+            stream << "void *";
+            if (op->args.size()) {
+                stream << ", ";
+            }
+        }
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (i > 0) {
+                stream << ", ";
+            }
+            if (op->args[i].as<StringImm>()) {
+                stream << "const char *";
+            } else {
+              stream << type_to_c_type(op->args[i].type(), true);
+            }
+        }
+        stream << ");\n";
+    }
+
+    void emit_namespace_or_call(ostream &stream, const NamespaceOrCall &ns_or_call, const std::string &name) {
+        if (ns_or_call.call == nullptr) {
+            stream << "namespace " << name << " {\n";
+            for (const auto &ns_or_call_inner : ns_or_call.names) {
+                emit_namespace_or_call(stream, ns_or_call_inner.second, ns_or_call_inner.first);
+            }
+            stream << "} // namespace " << name << "\n";
+        } else {
+            emit_function_decl(stream, ns_or_call.call, name);
         }
     }
 
 public:
-  ExternCallPrototypes(ostream &s, std::set<string> &emitted, bool in_c_plus_plus)
-      : stream(s), emitted(emitted), started_in_c_plus_plus(in_c_plus_plus), in_c_plus_plus(in_c_plus_plus) {
+  ExternCallPrototypes(std::set<string> &emitted, bool in_c_plus_plus)
+      : emitted(emitted) {
         size_t j = 0;
         // Make sure we don't catch calls that are already in the global declarations
         for (size_t i = 0; i < globals.size(); i++) {
@@ -361,22 +437,40 @@ public:
         }
     }
 
-  ~ExternCallPrototypes() {
-      switch_calling_convention(started_in_c_plus_plus);
-  }
+    bool has_c_declarations() {
+        return !c_externs.empty();
+    }
+
+    bool has_c_plus_plus_declarations() {
+        return !c_plus_plus_externs.empty();
+    }
+
+    void emit_c_declarations(ostream &stream) {
+        for (const auto &call : c_externs) {
+            emit_function_decl(stream, call.second, call.first);
+        }
+        stream << "\n";
+    }
+
+    void emit_c_plus_plus_declarations(ostream &stream) {
+        for (const auto &ns_or_call : c_plus_plus_externs) {
+            emit_namespace_or_call(stream, ns_or_call.second, ns_or_call.first);
+        }
+        stream << "\n";
+    }
 };
 }
 
 void CodeGen_C::compile(const Module &input) {
     for (const auto &b : input.buffers()) {
-        compile(b, input.target());
+        compile(b);
     }
     for (const auto &f : input.functions()) {
-        compile(f, input.target());
+        compile(f);
     }
 }
 
-void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
+void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
     if (is_header() && f.linkage != LoweredFunc::External) {
         return;
@@ -426,10 +520,22 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
     // Emit prototypes for any extern calls used.
     if (!is_header()) {
         stream << "\n";
-        ExternCallPrototypes e(stream, emitted, is_c_plus_plus_interface());
+        ExternCallPrototypes e(emitted, is_c_plus_plus_interface());
         f.body.accept(&e);
-        stream << "\n";
+
+        if (e.has_c_plus_plus_declarations()) {
+            switch_to_c_or_c_plus_plus(COrCPlusPlus::CPlusPlus);
+            e.emit_c_plus_plus_declarations(stream);
+        }
+
+        if (e.has_c_declarations()) {
+            switch_to_c_or_c_plus_plus(COrCPlusPlus::C);
+            e.emit_c_declarations(stream);
+        }
     }
+
+    switch_to_c_or_c_plus_plus(is_c_plus_plus_interface() ? COrCPlusPlus::Default : COrCPlusPlus::C);
+    stream << "\n";
 
     std::vector<std::string> namespaces;
     std::string simple_name = extract_namespaces(f.name, namespaces);
@@ -595,9 +701,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
         stream << "\n\n";
     }
 
-
     if (is_header()) {
-        // Declare the metadata.
+        // And also the metadata.
         stream << "// Result is never null and points to constant static data\n";
         stream << "extern const struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
     }
@@ -966,6 +1071,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << a0 << " >> " << a1;
     } else if (op->is_intrinsic(Call::rewrite_buffer)) {
         int dims = ((int)(op->args.size())-2)/3;
+        (void)dims; // In case internal_assert is ifdef'd to do nothing
         internal_assert((int)(op->args.size()) == dims*3 + 2);
 
         const Variable *v = op->args[0].as<Variable>();
@@ -1023,6 +1129,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 3);
 
         string result_id = unique_name('_');
+
         do_indent();
         stream << print_type(op->args[1].type(), AppendSpace)
                << result_id << ";\n";
@@ -1131,12 +1238,14 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::set_host_dirty)) {
         internal_assert(op->args.size() == 1);
         string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
         do_indent();
         stream << "((halide_buffer_t *)(" << a0 << "))->set_host_dirty(true);\n";
         rhs << "0";
     } else if (op->is_intrinsic(Call::set_device_dirty)) {
         internal_assert(op->args.size() == 1);
         string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
         do_indent();
         stream << "((halide_buffer_t *)(" << a0 << "))->set_device_dirty(true);\n";
         rhs << "0";
@@ -1246,29 +1355,23 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::indeterminate_expression)) {
+        user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
 
     } else {
-        std::string name;
-        if (op->call_type == Call::ExternCPlusPlus) {
-            std::vector<std::string> namespaces;
-            name = extract_namespaces(op->name, namespaces);
-        } else {
-            name = op->name;
-        }
-
         // Generic calls
         vector<string> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = print_expr(op->args[i]);
         }
-        rhs << name << "(";
+        rhs << op->name << "(";
 
         if (function_takes_user_context(op->name)) {
-            rhs << (have_user_context ? "__user_context_, " : "NULL, ");
+            rhs << (have_user_context ? "__user_context_, " : "nullptr, ");
         }
 
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -1381,20 +1484,13 @@ void CodeGen_C::visit(const AssertStmt *op) {
 }
 
 void CodeGen_C::visit(const ProducerConsumer *op) {
-
     do_indent();
-    stream << "// produce " << op->name << '\n';
-    print_stmt(op->produce);
-
-    if (op->update.defined()) {
-        do_indent();
-        stream << "// update " << op->name << '\n';
-        print_stmt(op->update);
+    if (op->is_producer) {
+        stream << "// produce " << op->name << '\n';
+    } else {
+        stream << "// consume " << op->name << '\n';
     }
-
-    do_indent();
-    stream << "// consume " << op->name << '\n';
-    print_stmt(op->consume);
+    print_stmt(op->body);
 }
 
 void CodeGen_C::visit(const For *op) {
@@ -1483,7 +1579,7 @@ void CodeGen_C::visit(const Allocate *op) {
             open_scope();
             do_indent();
             stream << "halide_error("
-                   << (have_user_context ? "__user_context_" : "NULL")
+                   << (have_user_context ? "__user_context_" : "nullptr")
                    << ", \"32-bit signed overflow computing size of allocation "
                    << op->name << "\\n\");\n";
             do_indent();
@@ -1519,7 +1615,7 @@ void CodeGen_C::visit(const Allocate *op) {
                    << " = ("
                    << print_type(op->type)
                    << " *)halide_malloc("
-                   << (have_user_context ? "__user_context_" : "NULL")
+                   << (have_user_context ? "__user_context_" : "nullptr")
                    << ", sizeof("
                    << print_type(op->type)
                    << ")*" << size_id << ");\n";
@@ -1544,7 +1640,7 @@ void CodeGen_C::visit(const Free *op) {
 
         do_indent();
         stream << free_function << "("
-               << (have_user_context ? "__user_context_, " : "NULL, ")
+               << (have_user_context ? "__user_context_, " : "nullptr, ")
                << print_name(op->name)
                << ");\n";
         heap_allocations.pop(op->name);
@@ -1585,7 +1681,7 @@ void CodeGen_C::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, Handle(), 0);
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
     vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
@@ -1610,11 +1706,14 @@ void CodeGen_C::test() {
     string src = source.str();
     string correct_source =
         headers +
+        buffer_t_definition +
+        "struct halide_filter_metadata_t;\n" +
         globals +
         string((const char *)halide_internal_initmod_declarations) + '\n' +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"
         "#endif\n"
+        "\n"
         "#ifdef __cplusplus\n"
         "extern \"C\" {\n"
         "#endif\n"

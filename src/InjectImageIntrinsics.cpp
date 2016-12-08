@@ -17,13 +17,15 @@ public:
     InjectImageIntrinsics(const map<string, Function> &e) : inside_kernel_loop(false), env(e) {}
     Scope<int> scope;
     bool inside_kernel_loop;
+    Scope<int> kernel_scope_allocations;
     const map<string, Function> &env;
 
 private:
     using IRMutator::visit;
 
     void visit(const Provide *provide) {
-        if (!inside_kernel_loop) {
+        if (!inside_kernel_loop ||
+            kernel_scope_allocations.contains(provide->name)) {
             IRMutator::visit(provide);
             return;
         }
@@ -53,7 +55,8 @@ private:
     void visit(const Call *call) {
         if (!inside_kernel_loop ||
             (call->call_type != Call::Halide &&
-             call->call_type != Call::Image)) {
+             call->call_type != Call::Image) ||
+            kernel_scope_allocations.contains(call->name)) {
             IRMutator::visit(call);
             return;
         }
@@ -141,12 +144,21 @@ private:
     void visit(const For *loop) {
         bool old_kernel_loop = inside_kernel_loop;
         if (loop->for_type == ForType::Parallel &&
-            (loop->device_api == DeviceAPI::GLSL ||
-                loop->device_api == DeviceAPI::Renderscript)) {
+            loop->device_api == DeviceAPI::GLSL) {
             inside_kernel_loop = true;
         }
         IRMutator::visit(loop);
         inside_kernel_loop = old_kernel_loop;
+    }
+
+    void visit(const Realize *op) {
+        if (inside_kernel_loop) {
+            kernel_scope_allocations.push(op->name, 0);
+            IRMutator::visit(op);
+            kernel_scope_allocations.pop(op->name);
+        } else {
+            IRMutator::visit(op);
+        }
     }
 };
 

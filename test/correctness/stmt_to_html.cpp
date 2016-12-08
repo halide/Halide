@@ -35,7 +35,7 @@ int main() {
 
     // Also check using an image.
     const char *result_file_2 = "stmt_to_html_dump_2.html";
-    Image<int> im(800, 600);
+    Buffer<int> im(800, 600);
     gradient_fast.compile_to_lowered_stmt(result_file_2, {im}, Halide::HTML);
 
     #ifndef _MSC_VER

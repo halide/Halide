@@ -3,12 +3,12 @@
 #include <stdio.h>
 
 #include "mandelbrot.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 int main(int argc, char **argv) {
-    Image<int> output(100, 30);
+    Buffer<int> output(100, 30);
     const char *code = " .:-~*={}&%#@";
     const int iters = strlen(code) - 1;
 
@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     for (float t = 0; t < 100; t++) {
         float fx = cos(t / 10.0f), fy = sin(t / 10.0f);
         mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters, output.width(), output.height(),
-                   &output);
+                   output);
     }
 
     char buf[4096];

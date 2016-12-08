@@ -23,7 +23,7 @@ int main() {
 
     // Use JIT for computation
     h_assert(sizeof(float16_t) == 2, "float16_t has invalid size");
-    Image<float16_t> simple = f.realize(10, 3);
+    Buffer<float16_t> simple = f.realize(10, 3);
 
     // Read result back
     for (int y = 0; y < 3; y++) {

@@ -1,16 +1,18 @@
-#include "../HalideRuntime.h"
-#include "HexagonWrapper.h"
-#include "sim_protocol.h"
-
 #include <vector>
 #include <sstream>
 #include <cassert>
 #include <memory>
 
+#include <HalideRuntime.h>
+#include <HexagonWrapper.h>
+
+#include "sim_protocol.h"
+
 typedef unsigned int handle_t;
 
 std::unique_ptr<HexagonWrapper> sim;
 
+bool debug_mode = false;
 int init_sim() {
     if (sim) return 0;
 
@@ -85,6 +87,8 @@ int init_sim() {
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::ConfigureRemoteDebug failed: %d\n", status);
             return -1;
+        } else {
+            debug_mode = true;
         }
     }
 
@@ -109,19 +113,30 @@ int write_memory(int dest, const void *src, int size) {
         // WriteMemory only works with powers of 2, so align down. It
         // also only writes up to 8 bytes, so we need to do this
         // repeatedly until we've finished copying the buffer.
-        int next = 1;
-        if (size >= 8) next = 8;
-        else if (size >= 4) next = 4;
-        else if (size >= 2) next = 2;
-        HEXAPI_Status status = sim->WriteMemory(dest, next, *reinterpret_cast<const HEX_8u_t*>(src));
+        HEX_8u_t src_chunk;
+        int chunk_size;
+        if (size >= 8) {
+            src_chunk = *reinterpret_cast<const HEX_8u_t*>(src);
+            chunk_size = 8;
+        } else if (size >= 4) {
+            src_chunk = *reinterpret_cast<const HEX_4u_t*>(src);
+            chunk_size = 4;
+        } else if (size >= 2) {
+            src_chunk = *reinterpret_cast<const HEX_2u_t*>(src);
+            chunk_size = 2;
+        } else {
+            src_chunk = *reinterpret_cast<const HEX_1u_t*>(src);
+            chunk_size = 1;
+        }
+        HEXAPI_Status status = sim->WriteMemory(dest, chunk_size, src_chunk);
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::WriteMemory failed: %d\n", status);
             return -1;
         }
 
-        size -= next;
-        dest += next;
-        src = reinterpret_cast<const char *>(src) + next;
+        size -= chunk_size;
+        dest += chunk_size;
+        src = reinterpret_cast<const char *>(src) + chunk_size;
     }
     return 0;
 }
@@ -201,7 +216,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
     }
 
     HEXAPI_CoreState state;
-    if (msg == Message::Break) {
+    // If we are debugging using LLDB, then we cannot use sim->Step, but
+    // we need to use sim->Run to allow LLDB to take over.
+    if (msg == Message::Break || (debug_mode && (msg == Message::Run))) {
         // If we're trying to end the remote simulation, just run
         // until completion.
         HEX_4u_t result;

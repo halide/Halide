@@ -6,6 +6,7 @@
  * Classes for declaring output image parameters to halide pipelines
  */
 
+#include "Argument.h"
 #include "Var.h"
 
 namespace Halide {
@@ -125,16 +126,9 @@ public:
      * inspecting its min, extent, or stride. */
     EXPORT const Dimension dim(int i) const;
 
-    /** Helpers for backward compatibility. Do not use. */
-    // @{
-    OutputImageParam set_min(int i, Expr e) {dim(i).set_min(e); return *this;}
-    OutputImageParam set_extent(int i, Expr e) {dim(i).set_extent(e); return *this;}
-    OutputImageParam set_bounds(int i, Expr a, Expr b) {dim(i).set_bounds(a, b); return *this;}
-    OutputImageParam set_stride(int i, Expr e) {dim(i).set_stride(e); return *this;}
-    Expr min(int i) {return dim(i).min();}
-    Expr extent(int i) {return dim(i).extent();}
-    Expr stride(int i) {return dim(i).stride();}
-    // @}
+    /** Get an expression representing the stride of this image in the
+     * given dimension */
+    EXPORT Expr stride(int x) const;
 
     /** Get the alignment of the host pointer in bytes. Defaults to
      * the size of type. */

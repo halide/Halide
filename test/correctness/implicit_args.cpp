@@ -11,10 +11,10 @@ int main(int argc, char **argv) {
     assert(im1.dimensions() == 3);
     // im1 is a 3d imageparam
 
-    Image<int> im1_val = lambda(x, y, z, x*y*z).realize(10, 10, 10);
+    Buffer<int> im1_val = lambda(x, y, z, x*y*z).realize(10, 10, 10);
     im1.set(im1_val);
 
-    Image<int> im2 = lambda(x, y, x+y).realize(10, 10);
+    Buffer<int> im2 = lambda(x, y, x+y).realize(10, 10);
     assert(im2.dimensions() == 2);
     assert(im2(4, 6) == 10);
     // im2 is a 2d image
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     // f(x, i, j, k) = im1(i, j, k) + im2(x, i) + im2(i, j);
     // f(x, i, j, k) = i*j*k + x+i + i+j;
 
-    Image<int> result1 = f.realize(2, 2, 2, 2);
+    Buffer<int> result1 = f.realize(2, 2, 2, 2);
     for (int k = 0; k < 2; k++) {
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < 2; i++) {
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 
     assert(g.dimensions() == 2);
 
-    Image<int> result2 = g.realize(10, 10);
+    Buffer<int> result2 = g.realize(10, 10);
     for (int j = 0; j < 10; j++) {
         for (int i = 0; i < 10; i++) {
             int correct = 2*i*j + 2+2 + 2+i + 1+i;
@@ -66,13 +66,13 @@ int main(int argc, char **argv) {
     }
 
     // An image which ensures any transposition of unequal coordinates changes the value
-    Image<int> im3 = lambda(x, y, z, w, (x<<24)|(y<<16)|(z<<8)|w).realize(10, 10, 10, 10);
+    Buffer<int> im3 = lambda(x, y, z, w, (x<<24)|(y<<16)|(z<<8)|w).realize(10, 10, 10, 10);
 
     Func transpose_last_two;
     transpose_last_two(_, x, y) = im3(_, y, x);
     // Equivalent to transpose_last_two(_0, _1, x, y) = im3(_0, _1, x, y)
 
-    Image<int> transposed = transpose_last_two.realize(10, 10, 10, 10);
+    Buffer<int> transposed = transpose_last_two.realize(10, 10, 10, 10);
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
     // Equivalent to hairy_transpose(_0, _1, x, y) = im3(y, _0, _1, x) +
     // im3(y, x, _0, _1)
 
-    Image<int> hairy_transposed = hairy_transpose.realize(10, 10, 10, 10);
+    Buffer<int> hairy_transposed = hairy_transpose.realize(10, 10, 10, 10);
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
     // Equivalent to hairy_transpose2(_0, _1, _2, x) = im3(_0, _1, _2, x) +
     // im3(x, x, _0, _1)
 
-    Image<int> hairy_transposed2 = hairy_transpose2.realize(10, 10, 10, 10);
+    Buffer<int> hairy_transposed2 = hairy_transpose2.realize(10, 10, 10, 10);
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {

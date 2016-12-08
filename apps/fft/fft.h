@@ -7,7 +7,7 @@
 #include <string>
 
 #include "complex.h"
-#include <Halide.h>
+#include "Halide.h"
 
 // This is an optional extra description for the details of computing an FFT.
 struct Fft2dDesc {

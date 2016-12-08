@@ -1,34 +1,41 @@
+// Test doesn't build on windows, because OpenGL on windows is a nightmare.
+#ifdef _WIN32
+#include <stdio.h>
+int main() {
+    printf("Skipping test on Windows\n");
+    return 0;
+}
+#else
+
 #include <stdio.h>
 #include <stdlib.h>
-
-#if defined(__APPLE__)
-#include <OpenGL/gl.h>
-#else
-#include <GL/gl.h>
-#endif
+#include <stdint.h>
+#include <stddef.h>
 
 #include "Halide.h"
 #include "HalideRuntimeOpenGL.h"
 
+#include "runtime/mini_opengl.h"
+
 using namespace Halide;
 
-int main() {
-    
-    // This test must be run with an OpenGL target
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL))  {
-        fprintf(stderr,"ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
+extern "C" void glGenTextures(GLsizei, GLuint *);
+extern "C" void glTexParameteri(GLenum, GLenum, GLint);
+extern "C" void glBindTexture(GLenum, GLuint);
+extern "C" void glTexImage2D(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const GLvoid *);
 
+int main() {
+
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     const int width = 255;
     const int height = 10;
 
-    Image<uint8_t> input(width, height, 3);
-    Buffer out1(UInt(8), width, height, 3);
-    Buffer out2(UInt(8), width, height, 3);
-    Buffer out3(UInt(8), width, height, 3);
+    Buffer<uint8_t> input(width, height, 3);
+    Buffer<uint8_t> out1(width, height, 3);
+    Buffer<uint8_t> out2(width, height, 3);
+    Buffer<uint8_t> out3(width, height, 3);
 
     Var x, y, c;
     Func g;
@@ -37,7 +44,7 @@ int main() {
     g.glsl(x, y, c);
 
 
-    g.realize(out1); // run once to initialize OpenGL
+    g.realize(out1, target); // run once to initialize OpenGL
 
     GLuint texture_id;
     glGenTextures(1, &texture_id);
@@ -50,14 +57,16 @@ int main() {
 
     // wrapping a texture should work
     halide_opengl_wrap_texture(nullptr, out2.raw_buffer(), texture_id);
-    g.realize(out2);
+    g.realize(out2, target);
     halide_opengl_detach_texture(nullptr, out2.raw_buffer());
 
     // re-wrapping the texture should not abort
     halide_opengl_wrap_texture(nullptr, out3.raw_buffer(), texture_id);
-    g.realize(out3);
+    g.realize(out3, target);
     halide_opengl_detach_texture(nullptr, out3.raw_buffer());
 
     printf("Success!\n");
     return 0;
 }
+
+#endif

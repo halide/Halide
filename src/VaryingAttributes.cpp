@@ -112,17 +112,23 @@ protected:
 
     virtual void visit(const For *op) {
         bool old_in_glsl_loops = in_glsl_loops;
+        bool kernel_loop = op->device_api == DeviceAPI::GLSL;
+        bool within_kernel_loop = !kernel_loop && in_glsl_loops;
         // Check if the loop variable is a GPU variable thread variable and for GLSL
-        if ((CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) ||
-            (in_glsl_loops && op->device_api == DeviceAPI::None)) {
+        if (kernel_loop) {
             loop_vars.push_back(op->name);
             in_glsl_loops = true;
+        } else if (within_kernel_loop) {
+            // The inner loop variable is non-linear w.r.t the glsl pixel coordinate.
+            scope.push(op->name, 2);
         }
 
         Stmt mutated_body = mutate(op->body);
 
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)  && op->device_api == DeviceAPI::GLSL) {
+        if (kernel_loop) {
             loop_vars.pop_back();
+        } else if (within_kernel_loop) {
+            scope.pop(op->name);
         }
 
         in_glsl_loops = old_in_glsl_loops;
@@ -812,7 +818,7 @@ void IRFilter::visit(const AssertStmt *op) {
 }
 
 void IRFilter::visit(const ProducerConsumer *op) {
-    mutate_operator(this, op, op->produce, op->update, op->consume, &stmt);
+    mutate_operator(this, op, op->body, &stmt);
 }
 
 void IRFilter::visit(const For *op) {

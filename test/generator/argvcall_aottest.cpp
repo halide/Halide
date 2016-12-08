@@ -1,16 +1,16 @@
 #include "HalideRuntime.h"
-#include "HalideImage.h"
+#include "HalideBuffer.h"
 
 #include <math.h>
 #include <stdio.h>
 
 #include "argvcall.h"
 
-using namespace Halide::Tools;
+using namespace Halide;
 
 const int kSize = 32;
 
-void verify(const Image<int32_t> &img, float f1, float f2) {
+void verify(const Buffer<int32_t> &img, float f1, float f2) {
     for (int i = 0; i < kSize; i++) {
         for (int j = 0; j < kSize; j++) {
             for (int c = 0; c < 3; c++) {
@@ -27,10 +27,10 @@ void verify(const Image<int32_t> &img, float f1, float f2) {
 int main(int argc, char **argv) {
 
     int result;
-    Image<int32_t> output(kSize, kSize, 3);
+    Buffer<int32_t> output(kSize, kSize, 3);
 
     // We can, of course, pass whatever values for Param/ImageParam that we like.
-    result = argvcall(1.2f, 3.4f, &output);
+    result = argvcall(1.2f, 3.4f, output);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
         exit(-1);
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     // also produces the correct result
     float arg0 = 1.234f;
     float arg1 = 3.456f;
-    void* args[3] = { &arg0, &arg1, &output };
+    void* args[3] = { &arg0, &arg1, (halide_buffer_t *)output };
     result = argvcall_argv(args);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);

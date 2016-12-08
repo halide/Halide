@@ -20,7 +20,7 @@ int main() {
     // to a float
     f(x, y) = 0.25f + Expr(float16_t(0.75));
 
-    Image<float> simple = f.realize(10, 3);
+    Buffer<float> simple = f.realize(10, 3);
 
     // Read result back
     for (int y = 0; y < 3; y++) {
