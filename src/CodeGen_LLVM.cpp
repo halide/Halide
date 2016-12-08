@@ -168,6 +168,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     metadata_t_type(nullptr),
     argument_t_type(nullptr),
     scalar_value_t_type(nullptr),
+    device_interface_t_type(nullptr),
 
     // Vector types. These need an LLVMContext before they can be initialized.
     i8x8(nullptr),
@@ -495,8 +496,14 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
     // Ensure some types we need are defined
-    buffer_t_type = module->getTypeByName("struct.buffer_t");
-    internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
+    buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
+    internal_assert(buffer_t_type) << "Did not find halide_buffer_t in initial module";
+
+    type_t_type = module->getTypeByName("struct.halide_type_t");
+    internal_assert(type_t_type) << "Did not find halide_type_t in initial module";
+
+    dimension_t_type = module->getTypeByName("struct.halide_dimension_t");
+    internal_assert(dimension_t_type) << "Did not find halide_dimension_t in initial module";
 
     metadata_t_type = module->getTypeByName("struct.halide_filter_metadata_t");
     internal_assert(metadata_t_type) << "Did not find halide_filter_metadata_t in initial module";
@@ -506,6 +513,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
+
+    device_interface_t_type = module->getTypeByName("struct.halide_device_interface_t");
+    internal_assert(scalar_value_t_type) << "Did not find halide_device_interface_t in initial module";
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
@@ -811,6 +821,7 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
         ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero),
+        ConstantExpr::getInBoundsGetElementPtr(storage, zero),
         scalar_value_t_type->getPointerTo());
 }
 
@@ -1026,14 +1037,14 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
-void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
+void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *buffer) {
     // Make sure the buffer object itself is not null
     create_assertion(builder->CreateIsNotNull(buffer),
                      Call::make(Int(32), "halide_error_buffer_argument_is_null",
                                 {name}, Call::Extern));
 
     Value *host_ptr = buffer_host(buffer);
-    Value *dev_ptr = buffer_dev(buffer);
+    Value *device_ptr = buffer_device(buffer);
 
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
@@ -1043,47 +1054,54 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     sym_push(name + ".buffer", buffer);
 
     sym_push(name + ".host", host_ptr);
-    sym_push(name + ".dev", dev_ptr);
+    sym_push(name + ".device", device_ptr);
     Value *nullity_test = builder->CreateAnd(builder->CreateIsNull(host_ptr),
-                                             builder->CreateIsNull(dev_ptr));
-    sym_push(name + ".host_and_dev_are_null", nullity_test);
-    sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
-    sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
-    sym_push(name + ".extent.0", buffer_extent(buffer, 0));
-    sym_push(name + ".extent.1", buffer_extent(buffer, 1));
-    sym_push(name + ".extent.2", buffer_extent(buffer, 2));
-    sym_push(name + ".extent.3", buffer_extent(buffer, 3));
-    sym_push(name + ".stride.0", buffer_stride(buffer, 0));
-    sym_push(name + ".stride.1", buffer_stride(buffer, 1));
-    sym_push(name + ".stride.2", buffer_stride(buffer, 2));
-    sym_push(name + ".stride.3", buffer_stride(buffer, 3));
-    sym_push(name + ".min.0", buffer_min(buffer, 0));
-    sym_push(name + ".min.1", buffer_min(buffer, 1));
-    sym_push(name + ".min.2", buffer_min(buffer, 2));
-    sym_push(name + ".min.3", buffer_min(buffer, 3));
-    sym_push(name + ".elem_size", buffer_elem_size(buffer));
+                                             builder->CreateIsNull(device_ptr));
+    sym_push(name + ".host_and_device_are_null", nullity_test);
+    sym_push(name + ".host_dirty", buffer_get_flag(buffer, halide_buffer_t::flag_host_dirty));
+    sym_push(name + ".device_dirty", buffer_get_flag(buffer, halide_buffer_t::flag_device_dirty));
+    sym_push(name + ".type.code", buffer_type_code(buffer));
+    sym_push(name + ".type.bits", buffer_type_bits(buffer));
+    sym_push(name + ".type.lanes", buffer_type_lanes(buffer));
+    sym_push(name + ".type.bytes", buffer_type_bytes(buffer));
+    for (int i = 0; i < dimensions; i++) {
+        string d = std::to_string(i);
+        sym_push(name + ".extent." + d, buffer_extent(buffer, i));
+        sym_push(name + ".stride." + d, buffer_stride(buffer, i));
+        sym_push(name + ".min." + d, buffer_min(buffer, i));
+    }
 }
 
-void CodeGen_LLVM::pop_buffer(const string &name) {
+void CodeGen_LLVM::pop_buffer(const string &name, int dimensions) {
     sym_pop(name + ".buffer");
     sym_pop(name + ".host");
-    sym_pop(name + ".dev");
-    sym_pop(name + ".host_and_dev_are_null");
+    sym_pop(name + ".device");
+    sym_pop(name + ".host_and_device_are_null");
     sym_pop(name + ".host_dirty");
-    sym_pop(name + ".dev_dirty");
-    sym_pop(name + ".extent.0");
-    sym_pop(name + ".extent.1");
-    sym_pop(name + ".extent.2");
-    sym_pop(name + ".extent.3");
-    sym_pop(name + ".stride.0");
-    sym_pop(name + ".stride.1");
-    sym_pop(name + ".stride.2");
-    sym_pop(name + ".stride.3");
-    sym_pop(name + ".min.0");
-    sym_pop(name + ".min.1");
-    sym_pop(name + ".min.2");
-    sym_pop(name + ".min.3");
-    sym_pop(name + ".elem_size");
+    sym_pop(name + ".device_dirty");
+    sym_pop(name + ".type.code");
+    sym_pop(name + ".type.bits");
+    sym_pop(name + ".type.bytes");
+    sym_pop(name + ".type.lanes");
+    for (int i = 0; i < dimensions; i++) {
+        string d = std::to_string(i);
+        sym_pop(name + ".extent." + d);
+        sym_pop(name + ".stride." + d);
+        sym_pop(name + ".min." + d);
+    }
+}
+
+llvm::Value *CodeGen_LLVM::create_gep(llvm::Type *t, llvm::Value *obj, std::vector<int> field) {
+    vector<llvm::Value *> args;
+    for (int i : field) {
+        args.push_back(ConstantInt::get(i32_t, i));
+    }
+    llvm::Value *result;
+    result = builder->CreateInBoundsGEP(
+        t,
+        obj,
+        args);
+    return result;
 }
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
@@ -1091,16 +1109,33 @@ Value *CodeGen_LLVM::buffer_host(Value *buffer) {
     return builder->CreateLoad(buffer_host_ptr(buffer));
 }
 
-Value *CodeGen_LLVM::buffer_dev(Value *buffer) {
-    return builder->CreateLoad(buffer_dev_ptr(buffer));
+Value *CodeGen_LLVM::buffer_device(Value *buffer) {
+    return builder->CreateLoad(buffer_device_ptr(buffer));
 }
 
-Value *CodeGen_LLVM::buffer_host_dirty(Value *buffer) {
-    return builder->CreateLoad(buffer_host_dirty_ptr(buffer));
+Value *CodeGen_LLVM::buffer_device_interface(Value *buffer) {
+    return builder->CreateLoad(buffer_device_interface_ptr(buffer));
 }
 
-Value *CodeGen_LLVM::buffer_dev_dirty(Value *buffer) {
-    return builder->CreateLoad(buffer_dev_dirty_ptr(buffer));
+Value *CodeGen_LLVM::buffer_flags(Value *buffer) {
+    return builder->CreateLoad(buffer_flags_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_get_flag(Value *buffer, halide_buffer_t::buffer_flags flag) {
+    Value *flags = buffer_flags(buffer);
+    flags = builder->CreateAnd(flags, ConstantInt::get(i64_t, 1 << flag));
+    return builder->CreateICmpNE(flags, ConstantInt::get(i64_t, 0));
+}
+
+void CodeGen_LLVM::buffer_set_flag(Value *buffer, halide_buffer_t::buffer_flags flag, bool value) {
+    Value *flags_ptr = buffer_flags_ptr(buffer);
+    Value *flags = builder->CreateLoad(flags_ptr);
+    if (value) {
+        flags = builder->CreateOr(flags, ConstantInt::get(i64_t, flag));
+    } else {
+        flags = builder->CreateAnd(flags, ConstantInt::get(i64_t, ~(flag)));
+    }
+    builder->CreateStore(flags, flags_ptr);
 }
 
 Value *CodeGen_LLVM::buffer_extent(Value *buffer, int i) {
@@ -1115,89 +1150,84 @@ Value *CodeGen_LLVM::buffer_min(Value *buffer, int i) {
     return builder->CreateLoad(buffer_min_ptr(buffer, i));
 }
 
-Value *CodeGen_LLVM::buffer_elem_size(Value *buffer) {
-    return builder->CreateLoad(buffer_elem_size_ptr(buffer));
+Value *CodeGen_LLVM::buffer_type_code(Value *buffer) {
+    return builder->CreateLoad(buffer_type_code_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_type_bits(Value *buffer) {
+    return builder->CreateLoad(buffer_type_bits_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_type_lanes(Value *buffer) {
+    return builder->CreateLoad(buffer_type_lanes_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_type_bytes(Value *buffer) {
+    Value *bits = buffer_type_bits(buffer);
+    return builder->CreateAShr(bits, ConstantInt::get(bits->getType(), 8));
+}
+
+Value *CodeGen_LLVM::buffer_dimensions(Value *buffer) {
+    return builder->CreateLoad(buffer_dimensions_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_dim_array(Value *buffer) {
+    return builder->CreateLoad(buffer_dim_array_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_device_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 0});
+}
+
+Value *CodeGen_LLVM::buffer_device_interface_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 1});
 }
 
 Value *CodeGen_LLVM::buffer_host_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        1,
-        "buf_host");
+    return create_gep(buffer_t_type, buffer, {0, 2});
 }
 
-Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        0,
-        "buf_dev");
+Value *CodeGen_LLVM::buffer_flags_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 3});
 }
 
-Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        6,
-        "buffer_host_dirty");
+Value *CodeGen_LLVM::buffer_type_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 4});
 }
 
-Value *CodeGen_LLVM::buffer_dev_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        7,
-        "buffer_dev_dirty");
+Value *CodeGen_LLVM::buffer_type_code_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 4, 0});
 }
 
-Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32_t, 0);
-    llvm::Value *field = ConstantInt::get(i32_t, 2);
-    llvm::Value *idx = ConstantInt::get(i32_t, i);
-    vector<llvm::Value *> args = {zero, field, idx};
-    return builder->CreateInBoundsGEP(
-        buffer_t_type,
-        buffer,
-        args,
-        "buf_extent");
+Value *CodeGen_LLVM::buffer_type_bits_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 4, 1});
 }
 
-Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32_t, 0);
-    llvm::Value *field = ConstantInt::get(i32_t, 3);
-    llvm::Value *idx = ConstantInt::get(i32_t, i);
-    vector<llvm::Value *> args = {zero, field, idx};
-    return builder->CreateInBoundsGEP(
-        buffer_t_type,
-        buffer,
-        args,
-        "buf_stride");
+Value *CodeGen_LLVM::buffer_type_lanes_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 4, 2});
+}
+
+Value *CodeGen_LLVM::buffer_dimensions_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 5});
+}
+
+Value *CodeGen_LLVM::buffer_dim_array_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 6});
 }
 
 Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32_t, 0);
-    llvm::Value *field = ConstantInt::get(i32_t, 4);
-    llvm::Value *idx = ConstantInt::get(i32_t, i);
-    vector<llvm::Value *> args = {zero, field, idx};
-    return builder->CreateInBoundsGEP(
-        buffer_t_type,
-        buffer,
-        args,
-        "buf_min");
+    Value *dim_array = buffer_dim_array(buffer);
+    return create_gep(dimension_t_type, dim_array, {i, 0});
 }
 
-Value *CodeGen_LLVM::buffer_elem_size_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        5,
-        "buf_elem_size");
+Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
+    Value *dim_array = buffer_dim_array(buffer);
+    return create_gep(dimension_t_type, dim_array, {i, 1});
+}
+
+Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
+    Value *dim_array = buffer_dim_array(buffer);
+    return create_gep(dimension_t_type, dim_array, {i, 2});
 }
 
 Value *CodeGen_LLVM::codegen(Expr e) {
@@ -3043,6 +3073,7 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, zeros);
+    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, zeros);
     return ptr;
 }
 

@@ -495,25 +495,31 @@ public:
                     Function input(args[j].func);
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
-                        Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                              {null_handle, make_zero(input.output_types()[k])},
-                                              Call::Intrinsic);
+                        vector<Expr> args = {null_handle, make_zero(input.output_types()[k])};
+                        for (int i = 0; i < input.dimensions()*3; i++) {
+                            args.push_back(0);
+                        }
+                        Expr buf = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t,
+                                              args, Call::Intrinsic);
+
                         lets.push_back(make_pair(name, buf));
-                        bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), name));
+                        bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
                         buffers_to_annotate.push_back(bounds_inference_args.back());
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
                     BufferPtr b = args[j].buffer;
                     string name = args[j].is_image_param() ? p.name() : b.name();
+                    int dims = args[j].is_image_param() ? p.dimensions() : b.dimensions();
 
-                    Expr in_buf = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
+                    Expr in_buf = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
-                    Expr query_buf = Call::make(type_of<struct buffer_t *>(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
+
+                    Expr query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::copy_buffer_t, {in_buf, dims}, Call::Intrinsic);
                     lets.push_back(make_pair(query_name, query_buf));
-                    Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
+                    Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
                     // we create a copy with copy_buffer_t (not msan-aware), so we need to annotate it as initialized.
@@ -538,11 +544,11 @@ public:
                     output_buffer_t_args.push_back(0); // stride
                 }
 
-                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+                Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t,
                                                   output_buffer_t_args, Call::Intrinsic);
 
                 string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
-                bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
+                bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
                 buffers_to_annotate.push_back(bounds_inference_args.back());
@@ -555,7 +561,7 @@ public:
                 for (const auto &buffer: buffers_to_annotate) {
                     // Return type is really 'void', but no way to represent that in our IR.
                     // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                    Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
+                    Expr sizeof_buffer_t((uint64_t) sizeof(halide_buffer_t));
                     Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
                     if (annotate.defined()) {
                         annotate = Block::make(annotate, mark_buffer);
@@ -971,6 +977,7 @@ public:
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
     }
+
 };
 
 

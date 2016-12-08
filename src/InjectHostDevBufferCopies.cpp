@@ -86,9 +86,9 @@ class FindBuffersToTrack : public IRVisitor {
     }
 
     void visit(const LetStmt *op) {
-        // The let that defines the buffer_t is not interesting, and
-        // nothing before that let could be interesting either
-        // (because the buffer doesn't exist yet).
+        // The let that defines the halide_buffer_t is not
+        // interesting, and nothing before that let could be
+        // interesting either (because the buffer doesn't exist yet).
         const Call *c = op->value.as<Call>();
         if (ends_with(op->name, ".buffer") &&
             c && c->name == Call::create_buffer_t) {
@@ -195,7 +195,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api, bool is_device_and_host) {
-        Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
+        Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
         Stmt device_malloc = call_extern_and_assert(is_device_and_host ? "halide_device_and_host_malloc"
                                                                        : "halide_device_malloc",
@@ -216,7 +216,7 @@ class InjectBufferCopies : public IRMutator {
     Stmt make_buffer_copy(CopyDirection direction, string buf_name, DeviceAPI target_device_api) {
         internal_assert(direction == ToHost || direction == ToDevice) << "make_buffer_copy caller logic error.\n";
         std::vector<Expr> args;
-        Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
+        Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name + ".buffer");
         args.push_back(buffer);
         if (direction == ToDevice) {
             args.push_back(make_device_interface_call(target_device_api));
@@ -333,20 +333,19 @@ class InjectBufferCopies : public IRMutator {
                 debug(4) << "Invalidating host_current\n";
             }
 
-            Expr buffer = Variable::make(type_of<struct buffer_t *>(), i.first + ".buffer");
-            Expr t = make_one(UInt(8));
+            Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), i.first + ".buffer");
 
             if (host_wrote) {
                 debug(4) << "Setting host dirty for " << i.first << "\n";
                 // If we just invalidated the dev pointer, we need to set the host dirty bit.
-                Expr set_host_dirty = Call::make(Int(32), Call::set_host_dirty, {buffer, t}, Call::Intrinsic);
+                Expr set_host_dirty = Call::make(Int(32), Call::set_host_dirty, {buffer}, Call::Intrinsic);
                 s = Block::make(s, Evaluate::make(set_host_dirty));
             }
 
             if (device_wrote) {
                 // If we just invalidated the host pointer, we need to set the dev dirty bit.
-                Expr set_dev_dirty = Call::make(Int(32), Call::set_dev_dirty, {buffer, t}, Call::Intrinsic);
-                s = Block::make(s, Evaluate::make(set_dev_dirty));
+                Expr set_device_dirty = Call::make(Int(32), Call::set_device_dirty, {buffer}, Call::Intrinsic);
+                s = Block::make(s, Evaluate::make(set_device_dirty));
             }
 
             // Clear the pending action bits.
@@ -608,7 +607,7 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(create_buffer_t && create_buffer_t->name == Call::create_buffer_t);
                 vector<Expr> args = create_buffer_t->args;
                 args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                value = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
+                value = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
                 stmt = LetStmt::make(op->name, value, op->body);
             }
         }

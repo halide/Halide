@@ -75,13 +75,6 @@ Stmt add_image_checks(Stmt s,
 
     // Add the output buffer(s).
     for (Function f : outputs) {
-        // Check that their dimensionality
-        // doesn't exceed what buffer_t can handle.
-        user_assert(f.dimensions() <= 4)
-            << "Output Func " << f.name()
-            << " has " << f.dimensions()
-            << " dimensions. Output buffers may not currently have more than four dimensions.\n";
-
         for (size_t i = 0; i < f.values().size(); i++) {
             FindBuffers::Result output_buffer;
             output_buffer.type = f.values()[i].type();
@@ -124,7 +117,7 @@ Stmt add_image_checks(Stmt s,
     for (const pair<string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
 
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < buf.second.dimensions; i++) {
             string dim = std::to_string(i);
 
             Expr min_required = Variable::make(Int(32), name + ".min." + dim + ".required");
@@ -198,7 +191,7 @@ Stmt add_image_checks(Stmt s,
             for (size_t i = 0; i < extern_users.size(); i++) {
                 const string &extern_user = extern_users[i];
                 Box query_box;
-                Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
+                Expr query_buf = Variable::make(type_of<struct halide_buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::extract_buffer_min,
@@ -213,7 +206,7 @@ Stmt add_image_checks(Stmt s,
 
         // An expression returning whether or not we're in inference mode
         ReductionDomain rdom;
-        Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null", image, param, rdom);
+        Expr inference_mode = Variable::make(UInt(1), name + ".host_and_device_are_null", image, param, rdom);
 
         maybe_return_condition = maybe_return_condition || inference_mode;
 
@@ -221,17 +214,24 @@ Stmt add_image_checks(Stmt s,
         string error_name = (is_output_buffer ? "Output" : "Input");
         error_name += " buffer " + name;
 
-        // Check the elem size matches the internally-understood type
+        // Check the type matches the internally-understood type
         {
-            string elem_size_name = name + ".elem_size";
-            Expr elem_size = Variable::make(Int(32), elem_size_name, image, param, rdom);
-            int correct_size = type.bytes();
-            std::ostringstream type_name;
-            type_name << type;
-            Expr error = Call::make(Int(32), "halide_error_bad_elem_size",
-                                    {error_name, type_name.str(), elem_size, correct_size},
+            string type_code_name = name + ".type.code";
+            string type_bits_name = name + ".type.bits";
+            string type_lanes_name = name + ".type.lanes";
+            Expr type_code = Variable::make(UInt(8), type_code_name, image, param, rdom);
+            Expr type_bits = Variable::make(UInt(8), type_bits_name, image, param, rdom);
+            Expr type_lanes = Variable::make(UInt(16), type_lanes_name, image, param, rdom);
+            Expr error = Call::make(Int(32), "halide_error_bad_type",
+                                    {error_name,
+                                     type_code, make_const(UInt(8), (int)type.code()),
+                                     type_bits, make_const(UInt(8), type.bits()),
+                                     type_lanes, make_const(UInt(16), type.lanes())},
                                     Call::Extern);
-            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error));
+            asserts_elem_size.push_back(
+                AssertStmt::make((type_code == type.code()) &&
+                                 (type_bits == type.bits()) &&
+                                 (type_lanes == type.lanes()), error));
         }
 
         if (touched.maybe_unused()) {
@@ -337,8 +337,8 @@ Stmt add_image_checks(Stmt s,
         }
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
-        Expr buffer_name_expr = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
-        vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
+        Expr buffer_name_expr = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+        vector<Expr> args = {buffer_name_expr, make_zero(type)};
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
             args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));

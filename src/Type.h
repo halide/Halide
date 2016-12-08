@@ -128,6 +128,7 @@ template<> struct halide_c_type_to_name<uint32_t> { static const bool known_type
 template<> struct halide_c_type_to_name<float> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "float"}; } };
 template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
 template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
+template<> struct halide_c_type_to_name<struct halide_buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "halide_buffer_t"}; } };
 
 // You can make arbitrary user-defined types be "Known" by adding your own specialization of 
 // halide_c_type_to_name in your code; this is useful for making Param<> arguments for Generators

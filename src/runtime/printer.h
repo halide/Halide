@@ -89,6 +89,29 @@ public:
         return *this;
     }
 
+    Printer &operator<<(const halide_type_t &t) {
+        switch(t.code) {
+        case halide_type_int:
+            dst = halide_string_to_string(dst, end, "int");
+            break;
+        case halide_type_uint:
+            dst = halide_string_to_string(dst, end, "uint");
+            break;
+        case halide_type_float:
+            dst = halide_string_to_string(dst, end, "float");
+            break;
+        case halide_type_handle:
+            dst = halide_string_to_string(dst, end, "handle");
+            break;
+        }
+        halide_uint64_to_string(dst, end, t.bits, 1);
+        if (t.lanes != 1) {
+            dst = halide_string_to_string(dst, end, "x");
+            dst = halide_uint64_to_string(dst, end, t.lanes, 1);
+        }
+        return *this;
+    }
+
     // Use it like a stringstream.
     const char *str() {
         if (buf) {

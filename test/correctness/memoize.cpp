@@ -16,12 +16,12 @@ using namespace Halide;
 
 int call_count = 0;
 
-extern "C" DLLEXPORT int count_calls(buffer_t *out) {
+extern "C" DLLEXPORT int count_calls(halide_buffer_t *out) {
     if (out->host) {
         call_count++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = 42;
+        for (int32_t i = 0; i < out->dim[0].extent; i++) {
+            for (int32_t j = 0; j < out->dim[1].extent; j++) {
+                out->host[i * out->dim[0].stride + j * out->dim[1].stride] = 42;
             }
         }
     }
@@ -30,12 +30,12 @@ extern "C" DLLEXPORT int count_calls(buffer_t *out) {
 
 int call_count_with_arg = 0;
 
-extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, buffer_t *out) {
+extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, halide_buffer_t *out) {
     if (out->host) {
         call_count_with_arg++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = val;
+        for (int32_t i = 0; i < out->dim[0].extent; i++) {
+            for (int32_t j = 0; j < out->dim[1].extent; j++) {
+                out->host[i * out->dim[0].stride + j * out->dim[1].stride] = val;
             }
         }
     }
@@ -44,12 +44,12 @@ extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, buffer_t *out) {
 
 int call_count_with_arg_parallel[8];
 
-extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, buffer_t *out) {
+extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, halide_buffer_t *out) {
     if (out->host) {
-        call_count_with_arg_parallel[out->min[2]]++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = val;
+        call_count_with_arg_parallel[out->dim[2].min]++;
+        for (int32_t i = 0; i < out->dim[0].extent; i++) {
+            for (int32_t j = 0; j < out->dim[1].extent; j++) {
+                out->host[i * out->dim[0].stride + j * out->dim[1].stride] = val;
             }
         }
     }
@@ -58,21 +58,18 @@ extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, buffer_t *ou
 
 int call_count_staged[4];
 
-extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t *in, buffer_t *out) {
+extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_buffer_t *in, halide_buffer_t *out) {
     if (in->host == nullptr) {
-        for (int i = 0; i < 4; i++) {
-            in->min[i] = out->min[i];
-            in->extent[i] = out->extent[i];
-            in->stride[i] = out->stride[i];
+        for (int i = 0; i < out->dimensions; i++) {
+            in->dim[i] = out->dim[i];
         }
-        in->elem_size = out->elem_size;
     } else if (out->host) {
         assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] =
-                  in->host[i * in->stride[0] + j * in->stride[1]] + val;
+        for (int32_t i = 0; i < out->dim[0].extent; i++) {
+            for (int32_t j = 0; j < out->dim[1].extent; j++) {
+                out->host[i * out->dim[0].stride + j * out->dim[1].stride] =
+                  in->host[i * in->dim[0].stride + j * in->dim[1].stride] + val;
             }
         }
     }
