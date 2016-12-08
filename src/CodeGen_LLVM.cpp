@@ -3511,6 +3511,13 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
 
     vector<Value *> vecs = v;
 
+    // Force them all to be actual vectors
+    for (Value *&val : vecs) {
+        if (!val->getType()->isVectorTy()) {
+            val = create_broadcast(val, 1);
+        }
+    }
+
     while (vecs.size() > 1) {
         vector<Value *> new_vecs;
 
