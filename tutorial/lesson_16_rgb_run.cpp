@@ -19,54 +19,59 @@
 
 #include "clock.h"
 
-buffer_t make_planar_rgb_image(int width, int height) {
-    buffer_t buf = {0};
+halide_buffer_t make_planar_rgb_image(int width, int height) {
+    halide_buffer_t buf = {0};
     // Allocate the memory required and clear it
-    buf.host = (uint8_t *)malloc(width * height * 3);
-    memset(buf.host, 0, width * height * 3);
+    buf.host = (uint8_t *)calloc(width * height * 3, sizeof(uint8_t));
     // This will be an 8-bit image.
-    buf.elem_size = 1;
+    buf.type = halide_type_of<uint8_t>();
+
+    // With three dimensions
+    buf.dimensions = 3;
+    buf.dim = (halide_dimension_t *)calloc(3, sizeof(halide_dimension_t));
 
     // Set the sizes of each dimension
-    buf.extent[0] = width;
-    buf.extent[1] = height;
+    buf.dim[0].extent = width;
+    buf.dim[1].extent = height;
     // There are three color channels
-    buf.extent[2] = 3;
+    buf.dim[2].extent = 3;
 
     // Planar layout means that the stride in x is 1
-    buf.stride[0] = 1;
+    buf.dim[0].stride = 1;
     // The stride in y is the width of the image
-    buf.stride[1] = width;
+    buf.dim[1].stride = width;
     // And the stride in c is width times height. This means that to
     // get to the next color channel, one should step forwards
     // width*height elements in memory.
-    buf.stride[2] = width*height;
+    buf.dim[2].stride = width*height;
 
     return buf;
 }
 
-buffer_t make_interleaved_rgb_image(int width, int height) {
-    buffer_t buf = {0};
+halide_buffer_t make_interleaved_rgb_image(int width, int height) {
+    halide_buffer_t buf = {0};
     // This code will be the same as making a planar rgb image ...
-    buf.host = (uint8_t *)malloc(width * height * 3);
-    memset(buf.host, 0, width * height * 3);
-    buf.elem_size = 1;
-    buf.extent[0] = width;
-    buf.extent[1] = height;
-    buf.extent[2] = 3;
+    buf.host = (uint8_t *)calloc(width * height * 3, sizeof(uint8_t));
+    buf.type = halide_type_of<uint8_t>();
+    buf.dimensions = 3;
+    buf.dim = (halide_dimension_t *)calloc(3, sizeof(halide_dimension_t));
+    buf.dim[0].extent = width;
+    buf.dim[1].extent = height;
+    buf.dim[2].extent = 3;
 
     // ... except we'll set up the strides differently.
     // Interleaved layout means that the stride in x is 3
-    buf.stride[0] = 3;
+    buf.dim[0].stride = 3;
     // The stride in y is three times the width of the image
-    buf.stride[1] = 3*width;
+    buf.dim[1].stride = 3*width;
     // And the stride in c is 1.
-    buf.stride[2] = 1;
+    buf.dim[2].stride = 1;
 
     return buf;
 }
 
-void destroy_image(buffer_t *b) {
+void destroy_image(halide_buffer_t *b) {
+    free(b->dim);
     free(b->host);
     b->host = NULL;
 }
@@ -88,10 +93,10 @@ int main(int argc, char **argv) {
 
     // Let's make some images stored with interleaved and planar
     // memory, and buffer_ts that describe them.
-    buffer_t planar_input = make_planar_rgb_image(1024, 768);
-    buffer_t planar_output = make_planar_rgb_image(1024, 768);
-    buffer_t interleaved_input = make_interleaved_rgb_image(1024, 768);
-    buffer_t interleaved_output = make_interleaved_rgb_image(1024, 768);
+    halide_buffer_t planar_input = make_planar_rgb_image(1024, 768);
+    halide_buffer_t planar_output = make_planar_rgb_image(1024, 768);
+    halide_buffer_t interleaved_input = make_interleaved_rgb_image(1024, 768);
+    halide_buffer_t interleaved_output = make_interleaved_rgb_image(1024, 768);
 
     // We'll now call the various functions we compiled and check the
     // performance of each.

@@ -14,8 +14,13 @@ int main(int argc, char **argv) {
     uint8_t c[4096];
     memset(c, 42, sizeof(c));
 
-    buffer_t buf;
-    memset(&buf, 0, sizeof(buf));
+    halide_buffer_t buf = {0};
+    halide_dimension_t shape[] = {{0, 4096, 1},
+                                  {0, 4096, 0},
+                                  {0, 256, 0}};
+    buf.dim = shape;
+    buf.dimensions = 3;
+    buf.type = UInt(8);
     buf.host = c;
     buf.extent[0] = 4096;
     buf.extent[1] = 4096;

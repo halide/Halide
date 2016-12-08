@@ -532,6 +532,7 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   noos \
+  old_buffer_t \
   opencl \
   opengl \
   openglcompute \
@@ -596,6 +597,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
+                  $(BUILD_DIR)/initmod.declarations.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
@@ -696,13 +698,16 @@ $(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll
 $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
 	$(LLVM_AS) $(BUILD_DIR)/initmod.$*.ll -o $(BUILD_DIR)/initmod.$*.bc
 
-$(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp $(BUILD_DIR)/initmod.%.bc
-	./$(BIN_DIR)/bitcode2cpp $* < $(BUILD_DIR)/initmod.$*.bc > $@
+$(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/binary2cpp $(BUILD_DIR)/initmod.%.bc
+	./$(BIN_DIR)/binary2cpp initmod_$* < $(BUILD_DIR)/initmod.$*.bc > $@
 
-$(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/bitcode2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
-	./$(BIN_DIR)/bitcode2cpp ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
+$(BUILD_DIR)/initmod.declarations.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/HalideRuntime.h
+	./$(BIN_DIR)/binary2cpp initmod_declarations < $(SRC_DIR)/runtime/HalideRuntime.h > $@
 
-$(BIN_DIR)/bitcode2cpp: $(ROOT_DIR)/tools/bitcode2cpp.cpp
+$(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
+	./$(BIN_DIR)/binary2cpp initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
+
+$(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@-mkdir -p $(BIN_DIR)
 	$(CXX) $< -o $@
 
@@ -813,7 +818,7 @@ WEAK_BUFFER_LINKAGE_FLAGS=
 endif
 
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
-# this test should be usable without either. (Note that this requires an extra 
+# this test should be usable without either. (Note that this requires an extra
 # linker directive on Darwin to ensure halide_weak_device_free() is in fact weak.)
 $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer.cpp $(INCLUDE_DIR)/HalideBuffer.h $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(WEAK_BUFFER_LINKAGE_FLAGS) -o $@

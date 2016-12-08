@@ -9,56 +9,42 @@
 
 namespace {
 
-void init_scalar_buffer(const float *x, buffer_t *buff) {
-    memset((void*)buff, 0, sizeof(buffer_t));
+void init_scalar_buffer(const float *x, halide_nd_buffer_t<1> *buff) {
     buff->host = (uint8_t*)const_cast<float*>(x);
-    buff->extent[0] = 1;
-    buff->stride[0] = 1;
-    buff->elem_size = sizeof(float);
+    buff->dim[0] = halide_dimension_t(0, 1, 1);
+    buff->type = halide_type_of<float>();
 }
 
-void init_scalar_buffer(const double *x, buffer_t *buff) {
-    memset((void*)buff, 0, sizeof(buffer_t));
+void init_scalar_buffer(const double *x, halide_nd_buffer_t<1> *buff) {
     buff->host = (uint8_t*)const_cast<double*>(x);
-    buff->extent[0] = 1;
-    buff->stride[0] = 1;
-    buff->elem_size = sizeof(double);
+    buff->dim[0] = halide_dimension_t(0, 1, 1);
+    buff->type = halide_type_of<double>();
 }
 
-void init_vector_buffer(const int N, const float *x, const int incx, buffer_t *buff) {
-    memset((void*)buff, 0, sizeof(buffer_t));
+void init_vector_buffer(const int N, const float *x, const int incx, halide_nd_buffer_t<1> *buff) {
     buff->host = (uint8_t*)const_cast<float*>(x);
-    buff->extent[0] = N;
-    buff->stride[0] = incx;
-    buff->elem_size = sizeof(float);
+    buff->dim[0] = halide_dimension_t(0, N, incx);
+    buff->type = halide_type_of<float>();
 }
 
-void init_vector_buffer(const int N, const double *x, const int incx, buffer_t *buff) {
-    memset((void*)buff, 0, sizeof(buffer_t));
+void init_vector_buffer(const int N, const double *x, const int incx, halide_nd_buffer_t<1> *buff) {
     buff->host = (uint8_t*)const_cast<double*>(x);
-    buff->extent[0] = N;
-    buff->stride[0] = incx;
-    buff->elem_size = sizeof(double);
+    buff->dim[0] = halide_dimension_t(0, N, incx);
+    buff->type = halide_type_of<double>();
 }
 
-void init_matrix_buffer(const int M, const int N, const float *A, const int lda, buffer_t *buff) {
-    memset((void*)buff, 0, sizeof(buffer_t));
+void init_matrix_buffer(const int M, const int N, const float *A, const int lda, halide_nd_buffer_t<2> *buff) {
     buff->host = (uint8_t*)const_cast<float*>(A);
-    buff->extent[0] = M;
-    buff->extent[1] = N;
-    buff->stride[0] = 1;
-    buff->stride[1] = lda;
-    buff->elem_size = sizeof(float);
+    buff->dim[0] = halide_dimension_t(0, M, 1);
+    buff->dim[1] = halide_dimension_t(0, N, lda);
+    buff->type = halide_type_of<float>();
 }
 
-void init_matrix_buffer(const int M, const int N, const double *A, const int lda, buffer_t *buff) {
-    memset((void*)buff, 0, sizeof(buffer_t));
+void init_matrix_buffer(const int M, const int N, const double *A, const int lda, halide_nd_buffer_t<2> *buff) {
     buff->host = (uint8_t*)const_cast<double*>(A);
-    buff->extent[0] = M;
-    buff->extent[1] = N;
-    buff->stride[0] = 1;
-    buff->stride[1] = lda;
-    buff->elem_size = sizeof(double);
+    buff->dim[0] = halide_dimension_t(0, M, 1);
+    buff->dim[1] = halide_dimension_t(0, N, lda);
+    buff->type = halide_type_of<double>();
 }
 
 }
@@ -73,7 +59,7 @@ extern "C" {
 
 void hblas_scopy(const int N, const float *x, const int incx,
                  float *y, const int incy) {
-    buffer_t buff_x, buff_y;
+    halide_nd_buffer_t<1> buff_x, buff_y;
     init_vector_buffer(N, x, incx, &buff_x);
     init_vector_buffer(N, y, incy, &buff_y);
     assert_no_error(halide_scopy(&buff_x, &buff_y));
@@ -81,7 +67,7 @@ void hblas_scopy(const int N, const float *x, const int incx,
 
 void hblas_dcopy(const int N, const double *x, const int incx,
                  double *y, const int incy) {
-    buffer_t buff_x, buff_y;
+    halide_nd_buffer_t<1> buff_x, buff_y;
     init_vector_buffer(N, x, incx, &buff_x);
     init_vector_buffer(N, y, incy, &buff_y);
     assert_no_error(halide_dcopy(&buff_x, &buff_y));
@@ -92,13 +78,13 @@ void hblas_dcopy(const int N, const double *x, const int incx,
 //////////
 
 void hblas_sscal(const int N, const float a, float *x, const int incx) {
-    buffer_t buff_x;
+    halide_nd_buffer_t<1> buff_x;
     init_vector_buffer(N, x, incx, &buff_x);
     assert_no_error(halide_sscal(a, &buff_x));
 }
 
 void hblas_dscal(const int N, const double a, double *x, const int incx) {
-    buffer_t buff_x;
+    halide_nd_buffer_t<1> buff_x;
     init_vector_buffer(N, x, incx, &buff_x);
     assert_no_error(halide_dscal(a, &buff_x));
 }
@@ -109,7 +95,7 @@ void hblas_dscal(const int N, const double a, double *x, const int incx) {
 
 void hblas_saxpy(const int N, const float a, const float *x, const int incx,
                  float *y, const int incy) {
-    buffer_t buff_x, buff_y;
+    halide_nd_buffer_t<1> buff_x, buff_y;
     init_vector_buffer(N, x, incx, &buff_x);
     init_vector_buffer(N, y, incy, &buff_y);
     assert_no_error(halide_saxpy(a, &buff_x, &buff_y));
@@ -117,7 +103,7 @@ void hblas_saxpy(const int N, const float a, const float *x, const int incx,
 
 void hblas_daxpy(const int N, const double a, const double *x, const int incx,
                  double *y, const int incy) {
-    buffer_t buff_x, buff_y;
+    halide_nd_buffer_t<1> buff_x, buff_y;
     init_vector_buffer(N, x, incx, &buff_x);
     init_vector_buffer(N, y, incy, &buff_y);
     assert_no_error(halide_daxpy(a, &buff_x, &buff_y));
@@ -130,7 +116,7 @@ void hblas_daxpy(const int N, const double a, const double *x, const int incx,
 float hblas_sdot(const int N, const float *x, const int incx,
                  const float *y, const int incy) {
     float result;
-    buffer_t buff_x, buff_y, buff_dot;
+    halide_nd_buffer_t<1> buff_x, buff_y, buff_dot;
     init_vector_buffer(N, x, incx, &buff_x);
     init_vector_buffer(N, y, incy, &buff_y);
     init_scalar_buffer(&result, &buff_dot);
@@ -141,7 +127,7 @@ float hblas_sdot(const int N, const float *x, const int incx,
 double hblas_ddot(const int N, const double *x, const int incx,
                   const double *y, const int incy) {
     double result;
-    buffer_t buff_x, buff_y, buff_dot;
+    halide_nd_buffer_t<1> buff_x, buff_y, buff_dot;
     init_vector_buffer(N, x, incx, &buff_x);
     init_vector_buffer(N, y, incy, &buff_y);
     init_scalar_buffer(&result, &buff_dot);
@@ -155,7 +141,7 @@ double hblas_ddot(const int N, const double *x, const int incx,
 
 float hblas_snrm2(const int N, const float *x, const int incx) {
     float result;
-    buffer_t buff_x, buff_nrm;
+    halide_nd_buffer_t<1> buff_x, buff_nrm;
     init_vector_buffer(N, x, incx, &buff_x);
     init_scalar_buffer(&result, &buff_nrm);
     assert_no_error(halide_sdot(&buff_x, &buff_x, &buff_nrm));
@@ -164,7 +150,7 @@ float hblas_snrm2(const int N, const float *x, const int incx) {
 
 double hblas_dnrm2(const int N, const double *x, const int incx) {
     double result;
-    buffer_t buff_x, buff_nrm;
+    halide_nd_buffer_t<1> buff_x, buff_nrm;
     init_vector_buffer(N, x, incx, &buff_x);
     init_scalar_buffer(&result, &buff_nrm);
     assert_no_error(halide_ddot(&buff_x, &buff_x, &buff_nrm));
@@ -177,7 +163,7 @@ double hblas_dnrm2(const int N, const double *x, const int incx) {
 
 float hblas_sasum(const int N, const float *x, const int incx) {
     float result;
-    buffer_t buff_x, buff_sum;
+    halide_nd_buffer_t<1> buff_x, buff_sum;
     init_vector_buffer(N, x, incx, &buff_x);
     init_scalar_buffer(&result, &buff_sum);
     assert_no_error(halide_sasum(&buff_x, &buff_sum));
@@ -186,7 +172,7 @@ float hblas_sasum(const int N, const float *x, const int incx) {
 
 double hblas_dasum(const int N, const double *x, const int incx) {
     double result;
-    buffer_t buff_x, buff_sum;
+    halide_nd_buffer_t<1> buff_x, buff_sum;
     init_vector_buffer(N, x, incx, &buff_x);
     init_scalar_buffer(&result, &buff_sum);
     assert_no_error(halide_dasum(&buff_x, &buff_sum));
@@ -209,7 +195,8 @@ void hblas_sgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
         t = true; break;
     };
 
-    buffer_t buff_A, buff_x, buff_y;
+    halide_nd_buffer_t<2> buff_A;
+    halide_nd_buffer_t<1> buff_x, buff_y;
     init_matrix_buffer(M, N, A, lda, &buff_A);
     if (t) {
         init_vector_buffer(M, x, incx, &buff_x);
@@ -234,7 +221,8 @@ void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
         t = true; break;
     };
 
-    buffer_t buff_A, buff_x, buff_y;
+    halide_nd_buffer_t<2> buff_A;
+    halide_nd_buffer_t<1> buff_x, buff_y;
     init_matrix_buffer(M, N, A, lda, &buff_A);
     if (t) {
         init_vector_buffer(M, x, incx, &buff_x);
@@ -255,7 +243,8 @@ void hblas_sger(const enum HBLAS_ORDER order, const int M, const int N,
                 const float alpha, const float *x, const int incx,
                 const float *y, const int incy, float *A, const int lda)
 {
-    buffer_t buff_x, buff_y, buff_A;
+    halide_nd_buffer_t<2> buff_A;
+    halide_nd_buffer_t<1> buff_x, buff_y;
     init_vector_buffer(M, x, incx, &buff_x);
     init_vector_buffer(N, y, incy, &buff_y);
     init_matrix_buffer(M, N, A, lda, &buff_A);
@@ -267,7 +256,8 @@ void hblas_dger(const enum HBLAS_ORDER order, const int M, const int N,
                 const double alpha, const double *x, const int incx,
                 const double *y, const int incy, double *A, const int lda)
 {
-    buffer_t buff_x, buff_y, buff_A;
+    halide_nd_buffer_t<2> buff_A;
+    halide_nd_buffer_t<1> buff_x, buff_y;
     init_vector_buffer(M, x, incx, &buff_x);
     init_vector_buffer(N, y, incy, &buff_y);
     init_matrix_buffer(M, N, A, lda, &buff_A);
@@ -301,7 +291,7 @@ void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA
         tB = true; break;
     };
 
-    buffer_t buff_A, buff_B, buff_C;
+    halide_nd_buffer_t<2> buff_A, buff_B, buff_C;
     if (!tA) {
         init_matrix_buffer(M, K, A, lda, &buff_A);
     } else {
@@ -341,7 +331,7 @@ void hblas_dgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA
         tB = true; break;
     };
 
-    buffer_t buff_A, buff_B, buff_C;
+    halide_nd_buffer_t<2> buff_A, buff_B, buff_C;
     if (!tA) {
         init_matrix_buffer(M, K, A, lda, &buff_A);
     } else {

@@ -169,7 +169,7 @@ private:
             // Promote the type to be a multiple of 8 bits
             Type t = realize->types[idx].with_bits(realize->types[idx].bytes() * 8);
 
-            // Create a buffer_t object for this allocation.
+            // Create a halide_buffer_t object for this allocation.
             vector<Expr> args(dims*3 + 2);
             //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
             Expr first_elem = Load::make(t, buffer_name, 0, BufferPtr(), Parameter());
@@ -180,7 +180,7 @@ private:
                 args[3*i+3] = extent_var[i];
                 args[3*i+4] = stride_var[i];
             }
-            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+            Expr buf = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t,
                                   args, Call::Intrinsic);
             stmt = LetStmt::make(buffer_name + ".buffer",
                                  buf,

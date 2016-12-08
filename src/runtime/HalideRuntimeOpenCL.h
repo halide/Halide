@@ -11,7 +11,7 @@ extern "C" {
  *  Routines specific to the Halide OpenCL runtime.
  */
 
-extern const struct halide_device_interface *halide_opencl_device_interface();
+extern const struct halide_device_interface_t *halide_opencl_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide OpenCL runtime. Do not call them. */
@@ -61,31 +61,31 @@ extern void halide_opencl_set_device_type(const char *n);
  * halide_set_ocl_device_type. */
 extern const char *halide_opencl_get_device_type(void *user_context);
 
-/** Set the underlying cl_mem for a buffer_t. This memory should be
+/** Set the underlying cl_mem for a halide_buffer_t. This memory should be
  * allocated using clCreateBuffer or similar and must have an extent
- * large enough to cover that specified by the buffer_t extent
- * fields. The dev field of the buffer_t must be NULL when this
+ * large enough to cover that specified by the halide_buffer_t extent
+ * fields. The dev field of the halide_buffer_t must be NULL when this
  * routine is called. This call can fail due to running out of memory
  * or being passed an invalid device pointer. The device and host
  * dirty bits are left unmodified. */
-extern int halide_opencl_wrap_cl_mem(void *user_context, struct buffer_t *buf, uintptr_t device_ptr);
+extern int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uintptr_t device_ptr);
 
-/** Disconnect a buffer_t from the memory it was previously wrapped
- * around. Should only be called for a buffer_t that
+/** Disconnect a halide_buffer_t from the memory it was previously wrapped
+ * around. Should only be called for a halide_buffer_t that
  * halide_opencl_wrap_device_ptr was previously called on. Frees any
- * storage associated with the binding of the buffer_t and the device
+ * storage associated with the binding of the halide_buffer_t and the device
  * pointer, but does not free the cl_mem. The previously wrapped
- * cl_mem is returned. The dev field of the buffer_t will be NULL on
+ * cl_mem is returned. The dev field of the halide_buffer_t will be NULL on
  * return.
  */
-extern uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct buffer_t *buf);
+extern uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct halide_buffer_t *buf);
 
-/** Return the underlying cl_mem for a buffer_t. This buffer must be
+/** Return the underlying cl_mem for a halide_buffer_t. This buffer must be
  *  valid on an OpenCL device, or not have any associated device
  *  memory. If there is no device memory (dev field is NULL), this
  *  returns 0.
  */
-extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct buffer_t *buf);
+extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct halide_buffer_t *buf);
 
 #ifdef __cplusplus
 } // End extern "C"

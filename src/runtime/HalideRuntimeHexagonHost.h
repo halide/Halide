@@ -13,7 +13,7 @@ extern "C" {
 
 typedef int halide_hexagon_handle_t;
 
-extern const struct halide_device_interface *halide_hexagon_device_interface();
+extern const struct halide_device_interface_t *halide_hexagon_device_interface();
 
 /** Check if the Hexagon runtime (libhalide_hexagon_host.so) is
  * available. If it is not, pipelines using Hexagon will fail. */
@@ -22,26 +22,27 @@ extern bool halide_is_hexagon_available(void *user_context);
 /** The device handle for Hexagon is simply a pointer and size, stored
  * in the dev field of the buffer_t. If the buffer is allocated in a
  * particular way (ion_alloc), the buffer will be shared with Hexagon
- * (not copied). The dev field of the buffer_t must be NULL when this
+ * (not copied). The device field of the buffer_t must be NULL when this
  * routine is called. This call can fail due to running out of memory
  * or being passed an invalid device handle. The device and host
  * dirty bits are left unmodified. */
-extern int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t *buf,
+extern int halide_hexagon_wrap_device_handle(void *user_context, struct halide_buffer_t *buf,
                                              void *ptr, uint64_t size);
 
-/** Disconnect this buffer_t from the device handle it was previously
- * wrapped around. Should only be called for a buffer_t that
- * halide_hexagon_wrap_device_handle was previously called on. Frees any
- * storage associated with the binding of the buffer_t and the device
- * handle, but does not free the device handle. The previously
- * wrapped device handle is returned. The dev field of the buffer_t
- * will be NULL on return. */
-extern void *halide_hexagon_detach_device_handle(void *user_context, struct buffer_t *buf);
+/** Disconnect this halide_buffer_t from the device handle it was
+ * previously wrapped around. Should only be called for a
+ * halide_buffer_t that halide_hexagon_wrap_device_handle was
+ * previously called on. Frees any storage associated with the binding
+ * of the halide_buffer_t and the device handle, but does not free the
+ * device handle. The previously wrapped device handle is
+ * returned. The device field of the halide_buffer_t will be NULL on
+ * return. */
+extern void *halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf);
 
 /** Return the underlying device handle for a buffer_t. If there is
  * no device memory (dev field is NULL), this returns 0. */
-extern void *halide_hexagon_get_device_handle(void *user_context, struct buffer_t *buf);
-extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer_t *buf);
+extern void *halide_hexagon_get_device_handle(void *user_context, struct halide_buffer_t *buf);
+extern uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_buffer_t *buf);
 
 /** Power HVX on and off. Calling a Halide pipeline will do this
  * automatically on each pipeline invocation; however, it costs a

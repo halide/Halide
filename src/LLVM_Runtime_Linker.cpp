@@ -97,6 +97,7 @@ DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
 DECLARE_CPP_INITMOD(msan_stubs)
 DECLARE_CPP_INITMOD(noos)
+DECLARE_CPP_INITMOD(old_buffer_t)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(openglcompute)
@@ -727,6 +728,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
+            modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
             if (t.arch != Target::MIPS && t.os != Target::NoOS) {
