@@ -1,4 +1,4 @@
-#include "Halide.h"
+ #include "Halide.h"
 
 namespace {
 
@@ -16,6 +16,9 @@ public:
         Target target = get_target();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, 16, 16).compute_root();
+        } else {
+            assert(!"This Generator should always be build with a GPU feature");
+            exit(1);  // just in case we're build with NDEBUG
         }
         return f;
     }
