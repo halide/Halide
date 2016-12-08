@@ -14,11 +14,12 @@ public:
 
     void generate() {
 
-        // We'll explicit fill in the struct fields by name, just to show
+        // We'll explicitly fill in the struct fields by name, just to show
         // it as an option. (Alternately, we could fill it in by using
         // C++11 aggregate-initialization syntax.)
         StubTest::Inputs inputs;
-        inputs.input = { input };
+        inputs.simple_input = input;
+        inputs.array_input = { input };
         inputs.float_arg = 1.234f;
         inputs.int_arg = { int_arg };
 
