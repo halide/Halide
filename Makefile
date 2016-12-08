@@ -875,6 +875,13 @@ $(FILTERS_DIR)/cxx_mangling_define_extern.a: $(BIN_DIR)/cxx_mangling_define_exte
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling-user_context -f "HalideTest::cxx_mangling_define_extern"
 
+# acquire_release needs a custom target: in addition to enabling a GPU target,
+# we build with C++ name mangling to ensure that the GPU-Host code path mangles properly.
+$(FILTERS_DIR)/acquire_release.a: $(BIN_DIR)/acquire_release.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -f acquire_release -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-c_plus_plus_name_mangling-opencl
+
 # pyramid needs a custom arg
 $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 	@mkdir -p $(FILTERS_DIR)
