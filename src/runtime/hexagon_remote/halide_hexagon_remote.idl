@@ -34,12 +34,11 @@ interface halide_hexagon_remote
     // Two more ways for powering on HVX
     long power_hvx_on_mode(in long mode);
     long power_hvx_on_perf(in long set_mips,
-                           in long mipsPerThread,
-                           in long mipsTotal,
+                           in unsigned long mipsPerThread,
+                           in unsigned long mipsTotal,
                            in long set_bus_bw,
-                           in long bwBytePerSec_u32,
-                           in long bwBytePerSec_l32,
-                           in long busbwUsagePercentage,
+                           in unsigned long long bwBytePerSec,
+                           in unsigned long busbwUsagePercentage,
                            in long set_latency,
                            in long latency);
 

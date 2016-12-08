@@ -50,12 +50,28 @@ extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer
  * running several pipelines, and powered off afterwards. If HVX is
  * powered on, subsequent calls to power HVX on will be cheap. */
 
+/**
+ * Power mode for halide_hexagon_power_hvx_on_mode */
 typedef enum halide_hvx_power_mode_t {
-    halide_hvx_power_low    = 0,
-    halide_hvx_power_normal = 1,
-    halide_hvx_power_turbo  = 2
+    halide_hvx_power_low     = 0,
+    halide_hvx_power_nominal = 1,
+    halide_hvx_power_turbo   = 2
 } halide_hvx_power_mode_t;
 
+/**
+ * Performance parameters for halide_hexagon_power_hvx_on_perf
+ * @param set_mips - Set to TRUE to requst MIPS
+ * @param mipsPerThread - mips requested per thread, to establish a minimal clock frequency per HW thread
+ * @param mipsTotal - Total mips requested, to establish total number of MIPS required across all HW threads
+ * @param set_bus_bw - Set to TRUE to request bus_bw
+ * @param bwBytePerSec - Max bus BW requested (bytes per second)
+ * @param busbwUsagePercentage - Percentage of time during which bwBytesPerSec BW is required from the bus (0..100)
+ * @param set_latency - Set to TRUE to set latency
+ * @param latency - maximum hardware wakeup latency in microseconds.  The
+ *                  higher the value the deeper state of sleep
+ *                  that can be entered but the longer it may
+ *                  take to awaken. Only values > 0 are supported (1 microsecond is the smallest valid value)
+ */
 typedef struct {
     bool set_mips;
     unsigned int mipsPerThread;
