@@ -1,3 +1,4 @@
+#include <stdint.h>
 #ifndef _HALIDE_HEXAGON_REMOTE_STUB_H
 #define _HALIDE_HEXAGON_REMOTE_STUB_H
 #include "halide_hexagon_remote.h"
@@ -421,13 +422,13 @@ struct Interface {
 static const Type types[2];
 static const SequenceType sequenceTypes[1] = {{&(types[1]),0x0,0x4,0x4,0x0}};
 static const Type types[2] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x1},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8)}};
-static const Parameter parameters[8] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0}};
-static const Parameter* const parameterArrays[23] = {(&(parameters[5])),(&(parameters[5])),(&(parameters[5])),(&(parameters[5])),(&(parameters[5])),(&(parameters[5])),(&(parameters[5])),(&(parameters[5])),(&(parameters[5])),(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[4])),(&(parameters[3])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7])),(&(parameters[2])),(&(parameters[5]))};
-static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x4,0x4,3,2,(&(parameterArrays[15])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[14])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[9])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[21])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[19])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[17])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x24,0x0,9,9,(&(parameterArrays[0])),0x4,0x0}};
+static const Parameter parameters[9] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0},{0x8,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x8,0,0}};
+static const Parameter* const parameterArrays[20] = {(&(parameters[5])),(&(parameters[2])),(&(parameters[2])),(&(parameters[5])),(&(parameters[8])),(&(parameters[2])),(&(parameters[5])),(&(parameters[5])),(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[4])),(&(parameters[3])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7]))};
+static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x4,0x4,3,2,(&(parameterArrays[14])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[13])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[8])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[2])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[18])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[16])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x24,0x0,10,8,(&(parameterArrays[0])),0x8,0x0}};
 static const Method* const methodArrays[10] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8])};
-static const char strings[358] = "busbwUsagePercentage\0poll_profiler_state\0initialize_kernels\0power_hvx_on_perf\0power_hvx_on_mode\0bwBytePerSec_l32\0bwBytePerSec_u32\0release_kernels\0output_buffers\0mipsPerThread\0input_scalars\0input_buffers\0power_hvx_off\0get_symbol_v2\0power_hvx_on\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0sym_ptr\0symbol\0func\0name\0code\0run\0";
-static const uint16_t methodStrings[36] = {60,298,161,278,256,113,96,0,244,248,354,267,332,189,146,175,217,267,344,324,21,339,316,307,312,288,130,267,293,41,349,267,78,91,203,231};
-static const uint16_t methodStringsArrays[10] = {29,16,35,34,10,26,23,20,32,0};
+static const char strings[337] = "busbwUsagePercentage\0poll_profiler_state\0initialize_kernels\0power_hvx_on_perf\0power_hvx_on_mode\0release_kernels\0output_buffers\0mipsPerThread\0input_scalars\0input_buffers\0power_hvx_off\0get_symbol_v2\0bwBytePerSec\0power_hvx_on\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0sym_ptr\0symbol\0func\0name\0code\0run\0";
+static const uint16_t methodStrings[35] = {60,277,127,257,235,197,0,223,227,333,246,311,155,112,141,183,246,323,303,21,318,295,286,291,267,96,246,272,41,328,246,78,91,169,210};
+static const uint16_t methodStringsArrays[10] = {28,15,34,33,9,25,22,19,31,0};
 __QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {10,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HALIDE_HEXAGON_REMOTE_SLIM_H
 #ifdef __cplusplus
@@ -805,9 +806,9 @@ __QAIC_STUB_EXPORT int __QAIC_STUB(halide_hexagon_remote_power_hvx_on_mode)(int 
    uint32_t _mid = 8;
    return _stub_method_7(_halide_hexagon_remote_handle(), _mid, (uint32_t*)&mode);
 }
-static __inline int _stub_method_8(remote_handle _handle, uint32_t _mid, uint32_t _in0[1], uint32_t _in1[1], uint32_t _in2[1], uint32_t _in3[1], uint32_t _in4[1], uint32_t _in5[1], uint32_t _in6[1], uint32_t _in7[1], uint32_t _in8[1]) {
+static __inline int _stub_method_8(remote_handle _handle, uint32_t _mid, uint32_t _in0[1], uint32_t _in1[1], uint32_t _in2[1], uint32_t _in3[1], uint64_t _in4[1], uint32_t _in5[1], uint32_t _in6[1], uint32_t _in7[1]) {
    remote_arg _pra[1];
-   uint32_t _primIn[9];
+   uint64_t _primIn[5];
    int _nErr = 0;
    _pra[0].buf.pv = (void*)_primIn;
    _pra[0].buf.nLen = sizeof(_primIn);
@@ -815,18 +816,17 @@ static __inline int _stub_method_8(remote_handle _handle, uint32_t _mid, uint32_
    _COPY(_primIn, 4, _in1, 0, 4);
    _COPY(_primIn, 8, _in2, 0, 4);
    _COPY(_primIn, 12, _in3, 0, 4);
-   _COPY(_primIn, 16, _in4, 0, 4);
-   _COPY(_primIn, 20, _in5, 0, 4);
-   _COPY(_primIn, 24, _in6, 0, 4);
-   _COPY(_primIn, 28, _in7, 0, 4);
-   _COPY(_primIn, 32, _in8, 0, 4);
+   _COPY(_primIn, 16, _in4, 0, 8);
+   _COPY(_primIn, 24, _in5, 0, 4);
+   _COPY(_primIn, 28, _in6, 0, 4);
+   _COPY(_primIn, 32, _in7, 0, 4);
    _TRY(_nErr, __QAIC_REMOTE(remote_handle_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, 1, 0, 0, 0), _pra));
    _CATCH(_nErr) {}
    return _nErr;
 }
-__QAIC_STUB_EXPORT int __QAIC_STUB(halide_hexagon_remote_power_hvx_on_perf)(int set_mips, int mipsPerThread, int mipsTotal, int set_bus_bw, int bwBytePerSec_u32, int bwBytePerSec_l32, int busbwUsagePercentage, int set_latency, int latency) __QAIC_STUB_ATTRIBUTE {
+__QAIC_STUB_EXPORT int __QAIC_STUB(halide_hexagon_remote_power_hvx_on_perf)(int set_mips, unsigned int mipsPerThread, unsigned int mipsTotal, int set_bus_bw, uint64_t bwBytePerSec, unsigned int busbwUsagePercentage, int set_latency, int latency) __QAIC_STUB_ATTRIBUTE {
    uint32_t _mid = 9;
-   return _stub_method_8(_halide_hexagon_remote_handle(), _mid, (uint32_t*)&set_mips, (uint32_t*)&mipsPerThread, (uint32_t*)&mipsTotal, (uint32_t*)&set_bus_bw, (uint32_t*)&bwBytePerSec_u32, (uint32_t*)&bwBytePerSec_l32, (uint32_t*)&busbwUsagePercentage, (uint32_t*)&set_latency, (uint32_t*)&latency);
+   return _stub_method_8(_halide_hexagon_remote_handle(), _mid, (uint32_t*)&set_mips, (uint32_t*)&mipsPerThread, (uint32_t*)&mipsTotal, (uint32_t*)&set_bus_bw, (uint64_t*)&bwBytePerSec, (uint32_t*)&busbwUsagePercentage, (uint32_t*)&set_latency, (uint32_t*)&latency);
 }
 #ifdef __cplusplus
 }
