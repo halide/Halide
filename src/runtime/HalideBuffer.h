@@ -618,6 +618,10 @@ public:
      * own memory. */
     void deallocate() {
         decref();
+        if (manages_memory()) {
+            buf.host = nullptr;
+            alloc = nullptr;
+        }
     }
 
     /** Drop reference to any owned device memory, possibly freeing it
