@@ -163,7 +163,7 @@ public:
  * used for argument passing groups of Buffers into Pipeline::realize
  * and Pipeline::infer_input_bounds. It does not affect the lifetime
  * of the buffers that it refers to. */
-class BufferRefCollection {
+class BufferRefs {
     std::vector<Buffer<> *> ptrs;
 
     template<typename T, int D, typename ...Args>
@@ -177,11 +177,11 @@ class BufferRefCollection {
 public:
     template<typename T, int D, typename ...Args,
              typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
-    BufferRefCollection(Buffer<T, D> &first, Args&... rest) {
+    BufferRefs(Buffer<T, D> &first, Args&... rest) {
         init(&first, &rest...);
     }
 
-    BufferRefCollection(Realization r) : ptrs(r.size()) {
+    BufferRefs(Realization r) : ptrs(r.size()) {
         for (size_t i = 0; i < r.size(); i++) {
             ptrs[i] = &r[i];
         }
