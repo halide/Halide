@@ -238,8 +238,7 @@ if (WITH_TEST_GENERATORS)
   # test that executes the generated code (e.g. from example_aottest.cpp).
 
   # Tests with no special requirements
-  halide_define_aot_test(acquire_release
-                         GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-opencl)
+  halide_define_aot_test(acquire_release)
   halide_define_aot_test(argvcall)
   halide_define_aot_test(can_use_target)
   halide_define_aot_test(cleanup_on_error)
@@ -272,6 +271,10 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(cxx_mangling 
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
                          GENERATED_FUNCTION HalideTest::cxx_mangling)
+  halide_add_aot_test_dependency(cxx_mangling
+                               AOT_LIBRARY_TARGET cxx_mangling_gpu
+                               GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
+                               GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
