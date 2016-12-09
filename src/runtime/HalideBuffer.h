@@ -84,13 +84,17 @@ struct AllocationHeader {
  * functionality. When using Halide from C++, this is the preferred
  * way to create input and output buffers. The overhead of using this
  * class relative to a naked halide_buffer_t is minimal - it uses another
- * ~100 bytes on the stack, and does no dynamic allocations when using
- * it to represent existing memory. This overhead will shrink further
- * in the future once halide_buffer_t is deprecated.
+ * ~16 bytes on the stack, and does no dynamic allocations when using
+ * it to represent existing memory of a known maximum dimensionality.
  *
- * The template parameter T is the element type, and D is the maximum
- * number of dimensions. It defaults to 4. For buffers where the
- * element type is not known at compile time, use void for T.
+ * The template parameter T is the element type. For buffers where the
+ * element type is unknown, or may vary, use void or const void.
+ *
+ * D is the maximum number of dimensions that can be represented using
+ * space inside the class itself. Set it to the maximum dimensionality
+ * you expect this buffer to be. If the actual dimensionality exceeds
+ * this, heap storage is allocated to track the shape of the buffer. D
+ * defaults to 4, which should cover nearly all usage.
  *
  * The class optionally allocates and owns memory for the image using
  * a shared pointer allocated with the provided allocator. If they are
@@ -479,8 +483,8 @@ public:
     }
 
     /** Construct a Buffer from a Buffer of different dimensionality
-     * and type. Asserts that the dimensionality and type is
-     * compatible at runtime. Note that this constructor is
+     * and type. Asserts that the type matches (at runtime, if one of
+     * the types is void). Note that this constructor is
      * implicit. This, for example, lets you pass things like
      * Buffer<T> or Buffer<const void> to functions expected
      * Buffer<const T>. */
@@ -503,8 +507,8 @@ public:
     }
 
     /** Move-construct a Buffer from a Buffer of different
-     * dimensionality and type. Asserts that the dimensionality and
-     * type is compatible at runtime. */
+     * dimensionality and type. Asserts that the types match (at
+     * runtime if one of the types is void). */
     template<typename T2, int D2>
     Buffer(Buffer<T2, D2> &&other) : buf(other.buf),
                                      alloc(other.alloc),
@@ -516,8 +520,8 @@ public:
     }
 
     /** Assign from another Buffer of possibly-different
-     * dimensionality and type. Asserts that the dimensionality and
-     * type is compatible at runtime. */
+     * dimensionality and type. Asserts that the types match (at
+     * runtime if one of the types is void). */
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
         assert_can_convert_from(other);
@@ -531,6 +535,7 @@ public:
         return *this;
     }
 
+    /** Standard assignment operator */
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
         other.incref();
         decref();
@@ -542,9 +547,9 @@ public:
         return *this;
     }
 
-    /** Move from another Buffer of possibly-different dimensionality
-     * and type. Asserts that the dimensionality and
-     * type is compatible at runtime. */
+    /** Move from another Buffer of possibly-different
+     * dimensionality and type. Asserts that the types match (at
+     * runtime if one of the types is void). */
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
         assert_can_convert_from(other);
@@ -556,6 +561,7 @@ public:
         return *this;
     }
 
+    /** Standard move-assignment operator */
     Buffer<T, D> &operator=(Buffer<T, D> &&other) {
         std::swap(alloc, other.alloc);
         std::swap(dev_ref_count, other.dev_ref_count);
@@ -1105,8 +1111,7 @@ public:
     /** Add a new dimension with a min of zero and an extent of
      * one. The stride is the extent of the outermost dimension times
      * its stride. The new dimension is the last dimension. This is a
-     * special case of embed. It requires that the actual number of
-     * dimensions is less than template parameter D. */
+     * special case of embed. */
     void add_dimension() {
         const int dims = buf.dimensions;
         buf.dimensions++;
@@ -1137,9 +1142,7 @@ public:
 
     /** Add a new dimension with a min of zero, an extent of one, and
      * the specified stride. The new dimension is the last
-     * dimension. This is a special case of embed. It requires that
-     * the actual number of dimensions is less than template parameter
-     * D. */
+     * dimension. This is a special case of embed. */
     void add_dimension_with_stride(int s) {
         add_dimension();
         buf.dim[buf.dimensions-1].stride = s;
