@@ -217,9 +217,9 @@ void defineBuffer_impl(const std::string suffix, const h::Type type) {
             p::args("self", "r"),
             "Wrap a single-element realization in an Buffer object."))
 
-        .def(p::init<buffer_t>(
+        .def(p::init<halide_buffer_t>(
             p::args("self", "b"),
-            "Wrap a buffer_t in an Buffer object, so that we can access its pixels."));
+            "Wrap a halide_buffer_t in an Buffer object, so that we can access its pixels."));
 
     buffer_class
         .def("__repr__", &buffer_repr<T>, p::arg("self"));
@@ -529,8 +529,8 @@ struct BufferFactory {
         return create_buffer_impl(type, r);
     }
 
-    static p::object create_buffer_from_buffer(h::Type type, buffer_t b) {
-        return create_buffer_impl(type, b);
+    static p::object create_buffer_from_buffer(halide_buffer_t b) {
+        return create_buffer_impl(b.type, b);
     }
 };
 
@@ -569,9 +569,9 @@ void defineBuffer() {
            "Wrap a single-element realization in an Buffer object of type T.");
 
     p::def("Buffer", &BufferFactory::create_buffer_from_buffer,
-           p::args("type", "b"),
+           p::args("b"),
            p::with_custodian_and_ward_postcall<0, 2>(),  // the buffer_t reference count is increased
-           "Wrap a buffer_t in an Buffer object of type T, so that we can access its pixels.");
+           "Wrap a halide_buffer_t in an Buffer object, so that we can access its pixels.");
 
 #ifdef USE_NUMPY
     bn::initialize();
