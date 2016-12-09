@@ -232,6 +232,14 @@ typedef enum halide_type_code_t
     #endif
 #endif
 
+#ifndef HALIDE_ATTRIBUTE_DEPRECATED
+    #ifdef _MSC_VER
+        #define HALIDE_ATTRIBUTE_DEPRECATED __declspec(deprecated)
+    #else
+        #define HALIDE_ATTRIBUTE_DEPRECATED __attribute__((deprecated))
+    #endif
+#endif
+
 /** A runtime tag for a type in the halide type system. Can be ints,
  * unsigned ints, or floats of various bit-widths (the 'bits'
  * field). Can also be vectors of the same (by setting the 'lanes'
