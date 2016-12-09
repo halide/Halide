@@ -176,6 +176,20 @@ T parse_scalar(const std::string &value) {
     return t;
 }
 
+Func make_param_func(const Parameter &p, const std::string &name) {
+    internal_assert(p.is_buffer());
+    std::vector<Var> args;
+    std::vector<Expr> args_expr;
+    for (int i = 0; i < p.dimensions(); ++i) {
+        Var v = Var::implicit(i);
+        args.push_back(v);
+        args_expr.push_back(v);
+    }
+    Func f = Func(name + "_im");
+    f(args) = Internal::Call::make(p, args_expr);
+    return f;
+}
+
 }  // namespace
 
 class StubEmitter {
@@ -1452,16 +1466,8 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         if (kind() == IOKind::Function) {
-            std::vector<Var> args;
-            std::vector<Expr> args_expr;
-            for (int i = 0; i < dimensions(); ++i) {
-                Var v = Var::implicit(i);
-                args.push_back(v);
-                args_expr.push_back(v);
-            }
-            Func f = Func(array_name(i) + "_im");
-            f(args) = Internal::Call::make(parameters_[i], args_expr);
-            funcs_.push_back(f);
+            internal_assert(dimensions() == parameters_[i].dimensions());
+            funcs_.push_back(make_param_func(parameters_[i], array_name(i) + "_im"));
         } else {
             Expr e = Internal::Variable::make(type(), array_name(i), parameters_[i]);
             exprs_.push_back(e);
