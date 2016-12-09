@@ -190,10 +190,11 @@ class Buffer {
             if (new_count == 0) {
                 void (*fn)(void *) = alloc->deallocate_fn;
                 fn(alloc);
-                buf.host = nullptr;
-                alloc = nullptr;
             }
         }
+        buf.host = nullptr;
+        alloc = nullptr;
+
         decref_dev();
     }
 
@@ -215,10 +216,10 @@ class Buffer {
             }
             if (dev_ref_count) {
                 delete dev_ref_count;
-                dev_ref_count = nullptr;
             }
         }
         buf.dev = 0;
+        dev_ref_count = nullptr;
     }
 
     /** A temporary helper function to get the number of dimensions in
