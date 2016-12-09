@@ -2626,6 +2626,12 @@ void CodeGen_LLVM::visit(const Call *op) {
                 if (s) {
                     call_args.push_back(codegen(op->args[i]));
                     dst = builder->CreateCall(append_string, call_args);
+                } else if (t.is_bool()) {
+                    call_args.push_back(builder->CreateSelect(
+                        codegen(op->args[i]), 
+                        codegen(StringImm::make("true")), 
+                        codegen(StringImm::make("false"))));
+                    dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_int()) {
                     call_args.push_back(codegen(Cast::make(Int(64), op->args[i])));
                     call_args.push_back(ConstantInt::get(i32_t, 1));
@@ -3510,6 +3516,13 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     internal_assert(!v.empty());
 
     vector<Value *> vecs = v;
+
+    // Force them all to be actual vectors
+    for (Value *&val : vecs) {
+        if (!val->getType()->isVectorTy()) {
+            val = create_broadcast(val, 1);
+        }
+    }
 
     while (vecs.size() > 1) {
         vector<Value *> new_vecs;

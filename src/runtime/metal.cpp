@@ -179,7 +179,7 @@ WEAK void *buffer_contents(mtl_buffer *buffer) {
     return objc_msgSend(buffer, sel_getUid("contents"));
 }
 
-extern WEAK halide_device_interface metal_device_interface;
+extern WEAK halide_device_interface_t metal_device_interface;
 
 volatile int WEAK thread_lock = 0;
 WEAK mtl_device *device;
@@ -771,7 +771,7 @@ WEAK uintptr_t halide_metal_get_buffer(void *user_context, struct buffer_t *buf)
     return (uintptr_t)buffer;
 }
 
-WEAK const struct halide_device_interface *halide_metal_device_interface() {
+WEAK const struct halide_device_interface_t *halide_metal_device_interface() {
     return &metal_device_interface;
 }
 
@@ -785,7 +785,7 @@ WEAK void halide_metal_cleanup() {
 } // extern "C" linkage
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
-WEAK halide_device_interface metal_device_interface = {
+WEAK halide_device_interface_t metal_device_interface = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_metal_device_malloc,

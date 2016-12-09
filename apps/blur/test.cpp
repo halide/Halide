@@ -171,9 +171,7 @@ Buffer<uint16_t> blur_fast2(const Buffer<uint16_t> &in) {
     return out;
 }
 
-extern "C" {
 #include "halide_blur.h"
-}
 
 Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
     Buffer<uint16_t> out(in.width()-8, in.height()-2);
