@@ -617,10 +617,10 @@ public:
      * the buffer. Does nothing if this buffer did not allocate its
      * own memory. */
     void deallocate() {
-        decref();
         if (manages_memory()) {
-            buf.host = nullptr;
+            decref();
             alloc = nullptr;
+            buf.host = nullptr;
         }
     }
 
@@ -631,6 +631,8 @@ public:
     void device_deallocate() {
         if (manages_memory()) {
             decref_dev();
+            dev_ref_count = nullptr;
+            buf.dev = 0;
         }
     }
 
