@@ -164,7 +164,7 @@ public:
             // by telling Halide to inspect the memory layout at
             // runtime, and branch to different code depending on the
             // strides it find. First we relax the default constraint
-            // that stride(0) == 1:
+            // that dim(0).stride() == 1:
 
             input.dim(0).set_stride(Expr()); // Use an undefined Expr to
                                              // mean there is no
