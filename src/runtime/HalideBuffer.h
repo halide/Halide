@@ -1191,7 +1191,7 @@ public:
         return 0;
     }
 
-    int copy_to_device(const struct halide_device_interface *device_interface, void *ctx = nullptr) {
+    int copy_to_device(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         if (host_dirty()) {
             return halide_copy_to_device(ctx, &buf, device_interface);
         }

@@ -67,7 +67,7 @@ WEAK void load_libcuda(void *user_context) {
     #include "cuda_functions.h"
 }
 
-extern WEAK halide_device_interface cuda_device_interface;
+extern WEAK halide_device_interface_t cuda_device_interface;
 
 WEAK const char *get_error_name(CUresult error);
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx);
@@ -874,7 +874,7 @@ WEAK uintptr_t halide_cuda_get_device_ptr(void *user_context, struct buffer_t *b
     return (uintptr_t)dev_ptr;
 }
 
-WEAK const halide_device_interface *halide_cuda_device_interface() {
+WEAK const halide_device_interface_t *halide_cuda_device_interface() {
     return &cuda_device_interface;
 }
 
@@ -924,7 +924,7 @@ WEAK const char *get_error_name(CUresult error) {
     }
 }
 
-WEAK halide_device_interface cuda_device_interface = {
+WEAK halide_device_interface_t cuda_device_interface = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_cuda_device_malloc,
