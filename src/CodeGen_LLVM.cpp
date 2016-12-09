@@ -594,7 +594,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
         for (auto &arg : function->args()) {
             sym_push(args[i].name, &arg);
             if (args[i].is_buffer()) {
-                push_buffer(args[i].name, &arg);
+                push_buffer(args[i].name, args[i].dimensions, &arg);
             }
 
             if (args[i].alignment.modulus != 0) {
@@ -613,7 +613,7 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     for (size_t i = 0; i < args.size(); i++) {
         sym_pop(args[i].name);
         if (args[i].is_buffer()) {
-            pop_buffer(args[i].name);
+            pop_buffer(args[i].name, args[i].dimensions);
         }
 
         if (args[i].alignment.modulus != 0) {
@@ -749,49 +749,49 @@ void CodeGen_LLVM::compile_buffer(const BufferPtr &buf) {
     // Embed the buffer declaration as a global.
     internal_assert(buf.defined());
 
-    buffer_t b = *(buf.raw_buffer());
-    user_assert(b.host)
+    Halide::Buffer<> b = buf.get();
+    user_assert(b.data())
         << "Can't embed buffer " << buf.name() << " because it has a null host pointer.\n";
-    user_assert(!b.dev_dirty)
+    user_assert(!b.device_dirty())
         << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
-    // Figure out the offset of the last pixel.
-    size_t num_elems = 1;
-    for (int d = 0; b.extent[d]; d++) {
-        num_elems += b.stride[d] * (b.extent[d] - 1);
-    }
-    vector<char> array(b.host, b.host + num_elems * b.elem_size);
+    Constant *type_fields[] = {
+        ConstantInt::get(i8_t, b.type().code),
+        ConstantInt::get(i8_t, b.type().bits),
+        ConstantInt::get(i16_t, b.type().lanes)
+    };
 
-    // Embed the buffer_t and make it point to the data array.
-    GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
-                                                false, GlobalValue::PrivateLinkage,
-                                                0, buf.name() + ".buffer");
-    llvm::ArrayType *i32_array = ArrayType::get(i32_t, 4);
-
-    llvm::Type *padding_bytes_type =
-        buffer_t_type->getElementType(buffer_t_type->getNumElements()-1);
+    size_t shape_size = b.dimensions() * sizeof(halide_dimension_t);
+    vector<char> shape_blob((char *)b.raw_buffer()->dim, (char *)b.raw_buffer()->dim + shape_size);
+    Constant *shape = create_binary_blob(shape_blob, buf.name() + ".shape");
+    shape = ConstantExpr::getPointerCast(shape, dimension_t_type->getPointerTo());
 
     // For now, we assume buffers that aren't scalar are constant,
     // while scalars can be mutated. This accomodates all our existing
     // use cases, which is that all buffers are constant, except those
     // used to store stateful module information in offloading runtimes.
-    bool constant = num_elems > 1;
+    bool constant = b.dimensions() == 0;
+
+    vector<char> data_blob((char *)b.data(), (char *)b.data() + b.size_in_bytes());
 
     Constant *fields[] = {
-        ConstantInt::get(i64_t, 0), // dev
-        create_binary_blob(array, buf.name() + ".data", constant), // host
-        ConstantArray::get(i32_array, get_constants(i32_t, b.extent, b.extent + 4)),
-        ConstantArray::get(i32_array, get_constants(i32_t, b.stride, b.stride + 4)),
-        ConstantArray::get(i32_array, get_constants(i32_t, b.min, b.min + 4)),
-        ConstantInt::get(i32_t, b.elem_size),
-        ConstantInt::get(i8_t, 1), // host_dirty
-        ConstantInt::get(i8_t, 0), // dev_dirty
-        Constant::getNullValue(padding_bytes_type)
+        ConstantInt::get(i64_t, 0),                                 // device
+        ConstantPointerNull::get(device_interface_t_type->getPointerTo()), // device_interface
+        create_binary_blob(data_blob, buf.name() + ".data", constant), // host
+        ConstantInt::get(i64_t, 1 << halide_buffer_flag_host_dirty),  // flags
+        ConstantStruct::get(type_t_type, type_fields),            // type
+        ConstantInt::get(i32_t, buf.dimensions()),                  // dimensions
+        shape,                                                    // dim
+        ConstantPointerNull::get(i8_t->getPointerTo()),         // padding
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
-    global->setInitializer(buffer_struct);
 
+    // Embed the halide_buffer_t and make it point to the data array.
+    GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
+                                                false, GlobalValue::PrivateLinkage,
+                                                0, buf.name() + ".buffer");
+    global->setInitializer(buffer_struct);
 
     // Finally, dump it in the symbol table
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
@@ -821,7 +821,6 @@ Constant* CodeGen_LLVM::embed_constant_expr(Expr e) {
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     return ConstantExpr::getBitCast(
         ConstantExpr::getInBoundsGetElementPtr(constant->getType(), storage, zero),
-        ConstantExpr::getInBoundsGetElementPtr(storage, zero),
         scalar_value_t_type->getPointerTo());
 }
 
@@ -1058,8 +1057,8 @@ void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *
     Value *nullity_test = builder->CreateAnd(builder->CreateIsNull(host_ptr),
                                              builder->CreateIsNull(device_ptr));
     sym_push(name + ".host_and_device_are_null", nullity_test);
-    sym_push(name + ".host_dirty", buffer_get_flag(buffer, halide_buffer_t::flag_host_dirty));
-    sym_push(name + ".device_dirty", buffer_get_flag(buffer, halide_buffer_t::flag_device_dirty));
+    sym_push(name + ".host_dirty", buffer_get_flag(buffer, halide_buffer_flag_host_dirty));
+    sym_push(name + ".device_dirty", buffer_get_flag(buffer, halide_buffer_flag_device_dirty));
     sym_push(name + ".type.code", buffer_type_code(buffer));
     sym_push(name + ".type.bits", buffer_type_bits(buffer));
     sym_push(name + ".type.lanes", buffer_type_lanes(buffer));
@@ -1121,13 +1120,13 @@ Value *CodeGen_LLVM::buffer_flags(Value *buffer) {
     return builder->CreateLoad(buffer_flags_ptr(buffer));
 }
 
-Value *CodeGen_LLVM::buffer_get_flag(Value *buffer, halide_buffer_t::buffer_flags flag) {
+Value *CodeGen_LLVM::buffer_get_flag(Value *buffer, halide_buffer_flags flag) {
     Value *flags = buffer_flags(buffer);
     flags = builder->CreateAnd(flags, ConstantInt::get(i64_t, 1 << flag));
     return builder->CreateICmpNE(flags, ConstantInt::get(i64_t, 0));
 }
 
-void CodeGen_LLVM::buffer_set_flag(Value *buffer, halide_buffer_t::buffer_flags flag, bool value) {
+void CodeGen_LLVM::buffer_set_flag(Value *buffer, halide_buffer_flags flag, bool value) {
     Value *flags_ptr = buffer_flags_ptr(buffer);
     Value *flags = builder->CreateLoad(flags_ptr);
     if (value) {
@@ -2274,23 +2273,38 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
     } else if (op->is_intrinsic(Call::copy_buffer_t)) {
+        internal_assert(op->args.size() == 2);
+        const int64_t *dims = as_const_int(op->args[1]);
+        internal_assert(dims);
         // Make some memory for this buffer_t
         Value *dst = create_alloca_at_entry(buffer_t_type, 1);
+        Value *dst_shape = create_alloca_at_entry(dimension_t_type, *dims);
+
         Value *src = codegen(op->args[0]);
         src = builder->CreatePointerCast(src, buffer_t_type->getPointerTo());
-        src = builder->CreateLoad(src);
-        builder->CreateStore(src, dst);
+        Value *src_shape = buffer_dim_array(src);
+        builder->CreateStore(builder->CreateLoad(src), dst);
+        builder->CreateStore(dst_shape, buffer_dim_array_ptr(dst));
+        for (int i = 0; i < *dims; i++) {
+            Value *d = builder->CreateLoad(create_gep(dimension_t_type, src_shape, {i}));
+            builder->CreateStore(d, create_gep(dimension_t_type, dst_shape, {i}));
+        }
         value = dst;
     } else if (op->is_intrinsic(Call::create_buffer_t)) {
-        // Make some memory for this buffer_t
-        Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
+        int dims = (op->args.size() - 2) / 3;
+
+        // Make some zero'd memory for this buffer_t
+        Value *buffer = create_alloca_at_entry(buffer_t_type, 1, true);
+        Value *shape = create_alloca_at_entry(dimension_t_type, dims, true);
 
         // Populate the fields
         internal_assert(op->args[0].type().is_handle())
             << "The first argument to create_buffer_t must be a Handle\n";
-        Value *host_ptr = codegen(op->args[0]);
-        host_ptr = builder->CreatePointerCast(host_ptr, i8_t->getPointerTo());
-        builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
+        Value *host = codegen(op->args[0]);
+        host = builder->CreatePointerCast(host, i8_t->getPointerTo());
+        builder->CreateStore(host, buffer_host_ptr(buffer));
+        builder->CreateStore(shape, buffer_dim_array_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i32_t, dims), buffer_dimensions_ptr(buffer));
 
         // Type check integer arguments
         for (size_t i = 2; i < op->args.size(); i++) {
@@ -2299,32 +2313,16 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
 
         // Second argument is used solely for its Type. Value is unimportant.
-        // Currenty, only the size matters, but ultimately we will encode
-        // complete type info in buffer_t.
-        Value *elem_size = codegen(op->args[1].type().bytes());
-        builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
+        Type t = op->args[1].type();
+        builder->CreateStore(ConstantInt::get(i8_t, t.code()), buffer_type_code_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i8_t, t.bits()), buffer_type_bits_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i16_t, t.lanes()), buffer_type_lanes_ptr(buffer));
 
-        int dims = (op->args.size() - 2) / 3;
-        user_assert(dims <= 4)
-            << "Halide currently has a limit of four dimensions on "
-            << "Funcs used on the GPU or passed to extern stages.\n";
-        for (int i = 0; i < 4; i++) {
-            Value *min, *extent, *stride;
-            if (i < dims) {
-                min    = codegen(op->args[i*3+2]);
-                extent = codegen(op->args[i*3+3]);
-                stride = codegen(op->args[i*3+4]);
-            } else {
-                min = extent = stride = ConstantInt::get(i32_t, 0);
-            }
-            builder->CreateStore(min, buffer_min_ptr(buffer, i));
-            builder->CreateStore(extent, buffer_extent_ptr(buffer, i));
-            builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
+        for (int i = 0; i < dims; i++) {
+            builder->CreateStore(codegen(op->args[i*3+2]), create_gep(dimension_t_type, shape, {i, 0}));
+            builder->CreateStore(codegen(op->args[i*3+3]), create_gep(dimension_t_type, shape, {i, 1}));
+            builder->CreateStore(codegen(op->args[i*3+4]), create_gep(dimension_t_type, shape, {i, 2}));
         }
-
-        builder->CreateStore(ConstantInt::get(i8_t, 0), buffer_host_dirty_ptr(buffer));
-        builder->CreateStore(ConstantInt::get(i8_t, 0), buffer_dev_dirty_ptr(buffer));
-        builder->CreateStore(ConstantInt::get(i64_t, 0), buffer_dev_ptr(buffer));
 
         value = buffer;
     } else if (op->is_intrinsic(Call::extract_buffer_host)) {
@@ -2352,36 +2350,35 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::rewrite_buffer)) {
         int dims = ((int)(op->args.size())-2)/3;
         internal_assert((int)(op->args.size()) == dims*3 + 2);
-        internal_assert(dims <= 4);
 
         Value *buffer = codegen(op->args[0]);
 
-        // Rewrite the buffer_t using the args
-        builder->CreateStore(codegen(op->args[1]), buffer_elem_size_ptr(buffer));
+        // Rewrite the halide_buffer_t using the args
+        // Arg 1 is only used for its type
+        Type t = op->args[1].type();
+        builder->CreateStore(ConstantInt::get(i8_t, t.code()), buffer_type_code_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i8_t, t.bits()), buffer_type_bits_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i16_t, t.lanes()), buffer_type_lanes_ptr(buffer));
+        builder->CreateStore(ConstantInt::get(i32_t, dims), buffer_dimensions_ptr(buffer));
+
         for (int i = 0; i < dims; i++) {
+            string buf_name = op->args[0].as<Variable>()->name;
             builder->CreateStore(codegen(op->args[i*3+2]), buffer_min_ptr(buffer, i));
             builder->CreateStore(codegen(op->args[i*3+3]), buffer_extent_ptr(buffer, i));
             builder->CreateStore(codegen(op->args[i*3+4]), buffer_stride_ptr(buffer, i));
-        }
-        for (int i = dims; i < 4; i++) {
-            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_min_ptr(buffer, i));
-            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_extent_ptr(buffer, i));
-            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_stride_ptr(buffer, i));
         }
 
         // From the point of view of the continued code (a containing assert stmt), this returns true.
         value = codegen(const_true());
     } else if (op->is_intrinsic(Call::set_host_dirty)) {
-        internal_assert(op->args.size() == 2);
+        internal_assert(op->args.size() == 1);
         Value *buffer = codegen(op->args[0]);
-        Value *arg = codegen(op->args[1]);
-        builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
+        buffer_set_flag(buffer, halide_buffer_flag_host_dirty, true);
         value = ConstantInt::get(i32_t, 0);
-    } else if (op->is_intrinsic(Call::set_dev_dirty)) {
-        internal_assert(op->args.size() == 2);
+    } else if (op->is_intrinsic(Call::set_device_dirty)) {
+        internal_assert(op->args.size() == 1);
         Value *buffer = codegen(op->args[0]);
-        Value *arg = codegen(op->args[1]);
-        builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
+        buffer_set_flag(buffer, halide_buffer_flag_device_dirty, true);
         value = ConstantInt::get(i32_t, 0);
     } else if (op->is_intrinsic(Call::null_handle)) {
         internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
@@ -3073,7 +3070,6 @@ Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const strin
     Constant *zero = ConstantInt::get(i32_t, 0);
     Constant *zeros[] = {zero, zero};
     Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(type, global, zeros);
-    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, zeros);
     return ptr;
 }
 
@@ -3437,8 +3433,14 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     }
 
     if (zero_initialize) {
-        internal_assert(n == 1) << "Zero initialization for stack arrays not implemented\n";
-        builder->CreateStore(Constant::getNullValue(t), ptr);
+        if (n == 1) {
+            builder->CreateStore(Constant::getNullValue(t), ptr);
+        } else {
+            for (int i = 0; i < n; i++) {
+                Value *field_ptr = create_gep(t, ptr, {i});
+                builder->CreateStore(Constant::getNullValue(t), field_ptr);
+            }
+        }
     }
     builder->restoreIP(here);
     return ptr;

@@ -4,6 +4,7 @@
 #include "HalideRuntime.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "old_buffer_t.h"
 
 int main(int argc, char **argv) {

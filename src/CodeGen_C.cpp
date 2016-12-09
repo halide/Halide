@@ -20,31 +20,9 @@ using std::vector;
 using std::ostringstream;
 using std::map;
 
+extern "C" unsigned char halide_internal_initmod_declarations[];
+
 namespace {
-const string buffer_t_definition =
-    "#ifndef HALIDE_ATTRIBUTE_ALIGN\n"
-    "  #ifdef _MSC_VER\n"
-    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))\n"
-    "  #else\n"
-    "    #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))\n"
-    "  #endif\n"
-    "#endif\n"
-    "#ifndef BUFFER_T_DEFINED\n"
-    "#define BUFFER_T_DEFINED\n"
-    "#include <stdbool.h>\n"
-    "#include <stdint.h>\n"
-    "typedef struct buffer_t {\n"
-    "    uint64_t dev;\n"
-    "    uint8_t* host;\n"
-    "    int32_t extent[4];\n"
-    "    int32_t stride[4];\n"
-    "    int32_t min[4];\n"
-    "    int32_t elem_size;\n"
-    "    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;\n"
-    "    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;\n"
-    "    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];\n"
-    "} buffer_t;\n"
-    "#endif\n";
 
 const string headers =
     "#include <iostream>\n"
@@ -57,12 +35,6 @@ const string headers =
 
 const string globals =
     "extern \"C\" {\n"
-    "void *halide_malloc(void *ctx, size_t);\n"
-    "void halide_free(void *ctx, void *ptr);\n"
-    "void *halide_print(void *ctx, const void *str);\n"
-    "void *halide_error(void *ctx, const void *str);\n"
-    "int halide_debug_to_file(void *ctx, const char *filename, int, struct buffer_t *buf);\n"
-    "int halide_start_clock(void *ctx);\n"
     "int64_t halide_current_time_ns(void *ctx);\n"
     "void halide_profiler_pipeline_end(void *, void *);\n"
     "}\n"
@@ -138,27 +110,7 @@ const string globals =
     // it. Compilers understand memcpy and will convert it to a no-op
     // when used in this way. See http://blog.regehr.org/archives/959
     // for a detailed comparison of type-punning methods.
-    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
-    "\n"
-    "static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
-    "                           int32_t min0, int32_t extent0, int32_t stride0,\n"
-    "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
-    "                           int32_t min2, int32_t extent2, int32_t stride2,\n"
-    "                           int32_t min3, int32_t extent3, int32_t stride3) {\n"
-    " b->min[0] = min0;\n"
-    " b->min[1] = min1;\n"
-    " b->min[2] = min2;\n"
-    " b->min[3] = min3;\n"
-    " b->extent[0] = extent0;\n"
-    " b->extent[1] = extent1;\n"
-    " b->extent[2] = extent2;\n"
-    " b->extent[3] = extent3;\n"
-    " b->stride[0] = stride0;\n"
-    " b->stride[1] = stride1;\n"
-    " b->stride[2] = stride2;\n"
-    " b->stride[3] = stride3;\n"
-    " return true;\n"
-    "}\n";
+    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n";
 }
 
 CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind), extern_c_open(false) {
@@ -169,19 +121,11 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
     }
 
     if (!is_header()) {
-        stream << headers;
+        stream
+            << headers
+            << globals;
     }
-
-    // Throw in a definition of a buffer_t
-    stream << buffer_t_definition;
-
-    // halide_filter_metadata_t just gets a forward declaration
-    // (include HalideRuntime.h for the full goodness)
-    stream << "struct halide_filter_metadata_t;\n";
-
-    if (!is_header()) {
-        stream << globals;
-    }
+    stream << halide_internal_initmod_declarations << '\n';
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
     // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
@@ -440,14 +384,14 @@ public:
 
 void CodeGen_C::compile(const Module &input) {
     for (const auto &b : input.buffers()) {
-        compile(b);
+        compile(b, input.target());
     }
     for (const auto &f : input.functions()) {
-        compile(f);
+        compile(f, input.target());
     }
 }
 
-void CodeGen_C::compile(const LoweredFunc &f) {
+void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
     // Don't put non-external function declarations in headers.
     if (is_header() && f.linkage != LoweredFunc::External) {
         return;
@@ -584,15 +528,15 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         // declare the argv function.
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
-        // Define a stub to accept and upgrade old buffer_t's
-        string ucon = have_user_context ? "__user_context" : "NULL";
+        // Define a stub to accept and upgrade old buffer_t's. We
+        // generate signatures that accept const void * for
+        // user_context, but our runtime all accepts void *.
+        string ucon = have_user_context ? "const_cast<void *>(__user_context)" : "NULL";
         stream
             << "\n// A shim to support use of the old buffer_t struct. This is deprecated and will be removed at some point.\n";
 
-        if (!is_c_plus_plus_interface()) {
-            stream << "#ifdef __cplusplus\n"
-                   << "}; // extern \"C\" \n";
-        }
+        switch_to_c_or_c_plus_plus(COrCPlusPlus::CPlusPlus);
+
         stream << "HALIDE_ATTRIBUTE_DEPRECATED(\"buffer_t is deprecated. Use halide_buffer_t.\")\n"
                << "inline int " << simple_name << "(";
         for (size_t i = 0; i < args.size(); i++) {
@@ -643,7 +587,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             for (size_t i = 0; i < args.size(); i++) {
                 if (args[i].is_buffer()) {
                     string name = print_name(args[i].name);
-                    stream << "    if (" << name << "_buffer->host == NULL) {\n"
+                    stream << "    if (" << name << "_buffer->host == NULL && " << name << "_buffer->dev == 0) {\n"
                            << "        err = halide_downgrade_buffer_t(" << ucon << ", "
                            << "\"" << args[i].name << "\", "
                            << "&" << name << "_upgraded, "
@@ -656,13 +600,13 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "    return err;\n"
                << "}\n";
 
-        if (!is_c_plus_plus_interface()) {
-            stream << "extern \"C\" {\n"
-                   << "#endif\n\n";
-        }
+        switch_to_c_or_c_plus_plus(is_c_plus_plus_interface() ? COrCPlusPlus::Default : COrCPlusPlus::C);
+
+        // And also the metadata.
+        stream << "// Result is never null and points to constant static data\n";
+        stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
     }
 
-    // Close namespaces here as metadata must be outside them
     if (!namespaces.empty()) {
         stream << "\n";
         for (size_t i = 0; i < namespaces.size(); i++) {
@@ -677,15 +621,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         stream << "\n\n";
     }
-
-    if (is_header()) {
-        // And also the metadata.
-        stream << "// Result is never null and points to constant static data\n";
-        stream << "extern const struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
-    }
 }
 
-void CodeGen_C::compile(const Buffer &buffer, const Target &target) {
+void CodeGen_C::compile(const BufferPtr &buffer, const Target &target) {
     // Don't define buffers in headers.
     if (is_header()) {
         return;
@@ -1683,8 +1621,6 @@ void CodeGen_C::test() {
     string src = source.str();
     string correct_source =
         headers +
-        buffer_t_definition +
-        "struct halide_filter_metadata_t;\n" +
         globals +
         string((const char *)halide_internal_initmod_declarations) + '\n' +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
@@ -1694,8 +1630,9 @@ void CodeGen_C::test() {
         "#ifdef __cplusplus\n"
         "extern \"C\" {\n"
         "#endif\n"
+        "int32_t  halide_print(void *, char const *);\n"
         "\n\n"
-        "int test1(halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void *__user_context) HALIDE_FUNCTION_ATTRS {\n"
+        "int test1(halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
         " const bool _buf_host_and_device_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->device == 0);\n"
@@ -1760,7 +1697,7 @@ void CodeGen_C::test() {
         "  halide_free(__user_context_, _tmp_heap);\n"
         " } // alloc _tmp_heap\n"
         " return 0;\n"
-        "}\n"
+        "}\n\n"
         "#ifdef __cplusplus\n"
         "}  // extern \"C\"\n"
         "#endif\n";
@@ -1775,8 +1712,8 @@ void CodeGen_C::test() {
         internal_error
             << "Correct source code:\n" << correct_source
             << "Actual source code:\n" << src
-            << "\nDifference starts at: " << src.substr(diff, diff_end - diff) << "\n";
-
+            << "\nDifference starts at: " << src.substr(diff, diff_end - diff) << "\n"
+            << "vs: " << correct_source.substr(diff, diff_end - diff) << "\n";
     }
 
 

@@ -418,7 +418,7 @@ Stmt build_produce(Function f, const Target &target) {
             for (const auto &buffer: buffers_to_annotate) {
                 // Return type is really 'void', but no way to represent that in our IR.
                 // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
+                Expr sizeof_buffer_t((uint64_t) sizeof(halide_buffer_t));
                 Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
                 if (annotate.defined()) {
                     annotate = Block::make(annotate, mark_buffer);

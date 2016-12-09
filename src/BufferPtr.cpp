@@ -57,12 +57,6 @@ BufferPtr::BufferPtr(const Buffer<> &buf, std::string name) :
     contents->name = make_buffer_name(name, contents->image);
 }
 
-BufferPtr::BufferPtr(Type t, const buffer_t &buf, std::string name) :
-    contents(new Internal::BufferContents) {
-    contents->image = Buffer<>(t, buf);
-    contents->name = make_buffer_name(name, contents->image);
-}
-
 BufferPtr::BufferPtr(Type t, const std::vector<int> &size, std::string name) :
     contents(new Internal::BufferContents) {
     contents->image = Buffer<>(t, size);
@@ -113,7 +107,7 @@ int BufferPtr::stride(int i) const {
     return dim(i).stride();
 }
 
-buffer_t *BufferPtr::raw_buffer() const {
+halide_buffer_t *BufferPtr::raw_buffer() const {
     return contents->image.raw_buffer();
 }
 

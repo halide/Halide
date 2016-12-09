@@ -14,21 +14,10 @@ int main(int argc, char **argv) {
     uint8_t c[4096];
     memset(c, 42, sizeof(c));
 
-    halide_buffer_t buf = {0};
     halide_dimension_t shape[] = {{0, 4096, 1},
                                   {0, 4096, 0},
                                   {0, 256, 0}};
-    buf.dim = shape;
-    buf.dimensions = 3;
-    buf.type = UInt(8);
-    buf.host = c;
-    buf.extent[0] = 4096;
-    buf.extent[1] = 4096;
-    buf.extent[2] = 256;
-    buf.stride[0] = 1;
-    buf.stride[1] = 0;
-    buf.stride[2] = 0;
-    buf.elem_size = 1;
+    Halide::Buffer<uint8_t> buf(c, 3, shape);
 
     Buffer<uint8_t> param_buf(buf);
     ImageParam input(UInt(8), 3);

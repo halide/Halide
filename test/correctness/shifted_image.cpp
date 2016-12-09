@@ -13,12 +13,10 @@ int main(int argc, char **argv) {
     buf.allocate();
 
     buf.data()[0] = 17;
-    if (im(100, 300, 500, 400) != 17) {
+    if (buf(100, 300, 500, 400) != 17) {
         printf("Image indexing into buffers with non-zero mins is broken\n");
         return -1;
     }
-
-    free(buf.host);
 
     return 0;
 }

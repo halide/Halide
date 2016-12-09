@@ -50,7 +50,7 @@ extern "C" {
 
 // Forward-declare to suppress warnings if compiling as C.
 #ifndef BUFFER_T_DEFINED
-struct buffer_t;
+struct halide_buffer_t;
 #endif
 
 /** Print a message to stderr. Main use is to support HL_TRACE
@@ -204,7 +204,7 @@ extern void *halide_get_library_symbol(void *lib, const char *name);
  */
 extern int32_t halide_debug_to_file(void *user_context, const char *filename,
                                     int32_t type_code,
-                                    struct buffer_t *buf);
+                                    struct halide_buffer_t *buf);
 
 /** Types in the halide type system. They can be ints, unsigned ints,
  * or floats (of various bit-widths), or a handle (which is always 64-bits).
@@ -396,10 +396,10 @@ extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
 /** Get a pointer to halide_device_free if a Halide runtime has been
  * linked in. Returns null if it has not. This requires a different
  * mechanism on different platforms. */
-typedef int (*halide_device_free_t)(void *, struct buffer_t *);
+typedef int (*halide_device_free_t)(void *, struct halide_buffer_t *);
 #ifdef _MSC_VER
 extern const __declspec(selectany) void *halide_dummy_device_free = NULL;
-extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+extern int halide_weak_device_free(void *user_context, struct halide_buffer_t *buf);
 // The following pragma tells the windows linker to make
 // halide_device_free_weak the same symbol as halide_dummy_device_free
 // if it can't resolve halide_weak_device_free normally
@@ -421,7 +421,7 @@ inline halide_device_free_t halide_get_device_free_fn() {
     return &halide_device_free;
 }
 #else
-extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct buffer_t *buf);
+extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct halide_buffer_t *buf);
 inline halide_device_free_t halide_get_device_free_fn() {
     return &halide_weak_device_free;
 }
@@ -723,7 +723,7 @@ extern int halide_error_failed_to_upgrade_buffer_t(void *user_context,
                                                    const char *reason);
 extern int halide_error_failed_to_downgrade_buffer_t(void *user_context,
                                                      const char *input_name,
-
+                                                     const char *reason);
 extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                  const char *loop_name);
 
@@ -855,19 +855,24 @@ typedef struct halide_dimension_t {
 #endif
 } halide_dimension_t;
 
+#ifdef __cplusplus
 } // extern "C"
+#endif
+
+typedef enum {halide_buffer_flag_host_dirty = 1,
+              halide_buffer_flag_device_dirty = 2} halide_buffer_flags;
 
 /**
  * The raw representation of an image passed around by generated
  * Halide code. It includes some stuff to track whether the image is
  * not actually in main memory, but instead on a device (like a
- * GPU). */
+ * GPU). For a more convenient C++ wrapper, use Halide::Buffer<T>. */
 typedef struct halide_buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t device;
 
     /** The interface used to interpret the above handle. */
-    const halide_device_interface_t *device_interface;
+    const struct halide_device_interface_t *device_interface;
 
     /** A pointer to the start of the data in main memory. In terms of
      * the Halide coordinate system, this is the address of the min
@@ -875,19 +880,16 @@ typedef struct halide_buffer_t {
     uint8_t* host;
 
     /** flags with various meanings. */
-    enum buffer_flags {flag_host_dirty = 1, flag_device_dirty = 2};
     uint64_t flags;
 
     /** The type of each buffer element. */
-    halide_type_t type;
+    struct halide_type_t type;
 
     /** The dimensionality of the buffer. */
     int32_t dimensions;
 
     /** The shape of the buffer. Halide does not own this array - you
-     * must manage the memory for it yourself. If you know the
-     * dimensionality at compile time, you can use halide_nd_buffer_t
-     * below for a version that does own this array. */
+     * must manage the memory for it yourself. */
     halide_dimension_t *dim;
 
     /** Pads the buffer up to a multiple of 8 bytes */
@@ -896,11 +898,11 @@ typedef struct halide_buffer_t {
 #ifdef __cplusplus
     /** Convenience methods for accessing the flags */
     // @{
-    bool get_flag(buffer_flags flag) const {
+    bool get_flag(halide_buffer_flags flag) const {
         return flags & flag;
     }
 
-    void set_flag(buffer_flags flag, bool value) {
+    void set_flag(halide_buffer_flags flag, bool value) {
         if (value) {
             flags |= flag;
         } else {
@@ -909,19 +911,19 @@ typedef struct halide_buffer_t {
     }
 
     bool host_dirty() const {
-        return get_flag(flag_host_dirty);
+        return get_flag(halide_buffer_flag_host_dirty);
     }
 
     bool device_dirty() const {
-        return get_flag(flag_device_dirty);
+        return get_flag(halide_buffer_flag_device_dirty);
     }
 
     void set_host_dirty(bool v = true) {
-        set_flag(flag_host_dirty, v);
+        set_flag(halide_buffer_flag_host_dirty, v);
     }
 
     void set_device_dirty(bool v = true) {
-        set_flag(flag_device_dirty, v);
+        set_flag(halide_buffer_flag_device_dirty, v);
     }
     // @}
 

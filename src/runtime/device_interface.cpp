@@ -27,27 +27,26 @@ struct device_handle_wrapper {
 WEAK halide_mutex device_copy_mutex;
 
 WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t *buf) {
-    if (!buf->dev_dirty) {
+    if (!buf->device_dirty()) {
         return 0;  // my, that was easy
     }
 
     debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty is true\n";
     const halide_device_interface_t *interface = buf->device_interface;
     if (buf->host_dirty()) {
-        error(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty and host_dirty are true\n";
-        result = halide_error_code_copy_to_host_failed;
-    } else if (interface == NULL) {
-        error(user_context) << "copy_to_host_already_locked " << buf << " interface is NULL\n";
-        result = halide_error_code_no_device_interface;
-    } else {
-        result = interface->copy_to_host(user_context, buf);
-        if (result == 0) {
-            buf->set_device_dirty(false);
-        } else {
-            debug(user_context) << "copy_to_host_already_locked " << buf << " device copy_to_host returned an error\n";
-            result = halide_error_code_copy_to_host_failed;
-        }
+        debug(user_context) << "copy_to_host_already_locked " << buf << " dev_dirty and host_dirty are true\n";
+        return halide_error_code_copy_to_host_failed;
     }
+    if (interface == NULL) {
+        debug(user_context) << "copy_to_host_already_locked " << buf << " interface is NULL\n";
+        return halide_error_code_no_device_interface;
+    }
+    int result = interface->copy_to_host(user_context, buf);
+    if (result != 0) {
+        debug(user_context) << "copy_to_host_already_locked " << buf << " device copy_to_host returned an error\n";
+        return halide_error_code_copy_to_host_failed;
+    }
+    buf->set_device_dirty(false);
     halide_msan_annotate_buffer_is_initialized(user_context, buf);
 
     return result;

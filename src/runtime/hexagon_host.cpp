@@ -414,7 +414,7 @@ WEAK int halide_hexagon_device_malloc(void *user_context, halide_buffer_t *buf) 
                         << buf->dim[1].stride << "x"
                         << buf->dim[2].stride << "x"
                         << buf->dim[3].stride << " "
-                        << "(" << buf->type.bytes() << " bytes per element)\n";
+                        << "(" << (int)buf->type.bytes() << " bytes per element)\n";
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
