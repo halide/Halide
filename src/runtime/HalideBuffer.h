@@ -1710,7 +1710,7 @@ struct for_each_element_helpers {
     template<typename Fn2>
     static auto for_each_element(int, const halide_buffer_t &buf, Fn2 &&f)
         -> decltype(f((const int *)0)) {
-        int pos[buf.dimensions] = {0};
+        int pos[buf.dimensions];
         for_each_element_array(buf.dimensions - 1, std::forward<Fn2>(f), buf, pos);
     }
 
