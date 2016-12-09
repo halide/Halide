@@ -126,18 +126,6 @@ public:
      * inspecting its min, extent, or stride. */
     EXPORT const Dimension dim(int i) const;
 
-    /** Get or constrain the shape of the dimensions. Soon to be
-     * deprecated. Do not use. */
-    // @{
-    OutputImageParam set_min(int i, Expr e) {dim(i).set_min(e); return *this;}
-    OutputImageParam set_extent(int i, Expr e) {dim(i).set_extent(e); return *this;}
-    OutputImageParam set_bounds(int i, Expr a, Expr b) {dim(i).set_bounds(a, b); return *this;}
-    OutputImageParam set_stride(int i, Expr e) {dim(i).set_stride(e); return *this;}
-    Expr min(int i) const {return dim(i).min();}
-    Expr extent(int i) const {return dim(i).extent();}
-    Expr stride(int i) const {return dim(i).stride();}
-    // @}
-
     /** Get the alignment of the host pointer in bytes. Defaults to
      * the size of type. */
     EXPORT int host_alignment() const;
