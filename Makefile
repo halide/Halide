@@ -285,6 +285,7 @@ SOURCE_FILES = \
   Error.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
+  FragmentAllocations.cpp \
   Float16.cpp \
   Func.cpp \
   Function.cpp \
@@ -409,6 +410,7 @@ HEADER_FILES = \
   Extern.h \
   FastIntegerDivide.h \
   FindCalls.h \
+  FragmentAllocations.h \
   Float16.h \
   Func.h \
   Function.h \
@@ -960,10 +962,16 @@ $(BIN_DIR)/stubuser.generator: $(BIN_DIR)/stubtest_generator.o
 # stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
 # usage (the types can be inferred), but for AOT compilation, we must make the types
 # concrete via generator args.
+STUBTEST_GENERATOR_ARGS=\
+	simple_input.type=float32 \
+	array_input.type=float32 array_input.size=2 \
+	int_arg.size=2 \
+	tuple_output.type=float32,float32
+
 $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -f stubtest -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime input.type=float32 input.size=2 int_arg.size=2 tuple_output.type=float32,float32
+	cd $(TMP_DIR); $(CURDIR)/$< -f stubtest -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime $(STUBTEST_GENERATOR_ARGS)
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
