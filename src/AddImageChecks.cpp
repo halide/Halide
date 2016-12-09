@@ -314,7 +314,6 @@ Stmt add_image_checks(Stmt s,
             Expr max_size = make_const(UInt(64), t.maximum_buffer_size());
             Expr max_extent = make_const(UInt(64), 0x7fffffff);
             Expr actual_size = abs(cast<int64_t>(actual_extent) * actual_stride);
-            internal_assert(actual_size.type() == UInt(64));
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);
             Stmt check = AssertStmt::make(actual_size <= max_size, allocation_size_error);

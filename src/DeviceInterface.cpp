@@ -200,7 +200,6 @@ uintptr_t halide_opengl_detach_texture(void *user_context, struct halide_buffer_
 }
 EXPORT_SYM(halide_opengl_detach_texture)
 
-
 const struct halide_device_interface_t *halide_openglcompute_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::OpenGLCompute);
@@ -212,10 +211,10 @@ const struct halide_device_interface_t *halide_openglcompute_device_interface() 
 }
 EXPORT_SYM(halide_openglcompute_device_interface)
 
-const struct halide_device_interface *halide_metal_device_interface() {
+const struct halide_device_interface_t *halide_metal_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::Metal);
-    struct halide_device_interface *(*fn)();
+    struct halide_device_interface_t *(*fn)();
     if (lookup_runtime_routine("halide_metal_device_interface", target, fn)) {
         return (*fn)();
     }

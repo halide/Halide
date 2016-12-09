@@ -663,6 +663,9 @@ enum halide_error_code_t {
      * too small to store all the values of a producer needed by the
      * consumer. */
     halide_error_code_fold_factor_too_small = -28,
+
+    /** User-specified require() expression was not satisfied. */
+    halide_error_code_requirement_failed = -29,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -729,6 +732,7 @@ extern int halide_error_bad_fold(void *user_context, const char *func_name, cons
 
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);
+extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
 
 // @}
 

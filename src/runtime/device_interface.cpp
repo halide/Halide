@@ -15,7 +15,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 struct device_handle_wrapper {
     uint64_t device_handle;
-    const halide_device_interface *interface;
+    const halide_device_interface_t *interface;
 };
 
 // TODO: Coarser grained locking, also consider all things that need
