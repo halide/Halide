@@ -324,6 +324,7 @@ Stmt add_image_checks(Stmt s,
                 if (j == 0) {
                     lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
                 } else {
+                    max_size = cast<int64_t>(max_size);
                     Expr last_dim = Variable::make(Int(64), name + ".total_extent." + std::to_string(j-1));
                     Expr this_dim = actual_extent * last_dim;
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
