@@ -20,7 +20,7 @@ extern "C" DLLEXPORT int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) 
         float *out_start = (float *)out->host;
         float *out_end = out_start + out->dim[0].extent;
         std::sort(out_start, out_end);
-        out->host_dirty = true;
+        out->set_host_dirty();
     }
     return 0;
 }

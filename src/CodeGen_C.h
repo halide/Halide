@@ -44,8 +44,8 @@ public:
 protected:
     /** Emit a declaration. */
     // @{
-    virtual void compile(const LoweredFunc &func);
-    virtual void compile(const BufferPtr &buffer);
+    virtual void compile(const LoweredFunc &func, const Target &target);
+    virtual void compile(const BufferPtr &buffer, const Target &target);
     // @}
 
     /** An ID for the most recently generated ssa variable */

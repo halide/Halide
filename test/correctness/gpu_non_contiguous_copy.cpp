@@ -12,21 +12,16 @@ int main(int argc, char **argv) {
     const int x_off = 4, y_off = 8, z_off = 2, w_off = 4;
     const int x_size = 16, y_size = 16, z_size = 3, w_size = 3;
 
-    buffer_t cropped = *full.raw_buffer();
-    cropped.host = (uint8_t *)&(full(x_off, y_off, z_off, w_off));
-    cropped.min[0] = 0;
-    cropped.min[1] = 0;
-    cropped.min[2] = 0;
-    cropped.min[3] = 0;
-    cropped.extent[0] = x_size;
-    cropped.extent[1] = y_size;
-    cropped.extent[2] = z_size;
-    cropped.extent[3] = w_size;
-    cropped.stride[0] *= 2;
-    cropped.stride[1] *= 2;
-    cropped.stride[2] *= 2;
-    cropped.stride[3] *= 2;
-    Buffer<int32_t> out(cropped);
+    Buffer<int> cropped(full);
+    cropped.raw_buffer()->host = (uint8_t *)&(full(x_off, y_off, z_off, w_off));
+    cropped.raw_buffer()->dim[0].extent = x_size;
+    cropped.raw_buffer()->dim[1].extent = y_size;
+    cropped.raw_buffer()->dim[2].extent = z_size;
+    cropped.raw_buffer()->dim[3].extent = w_size;
+    cropped.raw_buffer()->dim[0].stride *= 2;
+    cropped.raw_buffer()->dim[1].stride *= 2;
+    cropped.raw_buffer()->dim[2].stride *= 2;
+    cropped.raw_buffer()->dim[3].stride *= 2;
 
     // Make a bitmask representing the region inside the crop.
     Buffer<bool> in_subregion(80, 60, 10, 10);
@@ -50,7 +45,7 @@ int main(int argc, char **argv) {
         f.hexagon().vectorize(x, 16);
     }
     f.output_buffer().set_stride(0, Expr());
-    f.realize(out);
+    f.realize(cropped);
 
     // Put some data in the full host buffer, avoiding the region
     // being evaluated above.
@@ -58,7 +53,7 @@ int main(int argc, char **argv) {
     lambda(x, y, z, w, change_out_of_subregion).realize(full);
 
     // Copy back the output subset from the GPU.
-    out.copy_to_host();
+    cropped.copy_to_host();
 
     for (int w = 0; w < full.extent(3); ++w) {
         for (int z = 0; z < full.extent(2); ++z) {

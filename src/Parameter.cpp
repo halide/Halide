@@ -24,12 +24,16 @@ struct ParameterContents {
     const bool is_explicit_name;
     const bool is_registered;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
-        : type(t), dimensions(d), name(n), buffer(BufferPtr()), data(0), 
+        : type(t), dimensions(d), name(n), buffer(BufferPtr()), data(0),
           host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r) {
+
+        min_constraint.resize(dimensions);
+        extent_constraint.resize(dimensions);
+        stride_constraint.resize(dimensions);
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
-        if (d > 0) {
+        if (dimensions > 0) {
             stride_constraint[0] = 1;
         }
     }

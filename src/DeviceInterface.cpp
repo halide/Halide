@@ -145,7 +145,7 @@ int halide_weak_device_free(void *user_context, struct halide_buffer_t *buf) {
 }
 EXPORT_SYM(halide_weak_device_free)
 
-const struct halide_device_interface *halide_cuda_device_interface() {
+const struct halide_device_interface_t *halide_cuda_device_interface() {
     Target target(get_host_target());
     target.set_feature(Target::CUDA);
     struct halide_device_interface_t *(*fn)();

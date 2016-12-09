@@ -17,12 +17,12 @@ uint64_t fn(int i0, int i1, int i2, int i3, int i4, int i5, int i6, int i7) {
 int main(int argc, char **argv) {
     {
         // Make an 8-dimensional image
-        Image<uint64_t> in({2, 3, 4, 5, 6, 7, 8, 9});
-        Image<uint64_t> out({2, 3, 4, 5, 6, 7, 8, 9});
+        Buffer<uint64_t> in({2, 3, 4, 5, 6, 7, 8, 9});
+        Buffer<uint64_t> out({2, 3, 4, 5, 6, 7, 8, 9});
 
         // Move the origin
-        in.set_min({90, 80, 70, 60, 50, 40, 30, 20});
-        out.set_min({90, 80, 70, 60, 50, 40, 30, 20});
+        in.set_min(90, 80, 70, 60, 50, 40, 30, 20);
+        out.set_min(90, 80, 70, 60, 50, 40, 30, 20);
 
         // Fill it in
         for (int i0 = in.dim(0).min(); i0 <= in.dim(0).max(); i0++) {

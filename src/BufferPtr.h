@@ -21,7 +21,6 @@ private:
 public:
     BufferPtr() : contents(nullptr) {}
     EXPORT BufferPtr(const Buffer<> &buf, std::string name = "");
-    EXPORT BufferPtr(Type t, const buffer_t &buf, std::string name = "");
 
     template<typename T, int D> BufferPtr(const Buffer<T, D> &buf, std::string name = "") :
         BufferPtr(Buffer<>(buf), name) {}
@@ -61,7 +60,7 @@ public:
     EXPORT size_t size_in_bytes() const;
 
     /** Get a pointer to the raw buffer */
-    EXPORT buffer_t *raw_buffer() const;
+    EXPORT halide_buffer_t *raw_buffer() const;
 
     /** Get the host pointer */
     EXPORT uint8_t *host_ptr() const;
