@@ -135,7 +135,7 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
                                                  const std::string &simple_name,
-                                                 const std::string &/* extern_name */) {
+                                                 const std::string &extern_name) {
     function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
@@ -144,7 +144,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     }
 
     // Call the base implementation to create the function.
-    CodeGen_CPU::compile_func(f, f.name, f.name);
+    CodeGen_CPU::compile_func(f, simple_name, extern_name);
 
     // We need to insert code after the existing entry block, so that
     // the destructor stack slots exist before we do the assertions
