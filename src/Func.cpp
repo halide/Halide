@@ -2761,11 +2761,11 @@ const Internal::JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(BufferRefCollection dst, const Target &target) {
+void Func::realize(BufferRefs dst, const Target &target) {
     pipeline().realize(dst, target);
 }
 
-void Func::infer_input_bounds(BufferRefCollection dst) {
+void Func::infer_input_bounds(BufferRefs dst) {
     pipeline().infer_input_bounds(dst);
 }
 

@@ -523,7 +523,7 @@ public:
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
     // @{
-    EXPORT void realize(BufferRefCollection dst, const Target &target = Target());
+    EXPORT void realize(BufferRefs dst, const Target &target = Target());
 
     template<typename T, int D>
     NO_INLINE void realize(Buffer<T, D> &dst, const Target &target = Target()) {
@@ -538,7 +538,7 @@ public:
      * ImageParams. */
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(BufferRefCollection dst);
+    EXPORT void infer_input_bounds(BufferRefs dst);
 
     template<typename T, int D>
     NO_INLINE void infer_input_bounds(Buffer<T, D> &im) {
