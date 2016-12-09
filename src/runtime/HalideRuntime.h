@@ -362,12 +362,12 @@ extern int halide_shutdown_trace();
 /** All Halide GPU or device backend implementations much provide an interface
  * to be used with halide_device_malloc, etc.
  */
-struct halide_device_interface;
+struct halide_device_interface_t;
 
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_device_release(void *user_context, const struct halide_device_interface *device_interface);
+extern void halide_device_release(void *user_context, const struct halide_device_interface_t *device_interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
@@ -380,14 +380,14 @@ extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
 extern int halide_copy_to_device(void *user_context, struct buffer_t *buf,
-                                 const struct halide_device_interface *device_interface);
+                                 const struct halide_device_interface_t *device_interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 
 /** Allocate device memory to back a buffer_t. */
-extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
+extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface_t *device_interface);
 
 /** Free device memory. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
@@ -652,6 +652,9 @@ enum halide_error_code_t {
      * too small to store all the values of a producer needed by the
      * consumer. */
     halide_error_code_fold_factor_too_small = -26,
+
+    /** User-specified require() expression was not satisfied. */
+    halide_error_code_requirement_failed = -27,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -709,6 +712,7 @@ extern int halide_error_bad_fold(void *user_context, const char *func_name, cons
                                  const char *loop_name);
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);
+extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
 
 // @}
 

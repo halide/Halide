@@ -14,7 +14,7 @@ struct ion_device_handle {
 
 WEAK halide_mutex thread_lock = { { 0 } };
 
-extern WEAK halide_device_interface hexagon_device_interface;
+extern WEAK halide_device_interface_t hexagon_device_interface;
 
 // Define dynamic version of hexagon_remote/halide_hexagon_remote.h
 typedef struct _remote_buffer__seq_octet _remote_buffer__seq_octet;
@@ -691,7 +691,7 @@ WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * 
     halide_hexagon_power_hvx_off(user_context);
 }
 
-WEAK const halide_device_interface *halide_hexagon_device_interface() {
+WEAK const halide_device_interface_t *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
 }
 
@@ -728,7 +728,7 @@ WEAK void halide_hexagon_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
-WEAK halide_device_interface hexagon_device_interface = {
+WEAK halide_device_interface_t hexagon_device_interface = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_hexagon_device_malloc,
