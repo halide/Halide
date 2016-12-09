@@ -622,7 +622,7 @@ void StubEmitter::emit() {
 GeneratorStub::GeneratorStub(const GeneratorContext *context,
                              GeneratorFactory generator_factory,
                              const std::map<std::string, std::string> &generator_params,
-                             const std::vector<std::vector<Internal::FuncOrExpr>> &inputs) {
+                             const std::vector<std::vector<Internal::StubInput>> &inputs) {
     user_assert(context != nullptr) << "Context may not be null";
     generator = generator_factory(generator_params);
     generator->target.set(context->get_target());
@@ -1178,7 +1178,7 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
     schedule_params_set = true;
 }
 
-void GeneratorBase::set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs) {
+void GeneratorBase::set_inputs(const std::vector<std::vector<StubInput>> &inputs) {
     internal_assert(!inputs_set) << "set_inputs() must be called at most once per Generator instance.\n";
     build_params();
     user_assert(inputs.size() == filter_inputs.size()) 
@@ -1471,11 +1471,11 @@ void GeneratorInputBase::init_internals() {
     verify_internals();
 }
 
-void GeneratorInputBase::set_inputs(const std::vector<FuncOrExpr> &inputs) {
+void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     exprs_.clear();
     funcs_.clear();
     check_matching_array_size(inputs.size());
-    for (const FuncOrExpr & i : inputs) {
+    for (const StubInput & i : inputs) {
         user_assert(i.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
         if (kind() == IOKind::Function) {
             check_matching_type_and_dim(i.func().output_types(), i.func().dimensions());

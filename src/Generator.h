@@ -850,14 +850,14 @@ enum class IOKind { Scalar, Function };
 // via C++11 initializer-list syntax; it is only used in situations where the
 // downstream consumer will be able to explicitly check that each value is
 // of the expected/required kind.
-class FuncOrExpr {
+class StubInput {
     const IOKind kind_;
     const Halide::Func func_;
     const Halide::Expr expr_;
 public:
     // *not* explicit 
-    FuncOrExpr(const Func &f) : kind_(IOKind::Function), func_(f), expr_(Expr()) {}
-    FuncOrExpr(const Expr &e) : kind_(IOKind::Scalar), func_(Func()), expr_(e) {}
+    StubInput(const Func &f) : kind_(IOKind::Function), func_(f), expr_(Expr()) {}
+    StubInput(const Expr &e) : kind_(IOKind::Scalar), func_(Func()), expr_(e) {}
 
     IOKind kind() const {
         return kind_;
@@ -982,7 +982,7 @@ protected:
     std::vector<Parameter> parameters_;
 
     EXPORT void init_internals();
-    EXPORT void set_inputs(const std::vector<FuncOrExpr> &inputs);
+    EXPORT void set_inputs(const std::vector<StubInput> &inputs);
 
     EXPORT virtual void set_def_min_max();
 
@@ -1848,7 +1848,7 @@ private:
         generator_name = n;
     }
 
-    EXPORT void set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs);
+    EXPORT void set_inputs(const std::vector<std::vector<StubInput>> &inputs);
 
     GeneratorBase(const GeneratorBase &) = delete;
     void operator=(const GeneratorBase &) = delete;
@@ -2094,7 +2094,7 @@ protected:
     EXPORT GeneratorStub(const GeneratorContext *context,
                   GeneratorFactory generator_factory,
                   const std::map<std::string, std::string> &generator_params,
-                  const std::vector<std::vector<Internal::FuncOrExpr>> &inputs);
+                  const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
     // TODO: identify vars used
@@ -2116,13 +2116,13 @@ protected:
     }
 
     template <typename T>
-    static std::vector<FuncOrExpr> to_func_or_expr_vector(const T &t) {
-        return { FuncOrExpr(t) };
+    static std::vector<StubInput> to_func_or_expr_vector(const T &t) {
+        return { StubInput(t) };
     }
 
     template <typename T>
-    static std::vector<FuncOrExpr> to_func_or_expr_vector(const std::vector<T> &v) {
-        std::vector<FuncOrExpr> r;
+    static std::vector<StubInput> to_func_or_expr_vector(const std::vector<T> &v) {
+        std::vector<StubInput> r;
         std::copy(v.begin(), v.end(), std::back_inserter(r));
         return r;
     }
