@@ -232,14 +232,6 @@ typedef enum halide_type_code_t
     #endif
 #endif
 
-#ifndef HALIDE_ATTRIBUTE_DEPRECATED
-    #ifdef _MSC_VER
-        #define HALIDE_ATTRIBUTE_DEPRECATED __declspec(deprecated)
-    #else
-        #define HALIDE_ATTRIBUTE_DEPRECATED __attribute__((deprecated))
-    #endif
-#endif
-
 /** A runtime tag for a type in the halide type system. Can be ints,
  * unsigned ints, or floats of various bit-widths (the 'bits'
  * field). Can also be vectors of the same (by setting the 'lanes'
@@ -821,6 +813,19 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  *     }
  */
 extern int halide_default_can_use_target_features(uint64_t features);
+
+
+#ifndef HALIDE_ATTRIBUTE_DEPRECATED
+#ifdef HALIDE_ALLOW_DEPRECATED
+#define HALIDE_ATTRIBUTE_DEPRECATED(x)
+#else
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
+#else
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
+#endif
+#endif
+#endif
 
 
 #ifndef BUFFER_T_DEFINED
