@@ -1,5 +1,7 @@
 #include "Halide.h"
 
+using namespace Halide;
+
 namespace {
 
 class MatMul : public Halide::Generator<MatMul> {
@@ -10,36 +12,30 @@ public:
     ImageParam            B {Float(32), 2, "B"};
 
     Func build() {
-        Var x, y;
+        Var x("x"), y("y");
 
         Func prod("prod");
         RDom r(0, size);
         prod(x, y) += A(x, r) * B(r, y);
 
-        Var xi, yi, xii, yii;
+        Var xi, yi, xio, xii, yii;
         Func out = prod.in();
         out.bound(x, 0, size)
             .bound(y, 0, size)
-            .tile(x, y, xi, yi, 16, 8)
-            .vectorize(xi, 4)
-            .unroll(xi)
+            .tile(x, y, xi, yi, 8*32, 8)
+            .split(xi, xio, xii, 32)
+            .reorder(xio, yi, xii, x, y)
+            .unroll(xio)
             .unroll(yi)
-            .gpu_tile(x, y, 8, 8);
+            .gpu_blocks(x, y).gpu_threads(xii);
         prod.compute_at(out, Var::gpu_threads())
             .unroll(x)
             .unroll(y)
             .update()
             .reorder(x, y, r.x)
-            .tile(x, y, xi, yi, 2, 2)
-            .vectorize(xi)
-            .unroll(yi)
-            .tile(x, y, xii, yii, 2, 2)
-            .unroll(xii)
-            .unroll(yii)
             .unroll(x)
             .unroll(y);
-
-        Halide::OutputImageParam bufs[] = {A, B, out.output_buffer()};
+        OutputImageParam bufs[] = {A, B, out.output_buffer()};
         for (auto &buf : bufs) {
             buf.set_host_alignment(16)
                 .set_bounds(0, 0, size)
