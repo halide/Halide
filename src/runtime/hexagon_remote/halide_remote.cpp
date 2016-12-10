@@ -153,7 +153,7 @@ int halide_hexagon_remote_power_hvx_on_perf(
     unsigned int mipsPerThread,
     unsigned int mipsTotal,
     int set_bus_bw,
-    uint64_t bwBytePerSec,
+    unsigned int bwMegabytesPerSec,
     unsigned int busbwUsagePercentage,
     int set_latency,
     int latency)
@@ -182,7 +182,7 @@ int halide_hexagon_remote_power_hvx_on_perf(
         request.mips_bw.mipsPerThread   = mipsPerThread;
         request.mips_bw.mipsTotal       = mipsTotal;
         request.mips_bw.set_bus_bw      = set_bus_bw;
-        request.mips_bw.bwBytePerSec    = bwBytePerSec;
+        request.mips_bw.bwBytePerSec    = ((uint64_t) bwMegabytesPerSec) << 20;
         request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
         request.mips_bw.set_latency     = set_latency;
         request.mips_bw.latency         = latency;
@@ -202,90 +202,84 @@ int halide_hexagon_remote_power_hvx_on_mode(int mode) {
     unsigned int mipsTotal = 0;
     int set_bus_bw = 0;
     uint64_t bwBytePerSec = 0;
+    unsigned int bwMegabytesPerSec = 0;
     unsigned int busbwUsagePercentage = 0;
     int set_latency = 0;
     int latency = 0;
-    int result = 0;
 
-    // Only need to compute perf parameters if power_ref_count is zero
-    if (power_ref_count == 0) {
-        HAP_power_response_t power_info;
-        power_info.type = HAP_power_get_max_mips;
-        int retval = HAP_power_get(NULL, &power_info);
-        if (0 != retval) {
-            log_printf("HAP_power_get(HAP_power_get_max_mips) failed (%d)\n", retval);
-            return -1;
-        }
-        unsigned int max_mips = power_info.max_mips;
+    HAP_power_response_t power_info;
+    unsigned int max_mips = 0;
+    uint64 max_bus_bw = 0;
 
-        power_info.type = HAP_power_get_max_bus_bw;
-        retval = HAP_power_get(NULL, &power_info);
-        if (0 != retval) {
-            log_printf("HAP_power_get(HAP_power_get_max_bus_bw) failed (%d)\n", retval);
-            return -1;
-        }
-        uint64 max_bus_bw = power_info.max_bus_bw;
+    power_info.type = HAP_power_get_max_mips;
+    int retval = HAP_power_get(NULL, &power_info);
+    if (0 != retval) {
+        log_printf("HAP_power_get(HAP_power_get_max_mips) failed (%d)\n", retval);
+        return -1;
+    }
+    max_mips = power_info.max_mips;
 
-        // Sanity check max values
-        // The above API under-reports the max bus bw. If we use it as
-        // reported, performance is bad. Experimentally, this only
-        // needs to be ~10x.
-        // Make sure max values are at least:
-        const unsigned int default_mips = 500;
-        const uint64       default_bw   = 1000000000ULL;
-        if (max_bus_bw < default_bw) {
-            if (max_bus_bw == 0) {
-                max_bus_bw = default_bw;
-            }
-            while (max_bus_bw < default_bw) {
-                max_bus_bw *= 10;
-            }
-        }
-        if (max_mips < default_mips) {
-            max_mips = default_mips;
-        }
+    // Make sure max_mips is at least sanity_mips
+    const unsigned int sanity_mips = 500;
+    if (max_mips < sanity_mips) {
+        max_mips = sanity_mips;
+    }
 
-        switch (mode) {
-            case halide_hvx_power_low:
-                set_mips               = TRUE;
-                mipsPerThread          = max_mips / 4;
-                mipsTotal              = max_mips / 2;
-                set_bus_bw             = TRUE;
-                bwBytePerSec           = max_bus_bw / 2;
-                busbwUsagePercentage   = 50;
-                set_latency            = TRUE;
-                latency                = 1;
-                break;
-            case halide_hvx_power_nominal:
-                set_mips               = TRUE;
-                mipsPerThread          = (3 * max_mips) / 8;
-                mipsTotal              = (3 * max_mips) / 4;
-                set_bus_bw             = TRUE;
-                bwBytePerSec           = max_bus_bw;
-                busbwUsagePercentage   = 75;
-                set_latency            = TRUE;
-                latency                = 1;
-                break;
-            case halide_hvx_power_turbo:
-            default: 
-                set_mips               = TRUE;
-                mipsPerThread          = max_mips;
-                mipsTotal              = max_mips * 2;
-                set_bus_bw             = TRUE;
-                bwBytePerSec           = max_bus_bw * 2;
-                busbwUsagePercentage   = 100;
-                set_latency            = TRUE;
-                latency                = 1;
-                break;
+    power_info.type = HAP_power_get_max_bus_bw;
+    retval = HAP_power_get(NULL, &power_info);
+    if (0 != retval) {
+        log_printf("HAP_power_get(HAP_power_get_max_bus_bw) failed (%d)\n", retval);
+        return -1;
+    }
+    max_bus_bw = power_info.max_bus_bw;
+
+    // The above API under-reports the max bus bw. If we use it as
+    // reported, performance is bad. Experimentally, this only
+    // needs to be ~10x.
+    // Make sure max_bus_bw is at least sanity_bw
+    const uint64 sanity_bw = 1000000000ULL;
+    if (max_bus_bw < sanity_bw) {
+        if (max_bus_bw == 0) {
+            max_bus_bw = sanity_bw;
+        }
+        while (max_bus_bw < sanity_bw) {
+            max_bus_bw *= 10;
         }
     }
 
+    set_mips               = TRUE;
+    set_bus_bw             = TRUE;
+    set_latency            = TRUE;
+    latency                = 1;
+    switch (mode) {
+        case halide_hvx_power_low:
+            mipsPerThread          = max_mips / 4;
+            mipsTotal              = max_mips / 2;
+            bwBytePerSec           = max_bus_bw / 2;
+            busbwUsagePercentage   = 50;
+            break;
+        case halide_hvx_power_nominal:
+            mipsPerThread          = (3 * max_mips) / 8;
+            mipsTotal              = (3 * max_mips) / 4;
+            bwBytePerSec           = max_bus_bw;
+            busbwUsagePercentage   = 75;
+            break;
+        case halide_hvx_power_turbo:
+        default: 
+            mipsPerThread          = max_mips;
+            mipsTotal              = max_mips * 2;
+            bwBytePerSec           = max_bus_bw * 2;
+            busbwUsagePercentage   = 100;
+            break;
+    }
+
+    bwMegabytesPerSec = bwBytePerSec >> 20;
     return halide_hexagon_remote_power_hvx_on_perf(
                                     set_mips,
                                     mipsPerThread,
                                     mipsTotal,
                                     set_bus_bw,
-                                    bwBytePerSec,
+                                    bwMegabytesPerSec,
                                     busbwUsagePercentage,
                                     set_latency,
                                     latency);

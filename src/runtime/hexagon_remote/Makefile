@@ -40,7 +40,6 @@ HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../
 COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
-HEXAGON_QAICSED = sed -e '1 i\#include <stdint.h>' -e 's/uint64 /uint64_t /' -e 's/int64 /int64_t /'
 
 CC-host = ${CXX}
 CXX-host = ${CXX}
@@ -79,10 +78,6 @@ remotes: bin/v60/libhalide_hexagon_remote_skel.so bin/v60/hexagon_sim_remote
 bin/src/halide_hexagon_remote.h bin/src/halide_hexagon_remote_skel.c bin/src/halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $(@D)
 	$(HEXAGON_QAIC) $(HEXAGON_QAICFLAGS) $^ -o $(@D)
-	mv -f bin/src/halide_hexagon_remote.h      bin/src/halide_hexagon_remote.h-orig 
-	mv -f bin/src/halide_hexagon_remote_stub.c bin/src/halide_hexagon_remote_stub.c-orig 
-	$(HEXAGON_QAICSED) bin/src/halide_hexagon_remote.h-orig      > bin/src/halide_hexagon_remote.h
-	$(HEXAGON_QAICSED) bin/src/halide_hexagon_remote_stub.c-orig > bin/src/halide_hexagon_remote_stub.c
 
 bin/%/halide_hexagon_remote_skel.o: bin/src/halide_hexagon_remote_skel.c
 	mkdir -p $(@D)

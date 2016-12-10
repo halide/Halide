@@ -64,7 +64,7 @@ typedef enum halide_hvx_power_mode_t {
  * @param mipsPerThread - mips requested per thread, to establish a minimal clock frequency per HW thread
  * @param mipsTotal - Total mips requested, to establish total number of MIPS required across all HW threads
  * @param set_bus_bw - Set to TRUE to request bus_bw
- * @param bwBytePerSec - Max bus BW requested (bytes per second)
+ * @param bwMeagabytesPerSec - Max bus BW requested (megabytes per second)
  * @param busbwUsagePercentage - Percentage of time during which bwBytesPerSec BW is required from the bus (0..100)
  * @param set_latency - Set to TRUE to set latency
  * @param latency - maximum hardware wakeup latency in microseconds.  The
@@ -77,7 +77,7 @@ typedef struct {
     unsigned int mipsPerThread;
     unsigned int mipsTotal;
     bool set_bus_bw;
-    uint64_t bwBytePerSec;
+    unsigned int bwMegabytesPerSec;
     unsigned short busbwUsagePercentage;
     bool set_latency;
     int latency;

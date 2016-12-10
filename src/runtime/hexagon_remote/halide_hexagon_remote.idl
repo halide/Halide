@@ -37,7 +37,7 @@ interface halide_hexagon_remote
                            in unsigned long mipsPerThread,
                            in unsigned long mipsTotal,
                            in long set_bus_bw,
-                           in unsigned long long bwBytePerSec,
+                           in unsigned long bwMegabytesPerSec,
                            in unsigned long busbwUsagePercentage,
                            in long set_latency,
                            in long latency);

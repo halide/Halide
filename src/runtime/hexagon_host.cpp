@@ -34,7 +34,7 @@ typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
 typedef int (*remote_power_fn)();
 typedef int (*remote_power_mode_fn)(int);
-typedef int (*remote_power_perf_fn)(int, unsigned int, unsigned int, int, uint64_t, unsigned int, int, int);
+typedef int (*remote_power_perf_fn)(int, unsigned int, unsigned int, int, unsigned int, unsigned int, int, int);
 
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
@@ -713,7 +713,7 @@ WEAK int halide_hexagon_power_hvx_on_perf(void *user_context, halide_hvx_power_p
                                       perf->mipsPerThread,
                                       perf->mipsTotal,
                                       perf->set_bus_bw,
-                                      perf->bwBytePerSec,
+                                      perf->bwMegabytesPerSec,
                                       perf->busbwUsagePercentage,
                                       perf->set_latency,
                                       perf->latency);
