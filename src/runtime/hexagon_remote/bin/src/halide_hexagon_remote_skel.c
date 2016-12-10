@@ -421,42 +421,42 @@ struct Interface {
 static const Type types[2];
 static const SequenceType sequenceTypes[1] = {{&(types[1]),0x0,0x4,0x4,0x0}};
 static const Type types[2] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x1},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8)}};
-static const Parameter parameters[9] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0},{0x8,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x8,0,0}};
-static const Parameter* const parameterArrays[20] = {(&(parameters[5])),(&(parameters[2])),(&(parameters[2])),(&(parameters[5])),(&(parameters[8])),(&(parameters[2])),(&(parameters[5])),(&(parameters[5])),(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[4])),(&(parameters[3])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7]))};
-static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x4,0x4,3,2,(&(parameterArrays[14])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[13])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[8])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[2])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[18])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[16])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x24,0x0,10,8,(&(parameterArrays[0])),0x8,0x0}};
+static const Parameter parameters[8] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0}};
+static const Parameter* const parameterArrays[20] = {(&(parameters[5])),(&(parameters[2])),(&(parameters[2])),(&(parameters[5])),(&(parameters[2])),(&(parameters[2])),(&(parameters[5])),(&(parameters[5])),(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[4])),(&(parameters[3])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7]))};
+static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x4,0x4,3,2,(&(parameterArrays[14])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[13])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[8])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[2])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[18])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[16])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x20,0x0,8,8,(&(parameterArrays[0])),0x4,0x0}};
 static const Method* const methodArrays[10] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8])};
-static const char strings[337] = "busbwUsagePercentage\0poll_profiler_state\0initialize_kernels\0power_hvx_on_perf\0power_hvx_on_mode\0release_kernels\0output_buffers\0mipsPerThread\0input_scalars\0input_buffers\0power_hvx_off\0get_symbol_v2\0bwBytePerSec\0power_hvx_on\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0sym_ptr\0symbol\0func\0name\0code\0run\0";
-static const uint16_t methodStrings[35] = {60,277,127,257,235,197,0,223,227,333,246,311,155,112,141,183,246,323,303,21,318,295,286,291,267,96,246,272,41,328,246,78,91,169,210};
+static const char strings[342] = "busbwUsagePercentage\0poll_profiler_state\0initialize_kernels\0bwMegabytesPerSec\0power_hvx_on_perf\0power_hvx_on_mode\0release_kernels\0output_buffers\0mipsPerThread\0input_scalars\0input_buffers\0power_hvx_off\0get_symbol_v2\0power_hvx_on\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0sym_ptr\0symbol\0func\0name\0code\0run\0";
+static const uint16_t methodStrings[35] = {78,282,145,262,240,60,0,228,232,338,251,316,173,130,159,201,251,328,308,21,323,300,291,296,272,114,251,277,41,333,251,96,109,187,215};
 static const uint16_t methodStringsArrays[10] = {28,15,34,33,9,25,22,19,31,0};
 __QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {10,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HALIDE_HEXAGON_REMOTE_SLIM_H
 #ifdef __cplusplus
 extern "C" {
 #endif
-static __inline int _skel_method(int (*_pfn)(uint32_t, uint32_t, uint32_t, uint32_t, uint64_t, uint32_t, uint32_t, uint32_t), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method(int (*_pfn)(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    uint32_t _in0[1];
    uint32_t _in1[1];
    uint32_t _in2[1];
    uint32_t _in3[1];
-   uint64_t _in4[1];
+   uint32_t _in4[1];
    uint32_t _in5[1];
    uint32_t _in6[1];
    uint32_t _in7[1];
-   uint64_t* _primIn;
+   uint32_t* _primIn;
    int _nErr = 0;
    _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
    _ASSERT(_nErr, (_pra + 1) <= _praEnd);
-   _ASSERT(_nErr, _pra[0].buf.nLen >= 36);
+   _ASSERT(_nErr, _pra[0].buf.nLen >= 32);
    _primIn = _pra[0].buf.pv;
    _COPY(_in0, 0, _primIn, 0, 4);
    _COPY(_in1, 0, _primIn, 4, 4);
    _COPY(_in2, 0, _primIn, 8, 4);
    _COPY(_in3, 0, _primIn, 12, 4);
-   _COPY(_in4, 0, _primIn, 16, 8);
-   _COPY(_in5, 0, _primIn, 24, 4);
-   _COPY(_in6, 0, _primIn, 28, 4);
-   _COPY(_in7, 0, _primIn, 32, 4);
+   _COPY(_in4, 0, _primIn, 16, 4);
+   _COPY(_in5, 0, _primIn, 20, 4);
+   _COPY(_in6, 0, _primIn, 24, 4);
+   _COPY(_in7, 0, _primIn, 28, 4);
    _TRY(_nErr, _pfn(*_in0, *_in1, *_in2, *_in3, *_in4, *_in5, *_in6, *_in7));
    _CATCH(_nErr) {}
    return _nErr;
