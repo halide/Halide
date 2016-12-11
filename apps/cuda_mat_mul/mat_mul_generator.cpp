@@ -18,7 +18,7 @@ public:
         RDom r(0, size);
         prod(x, y) += A(x, r) * B(r, y);
 
-        Var xi, yi, xio, xii, yii;
+        Var xi, yi, xio, xii, yii, xo;
         Func out = prod.in();
         out.bound(x, 0, size)
             .bound(y, 0, size)
@@ -32,10 +32,15 @@ public:
             .unroll(x)
             .unroll(y)
             .update()
+            .unroll(r.x, 2)
             .reorder(x, y, r.x)
             .unroll(x)
             .unroll(y);
-        OutputImageParam bufs[] = {A, B, out.output_buffer()};
+        B.in()
+            .compute_at(prod, x)
+            .vectorize(B.in().args()[0]);
+
+        OutputImageParam bufs[] = {A, B, prod.output_buffer()};
         for (auto &buf : bufs) {
             buf.set_host_alignment(16)
                 .set_bounds(0, 0, size)
