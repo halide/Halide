@@ -33,11 +33,11 @@ public:
             .unroll(y)
             .update()
             .unroll(r.x, 2)
-            .reorder(x, y, r.x)
+            .reorder(y, x, r.x)
             .unroll(x)
             .unroll(y);
         B.in()
-            .compute_at(prod, x)
+            .compute_at(prod, y)
             .vectorize(B.in().args()[0]);
 
         OutputImageParam bufs[] = {A, B, prod.output_buffer()};
