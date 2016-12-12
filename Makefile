@@ -285,7 +285,6 @@ SOURCE_FILES = \
   Error.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
-  FragmentAllocations.cpp \
   Float16.cpp \
   Func.cpp \
   Function.cpp \
@@ -410,7 +409,6 @@ HEADER_FILES = \
   Extern.h \
   FastIntegerDivide.h \
   FindCalls.h \
-  FragmentAllocations.h \
   Float16.h \
   Func.h \
   Function.h \
