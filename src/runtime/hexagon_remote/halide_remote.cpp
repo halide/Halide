@@ -243,35 +243,33 @@ int halide_hexagon_remote_power_hvx_on_mode(int mode) {
             max_bus_bw = sanity_bw;
         }
         while (max_bus_bw < sanity_bw) {
-            max_bus_bw *= 10;
+            max_bus_bw <<= 3;  // Increase value while preserving bits
         }
     }
 
-    set_mips               = TRUE;
-    set_bus_bw             = TRUE;
-    set_latency            = TRUE;
-    latency                = 1;
+    set_mips    = TRUE;
+    set_bus_bw  = TRUE;
+    set_latency = TRUE;
     switch (mode) {
         case halide_hvx_power_low:
             mipsPerThread          = max_mips / 4;
-            mipsTotal              = max_mips / 2;
             bwBytePerSec           = max_bus_bw / 2;
-            busbwUsagePercentage   = 50;
+            busbwUsagePercentage   = 25;
             break;
         case halide_hvx_power_nominal:
             mipsPerThread          = (3 * max_mips) / 8;
-            mipsTotal              = (3 * max_mips) / 4;
             bwBytePerSec           = max_bus_bw;
-            busbwUsagePercentage   = 75;
+            busbwUsagePercentage   = 50;
             break;
         case halide_hvx_power_turbo:
         default: 
             mipsPerThread          = max_mips;
-            mipsTotal              = max_mips * 2;
-            bwBytePerSec           = max_bus_bw * 2;
+            bwBytePerSec           = max_bus_bw * 4;
             busbwUsagePercentage   = 100;
             break;
     }
+    mipsTotal = mipsPerThread * 2;
+    latency = 1;
 
     bwMegabytesPerSec = bwBytePerSec >> 20;
     return halide_hexagon_remote_power_hvx_on_perf(
