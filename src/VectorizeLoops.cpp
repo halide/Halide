@@ -250,6 +250,8 @@ class PredicateLoadStore : public IRMutator {
                 << "We are inside a hexagon loop, but the target doesn't have hexagon's features\n";
             return true;
         } else if (target.arch == Target::X86) {
+            // Should only attempt to predicate store/load if the lane size is
+            // no less than 4
             return (bit_size == 32) && (lanes >= 4);
         }
         // For other architecture, do not predicate vector load/store
@@ -341,8 +343,6 @@ class PredicateLoadStore : public IRMutator {
     }
 
 public:
-    // Should only attempt to predicate store/load if the lane size is
-    // no less than 4
     PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t) :
             var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
             lanes(vpred.type().lanes()), valid(true), vectorized(false) {
