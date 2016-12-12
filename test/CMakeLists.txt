@@ -271,10 +271,12 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(cxx_mangling 
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
                          GENERATED_FUNCTION HalideTest::cxx_mangling)
-  halide_add_aot_test_dependency(cxx_mangling
-                               AOT_LIBRARY_TARGET cxx_mangling_gpu
-                               GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
-                               GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
+  if (TARGET_PTX)
+    halide_add_aot_test_dependency(cxx_mangling
+                                 AOT_LIBRARY_TARGET cxx_mangling_gpu
+                                 GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
+                                 GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
+  endif()
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
