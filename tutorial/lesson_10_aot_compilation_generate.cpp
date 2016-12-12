@@ -19,7 +19,7 @@
 // On os x:
 // g++ lesson_10*generate.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -o lesson_10_generate
 // DYLD_LIBRARY_PATH=../bin ./lesson_10_generate
-// g++ lesson_10*run.cpp lesson_10_halide.a -o lesson_10_run
+// g++ lesson_10*run.cpp lesson_10_halide.a -o lesson_10_run -I ../include
 // ./lesson_10_run
 
 // The benefits of this approach are that the final program:
