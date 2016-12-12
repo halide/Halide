@@ -278,50 +278,43 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     llvm::Triple triple(module->getTargetTriple());
 
     // Allocate target machine
-    const std::string MArch = march();
-    const std::string MCPU = mcpu();
-    const llvm::Target* TheTarget = 0;
 
-    std::string errStr;
-    TheTarget = TargetRegistry::lookupTarget(triple.str(), errStr);
-    internal_assert(TheTarget);
+    std::string err_str;
+    const llvm::Target *target = TargetRegistry::lookupTarget(triple.str(), err_str);
+    internal_assert(target) << err_str << "\n";
 
-    TargetOptions Options;
-    Options.LessPreciseFPMADOption = true;
-    Options.PrintMachineCode = false;
-    //Options.NoExcessFPPrecision = false;
-    Options.AllowFPOpFusion = FPOpFusion::Fast;
-    Options.UnsafeFPMath = true;
-    Options.NoInfsFPMath = false;
-    Options.NoNaNsFPMath = false;
-    Options.HonorSignDependentRoundingFPMathOption = false;
-    /* if (FloatABIForCalls != FloatABI::Default) */
-        /* Options.FloatABIType = FloatABIForCalls; */
-    Options.NoZerosInBSS = false;
-    Options.GuaranteedTailCallOpt = false;
-    Options.StackAlignmentOverride = 0;
-    // Options.DisableJumpTables = false;
+    TargetOptions options;
+    options.LessPreciseFPMADOption = true;
+    options.PrintMachineCode = false;
+    options.AllowFPOpFusion = FPOpFusion::Fast;
+    options.UnsafeFPMath = true;
+    options.NoInfsFPMath = true;
+    options.NoNaNsFPMath = true;
+    options.HonorSignDependentRoundingFPMathOption = false;
+    options.NoZerosInBSS = false;
+    options.GuaranteedTailCallOpt = false;
+    options.StackAlignmentOverride = 0;
 
-    CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
-
-    const std::string FeaturesStr = mattrs();
     std::unique_ptr<TargetMachine>
-        target(TheTarget->createTargetMachine(triple.str(),
-                                              MCPU, FeaturesStr, Options,
-                                              llvm::Reloc::PIC_,
-                                              llvm::CodeModel::Default,
-                                              OLvl));
-    internal_assert(target.get()) << "Could not allocate target machine!";
-    TargetMachine &Target = *target.get();
+        target_machine(target->createTargetMachine(triple.str(),
+                                                   mcpu(), mattrs(), options,
+                                                   llvm::Reloc::PIC_,
+                                                   llvm::CodeModel::Default,
+                                                   CodeGenOpt::Aggressive));
+
+    internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
     // Set up passes
     llvm::SmallString<8> outstr;
     raw_svector_ostream ostream(outstr);
     ostream.SetUnbuffered();
-    legacy::PassManager PM;
 
-    PM.add(new TargetLibraryInfoWrapperPass(triple));
+    legacy::FunctionPassManager function_pass_manager(module.get());
+    legacy::PassManager module_pass_manager;
 
+    module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
+    function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
+    
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls
     // to __nvvm_reflect with a constant via a map lookup. The inliner
@@ -338,33 +331,40 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // passes.
     #define kDefaultDenorms 0
     #define kFTZDenorms     1
-
+   
     StringMap<int> reflect_mapping;
     reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
-    PM.add(createNVVMReflectPass(reflect_mapping));
-
-    // Inlining functions is essential to PTX
-    #if LLVM_VERSION < 40
-    PM.add(createAlwaysInlinerPass());
-    #else
-    PM.add(createAlwaysInlinerLegacyPass());
-    #endif
+    module_pass_manager.add(createNVVMReflectPass(reflect_mapping));
+    
+    PassManagerBuilder b;
+    b.OptLevel = 3;
+    b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
+    b.LoopVectorize = true;
+    b.SLPVectorize = true;
+    b.populateFunctionPassManager(function_pass_manager);
+    b.populateModulePassManager(module_pass_manager);
 
     // Override default to generate verbose assembly.
-    Target.Options.MCOptions.AsmVerbose = true;
+    target_machine->Options.MCOptions.AsmVerbose = true;
 
     // Output string stream
 
     // Ask the target to add backend passes as necessary.
-    bool fail = Target.addPassesToEmitFile(PM, ostream,
-                                           TargetMachine::CGFT_AssemblyFile,
-                                           true);
+    bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream,
+                                                    TargetMachine::CGFT_AssemblyFile,
+                                                    true);
     if (fail) {
         internal_error << "Failed to set up passes to emit PTX source\n";
     }
 
-    PM.run(*module);
-
+    // Run optimization passes
+    function_pass_manager.doInitialization();
+    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        function_pass_manager.run(*i);
+    }
+    function_pass_manager.doFinalization();
+    module_pass_manager.run(*module);    
+    
     #if LLVM_VERSION < 38
     ostream.flush();
     #endif
