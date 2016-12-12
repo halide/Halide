@@ -445,8 +445,8 @@ static __inline int _skel_method(int (*_pfn)(uint32_t, uint32_t, uint32_t, uint3
    uint32_t _in7[1];
    uint32_t* _primIn;
    int _nErr = 0;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 1) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((1 + 0) + (0 + 0))) <= _praEnd);
    _ASSERT(_nErr, _pra[0].buf.nLen >= 32);
    _primIn = _pra[0].buf.pv;
    _COPY(_in0, 0, _primIn, 0, 4);
@@ -466,8 +466,8 @@ static __inline int _skel_method_1(int (*_pfn)(uint32_t), uint32_t _sc, remote_a
    uint32_t _in0[1];
    uint32_t* _primIn;
    int _nErr = 0;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 1) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((1 + 0) + (0 + 0))) <= _praEnd);
    _ASSERT(_nErr, _pra[0].buf.nLen >= 4);
    _primIn = _pra[0].buf.pv;
    _COPY(_in0, 0, _primIn, 0, 4);
@@ -482,8 +482,8 @@ static __inline int _skel_method_2(int (*_pfn)(uint32_t*, uint32_t*), uint32_t _
    uint32_t* _primROut;
    int _numIn[1];
    int _nErr = 0;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 1) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((0 + 1) + (0 + 0))) <= _praEnd);
    _numIn[0] = (REMOTE_SCALARS_INBUFS(_sc) - 0);
    _ASSERT(_nErr, _pra[(_numIn[0] + 0)].buf.nLen >= 8);
    _primROut = _pra[(_numIn[0] + 0)].buf.pv;
@@ -504,8 +504,8 @@ static __inline int _skel_method_3(int (*_pfn)(char*, uint32_t, uint32_t*), uint
    remote_arg* _praIn;
    remote_arg* _praROut;
    int _nErr = 0;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 3) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((1 + 2) + (0 + 0))) <= _praEnd);
    _numIn[0] = (REMOTE_SCALARS_INBUFS(_sc) - 1);
    _ASSERT(_nErr, _pra[0].buf.nLen >= 4);
    _primIn = _pra[0].buf.pv;
@@ -527,8 +527,8 @@ static __inline int _skel_method_4(int (*_pfn)(uint32_t, uint32_t), uint32_t _sc
    uint32_t _in1[1];
    uint32_t* _primIn;
    int _nErr = 0;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 1) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((1 + 0) + (0 + 0))) <= _praEnd);
    _ASSERT(_nErr, _pra[0].buf.nLen >= 8);
    _primIn = _pra[0].buf.pv;
    _COPY(_in0, 0, _primIn, 0, 4);
@@ -612,8 +612,8 @@ static __inline int _skel_method_5(int (*_pfn)(uint32_t, uint32_t, void*, uint32
    char* _seq_nat3;
    char* _seq_primIn4;
    char* _seq_nat4;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 4) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((4 + 0) + (0 + 0))) <= _praEnd);
    _numIn[0] = (REMOTE_SCALARS_INBUFS(_sc) - 1);
    _ASSERT(_nErr, _pra[0].buf.nLen >= 20);
    _primIn = _pra[0].buf.pv;
@@ -664,8 +664,8 @@ static __inline int _skel_method_5(int (*_pfn)(uint32_t, uint32_t, void*, uint32
 static __inline int _skel_method_6(int (*_pfn)(void), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    int _nErr = 0;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 0) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((0 + 0) + (0 + 0))) <= _praEnd);
    _TRY(_nErr, _pfn());
    _CATCH(_nErr) {}
    return _nErr;
@@ -681,8 +681,8 @@ static __inline int _skel_method_7(int (*_pfn)(uint32_t, char*, uint32_t, uint32
    uint32_t* _primROut;
    remote_arg* _praIn;
    int _nErr = 0;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 3) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((2 + 1) + (0 + 0))) <= _praEnd);
    _numIn[0] = (REMOTE_SCALARS_INBUFS(_sc) - 1);
    _ASSERT(_nErr, _pra[0].buf.nLen >= 8);
    _primIn = _pra[0].buf.pv;
@@ -708,8 +708,8 @@ static __inline int _skel_method_8(int (*_pfn)(char*, uint32_t, uint32_t*), uint
    uint32_t* _primROut;
    remote_arg* _praIn;
    int _nErr = 0;
-   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc));
-   _ASSERT(_nErr, (_pra + 3) <= _praEnd);
+   _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
+   _ASSERT(_nErr, (_pra + ((2 + 1) + (0 + 0))) <= _praEnd);
    _numIn[0] = (REMOTE_SCALARS_INBUFS(_sc) - 1);
    _ASSERT(_nErr, _pra[0].buf.nLen >= 4);
    _primIn = _pra[0].buf.pv;

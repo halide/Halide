@@ -13,7 +13,7 @@ extern "C" {
 
 typedef int halide_hexagon_handle_t;
 
-extern const struct halide_device_interface *halide_hexagon_device_interface();
+extern const struct halide_device_interface_t *halide_hexagon_device_interface();
 
 /** Check if the Hexagon runtime (libhalide_hexagon_host.so) is
  * available. If it is not, pipelines using Hexagon will fail. */
