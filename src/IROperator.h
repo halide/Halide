@@ -1819,6 +1819,38 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
 
 // @}
 
+/** Create an Expr that that guarantees a precondition.
+ * If 'condition' is true, the return value is equal to the first Expr.
+ * If 'condition' is false, halide_error() is called, and the return value 
+ * is arbitrary. Any additional arguments after the first Expr are stringified
+ * and passed as a user-facing message to halide_error(), similar to print().
+ *
+ * Note that this essentially *always* inserts a runtime check into the
+ * generated code (except when the condition can be proven at compile time);
+ * as such, it should be avoided inside inner loops, except for debugging
+ * or testing purposes.
+ *
+ * However, using this to make assertions about (say) input values
+ * can be useful, both in terms of correctness and (potentially) in terms
+ * of code generation, e.g.
+ \code
+ Param<int> p;
+ Expr y = require(p > 0, p);
+ \endcode
+ * will allow the optimizer to assume positive, nonzero values for y.
+ */
+// @{
+EXPORT Expr require(Expr condition, const std::vector<Expr> &values);
+
+template<typename ...Args>
+inline NO_INLINE Expr require(Expr condition, Expr value, Args&&... args) {
+    std::vector<Expr> collected_args = {value};
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
+    return require(condition, collected_args);
+}
+
+// @}
+
 
 /** Return an undef value of the given type. Halide skips stores that
  * depend on undef values, so you can use this to mean "do not modify
