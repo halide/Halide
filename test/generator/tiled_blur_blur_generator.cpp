@@ -12,7 +12,7 @@ Halide::Expr is_planar(const Halide::OutputImageParam &p, int channels = 3) {
 
 class TiledBlurBlur : public Halide::Generator<TiledBlurBlur> {
 public:
-    ImageParam input{ Int(32), 3, "input" };
+    ImageParam input{ Float(32), 3, "input" };
     Param<int> width{ "width" };
     Param<int> height{ "height" };
 
@@ -31,7 +31,7 @@ public:
         Func input_clamped = Halide::BoundaryConditions::repeat_edge(input, 0, width, 0, height);
 
         Func blur("blur");
-        blur(x, y, c) = 
+        blur(x, y, c) =
             (input_clamped(x - 1, y, c) + input_clamped(x + 1, y, c) +
              input_clamped(x, y - 1, c) + input_clamped(x, y + 1, c)) /
             4.0f;
