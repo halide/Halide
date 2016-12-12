@@ -1319,10 +1319,7 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *op) {
-    const Call *load_addr = op->args[0].as<Call>();
-    internal_assert(load_addr && (load_addr->is_intrinsic(Call::address_of)))
-        << "The first argument to predicated_load must be call to address_of of the load\n";
+void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *load_addr, Expr predicate) {
     const Broadcast *broadcast = load_addr->args[0].as<Broadcast>();
     const Load *load = broadcast ? broadcast->value.as<Load>() : load_addr->args[0].as<Load>();
     internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
@@ -1331,7 +1328,7 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *op) {
     if (load->type.is_handle()) {
         Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index, load->image, load->param);
         Expr src = Call::make(Handle().with_lanes(uint64_load.type().lanes()), Call::address_of, {uint64_load}, Call::Intrinsic);
-        Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, op->args[1]}, Call::Intrinsic);
+        Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, predicate}, Call::Intrinsic);
         codegen(reinterpret(load->type, expr));
         return;
     }
@@ -1340,14 +1337,16 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *op) {
     // hexagon is not handled by the LLVM
 
     // If any of the predicate lane is true, then just do normal load; otherwise,
-    // if none of the predicate lanes is true, just load undef
+    // if none of the predicate lanes is true, just load undef. It is okay to do
+    // normal load if any of the predicate lane is true since Hexagon allocates
+    // one additional vector past the end of the actual allocation.
     Expr load_expr = broadcast ? Expr(broadcast) : Expr(load);
     debug(4) << "Predicated vector load on hexagon\n\t" << load_expr << "\n";
-    Value *vpred = codegen(op->args[1]);
+    Value *vpred = codegen(predicate);
 
     Constant *lane = ConstantInt::get(i32_t, 0);
     Value *any_true = builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane));
-    for (int i = 1; i < op->args[1].type().lanes(); i++) {
+    for (int i = 1; i < predicate.type().lanes(); i++) {
         lane = ConstantInt::get(i32_t, i);
         any_true = builder->CreateOr(any_true, builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane)));
     }
@@ -1360,9 +1359,6 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *op) {
     builder->SetInsertPoint(true_bb);
     Value *true_value = codegen(load_expr);
     builder->CreateBr(after_bb);
-    // The true value might have jumped to a new block (e.g. if there was a
-    // nested select). To generate a correct PHI node, grab the current
-    // block.
     BasicBlock *true_pred = builder->GetInsertBlock();
 
     builder->SetInsertPoint(false_bb);
@@ -1378,39 +1374,34 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *op) {
     value = phi;
 }
 
-void CodeGen_Hexagon::codegen_predicated_vector_store(const Call *op) {
-    const Call *store_addr = op->args[0].as<Call>();
-    internal_assert(store_addr && (store_addr->is_intrinsic(Call::address_of)))
-        << "The first argument to predicated_store must be call to address_of of the store\n";
-
+void CodeGen_Hexagon::codegen_predicated_vector_store(const Call *store_addr, Expr predicate, Expr value) {
     const Broadcast *broadcast = store_addr->args[0].as<Broadcast>();
     const Load *load = broadcast ? broadcast->value.as<Load>() : store_addr->args[0].as<Load>();
     internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
 
     // Even on 32-bit systems, Handles are treated as 64-bit in
     // memory, so convert stores of handles to stores of uint64_ts.
-    if (op->args[2].type().is_handle()) {
-        Expr v = reinterpret(UInt(64, op->args[2].type().lanes()), op->args[2]);
+    if (value.type().is_handle()) {
+        Expr v = reinterpret(UInt(64, value.type().lanes()), value);
         Expr dest = Call::make(Handle().with_lanes(v.type().lanes()), Call::address_of,
                                {Load::make(v.type(), load->name, load->index, load->image, load->param)},
                                Call::Intrinsic);
         Expr expr = Call::make(v.type(), Call::predicated_store,
-                               {dest, op->args[1], v},
+                               {dest, predicate, v},
                                Call::Intrinsic);
         codegen(expr);
         return;
     }
 
-    Type value_type = op->args[2].type().element_of();
-
     // We need to scalarize the predicated store since masked store/load on
     // hexagon is not handled by the LLVM
     debug(4) << "Scalarize predicated vector store on hexagon\n";
-    Value *vpred = codegen(op->args[1]);
-    Value *vval = codegen(op->args[2]);
-    Expr index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
-    Value *vindex = codegen(index);
-    for (int i = 0; i < index.type().lanes(); i++) {
+    Type value_type = value.type().element_of();
+    Value *vpred = codegen(predicate);
+    Value *vval = codegen(value);
+    int nlanes = broadcast ? broadcast->lanes : load->index.type().lanes();
+    Value *vindex = codegen(load->index);
+    for (int i = 0; i < nlanes; i++) {
         Constant *lane = ConstantInt::get(i32_t, i);
         Value *p = builder->CreateExtractElement(vpred, lane);
         if (p->getType() != i1_t) {
@@ -1418,7 +1409,10 @@ void CodeGen_Hexagon::codegen_predicated_vector_store(const Call *op) {
         }
 
         Value *v = builder->CreateExtractElement(vval, lane);
-        Value *idx = builder->CreateExtractElement(vindex, lane);
+        Value *idx = vindex;
+        if (!broadcast) {
+            idx = builder->CreateExtractElement(vindex, lane);
+        }
         internal_assert(p && v && idx);
 
         BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);

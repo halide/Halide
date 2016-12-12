@@ -231,10 +231,8 @@ public:
 
     void visit(const Call *call) {
         bool old_protect_loads_in_scope = protect_loads_in_scope;
-        if (call->is_intrinsic(Call::address_of) ||
-            call->is_intrinsic(Call::predicated_store) ||
-            call->is_intrinsic(Call::predicated_load)) {
-            // We shouldn't lift load out of a address_of/predicated_store/predicated_load node.
+        if (call->is_intrinsic(Call::address_of)) {
+            // We shouldn't lift load out of an address_of node.
             protect_loads_in_scope = true;
         }
         IRGraphVisitor::visit(call);

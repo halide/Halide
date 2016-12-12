@@ -1736,7 +1736,7 @@ void CodeGen_LLVM::visit(const Load *op) {
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
         if (ramp && stride && stride->value == 1) {
-            value = codegen_predicated_dense_vector_load(op, nullptr);
+            value = codegen_dense_vector_load(op);
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
             Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
@@ -1982,23 +1982,20 @@ void CodeGen_LLVM::scalarize(Expr e) {
     value = result;
 }
 
-void CodeGen_LLVM::codegen_predicated_vector_store(const Call *op) {
-    const Call *store_addr = op->args[0].as<Call>();
-    internal_assert(store_addr && (store_addr->is_intrinsic(Call::address_of)))
-        << "The first argument to predicated_store must be call to address_of of the store\n";
+void CodeGen_LLVM::codegen_predicated_vector_store(const Call *store_addr, Expr predicate, Expr value) {
     const Broadcast *broadcast = store_addr->args[0].as<Broadcast>();
     const Load *load = broadcast ? broadcast->value.as<Load>() : store_addr->args[0].as<Load>();
     internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
 
     // Even on 32-bit systems, Handles are treated as 64-bit in
     // memory, so convert stores of handles to stores of uint64_ts.
-    if (op->args[2].type().is_handle()) {
-        Expr v = reinterpret(UInt(64, op->args[2].type().lanes()), op->args[2]);
+    if (value.type().is_handle()) {
+        Expr v = reinterpret(UInt(64, value.type().lanes()), value);
         Expr dest = Call::make(Handle().with_lanes(v.type().lanes()), Call::address_of,
                                {Load::make(v.type(), load->name, load->index, load->image, load->param)},
                                Call::Intrinsic);
         Expr expr = Call::make(v.type(), Call::predicated_store,
-                               {dest, op->args[1], v},
+                               {dest, predicate, v},
                                Call::Intrinsic);
         codegen(expr);
         return;
@@ -2007,10 +2004,10 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Call *op) {
     const Ramp *ramp = load->index.as<Ramp>();
 
     if (ramp && is_one(ramp->stride)) { // Dense vector store
-        debug(4) << "Predicated dense vector store\n\t" << Expr(op) << "\n";
-        Value *vpred = codegen(op->args[1]);
-        Halide::Type value_type = op->args[2].type();
-        Value *val = codegen(op->args[2]);
+        debug(4) << "Predicated dense vector store\n\t" << Expr(store_addr) << "\n";
+        Value *vpred = codegen(predicate);
+        Halide::Type value_type = value.type();
+        Value *val = codegen(value);
         bool is_external = (external_buffer.find(load->name) != external_buffer.end());
         int alignment = value_type.bytes();
         int native_bits = native_vector_bits();
@@ -2054,11 +2051,12 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Call *op) {
         }
     } else { // It's not dense vector store, we need to scalarize it
         debug(4) << "Scalarize predicated vector store\n";
-        Value *vpred = codegen(op->args[1]);
-        Value *vval = codegen(op->args[2]);
-        Expr index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
-        Value *vindex = codegen(index);
-        for (int i = 0; i < index.type().lanes(); i++) {
+        Type value_type = value.type().element_of();
+        Value *vpred = codegen(predicate);
+        Value *vval = codegen(value);
+        int nlanes = broadcast ? broadcast->lanes : load->index.type().lanes();
+        Value *vindex = codegen(load->index);
+        for (int i = 0; i < nlanes; i++) {
             Constant *lane = ConstantInt::get(i32_t, i);
             Value *p = builder->CreateExtractElement(vpred, lane);
             if (p->getType() != i1_t) {
@@ -2066,31 +2064,29 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Call *op) {
             }
 
             Value *v = builder->CreateExtractElement(vval, lane);
-            Value *idx = builder->CreateExtractElement(vindex, lane);
+            Value *idx = vindex;
+            if (!broadcast) {
+                idx = builder->CreateExtractElement(vindex, lane);
+            }
             internal_assert(p && v && idx);
 
-            string pred_name = unique_name("pred");
-            string val_name = unique_name("val");
-            string idx_name = unique_name("idx");
-            Expr pred = Variable::make(op->args[1].type().element_of(), pred_name);
-            Expr val = Variable::make(op->args[2].type().element_of(), val_name);
-            Expr store_idx = Variable::make(load->index.type().element_of(), idx_name);
+            BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+            BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+            builder->CreateCondBr(p, true_bb, after_bb);
 
-            sym_push(pred_name, p);
-            sym_push(val_name, v);
-            sym_push(idx_name, idx);
+            builder->SetInsertPoint(true_bb);
 
-            Stmt store = Store::make(load->name, val, store_idx, load->param);
-            codegen(IfThenElse::make(pred, store));
+            // Scalar
+            Value *ptr = codegen_buffer_pointer(load->name, value_type, idx);
+            builder->CreateAlignedStore(v, ptr, value_type.bytes());
 
-            sym_pop(pred_name);
-            sym_pop(val_name);
-            sym_pop(idx_name);
+            builder->CreateBr(after_bb);
+            builder->SetInsertPoint(after_bb);
         }
     }
 }
 
-Value *CodeGen_LLVM::codegen_predicated_dense_vector_load(const Load *load, Value *vpred) {
+Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     debug(4) << "Vectorize predicated dense vector load:\n\t" << Expr(load) << "\n";
 
     const Ramp *ramp = load->index.as<Ramp>();
@@ -2154,10 +2150,7 @@ Value *CodeGen_LLVM::codegen_predicated_dense_vector_load(const Load *load, Valu
     return value;
 }
 
-void CodeGen_LLVM::codegen_predicated_vector_load(const Call *op) {
-    const Call *load_addr = op->args[0].as<Call>();
-    internal_assert(load_addr && (load_addr->is_intrinsic(Call::address_of)))
-        << "The first argument to predicated_load must be call to address_of of the load\n";
+void CodeGen_LLVM::codegen_predicated_vector_load(const Call *load_addr, Expr predicate) {
     const Broadcast *broadcast = load_addr->args[0].as<Broadcast>();
     const Load *load = broadcast ? broadcast->value.as<Load>() : load_addr->args[0].as<Load>();
     internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
@@ -2166,7 +2159,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Call *op) {
     if (load->type.is_handle()) {
         Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index, load->image, load->param);
         Expr src = Call::make(Handle().with_lanes(uint64_load.type().lanes()), Call::address_of, {uint64_load}, Call::Intrinsic);
-        Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, op->args[1]}, Call::Intrinsic);
+        Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, predicate}, Call::Intrinsic);
         codegen(reinterpret(load->type, expr));
         return;
     }
@@ -2175,16 +2168,16 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Call *op) {
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
     if (ramp && is_one(ramp->stride)) { // Dense vector load
-        value = codegen_predicated_dense_vector_load(load, codegen(op->args[1]));
+        value = codegen_dense_vector_load(load, codegen(predicate));
     } else if (ramp && stride && stride->value == -1) {
-        debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
+        debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(load) << "\n";
         vector<int> indices(ramp->lanes);
         for (int i = 0; i < ramp->lanes; i++) {
             indices[i] = ramp->lanes - 1 - i;
         }
 
         // Flip the predicate
-        Value *vpred = codegen(op->args[1]);
+        Value *vpred = codegen(predicate);
         vpred = shuffle_vectors(vpred, indices);
 
         // Load the vector and then flip it in-place
@@ -2193,14 +2186,14 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Call *op) {
         Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->lanes);
         Expr flipped_load = Load::make(load->type, load->name, flipped_index, load->image, load->param);
 
-        Value *flipped = codegen_predicated_dense_vector_load(flipped_load.as<Load>(), vpred);
+        Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = shuffle_vectors(flipped, indices);
     } else { // It's not dense vector load, we need to scalarize it
         Expr load_expr = broadcast ? Expr(broadcast) : Expr(load);
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
-                                    {op->args[1], load_expr, make_zero(load_expr.type())},
+                                    {predicate, load_expr, make_zero(load_expr.type())},
                                     Internal::Call::Intrinsic);
         value = codegen(pred_load);
     }
@@ -2550,7 +2543,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args[1].type().lanes() == op->args[2].type().lanes())
             << "Predicate of predicated_store should have the same number of lanes as the store value\n";
 
-        codegen_predicated_vector_store(op);
+        const Call *store_addr = op->args[0].as<Call>();
+        internal_assert(store_addr && (store_addr->is_intrinsic(Call::address_of)))
+            << "The first argument to predicated_store must be call to address_of of the store\n";
+
+        codegen_predicated_vector_store(store_addr, op->args[1], op->args[2]);
 
     } else if (op->is_intrinsic(Call::predicated_load)) {
         internal_assert(op->args.size() == 2) << "predicated_load takes two arguments: {load addr, predicate}\n";
@@ -2558,7 +2555,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args[1].type().lanes() == op->args[0].type().lanes())
             << "Predicate of predicated_load should have the same number of lanes as the load\n";
 
-        codegen_predicated_vector_load(op);
+        const Call *load_addr = op->args[0].as<Call>();
+        internal_assert(load_addr && (load_addr->is_intrinsic(Call::address_of)))
+            << "The first argument to predicated_load must be call to address_of of the load\n";
+
+        codegen_predicated_vector_load(load_addr, op->args[1]);
 
     } else if (op->is_intrinsic(Call::trace) ||
                op->is_intrinsic(Call::trace_expr)) {
