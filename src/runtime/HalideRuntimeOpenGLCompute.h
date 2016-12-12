@@ -11,7 +11,7 @@ extern "C" {
  *  Routines specific to the Halide OpenGL Compute runtime.
  */
 
-extern const struct halide_device_interface *halide_openglcompute_device_interface();
+extern const struct halide_device_interface_t *halide_openglcompute_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide Glsl runtime. Do not call them. */

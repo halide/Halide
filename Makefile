@@ -285,7 +285,6 @@ SOURCE_FILES = \
   Error.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
-  FragmentAllocations.cpp \
   Float16.cpp \
   Func.cpp \
   Function.cpp \
@@ -410,7 +409,6 @@ HEADER_FILES = \
   Extern.h \
   FastIntegerDivide.h \
   FindCalls.h \
-  FragmentAllocations.h \
   Float16.h \
   Func.h \
   Function.h \
@@ -872,6 +870,14 @@ $(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::cxx_mangling"
 
+# Also build with a gpu target to ensure that the GPU-Host generation
+# code handles name mangling properly. (Note that we don't need to
+# run this code, just check for link errors.)
+$(FILTERS_DIR)/cxx_mangling_gpu.a: $(BIN_DIR)/cxx_mangling.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -o $(CURDIR)/$(FILTERS_DIR) target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling-cuda -f "HalideTest::cxx_mangling_gpu"
+
 $(FILTERS_DIR)/cxx_mangling_define_extern.a: $(BIN_DIR)/cxx_mangling_define_extern.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
@@ -951,6 +957,7 @@ $(FILTERS_DIR)/matlab.a: $(BIN_DIR)/matlab.generator
 # TODO(srj): we really want to say "anything that depends on tiled_blur.a also depends on tiled_blur_blur.a";
 # is there a way to specify that in Make?
 $(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.a
+$(BIN_DIR)/generator_aot_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_gpu.a
 $(BIN_DIR)/generator_aot_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.a
 
 $(BIN_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h
@@ -1021,7 +1028,7 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-I$(TMP_DIR) $(TMP_DIR)/$${LESSON}_*.a -lpthread $(LIBDL) $(LIBPNG_LIBS) -lz -o $@; \
+		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a -lpthread $(LIBDL) $(LIBPNG_LIBS) -lz -o $@; \
 	else \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
 		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(LIBPNG_LIBS) -o $@;\
