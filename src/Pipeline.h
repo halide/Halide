@@ -355,10 +355,6 @@ public:
     EXPORT Realization realize(const Target &target = Target());
 
     EXPORT void realize(BufferRefs bufs, const Target &target = Target());
-    template<typename T, int D>
-    NO_INLINE void realize(Buffer<T, D> &buf, const Target &target = Target()) {
-        realize({buf}, target);
-    }
     // @}
 
     /** For a given size of output, or a given set of output buffers,
@@ -369,10 +365,6 @@ public:
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(BufferRefs bufs);
-    template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Buffer<T, D> &buf) {
-        infer_input_bounds({buf});
-    }
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
