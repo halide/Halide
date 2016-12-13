@@ -354,7 +354,7 @@ To build and run the HelloHexagon example in Halide/apps/HelloHexagon on the sim
 
     cd apps/HelloHexagon
     export HL_HEXAGON_TOOLS=$SDK_LOC/Hexagon_Tools/8.0/Tools/
-    LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. make run-host
+    LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:../../src/runtime/hexagon_remote/bin/v60/:$HL_HEXAGON_TOOLS/lib/iss/:. make run-host
 
 #### To build and run the HelloHexagon example in Halide/apps/HelloHexagon on Android:
 
