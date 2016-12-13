@@ -14,9 +14,9 @@ namespace Halide {
 namespace Internal {
 
 struct BufferContents {
-    Buffer<> image;
     std::string name;
     mutable RefCount ref_count;
+    Buffer<void, 0>::Ref image;
 };
 
 template<>
@@ -30,17 +30,17 @@ EXPORT void destroy<BufferContents>(const BufferContents *p) {
 }
 
 namespace {
-std::string make_buffer_name(const std::string &n, const Buffer<> &image) {
+std::string make_buffer_name(const std::string &n, const Buffer<void, 0>::Ref &image) {
     if (n.empty()) {
         // Embedded images are deduped by name, so it's important that
         // the same image always gets the same name.
         static std::mutex name_lock;
         std::lock_guard<std::mutex> lock_guard(name_lock);
         static std::map<const void *, std::string> buffer_names;
-        auto it = buffer_names.find(image.data());
+        auto it = buffer_names.find(image->data());
         if (it == buffer_names.end()) {
             std::string name = unique_name('b');
-            buffer_names[image.data()] = name;
+            buffer_names[image->data()] = name;
             return name;
         } else {
             return it->second;
@@ -51,21 +51,23 @@ std::string make_buffer_name(const std::string &n, const Buffer<> &image) {
 }
 }
 
-BufferPtr::BufferPtr(const Buffer<> &buf, std::string name) :
+BufferPtr::BufferPtr(Buffer<void, 0>::Ref buf, std::string name) :
     contents(new Internal::BufferContents) {
-    contents->image = Buffer<>(buf);
+    contents->image = buf;
     contents->name = make_buffer_name(name, contents->image);
 }
 
 BufferPtr::BufferPtr(Type t, const buffer_t &buf, std::string name) :
     contents(new Internal::BufferContents) {
-    contents->image = Buffer<>(t, buf);
+    Buffer<> b(t, buf);
+    contents->image = b.as<void, 0>().make_shared_ref();
     contents->name = make_buffer_name(name, contents->image);
 }
 
 BufferPtr::BufferPtr(Type t, const std::vector<int> &size, std::string name) :
     contents(new Internal::BufferContents) {
-    contents->image = Buffer<>(t, size);
+    Buffer<> b(t, size);
+    contents->image = b.as<void, 0>().make_shared_ref();
     contents->name = make_buffer_name(name, contents->image);
 }
 
@@ -73,16 +75,16 @@ bool BufferPtr::same_as(const BufferPtr &other) const {
     return contents.same_as(other.contents);
 }
 
-Buffer<> &BufferPtr::get() {
-    return contents->image;
+Buffer<void, 0> &BufferPtr::get() {
+    return *(contents->image);
 }
 
-const Buffer<> &BufferPtr::get() const {
-    return contents->image;
+const Buffer<void, 0> &BufferPtr::get() const {
+    return *(contents->image);
 }
 
 bool BufferPtr::defined() const {
-    return contents->image;
+    return contents.defined() && contents->image.defined();
 }
 
 const std::string &BufferPtr::name() const {
@@ -90,15 +92,15 @@ const std::string &BufferPtr::name() const {
 }
 
 Type BufferPtr::type() const {
-    return contents->image.type();
+    return contents->image->type();
 }
 
 int BufferPtr::dimensions() const {
-    return contents->image.dimensions();
+    return contents->image->dimensions();
 }
 
-Buffer<>::Dimension BufferPtr::dim(int i) const {
-    return contents->image.dim(i);
+Buffer<void, 0>::Dimension BufferPtr::dim(int i) const {
+    return contents->image->dim(i);
 }
 
 int BufferPtr::min(int i) const {
@@ -114,11 +116,11 @@ int BufferPtr::stride(int i) const {
 }
 
 buffer_t *BufferPtr::raw_buffer() const {
-    return contents->image.raw_buffer();
+    return contents->image->raw_buffer();
 }
 
 size_t BufferPtr::size_in_bytes() const {
-    return contents->image.size_in_bytes();
+    return contents->image->size_in_bytes();
 }
 
 uint8_t *BufferPtr::host_ptr() const {

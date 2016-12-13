@@ -800,6 +800,12 @@ public:
     /** Destructor. Will release any underlying owned allocation if
      * this is the last reference to it. */
     ~Buffer() {
+        if (ref_holder) {
+            // There are still references to me via the
+            // ref_holder. Move me to the heap.
+            ref_holder->storage = std::move(*this);
+            ref_holder->ptr = &ref_holder->storage.as<T, D>();
+        }
         decref();
     }
 
@@ -837,7 +843,7 @@ public:
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
     Buffer<T2, D2> &as() & {
-        Buffer<T2, D2>::assert_can_convert_from(*this);
+        Buffer<T2, D>::assert_can_convert_from(*this);
         return *((Buffer<T2, D2> *)this);
     }
 
@@ -848,7 +854,7 @@ public:
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
     const Buffer<T2, D2> &as() const &  {
-        Buffer<T2, D2>::assert_can_convert_from(*this);
+        Buffer<T2, D>::assert_can_convert_from(*this);
         return *((const Buffer<T2, D2> *)this);
     }
 
@@ -1589,6 +1595,125 @@ public:
         }
     }
 
+    /** See make_shared_ref */
+private:
+
+    struct RefHolder {
+        Buffer<T, D> *ptr = nullptr;
+        std::atomic<int> ref_count;
+        // Note that we erase the dimensionality here. Just as a
+        // Buffer<int, 0>* can point to a Buffer<int, 4>, we want a
+        // Buffer<int, 0>::Ref to be able to refer to a Buffer<int, 4>
+        Buffer<T> storage;
+    } *ref_holder = nullptr;
+
+public:
+    class Ref {
+        RefHolder *ptr = nullptr;
+
+        void incref() {
+            if (ptr) {
+                ptr->ref_count++;
+            }
+        }
+
+        void decref() {
+            if (ptr) {
+                int new_count = ptr->ref_count--;
+                if (new_count == 0) {
+                    delete ptr;
+                    ptr = nullptr;
+                }
+            }
+        }
+
+    public:
+        Ref() {}
+
+        Ref(RefHolder *r) : ptr(r) {
+            incref();
+        }
+
+        Ref(const Buffer<T, D>::Ref &other) {
+            ptr = other.ptr;
+            incref();
+        }
+
+        Ref(Buffer<T, D>::Ref &&other) {
+            ptr = other.ptr;
+            other.ptr = nullptr;
+        }
+
+        ~Ref() {
+            decref();
+        }
+
+        Ref &operator=(const Buffer<T, D>::Ref &other) {
+            if (other.ptr != ptr) {
+                decref();
+                ptr = other.ptr;
+                incref();
+            }
+            return *this;
+        }
+
+        Ref &operator=(Buffer<T, D>::Ref &&other) {
+            std::swap(ptr, other.ptr);
+            return *this;
+        }
+
+        bool same_as(const Buffer<T, D>::Ref &other) {
+            return ptr == other.ptr;
+        }
+
+        bool defined() const {
+            return ptr;
+        }
+
+        Buffer<T, D> *get() {
+            if (!ptr) return nullptr;
+            return ptr->ptr;
+        }
+
+        const Buffer<T, D> *get() const {
+            if (!ptr) return nullptr;
+            return ptr->ptr;
+        }
+
+        Buffer<T, D> *operator->() {
+            return ptr->ptr;
+        }
+
+        const Buffer<T, D> *operator->() const {
+            return ptr->ptr;
+        }
+
+        Buffer<T, D> &operator*() {
+            return *(ptr->ptr);
+        }
+
+        const Buffer<T, D> &operator*() const {
+            return *(ptr->ptr);
+        }
+
+    };
+
+    /** Make a shared reference to this Buffer. This reference does
+     * not actually keep the Buffer alive. If the Buffer is destroyed,
+     * it becomes a shared reference to a copy of this Buffer as it
+     * was at its time of death. It's a weak reference that acts like
+     * a strong reference. For this reason, it's perfectly legal to
+     * make a shared ref to a Buffer that lives on the stack. It will
+     * be transparently moved to the heap if references remain when
+     * its original scope ends. */
+    Ref make_shared_ref() {
+        if (ref_holder == nullptr) {
+            ref_holder = new RefHolder;
+            ref_holder->ptr = this;
+            ref_holder->ref_count = 0;
+        }
+        return Ref(ref_holder);
+    }
 
 };
 
