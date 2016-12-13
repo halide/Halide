@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
         f(xl) = f(xl - 1) + f(xl);
         f(xr) = f(xr + 1) + f(xr);
 
-        Image<float> result = f.realize(11);
+        Buffer<float> result = f.realize(11);
 
         // The same thing in C
         float ref[11];
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
         f(r2) = g(r2);
 
         g.compute_at(f, r2);
-        Image<int> result = f.realize(110);
+        Buffer<int> result = f.realize(110);
 
         int correct[110];
         for (int i = 0; i < 110; i++) {
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
             f(i) = f(i-1) + f(i-2);
         }
 
-        Image<int> result = f.realize(20);
+        Buffer<int> result = f.realize(20);
 
         int ref[20];
         ref[0] = 1;
@@ -127,10 +127,10 @@ int main(int argc, char **argv) {
         // we don't have the ability to reorder vars with rvars yet.
         f.update(1).reorder(Var(r.x.name()), y).parallel(y);
 
-        Image<float> result = f.realize(100, 100);
+        Buffer<float> result = f.realize(100, 100);
 
         // Now the equivalent in C (cheating and using Halide for the initial image)
-        Image<float> ref = lambda(x, y, sin(x+y)).realize(100, 100);
+        Buffer<float> ref = lambda(x, y, sin(x+y)).realize(100, 100);
         for (int y = 1; y < 100; y++) {
             for (int x = 0; x < 100; x++) {
                 ref(x, y) += ref(x, y - 1);

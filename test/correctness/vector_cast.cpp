@@ -55,7 +55,7 @@ bool test(int vec_width, const Target &target) {
     int W = 1024;
     int H = 1;
 
-    Image<A> input(W, H);
+    Buffer<A> input(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             input(x, y) = (A)((rand()&0xffff)*0.1);
@@ -79,7 +79,7 @@ bool test(int vec_width, const Target &target) {
         }
     }
 
-    Image<B> output = f.realize(W, H);
+    Buffer<B> output = f.realize(W, H);
 
     /*
     for (int y = 0; y < H; y++) {

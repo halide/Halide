@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
     f(x, y) = my_func(x, cast<float>(y));
 
-    Image<float> imf = f.realize(32, 32);
+    Buffer<float> imf = f.realize(32, 32);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 
     Pipeline p(g);
     p.set_jit_externs({ { "my_func", my_func2 } });
-    Image<float> imf2 = p.realize(32, 32);
+    Buffer<float> imf2 = p.realize(32, 32);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 
     // Switch from my_func2 to my_func and verify a recompile happens.
     p.set_jit_externs({ { "my_func", my_func3 } });
-    Image<float> imf3 = p.realize(32, 32);
+    Buffer<float> imf3 = p.realize(32, 32);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {

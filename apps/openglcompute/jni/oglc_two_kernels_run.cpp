@@ -13,7 +13,7 @@
 extern "C" int halide_copy_to_host(void *, buffer_t *);
 extern "C" int halide_device_sync(void *, buffer_t *);
 extern "C" int halide_device_free(void *, buffer_t* buf);
-extern "C" void halide_device_release(void *, const halide_device_interface *interface);
+extern "C" void halide_device_release(void *, const halide_device_interface_t *interface);
 
 buffer_t make_interleaved_image(int width, int height, int channels, int32_t host[]) {
     buffer_t bt_input = { 0 };

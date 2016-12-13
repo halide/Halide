@@ -19,7 +19,7 @@
 // On os x:
 // g++ lesson_10*generate.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -o lesson_10_generate
 // DYLD_LIBRARY_PATH=../bin ./lesson_10_generate
-// g++ lesson_10*run.cpp lesson_10_halide.a -o lesson_10_run
+// g++ lesson_10*run.cpp lesson_10_halide.a -o lesson_10_run -I ../include
 // ./lesson_10_run
 
 // The benefits of this approach are that the final program:
@@ -53,11 +53,11 @@ int main(int argc, char **argv) {
     // inputs and outputs.
     ImageParam input(type_of<uint8_t>(), 2);
 
-    // If we were jit-compiling, these would just be an int and an
-    // Image, but because we want to compile the pipeline once and
+    // If we were jit-compiling, these would just be an int and a
+    // Buffer, but because we want to compile the pipeline once and
     // have it work for any value of the parameter, we need to make a
     // Param object, which can be used like an Expr, and an ImageParam
-    // object, which can be used like an Image.
+    // object, which can be used like a Buffer.
 
     // Define the Func.
     brighter(x, y) = input(x, y) + offset;

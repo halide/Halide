@@ -15,10 +15,10 @@ int main(int argc, char **argv) {
 
     handle.set(&foo);
 
-    Image<uint64_t> out1 = f.realize(4);
+    Buffer<uint64_t> out1 = f.realize(4);
 
     g.vectorize(x, 4);
-    Image<uint64_t> out2 = g.realize(4);
+    Buffer<uint64_t> out2 = g.realize(4);
 
     uint64_t correct = (uint64_t)((uintptr_t)(&foo));
 

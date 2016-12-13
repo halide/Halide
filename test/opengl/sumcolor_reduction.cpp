@@ -9,7 +9,7 @@ int main() {
 
     // Define the input.
     const int width = 10, height = 10, channels = 3;
-    Image<float> input(width, height, channels);
+    Buffer<float> input(width, height, channels);
     for (int c = 0; c < input.channels(); c++) {
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -29,7 +29,7 @@ int main() {
     g.bound(c, 0, 3).glsl(x, y, c);
 
     // Generate the result.
-    Image<float> result = g.realize(10, 10, 3, target);
+    Buffer<float> result = g.realize(10, 10, 3, target);
     result.copy_to_host();
 
     // Check the result.

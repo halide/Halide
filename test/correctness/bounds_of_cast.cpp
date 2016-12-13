@@ -4,12 +4,12 @@
 using namespace Halide;
 
 void check(Func f, ImageParam in, int min, int extent) {
-    Image<int> output(12345);
+    Buffer<int> output(12345);
     output.set_min(-1234);
 
     in.reset();
     f.infer_input_bounds(output);
-    Image<int> im = in.get();
+    Buffer<int> im = in.get();
 
     if (im.extent(0) != extent || im.min(0) != min) {
         printf("Inferred size was [%d, %d] instead of [%d, %d]\n",

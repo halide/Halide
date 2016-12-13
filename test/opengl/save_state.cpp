@@ -319,8 +319,8 @@ int main() {
 
     KnownState known_state;
 
-    Image<uint8_t> input(255, 10, 3);
-    Image<uint8_t> out(UInt(8), 255, 10, 3);
+    Buffer<uint8_t> input(255, 10, 3);
+    Buffer<uint8_t> out(UInt(8), 255, 10, 3);
 
     Var x, y, c;
     Func g;

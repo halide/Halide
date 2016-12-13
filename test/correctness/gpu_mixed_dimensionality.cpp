@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
     f.compute_at(g, Var::gpu_threads());
     f.update();
 
-    Image<int> o = out.realize(64, 64, 64);
+    Buffer<int> o = out.realize(64, 64, 64);
 
     for (int z = 0; z < 64; z++) {
         for (int y = 0; y < 64; y++) {

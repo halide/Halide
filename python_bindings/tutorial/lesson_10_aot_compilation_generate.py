@@ -53,11 +53,11 @@ def main():
     # inputs and outputs.
     input = ImageParam(UInt(8), 2)
 
-    # If we were jit-compiling, these would just be an int and an
-    # Image, but because we want to compile the pipeline once and
+    # If we were jit-compiling, these would just be an int and a
+    # Buffer, but because we want to compile the pipeline once and
     # have it work for any value of the parameter, we need to make a
     # Param object, which can be used like an Expr, and an ImageParam
-    # object, which can be used like an Image.
+    # object, which can be used like a Buffer.
 
     # Define the Func.
     brighter[x, y] = input[x, y] + offset
