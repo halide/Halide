@@ -24,7 +24,7 @@ class ImageParam : public OutputImageParam {
     EXPORT void init_func();
 
     EXPORT void set(Internal::BufferPtr b);
-    
+
 public:
 
     /** Construct a nullptr image parameter handle. */
@@ -41,20 +41,20 @@ public:
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
     template<typename T, int D>
-    NO_INLINE void set(const Buffer<T, D> &im) {
+    NO_INLINE void set(Buffer<T, D> &im) {
         set(Internal::BufferPtr(im));
     }
     // @}
 
-    /** Get the Image bound to this ImageParam. Only relevant for jitting */
+    /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting */
     // @{
-    EXPORT const Buffer<> &get() const;
-    EXPORT Buffer<> &get();
+    EXPORT const Buffer<void, 0> &get() const;
+    EXPORT Buffer<void, 0> &get();
     // @}
 
     /** Unbind any bound Image */
     EXPORT void reset();
-    
+
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
      * variables to match the dimensionality of the image

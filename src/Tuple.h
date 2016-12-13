@@ -66,7 +66,7 @@ public:
  * them. Tuples are to Exprs as Realizations are to Images. */
 class Realization {
 private:
-    std::vector<Internal::BufferPtr> images;
+    std::vector<Buffer<>::Ref> images;
 public:
     /** The number of images in the Realization. */
     size_t size() const { return images.size(); }
@@ -74,19 +74,19 @@ public:
     /** Get a reference to one of the images. */
     Buffer<> &operator[](size_t x) {
         user_assert(x < images.size()) << "Realization access out of bounds\n";
-        return images[x].get();
+        return *images[x];
     }
 
     /** Get one of the images. */
     const Buffer<> &operator[](size_t x) const {
         user_assert(x < images.size()) << "Realization access out of bounds\n";
-        return images[x].get();
+        return *images[x];
     }
 
     /** Single-element realizations are implicitly castable to Images. */
     template<typename T, int D>
     operator Buffer<T, D>() const {
-        return images[0];
+        return *images[0];
     }
 
     /** Construct a Realization from some Images. */
@@ -95,25 +95,27 @@ public:
              int D,
              typename ...Args,
              typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
-    Realization(Buffer<T, D> a, Args&&... args) {
-        images = std::vector<Internal::BufferPtr>{a, std::forward<Args>(args)...};
+    Realization(Buffer<T, D> &a, Args&&... args) {
+        images = std::vector<typename Buffer<>::Ref>({a.template as<void>().make_shared_ref(),
+                                                      args.template as<void>().make_shared_ref()...});
     }
     //@}
 
-    /** Construct a Realization from a vector of Buffer<> */
-    explicit Realization(const std::vector<Buffer<>> &e) {
+    /** Construct a Realization that refers to the buffers in an
+     * existing vector of Buffer<> */
+    explicit Realization(std::vector<Buffer<>> &e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
-        for (const Buffer<> &im : e) {
-            images.push_back(Internal::BufferPtr(im));
+        for (Buffer<> &im : e) {
+            images.push_back(im.make_shared_ref());
         }
     }
 
     /** Support for iterating over a the Images in a Realization */
     struct iterator {
-        std::vector<Internal::BufferPtr>::iterator iter;
+        std::vector<Buffer<>::Ref>::iterator iter;
 
         Buffer<> &operator*() {
-            return iter->get();
+            return **iter;
         };
         iterator &operator++() {
             iter++;
@@ -133,10 +135,10 @@ public:
     }
 
     struct const_iterator {
-        std::vector<Internal::BufferPtr>::const_iterator iter;
+        std::vector<Buffer<>::Ref>::const_iterator iter;
 
         const Buffer<> &operator*() {
-            return iter->get();
+            return **iter;
         };
         const_iterator &operator++() {
             iter++;

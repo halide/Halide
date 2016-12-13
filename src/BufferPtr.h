@@ -20,20 +20,21 @@ private:
 
 public:
     BufferPtr() : contents(nullptr) {}
-    EXPORT BufferPtr(const Buffer<> &buf, std::string name = "");
+    EXPORT BufferPtr(Buffer<void, 0>::Ref buf, std::string name = "");
     EXPORT BufferPtr(Type t, const buffer_t &buf, std::string name = "");
 
-    template<typename T, int D> BufferPtr(const Buffer<T, D> &buf, std::string name = "") :
-        BufferPtr(Buffer<>(buf), name) {}
+    template<typename T, int D>
+    BufferPtr(Buffer<T, D> &buf, std::string name = "") :
+        BufferPtr(buf.template as<void, 0>().make_shared_ref(), name) {}
 
     EXPORT BufferPtr(Type t, const std::vector<int> &size, std::string name = "");
 
     /** Compare two buffers for identity (not equality of data). */
     EXPORT bool same_as(const BufferPtr &other) const;
 
-    /** Get the underlying Image */
-    EXPORT Buffer<> &get();
-    EXPORT const Buffer<> &get() const;
+    /** Get a reference to the underlying Buffer */
+    EXPORT Buffer<void, 0> &get();
+    EXPORT const Buffer<void, 0> &get() const;
 
     /** Check if this buffer handle actually points to data. */
     EXPORT bool defined() const;
@@ -48,7 +49,7 @@ public:
     EXPORT int dimensions() const;
 
     /** Get a dimension from the underlying buffer. */
-    EXPORT Buffer<>::Dimension dim(int i) const;
+    EXPORT Buffer<void, 0>::Dimension dim(int i) const;
 
     /** Access to the mins, strides, extents. Will be deprecated. Do not use. */
     // @{
@@ -66,12 +67,14 @@ public:
     /** Get the host pointer */
     EXPORT uint8_t *host_ptr() const;
 
+    #if 0
     /** Convert a buffer to a typed and dimensioned Image. Does
      * runtime type checks. */
     template<typename T, int D>
     operator Buffer<T, D>() const {
         return Buffer<T, D>(get());
     }
+    #endif
 
     /** Make a Call node to a specific site in this buffer. */
     // @{
@@ -91,14 +94,15 @@ public:
 /** An adaptor so that it's possible to access a Halide::Image using Exprs. */
 template<typename T, int D, typename ...Args,
          typename = std::enable_if<(Internal::all_are_convertible<Expr, Args...>::value)>>
-NO_INLINE Expr image_accessor(const Buffer<T, D> &im, Expr first, Args... rest) {
+NO_INLINE Expr image_accessor(Buffer<T, D> &im, Expr first, Args... rest) {
     return Internal::BufferPtr(im)(first, rest...);
 }
 
 template<typename T, int D>
-NO_INLINE Expr image_accessor(const Buffer<T, D> &im, const std::vector<Expr> &args) {
+NO_INLINE Expr image_accessor(Buffer<T, D> &im, const std::vector<Expr> &args) {
     return Internal::BufferPtr(im)(args);
 }
+
 
 }
 
