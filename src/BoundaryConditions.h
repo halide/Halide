@@ -51,24 +51,12 @@ namespace BoundaryConditions {
 
 namespace Internal {
 
-inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr>> &collected_bounds,
-                                     Expr min, Expr extent) {
-    collected_bounds.push_back(std::make_pair(min, extent));
-}
-
-template <typename ...Bounds>
-inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr>> &collected_bounds,
-                                     Expr min, Expr extent, Bounds... bounds) {
-    collected_bounds.push_back(std::make_pair(min, extent));
-    collect_bounds(collected_bounds, bounds...);
-}
-
 inline const Func &func_like_to_func(const Func &func) {
     return func;
 }
 
 template <typename T>
-inline NO_INLINE Func func_like_to_func(T func_like) {
+inline NO_INLINE Func func_like_to_func(const T &func_like) {
     return lambda(_, func_like(_));
 }
 
@@ -79,7 +67,7 @@ inline NO_INLINE Func func_like_to_func(T func_like) {
  *  constant, though the code currently allows accessing the arguments
  *  of source.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -96,7 +84,7 @@ EXPORT Func constant_exterior(const Func &source, Expr value,
                               const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Tuple value) {
+inline NO_INLINE Func constant_exterior(const T &func_like, Tuple value) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -105,28 +93,30 @@ inline NO_INLINE Func constant_exterior(T func_like, Tuple value) {
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
 }
 template <typename T>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value) {
+inline NO_INLINE Func constant_exterior(const T &func_like, Expr value) {
     return constant_exterior(func_like, Tuple(value));
 }
 
-template <typename T, typename ...Bounds>
-inline NO_INLINE Func constant_exterior(T func_like, Tuple value,
-                                        Bounds... bounds) {
+template <typename T, typename ...Bounds,
+          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
+inline NO_INLINE Func constant_exterior(const T &func_like, Tuple value,
+                                        Bounds&&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
-    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
 }
-template <typename T, typename ...Bounds>
-inline NO_INLINE Func constant_exterior(T func_like, Expr value,
-                                        Bounds... bounds) {
-    return constant_exterior(func_like, Tuple(value), bounds...);
+template <typename T, typename ...Bounds,
+          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
+inline NO_INLINE Func constant_exterior(const T &func_like, Expr value,
+                                        Bounds&&... bounds) {
+    return constant_exterior(func_like, Tuple(value), std::forward<Bounds>(bounds)...);
 }
 // @}
 
 /** Impose a boundary condition such that the nearest edge sample is returned
  *  everywhere outside the given region.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -140,7 +130,7 @@ EXPORT Func repeat_edge(const Func &source,
                         const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func repeat_edge(T func_like) {
+inline NO_INLINE Func repeat_edge(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -150,10 +140,11 @@ inline NO_INLINE Func repeat_edge(T func_like) {
 }
 
 
-template <typename T, typename ...Bounds>
-inline NO_INLINE Func repeat_edge(T func_like, Bounds... bounds) {
+template <typename T, typename ...Bounds,
+          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
+inline NO_INLINE Func repeat_edge(const T &func_like, Bounds&&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
-    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return repeat_edge(Internal::func_like_to_func(func_like), collected_bounds);
 }
 // @}
@@ -161,7 +152,7 @@ inline NO_INLINE Func repeat_edge(T func_like, Bounds... bounds) {
 /** Impose a boundary condition such that the entire coordinate space is
  *  tiled with copies of the image abutted against each other.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -175,7 +166,7 @@ EXPORT Func repeat_image(const Func &source,
                          const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func repeat_image(T func_like) {
+inline NO_INLINE Func repeat_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -184,10 +175,11 @@ inline NO_INLINE Func repeat_image(T func_like) {
     return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-template <typename T, typename ...Bounds>
-inline NO_INLINE Func repeat_image(T func_like, Bounds... bounds) {
+template <typename T, typename ...Bounds,
+          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
+inline NO_INLINE Func repeat_image(const T &func_like, Bounds&&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
-    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return repeat_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
 
@@ -195,7 +187,7 @@ inline NO_INLINE Func repeat_image(T func_like, Bounds... bounds) {
  *  tiled with copies of the image abutted against each other, but mirror
  *  them such that adjacent edges are the same.
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -209,7 +201,7 @@ EXPORT Func mirror_image(const Func &source,
                          const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func mirror_image(T func_like) {
+inline NO_INLINE Func mirror_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -218,10 +210,11 @@ inline NO_INLINE Func mirror_image(T func_like) {
     return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-template <typename T, typename ...Bounds>
-inline NO_INLINE Func mirror_image(T func_like, Bounds... bounds) {
+template <typename T, typename ...Bounds,
+          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
+inline NO_INLINE Func mirror_image(const T &func_like, Bounds&&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
-    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return mirror_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
 // @}
@@ -232,7 +225,7 @@ inline NO_INLINE Func mirror_image(T func_like, Bounds... bounds) {
  *
  *  This produces an error if any extent is 1 or less. (TODO: check this.)
  *
- *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
  *  is done and no bounds are given, the boundaries will be taken from the
  *  min and extent methods of the passed object.
  *
@@ -246,7 +239,7 @@ EXPORT Func mirror_interior(const Func &source,
                             const std::vector<std::pair<Expr, Expr>> &bounds);
 
 template <typename T>
-inline NO_INLINE Func mirror_interior(T func_like) {
+inline NO_INLINE Func mirror_interior(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
         object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
@@ -255,10 +248,11 @@ inline NO_INLINE Func mirror_interior(T func_like) {
     return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-template <typename T, typename ...Bounds>
-inline NO_INLINE Func mirror_interior(T func_like, Bounds... bounds) {
+template <typename T, typename ...Bounds,
+          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type* = nullptr>
+inline NO_INLINE Func mirror_interior(const T &func_like, Bounds&&... bounds) {
     std::vector<std::pair<Expr, Expr>> collected_bounds;
-    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, std::forward<Bounds>(bounds)...);
     return mirror_interior(Internal::func_like_to_func(func_like), collected_bounds);
 }
 // @}

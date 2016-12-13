@@ -11,7 +11,7 @@ extern "C" {
  *  Routines specific to the Halide Metal runtime.
  */
 
-extern const struct halide_device_interface *halide_metal_device_interface();
+extern const struct halide_device_interface_t *halide_metal_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide Metal runtime. Do not call them. */
@@ -77,8 +77,8 @@ struct halide_metal_command_queue;
  * - halide_device_release has been called on the interface returned from
  *     halide_metal_device_interface(). (This releases the programs on the context.)
  */
-extern int halide_metal_acquire_context(void *user_context, halide_metal_device *&device_ret,
-                                        halide_metal_command_queue *&queue_ret, bool create = true);
+extern int halide_metal_acquire_context(void *user_context, struct halide_metal_device **device_ret,
+                                        struct halide_metal_command_queue **queue_ret, bool create);
 
 /** This call balances each successfull halide_metal_acquire_context call.
  * If halide_metal_acquire_context is replaced, this routine must be replaced

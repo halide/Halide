@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
         f(x, y)[1] /= 2;
 
         Realization result = f.realize(1024, 1024);
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x + y + 2;
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         f(x, y)[1] += select(x < 20, 20*x, undef<int>());
 
         Realization result = f.realize(1024, 1024);
-        Image<int> a = result[0], b = result[1];
+        Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x;

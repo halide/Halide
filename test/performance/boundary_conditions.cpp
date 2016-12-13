@@ -26,7 +26,7 @@ struct Test {
             g.vectorize(x, 4);
         }
 
-        Image<float> out = g.realize(W, H);
+        Buffer<float> out = g.realize(W, H);
 
         // best of 10 x 5 runs.
         time = benchmark(10, 5, [&]() {
@@ -51,7 +51,7 @@ struct Test {
             g.tile(x, y, xi, yi, 8, 8).vectorize(xi, 4);
         }
 
-        Image<float> out = g.realize(W, H);
+        Buffer<float> out = g.realize(W, H);
 
         // best of 3 x 3 runs.
         time = benchmark(3, 3, [&]() {
@@ -72,10 +72,10 @@ int main(int argc, char **argv) {
     // We use image params bound to concrete images. Using images
     // directly lets Halide assume things about the width and height,
     // and we don't want that to pollute the timings.
-    Image<float> in(W, H);
+    Buffer<float> in(W, H);
 
     // A padded version of the input to use as a baseline.
-    Image<float> padded_in(W + 16, H + 16);
+    Buffer<float> padded_in(W + 16, H + 16);
 
     Var x, y;
 

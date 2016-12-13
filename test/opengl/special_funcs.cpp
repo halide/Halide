@@ -13,7 +13,7 @@ double square(double x) {
 }
 
 template <typename T>
-void test_function(Expr e, Image<T> &cpu_result, Image<T> &gpu_result) {
+void test_function(Expr e, Buffer<T> &cpu_result, Buffer<T> &gpu_result) {
     Func cpu("cpu"), gpu("gpu");
 
     Target cpu_target = get_host_target();
@@ -35,8 +35,8 @@ bool test_exact(Expr r, Expr g, Expr b) {
                             c == T(1), g,
                             b));
     const int W = 256, H = 256;
-    Image<T> cpu_result(W, H, 3);
-    Image<T> gpu_result(W, H, 3);
+    Buffer<T> cpu_result(W, H, 3);
+    Buffer<T> gpu_result(W, H, 3);
     test_function(e, cpu_result, gpu_result);
 
     for (int y=0; y<gpu_result.height(); y++) {
@@ -64,8 +64,8 @@ template <typename T>
 bool test_approx(Expr r, Expr g, Expr b, double rms_error) {
     Expr e = cast<T>(select(c == 0, r, c == 1, g, b));
     const int W = 256, H = 256;
-    Image<T> cpu_result(W, H, 3);
-    Image<T> gpu_result(W, H, 3);
+    Buffer<T> cpu_result(W, H, 3);
+    Buffer<T> gpu_result(W, H, 3);
     test_function(e, cpu_result, gpu_result);
 
     double err = 0.0;

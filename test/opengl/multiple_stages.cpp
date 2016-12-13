@@ -16,7 +16,7 @@ int main() {
     h.bound(c, 0, 3).compute_root();
     g.bound(c, 0, 3).compute_root().glsl(x, y, c);
 
-    Image<uint8_t> result = f.realize(10, 10, 3, target);
+    Buffer<uint8_t> result = f.realize(10, 10, 3, target);
     result.copy_to_host();
 
     for (int i=0; i<10; i++) {
@@ -38,8 +38,7 @@ int main() {
     f2.bound(c, 0, 3).glsl(x, y, c).compute_root();
     g2.bound(c, 0, 3).glsl(x, y, c);
 
-    Image<float> result2 = g2.realize(10, 10, 3, target);
-
+    Buffer<float> result2 = g2.realize(10, 10, 3, target);
     for (int i=0; i<10; i++) {
         for (int j=0; j<10; j++) {
             for (int k=0; k<3; k++) {

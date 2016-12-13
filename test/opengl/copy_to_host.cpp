@@ -22,7 +22,7 @@ int main() {
     // This should trigger a copy_to_host operation
     cpu(x, y, c) = gpu(x, y, c);
 
-    Image<uint8_t> out(10, 10, 3);
+    Buffer<uint8_t> out(10, 10, 3);
     cpu.realize(out, target);
 
     for (int y=0; y<out.height(); y++) {

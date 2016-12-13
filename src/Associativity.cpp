@@ -49,6 +49,8 @@ class ConvertSelfRef : public IRMutator {
             if (op->value_index != value_index) {
                 debug(4) << "Self-reference of " << op->name
                          << " with different index. Cannot prove associativity\n";
+                is_solvable = false;
+                return;
             } else if (is_conditional && (op->value_index == value_index)) {
                 debug(4) << "Self-reference of " << op->name
                          << " inside a conditional. Operation is not associative\n";
@@ -96,37 +98,46 @@ public:
 };
 
 template<typename T>
-bool visit_associative_binary_op(const string &op_x, const string &op_y, Expr x_part,
-                                 Expr lhs, Expr rhs, AssociativeOp &op) {
+std::pair<bool, bool> visit_associative_binary_op(
+        const string &op_x, const string &op_y, Expr x_part,
+        Expr lhs, Expr rhs, AssociativeOp &op) {
     const Variable *var_a = lhs.as<Variable>();
     if (!var_a || (var_a->name != op_x)) {
         debug(4) << "Can't prove associativity of " << T::make(lhs, rhs) << "\n";
-        return false;
+        return {false, false};
     } else if (expr_uses_var(rhs, op_x)) {
         debug(4) << "Can't prove associativity of " << T::make(lhs, rhs) << "\n";
-        return false;
+        return {false, false};
     } else {
         // op(x, y)
         op.x = {op_x, x_part};
         op.y = {op_y, rhs};
     }
-    return true;
+    if (std::is_same<T, Sub>::value) {
+        // Sub is associative but not commutative
+        return {true, false};
+    }
+    return {true, true};
 }
 
-bool extract_associative_op(const string &op_x, const string &op_y, Expr x_part,
-                            Expr e, AssociativeOp &op) {
+// Return a pair of booleans indicating if an operator is associative and commutative
+// respectively. 'op' contains the the equivalent associative binary/unary operator
+// for that operator. If the operator is non-associative, 'op' is not valid.
+std::pair<bool, bool> extract_associative_op(
+        const string &op_x, const string &op_y, Expr x_part, Expr e, AssociativeOp &op) {
     Type t = e.type();
     Expr x = Variable::make(t, op_x);
     Expr y = Variable::make(t, op_y);
 
     if (!x_part.defined()) { // op(y)
         // Update with no self-recurrence is associative and the identity can be
-        // anything since it's going to be replaced anyway
+        // anything since it's going to be replaced anyway, but it's not
+        // commutative
         op.op = y;
         op.identity = make_const(t, 0);
         op.x = {"", Expr()};
         op.y = {op_y, e};
-        return true;
+        return {true, false};
     }
 
     if (const Add *a = e.as<Add>()) {
@@ -161,9 +172,9 @@ bool extract_associative_op(const string &op_x, const string &op_y, Expr x_part,
         internal_error << "Let should have been substituted before calling this function\n";
     } else {
         debug(4) << "Can't prove associativity of " << e << "\n";
-        return false;
+        return {false, false};
     }
-    return false;
+    return {false, false};
 }
 
 } // anonymous namespace
@@ -171,8 +182,8 @@ bool extract_associative_op(const string &op_x, const string &op_y, Expr x_part,
 
 // TODO(psuriana): This does not handle cross-dependencies among tuple elements.
 // It also is not able to handle associative select() (e.g. argmin/argmax)
-pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Expr> args,
-                                                      vector<Expr> exprs) {
+ProveAssociativityResult prove_associativity(const string &f, vector<Expr> args,
+                                             vector<Expr> exprs) {
     vector<AssociativeOp> ops;
     map<Expr, string, ExprCompare> y_subs;
 
@@ -182,9 +193,15 @@ pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Ex
         arg = substitute_in_all_lets(arg);
     }
 
-    // For a Tuple of exprs to be associative, each element of the Tuple
-    // has to be associative. This does not handle dependencies across
-    // Tuple's elements
+    bool all_commutative = true;
+
+    // For a Tuple of exprs to be associative/commutative, each element of the Tuple
+    // has to be associative/commutative. This does not handle dependencies across
+    // Tuple's elements.
+
+    // Note that if any of the tuple op is failed to be proven as associative,
+    // we return early and hence, the 'is_commutative' result is not valid.
+
     for (size_t idx = 0; idx < exprs.size(); ++idx) {
         string op_x = unique_name("_x_" + std::to_string(idx));
         string op_y = unique_name("_y_" + std::to_string(idx));
@@ -195,27 +212,29 @@ pair<bool, vector<AssociativeOp>> prove_associativity(const string &f, vector<Ex
         ConvertSelfRef csr(f, args, idx, op_x);
         expr = csr.mutate(expr);
         if (!csr.is_solvable) {
-            return std::make_pair(false, vector<AssociativeOp>());
+            return ProveAssociativityResult();
         }
 
         expr = common_subexpression_elimination(expr);
         expr = simplify(expr);
         expr = solve_expression(expr, op_x).result; // Move 'x' to the left as possible
         if (!expr.defined()) {
-            return std::make_pair(false, vector<AssociativeOp>());
+            return ProveAssociativityResult();
         }
         expr = substitute_in_all_lets(expr);
 
         // Try to infer the 'y' part of the operator. If we couldn't find
         // a single 'y' that satisfy the operator, give up
         AssociativeOp op;
-        bool is_associative = extract_associative_op(op_x, op_y, csr.x_part, expr, op);
+        bool is_associative, is_commutative;
+        std::tie(is_associative, is_commutative) = extract_associative_op(op_x, op_y, csr.x_part, expr, op);
         if (!is_associative) {
-            return std::make_pair(false, vector<AssociativeOp>());
+            return ProveAssociativityResult();
         }
         ops.push_back(op);
+        all_commutative = all_commutative && is_commutative;
     }
-    return std::make_pair(true, ops);
+    return ProveAssociativityResult(true, all_commutative, ops);
 }
 
 namespace {
@@ -249,13 +268,13 @@ std::string print_args(const string &f, const vector<Expr> &args, const vector<E
 void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
                          bool is_associative, vector<AssociativeOp> ops) {
     auto result = prove_associativity(f, args, exprs);
-    internal_assert(result.first == is_associative)
+    internal_assert(result.is_associative == is_associative)
         << "Checking associativity: " << print_args(f, args, exprs) << "\n"
         << "  Expect is_associative: " << is_associative << "\n"
-        << "  instead of " << result.first << "\n";
+        << "  instead of " << result.is_associative << "\n";
     if (is_associative) {
         for (size_t i = 0; i < ops.size(); ++i) {
-            const AssociativeOp &op = result.second[i];
+            const AssociativeOp &op = result.ops[i];
             internal_assert(equal(op.identity, ops[i].identity))
                 << "Checking associativity: " << print_args(f, args, exprs) << "\n"
                 << "  Expect identity: " << ops[i].identity << "\n"
