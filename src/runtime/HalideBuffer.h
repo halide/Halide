@@ -1185,6 +1185,10 @@ public:
         buf.dev_dirty = v;
     }
 
+    int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
+        return halide_device_malloc(ctx, &buf, device_interface);
+    }
+
     int copy_to_host(void *ctx = nullptr) {
         if (device_dirty()) {
             return halide_copy_to_host(ctx, &buf);
@@ -1604,7 +1608,7 @@ struct for_each_element_helpers {
     ALWAYS_INLINE
     static auto for_each_element_variadic(int, int d, Fn &&f, const buffer_t &buf, Args... args)
         -> decltype(f(args...)) {
-        f(args...);
+        return f(args...);
     }
 
     /** If the above overload is impossible, we add an outer loop over

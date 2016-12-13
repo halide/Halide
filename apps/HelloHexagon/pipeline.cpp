@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 
     // Require the input and output to have 3 channels.
     blur.bound(c, 0, 3);
-    input.set_min(2, 0).set_extent(2, 3);
+    input.dim(2).set_bounds(0, 3);
 
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
@@ -77,12 +77,12 @@ int main(int argc, char **argv) {
         // Require scanlines of the input and output to be aligned.
         auto blur_buffer = blur.output_buffer();
 
-        input.set_min(0, 0).set_extent(0, (input.extent(0)/vector_size)*vector_size);
-        blur_buffer.set_min(0, 0).set_extent(0, (blur_buffer.extent(0)/vector_size)*vector_size);
+        input.dim(0).set_bounds(0, (input.dim(0).extent()/vector_size)*vector_size);
+        blur_buffer.dim(0).set_bounds(0, (blur_buffer.dim(0).extent()/vector_size)*vector_size);
 
         for (int i = 1; i < 3; i++) {
-            input.set_stride(i, (input.stride(i)/vector_size)*vector_size);
-            blur_buffer.set_stride(i, (blur_buffer.stride(i)/vector_size)*vector_size);
+            input.dim(i).set_stride((input.dim(i).stride()/vector_size)*vector_size);
+            blur_buffer.dim(i).set_stride((blur_buffer.dim(i).stride()/vector_size)*vector_size);
         }
     } else {
         const int vector_size = target.natural_vector_size<uint8_t>();
