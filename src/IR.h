@@ -506,6 +506,8 @@ struct Call : public ExprNode<Call> {
         prefetch,
         prefetch_2d,
         signed_integer_overflow,
+        predicated_store,
+        predicated_load,
         indeterminate_expression,
         bool_to_mask,
         cast_mask,
