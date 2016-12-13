@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
     {
         // Specialize for interleaved vs planar inputs
         ImageParam im(Float(32), 1);
-        im.set_stride(0, Expr()); // unconstrain the stride
+        im.dim(0).set_stride(Expr()); // unconstrain the stride
 
         Func f;
         Var x;
@@ -216,7 +216,7 @@ int main(int argc, char **argv) {
         f(x) = im(x);
 
         // If we have a stride of 1 it's worth vectorizing, but only if the width is also > 8.
-        f.specialize(im.stride(0) == 1 && im.width() >= 8).vectorize(x, 8);
+        f.specialize(im.dim(0).stride() == 1 && im.width() >= 8).vectorize(x, 8);
 
         f.trace_stores();
         f.set_custom_trace(&my_trace);
@@ -367,8 +367,8 @@ int main(int argc, char **argv) {
         h(x) = g(x);
         out(x) = h(x);
 
-        Expr w = out.output_buffer().extent(0);
-        out.output_buffer().set_min(0, 0);
+        Expr w = out.output_buffer().dim(0).extent();
+        out.output_buffer().dim(0).set_min(0);
 
         f.compute_root().specialize(w >= 4).vectorize(x, 4);
         g.compute_root().vectorize(x, 4);
