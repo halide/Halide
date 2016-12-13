@@ -27,82 +27,6 @@ protected:
                                           bool *placeholder_seen) const;
 public:
 
-    struct Dimension {
-        /** Get an expression representing the minimum coordinates of this image
-         * parameter in the given dimension. */
-        EXPORT Expr min() const;
-
-        /** Get an expression representing the extent of this image
-         * parameter in the given dimension */
-        EXPORT Expr extent() const;
-
-        /** Get an expression representing the maximum coordinates of
-         * this image parameter in the given dimension. */
-        EXPORT Expr max() const;
-
-        /** Get an expression representing the stride of this image in the
-         * given dimension */
-        EXPORT Expr stride() const;
-
-        /** Set the min in a given dimension to equal the given
-         * expression. Setting the mins to zero may simplify some
-         * addressing math. */
-        EXPORT Dimension set_min(Expr e);
-
-        /** Set the extent in a given dimension to equal the given
-         * expression. Images passed in that fail this check will generate
-         * a runtime error. Returns a reference to the ImageParam so that
-         * these calls may be chained.
-         *
-         * This may help the compiler generate better
-         * code. E.g:
-         \code
-         im.dim(0).set_extent(100);
-         \endcode
-         * tells the compiler that dimension zero must be of extent 100,
-         * which may result in simplification of boundary checks. The
-         * value can be an arbitrary expression:
-         \code
-         im.dim(0).set_extent(im.dim(1).extent());
-         \endcode
-         * declares that im is a square image (of unknown size), whereas:
-         \code
-         im.dim(0).set_extent((im.dim(0).extent()/32)*32);
-         \endcode
-         * tells the compiler that the extent is a multiple of 32. */
-        EXPORT Dimension set_extent(Expr e);
-
-        /** Set the stride in a given dimension to equal the given
-         * value. This is particularly helpful to set when
-         * vectorizing. Known strides for the vectorized dimension
-         * generate better code. */
-        EXPORT Dimension set_stride(Expr e);
-
-        /** Set the min and extent in one call. */
-        EXPORT Dimension set_bounds(Expr min, Expr extent);
-
-        /** Get a different dimension of the same buffer */
-        // @{
-        EXPORT Dimension dim(int i);
-        EXPORT const Dimension dim(int i) const;
-        // @}
-
-    private:
-        friend class OutputImageParam;
-
-        /** Construct a Dimension representing dimension d of some
-         * Internal::Parameter p. Only OutputImageParam may construct
-         * these. */
-        Dimension(const Internal::Parameter &p, int d) : param(p), d(d) {}
-
-        /** Only OutputImageParam may copy these, too. This prevents
-         * users removing constness by making a non-const copy. */
-        Dimension(const Dimension &) = default;
-
-        Internal::Parameter param;
-        int d;
-    };
-
     /** Construct a null image parameter handle. */
     OutputImageParam() {}
 
@@ -120,11 +44,11 @@ public:
 
     /** Get a handle on one of the dimensions for the purposes of
      * inspecting or constraining its min, extent, or stride. */
-    EXPORT Dimension dim(int i);
+    EXPORT Internal::Dimension dim(int i);
 
     /** Get a handle on one of the dimensions for the purposes of
      * inspecting its min, extent, or stride. */
-    EXPORT const Dimension dim(int i) const;
+    EXPORT const Internal::Dimension dim(int i) const;
 
     /** Get or constrain the shape of the dimensions. Soon to be
      * deprecated. Do not use. */
