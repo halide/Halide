@@ -1020,7 +1020,7 @@ public:
 
     /** Make an image which refers to the same data translated along
      * the first N dimensions. */
-    void translated(const std::vector<int> &delta) {
+    Buffer<T, D> translated(const std::vector<int> &delta) {
         Buffer<T, D> im = *this;
         im.translate(delta);
         return im;
