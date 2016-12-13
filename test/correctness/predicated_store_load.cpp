@@ -95,7 +95,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else {
+    } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
@@ -125,7 +125,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         //TODO(psuriana): the hexagon test for this one is broken
         //f.hexagon().vectorize(x, 16);
-    } else {
+    } else if (target.arch == Target::X86) {
         f.vectorize(x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
@@ -164,7 +164,7 @@ int multiple_vectorized_predicate_test() {
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         //TODO(psuriana): the hexagon test for this one is broken
         //f.update(0).hexagon().vectorize(r.x, 32);
-    } else {
+    } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
@@ -197,7 +197,7 @@ int scalar_load_test() {
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else {
+    } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
@@ -232,7 +232,7 @@ int scalar_store_test() {
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else {
+    } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
@@ -267,7 +267,7 @@ int not_dependent_on_vectorized_var_test() {
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.z, 32);
-    } else {
+    } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.z, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
     }
@@ -300,7 +300,7 @@ int no_op_store_test() {
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
         f.update(1).hexagon().vectorize(r.y, 32);
-    } else {
+    } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.update(1).vectorize(r.y, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
@@ -334,7 +334,7 @@ int vectorized_predicated_predicate_with_pure_call_test() {
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.update(0).hexagon().vectorize(r.x, 32);
-    } else {
+    } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
