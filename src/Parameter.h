@@ -14,6 +14,8 @@ class OutputImageParam;
 
 namespace Internal {
 
+template<typename T> class GeneratorInput_Buffer;
+template<typename T> class GeneratorOutput_Buffer;
 struct ParameterContents;
 
 /** A reference-counted handle to a parameter to a halide
@@ -202,6 +204,8 @@ public:
 
 private:
     friend class ::Halide::OutputImageParam;
+    template<typename T> friend class GeneratorInput_Buffer;
+    template<typename T> friend class GeneratorOutput_Buffer;
 
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct

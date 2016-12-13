@@ -25,10 +25,9 @@ public:
         input.compute_root();
         msan_extern_stage.compute_root();
         Func(msan_output).parallel(y).vectorize(x, 4);
-        msan_output.set_stride_constraint(0, Expr())
-                   .set_extent_constraint(0, 4)
-                   .set_extent_constraint(1, 4)
-                   .set_extent_constraint(2, 3);
+        msan_output.dim(0).set_stride(Expr()).set_extent(4)
+                   .dim(1).set_extent(4)
+                   .dim(2).set_extent(3);
 
     }
 private:

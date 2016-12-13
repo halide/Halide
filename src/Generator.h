@@ -1092,66 +1092,21 @@ public:
         return this->funcs().at(0)(args);
     }
 
-    GeneratorInput_Buffer<T> &set_min_constraint(int i, Expr e) {
-        this->parameters_.at(0).set_min_constraint(i, e);
-        return *this;
+    Dimension dim(int i) {
+        return Dimension(this->parameters_.at(0), i);
     }
 
-    GeneratorInput_Buffer<T> &set_extent_constraint(int i, Expr e) {
-        this->parameters_.at(0).set_extent_constraint(i, e);
-        return *this;
-    }
-
-    GeneratorInput_Buffer<T> &set_stride_constraint(int i, Expr e) {
-        this->parameters_.at(0).set_stride_constraint(i, e);
-        return *this;
-    }
-
-    GeneratorInput_Buffer<T> &set_host_alignment_constraint(int e) {
-        this->parameters_.at(0).set_host_alignment(e);
-        return *this;
-    }
-
-    Expr min(int i) const {
-        return MakeInt32Var(".min.", i);
-    }
-
-    Expr extent(int i) const {
-        return MakeInt32Var(".extent.", i);
-    }
-
-    Expr stride(int i) const {
-        return MakeInt32Var(".stride.", i);
-    }
-
-    Expr width() const {
-        return extent(0);
-    }
-
-    Expr height() {
-        return extent(1);
-    }
-
-    Expr channels() const {
-        return extent(2);
+    EXPORT const Dimension dim(int i) const {
+        return Dimension(this->parameters_.at(0), i);
     }
 
     int host_alignment() const {
         return this->parameters_.at(0).host_alignment();
     }
 
-    // This is a minimal definition of "Dimension" that is just enough to satisfy
-    // the needs of a "func-like" in BoundaryConditions.
-    struct Dimension {
-        const Expr min_, extent_, stride_;
-
-        Expr min() const { return min_; }
-        Expr extent() const { return extent_; }
-        Expr stride() const { return stride_; }
-        Expr max() const { return min() + extent(); }
-    };
-    const Dimension dim(int i) const {
-        return { min(i), extent(i), stride(i) };
+    GeneratorInput_Buffer<T> &set_host_alignment_constraint(int e) {
+        this->parameters_.at(0).set_host_alignment(e);
+        return *this;
     }
 
     operator Func() const { 
@@ -1545,40 +1500,21 @@ protected:
     }
 
 public:
-    GeneratorOutput_Buffer<T> &set_min_constraint(int i, Expr e) {
-        this->funcs().at(0).output_buffer().set_min(i, e);
-        return *this;
+    Dimension dim(int i) {
+        return this->funcs().at(0).output_buffer().dim(i);
     }
 
-    GeneratorOutput_Buffer<T> &set_extent_constraint(int i, Expr e) {
-        this->funcs().at(0).output_buffer().set_extent(i, e);
-        return *this;
-    }
-
-    GeneratorOutput_Buffer<T> &set_stride_constraint(int i, Expr e) {
-        this->funcs().at(0).output_buffer().set_stride(i, e);
-        return *this;
-    }
-
-    GeneratorOutput_Buffer<T> &set_host_alignment_constraint(int e) {
-        this->funcs().at(0).output_buffer().set_host_alignment(e);
-        return *this;
-    }
-
-    Expr min(int i) const {
-        return this->funcs().at(0).output_buffer().min(i);
-    }
-
-    Expr extent(int i) const {
-        return this->funcs().at(0).output_buffer().extent(i);
-    }
-
-    Expr stride(int i) const {
-        return this->funcs().at(0).output_buffer().stride(i);
+    EXPORT const Dimension dim(int i) const {
+        return this->funcs().at(0).output_buffer().dim(i);
     }
 
     int host_alignment() const {
         return this->funcs().at(0).output_buffer().host_alignment();
+    }
+
+    GeneratorOutput_Buffer<T> &set_host_alignment(int value) {
+        this->funcs().at(0).output_buffer().set_host_alignment(value);
+        return *this;
     }
 
     bool is_buffer() const override {

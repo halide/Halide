@@ -32,11 +32,11 @@ public:
         // We want to handle inputs that may be rotated 180 due to camera module placement.
 
         // Unset the default stride constraint
-        input.set_stride_constraint(0, Expr());
+        input.dim(0).set_stride(Expr());
 
         // Make specialized versions for input stride +/-1 to get dense vector loads
-        curved.specialize(input.stride(0) == 1);
-        curved.specialize(input.stride(0) == -1);
+        curved.specialize(input.dim(0).stride() == 1);
+        curved.specialize(input.dim(0).stride() == -1);
     }
 
 private:

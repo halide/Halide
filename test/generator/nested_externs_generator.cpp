@@ -6,10 +6,8 @@ namespace {
 
 template<typename T>
 void set_interleaved(T &t) {
-    t.set_stride_constraint(0, 3)
-     .set_min_constraint(2, 0)
-     .set_extent_constraint(2, 3)
-     .set_stride_constraint(2, 1);
+    t.dim(0).set_stride(3)
+     .dim(2).set_min(0).set_extent(3).set_stride(1);
 }
 
 // Add two inputs

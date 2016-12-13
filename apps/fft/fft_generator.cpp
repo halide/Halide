@@ -140,15 +140,11 @@ public:
         const int input_comps = (input_number_type == FFTNumberType::Real) ? 1 : 2;
         const int output_comps = (output_number_type == FFTNumberType::Real) ? 1 : 2;
 
-        input.set_stride_constraint(0, input_comps)
-             .set_min_constraint(2, 0)
-             .set_extent_constraint(2, input_comps)
-             .set_stride_constraint(2, 1);
+        input.dim(0).set_stride(input_comps)
+             .dim(2).set_min(0).set_extent(input_comps).set_stride(1);
 
-        output.set_stride_constraint(0, output_comps)
-              .set_min_constraint(2, 0)
-              .set_extent_constraint(2, output_comps)
-              .set_stride_constraint(2, 1);
+        output.dim(0).set_stride(output_comps)
+              .dim(2).set_min(0).set_extent(output_comps).set_stride(1);
 
         if (real_result.defined()) {
             real_result.compute_at(output, y);
