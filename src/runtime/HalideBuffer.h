@@ -505,6 +505,7 @@ public:
                                    ty(other.ty),
                                    alloc(other.alloc),
                                    dev_ref_count(other.dev_ref_count) {
+        printf("Move constructing %p -> %p\n", this, &other);
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
     }
@@ -518,7 +519,8 @@ public:
                                      ty(other.ty),
                                      alloc(other.alloc),
                                      dev_ref_count(other.dev_ref_count) {
-        assert_can_convert_from(other);
+        printf("Move constructing %p -> %p\n", this, &other);
+        other.detach_shared_refs();
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
     }
@@ -555,6 +557,7 @@ public:
      * type is compatible at runtime. */
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
+        printf("Moving %p -> %p\n", this, &other);
         assert_can_convert_from(other);
         std::swap(alloc, other.alloc);
         std::swap(dev_ref_count, other.dev_ref_count);
@@ -565,6 +568,7 @@ public:
     }
 
     Buffer<T, D> &operator=(Buffer<T, D> &&other) {
+        printf("Moving %p -> %p\n", this, &other);
         std::swap(alloc, other.alloc);
         std::swap(dev_ref_count, other.dev_ref_count);
         buf = other.buf;
@@ -800,7 +804,9 @@ public:
     /** Destructor. Will release any underlying owned allocation if
      * this is the last reference to it. */
     ~Buffer() {
+        printf("Destroying buffer at %p\n", this);
         if (ref_holder) {
+            printf("There are shared references. Moving it to the heap at %p\n", &ref_holder->storage);
             // There are still references to me via the
             // ref_holder. Move me to the heap.
             ref_holder->storage = std::move(*this);
@@ -1601,9 +1607,6 @@ private:
     struct RefHolder {
         Buffer<T, D> *ptr = nullptr;
         std::atomic<int> ref_count;
-        // Note that we erase the dimensionality here. Just as a
-        // Buffer<int, 0>* can point to a Buffer<int, 4>, we want a
-        // Buffer<int, 0>::Ref to be able to refer to a Buffer<int, 4>
         Buffer<T> storage;
     } *ref_holder = nullptr;
 
@@ -1621,6 +1624,10 @@ public:
             if (ptr) {
                 int new_count = ptr->ref_count--;
                 if (new_count == 0) {
+                    // Note we don't delete ptr->ptr. If it refers to
+                    // a user Buffer then we don't own the memory. If
+                    // it refers to ptr->storage then we're already
+                    // deleting that.
                     delete ptr;
                     ptr = nullptr;
                 }
@@ -1696,6 +1703,10 @@ public:
             return *(ptr->ptr);
         }
 
+        template<typename T2, int D2>
+        typename Buffer<T2, D2>::Ref as() const {
+            return get()->as<T2, D2>().make_shared_ref();
+        }
     };
 
     /** Make a shared reference to this Buffer. This reference does

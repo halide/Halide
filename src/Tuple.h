@@ -62,23 +62,25 @@ public:
     }
 };
 
-/** Funcs with Tuple values return multiple images when you realize
- * them. Tuples are to Exprs as Realizations are to Images. */
+/** A Realization is a vector of references to existing Buffer
+objects. Funcs with Tuple values return multiple images when you
+realize them, and they return them as a Realization. Tuples are to
+Exprs as Realizations are to Buffers. */
 class Realization {
 private:
-    std::vector<Buffer<>::Ref> images;
+    std::vector<Buffer<void, 0>::Ref> images;
 public:
     /** The number of images in the Realization. */
     size_t size() const { return images.size(); }
 
-    /** Get a reference to one of the images. */
-    Buffer<> &operator[](size_t x) {
+    /** Get a const reference to one of the images. */
+    const Buffer<void, 0> &operator[](size_t x) const {
         user_assert(x < images.size()) << "Realization access out of bounds\n";
         return *images[x];
     }
 
-    /** Get one of the images. */
-    const Buffer<> &operator[](size_t x) const {
+    /** Get a reference to one of the images. */
+    Buffer<void, 0> &operator[](size_t x) {
         user_assert(x < images.size()) << "Realization access out of bounds\n";
         return *images[x];
     }
@@ -96,8 +98,13 @@ public:
              typename ...Args,
              typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
     Realization(Buffer<T, D> &a, Args&&... args) {
-        images = std::vector<typename Buffer<>::Ref>({a.template as<void>().make_shared_ref(),
-                                                      args.template as<void>().make_shared_ref()...});
+        images = std::vector<typename Buffer<void, 0>::Ref>({
+                a.template as<void, 0>().make_shared_ref(),
+                args.template as<void, 0>().make_shared_ref()...
+            });
+        for (auto r : images) {
+            Internal::debug(0) << (void *)(r->data()) << "\n";
+        }
     }
     //@}
 
@@ -106,57 +113,12 @@ public:
     explicit Realization(std::vector<Buffer<>> &e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
         for (Buffer<> &im : e) {
-            images.push_back(im.make_shared_ref());
+            images.push_back(im.as<void, 0>().make_shared_ref());
+        }
+        for (auto r : images) {
+            Internal::debug(0) << (void *)(r->data()) << ", " << r->type().bytes() << "\n";
         }
     }
-
-    /** Support for iterating over a the Images in a Realization */
-    struct iterator {
-        std::vector<Buffer<>::Ref>::iterator iter;
-
-        Buffer<> &operator*() {
-            return **iter;
-        };
-        iterator &operator++() {
-            iter++;
-            return *this;
-        }
-        bool operator!=(const iterator &other) const {
-            return iter != other.iter;
-        }
-    };
-
-    iterator begin() {
-        return {images.begin()};
-    }
-
-    iterator end() {
-        return {images.end()};
-    }
-
-    struct const_iterator {
-        std::vector<Buffer<>::Ref>::const_iterator iter;
-
-        const Buffer<> &operator*() {
-            return **iter;
-        };
-        const_iterator &operator++() {
-            iter++;
-            return *this;
-        }
-        bool operator!=(const const_iterator &other) const {
-            return iter != other.iter;
-        }
-    };
-
-    const_iterator begin() const {
-        return {images.begin()};
-    }
-
-    const_iterator end() const{
-        return {images.end()};
-    }
-
 };
 
 /** Equivalents of some standard operators for tuples. */
