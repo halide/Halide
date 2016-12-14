@@ -81,7 +81,12 @@ void halide_free(void *user_context, void *ptr) {
 }
 
 void *halide_get_symbol(const char *name) {
-    return dlsym(RTLD_DEFAULT, name);
+    void *def = dlsym(RTLD_DEFAULT, name);
+    if (def) {
+        return def;
+    }
+    log_printf("dlsym(RTLD_DEFAULT, %s) failed\n", name);
+    return dlsym(RTLD_SELF, name);
 }
 
 void *halide_load_library(const char *name) {
@@ -262,7 +267,7 @@ int halide_hexagon_remote_power_hvx_on_mode(int mode) {
             busbwUsagePercentage   = 50;
             break;
         case halide_hvx_power_turbo:
-        default: 
+        default:
             mipsPerThread          = max_mips;
             bwBytePerSec           = max_bus_bw * 4;
             busbwUsagePercentage   = 100;
