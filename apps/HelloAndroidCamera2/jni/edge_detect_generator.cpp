@@ -38,9 +38,9 @@ public:
             .parallel(y, 8);
 
         // Cope with rotated inputs
-        input.set_stride(0, Expr());
-        result.specialize(input.stride(0) == 1);
-        result.specialize(input.stride(0) == -1);
+        input.dim(0).set_stride(Expr());
+        result.specialize(input.dim(0).stride() == 1);
+        result.specialize(input.dim(0).stride() == -1);
 
         return result;
     }
