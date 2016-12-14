@@ -781,8 +781,8 @@ Realization Pipeline::realize(vector<int32_t> sizes,
     }
     Realization r(bufs);
     realize(r, target);
-    for (Buffer<> &im : r) {
-        im.copy_to_host();
+    for (size_t i = 0; i < r.size(); i++) {
+        r[i].copy_to_host();
     }
     return r;
 }
@@ -994,8 +994,8 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (const Buffer<> &buf : dst) {
-        arg_values.push_back(buf.raw_buffer());
+    for (size_t i = 0; i < dst.size(); i++) {
+        arg_values.push_back(dst[i].raw_buffer());
         const void *ptr = arg_values.back();
         debug(1) << "JIT output buffer @ " << ptr << "\n";
     }
@@ -1057,6 +1057,12 @@ void Pipeline::realize(Realization dst, const Target &t) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     debug(2) << "Realizing Pipeline for " << target.to_string() << "\n";
+
+    for (size_t i = 0; i < dst.size(); i++) {
+        user_assert(dst[i].data() != nullptr)
+            << "Buffer at " << &dst[i] << " is unallocated. "
+            << "The Buffers in a Realization passed to realize must all be allocated\n";
+    }
 
     // If target is unspecified...
     if (target.os == Target::OSUnknown) {

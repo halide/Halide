@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         g(x) = select(x % 2 == 0, f(x+1), f(x-1)+8);
 
         Param<int> p;
-        h(x) = g(x-p) + g(x+p);
+        h(x) = g(x-p) + g(x+p) + print(0, p);
 
         f.compute_root();
         g.compute_root().align_bounds(x, 2).unroll(x, 2).trace_realizations();
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
 
         // Bounds of f should be [-p, 10+2*p] rounded outwards
         if (trace_min != -4 || trace_extent != 18) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
 
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         p.set(4);
         h.realize(result);
         if (trace_min != -4 || trace_extent != 18) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
 
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
         p.set(5);
         h.realize(result);
         if (trace_min != -6 || trace_extent != 22) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
     }
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
 
         // Now the min/max should stick to odd numbers
         if (trace_min != -3 || trace_extent != 16) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
 
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
         p.set(4);
         h.realize(result);
         if (trace_min != -5 || trace_extent != 20) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
 
@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
         p.set(5);
         h.realize(result);
         if (trace_min != -5 || trace_extent != 20) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
     }
