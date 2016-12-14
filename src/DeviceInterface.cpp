@@ -28,7 +28,8 @@ using namespace Halide::Internal;
 namespace {
 
 template <typename fn_type>
-bool lookup_runtime_routine(const char *name, const Target &target,
+bool lookup_runtime_routine(const std::string &name,
+                            const Target &target,
                             fn_type &result) {
     std::vector<JITModule> runtime(
         JITSharedRuntime::get(nullptr, target.with_feature(Target::JIT)));
@@ -44,6 +45,32 @@ bool lookup_runtime_routine(const char *name, const Target &target,
     return false;
 }
 
+}
+
+namespace Halide {
+halide_device_interface_t *get_device_interface_for_target(const Target &t) {
+    struct halide_device_interface_t *(*fn)();
+    struct {
+        Target::Feature feature;
+        std::string name;
+    } mapping[] =
+          {{Target::Metal, "metal"},
+           {Target::OpenCL, "opencl"},
+           {Target::CUDA, "cuda"},
+           {Target::OpenGLCompute, "openglcompute"},
+           {Target::OpenGL, "opengl"}};
+
+    for (auto p : mapping) {
+        if (t.has_feature(p.feature)) {
+            if (lookup_runtime_routine("halide_" + p.name + "_device_interface", t, fn)) {
+                return (*fn)();
+            } else {
+                return nullptr;
+            }
+        }
+    }
+    return nullptr;
+}
 }
 
 extern "C" {
@@ -85,7 +112,7 @@ EXPORT_SYM(halide_copy_to_host)
  * used. Otherwise if the dev field is 0 and interface is nullptr, an
  * error is returned. */
 int halide_copy_to_device(void *user_context, struct buffer_t *buf,
-                                 const halide_device_interface_t *device_interface) {
+                          const halide_device_interface_t *device_interface) {
     user_assert(user_context == nullptr) << "Cannot provide user_context to libHalide.a halide_copy_to_device\n";
     Target target(get_host_target());
     int (*fn)(void *user_context, struct buffer_t *buf, const halide_device_interface_t *device_interface);
@@ -146,35 +173,17 @@ int halide_weak_device_free(void *user_context, struct buffer_t *buf) {
 EXPORT_SYM(halide_weak_device_free)
 
 const struct halide_device_interface_t *halide_cuda_device_interface() {
-    Target target(get_host_target());
-    target.set_feature(Target::CUDA);
-    struct halide_device_interface_t *(*fn)();
-    if (lookup_runtime_routine("halide_cuda_device_interface", target, fn)) {
-        return (*fn)();
-    }
-    return nullptr;
+    return get_device_interface_for_target(Target("host-cuda"));
 }
 EXPORT_SYM(halide_cuda_device_interface)
 
 const struct halide_device_interface_t *halide_opencl_device_interface() {
-    Target target(get_host_target());
-    target.set_feature(Target::OpenCL);
-    struct halide_device_interface_t *(*fn)();
-    if (lookup_runtime_routine("halide_opencl_device_interface", target, fn)) {
-        return (*fn)();
-    }
-    return nullptr;
+    return get_device_interface_for_target(Target("host-opencl"));
 }
 EXPORT_SYM(halide_opencl_device_interface)
 
 const struct halide_device_interface_t *halide_opengl_device_interface() {
-    Target target(get_host_target());
-    target.set_feature(Target::OpenGL);
-    struct halide_device_interface_t *(*fn)();
-    if (lookup_runtime_routine("halide_opengl_device_interface", target, fn)) {
-        return (*fn)();
-    }
-    return nullptr;
+    return get_device_interface_for_target(Target("host-opengl"));
 }
 EXPORT_SYM(halide_opengl_device_interface)
 
@@ -201,24 +210,12 @@ uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf)
 EXPORT_SYM(halide_opengl_detach_texture)
 
 const struct halide_device_interface_t *halide_openglcompute_device_interface() {
-    Target target(get_host_target());
-    target.set_feature(Target::OpenGLCompute);
-    struct halide_device_interface_t *(*fn)();
-    if (lookup_runtime_routine("halide_openglcompute_device_interface", target, fn)) {
-        return (*fn)();
-    }
-    return nullptr;
+    return get_device_interface_for_target(Target("host-openglcompute"));
 }
 EXPORT_SYM(halide_openglcompute_device_interface)
 
 const struct halide_device_interface_t *halide_metal_device_interface() {
-    Target target(get_host_target());
-    target.set_feature(Target::Metal);
-    struct halide_device_interface_t *(*fn)();
-    if (lookup_runtime_routine("halide_metal_device_interface", target, fn)) {
-        return (*fn)();
-    }
-    return nullptr;
+    return get_device_interface_for_target(Target("host-metal"));
 }
 EXPORT_SYM(halide_metal_device_interface)
 
