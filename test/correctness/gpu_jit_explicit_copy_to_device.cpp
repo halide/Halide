@@ -1,5 +1,4 @@
 #include "Halide.h"
-#include "HalideRuntimeCuda.h"
 
 using namespace Halide;
 
