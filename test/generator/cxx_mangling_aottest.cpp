@@ -46,12 +46,23 @@ int main(int argc, char **argv) {
 
     // Don't bother calling this (we haven't linked in the CUDA support it needs),
     // just force a reference to ensure it is linked in.
-    auto f = HalideTest::cxx_mangling_gpu;
+    int (*f)(halide_buffer_t *,
+             int8_t, uint8_t,
+             int16_t, uint16_t,
+             int32_t, uint32_t,
+             int64_t, uint64_t,
+             bool,
+             float, double,
+             int32_t *, int32_t const *,
+             void *, void const *,
+             void *, void const *,
+             halide_buffer_t *) = HalideTest::cxx_mangling_gpu;
+
     printf("HalideTest::cxx_mangling is at: %p\n", (void*) f);
 
     int r = HalideTest::cxx_mangling(input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
                                     -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
-                                    int_ptr, const_int_ptr, void_ptr, const_void_ptr, 
+                                    int_ptr, const_int_ptr, void_ptr, const_void_ptr,
                                     string_ptr, const_string_ptr, result);
     if (r != 0) {
         fprintf(stderr, "Failure!\n");
