@@ -364,6 +364,7 @@ private:
             min = p.get_min_value();
             max = p.get_max_value();
         }
+
         InferredArgument a = {
             Argument(p.name(),
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
@@ -371,6 +372,19 @@ private:
             p,
             BufferPtr()};
         args.push_back(a);
+
+        // Visit child expressions
+        if (!p.is_buffer()) {
+            visit_expr(def);
+            visit_expr(min);
+            visit_expr(max);
+        } else {
+            for (int i = 0; i < p.dimensions(); i++) {
+                visit_expr(p.min_constraint(i));
+                visit_expr(p.extent_constraint(i));
+                visit_expr(p.stride_constraint(i));
+            }
+        }
     }
 
     void include_buffer(BufferPtr b) {
@@ -906,7 +920,7 @@ struct JITFuncCallContext {
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
-vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
+vector<const void *> Pipeline::prepare_jit_call_arguments(BufferRefs &dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     compile_jit(target);
@@ -980,8 +994,8 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     }
 
     // Then the outputs
-    for (const Buffer<> &buf : dst) {
-        arg_values.push_back(buf.raw_buffer());
+    for (size_t i = 0; i < dst.size(); i++) {
+        arg_values.push_back(dst[i].raw_buffer());
         const void *ptr = arg_values.back();
         debug(1) << "JIT output buffer @ " << ptr << "\n";
     }
@@ -1038,7 +1052,7 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-void Pipeline::realize(Realization dst, const Target &t) {
+void Pipeline::realize(BufferRefs dst, const Target &t) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -1151,26 +1165,29 @@ void Pipeline::realize(Realization dst, const Target &t) {
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(Realization dst) {
+void Pipeline::infer_input_bounds(BufferRefs dst) {
 
     Target target = get_jit_target_from_environment();
 
     vector<const void *> args = prepare_jit_call_arguments(dst, target);
 
     struct TrackedBuffer {
-        // The query buffer.
-        buffer_t query;
-        // A backup copy of it to test if it changed.
-        buffer_t orig;
+        // The query buffer, and a backup to check for changes.
+        Buffer<> query, orig;
     };
     vector<TrackedBuffer> tracked_buffers(args.size());
 
     vector<size_t> query_indices;
-    for (size_t i = 0; i < args.size(); i++) {
+    for (size_t i = 0; i < contents->inferred_args.size(); i++) {
         if (args[i] == nullptr) {
             query_indices.push_back(i);
-            memset(&tracked_buffers[i], 0, sizeof(TrackedBuffer));
-            args[i] = &tracked_buffers[i].query;
+            InferredArgument ia = contents->inferred_args[i];
+            internal_assert(ia.param.defined() && ia.param.is_buffer());
+            // Make some empty Buffers of the right dimensionality
+            vector<int> initial_shape(ia.param.dimensions(), 0);
+            tracked_buffers[i].query = Buffer<>(ia.param.type(), nullptr, initial_shape);
+            tracked_buffers[i].orig = Buffer<>(ia.param.type(), nullptr, initial_shape);
+            args[i] = tracked_buffers[i].query.raw_buffer();
         }
     }
 
@@ -1187,6 +1204,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
     for (iter = 0; iter < max_iters; iter++) {
         // Make a copy of the buffers that might be mutated
         for (TrackedBuffer &tb : tracked_buffers) {
+            // Make a copy of the buffer sizes, etc.
             tb.orig = tb.query;
         }
 
@@ -1196,10 +1214,14 @@ void Pipeline::infer_input_bounds(Realization dst) {
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
 
-        // Check if there were any changed
+        // Check if there were any changes
         for (TrackedBuffer &tb : tracked_buffers) {
-            if (memcmp(&tb.query, &tb.orig, sizeof(buffer_t))) {
-                changed = true;
+            for (int i = 0; i < tb.query.dimensions(); i++) {
+                if (tb.query.dim(i).min() != tb.orig.dim(i).min() ||
+                    tb.query.dim(i).extent() != tb.orig.dim(i).extent() ||
+                    tb.query.dim(i).stride() != tb.orig.dim(i).stride()) {
+                    changed = true;
+                }
             }
         }
         if (!changed) {
@@ -1220,21 +1242,12 @@ void Pipeline::infer_input_bounds(Realization dst) {
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
         internal_assert(!ia.param.get_buffer().defined());
-        buffer_t buf = tracked_buffers[i].query;
 
-        Internal::debug(1) << "Inferred bounds for " << ia.param.name() << ": ("
-                           << buf.min[0] << ","
-                           << buf.min[1] << ","
-                           << buf.min[2] << ","
-                           << buf.min[3] << ")..("
-                           << buf.min[0] + buf.extent[0] << ","
-                           << buf.min[1] + buf.extent[1] << ","
-                           << buf.min[2] + buf.extent[2] << ","
-                           << buf.min[3] + buf.extent[3] << ")\n";
+        // Allocate enough memory with the right type and dimensionality.
+        tracked_buffers[i].query.allocate();
 
-        Buffer<> im(ia.param.type(), buf);
-        im.allocate();
-        ia.param.set_buffer(im);
+        // Bind this parameter to this buffer
+        ia.param.set_buffer(tracked_buffers[i].query);
     }
 }
 

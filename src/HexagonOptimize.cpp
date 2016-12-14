@@ -533,6 +533,15 @@ private:
             { "halide.hexagon.trunc_satuh_rnd.vw", u16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
             { "halide.hexagon.trunc_sath_rnd.vw",  i16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
 
+            // Scalar multiply keep high half, with multiplication by 2.
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((wild_i32x*bc(wild_i32))/32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((bc(wild_i32)*wild_i32x)/32768), Pattern::NarrowOps | Pattern::SwapOps01 },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((wild_i32x*bc(wild_i32) + 16384)/32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((bc(wild_i32)*wild_i32x + 16384)/32768), Pattern::NarrowOps | Pattern::SwapOps01 },
+
+            // Vector multiply keep high half, with multiplication by 2.
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat((wild_i32x*wild_i32x + 16384)/32768), Pattern::NarrowOps },
+
             // Saturating narrowing casts
             { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
@@ -1094,8 +1103,18 @@ class OptimizeShuffles : public IRMutator {
     int lut_alignment;
     Scope<Interval> bounds;
     std::vector<std::pair<string, Expr>> lets;
+    bool inside_address_of = false;
 
     using IRMutator::visit;
+
+    void visit(const Call *op) {
+        bool old_inside_address_of = inside_address_of;
+        if (op->is_intrinsic(Call::address_of)) {
+            inside_address_of = true;
+        }
+        IRMutator::visit(op);
+        inside_address_of = old_inside_address_of;
+    }
 
     template <typename T>
     void visit_let(const T *op) {
@@ -1117,6 +1136,11 @@ class OptimizeShuffles : public IRMutator {
     void visit(const LetStmt *op) { visit_let(op); }
 
     void visit(const Load *op) {
+        if (inside_address_of) {
+            // We shouldn't mess with load inside an address_of.
+            IRMutator::visit(op);
+            return;
+        }
         if (!op->type.is_vector() || op->index.as<Ramp>()) {
             // Don't handle scalar or simple vector loads.
             IRMutator::visit(op);

@@ -6,14 +6,6 @@ option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 option(WITH_TEST_OPENGL "Build OpenGL tests" ON)
 option(WITH_TEST_GENERATORS "Build Generator tests" ON)
 
-if (MSVC)
-else()
-  # src/CMakeLists.txt always enables C++11 for non-Windows,
-  # so we'll give the same courtesy to tests
-  add_definitions("-std=c++11")
-  add_definitions("-fno-rtti")
-endif()
-
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
   halide_project(test_internal internal internal.cpp)
@@ -25,6 +17,15 @@ if (WITH_TEST_INTERNAL)
 else()
   message(WARNING "Internal tests disabled")
 endif()
+
+function(test_plain_c_includes)
+  set(folder "correctness")
+  set(name "plain_c_includes")
+  set(TEST_NAMES "${folder}_${name}")
+  add_executable("${folder}_${name}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/${name}.c")
+  target_include_directories("${folder}_${name}" PRIVATE "${CMAKE_BINARY_DIR}/include")
+  set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
+endfunction(test_plain_c_includes)
 
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp")
@@ -45,6 +46,7 @@ endfunction(tests)
 
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
+  test_plain_c_includes()
 endif()
 if (WITH_TEST_ERROR)
   tests(error)
@@ -120,6 +122,10 @@ function(halide_define_aot_test NAME)
   set(TARGET "generator_aot_${NAME}")
 
   add_executable("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_aottest.cpp")
+  if (MSVC)
+  else()
+    target_compile_options("${TARGET}" PUBLIC "-std=c++11") # HalideBuffer.h needs C++11
+  endif()
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
@@ -265,6 +271,12 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(cxx_mangling 
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
                          GENERATED_FUNCTION HalideTest::cxx_mangling)
+  if (TARGET_PTX)
+    halide_add_aot_test_dependency(cxx_mangling
+                                 AOT_LIBRARY_TARGET cxx_mangling_gpu
+                                 GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
+                                 GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
+  endif()
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
@@ -275,12 +287,30 @@ if (WITH_TEST_GENERATORS)
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
+  set(STUBTEST_GENERATOR_ARGS
+      simple_input.type=float32
+      array_input.type=float32 array_input.size=2
+      int_arg.size=2
+      tuple_output.type=float32,float32
+  )
   halide_define_aot_test(stubtest
                          GENERATOR_NAME StubNS1::StubNS2::StubTest
-                         GENERATOR_ARGS input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32)
+                         GENERATOR_ARGS "${STUBTEST_GENERATOR_ARGS}")
 
   # Tests that require additional dependencies, args, etc
-  set(MDTEST_GEN_ARGS input.type=uint8 input.dim=3 output.type=float32,float32 output.dim=3 input_not_nod.type=uint8 input_not_nod.dim=3 input_nod.dim=3 input_not.type=uint8 array_input.size=2 array_i8.size=2 array_i16.size=2 array_i32.size=2 array_h.size=2 array_outputs.size=2)
+  set(MDTEST_GEN_ARGS 
+      input.type=uint8 input.dim=3
+      output.type=float32,float32 output.dim=3
+      input_not_nod.type=uint8 input_not_nod.dim=3
+      input_nod.dim=3
+      input_not.type=uint8
+      array_input.size=2
+      array_i8.size=2
+      array_i16.size=2
+      array_i32.size=2
+      array_h.size=2
+      array_outputs.size=2
+  )
   halide_define_aot_test(metadata_tester
                          GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
   halide_add_aot_test_dependency(metadata_tester
@@ -293,16 +323,6 @@ if (WITH_TEST_GENERATORS)
   halide_add_aot_test_dependency(tiled_blur
                                  GENERATOR_TARGET tiled_blur_blur
                                  AOT_LIBRARY_TARGET tiled_blur_blur)
-
-  halide_define_aot_test(tiled_blur_interleaved OMIT_DEFAULT_GENERATOR)
-  halide_add_aot_test_dependency(tiled_blur_interleaved
-                                 GENERATOR_TARGET tiled_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_interleaved
-                                 GENERATOR_ARGS is_interleaved=true)
-  halide_add_aot_test_dependency(tiled_blur_interleaved
-                                 GENERATOR_TARGET tiled_blur_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_blur_interleaved
-                                 GENERATOR_ARGS is_interleaved=true)
 
   halide_define_aot_test(cxx_mangling_define_extern
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-user_context

@@ -2757,8 +2757,8 @@ private:
             }
         } else if (no_overflow(op->type) &&
                    sub_a &&
-                   is_const(sub_a->a) &&
-                   is_const(b)) {
+                   is_simple_const(sub_a->a) &&
+                   is_simple_const(b)) {
             // max(8 - x, 3) -> 8 - min(x, 5)
             expr = mutate(sub_a->a - min(sub_a->b, sub_a->a - b));
         } else if (select_a &&
@@ -3980,6 +3980,51 @@ private:
                 expr = mutate(b->value);
             } else {
                 internal_error << "Unreachable";
+            }
+        } else if (op->is_intrinsic(Call::predicated_store)) {
+            IRMutator::visit(op);
+            const Call *call = expr.as<Call>();
+
+            Expr pred = call->args[1];
+            internal_assert(pred.defined());
+            if (is_zero(pred)) {
+                // Predicate of a predicated store is always false
+                expr = make_zero(op->type);
+                return;
+            }
+
+            internal_assert(call->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
+            const Call *addr = call->args[0].as<Call>();
+            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
+                << "The first argument to predicated_store must be call to address_of of the store\n";
+            const Broadcast *broadcast = addr->args[0].as<Broadcast>();
+            const Load *load = broadcast ? broadcast->value.as<Load>() : addr->args[0].as<Load>();
+            internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
+
+            const Call *val = call->args[2].as<Call>();
+            if (val && val->is_intrinsic(Call::predicated_load)) {
+                const Call *load_addr = call->args[0].as<Call>();
+                internal_assert(load_addr);
+                const Broadcast *b = load_addr->args[0].as<Broadcast>();
+                const Load *l = b ? b->value.as<Load>() : load_addr->args[0].as<Load>();
+                Expr store_index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
+                Expr val_index = b ? Broadcast::make(l->index, b->lanes) : l->index;
+                if (l && (l->name == load->name) && equal(val_index, store_index)) {
+                    // foo[ramp(x, 0, 1)] = foo[ramp(x, 0, 1)] is a no-op
+                    expr = make_zero(op->type);
+                }
+            }
+
+        } else if (op->is_intrinsic(Call::predicated_load)) {
+            IRMutator::visit(op);
+            const Call *call = expr.as<Call>();
+
+            Expr pred = call->args[1];
+            internal_assert(pred.defined());
+            if (is_zero(pred)) {
+                // Predicate of a predicated load is always false. Replace
+                // with undef
+                expr = undef(call->type);
             }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
@@ -5928,6 +5973,23 @@ void simplify_test() {
         Expr e = Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2));
         Expr expected = Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2));
         check(e, expected);
+    }
+
+    {
+        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
+        Expr index = ramp(x + y, 1, 8);
+
+        Expr load = Load::make(index.type(), "f", index, BufferPtr(), Parameter());
+        Expr src = Call::make(Handle().with_lanes(8), Call::address_of, {load}, Call::Intrinsic);
+        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+
+        Expr dest = Call::make(Handle().with_lanes(8), Call::address_of,
+                               {Load::make(index.type(), "f", index, BufferPtr(), Parameter())},
+                               Call::Intrinsic);
+        Stmt stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
+                                         {dest, pred, value},
+                                         Call::Intrinsic));
+        check(stmt, Evaluate::make(make_zero(value.type())));
     }
 
     std::cout << "Simplify test passed" << std::endl;

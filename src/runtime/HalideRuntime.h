@@ -362,12 +362,12 @@ extern int halide_shutdown_trace();
 /** All Halide GPU or device backend implementations much provide an interface
  * to be used with halide_device_malloc, etc.
  */
-struct halide_device_interface;
+struct halide_device_interface_t;
 
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_device_release(void *user_context, const struct halide_device_interface *device_interface);
+extern void halide_device_release(void *user_context, const struct halide_device_interface_t *device_interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
@@ -380,14 +380,14 @@ extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
 extern int halide_copy_to_device(void *user_context, struct buffer_t *buf,
-                                 const struct halide_device_interface *device_interface);
+                                 const struct halide_device_interface_t *device_interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 
 /** Allocate device memory to back a buffer_t. */
-extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
+extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface_t *device_interface);
 
 /** Free device memory. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
@@ -397,7 +397,7 @@ extern int halide_device_free(void *user_context, struct buffer_t *buf);
  * mechanism on different platforms. */
 typedef int (*halide_device_free_t)(void *, struct buffer_t *);
 #ifdef _MSC_VER
-extern const __declspec(selectany) void *halide_dummy_device_free = nullptr;
+extern const __declspec(selectany) void *halide_dummy_device_free = NULL;
 extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 // The following pragma tells the windows linker to make
 // halide_device_free_weak the same symbol as halide_dummy_device_free
@@ -409,7 +409,7 @@ extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 #endif
 inline halide_device_free_t halide_get_device_free_fn() {
     if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
-        return nullptr;
+        return NULL;
     } else {
         return &halide_weak_device_free;
     }
@@ -652,6 +652,9 @@ enum halide_error_code_t {
      * too small to store all the values of a producer needed by the
      * consumer. */
     halide_error_code_fold_factor_too_small = -26,
+
+    /** User-specified require() expression was not satisfied. */
+    halide_error_code_requirement_failed = -27,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -709,6 +712,7 @@ extern int halide_error_bad_fold(void *user_context, const char *func_name, cons
                                  const char *loop_name);
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);
+extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
 
 // @}
 
@@ -768,7 +772,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
     halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
     halide_target_feature_avx512 = 38, ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
-    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER. 
+    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
     halide_target_feature_end = 42 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
@@ -809,6 +813,19 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  *     }
  */
 extern int halide_default_can_use_target_features(uint64_t features);
+
+
+#ifndef HALIDE_ATTRIBUTE_DEPRECATED
+#ifdef HALIDE_ALLOW_DEPRECATED
+#define HALIDE_ATTRIBUTE_DEPRECATED(x)
+#else
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
+#else
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
+#endif
+#endif
+#endif
 
 
 #ifndef BUFFER_T_DEFINED

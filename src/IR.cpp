@@ -490,6 +490,15 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
+Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
+    internal_assert(idx >= 0 &&
+                    idx < func.outputs())
+        << "Value index out of range in call to halide function\n";
+    internal_assert(func.has_pure_definition() || func.has_extern_definition())
+        << "Call to undefined halide function\n";
+    return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, BufferPtr(), Parameter());
+}
+
 Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                 IntrusivePtr<FunctionContents> func, int value_index,
                 BufferPtr image, Parameter param) {
@@ -627,6 +636,8 @@ Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_fu
 Call::ConstString Call::prefetch = "prefetch";
 Call::ConstString Call::prefetch_2d = "prefetch_2d";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
+Call::ConstString Call::predicated_store = "predicated_store";
+Call::ConstString Call::predicated_load = "predicated_load";
 Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";

@@ -53,3 +53,6 @@ $(BIN)/fft_aot_test: fft_aot_test.cpp $(BIN)/fft_forward_r2c.a $(BIN)/fft_invers
 
 clean:
 	rm -rf $(BIN)
+
+fft_aot_test: $(BIN)/fft_aot_test
+	$(BIN)/fft_aot_test
