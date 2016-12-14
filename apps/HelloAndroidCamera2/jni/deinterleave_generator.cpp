@@ -20,9 +20,9 @@ public:
             .vectorize(x, natural_vector_size(UInt(8)));
 
         // Cope with rotated inputs
-        uvInterleaved.set_stride(0, Expr());
-        result.specialize(uvInterleaved.stride(0) == 1);
-        result.specialize(uvInterleaved.stride(0) == -1);
+        uvInterleaved.dim(0).set_stride(Expr());
+        result.specialize(uvInterleaved.dim(0).stride() == 1);
+        result.specialize(uvInterleaved.dim(0).stride() == -1);
 
         return result;
     }
