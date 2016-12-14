@@ -49,8 +49,44 @@ extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer
  * pipelines. To avoid this cost, HVX can be powered on prior to
  * running several pipelines, and powered off afterwards. If HVX is
  * powered on, subsequent calls to power HVX on will be cheap. */
+
+/**
+ * Power mode for halide_hexagon_power_hvx_on_mode */
+typedef enum halide_hvx_power_mode_t {
+    halide_hvx_power_low     = 0,
+    halide_hvx_power_nominal = 1,
+    halide_hvx_power_turbo   = 2
+} halide_hvx_power_mode_t;
+
+/**
+ * Performance parameters for halide_hexagon_power_hvx_on_perf
+ * @param set_mips - Set to TRUE to requst MIPS
+ * @param mipsPerThread - mips requested per thread, to establish a minimal clock frequency per HW thread
+ * @param mipsTotal - Total mips requested, to establish total number of MIPS required across all HW threads
+ * @param set_bus_bw - Set to TRUE to request bus_bw
+ * @param bwMeagabytesPerSec - Max bus BW requested (megabytes per second)
+ * @param busbwUsagePercentage - Percentage of time during which bwBytesPerSec BW is required from the bus (0..100)
+ * @param set_latency - Set to TRUE to set latency
+ * @param latency - maximum hardware wakeup latency in microseconds.  The
+ *                  higher the value the deeper state of sleep
+ *                  that can be entered but the longer it may
+ *                  take to awaken. Only values > 0 are supported (1 microsecond is the smallest valid value)
+ */
+typedef struct {
+    bool set_mips;
+    unsigned int mipsPerThread;
+    unsigned int mipsTotal;
+    bool set_bus_bw;
+    unsigned int bwMegabytesPerSec;
+    unsigned short busbwUsagePercentage;
+    bool set_latency;
+    int latency;
+} halide_hvx_power_perf_t;
+
 // @{
 extern int halide_hexagon_power_hvx_on(void *user_context);
+extern int halide_hexagon_power_hvx_on_mode(void *user_context, halide_hvx_power_mode_t mode);
+extern int halide_hexagon_power_hvx_on_perf(void *user_context, halide_hvx_power_perf_t *perf);
 extern int halide_hexagon_power_hvx_off(void *user_context);
 extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
 // @}
