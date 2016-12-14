@@ -58,8 +58,12 @@ bool should_extract(Expr e) {
         return !is_const(a->stride);
     }
 
+    if (const Call *a = e.as<Call>()) {
+        if (a->is_intrinsic(Call::address_of)) {
+            return false;
+        }
+    }
     return true;
-
 }
 
 // A global-value-numbering of expressions. Returns canonical form of
@@ -78,11 +82,12 @@ public:
     map<Expr, int, ExprCompare> shallow_numbering;
 
     Scope<int> let_substitutions;
+    bool protect_loads_in_scope;
     int number;
 
     IRCompareCache cache;
 
-    GVN() : number(0), cache(8) {}
+    GVN() : protect_loads_in_scope(false), number(0), cache(8) {}
 
     Stmt mutate(Stmt s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
@@ -137,12 +142,14 @@ public:
         }
 
         // Add it to the numbering.
-        Entry entry = {e, 0};
-        number = (int)entries.size();
-        numbering[with_cache(e)] = number;
-        shallow_numbering[e] = number;
-        entries.push_back(entry);
-        internal_assert(e.type() == old_e.type());
+        if ((e.as<Load>() == nullptr) || !protect_loads_in_scope) {
+            Entry entry = {e, 0};
+            number = (int)entries.size();
+            numbering[with_cache(e)] = number;
+            shallow_numbering[e] = number;
+            entries.push_back(entry);
+            internal_assert(e.type() == old_e.type());
+        }
         return e;
     }
 
@@ -165,21 +172,44 @@ public:
         expr = body;
     }
 
+    void visit(const Call *call) {
+        bool old_protect_loads_in_scope = protect_loads_in_scope;
+        if (call->is_intrinsic(Call::address_of) ||
+            call->is_intrinsic(Call::predicated_store) ||
+            call->is_intrinsic(Call::predicated_load)) {
+            // We shouldn't lift load out of a address_of/predicated_store/predicated_load node
+            protect_loads_in_scope = true;
+        }
+        IRMutator::visit(call);
+        protect_loads_in_scope = old_protect_loads_in_scope;
+    }
+
 };
 
 /** Fill in the use counts in a global value numbering. */
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
+    bool protect_loads_in_scope;
 public:
-    ComputeUseCounts(GVN &g) : gvn(g) {}
+    ComputeUseCounts(GVN &g) : gvn(g), protect_loads_in_scope(false) {}
 
     using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
 
     void include(const Expr &e) {
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
+        debug(4) << "Include: " << e << "; should extract: " << should_extract(e) << "\n";
         if (!should_extract(e)) {
+            e.accept(this);
+            return;
+        }
+
+        // If we're not supposed to lift out load node (i.e. we're inside an
+        // address_of call node), just use the generic visitor to visit the
+        // load index.
+        if ((e.as<Load>() != nullptr) && protect_loads_in_scope) {
             e.accept(this);
             return;
         }
@@ -196,6 +226,17 @@ public:
             visited.insert(e.get());
             e.accept(this);
         }
+    }
+
+
+    void visit(const Call *call) {
+        bool old_protect_loads_in_scope = protect_loads_in_scope;
+        if (call->is_intrinsic(Call::address_of)) {
+            // We shouldn't lift load out of an address_of node.
+            protect_loads_in_scope = true;
+        }
+        IRGraphVisitor::visit(call);
+        protect_loads_in_scope = old_protect_loads_in_scope;
     }
 };
 
@@ -224,10 +265,18 @@ public:
     }
 };
 
+class CSEEveryExprInStmt : public IRMutator {
+public:
+    using IRMutator::mutate;
+
+    Expr mutate(Expr e) {
+        return common_subexpression_elimination(e);
+    }
+};
+
 } // namespace
 
 Expr common_subexpression_elimination(Expr e) {
-
     // Early-out for trivial cases.
     if (is_const(e) || e.as<Variable>()) return e;
 
@@ -277,19 +326,6 @@ Expr common_subexpression_elimination(Expr e) {
 
     return e;
 }
-
-namespace {
-
-class CSEEveryExprInStmt : public IRMutator {
-public:
-    using IRMutator::mutate;
-
-    Expr mutate(Expr e) {
-        return common_subexpression_elimination(e);
-    }
-};
-
-} // namespace
 
 Stmt common_subexpression_elimination(Stmt s) {
     return CSEEveryExprInStmt().mutate(s);
@@ -355,6 +391,8 @@ Expr ssa_block(vector<Expr> exprs) {
 
 void cse_test() {
     Expr x = Variable::make(Int(32), "x");
+    Expr y = Variable::make(Int(32), "y");
+
     Expr t[32], tf[32];
     for (int i = 0; i < 32; i++) {
         t[i] = Variable::make(Int(32), "t" + std::to_string(i));
@@ -417,6 +455,80 @@ void cse_test() {
         e = e*e - e * i;
     }
     Expr result = common_subexpression_elimination(e);
+
+    {
+        Expr pred = x*x + y*y > 0;
+        Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
+        Expr load = Load::make(Int(32), "buf", index, BufferPtr(), Parameter());
+        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+        e = select(x*y > 10, x*y + 2, x*y + 3 + load) + pred_load;
+
+        Expr t2 = Variable::make(Bool(), "t2");
+        Expr cse_load = Load::make(Int(32), "buf", t[3], BufferPtr(), Parameter());
+        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
+        Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
+        correct = ssa_block({x*y,
+                             x*x + y*y,
+                             t[1] > 0,
+                             select(t2, t[1] + 2, t[1] + 10),
+                             select(t[0] > 10, t[0] + 2, t[0] + 3 + cse_load) + cse_pred_load});
+
+        check(e, correct);
+    }
+
+    {
+        Expr pred = x*x + y*y > 0;
+        Expr load = Load::make(Int(32), "buf", select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10),
+                               BufferPtr(), Parameter());
+        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+        Expr dest = Call::make(Handle(), Call::address_of,
+                               {Load::make(value.type(), "out", x*x + y*y + 2, BufferPtr(), Parameter())},
+                               Call::Intrinsic);
+        e = Call::make(value.type(), Call::predicated_store,
+                       {dest, pred, value},
+                       Call::Intrinsic);
+
+        Expr t1 = Variable::make(Bool(), "t1");
+        Expr cse_load = Load::make(Int(32), "buf",
+                                   select(t1, t[0] + 2, t[0] + 10),
+                                   BufferPtr(), Parameter());
+        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
+        Expr cse_value = Call::make(load.type(), Call::predicated_load, {cse_src, t1}, Call::Intrinsic);
+        Expr cse_dest = Call::make(Handle(), Call::address_of,
+                               {Load::make(value.type(), "out", t[0] + 2, BufferPtr(), Parameter())},
+                               Call::Intrinsic);
+        Expr cse_pred_store = Call::make(value.type(), Call::predicated_store,
+                                         {cse_dest, t1, cse_value},
+                                         Call::Intrinsic);
+        correct = ssa_block({x*x + y*y,
+                             t[0] > 0,
+                             cse_pred_store});
+
+        check(e, correct);
+    }
+
+    {
+        Expr pred = x*x + y*y > 0;
+        Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
+        Expr load = Load::make(Int(32), "buf", index, BufferPtr(), Parameter());
+        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+        e = select(x*y > 10, x*y + 2, x*y + 3 + pred_load) + pred_load;
+
+        Expr t2 = Variable::make(Bool(), "t2");
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), BufferPtr(), Parameter());
+        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
+        Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
+        correct = ssa_block({x*y,
+                             x*x + y*y,
+                             t[1] > 0,
+                             cse_pred_load,
+                             select(t[0] > 10, t[0] + 2, t[0] + 3 + t[3]) + t[3]});
+
+        check(e, correct);
+    }
 
     debug(0) << "common_subexpression_elimination test passed\n";
 }

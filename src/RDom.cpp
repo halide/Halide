@@ -164,8 +164,8 @@ RDom::RDom(ImageParam p) {
     for (int i = 0; i < p.dimensions(); i++) {
         ReductionVariable var = {
             p.name() + "$" + var_names[i],
-            p.min(i),
-            p.extent(i)
+            p.dim(i).min(),
+            p.dim(i).extent()
         };
         vars.push_back(var);
     }

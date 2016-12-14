@@ -179,18 +179,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
-    string id_index;
-    const Ramp *ramp = op->index.as<Ramp>();
-    if (ramp) {
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-        user_assert(stride && stride->value == 1 && ramp->lanes == 4) <<
-            "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute.";
-
-        // Buffer type is 4-elements wide, that's why we divide by ramp->lanes.
-        id_index = print_expr(Div::make(ramp->base, ramp->lanes));
-    } else {
-        id_index = print_expr(op->index);
-    }
+    // TODO: support vectors
+    internal_assert(op->type.is_scalar());
+    string id_index = print_expr(op->index);
 
     ostringstream oss;
     oss << print_name(op->name);
@@ -202,21 +193,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
-    string id_index;
-    const Ramp *ramp = op->index.as<Ramp>();
-    if (ramp) {
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-        user_assert(stride && stride->value == 1 && ramp->lanes == 4)
-            << "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute."
-            << " Got integer stride "
-            << (stride ? std::to_string(stride->value): "undefined")
-            << " and lanes " << ramp->lanes << " instead.";
-
-        // Buffer type is 4-elements wide, that's why we divide by ramp->lanes.
-        id_index = print_expr(Div::make(ramp->base, ramp->lanes));
-    } else {
-        id_index = print_expr(op->index);
-    }
+    // TODO: support vectors
+    internal_assert(op->value.type().is_scalar());
+    string id_index = print_expr(op->index);
 
     string id_value = print_expr(op->value);
 

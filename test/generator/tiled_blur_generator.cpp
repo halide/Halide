@@ -3,11 +3,11 @@
 namespace {
 
 Halide::Expr is_interleaved(const Halide::OutputImageParam &p, int channels = 3) {
-    return p.stride(0) == channels && p.stride(2) == 1 && p.extent(2) == channels;
+    return p.dim(0).stride() == channels && p.dim(2).stride() == 1 && p.dim(2).extent() == channels;
 }
 
 Halide::Expr is_planar(const Halide::OutputImageParam &p, int channels = 3) {
-    return p.stride(0) == 1 && p.extent(2) == channels;
+    return p.dim(0).stride() == 1 && p.dim(2).extent() == channels;
 }
 
 class TiledBlur : public Halide::Generator<TiledBlur> {
@@ -46,8 +46,8 @@ public:
         brighter1.trace_realizations();
 
         // Unset default constraints so that specialization works.
-        input.set_stride(0, Expr());
-        brighter2.output_buffer().set_stride(0, Expr());
+        input.dim(0).set_stride(Expr());
+        brighter2.output_buffer().dim(0).set_stride(Expr());
 
         // Add specialization for input and output buffers that are both planar.
         brighter2.specialize(is_planar(input) && is_planar(brighter2.output_buffer()));
