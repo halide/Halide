@@ -29,7 +29,7 @@ string get_block_name(int index) {
 }
 
 class CountGPUBlocksThreads : public IRVisitor {
-    string prefix;
+    string prefix; // Producer name + stage
 
     using IRVisitor::visit;
 
@@ -68,8 +68,10 @@ public:
     int nthreads;
 };
 
-class FindGPUVarsReplacement : public IRVisitor {
-    using IRVisitor::visit;
+class CanonicalizeGPUVars : public IRMutator {
+    map<string, string> gpu_vars;
+
+    using IRMutator::visit;
 
     string gpu_name(vector<string> v, const string &new_var) {
         v.push_back(new_var);
@@ -84,59 +86,17 @@ class FindGPUVarsReplacement : public IRVisitor {
         return stream.str();
     }
 
-    void visit(const For *op) {
-        if ((op->for_type == ForType::GPUBlock) ||
-            (op->for_type == ForType::GPUThread)) {
-
-            vector<string> v = split_string(op->name, ".");
-            internal_assert(v.size() > 2);
-
-            CountGPUBlocksThreads counter(v[0] + "." + v[1]);
-            op->body.accept(&counter);
-            internal_assert(counter.nblocks <= 4)
-                << op->name << " can only have maximum of 4 block dimensions\n";
-            internal_assert(counter.nthreads <= 4)
-                << op->name << " can only have maximum of 4 thread dimensions\n";
-
-            string name;
-            if (op->for_type == ForType::GPUBlock) {
-                name = gpu_name(v, get_block_name(counter.nblocks));
-                debug(5) << "Replacing " << op->name << " with GPU block name " << name << "\n";
-            } else if (op->for_type == ForType::GPUThread) {
-                name = gpu_name(v, get_thread_name(counter.nthreads));
-                debug(5) << "Replacing " << op->name << " with GPU thread name " << name << "\n";
-            }
-
-            gpu_vars.emplace(op->name, name);
-            replacements.emplace(op->name, Variable::make(Int(32), name));
-        }
-
-        op->body.accept(this);
-    }
-
-public:
-    map<string, string> gpu_vars;
-    map<string, Expr> replacements;
-};
-
-class CanonicalizeGPUVars : public IRMutator {
-    const map<string, string> &gpu_vars;
-
-    using IRMutator::visit;
-
     string find_replacement(const string &suffix, const string &name) {
         vector<string> v = split_string(name, suffix);
         internal_assert(v.size() == 2);
         const auto &iter = gpu_vars.find(v[0]);
         if (iter != gpu_vars.end()) {
-            string new_name = iter->second + suffix;
-            replacements.emplace(name, Variable::make(Int(32), new_name));
-            return new_name;
+            return iter->second + suffix;
         }
         return name;
     }
 
-    string canonicalize_name(const string &name) {
+    string canonicalize_let(const string &name) {
         if (ends_with(name, ".loop_max")) {
             return find_replacement(".loop_max", name);
         } else if (ends_with(name, ".loop_min")) {
@@ -150,14 +110,41 @@ class CanonicalizeGPUVars : public IRMutator {
 
     void visit(const For *op) {
         string name = op->name;
-        const auto &iter = gpu_vars.find(op->name);
-        if (iter != gpu_vars.end()) {
-            name = iter->second;
-        }
-
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
         Stmt body = mutate(op->body);
+
+        if ((op->for_type == ForType::GPUBlock) ||
+            (op->for_type == ForType::GPUThread)) {
+
+            vector<string> v = split_string(op->name, ".");
+            internal_assert(v.size() > 2);
+
+            CountGPUBlocksThreads counter(v[0] + "." + v[1]);
+            op->body.accept(&counter);
+            internal_assert(counter.nblocks <= 4)
+                << op->name << " can only have maximum of 4 block dimensions\n";
+            internal_assert(counter.nthreads <= 4)
+                << op->name << " can only have maximum of 4 thread dimensions\n";
+
+            if (op->for_type == ForType::GPUBlock) {
+                name = gpu_name(v, get_block_name(counter.nblocks));
+                debug(5) << "Replacing " << op->name << " with GPU block name " << name << "\n";
+            } else if (op->for_type == ForType::GPUThread) {
+                name = gpu_name(v, get_thread_name(counter.nthreads));
+                debug(5) << "Replacing " << op->name << " with GPU thread name " << name << "\n";
+            }
+
+            if (name != op->name) {
+                // Canonicalize the GPU for loop name
+                gpu_vars.emplace(op->name, name);
+                Expr new_var = Variable::make(Int(32), name);
+                min = substitute(op->name, new_var, min);
+                extent = substitute(op->name, new_var, extent);
+                body = substitute(op->name, new_var, body);
+            }
+        }
+
         if ((name == op->name) &&
             min.same_as(op->min) &&
             extent.same_as(op->extent) &&
@@ -168,10 +155,18 @@ class CanonicalizeGPUVars : public IRMutator {
         }
     }
 
+
     void visit(const LetStmt *op) {
-        string name = canonicalize_name(op->name);
         Expr value = mutate(op->value);
         Stmt body = mutate(op->body);
+
+        string name = canonicalize_let(op->name);
+        if (name != op->name) {
+            Expr new_var = Variable::make(Int(32), name);
+            value = substitute(op->name, new_var, value);
+            body = substitute(op->name, new_var, body);
+        }
+
         if ((name == op->name) &&
             value.same_as(op->value) &&
             body.same_as(op->body)) {
@@ -181,25 +176,31 @@ class CanonicalizeGPUVars : public IRMutator {
         }
     }
 
-public:
-    CanonicalizeGPUVars(const map<string, string> &g, const map<string, Expr> &r)
-        : gpu_vars(g), replacements(r) {}
+    void visit(const IfThenElse *op) {
+        Expr condition = mutate(op->condition);
 
-    map<string, Expr> replacements;
+        map<string, string> old_gpu_vars;
+        old_gpu_vars.swap(gpu_vars);
+        Stmt then_case = mutate(op->then_case);
+
+        gpu_vars = old_gpu_vars;
+        Stmt else_case = mutate(op->else_case);
+
+        if (condition.same_as(op->condition) &&
+            then_case.same_as(op->then_case) &&
+            else_case.same_as(op->else_case)) {
+            stmt = op;
+        } else {
+            stmt = IfThenElse::make(condition, then_case, else_case);
+        }
+    }
 };
 
 } // anonymous namespace
 
 Stmt canonicalize_gpu_vars(Stmt s) {
-    FindGPUVarsReplacement finder;
-    s.accept(&finder);
-
-    CanonicalizeGPUVars canonicalizer(finder.gpu_vars, finder.replacements);
+    CanonicalizeGPUVars canonicalizer;
     s = canonicalizer.mutate(s);
-
-    // Now we need to substitute in the new vars
-    s = substitute(canonicalizer.replacements, s);
-
     return s;
 }
 
