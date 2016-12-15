@@ -691,6 +691,9 @@ WEAK int halide_metal_run(void *user_context,
             buffer_index++;
         }
     }
+
+    // Round shared memory size up to a multiple of 16, as required by setThreadgroupMemoryLength.
+    shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
     debug(user_context) << "Setting shared memory length to " << shared_mem_bytes << "\n";
     set_threadgroup_memory_length(encoder, shared_mem_bytes, 0);
 
