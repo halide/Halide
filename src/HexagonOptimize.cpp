@@ -683,38 +683,12 @@ public:
 // IR operations. When an interleave collides with a deinterleave,
 // they cancel out.
 class EliminateInterleaves : public IRMutator {
-private:
     Scope<bool> vars;
 
-    // We need some special handling for expressions that are modified
-    // by eliminate_bool_vectors. mutate_with_interleave allows
-    // interleaves to be removed, but not added to the resulting
-    // expression, returned as a flag indicating the result should be
-    // interleaved instead. This is necessary because expressions
-    // returning boolean vectors can't be interleaved, the expression
-    // using it must be interleaved instead.
-    bool interleave_expr;
-    int allow_interleave_expr = 0;
+    // We can't interleave booleans, so we handle them specially.
+    bool in_bool_to_mask = false;
+    bool interleave_mask = false;
 
-    pair<Expr, bool> mutate_with_interleave(Expr e) {
-        int old_allow_interleave_expr = allow_interleave_expr;
-        allow_interleave_expr = 1;
-        interleave_expr = false;
-        Expr ret = mutate(e);
-        allow_interleave_expr = old_allow_interleave_expr;
-        return std::make_pair(ret, interleave_expr);
-    }
-
-public:
-    Expr mutate(Expr e) {
-        --allow_interleave_expr;
-        Expr ret = IRMutator::mutate(e);
-        ++allow_interleave_expr;
-        return ret;
-    }
-    using IRMutator::mutate;
-
-private:
     // Check if x is an expression that is either an interleave, or
     // can pretend to be one (is a scalar or a broadcast).
     bool yields_interleave(Expr x) {
@@ -765,20 +739,15 @@ private:
     void visit_binary(const T* op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
-        // We only want to pull out an interleave if at least one of
-        // the operands is an actual interleave. Furthermore, we can
-        // only attempt to do this if we are allowing the expr to be
-        // interleaved via interleave_expr, or the result is not boolean.
-        bool can_interleave = op->type.bits() != 1;
-        if ((can_interleave || allow_interleave_expr == 0) && yields_removable_interleave({a, b})) {
+        if (yields_removable_interleave({a, b})) {
             a = remove_interleave(a);
             b = remove_interleave(b);
             expr = T::make(a, b);
-            if (can_interleave) {
-                expr = native_interleave(expr);
+            if (expr.type().bits() == 1) {
+                internal_assert(!interleave_mask);
+                interleave_mask = true;
             } else {
-                internal_assert(!interleave_expr);
-                interleave_expr = true;
+                expr = native_interleave(expr);
             }
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
@@ -899,13 +868,9 @@ private:
         if (op->type.bits() == op->value.type().bits()) {
             // We can only move interleaves through casts of the same size.
 
-            Expr value;
-            bool interleave;
-            std::tie(value, interleave) = mutate_with_interleave(op->value);
+            Expr value = mutate(op->value);
 
-            if (interleave) {
-                expr = native_interleave(Cast::make(op->type, value));
-            } else if (is_native_interleave(value)) {
+            if (is_native_interleave(value)) {
                 value = remove_interleave(value);
                 expr = native_interleave(Cast::make(op->type, value));
             } else if (!value.same_as(op->value)) {
@@ -961,7 +926,30 @@ private:
         return true;
     }
 
+    void visit_bool_to_mask(const Call *op) {
+        bool old_in_bool_to_mask = in_bool_to_mask;
+        in_bool_to_mask = true;
+
+        Expr arg = mutate(op->args[0]);
+        if (!arg.same_as(op->args[0]) || interleave_mask) {
+            expr = Call::make(op->type, Call::bool_to_mask, {arg}, Call::PureIntrinsic);
+            if (interleave_mask) {
+                expr = native_interleave(expr);
+                interleave_mask = false;
+            }
+        } else {
+            expr = op;
+        }
+
+        in_bool_to_mask = old_in_bool_to_mask;
+    }
+
     void visit(const Call *op) {
+        if (op->is_intrinsic(Call::bool_to_mask)) {
+            visit_bool_to_mask(op);
+            return;
+        }
+
         vector<Expr> args(op->args);
 
         // mutate all the args.
