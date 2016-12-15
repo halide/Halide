@@ -5979,12 +5979,12 @@ void simplify_test() {
         Expr pred = ramp(x*y + x*z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
 
-        Expr load = Load::make(index.type(), "f", index, BufferPtr(), Parameter());
+        Expr load = Load::make(index.type(), "f", index, BufferRef<>(), Parameter());
         Expr src = Call::make(Handle().with_lanes(8), Call::address_of, {load}, Call::Intrinsic);
         Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
 
         Expr dest = Call::make(Handle().with_lanes(8), Call::address_of,
-                               {Load::make(index.type(), "f", index, BufferPtr(), Parameter())},
+                               {Load::make(index.type(), "f", index, BufferRef<>(), Parameter())},
                                Call::Intrinsic);
         Stmt stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
                                          {dest, pred, value},

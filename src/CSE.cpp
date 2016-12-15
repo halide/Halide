@@ -459,13 +459,13 @@ void cse_test() {
     {
         Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-        Expr load = Load::make(Int(32), "buf", index, BufferPtr(), Parameter());
+        Expr load = Load::make(Int(32), "buf", index, BufferRef<>(), Parameter());
         Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
         Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
         e = select(x*y > 10, x*y + 2, x*y + 3 + load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", t[3], BufferPtr(), Parameter());
+        Expr cse_load = Load::make(Int(32), "buf", t[3], BufferRef<>(), Parameter());
         Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
         Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
         correct = ssa_block({x*y,
@@ -480,11 +480,11 @@ void cse_test() {
     {
         Expr pred = x*x + y*y > 0;
         Expr load = Load::make(Int(32), "buf", select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10),
-                               BufferPtr(), Parameter());
+                               BufferRef<>(), Parameter());
         Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
         Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
         Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(value.type(), "out", x*x + y*y + 2, BufferPtr(), Parameter())},
+                               {Load::make(value.type(), "out", x*x + y*y + 2, BufferRef<>(), Parameter())},
                                Call::Intrinsic);
         e = Call::make(value.type(), Call::predicated_store,
                        {dest, pred, value},
@@ -493,11 +493,11 @@ void cse_test() {
         Expr t1 = Variable::make(Bool(), "t1");
         Expr cse_load = Load::make(Int(32), "buf",
                                    select(t1, t[0] + 2, t[0] + 10),
-                                   BufferPtr(), Parameter());
+                                   BufferRef<>(), Parameter());
         Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
         Expr cse_value = Call::make(load.type(), Call::predicated_load, {cse_src, t1}, Call::Intrinsic);
         Expr cse_dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(value.type(), "out", t[0] + 2, BufferPtr(), Parameter())},
+                               {Load::make(value.type(), "out", t[0] + 2, BufferRef<>(), Parameter())},
                                Call::Intrinsic);
         Expr cse_pred_store = Call::make(value.type(), Call::predicated_store,
                                          {cse_dest, t1, cse_value},
@@ -512,13 +512,13 @@ void cse_test() {
     {
         Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-        Expr load = Load::make(Int(32), "buf", index, BufferPtr(), Parameter());
+        Expr load = Load::make(Int(32), "buf", index, BufferRef<>(), Parameter());
         Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
         Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
         e = select(x*y > 10, x*y + 2, x*y + 3 + pred_load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), BufferPtr(), Parameter());
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), BufferRef<>(), Parameter());
         Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
         Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
         correct = ssa_block({x*y,
