@@ -966,21 +966,14 @@ class EliminateInterleaves : public IRMutator {
         // does not deinterleave, and then opportunistically select
         // the interleaving alternative when we can cancel out to the
         // interleave.
-        struct DeinterleavingAlternative {
-            string name;
-            vector<Expr> extra_args;
-        };
-        static std::map<string, DeinterleavingAlternative> deinterleaving_alts = {
-            { "halide.hexagon.pack.vh", { "halide.hexagon.trunc.vh" } },
-            { "halide.hexagon.pack.vw", { "halide.hexagon.trunc.vw" } },
-            { "halide.hexagon.packhi.vh", { "halide.hexagon.trunclo.vh" } },
-            { "halide.hexagon.packhi.vw", { "halide.hexagon.trunclo.vw" } },
-            { "halide.hexagon.pack_satub.vh", { "halide.hexagon.trunc_satub.vh" } },
-            { "halide.hexagon.pack_sath.vw", { "halide.hexagon.trunc_sath.vw" } },
-            // For this one, we don't have a simple alternative. But,
-            // we have a shift-saturate-narrow that we can use with a
-            // shift of 0.
-            { "halide.hexagon.pack_satuh.vw", { "halide.hexagon.trunc_satuh_shr.vw.w", { 0 } } },
+        static std::map<string, string> deinterleaving_alts = {
+            { "halide.hexagon.pack.vh", "halide.hexagon.trunc.vh" },
+            { "halide.hexagon.pack.vw", "halide.hexagon.trunc.vw" },
+            { "halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh" },
+            { "halide.hexagon.packhi.vw", "halide.hexagon.trunclo.vw" },
+            { "halide.hexagon.pack_satub.vh", "halide.hexagon.trunc_satub.vh" },
+            { "halide.hexagon.pack_sath.vw", "halide.hexagon.trunc_sath.vw" },
+            { "halide.hexagon.pack_satuh.vw", "halide.hexagon.trunc_satuh.vw" },
         };
 
         if (is_native_deinterleave(op) && yields_interleave(args[0])) {
@@ -1002,14 +995,10 @@ class EliminateInterleaves : public IRMutator {
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
             // alternative instead.
-            const DeinterleavingAlternative &alt = deinterleaving_alts[op->name];
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            for (Expr i : alt.extra_args) {
-                args.push_back(i);
-            }
-            expr = Call::make(op->type, alt.name, args, op->call_type);
+            expr = Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
         } else if (changed) {
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
