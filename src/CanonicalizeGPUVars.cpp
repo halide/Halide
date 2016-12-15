@@ -44,6 +44,24 @@ class CountGPUBlocksThreads : public IRVisitor {
         IRVisitor::visit(op);
     }
 
+    void visit(const IfThenElse *op) {
+        op->condition.accept(this);
+
+        int old_nblocks = nblocks;
+        int old_nthreads = nthreads;
+        op->then_case.accept(this);
+
+        if (op->else_case.defined()) {
+            int then_nblocks = nblocks;
+            int then_nthreads = nthreads;
+            nblocks = old_nblocks;
+            nthreads = old_nthreads;
+            op->else_case.accept(this);
+            nblocks = std::max(then_nblocks, nblocks);
+            nthreads = std::max(then_nthreads, nthreads);
+        }
+    }
+
 public:
     CountGPUBlocksThreads(const string &p) : prefix(p), nblocks(0), nthreads(0) {}
     int nblocks;

@@ -22,9 +22,9 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     y = Var('y')
     z = Var('z')
     c = Var('c')
-    tx = Var("tx")
-    ty = Var("ty")
-    tz = Var("tz")
+    xi = Var("xi")
+    yi = Var("yi")
+    zi = Var("zi")
 
     # Add a boundary condition
     clamped = Func('clamped')
@@ -76,11 +76,11 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
         print ("Compiling for GPU.")
         histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
         histogram = histogram.update() # Because returns ScheduleHandle
-        histogram.reorder(c, r.x, r.y, x, y).gpu_tile(x, y, tx, ty, 8, 8).unroll(c)
-        blurx.compute_root().gpu_tile(x, y, z, tx, ty, tz, 16, 16, 1)
-        blury.compute_root().gpu_tile(x, y, z, tx, ty, tz, 16, 16, 1)
-        blurz.compute_root().gpu_tile(x, y, z, tx, ty, tz, 8, 8, 4)
-        bilateral_grid.compute_root().gpu_tile(x, y, tx, ty, s_sigma, s_sigma)
+        histogram.reorder(c, r.x, r.y, x, y).gpu_tile(x, y, xi, yi, 8, 8).unroll(c)
+        blurx.compute_root().gpu_tile(x, y, z, xi, yi, zi, 16, 16, 1)
+        blury.compute_root().gpu_tile(x, y, z, xi, yi, zi, 16, 16, 1)
+        blurz.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 4)
+        bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma)
     else:
         # CPU schedule
         print ("Compiling for CPU.")

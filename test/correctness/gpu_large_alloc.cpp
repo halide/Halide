@@ -22,9 +22,9 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        Var tx, ty;
-        f.compute_root().gpu_tile(x, y, tx, ty, 16, 16);
-        g.compute_root().gpu_tile(x, y, tx, ty, 16, 16);
+        Var xi, yi;
+        f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
+        g.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
     }
 
     printf("Realizing function...\n");

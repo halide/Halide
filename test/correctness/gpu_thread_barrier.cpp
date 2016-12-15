@@ -70,8 +70,8 @@ int main(int argc, char **argv) {
         Func g;
         g(x, y) = f(0, 0)+ f(9, 7);
 
-        Var tx, ty;
-        g.gpu_tile(x, y, tx, ty, 16, 8);
+        Var xi, yi;
+        g.gpu_tile(x, y, xi, yi, 16, 8);
         f.compute_at(g, x);
 
         for (int i = 0; i < passes; i++) {
@@ -114,8 +114,8 @@ int main(int argc, char **argv) {
         Func g;
         g(x, y) = f(0, 0) + f(7, 7);
 
-        Var tx, ty;
-        g.gpu_tile(x, y, tx, ty, 8, 8);
+        Var xi, yi;
+        g.gpu_tile(x, y, xi, yi, 8, 8);
         f.compute_at(g, x);
 
         f.gpu_threads(x, y);

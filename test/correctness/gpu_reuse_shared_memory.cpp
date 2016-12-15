@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-int multi_type_test() {
+int multi_thread_ype_test() {
     Func f1("f1"), f2("f2"), f3("f3"), f4("f4"), f5("f5"), f6("f6");
     Var x, y, z;
 
@@ -13,8 +13,8 @@ int multi_type_test() {
     f5(x, y, z) = cast<uint32_t>(f4(x+1, y, z) + f4(x, y+1, z));
     f6(x, y, z) = cast<uint8_t>(f5(x+1, y, z) + f5(x, y+1, z));
 
-    Var tx, ty;
-    f6.compute_root().gpu_tile(x, y, tx, ty, 1, 1);
+    Var thread_x, thread_y;
+    f6.compute_root().gpu_tile(x, y, thread_x, thread_y, 1, 1);
     f5.compute_at(f6, x).gpu_threads(x, y);
     f4.compute_at(f6, x).gpu_threads(x, y);
     f3.compute_at(f6, x).gpu_threads(x, y);
@@ -49,7 +49,7 @@ int pyramid_test() {
     const int size_x = 100;
     const int size_y = 100;
 
-    Var x, y, z, xo, xi, yo, yi, tx, ty;
+    Var x, y, z, xo, xi, yo, yi, thread_x, thread_y;
 
     std::vector<Func> funcs(levels);
 
@@ -59,7 +59,7 @@ int pyramid_test() {
     }
 
     funcs[levels-1].compute_root()
-        .gpu_tile(x, y, tx, ty, 3, 4);
+        .gpu_tile(x, y, thread_x, thread_y, 3, 4);
     for (int i = levels-2; i >= 0; --i) {
         funcs[i].compute_at(funcs[levels-1], x)
             .split(x, xo, xi, 1 << (levels - i - 1))
@@ -88,7 +88,7 @@ int inverted_pyramid_test() {
     const int size_x = 8*16*4;
     const int size_y = 8*16*4;
 
-    Var x, y, z, yo, yi, yii, xo, xi, xii, tx, ty;
+    Var x, y, z, yo, yi, yii, xo, xi, xii, thread_x, thread_y;
 
     std::vector<Func> funcs(levels);
 
@@ -134,14 +134,14 @@ int dynamic_shared_test() {
     }
 
     Func f1, f2, f3, f4;
-    Var x, xo, xi, txo;
+    Var x, xo, xi, thread_xo;
 
     f1(x) = x;
     f2(x) = f1(x) + f1(2*x);
     f3(x) = f2(x) + f2(2*x);
     f4(x) = f3(x) + f3(2*x);
 
-    f4.split(x, xo, xi, 16).gpu_tile(xo, txo, 16);
+    f4.split(x, xo, xi, 16).gpu_tile(xo, thread_xo, 16);
     f3.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi);
     f2.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi);
     f1.compute_at(f4, xo).split(x, xo, xi, 16).gpu_threads(xi);
@@ -168,8 +168,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    printf("Running multi type test!\n");
-    if (multi_type_test() != 0) {
+    printf("Running multi thread_ype test!\n");
+    if (multi_thread_ype_test() != 0) {
         return -1;
     }
 

@@ -65,12 +65,12 @@ public:
         bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
         if (get_target().has_gpu_feature()) {
-            Var tx("tx"), ty("ty"), tz("tz");
+            Var xi("xi"), yi("yi"), zi("zi");
 
             // Schedule blurz in 8x8 tiles. This is a tile in
             // grid-space, which means it represents something like
             // 64x64 pixels in the input (if s_sigma is 8).
-            blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, tx, ty, 8, 8);
+            blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8);
 
             // Schedule histogram to happen per-tile of blurz, with
             // intermediate results in shared memory. This means histogram
@@ -82,13 +82,13 @@ public:
             histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c);
 
             // An alternative schedule for histogram that doesn't use shared memory:
-            // histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, tx, ty, 8, 8);
-            // histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, tx, ty, 8, 8).unroll(c);
+            // histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8);
+            // histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, xi, yi, 8, 8).unroll(c);
 
             // Schedule the remaining blurs and the sampling at the end similarly.
-            blurx.compute_root().gpu_tile(x, y, z, tx, ty, tz, 8, 8, 1);
-            blury.compute_root().gpu_tile(x, y, z, tx, ty, tz, 8, 8, 1);
-            bilateral_grid.compute_root().gpu_tile(x, y, tx, ty, s_sigma, s_sigma);
+            blurx.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
+            blury.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
+            bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma);
         } else {
             // The CPU schedule.
             blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);

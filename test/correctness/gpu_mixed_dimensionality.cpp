@@ -22,9 +22,9 @@ int main(int argc, char **argv) {
     out(x, y, z) = h(x, y, z);
     out(x, y, z) += 1;
 
-    Var tx("tx"), ty("ty"), tz("tz");
-    out.gpu_tile(x, y, z, tx, ty, tz, 4, 4, 4);
-    out.update().gpu_tile(x, y, tx, ty, 4, 4);
+    Var xi("xi"), yi("yi"), zi("zi");
+    out.gpu_tile(x, y, z, xi, yi, zi, 4, 4, 4);
+    out.update().gpu_tile(x, y, xi, yi, 4, 4);
     h.compute_at(out, x).gpu_threads(x, y);
     h.update().gpu_threads(x);
     g.compute_at(h, y).gpu_threads(x);

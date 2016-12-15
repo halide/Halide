@@ -10,12 +10,12 @@ int main(int argc, char **argv) {
     }
 
     Func f("f"), g("g");
-    Var x("x"), tx("tx");
+    Var x("x"), xi("xi");
 
     f(x) = x;
     g(x) = f(x) + f(2*x);
 
-    g.gpu_tile(x, tx, 16);
+    g.gpu_tile(x, xi, 16);
     f.compute_at(g, x).gpu_threads(x);
 
     // The amount of shared memory required varies with x

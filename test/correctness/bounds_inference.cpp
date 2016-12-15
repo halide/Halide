@@ -16,10 +16,10 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        Var bx("bx"), by("by"), tx("tx"), ty("ty");
-        f.gpu_tile(x, y, bx, by, tx, ty, 16, 16);
-        g.gpu_tile(x, bx, tx, 128);
-        h.gpu_tile(x, bx, tx, 128);
+        Var xo("xo"), yo("yo"), xi("xi"), yi("yi");
+        f.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
+        g.gpu_tile(x, xo, xi, 128);
+        h.gpu_tile(x, xo, xi, 128);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon().vectorize(x, 32);
         g.hexagon().vectorize(x, 32);
