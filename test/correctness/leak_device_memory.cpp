@@ -46,7 +46,9 @@ int main(int argc, char **argv) {
             // The copy now has a non-zero dev field, but the original
             // buf is unaware of that fact. It should get cleaned up
             // here.
-            assert(copy.has_device_allocation());
+            if (target.has_gpu_feature()) {
+                assert(copy.has_device_allocation());
+            }
         }
 
         Halide::Internal::JITSharedRuntime::release_all();
