@@ -341,3 +341,14 @@ define weak_odr <64 x i32> @halide.hexagon.acc_add_mpy_mpy.vw.vh.vh.b.b(<64 x i3
   %res = call <64 x i32> @llvm.hexagon.V6.vmpahb.acc.128B(<64 x i32> %acc, <64 x i32> %dv1, i32 %const)
   ret <64 x i32> %res
 }
+
+; Define a missing saturating narrow instruction in terms of a saturating narrowing shift.
+declare <32 x i32> @llvm.hexagon.V6.vasrwuhsat.128B(<32 x i32>, <32 x i32>, i32)
+
+define weak_odr <64 x i16> @halide.hexagon.trunc_satuh.vw(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %e = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
+  %o = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %arg)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vasrwuhsat.128B(<32 x i32> %o, <32 x i32> %e, i32 0)
+  %r = bitcast <32 x i32> %r_32 to <64 x i16>
+  ret <64 x i16> %r
+}
