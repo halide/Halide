@@ -804,9 +804,11 @@ public:
     ~Buffer() {
         // Improve code layout in the common case by bailing out early
         // if both ref_holder and alloc are zero.
+        #ifndef _MSC_VER
         if (__builtin_expect(!((uintptr_t)ref_holder | (uintptr_t)alloc), 1)) {
             return;
         }
+        #endif
         if (ref_holder) {
             // There are still references to me via the
             // ref_holder. Move me to the heap.
