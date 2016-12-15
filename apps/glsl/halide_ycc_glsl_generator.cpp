@@ -30,7 +30,7 @@ public:
                                             0.0f) * 255.f);
 
         // Schedule for GLSL
-        input8.set_bounds(2, 0, 3);
+        input8.dim(2).set_bounds(0, 3);
         out.bound(c, 0, 3);
         out.glsl(x, y, c);
 
