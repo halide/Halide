@@ -1,5 +1,8 @@
 import org.apache.tools.ant.taskdefs.condition.Os
 
+// Avoid conflicts with Bazel on case-insensitive filesystems
+buildDir = 'gradle_build' 
+
 repositories {
     jcenter()
 }
@@ -54,14 +57,14 @@ executables {
     halide_generator {
         binaries.all {
             cppCompiler.args "-std=c++11", "-g", "-Wall", "-fno-rtti", "-I", "${projectDir}/../../include", "-I", "${projectDir}/../../build/include"
+            // "/bin" assumes Makefile build for Halide; "/build/lib" assumes CMake build
             linker.args "-lHalide", "-ldl", "-lpthread", "-lz", "-L", "${projectDir}/../../bin", "-L", "${projectDir}/../../build/lib"
         }
     }
 }
 
 binaries.withType(NativeExecutableBinary) { binary ->
-    def jnis = "${projectDir}/jni"
-    def halideRoot = "${projectDir}/../../"
+    def bin = "${projectDir}/bin"
     def linkTask = binary.tasks.link
     println "linktask output file is " + linkTask.outputFile
     Map<String, String> archs = [
@@ -79,7 +82,7 @@ binaries.withType(NativeExecutableBinary) { binary ->
         def android_abi = arch.key
         def hl_target = arch.value
         def task_name = "generate_halide_binary_${binary.name.capitalize()}_${android_abi}"
-        def destDir = new File(jnis, "/halide_generated_${android_abi}")
+        def destDir = new File(bin, "${android_abi}")
         def generateHalideTask = task(task_name) {
             dependsOn linkTask
             doFirst {
@@ -138,7 +141,7 @@ android {
             // which would use parameters defined in build.gradle. Use our own
             // task (ndkBuild) below.
             jni.srcDirs = []
-            jniLibs.srcDirs = ["libs/"] // default is src/main/jniLibs
+            jniLibs.srcDirs = ["bin/lib/"] // default is src/main/jniLibs
             manifest.srcFile "AndroidManifest.xml"
             res.srcDirs = ["res/"] // default is src/main/res
         }
@@ -154,7 +157,7 @@ android {
         } else {
             ndkBuildCmd = "ndk-build"
         }
-        commandLine "$ndkDir/$ndkBuildCmd", '-C', file('jni').absolutePath
+        commandLine "$ndkDir/$ndkBuildCmd", "NDK_GEN_OUT=./bin/gen", "NDK_LIBS_OUT=./bin/lib", "NDK_OUT=./bin/obj"
     }
 
     tasks.withType(JavaCompile) {

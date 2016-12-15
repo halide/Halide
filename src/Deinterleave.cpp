@@ -280,6 +280,24 @@ private:
                 args.push_back(i*lane_stride + starting_lane);
             }
             expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
+        } else if (op->is_intrinsic(Call::predicated_load) ||
+                   op->is_intrinsic(Call::predicated_store)) {
+
+            const Call *addr = op->args[0].as<Call>();
+            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
+                << "The second argument to predicated store/load must be call to address_of\n";
+            internal_assert(addr->args.size() == 1) << "address_of should only take 1 argument";
+
+            std::vector<Expr> args(op->args.size());
+            args[0] = Call::make(Handle().with_lanes(new_lanes), addr->name, {mutate(addr->args[0])},
+                                 addr->call_type, addr->func, addr->value_index, addr->image, addr->param);
+            for (size_t i = 1; i < args.size(); i++) {
+                args[i] = mutate(op->args[i]);
+            }
+
+            expr = Call::make(t, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+
         } else {
 
             // Vector calls are always parallel across the lanes, so we

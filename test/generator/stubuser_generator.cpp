@@ -14,18 +14,19 @@ public:
 
     void generate() {
 
-        // We'll explicit fill in the struct fields by name, just to show
+        // We'll explicitly fill in the struct fields by name, just to show
         // it as an option. (Alternately, we could fill it in by using
         // C++11 aggregate-initialization syntax.)
         StubTest::Inputs inputs;
-        inputs.input = { input };
+        inputs.simple_input = input;
+        inputs.array_input = { input };
         inputs.float_arg = 1.234f;
         inputs.int_arg = { int_arg };
 
         stub = StubTest(this, inputs);
 
         const float kOffset = 2.f;
-        output(x, y, c) = cast<uint8_t>(stub.f(x, y, c)[1] + kOffset);
+        output(x, y, c) = cast<uint8_t>(stub.tuple_output(x, y, c)[1] + kOffset);
     }
 
     void schedule() {

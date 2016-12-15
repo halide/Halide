@@ -506,6 +506,8 @@ struct Call : public ExprNode<Call> {
         prefetch,
         prefetch_2d,
         signed_integer_overflow,
+        predicated_store,
+        predicated_load,
         indeterminate_expression,
         bool_to_mask,
         cast_mask,
@@ -534,14 +536,7 @@ struct Call : public ExprNode<Call> {
                             BufferPtr image = BufferPtr(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
-        internal_assert(idx >= 0 &&
-                        idx < func.outputs())
-            << "Value index out of range in call to halide function\n";
-        internal_assert(func.has_pure_definition() || func.has_extern_definition())
-            << "Call to undefined halide function\n";
-        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, BufferPtr(), Parameter());
-    }
+    EXPORT static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
     static Expr make(BufferPtr image, const std::vector<Expr> &args) {

@@ -161,7 +161,7 @@ class Buffer {
     bool manages_memory() const {
         return alloc != nullptr;
     }
-    
+
     /** Increment the reference count of any owned allocation */
     void incref() const {
         if (!manages_memory()) return;
@@ -192,27 +192,34 @@ class Buffer {
                 fn(alloc);
             }
         }
-        decref_dev();
         buf.host = nullptr;
         alloc = nullptr;
+
+        decref_dev();
     }
 
     void decref_dev() {
-        if (!manages_memory() || buf.dev == 0) return;
         int new_count = 0;
         if (dev_ref_count) {
             new_count = --(*dev_ref_count);
         }
         if (new_count == 0) {
-            halide_device_free_t fn = halide_get_device_free_fn();
-            assert(fn && "Buffer has a device allocation but no Halide Runtime linked");
-            (*fn)(nullptr, &buf);
+            if (buf.dev) {
+                halide_device_free_t fn = halide_get_device_free_fn();
+                assert(fn && "Buffer has a device allocation but no Halide Runtime linked");
+                assert(!(alloc && device_dirty()) &&
+                       "Implicitly freeing a dirty device allocation while a host allocation still lives. "
+                       "Call device_free explicitly if you want to drop dirty device-side data. "
+                       "Call copy_to_host explicitly if you want the data copied to the host allocation "
+                       "before the device allocation is freed.");
+                (*fn)(nullptr, &buf);
+            }
             if (dev_ref_count) {
                 delete dev_ref_count;
-                dev_ref_count = nullptr;
             }
         }
         buf.dev = 0;
+        dev_ref_count = nullptr;
     }
 
     /** A temporary helper function to get the number of dimensions in
@@ -467,10 +474,21 @@ public:
         }
     }
 
-    /** Make a Buffer<T> from another Buffer<T> of possibly-different
-     * dimensionality and type. Asserts if D is less than the
-     * dimensionality of the argument, or if there's a type
-     * mismatch. */
+    /** Copy constructor. Does not copy underlying data. */
+    Buffer(const Buffer<T, D> &other) : buf(other.buf),
+                                        dims(other.dims),
+                                        ty(other.ty),
+                                        alloc(other.alloc) {
+        other.incref();
+        dev_ref_count = other.dev_ref_count;
+    }
+
+    /** Construct a Buffer from a Buffer of different dimensionality
+     * and type. Asserts that the dimensionality and type is
+     * compatible at runtime. Note that this constructor is
+     * implicit. This, for example, lets you pass things like
+     * Buffer<T> or Buffer<const void> to functions expected
+     * Buffer<const T>. */
     template<typename T2, int D2>
     Buffer(const Buffer<T2, D2> &other) : buf(other.buf),
                                           dims(other.dims),
@@ -481,18 +499,19 @@ public:
         dev_ref_count = other.dev_ref_count;
     }
 
-    Buffer(const Buffer<T, D> &other) : buf(other.buf),
-                                        dims(other.dims),
-                                        ty(other.ty),
-                                        alloc(other.alloc) {
-        other.incref();
-        dev_ref_count = other.dev_ref_count;
+    /** Move constructor */
+    Buffer(Buffer<T, D> &&other) : buf(other.buf),
+                                   dims(other.dims),
+                                   ty(other.ty),
+                                   alloc(other.alloc),
+                                   dev_ref_count(other.dev_ref_count) {
+        other.dev_ref_count = nullptr;
+        other.alloc = nullptr;
     }
 
-    /** Move-construct an Buffer from another Buffer of
-     * possibly-different dimensionality. Asserts if D is less than
-     * the dimensionality of the argument, or if there's a type
-     * mismatch. */
+    /** Move-construct a Buffer from a Buffer of different
+     * dimensionality and type. Asserts that the dimensionality and
+     * type is compatible at runtime. */
     template<typename T2, int D2>
     Buffer(Buffer<T2, D2> &&other) : buf(other.buf),
                                      dims(other.dims),
@@ -504,18 +523,9 @@ public:
         other.alloc = nullptr;
     }
 
-    Buffer(Buffer<T, D> &&other) : buf(other.buf),
-                                   dims(other.dims),
-                                   ty(other.ty),
-                                   alloc(other.alloc),
-                                   dev_ref_count(other.dev_ref_count) {
-        other.dev_ref_count = nullptr;
-        other.alloc = nullptr;
-    }
-
-    /** Assign from another Buffer of possibly-different dimensionality
-     * and type. Asserts if D is less than the dimensionality of the
-     * argument, or if there's a type mismatch. */
+    /** Assign from another Buffer of possibly-different
+     * dimensionality and type. Asserts that the dimensionality and
+     * type is compatible at runtime. */
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
         assert_can_convert_from(other);
@@ -541,8 +551,8 @@ public:
     }
 
     /** Move from another Buffer of possibly-different dimensionality
-     * and type. Asserts if D is less than the dimensionality of the
-     * argument, or if there's a type mismatch. */
+     * and type. Asserts that the dimensionality and
+     * type is compatible at runtime. */
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
         assert_can_convert_from(other);
@@ -613,11 +623,14 @@ public:
 
     /** Drop reference to any owned device memory, possibly freeing it
      * if this buffer held the last reference to it. Does nothing if
-     * this buffer did not allocate its own memory. */
+     * this buffer did not allocate its own memory. Asserts that
+     * device_dirty is false. */
     void device_deallocate() {
-        decref_dev();
+        if (manages_memory()) {
+            decref_dev();
+        }
     }
-    
+
     /** Allocate a new image of the given size with a runtime
      * type. Only used when you do know what size you want but you
      * don't know statically what type the elements are. Pass zeroes
@@ -817,6 +830,36 @@ public:
         return &buf;
     }
 
+    /** Return a typed reference to this Buffer. Useful for converting
+     * a reference to a Buffer<void> to a reference to, for example, a
+     * Buffer<const uint8_t>. Does a runtime assert if the source
+     * buffer type is void. */
+    template<typename T2, int D2 = D,
+             typename = typename std::enable_if<(D2 <= D)>::type>
+    Buffer<T2, D2> &as() & {
+        Buffer<T2, D2>::assert_can_convert_from(*this);
+        return *((Buffer<T2, D2> *)this);
+    }
+
+    /** Return a const typed reference to this Buffer. Useful for
+     * converting a conference reference to one Buffer type to a const
+     * reference to another Buffer type. Does a runtime assert if the
+     * source buffer type is void. */
+    template<typename T2, int D2 = D,
+             typename = typename std::enable_if<(D2 <= D)>::type>
+    const Buffer<T2, D2> &as() const &  {
+        Buffer<T2, D2>::assert_can_convert_from(*this);
+        return *((const Buffer<T2, D2> *)this);
+    }
+
+    /** Returns this rval Buffer with a different type attached. Does
+     * a dynamic type check if the source type is void. */
+    template<typename T2, int D2 = D>
+    Buffer<T2, D2> as() && {
+        Buffer<T2, D2>::assert_can_convert_from(*this);
+        return *((Buffer<T2, D2> *)this);
+    }
+
     /** Conventional names for the first three dimensions. */
     // @{
     int width() const {
@@ -849,65 +892,24 @@ public:
     }
     // @}
 
-    /** Make a new image which is a deep copy of this image using the
-     * minimum number of calls to memcpy. Use crop or slice followed
-     * by copy to make a copy of only a portion of the image. The new
-     * image uses the same memory layout as the original, with holes
-     * compacted away. */
+    /** Make a new image which is a deep copy of this image. Use crop
+     * or slice followed by copy to make a copy of only a portion of
+     * the image. The new image uses the same memory layout as the
+     * original, with holes compacted away. */
     Buffer<T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
-                     void (*deallocate_fn)(void *) = nullptr) const {
-        Buffer<T, D> src = *this;
-
-        // Reorder the dimensions of src to have strides in increasing order
-        int swaps[(D*(D+1))/2];
-        int swaps_idx = 0;
-        for (int i = dimensions()-1; i > 0; i--) {
-            for (int j = i; j > 0; j--) {
-                if (src.dim(j-1).stride() > src.dim(j).stride()) {
-                    src.transpose(j-1, j);
-                    swaps[swaps_idx++] = j;
-                }
-            }
-        }
-
-        // Make a copy of it using this dimension ordering
-        Buffer<T, D> dst = src;
-        dst.allocate(allocate_fn, deallocate_fn);
-
-        // Concatenate dense inner dimensions into contiguous memcpy tasks
-        Buffer<T, D> src_slice = src;
-        Buffer<T, D> dst_slice = dst;
-        int64_t slice_size = 1;
-        while (src_slice.dimensions() && src_slice.dim(0).stride() == slice_size) {
-            assert(dst_slice.dim(0).stride() == slice_size);
-            slice_size *= src_slice.dim(0).extent();
-            src_slice = src_slice.sliced(0, src_slice.dim(0).min());
-            dst_slice = dst_slice.sliced(0, dst_slice.dim(0).min());
-        }
-
-        slice_size *= buf.elem_size;
-        // Do the memcpys
-        src_slice.for_each_element([&](const int *pos) {
-            memcpy(dst_slice.address_of(pos), src_slice.address_of(pos), slice_size);
-        });
-
-        // Undo the dimension reordering
-        while (swaps_idx > 0) {
-            int j = swaps[--swaps_idx];
-            dst.transpose(j-1, j);
-        }
-
+                      void (*deallocate_fn)(void *) = nullptr) const {
+        Buffer<T, D> dst = make_with_shape_of(*this);
+        dst.copy_from(*this);
         return dst;
     }
 
     /** Fill a Buffer with the values at the same coordinates in
-     * another Buffer using the minimum number of calls to
-     * memcpy. Restricts itself to coordinates contained within the
-     * intersection of the two buffers. If the two Buffers are not in
-     * the same coordinate system, you will need to translate the
-     * argument Buffer first. E.g. if you're blitting a sprite onto a
-     * framebuffer, you'll want to translate the sprite to the correct
-     * location first like so: \code
+     * another Buffer. Restricts itself to coordinates contained
+     * within the intersection of the two buffers. If the two Buffers
+     * are not in the same coordinate system, you will need to
+     * translate the argument Buffer first. E.g. if you're blitting a
+     * sprite onto a framebuffer, you'll want to translate the sprite
+     * to the correct location first like so: \code
      * framebuffer.copy_from(sprite.translated({x, y})); \endcode
     */
     template<typename T2, int D2>
@@ -929,35 +931,32 @@ public:
             src.crop(i, min_coord, max_coord - min_coord + 1);
         }
 
-        // Reorder the dimensions of dst to have strides in increasing
-        // order. Apply the same transposition to src.
-        for (int i = dimensions()-1; i > 0; i--) {
-            for (int j = i; j > 0; j--) {
-                if (dst.dim(j-1).stride() > dst.dim(j).stride()) {
-                    dst.transpose(j-1, j);
-                    src.transpose(j-1, j);
-                }
-            }
+        // If T is void, we need to do runtime dispatch to an
+        // appropriately-typed lambda. We're copying, so we only care
+        // about the element size.
+        if (type().bytes() == 1) {
+            using MemType = uint8_t;
+            auto &typed_dst = (Buffer<MemType, D> &)dst;
+            auto &typed_src = (Buffer<const MemType, D> &)src;
+            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+        } else if (type().bytes() == 2) {
+            using MemType = uint16_t;
+            auto &typed_dst = (Buffer<MemType, D> &)dst;
+            auto &typed_src = (Buffer<const MemType, D> &)src;
+            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+        } else if (type().bytes() == 4) {
+            using MemType = uint32_t;
+            auto &typed_dst = (Buffer<MemType, D> &)dst;
+            auto &typed_src = (Buffer<const MemType, D> &)src;
+            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+        } else if (type().bytes() == 8) {
+            using MemType = uint64_t;
+            auto &typed_dst = (Buffer<MemType, D> &)dst;
+            auto &typed_src = (Buffer<const MemType, D> &)src;
+            typed_dst.for_each_value([&](MemType &dst, MemType src) {dst = src;}, typed_src);
+        } else {
+            assert(false && "type().bytes() must be 1, 2, 4, or 8");
         }
-
-        // Concatenate dense inner dimensions into contiguous memcpy tasks
-        Buffer<const T, D> src_slice = src;
-        Buffer<T, D> dst_slice = dst;
-        int64_t slice_size = 1;
-        while (dst_slice.dimensions() &&
-               dst_slice.dim(0).stride() == slice_size &&
-               src_slice.dim(0).stride() == slice_size) {
-            slice_size *= dst_slice.dim(0).extent();
-            int min_0 = dst_slice.dim(0).min();
-            dst_slice = dst_slice.sliced(0, min_0);
-            src_slice = src_slice.sliced(0, min_0);
-        }
-        slice_size *= buf.elem_size;
-
-        // Do the memcpys
-        src_slice.for_each_element([&](const int *pos) {
-            memcpy(dst_slice.address_of(pos), src_slice.address_of(pos), slice_size);
-        });
     }
 
     /** Make an image that refers to a sub-range of this image along
@@ -992,8 +991,6 @@ public:
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
         Buffer<T, D> im = *this;
-        // Drop the reference to any device allocation. It won't be
-        // valid for the cropped image.
         im.crop(rect);
         return im;
     }
@@ -1023,7 +1020,7 @@ public:
 
     /** Make an image which refers to the same data translated along
      * the first N dimensions. */
-    void translated(const std::vector<int> &delta) {
+    Buffer<T, D> translated(const std::vector<int> &delta) {
         Buffer<T, D> im = *this;
         im.translate(delta);
         return im;
@@ -1047,6 +1044,20 @@ public:
         for (size_t i = 0; i < sizeof...(args); i++) {
             buf.min[i] = x[i];
         }
+    }
+
+    /** Test if a given coordinate is within the the bounds of an image */
+    template<typename ...Args>
+    bool contains(Args... args) {
+        static_assert(sizeof...(args) <= D, "Too many arguments for dimensionality of Buffer");
+        assert(sizeof...(args) <= (size_t)dimensions());
+        const int x[] = {args...};
+        for (size_t i = 0; i < sizeof...(args); i++) {
+            if (x[i] < dim(i).min() || x[i] > dim(i).max()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Make an image which refers to the same data using a different
@@ -1174,6 +1185,10 @@ public:
         buf.dev_dirty = v;
     }
 
+    int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
+        return halide_device_malloc(ctx, &buf, device_interface);
+    }
+
     int copy_to_host(void *ctx = nullptr) {
         if (device_dirty()) {
             return halide_copy_to_host(ctx, &buf);
@@ -1181,7 +1196,7 @@ public:
         return 0;
     }
 
-    int copy_to_device(const struct halide_device_interface *device_interface, void *ctx = nullptr) {
+    int copy_to_device(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         if (host_dirty()) {
             return halide_copy_to_device(ctx, &buf, device_interface);
         }
@@ -1196,7 +1211,7 @@ public:
                    "allocation. Freeing it would create dangling references. "
                    "Don't call device_free on Halide buffers that you have copied or "
                    "passed by value.");
-        }        
+        }
         int ret = halide_device_free(ctx, &buf);
         if (dev_ref_count) {
             delete dev_ref_count;
@@ -1273,6 +1288,45 @@ public:
         Buffer<T, 1> buf(1);
         buf.slice(0, 0);
         return buf;
+    }
+
+    /** Make a buffer with the same shape and memory nesting order as
+     * another buffer. It may have a different type. */
+    template<typename T2, int D2>
+    static Buffer<T, D> make_with_shape_of(Halide::Buffer<T2, D2> src,
+                                           void *(*allocate_fn)(size_t) = nullptr,
+                                           void (*deallocate_fn)(void *) = nullptr) {
+        assert(D >= src.dimensions());
+
+        // Reorder the dimensions of src to have strides in increasing order
+        int swaps[(D2*(D2+1))/2];
+        int swaps_idx = 0;
+        for (int i = src.dimensions()-1; i > 0; i--) {
+            for (int j = i; j > 0; j--) {
+                if (src.dim(j-1).stride() > src.dim(j).stride()) {
+                    src.transpose(j-1, j);
+                    swaps[swaps_idx++] = j;
+                }
+            }
+        }
+
+        halide_dimension_t shape[D2];
+        for (int i = 0; i < src.dimensions(); i++) {
+            shape[i].min = src.dim(i).min();
+            shape[i].extent = src.dim(i).extent();
+            shape[i].stride = src.dim(i).stride();
+        }
+
+        // Undo the dimension reordering
+        while (swaps_idx > 0) {
+            int j = swaps[--swaps_idx];
+            std::swap(shape[j-1], shape[j]);
+        }
+
+        Buffer<T, D> dst(nullptr, src.dimensions(), shape);
+        dst.allocate();
+
+        return dst;
     }
 
 private:
@@ -1411,34 +1465,134 @@ public:
     }
     // @}
 
-private:
-    /** Helper functions for fill that call for_each_element with a
-     * lambda of the correct dimensionality. */
-    // @{
-    template<typename ...Args>
-    typename std::enable_if<(sizeof...(Args) < D)>::type
-    fill_helper(not_void_T val, Args... args) {
-       if (sizeof...(Args) == dimensions()) {
-            for_each_element([&](Args... args) {(*this)(args...) = val;});
-        } else {
-            fill_helper(val, 0, args...);
-        }
+    void fill(not_void_T val) {
+        for_each_value([=](T &v) {v = val;});
     }
 
-    template<typename ...Args>
-    typename std::enable_if<(sizeof...(Args) == D)>::type
-    fill_helper(not_void_T val, Args...) {
-        for_each_element([&](Args... args) {(*this)(args...) = val;});
+private:
+    /** Helper functions for for_each_value. */
+    // @{
+    template<int N>
+    struct for_each_value_task_dim {
+        int extent;
+        int stride[N];
+    };
+
+    // Given an array of strides, and a bunch of pointers to pointers
+    // (all of different types), advance the pointers using the
+    // strides.
+    template<typename Ptr, typename ...Ptrs>
+    static void advance_ptrs(const int *stride, Ptr *ptr, Ptrs... ptrs) {
+        (*ptr) += *stride;
+        advance_ptrs(stride + 1, ptrs...);
+    }
+
+    static void advance_ptrs(const int *) {}
+
+    // Same as the above, but just increments the pointers.
+    template<typename Ptr, typename ...Ptrs>
+    static void increment_ptrs(Ptr *ptr, Ptrs... ptrs) {
+        (*ptr)++;
+        increment_ptrs(ptrs...);
+    }
+
+    static void increment_ptrs() {}
+
+    // Given a bunch of pointers to buffers of different types, read
+    // out their strides in the d'th dimension, and assert that their
+    // sizes match in that dimension.
+    template<typename T2, int D2, typename ...Args>
+    void extract_strides(int d, int *strides, const Buffer<T2, D2> *first, Args... rest) {
+        assert(first->dimensions() == dimensions());
+        assert(first->dim(d).min() == dim(d).min() &&
+               first->dim(d).max() == dim(d).max());
+        *strides++ = first->dim(d).stride();
+        extract_strides(d, strides, rest...);
+    }
+
+    void extract_strides(int d, int *strides) {}
+
+    // The template function that constructs the loop nest for for_each_value
+    template<int d, bool innermost_strides_are_one, typename Fn, typename... Ptrs>
+    static void for_each_value_helper(Fn &&f, const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
+        if (d == -1) {
+            f((*ptrs)...);
+        } else {
+            for (int i = t[d].extent; i != 0; i--) {
+                for_each_value_helper<(d >= 0 ? d - 1 : -1), innermost_strides_are_one>(f, t, ptrs...);
+                if (d == 0 && innermost_strides_are_one) {
+                    // It helps with auto-vectorization to statically
+                    // know the addresses are one apart in memory.
+                    increment_ptrs((&ptrs)...);
+                } else {
+                    advance_ptrs(t[d].stride, (&ptrs)...);
+                }
+            }
+        }
     }
     // @}
 
 public:
+    /** Call a function on every value in the buffer, and the
+     * corresponding values in some number of other buffers of the
+     * same size. The function should take a reference, const
+     * reference, or value of the correct type for each buffer. This
+     * effectively lifts a function of scalars to an element-wise
+     * function of buffers. This produces code that the compiler can
+     * autovectorize. This is slightly cheaper than for_each_element,
+     * because it does not need to track the coordinates. */
+    template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
+    void for_each_value(Fn &&f, Args... other_buffers) {
+        for_each_value_task_dim<N> t[D+1];
+        for (int i = 0; i <= D; i++) {
+            for (int j = 0; j < N; j++) {
+                t[i].stride[j] = 0;
+            }
+            t[i].extent = 1;
+        }
 
-    /** Set every value in the buffer to the given value */
-    void fill(not_void_T val) {
-        static_assert(!T_is_void, "Can't fill a Buffer of unknown type");
-        fill_helper(val);
+        for (int i = 0; i < dimensions(); i++) {
+            extract_strides(i, t[i].stride, this, &other_buffers...);
+            t[i].extent = dim(i).extent();
+            // Order the dimensions by stride, so that the traversal is cache-coherent.
+            for (int j = i; j > 0 && t[j].stride[0] < t[j-1].stride[0]; j--) {
+                std::swap(t[j], t[j-1]);
+            }
+        }
+
+        // flatten dimensions where possible to make a larger inner
+        // loop for autovectorization.
+        int d = dimensions();
+        for (int i = 1; i < d; i++) {
+            bool flat = true;
+            for (int j = 0; j < N; j++) {
+                flat = flat && t[i-1].stride[j] * t[i-1].extent == t[i].stride[j];
+            }
+            if (flat) {
+                t[i-1].extent *= t[i].extent;
+                for (int j = i; j < D; j++) {
+                    t[j] = t[j+1];
+                }
+                i--;
+                d--;
+            }
+        }
+
+        bool innermost_strides_are_one = false;
+        if (dimensions() > 0) {
+            innermost_strides_are_one = true;
+            for (int j = 0; j < N; j++) {
+                innermost_strides_are_one &= t[0].stride[j] == 1;
+            }
+        }
+
+        if (innermost_strides_are_one) {
+            for_each_value_helper<D-1, true>(f, t, begin(), (other_buffers.begin())...);
+        } else {
+            for_each_value_helper<D-1, false>(f, t, begin(), (other_buffers.begin())...);
+        }
     }
+
 
 };
 
@@ -1454,7 +1608,7 @@ struct for_each_element_helpers {
     ALWAYS_INLINE
     static auto for_each_element_variadic(int, int d, Fn &&f, const buffer_t &buf, Args... args)
         -> decltype(f(args...)) {
-        f(args...);
+        return f(args...);
     }
 
     /** If the above overload is impossible, we add an outer loop over

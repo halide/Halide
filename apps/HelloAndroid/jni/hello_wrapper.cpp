@@ -6,7 +6,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "halide_generated.h"
+#include "hello.h"
 #include "HalideRuntime.h"
 #include "HalideRuntimeOpenCL.h"
 
@@ -15,13 +15,11 @@
 
 #define DEBUG 1
 
-extern "C" void halide_set_error_handler(int (*handler)(void *user_context, const char *));
 extern "C" int halide_host_cpu_count();
 extern "C" int halide_start_clock(void *user_context);
 extern "C" int64_t halide_current_time_ns();
-extern "C" int halide_copy_to_host(void *, buffer_t *);
 
-int handler(void */* user_context */, const char *msg) {
+void handler(void */* user_context */, const char *msg) {
     LOGE("%s", msg);
 }
 
@@ -111,7 +109,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         memset(dst + w*h, 128, (w*h)/2);
 
         int64_t t1 = halide_current_time_ns();
-        halide_generated(&srcBuf, &dstBuf);
+        hello(&srcBuf, &dstBuf);
 
         if (dstBuf.dev) {
             halide_copy_to_host(NULL, &dstBuf);

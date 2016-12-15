@@ -604,9 +604,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         stream << "\n\n";
     }
-
-    if (is_header()) {
-    }
 }
 
 void CodeGen_C::compile(const BufferPtr &buffer) {
