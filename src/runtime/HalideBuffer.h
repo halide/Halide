@@ -1684,12 +1684,17 @@ class BufferRef {
 
 public:
 
+    /** Make a null BufferRef, which points to no Buffer */
     BufferRef() {}
 
+    /** This constructor is only used by Buffer::make_shared_ref() */
     BufferRef(typename Buffer<T, D>::RefHolder *r) : ptr(r) {
         incref();
     }
 
+    /** The conventional constructors, destructors, and assignment
+     * operators for a shared-pointer class. */
+    // @{
     BufferRef(const BufferRef<T, D> &other) {
         ptr = other.ptr;
         incref();
@@ -1758,42 +1763,56 @@ public:
         }
         return *this;
     }
+    // @}
 
+    /** Check if two BufferRef objects point to the same underlying Buffer */
     template<typename T2, int D2>
     bool same_as(const BufferRef<T2, D2> &other) {
         return (void *)ptr == (void *)other.ptr;
     }
 
+    /** Check if this BufferRef refers to an existing
+     * Buffer. Default-constructed BufferRef objects do not refer to
+     * any existing Buffer. */
     bool defined() const {
         return ptr;
     }
 
+    /** Get a pointer to the underlying Buffer */
+    // @{
     Buffer<T, D> *get() {
         if (!ptr) return nullptr;
         return ptr->ptr;
     }
-
     const Buffer<T, D> *get() const {
         if (!ptr) return nullptr;
         return ptr->ptr;
     }
+    // @}
 
+    /** Methods on the underlying Buffer can be called via ->
+     * syntax. E.g. ref->dimensions() */
+    // @{
     Buffer<T, D> *operator->() {
         return ptr->ptr;
     }
-
     const Buffer<T, D> *operator->() const {
         return ptr->ptr;
     }
+    // @}
 
+    /** Dereferencing a BufferRef returns a reference to the underlying Buffer. */
+    // @{
     Buffer<T, D> &operator*() {
         return *(ptr->ptr);
     }
-
     const Buffer<T, D> &operator*() const {
         return *(ptr->ptr);
     }
+    // @}
 
+    /** Get the name associated with this BufferRef. May be the empty
+     * string if no name was ever given. */
     const std::string &name() const {
         return ptr->name;
     }
