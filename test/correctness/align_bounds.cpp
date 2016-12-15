@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         g(x) = select(x % 2 == 0, f(x+1), f(x-1)+8);
 
         Param<int> p;
-        h(x) = g(x-p) + g(x+p) + print(0, p);
+        h(x) = g(x-p) + g(x+p);
 
         f.compute_root();
         g.compute_root().align_bounds(x, 2).unroll(x, 2).trace_realizations();
