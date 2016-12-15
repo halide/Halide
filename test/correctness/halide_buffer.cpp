@@ -140,6 +140,24 @@ int main(int argc, char **argv) {
         assert(ref->data() != nullptr);
     }
 
+    {
+        // Check that it's OK for the Buffer to outlive the shared
+        // references too. valgrind should catch any anomalies here.
+        Buffer<float> buf(100, 100);
+        std::string name1, name2;
+        {
+            BufferRef<float> b1 = buf.make_shared_ref("name1");
+            name1 = b1.name();
+        }
+        {
+            BufferRef<float> b2 = buf.make_shared_ref("name2");
+            name2 = b2.name();
+        }
+        assert(buf.data());
+        assert(name1 == "name1");
+        assert(name2 == "name2");
+    }
+
     printf("Success!\n");
     return 0;
 }

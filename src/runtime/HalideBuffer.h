@@ -1660,8 +1660,11 @@ class BufferRef {
 
     void decref() {
         if (ptr) {
-            int new_count = ptr->ref_count--;
+            int new_count = --(ptr->ref_count);
             if (new_count == 0) {
+                if (ptr->ptr) {
+                    ptr->ptr->ref_holder = nullptr;
+                }
                 // Note we don't delete ptr->ptr. If it refers to
                 // a user Buffer then we don't own the memory. If
                 // it refers to ptr->storage then we're already

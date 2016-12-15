@@ -46,9 +46,12 @@ int main(int argc, char **argv) {
             // The copy now has a non-zero dev field, but the original
             // buf is unaware of that fact. It should get cleaned up
             // here.
+            assert(copy.has_device_allocation());
         }
 
         Halide::Internal::JITSharedRuntime::release_all();
+
+        assert(!buf.has_device_allocation());
 
         // At this point, the device allocation should have been cleaned up, even though the original buffer still lives.
         if (tracker.validate_gpu_object_lifetime(true /* allow_globals */,
