@@ -28,27 +28,27 @@ void ImageParam::init_func() {
     func(args) = Internal::Call::make(param, args_expr);
 }
 
-void ImageParam::set(Internal::BufferPtr b) {
+void ImageParam::set(BufferRef<> b) {
     if (b.defined()) {
-        user_assert(b.type() == type())
+        user_assert(b->type() == type())
             << "Can't bind ImageParam " << name()
             << " of type " << type()
             << " to Buffer " << b.name()
-            << " of type " << b.type() << "\n";
+            << " of type " << Type(b->type()) << "\n";
     }
     param.set_buffer(b);
 }
 
 const Buffer<void, 0> &ImageParam::get() const {
-    return param.get_buffer().get();
+    return *param.get_buffer();
 }
 
 Buffer<void, 0> &ImageParam::get() {
-    return param.get_buffer().get();
+    return *param.get_buffer();
 }
 
 void ImageParam::reset() {
-    set(Internal::BufferPtr());
+    set(BufferRef<>());
 }
 
 Expr ImageParam::operator()(std::vector<Expr> args_passed) const {

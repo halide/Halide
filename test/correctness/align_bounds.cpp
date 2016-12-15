@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
 
         // Increasing p by one should have no effect
         p.set(4);
+        assert(result.data());
         h.realize(result);
         if (trace_min != -4 || trace_extent != 18) {
             printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
@@ -74,6 +75,7 @@ int main(int argc, char **argv) {
         }
 
         // But increasing it again should cause a jump of two in the bounds computed.
+        assert(result.data());
         p.set(5);
         h.realize(result);
         if (trace_min != -6 || trace_extent != 22) {

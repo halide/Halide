@@ -963,7 +963,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             // f.split(x, x, xi, 32).vectorize(xi, 8).unroll(xi);
             //
             // It's only the tail/epilogue that changes.
-            
+
             std::set<string> descends_from_shiftinwards_outer;
             for (const Split &s : definition.schedule().splits()) {
                 if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
@@ -983,7 +983,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
             }
         }
     }
-    
+
     if (!definition.is_init()) {
         user_assert(tail != TailStrategy::ShiftInwards)
             << "When splitting Var " << old_name

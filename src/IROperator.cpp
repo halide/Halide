@@ -5,6 +5,8 @@
 
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IREquality.h"
+#include "Var.h"
 #include "Debug.h"
 #include "CSE.h"
 
@@ -705,10 +707,10 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
     user_assert(condition.type().is_bool()) << "Require condition must be a boolean type\n";
     user_assert(args.at(0).defined()) << "Require of undefined value\n";
 
-    Expr requirement_failed_error = 
-        Internal::Call::make(Int(32), 
+    Expr requirement_failed_error =
+        Internal::Call::make(Int(32),
                              "halide_error_requirement_failed",
-                             {stringify({condition}), combine_strings(args)}, 
+                             {stringify({condition}), combine_strings(args)},
                              Internal::Call::Extern);
     // Just cast to the type expected by the success path: since the actual
     // value will never be used in the failure branch, it doesn't really matter
@@ -767,6 +769,28 @@ Expr saturating_cast(Type t, Expr e) {
         }
     }
     return e;
+}
+
+namespace Internal {
+Expr image_accessor(BufferRef<> buf, const std::vector<Expr> &args) {
+    std::vector<Expr> int_args;
+    for (Expr e : args) {
+        user_assert(Int(32).can_represent(e.type()))
+            << "Args to a call to an Image must be representable as 32-bit integers.\n";
+        if (equal(e, _)) {
+            // Expand the _ into the appropriate number of implicit vars.
+            int missing_dimensions = buf->dimensions() - (int)args.size() + 1;
+            for (int i = 0; i < missing_dimensions; i++) {
+                int_args.push_back(Var::implicit(i));
+            }
+        } else if (e.type() == Int(32)) {
+            int_args.push_back(e);
+        } else {
+            int_args.push_back(cast<int>(e));
+       }
+    }
+    return Call::make(buf, int_args);
+}
 }
 
 }

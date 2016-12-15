@@ -6,7 +6,6 @@
  * generated halide pipeline
  */
 
-#include "BufferPtr.h"
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
@@ -77,7 +76,7 @@ struct Argument {
 
     template<typename T, int D>
     Argument(Buffer<T, D> im) :
-        name(Internal::BufferPtr(im).name()),
+        name(im.make_shared_ref().name()),
         kind(InputBuffer),
         dimensions(im.dimensions()),
         type(im.type()) {}

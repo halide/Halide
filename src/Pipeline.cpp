@@ -48,7 +48,7 @@ Outputs static_library_outputs(const string &filename_prefix, const Target &targ
 struct InferredArgument {
     Argument arg;
     Parameter param;
-    BufferPtr buffer;
+    BufferRef<> buffer;
 
     bool operator<(const InferredArgument &other) const {
         if (arg.is_buffer() && !other.arg.is_buffer()) {
@@ -370,7 +370,7 @@ private:
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                      p.type(), p.dimensions(), def, min, max),
             p,
-            BufferPtr()};
+            BufferRef<>()};
         args.push_back(a);
 
         // Visit child expressions
@@ -387,12 +387,12 @@ private:
         }
     }
 
-    void include_buffer(BufferPtr b) {
+    void include_buffer(BufferRef<> b) {
         if (!b.defined()) return;
         if (already_have(b.name())) return;
 
         InferredArgument a = {
-            Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions()),
+            Argument(b.name(), Argument::InputBuffer, b->type(), b->dimensions()),
             Parameter(),
             b};
         args.push_back(a);
@@ -460,10 +460,10 @@ vector<Argument> Pipeline::infer_arguments() {
 
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are returned. */
-vector<BufferPtr> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
+vector<BufferRef<>> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
     infer_arguments(body);
 
-    vector<BufferPtr> images_to_embed;
+    vector<BufferRef<>> images_to_embed;
 
     for (const InferredArgument &arg : contents->inferred_args) {
 
@@ -591,7 +591,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = build_public_args(args, target);
 
-    vector<BufferPtr> global_images = validate_arguments(public_args, private_body);
+    vector<BufferRef<>> global_images = validate_arguments(public_args, private_body);
 
     // Create a module with all the global images in it.
     Module module(simple_new_fn_name, target);
@@ -599,11 +599,11 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Add all the global images to the module, and add the global
     // images used to the private argument list.
     vector<Argument> private_args = public_args;
-    for (BufferPtr buf : global_images) {
+    for (BufferRef<> buf : global_images) {
         module.append(buf);
         private_args.push_back(Argument(buf.name(),
                                         Argument::InputBuffer,
-                                        buf.type(), buf.dimensions()));
+                                        buf->type(), buf->dimensions()));
     }
 
     module.append(LoweredFunc(private_name, private_args,
@@ -973,9 +973,9 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     for (InferredArgument arg : input_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
-            BufferPtr buf = arg.param.get_buffer();
+            BufferRef<> buf = arg.param.get_buffer();
             if (buf.defined()) {
-                arg_values.push_back(buf.raw_buffer());
+                arg_values.push_back(buf->raw_buffer());
             } else {
                 // Unbound
                 arg_values.push_back(nullptr);
@@ -987,7 +987,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
         } else {
             debug(1) << "JIT input Image argument ";
             internal_assert(arg.buffer.defined());
-            arg_values.push_back(arg.buffer.raw_buffer());
+            arg_values.push_back(arg.buffer->raw_buffer());
         }
         const void *ptr = arg_values.back();
         debug(1) << arg.arg.name << " @ " << ptr << "\n";
@@ -997,7 +997,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     for (size_t i = 0; i < dst.size(); i++) {
         arg_values.push_back(dst[i].raw_buffer());
         const void *ptr = arg_values.back();
-        debug(1) << "JIT output buffer @ " << ptr << "\n";
+        debug(1) << "JIT output buffer @ " << ptr << ", " << dst[i].data() << "\n";
     }
 
     return arg_values;
@@ -1060,7 +1060,7 @@ void Pipeline::realize(Realization dst, const Target &t) {
 
     for (size_t i = 0; i < dst.size(); i++) {
         user_assert(dst[i].data() != nullptr)
-            << "Buffer at " << &dst[i] << " is unallocated. "
+            << "Buffer at " << &(dst[i]) << " is unallocated. "
             << "The Buffers in a Realization passed to realize must all be allocated\n";
     }
 
@@ -1252,7 +1252,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
         tracked_buffers[i].query.allocate();
 
         // Bind this parameter to this buffer
-        ia.param.set_buffer(tracked_buffers[i].query);
+        ia.param.set_buffer(tracked_buffers[i].query.make_shared_ref());
     }
 }
 

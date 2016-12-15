@@ -460,7 +460,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                 mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
             } else if (arg.kind == Argument::InputBuffer ||
                        arg.kind == Argument::OutputBuffer) {
-                mangle_args.push_back(ExternFuncArgument(BufferPtr()));
+                mangle_args.push_back(ExternFuncArgument(BufferRef<>()));
             }
         }
         names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
@@ -735,11 +735,11 @@ void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stac
     builder->CreateCall(call_destructor, args);
 }
 
-void CodeGen_LLVM::compile_buffer(const BufferPtr &buf) {
+void CodeGen_LLVM::compile_buffer(const BufferRef<> &buf) {
     // Embed the buffer declaration as a global.
     internal_assert(buf.defined());
 
-    buffer_t b = *(buf.raw_buffer());
+    buffer_t b = *(buf->raw_buffer());
     user_assert(b.host)
         << "Can't embed buffer " << buf.name() << " because it has a null host pointer.\n";
     user_assert(!b.dev_dirty)
@@ -2628,8 +2628,8 @@ void CodeGen_LLVM::visit(const Call *op) {
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_bool()) {
                     call_args.push_back(builder->CreateSelect(
-                        codegen(op->args[i]), 
-                        codegen(StringImm::make("true")), 
+                        codegen(op->args[i]),
+                        codegen(StringImm::make("true")),
                         codegen(StringImm::make("false"))));
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_int()) {
