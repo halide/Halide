@@ -9,8 +9,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Func f, g, h;
-    Var x, y;
+    Func f("f"), g("g"), h("h");
+    Var x("x"), y("y");
 
     Param<bool> use_gpu;
 
@@ -23,8 +23,8 @@ int main(int argc, char **argv) {
     // must have a matching var name in either case.
 
     // Compute h in tiles either on the cpu or gpu
-    Var xo, yo, xi, yi, t, tx, ty;
-    h.compute_root().specialize(use_gpu).gpu_tile(x, y, tx, ty, 4, 4);
+    Var xo("xo"), yo("yo"), xi("xi"), yi("yi"), t("t");
+    h.compute_root().specialize(use_gpu).gpu_tile(x, y, xi, yi, 4, 4);
     h.tile(x, y, xo, yo, xi, yi, 8, 8).fuse(xo, yo, t).parallel(t);
 
     // Peel off a size-1 loop from blockidx to make a scheduling point
@@ -40,9 +40,10 @@ int main(int argc, char **argv) {
     g.specialize(use_gpu).gpu_threads(x, y);
 
     // We want f compute_at g, x, so do the same trick to g;
-    g.specialize(use_gpu).split(x, tx, x, 1).serial(x);
+    g.specialize(use_gpu).split(x, x, xi, 1).serial(xi);
+    g.rename(x, xi);
 
-    f.compute_at(g, x);
+    f.compute_at(g, xi);
 
     use_gpu.set(get_jit_target_from_environment().has_gpu_feature());
     Buffer<int> out1 = h.realize(1024, 1024);

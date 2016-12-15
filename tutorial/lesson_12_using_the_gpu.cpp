@@ -28,7 +28,7 @@ using namespace Halide::Tools;
 #include "clock.h"
 
 // Define some Vars to use.
-Var x, y, c, i, ti, tx, ty;
+Var x, y, c, i, ii, xi, yi;
 
 // We're going to want to schedule a pipeline in several ways, so we
 // define the pipeline in a class so that we can recreate it several
@@ -130,7 +130,7 @@ public:
         // This is a very common scheduling pattern on the GPU, so
         // there's a shorthand for it:
 
-        // lut.gpu_tile(i, ti, 16);
+        // lut.gpu_tile(i, ii, 16);
 
         // Func::gpu_tile method is similar to Func::tile, except that
         // it also specifies that the tile coordinates correspond to
@@ -144,7 +144,7 @@ public:
               .unroll(c);
 
         // Compute curved in 2D 8x8 tiles using the GPU.
-        curved.gpu_tile(x, y, tx, ty, 8, 8);
+        curved.gpu_tile(x, y, xi, yi, 8, 8);
 
         // This is equivalent to:
         // curved.tile(x, y, xo, yo, xi, yi, 8, 8)

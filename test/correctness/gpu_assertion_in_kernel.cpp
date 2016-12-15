@@ -32,8 +32,8 @@ int main(int argc, char **argv) {
     Func g;
     g(c, x) = f(c, x) * 8;
 
-    Var tx;
-    g.gpu_tile(x, tx, 8);
+    Var xi;
+    g.gpu_tile(x, xi, 8);
     f.compute_at(g, x).gpu_threads(x);
 
     g.set_error_handler(&my_error);

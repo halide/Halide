@@ -12,8 +12,8 @@ public:
 
         Target target = get_target();
         if (target.has_gpu_feature()) {
-            Var bx, tx;
-            f.gpu_tile(x, bx, tx, 16);
+            Var xo, xi;
+            f.gpu_tile(x, xo, xi, 16);
         }
         // The test requires gpu_debug to examine the output.
         target.set_feature(Target::Debug);

@@ -1,7 +1,7 @@
 #include "Halide.h"
 using namespace Halide;
 
-Var x("x"), y("y"), c("c"), tx("tx"), ty("ty");
+Var x("x"), y("y"), c("c"), xi("xi"), yi("yi");
 
 int main(int argc, char **argv) {
 
@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
         Expr r = dx * dx + dy * dy;
         Expr mask = r < 200 * 200;
         initial(x, y, c) = random_float();// * select(mask, 1.0f, 0.001f);
-        initial.reorder(c, x, y).bound(c, 0, 3).vectorize(c).gpu_tile(x, y, tx, ty, 4, 4);
+        initial.reorder(c, x, y).bound(c, 0, 3).vectorize(c).gpu_tile(x, y, xi, yi, 4, 4);
         initial.output_buffer().set_bounds(2, 0, 3);
         initial.output_buffer().set_stride(0, 3);
         initial.output_buffer().set_stride(2, 1);
@@ -100,20 +100,20 @@ int main(int argc, char **argv) {
 
         new_state.reorder(c, x, y).bound(c, 0, 3).unroll(c);
         blur.reorder(c, x, y).vectorize(c);
-        blur.compute_at(new_state, tx);
-        new_state.gpu_tile(x, y, tx, ty, 8, 2);
+        blur.compute_at(new_state, xi);
+        new_state.gpu_tile(x, y, xi, yi, 8, 2);
         new_state.update(0).reorder(c, x).unroll(c);
         new_state.update(1).reorder(c, x).unroll(c);
         new_state.update(2).reorder(c, y).unroll(c);
         new_state.update(3).reorder(c, y).unroll(c);
         new_state.update(4).reorder(c, clobber.x).unroll(c);
 
-        new_state.update(0).gpu_tile(x, tx, 8);
-        new_state.update(1).gpu_tile(x, tx, 8);
-        new_state.update(2).gpu_tile(y, ty, 8);
-        new_state.update(3).gpu_tile(y, ty, 8);
-        RVar clobber_tx("clobber_tx"), clobber_ty("clobber_ty");
-        new_state.update(4).gpu_tile(clobber.x, clobber.y, clobber_tx, clobber_ty, 1, 1);
+        new_state.update(0).gpu_tile(x, xi, 8);
+        new_state.update(1).gpu_tile(x, xi, 8);
+        new_state.update(2).gpu_tile(y, yi, 8);
+        new_state.update(3).gpu_tile(y, yi, 8);
+        RVar clobber_xi("clobber_xi"), clobber_yi("clobber_yi");
+        new_state.update(4).gpu_tile(clobber.x, clobber.y, clobber_xi, clobber_yi, 1, 1);
 
         std::vector<Argument> args(6);
         args[0] = state;
@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
         state.set_bounds(2, 0, 3);
         state.set_stride(2, 1);
         state.set_stride(0, 3);
-        render.gpu_tile(x, y, tx, ty, 32, 4);
+        render.gpu_tile(x, y, xi, yi, 32, 4);
 
         render.compile_to_file("reaction_diffusion_2_render", {state}, "reaction_diffusion_2_render");
     }

@@ -52,8 +52,8 @@ int main(int arch, char **argv) {
     // Schedule.
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        Var tx("tx"), ty("ty");
-        median3x3.gpu_tile(x, y, tx, ty, 16, 16);
+        Var xi("xi"), yi("yi");
+        median3x3.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         median3x3.hexagon().vectorize(x, 64);
     } else {

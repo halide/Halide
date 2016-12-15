@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
                     Float(32)};
     Func funcs[n_types];
 
-    Var x("x"), tx("tx");
+    Var x("x"), xi("xi");
 
     Func out("out");
 
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
 
 
     out(x) = e;
-    out.gpu_tile(x, tx, 23);
+    out.gpu_tile(x, xi, 23);
 
     Buffer<> output = out.realize(23*5);
 

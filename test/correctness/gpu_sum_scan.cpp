@@ -41,8 +41,8 @@ int main(int argc, char **argv) {
     // Read out the output
     Func out;
     out(x) = f(x % B, x / B);
-    Var tx;
-    out.gpu_tile(x, tx, B);
+    Var xi;
+    out.gpu_tile(x, xi, B);
 
     // Only deal with inputs that are a multiple of B
     out.bound(x, 0, im.width()/B * B);

@@ -222,7 +222,7 @@ void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class) {
         .def("gpu", &func_gpu0<FuncOrStage>,
              (bp::arg("self"),
               bp::arg("block_x"), bp::arg("thread_x"),
-              bp::arg("device_api   ") = hh::DeviceAPI::Default_GPU),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
              bp::return_internal_reference<1>());
 
     func_or_stage_class
