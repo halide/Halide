@@ -82,15 +82,11 @@ bool test(int vec_width) {
 }
 
 int main(int argc, char **argv) {
+    // As for now, we would only vectorize predicated store/load on Hexagon or
+    // if it is of type 32-bit value and has lanes no less than 4 on x86
+    test<float>(4);
+    test<float>(8);
 
-    bool ok = true;
-
-    // As for now, we would only vectorize predicated store/load if it is of
-    // type 32-bit value and has lanes no less than 4 for x86
-    ok = ok && test<float>(4);
-    ok = ok && test<float>(8);
-
-    if (!ok) return -1;
     printf("Success!\n");
     return 0;
 }
