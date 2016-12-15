@@ -85,13 +85,13 @@ public:
         return *images[x];
     }
 
-    /** Single-element realizations are implicitly castable to Images. */
+    /** Single-element realizations are implicitly castable to Buffers. */
     template<typename T, int D>
     operator Buffer<T, D>() const {
         return *images[0];
     }
 
-    /** Construct a Realization from some Images. */
+    /** Construct a Realization from some Buffers. */
     //@{
     template<typename T,
              int D,

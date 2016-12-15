@@ -1967,7 +1967,7 @@ int main(int argc, char **argv) {
     }
     for (ImageParam p : image_params) {
         p.set_host_alignment(128);
-        p.set_min(0, 0);
+        p.dim(0).set_min(0);
     }
 
     if (target.arch == Target::X86) {

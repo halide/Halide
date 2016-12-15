@@ -3,6 +3,8 @@
 
 namespace Halide {
 
+using Internal::Dimension;
+
 OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k) :
     param(p), kind(k) {
 }
@@ -19,75 +21,16 @@ bool OutputImageParam::defined() const {
     return param.defined();
 }
 
-OutputImageParam::Dimension OutputImageParam::dim(int i) {
-    user_assert(defined())
-        << "Can't access the dimensions of an undefined ImageParam\n";
-    user_assert(i >= 0 && i < dimensions())
-        << "Can't access dimension " << i
-        << " of a " << dimensions() << "-dimensional ImageParam\n";
-    return OutputImageParam::Dimension(param, i);
+Dimension OutputImageParam::dim(int i) {
+    return Dimension(param, i);
 }
 
-const OutputImageParam::Dimension OutputImageParam::dim(int i) const {
-    user_assert(defined())
-        << "Can't access the dimensions of an undefined ImageParam\n";
-    user_assert(i >= 0 && i < dimensions())
-        << "Can't access dimension " << i
-        << " of a " << dimensions() << "-dimensional ImageParam\n";
-    return OutputImageParam::Dimension(param, i);
+const Dimension OutputImageParam::dim(int i) const {
+    return Dimension(param, i);
 }
 
-Expr OutputImageParam::Dimension::min() const {
-    std::ostringstream s;
-    s << param.name() << ".min." << d;
-    return Internal::Variable::make(Int(32), s.str(), param);
-}
-
-Expr OutputImageParam::Dimension::extent() const {
-    std::ostringstream s;
-    s << param.name() << ".extent." << d;
-    return Internal::Variable::make(Int(32), s.str(), param);
-}
-
-Expr OutputImageParam::Dimension::max() const {
-    return min() + extent() - 1;
-}
-
-Expr OutputImageParam::Dimension::stride() const {
-    std::ostringstream s;
-    s << param.name() << ".stride." << d;
-    return Internal::Variable::make(Int(32), s.str(), param);
-}
 int OutputImageParam::host_alignment() const {
     return param.host_alignment();
-}
-
-OutputImageParam::Dimension OutputImageParam::Dimension::set_extent(Expr extent) {
-    param.set_extent_constraint(d, extent);
-    return *this;
-}
-
-OutputImageParam::Dimension OutputImageParam::Dimension::set_min(Expr min) {
-    param.set_min_constraint(d, min);
-    return *this;
-}
-
-OutputImageParam::Dimension OutputImageParam::Dimension::set_stride(Expr stride) {
-    param.set_stride_constraint(d, stride);
-    return *this;
-}
-
-
-OutputImageParam::Dimension OutputImageParam::Dimension::set_bounds(Expr min, Expr extent) {
-    return set_min(min).set_extent(extent);
-}
-
-OutputImageParam::Dimension OutputImageParam::Dimension::dim(int i) {
-    return OutputImageParam::Dimension(param, i);
-}
-
-const OutputImageParam::Dimension OutputImageParam::Dimension::dim(int i) const {
-    return OutputImageParam::Dimension(param, i);
 }
 
 OutputImageParam &OutputImageParam::set_host_alignment(int bytes) {
