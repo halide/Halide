@@ -28,10 +28,9 @@ public:
         msan_output.parallel(y).vectorize(x, 4);
 
         msan_output.output_buffer()
-                   .set_stride(0, Expr())
-                   .set_extent(0, 4)
-                   .set_extent(1, 4)
-                   .set_extent(2, 3);
+            .dim(0).set_stride(Expr()).set_extent(4)
+            .dim(1).set_extent(4)
+            .dim(2).set_extent(3);
 
         return msan_output;
     }

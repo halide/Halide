@@ -13,9 +13,10 @@ double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
 
     for (int i = 0; i < 3; i++) {
         f.output_buffer()
-            .set_stride(i, dst.stride(i))
-            .set_extent(i, dst.extent(i))
-            .set_min(i, dst.min(i));
+            .dim(i)
+            .set_stride(dst.dim(i).stride())
+            .set_extent(dst.dim(i).extent())
+            .set_min(dst.dim(i).min());
     }
 
     if (dst.stride(0) == 1 && src.stride(0) == 1) {
