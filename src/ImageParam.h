@@ -23,7 +23,7 @@ class ImageParam : public OutputImageParam {
     /** Helper function to initialize the Func representation of this ImageParam. */
     EXPORT void init_func();
 
-    EXPORT void set(Internal::BufferPtr b);
+    EXPORT void set(BufferRef<> b);
 
 public:
 
@@ -42,11 +42,11 @@ public:
     // @{
     template<typename T, int D>
     NO_INLINE void set(Buffer<T, D> &im) {
-        set(Internal::BufferPtr(im));
+        set(im.make_shared_ref());
     }
     // @}
 
-    /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting */
+    /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting. */
     // @{
     EXPORT const Buffer<void, 0> &get() const;
     EXPORT Buffer<void, 0> &get();

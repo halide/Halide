@@ -42,6 +42,7 @@ void for_each_element(const buffer_t &buf, Fn &&f);
 
 // Forward-declare our Buffer class
 template<typename T, int D> class Buffer;
+template<typename T, int D> class BufferRef;
 
 // This declaration exists so that Buffer is extensible with custom
 // operator()(Args...) methods. Add implementations of it for whatever
@@ -91,7 +92,7 @@ struct AllocationHeader {
  * functionality. When using Halide from C++, this is the preferred
  * way to create input and output buffers. The overhead of using this
  * class relative to a naked buffer_t is minimal - it uses another
- * ~100 bytes on the stack, and does no dynamic allocations when using
+ * 32 bytes on the stack, and does no dynamic allocations when using
  * it to represent existing memory. This overhead will shrink further
  * in the future once buffer_t is deprecated.
  *
@@ -165,9 +166,7 @@ class Buffer {
     /** Increment the reference count of any owned allocation */
     void incref() const {
         if (!manages_memory()) return;
-        if (alloc) {
-            alloc->ref_count++;
-        }
+        alloc->ref_count++;
         if (buf.dev) {
             if (!dev_ref_count) {
                 // I seem to have a non-zero dev field but no
@@ -185,12 +184,10 @@ class Buffer {
      * and device memory if it hits zero. Sets alloc to nullptr. */
     void decref() {
         if (!manages_memory()) return;
-        if (alloc) {
-            int new_count = --(alloc->ref_count);
-            if (new_count == 0) {
-                void (*fn)(void *) = alloc->deallocate_fn;
-                fn(alloc);
-            }
+        int new_count = --(alloc->ref_count);
+        if (new_count == 0) {
+            void (*fn)(void *) = alloc->deallocate_fn;
+            fn(alloc);
         }
         buf.host = nullptr;
         alloc = nullptr;
@@ -438,7 +435,7 @@ public:
 
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
-        return (size_t)((uint8_t *)end() - (uint8_t *)begin());
+        return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
     }
 
     Buffer() : ty(static_halide_type()) {}
@@ -505,7 +502,6 @@ public:
                                    ty(other.ty),
                                    alloc(other.alloc),
                                    dev_ref_count(other.dev_ref_count) {
-        printf("Move constructing %p -> %p\n", this, &other);
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
     }
@@ -519,8 +515,6 @@ public:
                                      ty(other.ty),
                                      alloc(other.alloc),
                                      dev_ref_count(other.dev_ref_count) {
-        printf("Move constructing %p -> %p\n", this, &other);
-        other.detach_shared_refs();
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
     }
@@ -530,6 +524,9 @@ public:
      * type is compatible at runtime. */
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
+        if ((const void *)this == (const void *)&other) {
+            return *this;
+        }
         assert_can_convert_from(other);
         other.incref();
         decref();
@@ -542,6 +539,9 @@ public:
     }
 
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
+        if (this == &other) {
+            return *this;
+        }
         other.incref();
         decref();
         dev_ref_count = other.dev_ref_count;
@@ -557,7 +557,6 @@ public:
      * type is compatible at runtime. */
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
-        printf("Moving %p -> %p\n", this, &other);
         assert_can_convert_from(other);
         std::swap(alloc, other.alloc);
         std::swap(dev_ref_count, other.dev_ref_count);
@@ -568,7 +567,6 @@ public:
     }
 
     Buffer<T, D> &operator=(Buffer<T, D> &&other) {
-        printf("Moving %p -> %p\n", this, &other);
         std::swap(alloc, other.alloc);
         std::swap(dev_ref_count, other.dev_ref_count);
         buf = other.buf;
@@ -804,13 +802,16 @@ public:
     /** Destructor. Will release any underlying owned allocation if
      * this is the last reference to it. */
     ~Buffer() {
-        printf("Destroying buffer at %p\n", this);
+        // Improve code layout in the common case by bailing out early
+        // if both ref_holder and alloc are zero.
+        if (__builtin_expect(!((uintptr_t)ref_holder | (uintptr_t)alloc), 1)) {
+            return;
+        }
         if (ref_holder) {
-            printf("There are shared references. Moving it to the heap at %p\n", &ref_holder->storage);
             // There are still references to me via the
             // ref_holder. Move me to the heap.
             ref_holder->storage = std::move(*this);
-            ref_holder->ptr = &ref_holder->storage.as<T, D>();
+            ref_holder->ptr = &ref_holder->storage.template as<T, D>();
         }
         decref();
     }
@@ -1601,131 +1602,199 @@ public:
         }
     }
 
-    /** See make_shared_ref */
 private:
-
     struct RefHolder {
         Buffer<T, D> *ptr = nullptr;
         std::atomic<int> ref_count;
+        std::string name;
         Buffer<T> storage;
     } *ref_holder = nullptr;
 
+    friend class BufferRef<T, D>;
+
 public:
-    class Ref {
-        RefHolder *ptr = nullptr;
 
-        void incref() {
-            if (ptr) {
-                ptr->ref_count++;
-            }
-        }
-
-        void decref() {
-            if (ptr) {
-                int new_count = ptr->ref_count--;
-                if (new_count == 0) {
-                    // Note we don't delete ptr->ptr. If it refers to
-                    // a user Buffer then we don't own the memory. If
-                    // it refers to ptr->storage then we're already
-                    // deleting that.
-                    delete ptr;
-                    ptr = nullptr;
-                }
-            }
-        }
-
-    public:
-        Ref() {}
-
-        Ref(RefHolder *r) : ptr(r) {
-            incref();
-        }
-
-        Ref(const Buffer<T, D>::Ref &other) {
-            ptr = other.ptr;
-            incref();
-        }
-
-        Ref(Buffer<T, D>::Ref &&other) {
-            ptr = other.ptr;
-            other.ptr = nullptr;
-        }
-
-        ~Ref() {
-            decref();
-        }
-
-        Ref &operator=(const Buffer<T, D>::Ref &other) {
-            if (other.ptr != ptr) {
-                decref();
-                ptr = other.ptr;
-                incref();
-            }
-            return *this;
-        }
-
-        Ref &operator=(Buffer<T, D>::Ref &&other) {
-            std::swap(ptr, other.ptr);
-            return *this;
-        }
-
-        bool same_as(const Buffer<T, D>::Ref &other) {
-            return ptr == other.ptr;
-        }
-
-        bool defined() const {
-            return ptr;
-        }
-
-        Buffer<T, D> *get() {
-            if (!ptr) return nullptr;
-            return ptr->ptr;
-        }
-
-        const Buffer<T, D> *get() const {
-            if (!ptr) return nullptr;
-            return ptr->ptr;
-        }
-
-        Buffer<T, D> *operator->() {
-            return ptr->ptr;
-        }
-
-        const Buffer<T, D> *operator->() const {
-            return ptr->ptr;
-        }
-
-        Buffer<T, D> &operator*() {
-            return *(ptr->ptr);
-        }
-
-        const Buffer<T, D> &operator*() const {
-            return *(ptr->ptr);
-        }
-
-        template<typename T2, int D2>
-        typename Buffer<T2, D2>::Ref as() const {
-            return get()->as<T2, D2>().make_shared_ref();
-        }
-    };
-
-    /** Make a shared reference to this Buffer. This reference does
-     * not actually keep the Buffer alive. If the Buffer is destroyed,
-     * it becomes a shared reference to a copy of this Buffer as it
-     * was at its time of death. It's a weak reference that acts like
-     * a strong reference. For this reason, it's perfectly legal to
-     * make a shared ref to a Buffer that lives on the stack. It will
-     * be transparently moved to the heap if references remain when
-     * its original scope ends. */
-    Ref make_shared_ref() {
+    /** Make a shared reference to this Buffer. See BufferRef. */
+    BufferRef<T, D> make_shared_ref(const std::string &name = "") {
         if (ref_holder == nullptr) {
             ref_holder = new RefHolder;
             ref_holder->ptr = this;
             ref_holder->ref_count = 0;
+            ref_holder->name = name;
         }
-        return Ref(ref_holder);
+        return BufferRef<T, D>(ref_holder);
+    }
+};
+
+/** A named shared reference to an existing Buffer object. Construct
+  * one using Buffer<T, D>::make_shared_ref.
+  *
+  * Like a weak reference, this reference does not actually extend the
+  * lifetime of the Buffer, but like a strong reference, it will never
+  * become invalid. If the Buffer is destroyed, the Ref becomes a
+  * shared reference to a copy of this Buffer as it was at its time of
+  * death. For this reason, it's perfectly legal to make a shared
+  * reference to a Buffer that lives on the stack. It will be
+  * transparently moved to the heap if references remain when its
+  * original scope ends.
+  *
+  * A BufferRef<T1, D1> can refer to a Buffer<T2, D2> if D1 <= D2, T1
+  * is const whenever T2 is const, and either T1 = T2 or T1 is void. A
+  * BufferRef<void, 0> can therefore refer to any Buffer of non-const
+  * type, so the default template parameters are T = void and D = 0 */
+template<typename T = void, int D = 0>
+class BufferRef {
+    typename Buffer<T, D>::RefHolder *ptr = nullptr;
+
+    void incref() {
+        if (ptr) {
+            ptr->ref_count++;
+        }
     }
 
+    void decref() {
+        if (ptr) {
+            int new_count = ptr->ref_count--;
+            if (new_count == 0) {
+                // Note we don't delete ptr->ptr. If it refers to
+                // a user Buffer then we don't own the memory. If
+                // it refers to ptr->storage then we're already
+                // deleting that.
+                delete ptr;
+                ptr = nullptr;
+            }
+        }
+    }
+
+    template<typename T2, int D2>
+    void assert_can_convert_from() {
+        static_assert(D <= D2,
+                      "A Buffer::Ref may only be constructed from Buffer::Ref of greater dimensionality");
+        static_assert(!std::is_const<T2>::value || std::is_const<T>::value,
+                      "A Buffer<T>::Ref may not be constructed from a Buffer<const T>::Ref");
+        static_assert(std::is_same<typename std::remove_const<T>::type,
+                      typename std::remove_const<T2>::type>::value ||
+                      std::is_same<typename std::remove_const<T>::type, void>::value,
+                      "A Buffer<T1>::Ref may only be constructed from a Buffer<T2>::Ref if T1 = T2 or T1 = void");
+    }
+
+    template<typename T2, int D2> friend class BufferRef;
+
+public:
+
+    BufferRef() {}
+
+    BufferRef(typename Buffer<T, D>::RefHolder *r) : ptr(r) {
+        incref();
+    }
+
+    BufferRef(const BufferRef<T, D> &other) {
+        ptr = other.ptr;
+        incref();
+    }
+
+    template<typename T2, int D2>
+    BufferRef(const BufferRef<T2, D2> &other) {
+        assert_can_convert_from<T2, D2>();
+        ptr = other.ptr;
+        incref();
+    }
+
+    BufferRef(BufferRef<T, D> &&other) {
+        ptr = other.ptr;
+        other.ptr = nullptr;
+    }
+
+    template<typename T2, int D2>
+    BufferRef(BufferRef<T2, D2> &&other) {
+        assert_can_convert_from<T2, D2>();
+        ptr = (typename Buffer<T, D>::RefHolder *)other.ptr;
+        other.ptr = nullptr;
+    }
+
+    ~BufferRef() {
+        decref();
+    }
+
+    BufferRef &operator=(const BufferRef<T, D> &other) {
+        if (other.ptr != ptr) {
+            decref();
+            ptr = other.ptr;
+            incref();
+        }
+        return *this;
+    }
+
+    template<typename T2, int D2>
+    BufferRef &operator=(const BufferRef<T2, D2> &other) {
+        assert_can_convert_from<T2, D2>();
+        auto *other_ptr = (typename Buffer<T, D>::RefHolder *)other.ptr;
+        if (other_ptr != ptr) {
+            decref();
+            ptr = other_ptr;
+            incref();
+        }
+        return *this;
+    }
+
+    BufferRef &operator=(const BufferRef<T, D> &&other) {
+        if (other.ptr != ptr) {
+            decref();
+            ptr = other.ptr;
+            other.ptr = nullptr;
+        }
+        return *this;
+    }
+
+    template<typename T2, int D2>
+    BufferRef &operator=(BufferRef<T2, D2> &&other) {
+        auto *other_ptr = (typename Buffer<T, D>::RefHolder *)other.ptr;
+        if (other_ptr != ptr) {
+            decref();
+            ptr = other_ptr;
+            other.ptr = nullptr;
+        }
+        return *this;
+    }
+
+    template<typename T2, int D2>
+    bool same_as(const BufferRef<T2, D2> &other) {
+        return (void *)ptr == (void *)other.ptr;
+    }
+
+    bool defined() const {
+        return ptr;
+    }
+
+    Buffer<T, D> *get() {
+        if (!ptr) return nullptr;
+        return ptr->ptr;
+    }
+
+    const Buffer<T, D> *get() const {
+        if (!ptr) return nullptr;
+        return ptr->ptr;
+    }
+
+    Buffer<T, D> *operator->() {
+        return ptr->ptr;
+    }
+
+    const Buffer<T, D> *operator->() const {
+        return ptr->ptr;
+    }
+
+    Buffer<T, D> &operator*() {
+        return *(ptr->ptr);
+    }
+
+    const Buffer<T, D> &operator*() const {
+        return *(ptr->ptr);
+    }
+
+    const std::string &name() const {
+        return ptr->name;
+    }
 };
 
 /** Some helpers for for_each_element. */

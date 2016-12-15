@@ -1821,7 +1821,7 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
 
 /** Create an Expr that that guarantees a precondition.
  * If 'condition' is true, the return value is equal to the first Expr.
- * If 'condition' is false, halide_error() is called, and the return value 
+ * If 'condition' is false, halide_error() is called, and the return value
  * is arbitrary. Any additional arguments after the first Expr are stringified
  * and passed as a user-facing message to halide_error(), similar to print().
  *
@@ -1956,6 +1956,27 @@ Expr saturating_cast(Expr e) {
 /** Cast an expression to a new type, clamping to the minimum and
  * maximum values of the result type. */
 EXPORT Expr saturating_cast(Type t, Expr e);
+
+
+/** An adaptor so that it's possible to access a Halide::Buffer using Exprs. */
+// @{
+namespace Internal {
+EXPORT Expr image_accessor(BufferRef<> ref, const std::vector<Expr> &args);
+}
+
+template<typename T, int D, typename ...Args,
+         typename = std::enable_if<(Internal::all_are_convertible<Expr, Args...>::value)>>
+NO_INLINE Expr image_accessor(Buffer<T, D> &im, Expr first, Args... rest) {
+    std::vector<Expr> args = {first, rest...};
+    return image_accessor(im, args);
+}
+
+template<typename T, int D>
+NO_INLINE Expr image_accessor(Buffer<T, D> &im, const std::vector<Expr> &args) {
+    return image_accessor(im.make_shared_ref(Internal::unique_name('b')), args);
+}
+
+// @}
 
 }
 

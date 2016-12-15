@@ -68,7 +68,7 @@ realize them, and they return them as a Realization. Tuples are to
 Exprs as Realizations are to Buffers. */
 class Realization {
 private:
-    std::vector<Buffer<void, 0>::Ref> images;
+    std::vector<BufferRef<>> images;
 public:
     /** The number of images in the Realization. */
     size_t size() const { return images.size(); }
@@ -98,13 +98,10 @@ public:
              typename ...Args,
              typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
     Realization(Buffer<T, D> &a, Args&&... args) {
-        images = std::vector<typename Buffer<void, 0>::Ref>({
-                a.template as<void, 0>().make_shared_ref(),
-                args.template as<void, 0>().make_shared_ref()...
+        images = std::vector<BufferRef<>>({
+                a.make_shared_ref(),
+                args.make_shared_ref()...
             });
-        for (auto r : images) {
-            Internal::debug(0) << (void *)(r->data()) << "\n";
-        }
     }
     //@}
 
@@ -113,10 +110,7 @@ public:
     explicit Realization(std::vector<Buffer<>> &e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
         for (Buffer<> &im : e) {
-            images.push_back(im.as<void, 0>().make_shared_ref());
-        }
-        for (auto r : images) {
-            Internal::debug(0) << (void *)(r->data()) << ", " << r->type().bytes() << "\n";
+            images.push_back(im.make_shared_ref());
         }
     }
 };

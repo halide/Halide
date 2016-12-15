@@ -606,14 +606,14 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 }
 
-void CodeGen_C::compile(const BufferPtr &buffer) {
+void CodeGen_C::compile(const BufferRef<> &buffer) {
     // Don't define buffers in headers.
     if (is_header()) {
         return;
     }
 
     string name = print_name(buffer.name());
-    buffer_t b = *(buffer.raw_buffer());
+    buffer_t b = *(buffer->raw_buffer());
 
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;

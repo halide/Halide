@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "BufferPtr.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"
@@ -17,6 +16,7 @@
 #include "Parameter.h"
 #include "Type.h"
 #include "Util.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
@@ -200,12 +200,12 @@ struct Load : public ExprNode<Load> {
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
-    BufferPtr image;
+    BufferRef<> image;
 
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, std::string name, Expr index, BufferPtr image, Parameter param);
+    EXPORT static Expr make(Type type, std::string name, Expr index, BufferRef<> image, Parameter param);
 
     static const IRNodeType _type_info = IRNodeType::Load;
 };
@@ -523,7 +523,7 @@ struct Call : public ExprNode<Call> {
 
     // If it's a call to an image, this call nodes hold a
     // pointer to that image's buffer
-    BufferPtr image;
+    BufferRef<> image;
 
     // If it's a call to an image parameter, this call node holds a
     // pointer to that
@@ -531,19 +531,19 @@ struct Call : public ExprNode<Call> {
 
     EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                             IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
-                            BufferPtr image = BufferPtr(), Parameter param = Parameter());
+                            BufferRef<> image = BufferRef<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
     EXPORT static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(BufferPtr image, const std::vector<Expr> &args) {
-        return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
+    static Expr make(BufferRef<> image, const std::vector<Expr> &args) {
+        return make(image->type(), image.name(), args, Image, nullptr, 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, nullptr, 0, BufferPtr(), param);
+        return make(param.type(), param.name(), args, Image, nullptr, 0, BufferRef<>(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that
@@ -579,28 +579,29 @@ struct Variable : public ExprNode<Variable> {
     Parameter param;
 
     /** References to properties of literal image parameters. */
-    BufferPtr image;
+    BufferRef<> image;
 
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
     static Expr make(Type type, std::string name) {
-        return make(type, name, BufferPtr(), Parameter(), ReductionDomain());
+        return make(type, name, BufferRef<>(), Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, BufferPtr(), param, ReductionDomain());
+        return make(type, name, BufferRef<>(), param, ReductionDomain());
     }
 
-    static Expr make(Type type, std::string name, BufferPtr image) {
+    static Expr make(Type type, std::string name, BufferRef<> image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, BufferPtr(), Parameter(), reduction_domain);
+        return make(type, name, BufferRef<>(), Parameter(), reduction_domain);
     }
 
-    EXPORT static Expr make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain);
+    EXPORT static Expr make(Type type, std::string name, BufferRef<> image,
+                            Parameter param, ReductionDomain reduction_domain);
 
     static const IRNodeType _type_info = IRNodeType::Variable;
 };

@@ -328,8 +328,8 @@ Stmt build_produce(Function f, const Target &target) {
                     buffers_contents_to_annotate.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
-                BufferPtr b = arg.buffer;
-                Parameter p(b.type(), true, b.dimensions(), b.name());
+                BufferRef<> b = arg.buffer;
+                Parameter p(b->type(), true, b->dimensions(), b.name());
                 p.set_buffer(b);
                 string buf_name = b.name() + ".buffer";
                 Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name, p);
