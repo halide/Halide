@@ -123,5 +123,23 @@ int main(int argc, char **argv) {
         });
     }
 
+    {
+        // Check shared references to stack buffers persist;
+        BufferRef<float> ref;
+        buffer_t *stack_ptr;
+        {
+            Buffer<float> buf(100, 100);
+            ref = buf.make_shared_ref();
+            stack_ptr = buf.raw_buffer();
+            // Check the reference points to the stack buffer.
+            assert(ref->raw_buffer() == stack_ptr);
+        }
+        // Check the buffer_t has been moved off-stack.
+        assert(ref->raw_buffer() != stack_ptr);
+        // Check the destructor didn't actually free the allocation
+        assert(ref->data() != nullptr);
+    }
+
+    printf("Success!\n");
     return 0;
 }
