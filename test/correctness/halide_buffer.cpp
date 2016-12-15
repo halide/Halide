@@ -1,4 +1,5 @@
-#include "Halide.h"
+// Don't include Halide.h: it is not necessary for this test.
+#include "HalideBuffer.h"
 
 using namespace Halide;
 
@@ -82,6 +83,44 @@ int main(int argc, char **argv) {
         b.set_min(123, 456, 2);
         b.translate({-123, -456, -2});
         check_equal(a, b);
+    }
+
+    {
+        // Check lifting a function over scalars to a function over entire buffers.
+        const int W = 5, H = 4, C = 3;
+        Buffer<float> a(W, H, C);
+        Buffer<float> b = Buffer<float>::make_interleaved(W, H, C);
+        int counter = 0;
+        b.for_each_value([&](float &b) {
+            counter += 1;
+            b = counter;
+        });
+        a.for_each_value([&](float &a, float b) {
+            a = 2*b;
+        }, b);
+
+        if (counter != W * H * C) {
+            printf("for_each_value didn't hit every element\n");
+            return -1;
+        }
+
+        a.for_each_element([&](int x, int y, int c) {
+            // The original for_each_value iterated over b, which is
+            // interleaved, so we expect the counter to count up c
+            // fastest.
+            float correct_b = 1 + c + C * (x + W * y);
+            float correct_a = correct_b * 2;
+            if (b(x, y, c) != correct_b) {
+                printf("b(%d, %d, %d) = %f instead of %f\n",
+                       x, y, c, b(x, y, c), correct_b);
+                abort();
+            }
+            if (a(x, y, c) != correct_a) {
+                printf("a(%d, %d, %d) = %f instead of %f\n",
+                       x, y, c, a(x, y, c), correct_a);
+                abort();
+            }
+        });
     }
 
     return 0;

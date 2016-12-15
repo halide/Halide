@@ -63,7 +63,7 @@ public:
 };
 
 /** Funcs with Tuple values return multiple images when you realize
- * them. Tuples are to Exprs as Realizations are to Images. */
+ * them. Tuples are to Exprs as Realizations are to Buffers. */
 class Realization {
 private:
     std::vector<Internal::BufferPtr> images;
@@ -83,13 +83,13 @@ public:
         return images[x].get();
     }
 
-    /** Single-element realizations are implicitly castable to Images. */
+    /** Single-element realizations are implicitly castable to Buffers. */
     template<typename T, int D>
     operator Buffer<T, D>() const {
         return images[0];
     }
 
-    /** Construct a Realization from some Images. */
+    /** Construct a Realization from some Buffers. */
     //@{
     template<typename T,
              int D,
@@ -108,7 +108,7 @@ public:
         }
     }
 
-    /** Support for iterating over a the Images in a Realization */
+    /** Support for iterating over a the Buffers in a Realization */
     struct iterator {
         std::vector<Internal::BufferPtr>::iterator iter;
 
@@ -155,6 +155,45 @@ public:
         return {images.end()};
     }
 
+};
+
+/** It's also useful to be able to collect some mutable references to
+ * existing buffer objects into an aggregate structure, so that the
+ * metadata on those buffers can be mutated. This is a temporary type
+ * used for argument passing groups of Buffers into Pipeline::realize
+ * and Pipeline::infer_input_bounds. It does not affect the lifetime
+ * of the buffers that it refers to. */
+class BufferRefs {
+    std::vector<Buffer<> *> ptrs;
+
+    template<typename T, int D, typename ...Args>
+    void init(Buffer<T, D> *first, Args... rest) {
+        ptrs.push_back(&(first->template as<void>()));
+        init(rest...);
+    }
+
+    void init() {}
+
+public:
+    template<typename T, int D, typename ...Args,
+             typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
+    BufferRefs(Buffer<T, D> &first, Args&... rest) {
+        init(&first, &rest...);
+    }
+
+    BufferRefs(Realization r) : ptrs(r.size()) {
+        for (size_t i = 0; i < r.size(); i++) {
+            ptrs[i] = &r[i];
+        }
+    }
+
+    size_t size() const {
+        return ptrs.size();
+    }
+
+    Buffer<> &operator[](int i) const {
+        return *ptrs[i];
+    }
 };
 
 /** Equivalents of some standard operators for tuples. */

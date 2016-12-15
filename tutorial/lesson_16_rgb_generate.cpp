@@ -123,12 +123,12 @@ public:
             // that this is the case for the input and output like so:
 
             input
-                .set_stride(0, 3) // stride in dimension 0 (x) is three
-                .set_stride(2, 1); // stride in dimension 2 (c) is one
+                .dim(0).set_stride(3) // stride in dimension 0 (x) is three
+                .dim(2).set_stride(1); // stride in dimension 2 (c) is one
 
             brighter.output_buffer()
-                .set_stride(0, 3)
-                .set_stride(2, 1);
+                .dim(0).set_stride(3)
+                .dim(2).set_stride(1);
 
             // For interleaved layout, you may want to use a different
             // schedule. We'll tell Halide to additionally assume and
@@ -136,8 +136,8 @@ public:
             // exploit this fact to make the loop over 'c' innermost
             // and unrolled.
 
-            input.set_bounds(2, 0, 3); // Dimension 2 (c) starts at 0 and has extent 3.
-            brighter.output_buffer().set_bounds(2, 0, 3);
+            input.dim(2).set_bounds(0, 3); // Dimension 2 (c) starts at 0 and has extent 3.
+            brighter.output_buffer().dim(2).set_bounds(0, 3);
 
             // Move the loop over color channels innermost and unroll
             // it.
@@ -153,42 +153,42 @@ public:
             // pipeline that will work with any memory layout. It will
             // probably be slow, because all vector loads become
             // gathers, and all vector stores become scatters.
-            input.set_stride(0, Expr()); // Use a default-constructed
-                                         // undefined Expr to mean
-                                         // there is no constraint.
+            input.dim(0).set_stride(Expr()); // Use a default-constructed
+                                             // undefined Expr to mean
+                                             // there is no constraint.
 
-            brighter.output_buffer().set_stride(0, Expr());
+            brighter.output_buffer().dim(0).set_stride(Expr());
 
         } else if (layout == Layout::Specialized) {
             // We can accept any memory layout with good performance
             // by telling Halide to inspect the memory layout at
             // runtime, and branch to different code depending on the
             // strides it find. First we relax the default constraint
-            // that stride(0) == 1:
+            // that dim(0).stride() == 1:
 
-            input.set_stride(0, Expr()); // Use an undefined Expr to
-                                         // mean there is no
-                                         // constraint.
+            input.dim(0).set_stride(Expr()); // Use an undefined Expr to
+                                             // mean there is no
+                                             // constraint.
 
-            brighter.output_buffer().set_stride(0, Expr());
+            brighter.output_buffer().dim(0).set_stride(Expr());
 
             // The we construct boolean Exprs that detect at runtime
             // whether we're planar or interleaved. The conditions
             // should check for all the facts we want to exploit in
             // each case.
             Expr input_is_planar =
-                (input.stride(0) == 1);
+                (input.dim(0).stride() == 1);
             Expr input_is_interleaved =
-                (input.stride(0) == 3 &&
-                 input.stride(2) == 1 &&
-                 input.extent(2) == 3);
+                (input.dim(0).stride() == 3 &&
+                 input.dim(2).stride() == 1 &&
+                 input.dim(2).extent() == 3);
 
             Expr output_is_planar =
-                (brighter.output_buffer().stride(0) == 1);
+                (brighter.output_buffer().dim(0).stride() == 1);
             Expr output_is_interleaved =
-                (brighter.output_buffer().stride(0) == 3 &&
-                 brighter.output_buffer().stride(2) == 1 &&
-                 brighter.output_buffer().extent(2) == 3);
+                (brighter.output_buffer().dim(0).stride() == 3 &&
+                 brighter.output_buffer().dim(2).stride() == 1 &&
+                 brighter.output_buffer().dim(2).extent() == 3);
 
             // We can then use Func::specialize to write a schedule
             // that switches at runtime to specialized code based on a

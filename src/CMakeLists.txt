@@ -130,63 +130,69 @@ set (CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
-foreach (i ${RUNTIME_CPP} )
-  foreach (j ${ARCHS} )
-    IF (${j} EQUAL 32)
-      IF (${i} MATCHES "windows_.*")
-        # win32 uses the stdcall calling convention, which is x86-specific
-        set(TARGET "i386-unknown-unknown-unknown")
+
+macro(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
+  foreach (i ${TARGET_RUNTIME_FILES} )
+    foreach (j ${ARCHS} )
+      IF (${j} EQUAL 32)
+        IF (${i} MATCHES "windows_.*")
+          # win32 uses the stdcall calling convention, which is x86-specific
+          set(TARGET "i386-unknown-unknown-unknown")
+        ELSE()
+          # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
+          set(TARGET "le32-unknown-nacl-unknown")
+        ENDIF()
       ELSE()
-        # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
-        set(TARGET "le32-unknown-nacl-unknown")
+        # generic 64-bit code
+        set(TARGET "le64-unknown-unknown-unknown")
       ENDIF()
-    ELSE()
-      # generic 64-bit code
-      set(TARGET "le64-unknown-unknown-unknown")
-    ENDIF()
-    set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
-    set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
-    set(LL "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
-    set(BC_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.bc")
-    set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
-    set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
-    set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
+      set(SOURCE "${TARGET_RUNTIME_DIR}${i}.cpp")
+      set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
+      set(LL "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
+      set(BC_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.bc")
+      set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
+      set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
+      set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
 
-    add_custom_command(OUTPUT "${LL_D}"
-                       DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
-                       COMMENT "${SOURCE} -> ${LL_D}"
-                       # Make sure that the output of this command also depends
-                       # on the header files that ${SOURCE} uses
-                       # FIXME: Only works for makefile generator
-                       IMPLICIT_DEPENDS CXX "${SOURCE}"
-                      )
-    add_custom_command(OUTPUT "${LL}"
-                       DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
-                       COMMENT "${SOURCE} -> ${LL}")
+      add_custom_command(OUTPUT "${LL_D}"
+                         DEPENDS "${SOURCE}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                         COMMENT "${SOURCE} -> ${LL_D}"
+                         # Make sure that the output of this command also depends
+                         # on the header files that ${SOURCE} uses
+                         # FIXME: Only works for makefile generator
+                         IMPLICIT_DEPENDS CXX "${SOURCE}"
+                        )
+      add_custom_command(OUTPUT "${LL}"
+                         DEPENDS "${SOURCE}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                         COMMENT "${SOURCE} -> ${LL}")
 
-    add_custom_command(OUTPUT "${BC_D}"
-                       DEPENDS "${LL_D}"
-                       COMMAND "${LLVM_AS}" "${LL_D}" -o "${BC_D}"
-                       COMMENT "${LL_D} -> ${BC_D}")
-    add_custom_command(OUTPUT "${BC}"
-                       DEPENDS "${LL}"
-                       COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
-                       COMMENT "${LL} -> ${BC}")
+      add_custom_command(OUTPUT "${BC_D}"
+                         DEPENDS "${LL_D}"
+                         COMMAND "${LLVM_AS}" "${LL_D}" -o "${BC_D}"
+                         COMMENT "${LL_D} -> ${BC_D}")
+      add_custom_command(OUTPUT "${BC}"
+                         DEPENDS "${LL}"
+                         COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
+                         COMMENT "${LL} -> ${BC}")
 
-    add_custom_command(OUTPUT "${INITMOD_D}"
-                       DEPENDS "${BC_D}"
-                       COMMAND bitcode2cpp "${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
-                       COMMENT "${BC_D} -> ${INITMOD_D}")
-    add_custom_command(OUTPUT "${INITMOD}"
-                       DEPENDS "${BC}"
-                       COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
-                       COMMENT "${BC} -> ${INITMOD}")
-    list(APPEND INITIAL_MODULES ${INITMOD})
-    list(APPEND INITIAL_MODULES ${INITMOD_D})
+      add_custom_command(OUTPUT "${INITMOD_D}"
+                         DEPENDS "${BC_D}"
+                         COMMAND bitcode2cpp "${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
+                         COMMENT "${BC_D} -> ${INITMOD_D}")
+      add_custom_command(OUTPUT "${INITMOD}"
+                         DEPENDS "${BC}"
+                         COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
+                         COMMENT "${BC} -> ${INITMOD}")
+      list(APPEND INITIAL_MODULES ${INITMOD})
+      list(APPEND INITIAL_MODULES ${INITMOD_D})
+    endforeach()
   endforeach()
-endforeach()
+endmacro (add_runtime_modules)
+
+add_runtime_modules("${RUNTIME_CPP}" "${NATIVE_RUNTIME_DIR}")
+
 foreach (i ${RUNTIME_LL} )
   set(LL "${NATIVE_RUNTIME_DIR}${i}.ll")
   set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}.bc")
