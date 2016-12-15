@@ -970,6 +970,7 @@ public:
         } else {
             assert(false && "type().bytes() must be 1, 2, 4, or 8");
         }
+        set_host_dirty();
     }
 
     /** Make an image that refers to a sub-range of this image along
@@ -1476,6 +1477,7 @@ public:
 
     void fill(not_void_T val) {
         for_each_value([=](T &v) {v = val;});
+        set_host_dirty();
     }
 
 private:
