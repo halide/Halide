@@ -810,7 +810,11 @@ $(BIN_DIR)/correctness_plain_c_includes: $(ROOT_DIR)/test/correctness/plain_c_in
 ifeq ($(UNAME), Darwin)
 WEAK_BUFFER_LINKAGE_FLAGS=-Wl,-U,_halide_weak_device_free
 else
+ifneq (,$(findstring MINGW,$(UNAME)))
+WEAK_BUFFER_LINKAGE_FLAGS=-Wl,--defsym=_halide_weak_device_free=0,--defsym=halide_device_free=0
+else
 WEAK_BUFFER_LINKAGE_FLAGS=
+endif
 endif
 
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
