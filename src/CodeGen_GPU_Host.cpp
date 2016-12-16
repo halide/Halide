@@ -392,8 +392,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             // store the size of the argument. BufferPtr arguments get
             // the dev field, which is 64-bits.
-            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits();
-            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
+            int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
+            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
                                  builder->CreateConstGEP2_32(
                                     gpu_arg_sizes_arr_type,
                                     gpu_arg_sizes_arr,
