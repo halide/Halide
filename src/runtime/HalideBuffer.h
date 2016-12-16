@@ -10,6 +10,7 @@
 #include <vector>
 #include <cassert>
 #include <atomic>
+#include <algorithm>
 #include <stdint.h>
 #include <string.h>
 
