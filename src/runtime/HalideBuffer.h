@@ -43,7 +43,7 @@ namespace Halide {
 class Target;
 enum class DeviceAPI;
 extern halide_device_interface_t *get_default_device_interface_for_target(const Target &);
-extern halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &);
+extern halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &, const Target &);
 extern Target get_jit_target_from_environment();
 
 template<typename Fn>
@@ -1195,10 +1195,6 @@ public:
         buf.dev_dirty = v;
     }
 
-    int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
-        return halide_device_malloc(ctx, &buf, device_interface);
-    }
-
     int copy_to_host(void *ctx = nullptr) {
         if (device_dirty()) {
             return halide_copy_to_host(ctx, &buf);
@@ -1213,6 +1209,7 @@ public:
         return 0;
     }
 
+    /** Only use this method when jitting */
     int copy_to_device(const Target &t = get_jit_target_from_environment()) {
         if (host_dirty()) {
             return halide_copy_to_device(nullptr, &buf, get_default_device_interface_for_target(t));
@@ -1220,9 +1217,10 @@ public:
         return 0;
     }
 
-    int copy_to_device(const DeviceAPI &d) {
+    /** Only use this method when jitting */
+    int copy_to_device(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
         if (host_dirty()) {
-            return halide_copy_to_device(nullptr, &buf, get_device_interface_for_device_api(d));
+            return halide_copy_to_device(nullptr, &buf, get_device_interface_for_device_api(d, t));
         }
         return 0;
     }
@@ -1231,12 +1229,14 @@ public:
         return halide_device_malloc(ctx, &buf, device_interface);
     }
 
+    /** Only use this method when jitting */
     int device_malloc(const Target &t = get_jit_target_from_environment()) {
         return halide_device_malloc(nullptr, &buf, get_default_device_interface_for_target(t));
     }
 
-    int device_malloc(const DeviceAPI &d) {
-        return halide_device_malloc(nullptr, &buf, get_device_interface_for_device_api(d));
+    /** Only use this method when jitting */
+    int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
+        return halide_device_malloc(nullptr, &buf, get_device_interface_for_device_api(d, t));
     }
 
     int device_free(void *ctx = nullptr) {

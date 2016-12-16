@@ -13,35 +13,8 @@ int main(int argc, char **argv) {
     // We'll have two input buffers. For one we'll copy to the device
     // explicitly. For the other we'll do a device malloc and set
     // host_dirty.
-    {
-        Buffer<float> a(100, 100), b(100, 100);
-
-        assert(!a.host_dirty());
-        a.fill(2.0f);
-        assert(!a.has_device_allocation());
-        assert(a.host_dirty());
-        a.copy_to_device();
-        assert(a.has_device_allocation());
-        assert(!a.host_dirty());
-
-        assert(!b.host_dirty());
-        b.fill(3.0f);
-        assert(!b.has_device_allocation());
-        assert(b.host_dirty());
-        b.device_malloc();
-        assert(b.has_device_allocation());
-        assert(b.host_dirty());
-
-        Func f;
-        Var x, y;
-        f(x, y) = a(x, y) + b(x, y) + 2;
-        f.gpu_tile(x, y, 8, 8);
-
-        Buffer<float> out = f.realize(100, 100);
-    }
-
-    if (target.has_feature(Target::CUDA)) {
-        // Now let's try again using an explicit device API
+    for (DeviceAPI d : {DeviceAPI::Default_GPU, DeviceAPI::CUDA, DeviceAPI::OpenCL}) {
+        if (!get_device_interface_for_device_api(d)) continue;
 
         Buffer<float> a(100, 100), b(100, 100);
 
@@ -49,7 +22,7 @@ int main(int argc, char **argv) {
         a.fill(2.0f);
         assert(!a.has_device_allocation());
         assert(a.host_dirty());
-        a.copy_to_device(DeviceAPI::Cuda);
+        a.copy_to_device(d);
         assert(a.has_device_allocation());
         assert(!a.host_dirty());
 
@@ -57,32 +30,24 @@ int main(int argc, char **argv) {
         b.fill(3.0f);
         assert(!b.has_device_allocation());
         assert(b.host_dirty());
-        b.device_malloc(DeviceAPI::Cuda);
+        b.device_malloc(d);
         assert(b.has_device_allocation());
         assert(b.host_dirty());
 
         Func f;
         Var x, y;
         f(x, y) = a(x, y) + b(x, y) + 2;
-        f.gpu_tile(x, y, 8, 8, DeviceAPI::Cuda);
+        f.gpu_tile(x, y, 8, 8, TailStrategy::Auto, d);
 
         Buffer<float> out = f.realize(100, 100);
+
+        out.for_each_value([&](float f) {
+            if (f != 7.0f) {
+                printf("%f != 4.0f\n", f);
+                abort();
+            }
+        });
     }
-
-    // Here's a wart: b was copied to the device, but it still has
-    // host_dirty set, because it is a *copy* of b's buffer_t that is
-    // held by the pipeline, and this copy was passed to
-    // copy_to_device. It's hard to fix this without keeping
-    // references to user Buffers (which may leave scope before the
-    // pipeline does!).
-    assert(b.host_dirty()); // :(
-
-    out.for_each_value([&](float f) {
-        if (f != 7.0f) {
-            printf("%f != 4.0f\n", f);
-            abort();
-        }
-    });
 
     printf("Success!\n");
     return 0;
