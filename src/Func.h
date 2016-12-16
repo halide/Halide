@@ -218,8 +218,9 @@ public:
                       DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     // TODO(psuriana): For now we need to expand "tx" into Var and RVar versions
-    // due to conflict with the deprecated interfaces. Merge this later once
-    // we remove the deprecated interfaces.
+    // due to conflict with the deprecated interfaces since Var can be implicitly
+    // converted into either VarOrRvar or Expr. Merge this later once we remove
+    // the deprecated interfaces.
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);

@@ -39,8 +39,7 @@ class Inliner : public IRMutator {
 
         for (size_t i = 0; i < s.dims().size(); i++) {
             Dim d = s.dims()[i];
-            if ((d.for_type == ForType::Parallel) || (d.for_type == ForType::GPUBlock) ||
-                (d.for_type == ForType::GPUThread)) {
+            if (d.is_parallel()) {
                 user_error << "Cannot parallelize dimension "
                            << d.var << " of function "
                            << f.name() << " because the function is scheduled inline.\n";
