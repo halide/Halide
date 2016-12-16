@@ -1,3 +1,4 @@
+#include "DeviceInterface.h"
 #include "JITModule.h"
 #include "Target.h"
 
@@ -49,15 +50,14 @@ bool lookup_runtime_routine(const std::string &name,
 
 namespace Halide {
 halide_device_interface_t *get_default_device_interface_for_target(const Target &t) {
-    DeviceAPI d = get_default_device_api_for_target(t);
-    if (d == DeviceAPI::Host) {
-        return nullptr;
-    } else {
-        return get_device_interface_for_device_api(d);
-    }
+    return get_device_interface_for_device_api(DeviceAPI::Default_GPU, t);
 }
 
-halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &d) {
+halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &d, const Target &t) {
+    if (d == DeviceAPI::Default_GPU) {
+        return get_device_interface_for_device_api(get_default_device_api_for_target(t), t);
+    }
+
     struct halide_device_interface_t *(*fn)();
     std::string name;
     if (d == DeviceAPI::Metal) {
@@ -68,10 +68,10 @@ halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &
         name = "cuda";
     } else if (d == DeviceAPI::OpenGLCompute) {
         name = "openglcompute";
-    } else if (d == DeviceAPI::OpenGL) {
+    } else if (d == DeviceAPI::GLSL) {
         name = "opengl";
     } else {
-        user_error << "get_device_interface_for_device_api requires an explicit GPU device API\n";
+        return nullptr;
     }
 
     if (lookup_runtime_routine("halide_" + name + "_device_interface", t, fn)) {
@@ -95,6 +95,7 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
     } else {
         return DeviceAPI::Host;
     }
+}
 }
 
 extern "C" {
@@ -197,17 +198,20 @@ int halide_weak_device_free(void *user_context, struct buffer_t *buf) {
 EXPORT_SYM(halide_weak_device_free)
 
 const struct halide_device_interface_t *halide_cuda_device_interface() {
-    return get_device_interface_for_target(Target("host-cuda"));
+    Target t = get_jit_target_from_environment().with_feature(Target::CUDA);
+    return get_device_interface_for_device_api(DeviceAPI::CUDA, t);
 }
 EXPORT_SYM(halide_cuda_device_interface)
 
 const struct halide_device_interface_t *halide_opencl_device_interface() {
-    return get_device_interface_for_target(Target("host-opencl"));
+    Target t = get_jit_target_from_environment().with_feature(Target::OpenCL);
+    return get_device_interface_for_device_api(DeviceAPI::OpenCL, t);
 }
 EXPORT_SYM(halide_opencl_device_interface)
 
 const struct halide_device_interface_t *halide_opengl_device_interface() {
-    return get_device_interface_for_target(Target("host-opengl"));
+    Target t = get_jit_target_from_environment().with_feature(Target::OpenGL);
+    return get_device_interface_for_device_api(DeviceAPI::GLSL, t);
 }
 EXPORT_SYM(halide_opengl_device_interface)
 
@@ -234,12 +238,14 @@ uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf)
 EXPORT_SYM(halide_opengl_detach_texture)
 
 const struct halide_device_interface_t *halide_openglcompute_device_interface() {
-    return get_device_interface_for_target(Target("host-openglcompute"));
+    Target t = get_jit_target_from_environment().with_feature(Target::OpenGLCompute);
+    return get_device_interface_for_device_api(DeviceAPI::OpenGLCompute, t);
 }
 EXPORT_SYM(halide_openglcompute_device_interface)
 
 const struct halide_device_interface_t *halide_metal_device_interface() {
-    return get_device_interface_for_target(Target("host-metal"));
+    Target t = get_jit_target_from_environment().with_feature(Target::Metal);
+    return get_device_interface_for_device_api(DeviceAPI::Metal, t);
 }
 EXPORT_SYM(halide_metal_device_interface)
 

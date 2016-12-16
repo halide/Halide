@@ -1,5 +1,6 @@
 #include "SelectGPUAPI.h"
 #include "IRMutator.h"
+#include "DeviceInterface.h"
 
 namespace Halide {
 namespace Internal {
