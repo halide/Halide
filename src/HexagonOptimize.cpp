@@ -768,7 +768,12 @@ class EliminateInterleaves : public IRMutator {
         }
         const Let *let = x.as<Let>();
         if (let) {
-            return Let::make(let->name, let->value, remove_interleave(let->body));
+            Expr body = remove_interleave(let->body);
+            if (!body.same_as(let->body)) {
+                return Let::make(let->name, let->value, remove_interleave(let->body));
+            } else {
+                return x;
+            }
         }
         internal_error << "Expression '" << x << "' does not yield an interleave.\n";
         return x;
@@ -894,8 +899,16 @@ class EliminateInterleaves : public IRMutator {
                 // lets, using the deinterleaved one to generate the
                 // interleaved one.
                 Expr deinterleaved = remove_interleave(value);
-                Expr deinterleaved_var = Variable::make(deinterleaved.type(), deinterleaved_name);
-                result = LetType::make(op->name, native_interleave(deinterleaved_var), result);
+
+                // If we actually removed an interleave from the
+                // value, re-interleave it to get the interleaved let
+                // value.
+                Expr interleaved = Variable::make(deinterleaved.type(), deinterleaved_name);
+                if (!deinterleaved.same_as(value)) {
+                    interleaved = native_interleave(interleaved);
+                }
+
+                result = LetType::make(op->name, interleaved, result);
                 result = LetType::make(deinterleaved_name, deinterleaved, result);
             } else if (deinterleaved_used) {
                 // Only the deinterleaved value is used, we can eliminate the interleave.
