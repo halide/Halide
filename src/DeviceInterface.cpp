@@ -48,29 +48,53 @@ bool lookup_runtime_routine(const std::string &name,
 }
 
 namespace Halide {
-halide_device_interface_t *get_device_interface_for_target(const Target &t) {
-    struct halide_device_interface_t *(*fn)();
-    struct {
-        Target::Feature feature;
-        std::string name;
-    } mapping[] =
-          {{Target::Metal, "metal"},
-           {Target::OpenCL, "opencl"},
-           {Target::CUDA, "cuda"},
-           {Target::OpenGLCompute, "openglcompute"},
-           {Target::OpenGL, "opengl"}};
-
-    for (auto p : mapping) {
-        if (t.has_feature(p.feature)) {
-            if (lookup_runtime_routine("halide_" + p.name + "_device_interface", t, fn)) {
-                return (*fn)();
-            } else {
-                return nullptr;
-            }
-        }
+halide_device_interface_t *get_default_device_interface_for_target(const Target &t) {
+    DeviceAPI d = get_default_device_api_for_target(t);
+    if (d == DeviceAPI::Host) {
+        return nullptr;
+    } else {
+        return get_device_interface_for_device_api(d);
     }
-    return nullptr;
 }
+
+halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &d) {
+    struct halide_device_interface_t *(*fn)();
+    std::string name;
+    if (d == DeviceAPI::Metal) {
+        name = "metal";
+    } else if (d == DeviceAPI::OpenCL) {
+        name = "opencl";
+    } else if (d == DeviceAPI::CUDA) {
+        name = "cuda";
+    } else if (d == DeviceAPI::OpenGLCompute) {
+        name = "openglcompute";
+    } else if (d == DeviceAPI::OpenGL) {
+        name = "opengl";
+    } else {
+        user_error << "get_device_interface_for_device_api requires an explicit GPU device API\n";
+    }
+
+    if (lookup_runtime_routine("halide_" + name + "_device_interface", t, fn)) {
+        return (*fn)();
+    } else {
+        return nullptr;
+    }
+}
+
+DeviceAPI get_default_device_api_for_target(const Target &target) {
+    if (target.has_feature(Target::Metal)) {
+        return DeviceAPI::Metal;
+    } else if (target.has_feature(Target::OpenCL)) {
+        return DeviceAPI::OpenCL;
+    } else if (target.has_feature(Target::CUDA)) {
+        return DeviceAPI::CUDA;
+    } else if (target.has_feature(Target::OpenGLCompute)) {
+        return DeviceAPI::OpenGLCompute;
+    } else if (target.has_feature(Target::OpenGL)) {
+        return DeviceAPI::GLSL;
+    } else {
+        return DeviceAPI::Host;
+    }
 }
 
 extern "C" {
