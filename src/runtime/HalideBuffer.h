@@ -457,22 +457,31 @@ public:
     /** Give Buffers access to the members of Buffers of different dimensionalities and types. */
     template<typename T2, int D2> friend class Buffer;
 
-    /** Fail an assertion at runtime or compile-time if an Buffer<T, D>
-     * cannot be constructed from some other Buffer type. */
+    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
+     * If this can be determined at compile time, fail with a static assert; otherwise
+     * return a boolean based on runtime typing. */
     template<typename T2, int D2>
-    static void assert_can_convert_from(const Buffer<T2, D2> &other) {
+    static bool can_convert_from(const Buffer<T2, D2> &other) {
         static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
                       "Can't convert from a Buffer<const T> to a Buffer<T>");
         static_assert(std::is_same<typename std::remove_const<T>::type,
                                    typename std::remove_const<T2>::type>::value ||
                       T_is_void || Buffer<T2, D2>::T_is_void,
                       "type mismatch constructing Buffer");
-        if (D < D2) {
-            assert(other.dimensions() <= D);
+        if (D < D2 && other.dimensions() > D) {
+            return false;
         }
-        if (Buffer<T2, D2>::T_is_void && !T_is_void) {
-            assert(other.ty == static_halide_type());
+        if (Buffer<T2, D2>::T_is_void && !T_is_void && other.ty != static_halide_type()) {
+            return false;
         }
+        return true;
+    }
+
+    /** Fail an assertion at runtime or compile-time if an Buffer<T, D>
+     * cannot be constructed from some other Buffer type. */
+    template<typename T2, int D2>
+    static void assert_can_convert_from(const Buffer<T2, D2> &other) {
+        assert(can_convert_from(other));
     }
 
     /** Copy constructor. Does not copy underlying data. */
