@@ -696,8 +696,7 @@ class EliminateInterleaves : public IRMutator {
             return true;
         }
 
-        const Let *let = x.as<Let>();
-        if (let) {
+        if (const Let *let = x.as<Let>()) {
             return yields_removable_interleave(let->body);
         }
 
@@ -723,11 +722,13 @@ class EliminateInterleaves : public IRMutator {
             return true;
         }
 
-        const Let *let = x.as<Let>();
-        if (let) {
+        if (const Let *let = x.as<Let>()) {
             return yields_interleave(let->body);
         }
 
+        // This is different from the deinterleaved lets handled in
+        // yields_removable_interleave. These are lets that can be
+        // deinterleaved freely, but are not actually interleaves.
         const Variable *var = x.as<Variable>();
         if (var && vars.contains(var->name + ".weak_deinterleaved")) {
             return true;
@@ -758,16 +759,16 @@ class EliminateInterleaves : public IRMutator {
         } else if (x.type().is_scalar() || x.as<Broadcast>()) {
             return x;
         }
-        const Variable *var = x.as<Variable>();
-        if (var) {
+
+        if (const Variable *var = x.as<Variable>()) {
             if (vars.contains(var->name + ".deinterleaved")) {
                 return Variable::make(var->type, var->name + ".deinterleaved");
             } else if (vars.contains(var->name + ".weak_deinterleaved")) {
                 return Variable::make(var->type, var->name + ".weak_deinterleaved");
             }
         }
-        const Let *let = x.as<Let>();
-        if (let) {
+
+        if (const Let *let = x.as<Let>()) {
             Expr body = remove_interleave(let->body);
             if (!body.same_as(let->body)) {
                 return Let::make(let->name, let->value, remove_interleave(let->body));
@@ -775,6 +776,7 @@ class EliminateInterleaves : public IRMutator {
                 return x;
             }
         }
+
         internal_error << "Expression '" << x << "' does not yield an interleave.\n";
         return x;
     }
@@ -867,7 +869,11 @@ class EliminateInterleaves : public IRMutator {
         NodeType body;
         // Other code in this mutator needs to be able to tell the
         // difference between a Let that yields a deinterleave, and a
-        // let that has a remoable deinterleave.
+        // let that has a removable deinterleave. Lets that can
+        // pretend to be deinterleaved at no cost are given an
+        // alternative let labelled "weak_deinterleaved", while lets
+        // that have a removable interleave are given an alternative
+        // let labelled "deinterleaved".
         if (yields_removable_interleave(value)) {
             // We can provide a deinterleaved version of this let value.
             deinterleaved_name = op->name + ".deinterleaved";
