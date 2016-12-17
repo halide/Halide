@@ -737,7 +737,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.has_feature(Target::MSAN)) {
                 modules.push_back(get_initmod_msan(c, bits_64, debug));
             } else {
-                modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));                
+                modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
             }
         }
 
