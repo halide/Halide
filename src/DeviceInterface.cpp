@@ -49,16 +49,16 @@ bool lookup_runtime_routine(const std::string &name,
 }
 
 namespace Halide {
-halide_device_interface_t *get_default_device_interface_for_target(const Target &t) {
+const halide_device_interface_t *get_default_device_interface_for_target(const Target &t) {
     return get_device_interface_for_device_api(DeviceAPI::Default_GPU, t);
 }
 
-halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &d, const Target &t) {
+const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &d, const Target &t) {
     if (d == DeviceAPI::Default_GPU) {
         return get_device_interface_for_device_api(get_default_device_api_for_target(t), t);
     }
 
-    struct halide_device_interface_t *(*fn)();
+    const struct halide_device_interface_t *(*fn)();
     std::string name;
     if (d == DeviceAPI::Metal) {
         name = "metal";
