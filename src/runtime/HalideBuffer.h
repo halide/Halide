@@ -40,7 +40,7 @@ namespace Halide {
 
 // Forward declare some methods that are needed when using Buffer in a
 // JIT context with GPU-using pipelines.
-class Target;
+struct Target;
 enum class DeviceAPI;
 extern const halide_device_interface_t *get_default_device_interface_for_target(const Target &);
 extern const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &, const Target &);
