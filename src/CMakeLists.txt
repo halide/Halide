@@ -131,7 +131,7 @@ set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
 
-macro(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
+function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
   foreach (i ${TARGET_RUNTIME_FILES} )
     foreach (j ${ARCHS} )
       IF (${j} EQUAL 32)
@@ -189,7 +189,10 @@ macro(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       list(APPEND INITIAL_MODULES ${INITMOD_D})
     endforeach()
   endforeach()
-endmacro (add_runtime_modules)
+  # This seems to be how you return values from functions in cmake.
+  # I just threw up in my mouth a little.
+  set(INITIAL_MODULES "${INITIAL_MODULES}" PARENT_SCOPE)
+endfunction (add_runtime_modules)
 
 add_runtime_modules("${RUNTIME_CPP}" "${NATIVE_RUNTIME_DIR}")
 
@@ -263,7 +266,6 @@ set(HEADER_FILES
   FastIntegerDivide.h
   FindCalls.h
   Float16.h
-  FragmentAllocations.h
   Func.h
   Function.h
   FuseGPUThreadLoops.h
@@ -410,7 +412,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Error.cpp
   FastIntegerDivide.cpp
   FindCalls.cpp
-  FragmentAllocations.cpp
   Float16.cpp
   Func.cpp
   Function.cpp

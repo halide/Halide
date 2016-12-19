@@ -133,6 +133,38 @@ bool propagate_indeterminate_expression(Expr e0, Expr e1, Expr e2, Type t, Expr 
            propagate_indeterminate_expression(e2, t, expr);
 }
 
+class ExprIsPure : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        if (!op->image.defined() && !op->param.defined()) {
+            // It's a load from an internal buffer, which could
+            // mutate.
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    bool result = true;
+};
+
+/** Test if an expression's value could be different at different
+ * points in the code. */
+bool expr_is_pure(Expr e) {
+    ExprIsPure pure;
+    e.accept(&pure);
+    return pure.result;
+}
+
 }
 
 class Simplify : public IRMutator {
@@ -3981,6 +4013,51 @@ private:
             } else {
                 internal_error << "Unreachable";
             }
+        } else if (op->is_intrinsic(Call::predicated_store)) {
+            IRMutator::visit(op);
+            const Call *call = expr.as<Call>();
+
+            Expr pred = call->args[1];
+            internal_assert(pred.defined());
+            if (is_zero(pred)) {
+                // Predicate of a predicated store is always false
+                expr = make_zero(op->type);
+                return;
+            }
+
+            internal_assert(call->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
+            const Call *addr = call->args[0].as<Call>();
+            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
+                << "The first argument to predicated_store must be call to address_of of the store\n";
+            const Broadcast *broadcast = addr->args[0].as<Broadcast>();
+            const Load *load = broadcast ? broadcast->value.as<Load>() : addr->args[0].as<Load>();
+            internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
+
+            const Call *val = call->args[2].as<Call>();
+            if (val && val->is_intrinsic(Call::predicated_load)) {
+                const Call *load_addr = call->args[0].as<Call>();
+                internal_assert(load_addr);
+                const Broadcast *b = load_addr->args[0].as<Broadcast>();
+                const Load *l = b ? b->value.as<Load>() : load_addr->args[0].as<Load>();
+                Expr store_index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
+                Expr val_index = b ? Broadcast::make(l->index, b->lanes) : l->index;
+                if (l && (l->name == load->name) && equal(val_index, store_index)) {
+                    // foo[ramp(x, 0, 1)] = foo[ramp(x, 0, 1)] is a no-op
+                    expr = make_zero(op->type);
+                }
+            }
+
+        } else if (op->is_intrinsic(Call::predicated_load)) {
+            IRMutator::visit(op);
+            const Call *call = expr.as<Call>();
+
+            Expr pred = call->args[1];
+            internal_assert(pred.defined());
+            if (is_zero(pred)) {
+                // Predicate of a predicated load is always false. Replace
+                // with undef
+                expr = undef(call->type);
+            }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
@@ -4536,7 +4613,8 @@ private:
             stmt = first;
         } else if (let_first &&
                    let_rest &&
-                   equal(let_first->value, let_rest->value)) {
+                   equal(let_first->value, let_rest->value) &&
+                   expr_is_pure(let_first->value)) {
 
             // Do both first and rest start with the same let statement (occurs when unrolling).
             Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
@@ -4551,7 +4629,8 @@ private:
             stmt = LetStmt::make(var_name, let_first->value, new_block);
         } else if (if_first &&
                    if_rest &&
-                   equal(if_first->condition, if_rest->condition)) {
+                   equal(if_first->condition, if_rest->condition) &&
+                   expr_is_pure(if_first->condition)) {
             // Two ifs with matching conditions
             Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
             Stmt else_case;
@@ -4567,6 +4646,8 @@ private:
         } else if (if_first &&
                    if_rest &&
                    !if_rest->else_case.defined() &&
+                   expr_is_pure(if_first->condition) &&
+                   expr_is_pure(if_rest->condition) &&
                    is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
             // Two ifs where the second condition is tighter than
             // the first condition.  The second if can be nested
@@ -5928,6 +6009,23 @@ void simplify_test() {
         Expr e = Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2));
         Expr expected = Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2));
         check(e, expected);
+    }
+
+    {
+        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
+        Expr index = ramp(x + y, 1, 8);
+
+        Expr load = Load::make(index.type(), "f", index, BufferPtr(), Parameter());
+        Expr src = Call::make(Handle().with_lanes(8), Call::address_of, {load}, Call::Intrinsic);
+        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+
+        Expr dest = Call::make(Handle().with_lanes(8), Call::address_of,
+                               {Load::make(index.type(), "f", index, BufferPtr(), Parameter())},
+                               Call::Intrinsic);
+        Stmt stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
+                                         {dest, pred, value},
+                                         Call::Intrinsic));
+        check(stmt, Evaluate::make(make_zero(value.type())));
     }
 
     std::cout << "Simplify test passed" << std::endl;

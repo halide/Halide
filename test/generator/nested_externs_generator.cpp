@@ -5,8 +5,7 @@ using namespace Halide;
 namespace {
 
 void set_interleaved(OutputImageParam m) {
-    m.set_stride(0, 3);
-    //m.set_stride(0, 3).set_stride(2, 1).set_bounds(2, 0, 3);
+    m.dim(0).set_stride(3);
 }
 
 // Add two inputs

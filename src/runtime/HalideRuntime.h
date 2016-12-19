@@ -815,6 +815,19 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
 extern int halide_default_can_use_target_features(uint64_t features);
 
 
+#ifndef HALIDE_ATTRIBUTE_DEPRECATED
+#ifdef HALIDE_ALLOW_DEPRECATED
+#define HALIDE_ATTRIBUTE_DEPRECATED(x)
+#else
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
+#else
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
+#endif
+#endif
+#endif
+
+
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 
