@@ -65,6 +65,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_param_too_small_f64,
     (void *)&halide_error_param_too_small_i64,
     (void *)&halide_error_param_too_small_u64,
+    (void *)&halide_error_requirement_failed,
     (void *)&halide_error_unaligned_host_ptr,
     (void *)&halide_float16_bits_to_double,
     (void *)&halide_float16_bits_to_float,
