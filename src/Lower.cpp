@@ -43,7 +43,6 @@
 #include "SelectGPUAPI.h"
 #include "SkipStages.h"
 #include "SlidingWindow.h"
-#include "FragmentAllocations.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
 #include "StorageFlattening.h"
@@ -231,7 +230,7 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     debug(2) << "Lowering after unrolling:\n" << s << "\n\n";
 
     debug(1) << "Vectorizing...\n";
-    s = vectorize_loops(s);
+    s = vectorize_loops(s, t);
     s = simplify(s);
     debug(2) << "Lowering after vectorizing:\n" << s << "\n\n";
 
@@ -263,12 +262,6 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
         debug(1) << "Fuzzing floating point stores...\n";
         s = fuzz_float_stores(s);
         debug(2) << "Lowering after fuzzing floating point stores:\n" << s << "\n\n";
-    }
-
-    if (t.has_feature(Target::CUDA)) {
-        debug(1) << "Fragmenting local allocations in cuda kernels...\n";
-        s = fragment_cuda_local_allocations(s);
-        debug(2) << "Lowering after sharding local allocations in cuda kernels:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";

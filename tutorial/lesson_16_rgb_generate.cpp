@@ -154,8 +154,8 @@ public:
             // probably be slow, because all vector loads become
             // gathers, and all vector stores become scatters.
             input.dim(0).set_stride(Expr()); // Use a default-constructed
-                                         // undefined Expr to mean
-                                         // there is no constraint.
+                                             // undefined Expr to mean
+                                             // there is no constraint.
 
             brighter.output_buffer().dim(0).set_stride(Expr());
 
@@ -167,8 +167,8 @@ public:
             // that dim(0).stride() == 1:
 
             input.dim(0).set_stride(Expr()); // Use an undefined Expr to
-                                         // mean there is no
-                                         // constraint.
+                                             // mean there is no
+                                             // constraint.
 
             brighter.output_buffer().dim(0).set_stride(Expr());
 

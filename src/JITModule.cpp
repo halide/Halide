@@ -13,6 +13,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Debug.h"
 #include "LLVM_Output.h"
+#include "CodeGen_LLVM.h"
 
 
 #ifdef _MSC_VER
@@ -251,6 +252,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
+    // Ensure that LLVM is initialized
+    CodeGen_LLVM::initialize_llvm();
+
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
@@ -272,11 +276,14 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(memory_manager));
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    engine_builder.setMCPU(mcpu);
+    if (!mcpu.empty()) {
+        engine_builder.setMCPU(mcpu);
+    }
     std::vector<string> mattrs_array = {mattrs};
     engine_builder.setMAttrs(mattrs_array);
 
     TargetMachine *tm = engine_builder.selectTarget();
+    internal_assert(tm) << error_string << "\n";
     #if LLVM_VERSION == 37
     DataLayout target_data_layout(*(tm->getDataLayout()));
     #else
@@ -658,7 +665,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         // This function is protected by a mutex so this is thread safe.
         std::unique_ptr<llvm::Module> module(get_initial_module_for_target(one_gpu,
             &runtime.jit_module->context, true, runtime_kind != MainShared));
-        clone_target_options(*for_module, *module);
+        if (for_module) {
+            clone_target_options(*for_module, *module);
+        }
         module->setModuleIdentifier(module_name);
 
         std::set<std::string> halide_exports_unique;
@@ -728,7 +737,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * determined from the target and the retrieved. If one does not exist
  * yet, it is made on the fly from the compiled in bitcode of the
  * runtime modules. As with all JITModules, the shared runtime is ref
- * counted, but a globabl keeps one ref alive until shutdown or when
+ * counted, but a global keeps one ref alive until shutdown or when
  * JITSharedRuntime::release_all is called. If
  * JITSharedRuntime::release_all is called, the global state is rest
  * and any newly compiled Funcs will get a new runtime. */
@@ -738,40 +747,47 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     std::vector<JITModule> result;
 
     JITModule m = make_module(for_module, target, MainShared, result, create);
-    if (m.compiled())
+    if (m.compiled()) {
         result.push_back(m);
+    }
 
     // Add all requested GPU modules, each only depending on the main shared runtime.
     std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
         JITModule m = make_module(for_module, target, OpenCL, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::Metal)) {
         JITModule m = make_module(for_module, target, Metal, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::CUDA)) {
         JITModule m = make_module(for_module, target, CUDA, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::OpenGL)) {
         JITModule m = make_module(for_module, target, OpenGL, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         JITModule m = make_module(for_module, target, OpenGLCompute, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         JITModule m = make_module(for_module, target, Hexagon, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
 
     return result;

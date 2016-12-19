@@ -18,9 +18,9 @@ int main(int argc, char **argv) {
         Expr mask = r < 200 * 200;
         initial(x, y, c) = random_float();// * select(mask, 1.0f, 0.001f);
         initial.reorder(c, x, y).bound(c, 0, 3).vectorize(c).gpu_tile(x, y, 4, 4);
-        initial.output_buffer().set_bounds(2, 0, 3);
-        initial.output_buffer().set_stride(0, 3);
-        initial.output_buffer().set_stride(2, 1);
+        initial.output_buffer().dim(2).set_bounds(0, 3);
+        initial.output_buffer().dim(0).set_stride(3);
+        initial.output_buffer().dim(2).set_stride(1);
         initial.compile_to_file("reaction_diffusion_2_init", {cx, cy}, "reaction_diffusion_2_init");
     }
 
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         Param<int> frame;
 
         Func clamped = BoundaryConditions::repeat_edge(state);
-        state.set_bounds(2, 0, 3);
+        state.dim(2).set_bounds(0, 3);
 
         Func blur_x("blur_x"), blur_y("blur_y"), blur("blur");
         blur_x(x, y, c) = (clamped(x-3, y, c) +
@@ -121,12 +121,12 @@ int main(int argc, char **argv) {
         args[3] = cx;
         args[4] = cy;
         args[5] = frame;
-        state.set_stride(0, 3);
-        state.set_stride(2, 1);
-        state.set_extent(2, 3);
-        new_state.output_buffer().set_extent(2, 3);
-        new_state.output_buffer().set_stride(0, 3);
-        new_state.output_buffer().set_stride(2, 1);
+        state.dim(0).set_stride(3);
+        state.dim(2).set_stride(1);
+        state.dim(2).set_extent(3);
+        new_state.output_buffer().dim(2).set_extent(3);
+        new_state.output_buffer().dim(0).set_stride(3);
+        new_state.output_buffer().dim(2).set_stride(1);
         new_state.compile_to_file("reaction_diffusion_2_update", args, "reaction_diffusion_2_update");
     }
 
@@ -151,9 +151,9 @@ int main(int argc, char **argv) {
         Func render("render");
         render(x, y) = alpha + red + green + blue;
 
-        state.set_bounds(2, 0, 3);
-        state.set_stride(2, 1);
-        state.set_stride(0, 3);
+        state.dim(2).set_bounds(0, 3);
+        state.dim(2).set_stride(1);
+        state.dim(0).set_stride(3);
         render.gpu_tile(x, y, 32, 4);
 
         render.compile_to_file("reaction_diffusion_2_render", {state}, "reaction_diffusion_2_render");
