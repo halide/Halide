@@ -101,10 +101,16 @@ WEAK void synchronize_resource(mtl_blit_command_encoder *encoder, mtl_buffer *bu
 }
 
 WEAK bool is_buffer_managed(mtl_buffer *buffer) {
-    typedef int (*storage_mode_method)(objc_id obj, objc_sel sel);
-    storage_mode_method method = (storage_mode_method)&objc_msgSend;
-    int storage_mode = (*method)(buffer, sel_getUid("storageMode"));
-    return storage_mode == 1; // MTLStorageModeManaged
+    typedef bool (*responds_to_selector_method)(objc_id obj, objc_sel sel_1, objc_sel sel_2);
+    responds_to_selector_method method1 = (responds_to_selector_method)&objc_msgSend;
+    objc_sel storage_mode_sel = sel_getUid("storageMode");
+    if ((*method1)(buffer, sel_getUid("respondsToSelector:"), storage_mode_sel)) {
+        typedef int (*storage_mode_method)(objc_id obj, objc_sel sel);
+        storage_mode_method method = (storage_mode_method)&objc_msgSend;
+        int storage_mode = (*method)(buffer, sel_getUid("storageMode"));
+        return storage_mode == 1; // MTLStorageModeManaged
+    }
+    return false;
 }
 
 WEAK void end_encoding(mtl_blit_command_encoder *encoder) {
