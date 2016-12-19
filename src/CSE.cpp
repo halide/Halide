@@ -161,15 +161,25 @@ public:
         Expr value = mutate(let->value);
 
         // Make references to the variable point to the value instead.
-        let_substitutions.push(let->name, number);
+        // This shouldn't be done if the Let's value is a Load and occurs
+        // within a protected scope, since the value is not added to the
+        // numbering
+        if (value.as<Load>() == nullptr || !protect_loads_in_scope) {
+            let_substitutions.push(let->name, number);
+        }
 
         // Visit the body and add it to the numbering.
         Expr body = mutate(let->body);
 
-        let_substitutions.pop(let->name);
+        if (value.as<Load>() == nullptr || !protect_loads_in_scope) {
+            let_substitutions.pop(let->name);
 
-        // Just return the body. We've removed the Let.
-        expr = body;
+            // Just return the body. We've removed the Let.
+            expr = body;
+        } else {
+            // If it was a protected Load, we still need the Let
+            expr = Let::make(let->name, value, body);
+        }
     }
 
     void visit(const Call *call) {
