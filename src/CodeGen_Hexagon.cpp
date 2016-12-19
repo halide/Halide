@@ -1504,6 +1504,14 @@ void CodeGen_Hexagon::visit(const Call *op) {
         } else if (op->is_intrinsic(Call::cast_mask)) {
             internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
+    } else if (op->is_intrinsic(Call::bool_to_mask)) {
+        internal_assert(op->args.size() == 1);
+        // The argument is a scalar bool. Converting it to
+        // all-ones or all-zeros is sufficient for HVX masks
+        // (mux just looks at the LSB of each byte).
+        Expr equiv = -Cast::make(op->type, op->args[0]);
+        equiv.accept(this);
+        return;
     }
     if (op->is_intrinsic(Call::bool_to_mask)) {
         internal_assert(op->args.size() == 1);
@@ -1519,6 +1527,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         }
         return;
     }
+
 
     if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {
         llvm::Function *prefetch_fn = module->getFunction("halide_" + op->name);
