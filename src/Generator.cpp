@@ -436,7 +436,7 @@ void StubEmitter::emit() {
     stream << indent() << class_name << "() {}\n";
     stream << "\n";
 
-    stream << indent() << class_name << "(\n";
+    stream << indent() << "NO_INLINE " << class_name << "(\n";
     indent_level++;
     stream << indent() << "const GeneratorContext* context,\n";
     stream << indent() << "const Inputs& inputs,\n";
@@ -568,7 +568,7 @@ void StubEmitter::emit() {
     indent_level--;
     stream << indent() << "protected:\n";
     indent_level++;
-    stream << indent() << "void verify() {\n";
+    stream << indent() << "NO_INLINE void verify() {\n";
     indent_level++;
     for (const auto &out : out_info) {
         stream << indent() << "verify_same_funcs(" << out.name << ", " << out.getter << ");\n";
@@ -576,7 +576,6 @@ void StubEmitter::emit() {
     indent_level--;
     stream << indent() << "}\n";
     stream << "\n";
-
 
     indent_level--;
     stream << indent() << "private:\n";
@@ -603,12 +602,18 @@ void StubEmitter::emit() {
 GeneratorStub::GeneratorStub(const GeneratorContext *context,
                              GeneratorFactory generator_factory,
                              const std::map<std::string, std::string> &generator_params,
-                             const std::vector<std::vector<Internal::FuncOrExpr>> &inputs) {
+                             const std::vector<std::vector<Internal::FuncOrExpr>> &inputs)
+    : generator(generator_factory(generator_params)) {
     user_assert(context != nullptr) << "Context may not be null";
-    generator = generator_factory(generator_params);
     generator->target.set(context->get_target());
     generator->set_inputs(inputs);
     generator->call_generate();
+}
+
+void GeneratorStub::schedule(const std::map<std::string, std::string> &schedule_params,
+              const std::map<std::string, LoopLevel> &schedule_params_looplevels) {
+    generator->set_schedule_param_values(schedule_params, schedule_params_looplevels);
+    generator->call_schedule();
 }
 
 void GeneratorStub::verify_same_funcs(Func a, Func b) {
@@ -1165,7 +1170,10 @@ void GeneratorBase::set_inputs(const std::vector<std::vector<FuncOrExpr>> &input
     inputs_set = true;
 }
 
-void GeneratorBase::init_inputs_and_outputs() {
+void GeneratorBase::pre_generate() {
+    user_assert(!generate_called) << "You may not call the generate() method more than once per instance.";
+    user_assert(filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
+    user_assert(filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
     if (!inputs_set) {
         for (auto input : filter_inputs) {
             input->init_internals();
@@ -1177,15 +1185,26 @@ void GeneratorBase::init_inputs_and_outputs() {
     }
 }
 
+void GeneratorBase::post_generate() {
+    generate_called = true;
+}
+
+void GeneratorBase::pre_schedule() {
+    user_assert(generate_called) << "You must call the generate() method before calling the schedule() method.";
+    user_assert(!schedule_called) << "You may not call the schedule() method more than once per instance.";
+}
+
+void GeneratorBase::post_schedule() {
+    schedule_called = true;
+}
+
 void GeneratorBase::pre_build() {
     user_assert(filter_inputs.size() == 0) << "May not use build() method with Input<>.";
     user_assert(filter_outputs.size() == 0) << "May not use build() method with Output<>.";
 }
 
-void GeneratorBase::pre_generate() {
-    user_assert(filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
-    user_assert(filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
-    init_inputs_and_outputs();
+void GeneratorBase::post_build() {
+    // nothing yet
 }
 
 Pipeline GeneratorBase::produce_pipeline() {
