@@ -186,6 +186,38 @@ define weak_odr <32 x i32> @halide.hexagon.mul.vuw.vuw(<32 x i32> %a, <32 x i32>
   ret <32 x i32> %ab
 }
 
+; 32 bit multiply keep high half.
+declare <16 x i32> @llvm.hexagon.V6.vmpyewuh(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vmpyowh.sacc(<16 x i32>, <16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vmpyowh.rnd.sacc(<16 x i32>, <16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vasrw(<16 x i32>, i32)
+declare <16 x i32> @llvm.hexagon.V6.vsubw(<16 x i32>, <16 x i32>)
+
+define weak_odr <16 x i32> @halide.hexagon.trunc_mpy.vw.vw(<16 x i32> %a, <16 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %ab1 = call <16 x i32> @llvm.hexagon.V6.vmpyewuh(<16 x i32> %a, <16 x i32> %b)
+  %ab2 = call <16 x i32> @llvm.hexagon.V6.vmpyowh.sacc(<16 x i32> %ab1, <16 x i32> %a, <16 x i32> %b)
+  %ab = call <16 x i32> @llvm.hexagon.V6.vasrw(<16 x i32> %ab2, i32 1)
+  ret <16 x i32> %ab
+}
+
+define weak_odr <16 x i32> @halide.hexagon.trunc_satdw_mpy2.vw.vw(<16 x i32> %a, <16 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %ab1 = call <16 x i32> @llvm.hexagon.V6.vmpyewuh(<16 x i32> %a, <16 x i32> %b)
+  %ab = call <16 x i32> @llvm.hexagon.V6.vmpyowh.sacc(<16 x i32> %ab1, <16 x i32> %a, <16 x i32> %b)
+  ; For some reason, this function returns the negative of the product.
+  %zero = tail call <16 x i32> @llvm.hexagon.V6.lvsplatw(i32 0) #6
+  %negated_ab = call <16 x i32> @llvm.hexagon.V6.vsubw(<16 x i32> %zero, <16 x i32> %ab)
+  ret <16 x i32> %negated_ab
+}
+
+define weak_odr <16 x i32> @halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw(<16 x i32> %a, <16 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %ab1 = call <16 x i32> @llvm.hexagon.V6.vmpyewuh(<16 x i32> %a, <16 x i32> %b)
+  %ab = call <16 x i32> @llvm.hexagon.V6.vmpyowh.rnd.sacc(<16 x i32> %ab1, <16 x i32> %a, <16 x i32> %b)
+  ; For some reason, this function returns the negative of the product.
+  %zero = tail call <16 x i32> @llvm.hexagon.V6.lvsplatw(i32 0) #6
+  %negated_ab = call <16 x i32> @llvm.hexagon.V6.vsubw(<16 x i32> %zero, <16 x i32> %ab)
+  ret <16 x i32> %negated_ab
+}
+
 ; Hexagon is missing shifts for byte sized operands.
 declare <16 x i32> @llvm.hexagon.V6.vaslh(<16 x i32>, i32)
 declare <16 x i32> @llvm.hexagon.V6.vasrh(<16 x i32>, i32)
