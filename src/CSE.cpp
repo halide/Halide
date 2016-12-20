@@ -142,7 +142,7 @@ public:
         }
 
         // Add it to the numbering.
-        if ((e.as<Load>() == nullptr) || !protect_loads_in_scope) {
+        if (!(e.as<Load>() && protect_loads_in_scope)) {
             Entry entry = {e, 0};
             number = (int)entries.size();
             numbering[with_cache(e)] = number;
@@ -161,32 +161,20 @@ public:
         Expr value = mutate(let->value);
 
         // Make references to the variable point to the value instead.
-        // This shouldn't be done if the Let's value is a Load and occurs
-        // within a protected scope, since the value is not added to the
-        // numbering
-        if (value.as<Load>() == nullptr || !protect_loads_in_scope) {
-            let_substitutions.push(let->name, number);
-        }
+        let_substitutions.push(let->name, number);
 
         // Visit the body and add it to the numbering.
         Expr body = mutate(let->body);
 
-        if (value.as<Load>() == nullptr || !protect_loads_in_scope) {
-            let_substitutions.pop(let->name);
+        let_substitutions.pop(let->name);
 
-            // Just return the body. We've removed the Let.
-            expr = body;
-        } else {
-            // If it was a protected Load, we still need the Let
-            expr = Let::make(let->name, value, body);
-        }
+        // Just return the body. We've removed the Let.
+        expr = body;
     }
 
     void visit(const Call *call) {
         bool old_protect_loads_in_scope = protect_loads_in_scope;
-        if (call->is_intrinsic(Call::address_of) ||
-            call->is_intrinsic(Call::predicated_store) ||
-            call->is_intrinsic(Call::predicated_load)) {
+        if (call->is_intrinsic(Call::address_of)) {
             // We shouldn't lift load out of a address_of/predicated_store/predicated_load node
             protect_loads_in_scope = true;
         }
