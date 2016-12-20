@@ -175,7 +175,7 @@ public:
     void visit(const Call *call) {
         bool old_protect_loads_in_scope = protect_loads_in_scope;
         if (call->is_intrinsic(Call::address_of)) {
-            // We shouldn't lift load out of a address_of/predicated_store/predicated_load node
+            // We shouldn't lift a load out of an address_of node
             protect_loads_in_scope = true;
         }
         IRMutator::visit(call);
