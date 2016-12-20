@@ -1600,7 +1600,11 @@ protected:
     EXPORT virtual void call_schedule() = 0;
 
     EXPORT void pre_build();
+    EXPORT void post_build();
     EXPORT void pre_generate();
+    EXPORT void post_generate();
+    EXPORT void pre_schedule();
+    EXPORT void post_schedule();
     EXPORT Pipeline produce_pipeline();
 
     template<typename T>
@@ -1629,7 +1633,6 @@ private:
     std::string generator_name;
 
     EXPORT void build_params(bool force = false);
-    EXPORT void init_inputs_and_outputs();
 
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods
@@ -1748,6 +1751,7 @@ private:
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
         pre_build();
         Pipeline p = ((T *)this)->build();
+        post_build();
         build_pipeline_called = true;
         return p;
     }
@@ -1773,12 +1777,11 @@ private:
     template <typename T2 = T,
               typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
     void call_generate_impl() {
-        user_assert(!generate_called) << "You may not call the generate() method more than once per instance.";
         typedef typename std::result_of<decltype(&T::generate)(T)>::type GenerateRetType;
         static_assert(std::is_void<GenerateRetType>::value, "generate() must return void");
         pre_generate();
         ((T *)this)->generate();
-        generate_called = true;
+        post_generate();
     }
 
     // Implementations for call_schedule_impl(), specialized on whether we
@@ -1793,12 +1796,11 @@ private:
     template <typename T2 = T,
               typename std::enable_if<has_schedule_method<T2>::value>::type * = nullptr>
     void call_schedule_impl() {
-        user_assert(generate_called) << "You must call the generate() method before calling the schedule() method.";
-        user_assert(!schedule_called) << "You may not call the schedule() method more than once per instance.";
         typedef typename std::result_of<decltype(&T::schedule)(T)>::type ScheduleRetType;
         static_assert(std::is_void<ScheduleRetType>::value, "schedule() must return void");
+        pre_schedule();
         ((T *)this)->schedule();
-        schedule_called = true;
+        post_schedule();
     }
 
 protected:
@@ -1833,7 +1835,7 @@ namespace Internal {
 class GeneratorStub : public NamesInterface {
 public:
     // default ctor
-    GeneratorStub() {}
+    GeneratorStub() = default;
 
     // move constructor
     GeneratorStub(GeneratorStub&& that) : generator(std::move(that.generator)) {}
@@ -1847,11 +1849,8 @@ public:
     Target get_target() const { return generator->get_target(); }
 
     // schedule method
-    void schedule(const std::map<std::string, std::string> &schedule_params,
-                  const std::map<std::string, LoopLevel> &schedule_params_looplevels) {
-        generator->set_schedule_param_values(schedule_params, schedule_params_looplevels);
-        generator->call_schedule();
-    }
+    EXPORT void schedule(const std::map<std::string, std::string> &schedule_params,
+                         const std::map<std::string, LoopLevel> &schedule_params_looplevels);
 
     // Overloads for first output
     operator Func() const { 
