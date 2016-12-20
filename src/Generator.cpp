@@ -176,6 +176,20 @@ T parse_scalar(const std::string &value) {
     return t;
 }
 
+Func make_param_func(const Parameter &p, const std::string &name) {
+    internal_assert(p.is_buffer());
+    std::vector<Var> args;
+    std::vector<Expr> args_expr;
+    for (int i = 0; i < p.dimensions(); ++i) {
+        Var v = Var::implicit(i);
+        args.push_back(v);
+        args_expr.push_back(v);
+    }
+    Func f = Func(name + "_im");
+    f(args) = Internal::Call::make(p, args_expr);
+    return f;
+}
+
 }  // namespace
 
 class StubEmitter {
@@ -305,7 +319,7 @@ void StubEmitter::emit_inputs_struct() {
     };
     std::vector<InInfo> in_info;
     for (auto input : inputs) {
-        std::string c_type(input->kind() == IOKind::Function ? "Func" : "Expr");
+        std::string c_type = input->get_c_type();
         if (input->is_array()) {
             c_type = "std::vector<" + c_type + ">";
         }
@@ -356,7 +370,7 @@ void StubEmitter::emit() {
         // on the other hand, since this file is just a couple of comments, it's
         // really not an issue if it's included multiple times.
         stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
-        stream << "/* There is no Stub for the Generator named " << generator_name << " */\n";
+        stream << "/* The Generator named " << generator_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
         return;
     }
 
@@ -377,10 +391,14 @@ void StubEmitter::emit() {
     };
     std::vector<OutputInfo> out_info;
     for (auto output : outputs) {
+        std::string c_type = output->get_c_type();
+        std::string getter;
+        if (output->is_array()) getter = "get_output_vector";
+        else getter = "get_output";
         out_info.push_back({
             output->name(),
-            output->is_array() ? "std::vector<Func>" : "Func",
-            std::string(output->is_array() ? "get_output_vector" : "get_output") + "(\"" + output->name() + "\")"
+            output->is_array() ? "std::vector<" + c_type + ">" : c_type,
+            getter + "(\"" + output->name() + "\")"
         });
     }
 
@@ -447,7 +465,7 @@ void StubEmitter::emit() {
     stream << indent() << ": GeneratorStub(context, &factory, params.to_string_map(), {\n";
     indent_level++;
     for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << indent() << "to_func_or_expr_vector(inputs." << inputs[i]->name() << ")";
+        stream << indent() << "to_stub_input_vector(inputs." << inputs[i]->name() << ")";
         stream << ",\n";
     }
     indent_level--;
@@ -553,12 +571,8 @@ void StubEmitter::emit() {
 
     stream << indent() << "// Output(s)\n";
     stream << indent() << "// TODO: identify vars used\n";
-    for (auto output : outputs) {
-        if (output->is_array()) {
-            stream << indent() << "std::vector<Func> " << output->name() << ";\n";
-        } else {
-            stream << indent() << "Func " << output->name() << ";\n";
-        }
+    for (const auto &out : out_info) {
+        stream << indent() << out.ctype << " " << out.name << ";\n";
     }
     stream << "\n";
 
@@ -602,7 +616,7 @@ void StubEmitter::emit() {
 GeneratorStub::GeneratorStub(const GeneratorContext *context,
                              GeneratorFactory generator_factory,
                              const std::map<std::string, std::string> &generator_params,
-                             const std::vector<std::vector<Internal::FuncOrExpr>> &inputs)
+                             const std::vector<std::vector<Internal::StubInput>> &inputs)
     : generator(generator_factory(generator_params)) {
     user_assert(context != nullptr) << "Context may not be null";
     generator->target.set(context->get_target());
@@ -616,7 +630,7 @@ void GeneratorStub::schedule(const std::map<std::string, std::string> &schedule_
     generator->call_schedule();
 }
 
-void GeneratorStub::verify_same_funcs(Func a, Func b) {
+void GeneratorStub::verify_same_funcs(const Func &a, const Func &b) {
     user_assert(a.function().get_contents().same_as(b.function().get_contents())) 
         << "Expected Func " << a.name() << " and " << b.name() << " to match.\n";
 }
@@ -1077,7 +1091,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
     }
     std::map<std::string, GIOBase *> type_names, dim_names, array_size_names;
     for (auto i : filter_inputs) {
-        if (i->kind() == IOKind::Function) {
+        if (i->kind() != IOKind::Scalar) {
             type_names[i->name() + ".type"] = i;
             dim_names[i->name() + ".dim"] = i;
         }
@@ -1086,7 +1100,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
         }
     }
     for (auto o : filter_outputs) {
-        if (o->kind() == IOKind::Function) {
+        if (o->kind() != IOKind::Scalar) {
             type_names[o->name() + ".type"] = o;
             dim_names[o->name() + ".dim"] = o;
         }
@@ -1125,7 +1139,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
                 continue;
             }
         }
-        user_error << "Generator has no GeneratorParam named: " << key;
+        user_error << "Generator " << generator_name << " has no GeneratorParam named: " << key << "\n";
     }
     generator_params_set = true;
 }
@@ -1142,7 +1156,7 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
         const std::string &key = key_value.first;
         const std::string &value = key_value.second;
         auto p = m.find(key);
-        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
+        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key << "\n";
         // It's not OK to set non-schedule params here.
         user_assert(p->second->is_schedule_param()) << "GeneratorParam cannot be specified for: " << key;
         p->second->set_from_string(value);
@@ -1151,14 +1165,14 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
         const std::string &key = key_value.first;
         const LoopLevel &value = key_value.second;
         auto p = m.find(key);
-        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
+        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key << "\n";
         user_assert(p->second->is_schedule_param()) << "LoopLevel param cannot be specified for: " << key;
         static_cast<GeneratorParam<LoopLevel> *>(p->second)->set(value);
     }
     schedule_params_set = true;
 }
 
-void GeneratorBase::set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs) {
+void GeneratorBase::set_inputs(const std::vector<std::vector<StubInput>> &inputs) {
     internal_assert(!inputs_set) << "set_inputs() must be called at most once per Generator instance.\n";
     build_params();
     user_assert(inputs.size() == filter_inputs.size()) 
@@ -1332,9 +1346,9 @@ const std::vector<Expr> &GIOBase::exprs() const {
 void GIOBase::verify_internals() const {
     user_assert(dimensions_ >= 0) << "Generator Input/Output Dimensions must have positive values";
 
-    if (kind() == IOKind::Function) {
+    if (kind() != IOKind::Scalar) {
         for (const Func &f : funcs()) {
-            user_assert(f.defined()) << "Input/Ouput " << name() << " is not defined.\n";
+            user_assert(f.defined()) << "Input/Output " << name() << " is not defined.\n";
             user_assert(f.dimensions() == dimensions()) 
                 << "Expected dimensions " << dimensions() 
                 << " but got " << f.dimensions()
@@ -1383,6 +1397,7 @@ void GIOBase::check_matching_type_and_dim(const std::vector<Type> &t, int d) {
     } else {
         types_ = t;
     }
+    internal_assert(d >= 0);
     if (dimensions_defined()) {
         user_assert(dimensions() == d) << "Dimensions mismatch for " << name() << ": expected " << dimensions() << " saw " << d;
     } else {
@@ -1418,7 +1433,7 @@ void GeneratorInputBase::set_def_min_max() {
 void GeneratorInputBase::init_parameters() {
     parameters_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
-        parameters_.emplace_back(type(), kind() == IOKind::Function, dimensions(), array_name(i), true, false);
+        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dimensions(), array_name(i), true, false);
     }
     set_def_min_max();
 }
@@ -1426,7 +1441,7 @@ void GeneratorInputBase::init_parameters() {
 void GeneratorInputBase::verify_internals() const {
     GIOBase::verify_internals();
 
-    const size_t expected = (kind() == IOKind::Function) ? funcs().size() : exprs().size();
+    const size_t expected = (kind() != IOKind::Scalar) ? funcs().size() : exprs().size();
     user_assert(parameters_.size() == expected) << "Expected parameters_.size() == " 
         << expected << ", saw " << parameters_.size() << " for " << name() << "\n";
 }
@@ -1441,17 +1456,9 @@ void GeneratorInputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
-        if (kind() == IOKind::Function) {
-            std::vector<Var> args;
-            std::vector<Expr> args_expr;
-            for (int i = 0; i < dimensions(); ++i) {
-                Var v = Var::implicit(i);
-                args.push_back(v);
-                args_expr.push_back(v);
-            }
-            Func f = Func(array_name(i) + "_im");
-            f(args) = Internal::Call::make(parameters_[i], args_expr);
-            funcs_.push_back(f);
+        if (kind() != IOKind::Scalar) {
+            internal_assert(dimensions() == parameters_[i].dimensions());
+            funcs_.push_back(make_param_func(parameters_[i], array_name(i) + "_im"));
         } else {
             Expr e = Internal::Variable::make(type(), array_name(i), parameters_[i]);
             exprs_.push_back(e);
@@ -1461,30 +1468,35 @@ void GeneratorInputBase::init_internals() {
     verify_internals();
 }
 
-void GeneratorInputBase::set_inputs(const std::vector<FuncOrExpr> &inputs) {
+void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
+    parameters_.clear();
     exprs_.clear();
     funcs_.clear();
     check_matching_array_size(inputs.size());
-    for (const FuncOrExpr & i : inputs) {
-        user_assert(i.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        const StubInput &in = inputs.at(i);
+        user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
         if (kind() == IOKind::Function) {
-            check_matching_type_and_dim(i.func().output_types(), i.func().dimensions());
-            funcs_.push_back(i.func());
+            auto f = in.func();
+            check_matching_type_and_dim(f.output_types(), f.dimensions());
+            funcs_.push_back(f);
+            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i), true, false);
         } else {
-            check_matching_type_and_dim({i.expr().type()}, 0);
-            exprs_.push_back(i.expr());
+            auto e = in.expr();
+            check_matching_type_and_dim({e.type()}, 0);
+            exprs_.push_back(e);
+            parameters_.emplace_back(e.type(), false, 0, array_name(i), true, false);
         }
     }
     
-    // must re-init parameters in case some GeneratorParams changed, since
-    // it can affect the expected length of parameters_.
-    init_parameters();
+    set_def_min_max();
 
     verify_internals();
 }
 
-GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, const std::vector<Type> &t, int d) 
-    : GIOBase(array_size, name, IOKind::Function, t, d) {
+GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, IOKind kind, const std::vector<Type> &t, int d) 
+    : GIOBase(array_size, name, kind, t, d) {
+    internal_assert(kind != IOKind::Scalar);
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
                                               this, nullptr);
 }
