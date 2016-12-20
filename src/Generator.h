@@ -202,11 +202,13 @@
 #include <vector>
 
 #include "Func.h"
-#include "ObjectInstanceRegistry.h"
 #include "Introspection.h"
+#include "ObjectInstanceRegistry.h"
 #include "Target.h"
 
 namespace Halide {
+
+template<typename T, int D> class Buffer;
 
 namespace Internal {
 
@@ -848,14 +850,14 @@ enum class IOKind { Scalar, Function };
 // via C++11 initializer-list syntax; it is only used in situations where the
 // downstream consumer will be able to explicitly check that each value is
 // of the expected/required kind.
-class FuncOrExpr {
+class StubInput {
     const IOKind kind_;
     const Halide::Func func_;
     const Halide::Expr expr_;
 public:
     // *not* explicit 
-    FuncOrExpr(const Func &f) : kind_(IOKind::Function), func_(f), expr_(Expr()) {}
-    FuncOrExpr(const Expr &e) : kind_(IOKind::Scalar), func_(Func()), expr_(e) {}
+    StubInput(const Func &f) : kind_(IOKind::Function), func_(f), expr_(Expr()) {}
+    StubInput(const Expr &e) : kind_(IOKind::Scalar), func_(Func()), expr_(e) {}
 
     IOKind kind() const {
         return kind_;
@@ -909,6 +911,8 @@ public:
     EXPORT const std::vector<Func> &funcs() const;
     EXPORT const std::vector<Expr> &exprs() const;
 
+    EXPORT virtual bool is_buffer() const;
+
 protected:
     EXPORT GIOBase(size_t array_size, 
                    const std::string &name, 
@@ -940,6 +944,10 @@ protected:
 
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
+
+    virtual bool allow_synthetic_generator_params() const {
+        return true;
+    }
 
 private:
     explicit GIOBase(const GIOBase &) = delete;
@@ -974,7 +982,7 @@ protected:
     std::vector<Parameter> parameters_;
 
     EXPORT void init_internals();
-    EXPORT void set_inputs(const std::vector<FuncOrExpr> &inputs);
+    EXPORT void set_inputs(const std::vector<StubInput> &inputs);
 
     EXPORT virtual void set_def_min_max();
 
@@ -1046,6 +1054,76 @@ public:
 };
 
 template<typename T>
+class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func> {
+private:
+    using Super = GeneratorInputImpl<T, Func>;
+
+    // TODO: this logic to create vars based on specific name
+    // patterns is already replicated in several places across Halide;
+    // we should really centralize it into one place, as it seems likely
+    // to be fragile.
+    Expr MakeInt32Var(const char* c, int d) const {
+        const auto &p = this->parameters_.at(0);
+        std::ostringstream s;
+        s << p.name() << c << d;
+        return Variable::make(Int(32), s.str(), p);
+    }
+
+protected:
+    using TBase = typename Super::TBase;
+
+    bool allow_synthetic_generator_params() const override {
+        return !T::has_static_halide_type();
+    }
+
+public:
+    GeneratorInput_Buffer(const std::string &name)
+        : Super(name, IOKind::Function,
+                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, 
+                T::has_static_halide_type() ? T::static_halide_max_dimensions() : -1) {
+    }
+
+    template <typename... Args>
+    Expr operator()(Args&&... args) const {
+        return this->funcs().at(0)(std::forward<Args>(args)...);
+    }
+
+    Expr operator()(std::vector<Expr> args) const {
+        return this->funcs().at(0)(args);
+    }
+
+    Dimension dim(int i) {
+        return Dimension(this->parameters_.at(0), i);
+    }
+
+    EXPORT const Dimension dim(int i) const {
+        return Dimension(this->parameters_.at(0), i);
+    }
+
+    int host_alignment() const {
+        return this->parameters_.at(0).host_alignment();
+    }
+
+    GeneratorInput_Buffer<T> &set_host_alignment_constraint(int e) {
+        this->parameters_.at(0).set_host_alignment(e);
+        return *this;
+    }
+
+    operator Func() const { 
+        return this->funcs().at(0); 
+    }
+
+    int dimensions() const {
+        return this->funcs().at(0).dimensions(); 
+    }
+
+    bool is_buffer() const override {
+        return true;
+    }
+};
+
+
+template<typename T>
 class GeneratorInput_Func : public GeneratorInputImpl<T, Func> {
 private:
     using Super = GeneratorInputImpl<T, Func>;
@@ -1103,6 +1181,10 @@ public:
 
     operator Func() const { 
         return this->funcs().at(0); 
+    }
+
+    int dimensions() const {
+        return this->funcs().at(0).dimensions(); 
     }
 };
 
@@ -1199,12 +1281,22 @@ public:
     }
 };
 
+template<typename> 
+struct type_sink { typedef void type; };
+
+template<typename T2, typename = void> 
+struct has_static_halide_type_method : std::false_type {}; 
+
+template<typename T2> 
+struct has_static_halide_type_method<T2, typename type_sink<decltype(T2::static_halide_type())>::type> : std::true_type {};
+
 template<typename T, typename TBase = typename std::remove_all_extents<T>::type> 
 using GeneratorInputImplBase =
     typename select_type<
-        cond<std::is_same<TBase, Func>::value, GeneratorInput_Func<T>>,
-        cond<std::is_arithmetic<TBase>::value, GeneratorInput_Arithmetic<T>>,
-        cond<std::is_scalar<TBase>::value,     GeneratorInput_Scalar<T>>
+        cond<has_static_halide_type_method<TBase>::value, GeneratorInput_Buffer<T>>,
+        cond<std::is_same<TBase, Func>::value,            GeneratorInput_Func<T>>,
+        cond<std::is_arithmetic<TBase>::value,            GeneratorInput_Arithmetic<T>>,
+        cond<std::is_scalar<TBase>::value,                GeneratorInput_Scalar<T>>
     >::type;
 
 }  // namespace Internal
@@ -1353,6 +1445,11 @@ public:
         return get_values<ValueType>().at(0); 
     }
 
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    int dimensions() const {
+        return get_values<ValueType>().at(0).dimensions(); 
+    }
+
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     size_t size() const {
         return get_values<ValueType>().size();
@@ -1386,6 +1483,45 @@ public:
         GeneratorOutputBase::resize(size);
     }
 };
+
+template<typename T>
+class GeneratorOutput_Buffer : public GeneratorOutputImpl<T> {
+private:
+    using Super = GeneratorOutputImpl<T>;
+
+protected:
+    using TBase = typename Super::TBase;
+
+protected:
+    GeneratorOutput_Buffer(const std::string &name)
+        : Super(name, 
+                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, 
+                T::has_static_halide_type() ? T::static_halide_max_dimensions() : -1) {
+    }
+
+public:
+    Dimension dim(int i) {
+        return this->funcs().at(0).output_buffer().dim(i);
+    }
+
+    EXPORT const Dimension dim(int i) const {
+        return this->funcs().at(0).output_buffer().dim(i);
+    }
+
+    int host_alignment() const {
+        return this->funcs().at(0).output_buffer().host_alignment();
+    }
+
+    GeneratorOutput_Buffer<T> &set_host_alignment(int value) {
+        this->funcs().at(0).output_buffer().set_host_alignment(value);
+        return *this;
+    }
+
+    bool is_buffer() const override {
+        return true;
+    }
+};
+
 
 template<typename T>
 class GeneratorOutput_Func : public GeneratorOutputImpl<T> {
@@ -1426,6 +1562,7 @@ protected:
 template<typename T, typename TBase = typename std::remove_all_extents<T>::type> 
 using GeneratorOutputImplBase =
     typename select_type<
+        cond<has_static_halide_type_method<TBase>::value, GeneratorOutput_Buffer<T>>,
         cond<std::is_same<TBase, Func>::value, GeneratorOutput_Func<T>>,
         cond<std::is_arithmetic<TBase>::value, GeneratorOutput_Arithmetic<T>>
     >::type;
@@ -1647,7 +1784,7 @@ private:
         generator_name = n;
     }
 
-    EXPORT void set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs);
+    EXPORT void set_inputs(const std::vector<std::vector<StubInput>> &inputs);
 
     GeneratorBase(const GeneratorBase &) = delete;
     void operator=(const GeneratorBase &) = delete;
@@ -1893,7 +2030,7 @@ protected:
     EXPORT GeneratorStub(const GeneratorContext *context,
                   GeneratorFactory generator_factory,
                   const std::map<std::string, std::string> &generator_params,
-                  const std::vector<std::vector<Internal::FuncOrExpr>> &inputs);
+                  const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
     // TODO: identify vars used
@@ -1915,13 +2052,13 @@ protected:
     }
 
     template <typename T>
-    static std::vector<FuncOrExpr> to_func_or_expr_vector(const T &t) {
-        return { FuncOrExpr(t) };
+    static std::vector<StubInput> to_func_or_expr_vector(const T &t) {
+        return { StubInput(t) };
     }
 
     template <typename T>
-    static std::vector<FuncOrExpr> to_func_or_expr_vector(const std::vector<T> &v) {
-        std::vector<FuncOrExpr> r;
+    static std::vector<StubInput> to_func_or_expr_vector(const std::vector<T> &v) {
+        std::vector<StubInput> r;
         std::copy(v.begin(), v.end(), std::back_inserter(r));
         return r;
     }

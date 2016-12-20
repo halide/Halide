@@ -160,8 +160,14 @@ class Buffer {
      * systems. */
     using storage_T = typename std::conditional<std::is_pointer<T>::value, uint64_t, not_void_T>::type;
 
+public:
+    /** Return true if the Halide type is not void (or const void). */
+    static constexpr bool has_static_halide_type() {
+        return !T_is_void;
+    }
+
     /** Get the Halide type of T. Callers should not use the result if
-     * T is void. */
+     * has_static_halide_type() returns false. */
     static halide_type_t static_halide_type() {
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
@@ -170,7 +176,13 @@ class Buffer {
     bool manages_memory() const {
         return alloc != nullptr;
     }
+    
+    /** Return the maximum number of dimensions for this Buffer type. */
+    static constexpr int static_halide_max_dimensions() {
+        return D;
+    }
 
+private:
     /** Increment the reference count of any owned allocation */
     void incref() const {
         if (!manages_memory()) return;
