@@ -6,6 +6,7 @@ enum class BagType { Paper, Plastic };
 
 class StubTest : public Halide::Generator<StubTest> {
 public:
+    GeneratorParam<Type> untyped_buffer_output_type{ "untyped_buffer_output_type", Float(32) };
     GeneratorParam<float> float_param{ "float_param", 3.1415926535f };
     GeneratorParam<BagType> bag_type{ "bag_type",
                                       BagType::Paper,
@@ -15,6 +16,8 @@ public:
     ScheduleParam<bool> vectorize{ "vectorize", true };
     ScheduleParam<LoopLevel> intermediate_level{ "intermediate_level", "undefined" };
 
+    Input<Buffer<uint8_t>> typed_buffer_input{ "typed_buffer_input", 3 };
+    Input<Buffer<>> untyped_buffer_input{ "untyped_buffer_input" };
     Input<Func> simple_input{ "simple_input", 3 };  // require a 3-dimensional Func but leave Type unspecified
     Input<Func[]> array_input{ "array_input", 3 };  // require a 3-dimensional Func but leave Type and ArraySize unspecified
     // Note that Input<Func> does not (yet) support Tuples
@@ -24,9 +27,17 @@ public:
     Output<Func> simple_output{ "simple_output", Float(32), 3};
     Output<Func> tuple_output{"tuple_output", 3};  // require a 3-dimensional Func but leave Type(s) unspecified
     Output<Func[]> array_output{ "array_output", Int(16), 2};   // leave ArraySize unspecified
+    Output<Buffer<float>> typed_buffer_output{ "typed_buffer_output" };
+    Output<Buffer<>> untyped_buffer_output{ "untyped_buffer_output" };
 
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
+        typed_buffer_output(x, y, c) = cast<float>(typed_buffer_input(x, y, c));
+        // Note that if we are being invoked via a Stub, "untyped_buffer_output.type()" will
+        // assert-fail, because there is no type constraint set: the type
+        // will end up as whatever we infer from the values put into it. We'll use an
+        // explicit GeneratorParam to allow us to set it.
+        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output_type, untyped_buffer_input(x, y, c));
 
         // Gratuitous intermediate for the purpose of exercising
         // ScheduleParam<LoopLevel>

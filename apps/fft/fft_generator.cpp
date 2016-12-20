@@ -80,11 +80,10 @@ public:
     // Dim0: extent = size0, stride = 2
     // Dim1: extent = size1, stride = size0 * 2
     // Dim2: extent = 2, stride = 1 (real followed by imaginary components)
-    ImageParam input{Float(32), 3, "input"};
+    Input<Buffer<float>>  input{"input", 3};
+    Output<Buffer<float>> output{"output", 3};
 
-    Func build() {
-        Var c{"c"}, x{"x"}, y{"y"};
-
+    void generate() {
         _halide_user_assert(size0 > 0) << "FFT must be at least 1D\n";
 
         Fft2dDesc desc;
@@ -99,11 +98,6 @@ public:
 
         const int sign = (direction == FFTDirection::SamplesToFrequency) ? -1 : 1;
 
-        const int input_comps = (input_number_type == FFTNumberType::Real) ? 1 : 2;
-        const int output_comps = (output_number_type == FFTNumberType::Real) ? 1 : 2;
-
-        Func real_result;
-        ComplexFunc complex_result;
         if (input_number_type == FFTNumberType::Real) {
             if (direction == FFTDirection::SamplesToFrequency) {
                 // TODO: Not sure why this is necessary as ImageParam
@@ -130,32 +124,37 @@ public:
             }
         }
 
-        Func result("result");
         if (output_number_type == FFTNumberType::Real) {
             if (real_result.defined()) {
-                 result(x, y, c) = real_result(x, y);
-                 real_result.compute_at(result, y);
+                 output(x, y, c) = real_result(x, y);
             } else {
-                 result(x, y, c) = re(complex_result(x, y));
+                 output(x, y, c) = re(complex_result(x, y));
             }
         } else {
-            result(x, y, c) = select(c == 0, 
+            output(x, y, c) = select(c == 0, 
                                      re(complex_result(x, y)), 
                                      im(complex_result(x, y)));
         }
-
-        input.set_stride(0, input_comps)
-             .set_min(2, 0)
-             .set_extent(2, input_comps)
-             .set_stride(2, 1);
-
-        result.output_buffer().set_stride(0, output_comps)
-                              .set_min(2, 0)
-                              .set_extent(2, output_comps)
-                              .set_stride(2, 1);
-
-        return result;
     }
+
+    void schedule() {
+        const int input_comps = (input_number_type == FFTNumberType::Real) ? 1 : 2;
+        const int output_comps = (output_number_type == FFTNumberType::Real) ? 1 : 2;
+
+        input.dim(0).set_stride(input_comps)
+             .dim(2).set_min(0).set_extent(input_comps).set_stride(1);
+
+        output.dim(0).set_stride(output_comps)
+              .dim(2).set_min(0).set_extent(output_comps).set_stride(1);
+
+        if (real_result.defined()) {
+            real_result.compute_at(output, y);
+        }
+    }
+private:
+    Var x{"x"}, y{"y"}, c{"c"};
+    Func real_result;
+    ComplexFunc complex_result;
 };
 
 Halide::RegisterGenerator<FFTGenerator> register_fft{"fft"};

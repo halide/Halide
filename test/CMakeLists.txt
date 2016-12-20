@@ -288,6 +288,7 @@ if (WITH_TEST_GENERATORS)
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
   set(STUBTEST_GENERATOR_ARGS
+      untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3
       simple_input.type=float32
       array_input.type=float32 array_input.size=2
       int_arg.size=2
@@ -299,16 +300,18 @@ if (WITH_TEST_GENERATORS)
 
   # Tests that require additional dependencies, args, etc
   set(MDTEST_GEN_ARGS 
-      input.type=uint8 input.dim=3
-      output.type=float32,float32 output.dim=3
-      input_not_nod.type=uint8 input_not_nod.dim=3
-      input_nod.dim=3
-      input_not.type=uint8
-      array_input.size=2
-      array_i8.size=2
-      array_i16.size=2
-      array_i32.size=2
-      array_h.size=2
+      input.type=uint8 input.dim=3 
+      semityped_input_buffer.dim=3
+      untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3 
+      output.type=float32,float32 output.dim=3 
+      input_not_nod.type=uint8 input_not_nod.dim=3 
+      input_nod.dim=3 
+      input_not.type=uint8 
+      array_input.size=2 
+      array_i8.size=2 
+      array_i16.size=2 
+      array_i32.size=2 
+      array_h.size=2 
       array_outputs.size=2
   )
   halide_define_aot_test(metadata_tester
