@@ -299,6 +299,8 @@ public:
         return get()->method(std::forward<Args>(args)...);              \
     }
 
+    /** Does the same thing as the equivalent Halide::Runtime::Buffer method */
+    // @{
     HALIDE_BUFFER_FORWARD(raw_buffer)
     HALIDE_BUFFER_FORWARD_CONST(raw_buffer)
     HALIDE_BUFFER_FORWARD_CONST(dimensions)
@@ -343,9 +345,6 @@ public:
 #undef HALIDE_BUFFER_FORWARD
 #undef HALIDE_BUFFER_FORWARD_CONST
 
-    /** Other methods are forwarded but require some manual care to
-     * fix up types. */
-    // @{
     Type type() const {
         return contents->buf.type();
     }
@@ -358,11 +357,7 @@ public:
     void copy_from(const Buffer<T2> &other) {
         contents->buf.copy_from(*other.get());
     }
-    // @}
 
-    /** For non-Expr arguments, operator() on a Buffer are forwarded
-     * to the equivalent on the underlying Runtime::Buffer */
-    // @{
     template<typename ...Args>
     auto operator()(int first, Args&&... args) ->
         decltype((*get())(first, std::forward<Args>(args)...)) {
