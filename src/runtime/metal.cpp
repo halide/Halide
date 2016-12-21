@@ -30,7 +30,7 @@ WEAK mtl_buffer *new_buffer(mtl_device *device, size_t length) {
     typedef mtl_buffer *(*new_buffer_method)(objc_id device, objc_sel sel, size_t length, size_t options);
     new_buffer_method method = (new_buffer_method)&objc_msgSend;
     return (*method)(device, sel_getUid("newBufferWithLength:options:"),
-                     length, 0  /* MTLResourceOptionCPUCacheModeDefault */);
+                     length, 0  /* MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared */);
 }
 
 WEAK mtl_command_queue *new_command_queue(mtl_device *device) {
@@ -88,29 +88,29 @@ struct NSRange {
     size_t length;
 };
 
-WEAK void did_modify_range_if_supported(mtl_buffer *buffer, NSRange range) {
-  debug(NULL) << "did_modify_range_if_supported called.\n";
-    typedef bool (*responds_to_selector_method)(objc_id obj, objc_sel sel_1, objc_sel sel_2);
-    responds_to_selector_method method1 = (responds_to_selector_method)&objc_msgSend;
-    objc_sel did_modify_range_sel = sel_getUid("didModifyRange:");
-    if ((*method1)(buffer, sel_getUid("respondsToSelector:"), did_modify_range_sel)) {
-      debug(NULL) << "Sending didModifyRange method\n";
-        typedef void (*did_modify_range_method)(objc_id obj, objc_sel sel, NSRange range);
-        did_modify_range_method method2 = (did_modify_range_method)&objc_msgSend;
-        (*method2)(buffer, did_modify_range_sel, range);
-    }
+WEAK void did_modify_range(mtl_buffer *buffer, NSRange range) {
+    typedef void (*did_modify_range_method)(objc_id obj, objc_sel sel, NSRange range);
+    did_modify_range_method method = (did_modify_range_method)&objc_msgSend;
+    (*method)(buffer, sel_getUid("didModifyRange:"), range);
 }
 
-WEAK void synchronize_resource_if_supported(mtl_blit_command_encoder *encoder, mtl_buffer *buffer) {
+WEAK void synchronize_resource(mtl_blit_command_encoder *encoder, mtl_buffer *buffer) {
+    typedef void (*synchronize_resource_method)(objc_id obj, objc_sel sel, mtl_buffer *buffer);
+    synchronize_resource_method method = (synchronize_resource_method)&objc_msgSend;
+    (*method)(encoder, sel_getUid("synchronizeResource:"), buffer);
+}
+
+WEAK bool is_buffer_managed(mtl_buffer *buffer) {
     typedef bool (*responds_to_selector_method)(objc_id obj, objc_sel sel_1, objc_sel sel_2);
     responds_to_selector_method method1 = (responds_to_selector_method)&objc_msgSend;
-    objc_sel synchronize_resource_sel = sel_getUid("synchronizeResource:");
-    if ((*method1)(encoder, sel_getUid("respondsToSelector:"), synchronize_resource_sel)) {
-      debug(NULL) << "Sending synchronizeResource method\n";
-        typedef void (*synchronize_resource_method)(objc_id obj, objc_sel sel, mtl_buffer*buffer);
-        synchronize_resource_method method2 = (synchronize_resource_method)&objc_msgSend;
-        (*method2)(encoder, synchronize_resource_sel, buffer);
+    objc_sel storage_mode_sel = sel_getUid("storageMode");
+    if ((*method1)(buffer, sel_getUid("respondsToSelector:"), storage_mode_sel)) {
+        typedef int (*storage_mode_method)(objc_id obj, objc_sel sel);
+        storage_mode_method method = (storage_mode_method)&objc_msgSend;
+        int storage_mode = (*method)(buffer, sel_getUid("storageMode"));
+        return storage_mode == 1; // MTLStorageModeManaged
     }
+    return false;
 }
 
 WEAK void end_encoding(mtl_blit_command_encoder *encoder) {
@@ -459,9 +459,11 @@ WEAK void halide_metal_device_sync_internal(mtl_command_queue *queue, struct buf
     mtl_command_buffer *sync_command_buffer = new_command_buffer(queue);
     if (buffer != NULL) {
         mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
-        mtl_blit_command_encoder *blit_encoder = new_blit_command_encoder(sync_command_buffer);
-        synchronize_resource_if_supported(blit_encoder, metal_buffer);
-        end_encoding(blit_encoder);
+        if (is_buffer_managed(metal_buffer)) {
+            mtl_blit_command_encoder *blit_encoder = new_blit_command_encoder(sync_command_buffer);
+            synchronize_resource(blit_encoder, metal_buffer);
+            end_encoding(blit_encoder);
+        }
     }
     commit_command_buffer(sync_command_buffer);
     wait_until_completed(sync_command_buffer);
@@ -511,7 +513,7 @@ WEAK int halide_metal_device_release(void *user_context) {
         module_state *state = state_list;
         while (state) {
           if (state->library) {
-                debug(user_context) << "Metal - Releasing: new_library_with_source" << state->library << "\n";
+                debug(user_context) << "Metal - Releasing: new_library_with_source " << state->library << "\n";
                 release_ns_object(state->library);
                 state->library = NULL;
             }
@@ -545,23 +547,25 @@ WEAK int halide_metal_copy_to_device(void *user_context, buffer_t* buffer) {
         return metal_context.error;
     }
 
-    mtl_buffer *metal_buffer = (mtl_buffer *)halide_get_device_handle(buffer->dev);
-    size_t total_size = buf_size(buffer);
-    halide_assert(user_context, total_size != 0);
-    NSRange total_extent;
-    total_extent.location = 0;
-    total_extent.length = total_size;
-    did_modify_range_if_supported(metal_buffer, total_extent);
-    halide_metal_device_sync_internal(metal_context.queue, buffer);
-
     halide_assert(user_context, buffer->host && buffer->dev);
+
+    device_copy c = make_host_to_device_copy(buffer);
+    mtl_buffer *metal_buffer = (mtl_buffer *)c.dst;
+    c.dst = (uint64_t)buffer_contents(metal_buffer);
 
     debug(user_context) << "halide_metal_copy_to_device dev = " << (void*)buffer->dev << " metal_buffer = " << metal_buffer << " host = " << buffer->host << "\n";
 
-    device_copy c = make_host_to_device_copy(buffer);
-    c.dst = (uint64_t)buffer_contents((mtl_buffer *)c.dst);
-
     c.copy_memory(user_context);
+
+    if (is_buffer_managed(metal_buffer)) {
+        size_t total_size = buf_size(buffer);
+        halide_assert(user_context, total_size != 0);
+        NSRange total_extent;
+        total_extent.location = 0;
+        total_extent.length = total_size;
+        did_modify_range(metal_buffer, total_extent);
+    }
+    halide_metal_device_sync_internal(metal_context.queue, buffer);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -693,6 +697,9 @@ WEAK int halide_metal_run(void *user_context,
             buffer_index++;
         }
     }
+
+    // Round shared memory size up to a multiple of 16, as required by setThreadgroupMemoryLength.
+    shared_mem_bytes = (shared_mem_bytes + 0xF) & ~0xF;
     debug(user_context) << "Setting shared memory length to " << shared_mem_bytes << "\n";
     set_threadgroup_memory_length(encoder, shared_mem_bytes, 0);
 
