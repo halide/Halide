@@ -214,8 +214,8 @@ namespace Internal {
 
 /**
  * ValueTracker is an internal utility class that attempts to track and flag certain
- * obvious Stub-related errors at Halide compiletime: it tracks the constraints set
- * on any Parameter-basedd argument (i.e., Input<Buffer> and Output<Buffer>) to
+ * obvious Stub-related errors at Halide compile time: it tracks the constraints set
+ * on any Parameter-based argument (i.e., Input<Buffer> and Output<Buffer>) to
  * ensure that incompatible values aren't set. 
  *
  * e.g.: if a Generator A requires stride[0] == 1, 
