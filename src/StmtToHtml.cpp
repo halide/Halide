@@ -600,8 +600,8 @@ public:
         scope.pop(op.name);
     }
 
-    void print(const BufferRef<> &op) {
-        stream << open_div("BufferRef<>");
+    void print(const Buffer<> &op) {
+        stream << open_div("Buffer<>");
         stream << keyword("buffer ") << var(op.name());
         stream << close_div();
     }

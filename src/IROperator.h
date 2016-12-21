@@ -1957,27 +1957,6 @@ Expr saturating_cast(Expr e) {
  * maximum values of the result type. */
 EXPORT Expr saturating_cast(Type t, Expr e);
 
-
-/** An adaptor so that it's possible to access a Halide::Buffer using Exprs. */
-// @{
-namespace Internal {
-EXPORT Expr image_accessor(BufferRef<> ref, const std::vector<Expr> &args);
-}
-
-template<typename T, int D, typename ...Args,
-         typename = std::enable_if<(Internal::all_are_convertible<Expr, Args...>::value)>>
-NO_INLINE Expr image_accessor(Buffer<T, D> &im, Expr first, Args... rest) {
-    std::vector<Expr> args = {first, rest...};
-    return image_accessor(im, args);
-}
-
-template<typename T, int D>
-NO_INLINE Expr image_accessor(Buffer<T, D> &im, const std::vector<Expr> &args) {
-    return image_accessor(im.make_shared_ref(Internal::unique_name('b')), args);
-}
-
-// @}
-
 }
 
 #endif

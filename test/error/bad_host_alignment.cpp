@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Var x, y;
     ImageParam in(UInt(8), 2);
 
-    Buffer<uint8_t, 2> param_buf(11, 10);
+    Buffer<uint8_t> param_buf(11, 10);
     param_buf.crop(0, 1, 10);
 
     in.set_host_alignment(512);

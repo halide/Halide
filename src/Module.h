@@ -80,13 +80,13 @@ public:
 
     /** The declarations contained in this module. */
     // @{
-    EXPORT const std::vector<BufferRef<>> &buffers() const;
+    EXPORT const std::vector<Buffer<>> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
     // @}
 
     /** Add a declaration to this module. */
     // @{
-    EXPORT void append(const BufferRef<> &buffer);
+    EXPORT void append(const Buffer<> &buffer);
     EXPORT void append(const Internal::LoweredFunc &function);
     // @}
 

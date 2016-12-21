@@ -328,8 +328,8 @@ Stmt build_produce(Function f, const Target &target) {
                     buffers_contents_to_annotate.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
-                BufferRef<> b = arg.buffer;
-                Parameter p(b->type(), true, b->dimensions(), b.name());
+                Buffer<> b = arg.buffer;
+                Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
                 string buf_name = b.name() + ".buffer";
                 Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name, p);
@@ -820,7 +820,7 @@ string schedule_to_source(Function f,
                 if (store_var_name == Var::outermost().name()) {
                     store_var_name = "Var::outermost()";
                 }
-                ss << ".store_at(" << store_at.func().name() << ", " << store_var_name << ")";
+                ss << ".store_at(" << store_at.func() << ", " << store_var_name << ")";
             }
         }
         if (compute_at.is_root()) {
@@ -830,7 +830,7 @@ string schedule_to_source(Function f,
             if (compute_var_name == Var::outermost().name()) {
                 compute_var_name = "Var::outermost()";
             }
-            ss << ".compute_at(" << compute_at.func().name() << ", " << compute_var_name << ")";
+            ss << ".compute_at(" << compute_at.func() << ", " << compute_var_name << ")";
         }
     }
     ss << ";";

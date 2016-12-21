@@ -10,7 +10,7 @@
 bool stop = false;
 int max_threads = 1;
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 void mess_with_num_threads(void *) {
     while (!stop) {

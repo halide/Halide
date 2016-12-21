@@ -24,12 +24,19 @@ int main(int argc, char **argv) {
     // We need debug output to record object creation.
     target.set_feature(Target::Debug);
 
+    // This tests what happens when you make a shallow copy of a
+    // Runtime::Buffer and then give the copy a device
+    // allocation. This is a silly thing to do, but we should at least
+    // not leak device memory.
     {
-        Halide::Buffer<float> buf(100, 100);
+        Halide::Runtime::Buffer<float> buf(100, 100);
 
         {
-            // Make a shallow copy of the original buf, and trigger a gpu copy of it.
-            Halide::Buffer<float> copy = buf;
+            // Make a shallow copy of the original buf, put it in a
+            // Halide::Buffer, and then run a Pipeline that triggers a
+            // gpu copy of it.
+            Halide::Runtime::Buffer<float> shallow_copy = buf;
+            Halide::Buffer<float> copy(std::move(shallow_copy));
             Func f;
             Var x, y;
             f(x, y) = copy(x, y);

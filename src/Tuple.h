@@ -68,51 +68,45 @@ realize them, and they return them as a Realization. Tuples are to
 Exprs as Realizations are to Buffers. */
 class Realization {
 private:
-    std::vector<BufferRef<>> images;
+    std::vector<Buffer<>> images;
 public:
     /** The number of images in the Realization. */
     size_t size() const { return images.size(); }
 
     /** Get a const reference to one of the images. */
-    const Buffer<void, 0> &operator[](size_t x) const {
+    const Buffer<> &operator[](size_t x) const {
         user_assert(x < images.size()) << "Realization access out of bounds\n";
-        return *images[x];
+        return images[x];
     }
 
     /** Get a reference to one of the images. */
-    Buffer<void, 0> &operator[](size_t x) {
+    Buffer<> &operator[](size_t x) {
         user_assert(x < images.size()) << "Realization access out of bounds\n";
-        return *images[x];
+        return images[x];
     }
 
     /** Single-element realizations are implicitly castable to Buffers. */
-    template<typename T, int D>
-    operator Buffer<T, D>() const {
-        return *images[0];
+    template<typename T>
+    operator Buffer<T>() const {
+        return images[0];
     }
 
-    /** Construct a Realization from some Buffers. */
-    //@{
+    /** Construct a Realization that acts as a reference to some
+     * existing Buffers. The element type of the Buffers may not be
+     * const. */
     template<typename T,
-             int D,
              typename ...Args,
              typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
-    Realization(Buffer<T, D> &a, Args&&... args) {
-        images = std::vector<BufferRef<>>({
-                a.make_shared_ref(),
-                args.make_shared_ref()...
-            });
+    Realization(Buffer<T> &a, Args&&... args) {
+        images = std::vector<Buffer<>>({a, args...});
     }
-    //@}
 
     /** Construct a Realization that refers to the buffers in an
      * existing vector of Buffer<> */
-    explicit Realization(std::vector<Buffer<>> &e) {
+    explicit Realization(std::vector<Buffer<>> &e) : images(e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
-        for (Buffer<> &im : e) {
-            images.push_back(im.make_shared_ref());
-        }
     }
+
 };
 
 /** Equivalents of some standard operators for tuples. */

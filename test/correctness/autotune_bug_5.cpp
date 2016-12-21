@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Func upsampledx("upsampledx");
     Var x("x"), y("y");
 
-    Func clamped("clamped");
+    Func clamped;//("clamped");
     clamped(x, y) = input(x, y);
 
     upsampledx(x, y) = select((x % 2) == 0,
@@ -24,6 +24,7 @@ int main(int argc, char **argv) {
         .split(y, y, yi, 8)
         .reorder(yi, y, x)
         .compute_root();
+
     upsampledx.compute_at(upsampled, yi);
 
     upsampled.realize(100, 100);

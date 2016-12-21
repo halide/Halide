@@ -23,8 +23,6 @@ class ImageParam : public OutputImageParam {
     /** Helper function to initialize the Func representation of this ImageParam. */
     EXPORT void init_func();
 
-    EXPORT void set(BufferRef<> b);
-
 public:
 
     /** Construct a nullptr image parameter handle. */
@@ -40,19 +38,15 @@ public:
 
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
-    template<typename T, int D>
-    NO_INLINE void set(Buffer<T, D> &im) {
-        set(im.make_shared_ref());
-    }
+    EXPORT void set(Buffer<> im);
     // @}
 
     /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting. */
     // @{
-    EXPORT const Buffer<void, 0> &get() const;
-    EXPORT Buffer<void, 0> &get();
+    EXPORT Buffer<> get() const;
     // @}
 
-    /** Unbind any bound Image */
+    /** Unbind any bound Buffer */
     EXPORT void reset();
 
     /** Construct an expression which loads from this image

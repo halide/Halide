@@ -227,6 +227,7 @@ set(HEADER_FILES
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
+  Buffer.h
   CSE.h
   Closure.h
   CodeGen_ARM.h
@@ -375,6 +376,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
+  Buffer.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp

@@ -6,7 +6,7 @@
 #include "benchmark.h"
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 //#define cimg_display 0
 //#include "CImg.h"

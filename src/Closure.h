@@ -35,7 +35,7 @@ protected:
 
 public:
     /** Information about a buffer reference from a closure. */
-    struct BufferRef
+    struct Buffer
     {
         /** The type of the buffer referenced. */
         Type type;
@@ -52,7 +52,7 @@ public:
         /** The size of the buffer if known, otherwise zero. */
         size_t size;
 
-        BufferRef() : dimensions(0), read(false), write(false), size(0) { }
+        Buffer() : dimensions(0), read(false), write(false), size(0) { }
     };
 
 public:
@@ -71,7 +71,7 @@ public:
     std::map<std::string, Type> vars;
 
     /** External allocations referenced. */
-    std::map<std::string, BufferRef> buffers;
+    std::map<std::string, Buffer> buffers;
 
     /** The Halide names of the external symbols (in the same order as llvm_types). */
     std::vector<std::string> names() const;

@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 #include "acquire_release.h"
 
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int W = 256, H = 256;
 

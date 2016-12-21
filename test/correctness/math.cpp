@@ -92,7 +92,7 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
-        Image<type_ret> result = test_##name.realize(in.height(), target);          \
+        Buffer<type_ret> result = test_##name.realize(in.height(), target);          \
         for (int i = 0; i < in.height(); i++) {                                     \
             type_ret c_result = c_name(in(0, i), in(1, i));                         \
             assert(relatively_equal(c_result, result(i)) &&                         \

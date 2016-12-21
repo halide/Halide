@@ -472,8 +472,8 @@ public:
     EXPORT explicit Func(Internal::Function f);
 
     /** Construct a new Func to wrap a Buffer. */
-    template<typename T, int D>
-    NO_INLINE explicit Func(Buffer<T, D> &im) : Func() {
+    template<typename T>
+    NO_INLINE explicit Func(Buffer<T> &im) : Func() {
         (*this)(_) = im(_);
     }
 
