@@ -24,6 +24,18 @@
 #define ALWAYS_INLINE __attribute__((always_inline))
 #endif
 
+#ifndef EXPORT
+#if defined(_WIN32) && defined(Halide_SHARED)
+#ifdef Halide_EXPORTS
+#define EXPORT __declspec(dllexport)
+#else
+#define EXPORT __declspec(dllimport)
+#endif
+#else
+#define EXPORT
+#endif
+#endif
+
 // gcc 5.1 has a false positive warning on this code
 #if __GNUC__ == 5 && __GNUC_MINOR__ == 1
 #pragma GCC diagnostic ignored "-Warray-bounds"
@@ -42,9 +54,9 @@ namespace Halide {
 // JIT context with GPU-using pipelines.
 struct Target;
 enum class DeviceAPI;
-extern const halide_device_interface_t *get_default_device_interface_for_target(const Target &);
-extern const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &, const Target &);
-extern const Target &get_const_ref_to_jit_target_from_environment();
+extern EXPORT const halide_device_interface_t *get_default_device_interface_for_target(const Target &);
+extern EXPORT const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &, const Target &);
+extern EXPORT const Target &get_const_ref_to_jit_target_from_environment();
 
 template<typename Fn>
 void for_each_element(const buffer_t &buf, Fn &&f);
