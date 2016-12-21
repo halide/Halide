@@ -285,63 +285,63 @@ public:
     // @}
 
     // We forward numerous methods from the underlying Buffer
-#define FORWARD_CONST(method)                                           \
+#define HALIDE_BUFFER_FORWARD_CONST(method)                             \
     template<typename ...Args>                                          \
     auto method(Args&&... args) const ->                                \
         decltype(get()->method(std::forward<Args>(args)...)) {          \
         return get()->method(std::forward<Args>(args)...);              \
     }
 
-#define FORWARD(method)                                                 \
+#define HALIDE_BUFFER_FORWARD(method)                                   \
     template<typename ...Args>                                          \
     auto method(Args&&... args) ->                                      \
         decltype(get()->method(std::forward<Args>(args)...)) {          \
         return get()->method(std::forward<Args>(args)...);              \
     }
 
-    FORWARD(raw_buffer)
-    FORWARD_CONST(raw_buffer)
-    FORWARD_CONST(dimensions)
-    FORWARD_CONST(dim)
-    FORWARD_CONST(width)
-    FORWARD_CONST(height)
-    FORWARD_CONST(channels)
-    FORWARD_CONST(min)
-    FORWARD_CONST(extent)
-    FORWARD_CONST(stride)
-    FORWARD_CONST(number_of_elements)
-    FORWARD_CONST(size_in_bytes)
-    FORWARD_CONST(begin)
-    FORWARD_CONST(end)
-    FORWARD(data)
-    FORWARD_CONST(data)
-    FORWARD_CONST(contains)
-    FORWARD(crop)
-    FORWARD(slice)
-    FORWARD(embed)
-    FORWARD(set_min)
-    FORWARD(translate)
-    FORWARD(transpose)
-    FORWARD(add_dimension)
-    FORWARD(copy_to_host)
-    FORWARD(copy_to_device)
-    FORWARD_CONST(has_device_allocation)
-    FORWARD_CONST(host_dirty)
-    FORWARD_CONST(device_dirty)
-    FORWARD(set_host_dirty)
-    FORWARD(set_device_dirty)
-    FORWARD(device_sync)
-    FORWARD(device_malloc)
-    FORWARD(allocate)
-    FORWARD(deallocate)
-    FORWARD(device_deallocate)
-    FORWARD(device_free)
-    FORWARD(fill)
-    FORWARD_CONST(for_each_element)
-    FORWARD(for_each_value)
+    HALIDE_BUFFER_FORWARD(raw_buffer)
+    HALIDE_BUFFER_FORWARD_CONST(raw_buffer)
+    HALIDE_BUFFER_FORWARD_CONST(dimensions)
+    HALIDE_BUFFER_FORWARD_CONST(dim)
+    HALIDE_BUFFER_FORWARD_CONST(width)
+    HALIDE_BUFFER_FORWARD_CONST(height)
+    HALIDE_BUFFER_FORWARD_CONST(channels)
+    HALIDE_BUFFER_FORWARD_CONST(min)
+    HALIDE_BUFFER_FORWARD_CONST(extent)
+    HALIDE_BUFFER_FORWARD_CONST(stride)
+    HALIDE_BUFFER_FORWARD_CONST(number_of_elements)
+    HALIDE_BUFFER_FORWARD_CONST(size_in_bytes)
+    HALIDE_BUFFER_FORWARD_CONST(begin)
+    HALIDE_BUFFER_FORWARD_CONST(end)
+    HALIDE_BUFFER_FORWARD(data)
+    HALIDE_BUFFER_FORWARD_CONST(data)
+    HALIDE_BUFFER_FORWARD_CONST(contains)
+    HALIDE_BUFFER_FORWARD(crop)
+    HALIDE_BUFFER_FORWARD(slice)
+    HALIDE_BUFFER_FORWARD(embed)
+    HALIDE_BUFFER_FORWARD(set_min)
+    HALIDE_BUFFER_FORWARD(translate)
+    HALIDE_BUFFER_FORWARD(transpose)
+    HALIDE_BUFFER_FORWARD(add_dimension)
+    HALIDE_BUFFER_FORWARD(copy_to_host)
+    HALIDE_BUFFER_FORWARD(copy_to_device)
+    HALIDE_BUFFER_FORWARD_CONST(has_device_allocation)
+    HALIDE_BUFFER_FORWARD_CONST(host_dirty)
+    HALIDE_BUFFER_FORWARD_CONST(device_dirty)
+    HALIDE_BUFFER_FORWARD(set_host_dirty)
+    HALIDE_BUFFER_FORWARD(set_device_dirty)
+    HALIDE_BUFFER_FORWARD(device_sync)
+    HALIDE_BUFFER_FORWARD(device_malloc)
+    HALIDE_BUFFER_FORWARD(allocate)
+    HALIDE_BUFFER_FORWARD(deallocate)
+    HALIDE_BUFFER_FORWARD(device_deallocate)
+    HALIDE_BUFFER_FORWARD(device_free)
+    HALIDE_BUFFER_FORWARD(fill)
+    HALIDE_BUFFER_FORWARD_CONST(for_each_element)
+    HALIDE_BUFFER_FORWARD(for_each_value)
 
-#undef FORWARD
-#undef FORWARDCONST
+#undef HALIDE_BUFFER_FORWARD
+#undef HALIDE_BUFFER_FORWARD_CONST
 
     /** Other methods are forwarded but require some manual care to
      * fix up types. */
