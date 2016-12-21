@@ -112,6 +112,10 @@ int main(int argc, char **argv) {
     Buffer<float> b1 = untyped_buffer_output_realized;
     verify(buffer_input, 1.f, 0, b1);
 
+    Halide::Realization static_compiled_buffer_output_realized = gen.static_compiled_buffer_output.realize(kSize, kSize, 3);
+    Buffer<uint8_t> b2 = static_compiled_buffer_output_realized;
+    verify(buffer_input, 1.f, 42, b2);
+
     printf("Success!\n");
     return 0;
 }
