@@ -828,6 +828,9 @@ class VectorSubs : public IRMutator {
         // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(0, 1, lanes)]
         body = substitute(v + widening_suffix, Ramp::make(0, 1, lanes), body);
 
+        // The variable itself could still exist inside an inner scalarized block.
+        body = substitute(v, Variable::make(Int(32), var), body);
+
         stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
     }
 

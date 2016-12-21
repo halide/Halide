@@ -133,6 +133,38 @@ bool propagate_indeterminate_expression(Expr e0, Expr e1, Expr e2, Type t, Expr 
            propagate_indeterminate_expression(e2, t, expr);
 }
 
+class ExprIsPure : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        if (!op->image.defined() && !op->param.defined()) {
+            // It's a load from an internal buffer, which could
+            // mutate.
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    bool result = true;
+};
+
+/** Test if an expression's value could be different at different
+ * points in the code. */
+bool expr_is_pure(Expr e) {
+    ExprIsPure pure;
+    e.accept(&pure);
+    return pure.result;
+}
+
 }
 
 class Simplify : public IRMutator {
@@ -4581,7 +4613,8 @@ private:
             stmt = first;
         } else if (let_first &&
                    let_rest &&
-                   equal(let_first->value, let_rest->value)) {
+                   equal(let_first->value, let_rest->value) &&
+                   expr_is_pure(let_first->value)) {
 
             // Do both first and rest start with the same let statement (occurs when unrolling).
             Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
@@ -4596,7 +4629,8 @@ private:
             stmt = LetStmt::make(var_name, let_first->value, new_block);
         } else if (if_first &&
                    if_rest &&
-                   equal(if_first->condition, if_rest->condition)) {
+                   equal(if_first->condition, if_rest->condition) &&
+                   expr_is_pure(if_first->condition)) {
             // Two ifs with matching conditions
             Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
             Stmt else_case;
@@ -4612,6 +4646,8 @@ private:
         } else if (if_first &&
                    if_rest &&
                    !if_rest->else_case.defined() &&
+                   expr_is_pure(if_first->condition) &&
+                   expr_is_pure(if_rest->condition) &&
                    is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
             // Two ifs where the second condition is tighter than
             // the first condition.  The second if can be nested

@@ -1501,22 +1501,23 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 type_suffix(op->args[1], op->args[2], false),
                                 op->args);
             return;
-        } else if (op->is_intrinsic(Call::bool_to_mask)) {
-            internal_assert(op->args.size() == 1);
-            if (op->args[0].type().is_vector()) {
-                // The argument is already a mask of the right width.
-                op->args[0].accept(this);
-            } else {
-                // The argument is a scalar bool. Converting it to
-                // all-ones or all-zeros is sufficient for HVX masks
-                // (mux just looks at the LSB of each byte).
-                Expr equiv = -Cast::make(op->type, op->args[0]);
-                equiv.accept(this);
-            }
-            return;
         } else if (op->is_intrinsic(Call::cast_mask)) {
             internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
+    }
+    if (op->is_intrinsic(Call::bool_to_mask)) {
+        internal_assert(op->args.size() == 1);
+        if (op->args[0].type().is_vector()) {
+            // The argument is already a mask of the right width.
+            op->args[0].accept(this);
+        } else {
+            // The argument is a scalar bool. Converting it to
+            // all-ones or all-zeros is sufficient for HVX masks
+            // (mux just looks at the LSB of each byte).
+            Expr equiv = -Cast::make(op->type, op->args[0]);
+            equiv.accept(this);
+        }
+        return;
     }
 
     if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {

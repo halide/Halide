@@ -65,6 +65,9 @@ struct device_copy {
 WEAK void device_copy::copy_memory(void *user_context) const {
     // If this is a zero copy buffer, these pointers will be the same.
     if (src != dst) {
+        debug(user_context) << "device_copy::copy_memory: copying "
+            << (extent[0] * extent[1] * extent[2] * extent[3] * chunk_size)
+            << " bytes.\n";
         // TODO: Is this 32-bit or 64-bit? Leaving signed for now
         // in case negative strides.
         for (int w = 0; w < (int)extent[3]; w++) {
