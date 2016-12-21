@@ -1462,6 +1462,15 @@ Stage &Stage::shader(VarOrRVar x, VarOrRVar y, VarOrRVar c, DeviceAPI device_api
     user_assert(constant_bounds)
         << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
     */
+
+    // Check to make sure the stage uses only naked Vars or RVars in the LHS.
+    for (auto v: this->definition.args()) {
+        user_assert(v.as<Variable>())
+            << "Unsupported expression in LHS of an update definition: " << v << "\n"
+            << "GLSL code generation only supports naked Vars/RVars in update definitions,\n"
+            << "e.g. f(r.x, y, c) = ...\n";
+    }
+
     return *this;
 }
 
