@@ -178,11 +178,15 @@ Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
 
     // Call it once to initialize the halide runtime stuff
     halide_blur(in, out);
+    // Copy-out result if it's device buffer and dirty.
+    out.copy_to_host();
 
     t = benchmark(10, 1, [&]() {
         // Compute the same region of the output as blur_fast (i.e., we're
         // still being sloppy with boundary conditions)
         halide_blur(in, out);
+        // Sync device execution if any.
+        out.device_sync();
     });
 
     return out;

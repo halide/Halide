@@ -237,9 +237,8 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, buffer_t *buf) {
     debug(user_context) << "OpenGLCompute: halide_openglcompute_device_malloc (user_context: "
                         << user_context << ", buf: " << buf << ")\n";
 
-    if (!global_state.initialized) {
-        error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_copy_to_device).";
-        return 1;
+    if (int error = halide_openglcompute_init(user_context)) {
+        return error;
     }
 
     size_t size = buf_size(buf);

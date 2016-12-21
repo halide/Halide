@@ -303,8 +303,9 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     llvm::LLVMContext &context = to.getContext();
 
     bool use_soft_float_abi = false;
-    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi))
+    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi)) {
         to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
+    }
 
     std::string mcpu;
     if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
