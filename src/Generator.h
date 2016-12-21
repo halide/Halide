@@ -1714,6 +1714,31 @@ protected:
 
 public:
 
+    // Allow assignment from a Buffer<> to an Output<Buffer<>>;
+    // this allows us to use a statically-compiled buffer inside a Generator
+    // to assign to an output.
+    template<typename T2, int D2>
+    NO_INLINE GeneratorOutput_Buffer<T> &operator=(const Buffer<T2, D2> &buffer) {
+        user_assert(T::can_convert_from(buffer)) 
+            << "Cannot assign to the Output \"" << this->name() 
+            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+
+        if (this->types_defined()) {
+            user_assert(Type(buffer.type()) == this->type()) 
+                << "Output should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
+        }
+        if (this->dimensions_defined()) {
+            user_assert(buffer.dimensions() == this->dimensions()) 
+                << "Output should have dim=" << this->dimensions() << " but saw dim=" << buffer.dimensions() << "\n";
+        }
+
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        user_assert(!this->funcs_.at(0).defined());
+        this->funcs_.at(0)(_) = buffer(_);
+
+        return *this;
+    }
+
     // Allow assignment from a StubOutputBuffer to an Output<Buffer>;
     // this allows us to pipeline the results of a Stub to the results
     // of the enclosing Generator.
@@ -1837,6 +1862,12 @@ public:
 
     GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, t, d) {
+    }
+
+    template <typename T2, int D2>
+    GeneratorOutput<T> &operator=(const Buffer<T2, D2> &buffer) {
+        Super::operator=(buffer);
+        return *this;
     }
 
     template <typename T2, int D2>

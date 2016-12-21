@@ -4,6 +4,19 @@ namespace {
 
 enum class BagType { Paper, Plastic };
 
+template<typename Type, int size = 32, int dim = 3>
+Halide::Buffer<Type> make_image(int extra) {
+    Halide::Buffer<Type> im(size, size, dim);
+    for (int x = 0; x < size; x++) {
+        for (int y = 0; y < size; y++) {
+            for (int c = 0; c < dim; c++) {
+                im(x, y, c) = static_cast<Type>(x + y + c + extra);
+            }
+        }
+    }
+    return im;
+}
+
 class StubTest : public Halide::Generator<StubTest> {
 public:
     GeneratorParam<Type> untyped_buffer_output_type{ "untyped_buffer_output_type", Float(32) };
@@ -29,6 +42,7 @@ public:
     Output<Func[]> array_output{ "array_output", Int(16), 2};   // leave ArraySize unspecified
     Output<Buffer<float>> typed_buffer_output{ "typed_buffer_output" };
     Output<Buffer<>> untyped_buffer_output{ "untyped_buffer_output" };
+    Output<Buffer<uint8_t>> static_compiled_buffer_output{ "static_compiled_buffer_output", 3 };
 
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
@@ -51,6 +65,11 @@ public:
         for (size_t i = 0; i < array_input.size(); ++i) {
             array_output[i](x, y) = cast<int16_t>(array_input[i](x, y, 0) + int_arg[i]);
         }
+
+        // This should be compiled into the Generator product itself,
+        // and not produce another input for the Stub or AOT filter.
+        Buffer<uint8_t> static_compiled_buffer = make_image<uint8_t>(42);
+        static_compiled_buffer_output = static_compiled_buffer;
     }
 
     void schedule() {

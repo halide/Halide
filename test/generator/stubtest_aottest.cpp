@@ -53,6 +53,7 @@ int main(int argc, char **argv) {
     Buffer<float> simple_output(kSize, kSize, 3);
     Buffer<float> tuple_output0(kSize, kSize, 3), tuple_output1(kSize, kSize, 3);
     Buffer<int16_t> array_output0(kSize, kSize), array_output1(kSize, kSize);
+    Buffer<uint8_t> static_compiled_buffer_output(kSize, kSize, 3);
 
     stubtest(
         buffer_input,
@@ -66,7 +67,8 @@ int main(int argc, char **argv) {
         tuple_output0, tuple_output1, 
         array_output0, array_output1,
         typed_buffer_output,
-        untyped_buffer_output
+        untyped_buffer_output,
+        static_compiled_buffer_output
     );
 
     verify(buffer_input, 1.f, 0, typed_buffer_output);
@@ -77,6 +79,7 @@ int main(int argc, char **argv) {
     verify(array_input0, 1.25f, 33, tuple_output1);
     verify(array_input0, 1.0f, 33, array_output0);
     verify(array_input1, 1.0f, 66, array_output1);
+    verify(buffer_input, 1.0f, 42, static_compiled_buffer_output);
 
     printf("Success!\n");
     return 0;
