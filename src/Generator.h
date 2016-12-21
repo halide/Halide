@@ -881,6 +881,8 @@ decltype(!(T)0) operator!(const GeneratorParam<T> &a) { return !(T)a; }
 
 namespace Internal {
 
+template<typename T2> class GeneratorInput_Buffer;
+
 enum class IOKind { Scalar, Function, Buffer };
 
 /**
