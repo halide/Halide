@@ -5,7 +5,7 @@
 #include "mandelbrot.h"
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
     Buffer<int> output(100, 30);

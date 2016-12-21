@@ -1,7 +1,7 @@
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 template<typename T1, typename T2>
 void check_equal_shape(const Buffer<T1> &a, const Buffer<T2> &b) {
@@ -121,41 +121,6 @@ int main(int argc, char **argv) {
                 abort();
             }
         });
-    }
-
-    {
-        // Check shared references to stack buffers persist;
-        BufferRef<float> ref;
-        buffer_t *stack_ptr;
-        {
-            Buffer<float> buf(100, 100);
-            ref = buf.make_shared_ref();
-            stack_ptr = buf.raw_buffer();
-            // Check the reference points to the stack buffer.
-            assert(ref->raw_buffer() == stack_ptr);
-        }
-        // Check the buffer_t has been moved off-stack.
-        assert(ref->raw_buffer() != stack_ptr);
-        // Check the destructor didn't actually free the allocation
-        assert(ref->data() != nullptr);
-    }
-
-    {
-        // Check that it's OK for the Buffer to outlive the shared
-        // references too. valgrind should catch any anomalies here.
-        Buffer<float> buf(100, 100);
-        std::string name1, name2;
-        {
-            BufferRef<float> b1 = buf.make_shared_ref("name1");
-            name1 = b1.name();
-        }
-        {
-            BufferRef<float> b2 = buf.make_shared_ref("name2");
-            name2 = b2.name();
-        }
-        assert(buf.data());
-        assert(name1 == "name1");
-        assert(name2 == "name2");
     }
 
     printf("Success!\n");

@@ -9,9 +9,8 @@
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
+#include "Buffer.h"
 #include "runtime/HalideRuntime.h"
-#include "runtime/HalideBuffer.h"
-
 
 namespace Halide {
 
@@ -74,9 +73,9 @@ struct Argument {
             << "Scalar max must not be defined for Buffer Arguments";
     }
 
-    template<typename T, int D>
-    Argument(Buffer<T, D> im) :
-        name(im.make_shared_ref().name()),
+    template<typename T>
+    Argument(Buffer<T> im) :
+        name(im.name()),
         kind(InputBuffer),
         dimensions(im.dimensions()),
         type(im.type()) {}

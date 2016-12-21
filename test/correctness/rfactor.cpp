@@ -401,9 +401,7 @@ int histogram_rfactor_test(bool compile_module) {
             reference_hist[uint8_t(in(x, y))] += 1;
         }
     }
-    // Ask the Buffer for a shared ref to it, so that we know its
-    // name. The pipeline will use the same shared ref.
-    BufferRef<> in_buf = in.make_shared_ref("input");
+
 
     Func hist("hist"), g("g");
     Var x("x");
@@ -429,7 +427,7 @@ int histogram_rfactor_test(bool compile_module) {
         CallGraphs expected = {
             {g.name(), {hist.name()}},
             {hist.name(), {intm.name(), hist.name()}},
-            {intm.name(), {in_buf.name(), intm.name()}},
+            {intm.name(), {in.name(), intm.name()}},
 
         };
         if (check_call_graphs(checker.calls, expected) != 0) {

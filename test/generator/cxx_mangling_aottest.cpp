@@ -8,7 +8,7 @@
 #include "cxx_mangling.h"
 #include "cxx_mangling_gpu.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int32_t extract_value_global(int32_t *arg) {
     return *arg;
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
 
     int r = HalideTest::cxx_mangling(input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
                                     -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
-                                    int_ptr, const_int_ptr, void_ptr, const_void_ptr, 
+                                    int_ptr, const_int_ptr, void_ptr, const_void_ptr,
                                     string_ptr, const_string_ptr, result);
     if (r != 0) {
         fprintf(stderr, "Failure!\n");

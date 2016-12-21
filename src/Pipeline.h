@@ -57,7 +57,7 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<BufferRef<>> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
+    std::vector<Buffer<>> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
     std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,

@@ -6,7 +6,7 @@
 #include "HalideBuffer.h"
 #include "user_context_insanity.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int num_launcher_tasks = 1000;
 

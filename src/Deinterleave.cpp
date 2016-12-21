@@ -598,7 +598,7 @@ class Interleaver : public IRMutator {
             std::vector<int> offsets(stores.size());
 
             std::string load_name;
-            BufferRef<> load_image;
+            Buffer<> load_image;
             Parameter load_param;
             for (size_t i = 0; i < stores.size(); ++i) {
                 const Ramp *ri = stores[i].as<Store>()->index.as<Ramp>();
@@ -731,9 +731,9 @@ void deinterleave_vector_test() {
     check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
-    check(Load::make(ramp.type(), "buf", ramp, BufferRef<>(), Parameter()),
-          Load::make(ramp_a.type(), "buf", ramp_a, BufferRef<>(), Parameter()),
-          Load::make(ramp_b.type(), "buf", ramp_b, BufferRef<>(), Parameter()));
+    check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter()),
+          Load::make(ramp_a.type(), "buf", ramp_a, Buffer<>(), Parameter()),
+          Load::make(ramp_b.type(), "buf", ramp_b, Buffer<>(), Parameter()));
 
     std::cout << "deinterleave_vector test passed" << std::endl;
 }

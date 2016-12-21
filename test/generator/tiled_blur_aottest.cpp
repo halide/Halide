@@ -6,7 +6,7 @@
 
 #include "tiled_blur.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int W = 80, H = 80;
 

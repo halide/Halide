@@ -82,7 +82,7 @@ struct ModuleContents {
     mutable RefCount ref_count;
     std::string name;
     Target target;
-    std::vector<BufferRef<>> buffers;
+    std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
 };
 
@@ -124,7 +124,7 @@ const std::string &Module::name() const {
     return contents->name;
 }
 
-const std::vector<BufferRef<>> &Module::buffers() const {
+const std::vector<Buffer<>> &Module::buffers() const {
     return contents->buffers;
 }
 
@@ -132,7 +132,7 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
-void Module::append(const BufferRef<> &buffer) {
+void Module::append(const Buffer<> &buffer) {
     contents->buffers.push_back(buffer);
 }
 

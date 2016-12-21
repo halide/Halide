@@ -16,7 +16,7 @@ using std::pair;
 class FindBuffers : public IRGraphVisitor {
 public:
     struct Result {
-        BufferRef<> image;
+        Buffer<> image;
         Parameter param;
         Type type;
         int dimensions;
@@ -146,7 +146,7 @@ Stmt add_image_checks(Stmt s,
 
     for (pair<const string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
-        BufferRef<> &image = buf.second.image;
+        Buffer<> &image = buf.second.image;
         Parameter &param = buf.second.param;
         Type type = buf.second.type;
         int dimensions = buf.second.dimensions;
@@ -387,8 +387,8 @@ Stmt add_image_checks(Stmt s,
                         << "as the first output buffer.\n";
 
                     stride_constrained = param.stride_constraint(i);
-                } else if (image.defined() && (int)i < image->dimensions()) {
-                    stride_constrained = image->dim(i).stride();
+                } else if (image.defined() && (int)i < image.dimensions()) {
+                    stride_constrained = image.dim(i).stride();
                 }
 
                 std::string min0_name = buffer_name + ".0.min." + dim;
@@ -404,10 +404,10 @@ Stmt add_image_checks(Stmt s,
                 } else {
                     extent_constrained = Variable::make(Int(32), extent0_name);
                 }
-            } else if (image.defined() && (int)i < image->dimensions()) {
-                stride_constrained = image->dim(i).stride();
-                extent_constrained = image->dim(i).extent();
-                min_constrained = image->dim(i).min();
+            } else if (image.defined() && (int)i < image.dimensions()) {
+                stride_constrained = image.dim(i).stride();
+                extent_constrained = image.dim(i).extent();
+                min_constrained = image.dim(i).min();
             } else if (param.defined()) {
                 stride_constrained = param.stride_constraint(i);
                 extent_constrained = param.extent_constraint(i);

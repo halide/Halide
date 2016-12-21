@@ -4,7 +4,7 @@
 #include "HalideBuffer.h"
 #include "stubtest.h"
 
-using Halide::Buffer;
+using Halide::Runtime::Buffer;
 
 const int kSize = 32;
 
@@ -52,13 +52,13 @@ int main(int argc, char **argv) {
     Buffer<int16_t> array_output0(kSize, kSize), array_output1(kSize, kSize);
 
     stubtest(
-        simple_input, 
-        array_input0, array_input1, 
-        1.25f, 
-        33, 
-        66, 
-        simple_output, 
-        tuple_output0, tuple_output1, 
+        simple_input,
+        array_input0, array_input1,
+        1.25f,
+        33,
+        66,
+        simple_output,
+        tuple_output0, tuple_output1,
         array_output0, array_output1
     );
 

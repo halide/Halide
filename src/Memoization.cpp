@@ -28,8 +28,8 @@ public:
             for (size_t i = 0; i < extern_args.size(); i++) {
                 if (extern_args[i].is_buffer()) {
                     // Function with an extern definition
-                    record(Halide::Internal::Parameter(extern_args[i].buffer->type(), true,
-                                                       extern_args[i].buffer->dimensions(),
+                    record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
+                                                       extern_args[i].buffer.dimensions(),
                                                        extern_args[i].buffer.name()));
                 } else if (extern_args[i].is_image_param()) {
                     record(extern_args[i].image_param);
@@ -182,7 +182,7 @@ class KeyInfo {
 #if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(UInt(8), key_name, index, BufferRef<>(), Parameter())},
+                               {Load::make(UInt(8), key_name, index, Buffer<>(), Parameter())},
                                Call::PureIntrinsic);
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
@@ -307,7 +307,7 @@ public:
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), BufferRef<>(), Parameter())},
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter())},
                                   Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -330,7 +330,7 @@ public:
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), BufferRef<>(), Parameter())},
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter())},
                                   Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));

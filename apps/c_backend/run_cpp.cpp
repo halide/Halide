@@ -6,7 +6,7 @@
 #include "pipeline_cpp_native.h"
 #include "pipeline_cpp_cpp.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 extern "C" int an_extern_c_func(int a1, float a2) {
     return (int)(a1 + a2);

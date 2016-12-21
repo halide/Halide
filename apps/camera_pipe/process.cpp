@@ -12,7 +12,8 @@
 #include <cstdlib>
 #include <cassert>
 
-using namespace Halide;
+using namespace Halide::Runtime;
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc < 7) {
@@ -26,7 +27,7 @@ int main(int argc, char **argv) {
 #endif
 
     fprintf(stderr, "input: %s\n", argv[1]);
-    Buffer<uint16_t> input = Tools::load_image(argv[1]);
+    Buffer<uint16_t> input = load_image(argv[1]);
     fprintf(stderr, "       %d %d\n", input.width(), input.height());
     Buffer<uint8_t> output(((input.width() - 32)/32)*32, ((input.height() - 24)/32)*32, 3);
 
@@ -69,7 +70,7 @@ int main(int argc, char **argv) {
     });
     fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
     fprintf(stderr, "output: %s\n", argv[6]);
-    Tools::save_image(output, argv[6]);
+    save_image(output, argv[6]);
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
     Buffer<uint8_t> output_c(output.width(), output.height(), output.channels());
@@ -79,7 +80,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "C++:\t%gus\n", best * 1e6);
     if (argc > 7) {
         fprintf(stderr, "output_c: %s\n", argv[7]);
-        Tools::save_image(output_c, argv[7]);
+        save_image(output_c, argv[7]);
     }
     fprintf(stderr, "        %d %d\n", output_c.width(), output_c.height());
 
@@ -90,7 +91,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "ASM:\t%gus\n", best * 1e6);
     if (argc > 8) {
         fprintf(stderr, "output_asm: %s\n", argv[8]);
-        Tools::save_image(output_asm, argv[8]);
+        save_image(output_asm, argv[8]);
     }
     fprintf(stderr, "        %d %d\n", output_asm.width(), output_asm.height());
 
