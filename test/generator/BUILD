@@ -112,6 +112,9 @@ halide_library(
 _METADATA_TESTER_GENERATOR_ARGS = " ".join([
     "input.type=uint8",
     "input.dim=3",
+    "semityped_input_buffer.dim=3",
+    "untyped_input_buffer.type=uint8",
+    "untyped_input_buffer.dim=3",
     "output.type=float32,float32",
     "output.dim=3",
     "input_not_nod.type=uint8",
@@ -207,6 +210,8 @@ halide_library(
     name = "stubtest",
     generator = ":stubtest_generator",
     generator_args = " ".join([
+        "untyped_buffer_input.type=uint8",
+        "untyped_buffer_input.dim=3",
         "simple_input.type=float32",
         "array_input.type=float32", 
         "array_input.size=2",
