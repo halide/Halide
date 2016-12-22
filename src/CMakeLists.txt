@@ -330,6 +330,7 @@ set(HEADER_FILES
   SkipStages.h
   SlidingWindow.h
   Solve.h
+  SplitTuples.h
   StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
@@ -338,7 +339,6 @@ set(HEADER_FILES
   Tracing.h
   TrimNoOps.h
   Tuple.h
-  TupleSplitting.h
   Type.h
   UnifyDuplicateLets.h
   UniquifyVariableNames.h
@@ -473,6 +473,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   SkipStages.cpp
   SlidingWindow.cpp
   Solve.cpp
+  SplitTuples.cpp
   StmtToHtml.cpp
   StorageFlattening.cpp
   StorageFolding.cpp
@@ -481,7 +482,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Tracing.cpp
   TrimNoOps.cpp
   Tuple.cpp
-  TupleSplitting.cpp
   Type.cpp
   UnifyDuplicateLets.cpp
   UniquifyVariableNames.cpp

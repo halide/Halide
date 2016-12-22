@@ -1,5 +1,5 @@
-#ifndef HALIDE_TUPLE_SPLITTING_H
-#define HALIDE_TUPLE_SPLITTING_H
+#ifndef HALIDE_SPLIT_TUPLES_H
+#define HALIDE_SPLIT_TUPLES_H
 
 #include "Expr.h"
 #include "Function.h"
