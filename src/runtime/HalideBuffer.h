@@ -51,14 +51,6 @@ struct halide_dimension_t {
 namespace Halide {
 namespace Runtime {
 
-// Forward declare some methods that are needed when using Buffer in a
-// JIT context with GPU-using pipelines.
-struct Target;
-enum class DeviceAPI;
-extern EXPORT const halide_device_interface_t *get_default_device_interface_for_target(const Target &);
-extern EXPORT const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &, const Target &);
-extern EXPORT const Target &get_const_ref_to_jit_target_from_environment();
-
 template<typename Fn>
 void for_each_element(const buffer_t &buf, Fn &&f);
 
@@ -1220,34 +1212,8 @@ public:
         return 0;
     }
 
-    /** Only use this method when jitting */
-    int copy_to_device(const Target &t = get_const_ref_to_jit_target_from_environment()) {
-        if (host_dirty()) {
-            return halide_copy_to_device(nullptr, &buf, get_default_device_interface_for_target(t));
-        }
-        return 0;
-    }
-
-    /** Only use this method when jitting */
-    int copy_to_device(const DeviceAPI &d, const Target &t = get_const_ref_to_jit_target_from_environment()) {
-        if (host_dirty()) {
-            return halide_copy_to_device(nullptr, &buf, get_device_interface_for_device_api(d, t));
-        }
-        return 0;
-    }
-
     int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         return halide_device_malloc(ctx, &buf, device_interface);
-    }
-
-    /** Only use this method when jitting */
-    int device_malloc(const Target &t = get_const_ref_to_jit_target_from_environment()) {
-        return halide_device_malloc(nullptr, &buf, get_default_device_interface_for_target(t));
-    }
-
-    /** Only use this method when jitting */
-    int device_malloc(const DeviceAPI &d, const Target &t = get_const_ref_to_jit_target_from_environment()) {
-        return halide_device_malloc(nullptr, &buf, get_device_interface_for_device_api(d, t));
     }
 
     int device_free(void *ctx = nullptr) {
