@@ -1,9 +1,23 @@
 #include "Halide.h"
 #include "stubtest.stub.h"
 
+using Halide::Buffer;
 using StubNS1::StubNS2::StubTest;
 
 namespace {
+
+template<typename Type, int size = 32>
+Buffer<Type> make_image() {
+    Buffer<Type> im(size, size, 3);
+    for (int x = 0; x < size; x++) {
+        for (int y = 0; y < size; y++) {
+            for (int c = 0; c < 3; c++) {
+                im(x, y, c) = static_cast<Type>(x + y + c);
+            }
+        }
+    }
+    return im;
+}
 
 class StubUser : public Halide::Generator<StubUser> {
 public:
@@ -16,11 +30,13 @@ public:
 
     void generate() {
 
+        Buffer<uint8_t> constant_image = make_image<uint8_t>();
+
         // We'll explicitly fill in the struct fields by name, just to show
         // it as an option. (Alternately, we could fill it in by using
         // C++11 aggregate-initialization syntax.)
         StubTest::Inputs inputs;
-        inputs.typed_buffer_input = input;
+        inputs.typed_buffer_input = constant_image;
         inputs.untyped_buffer_input = input;
         inputs.simple_input = input;
         inputs.array_input = { input };

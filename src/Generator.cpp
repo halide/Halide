@@ -1587,7 +1587,17 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
             check_matching_type_and_dim({p.type()}, p.dimensions());
-            funcs_.push_back(make_param_func(p, name()));
+            auto b = p.get_buffer();
+            if (b.defined()) {
+                // If the Parameter has an explicit BufferPtr set, bind directly to
+                // it (this happens in JIT mode and also with statically-compiled 
+                // Buffers)
+                Func f(name() + "_im");
+                f(_) = b(_);
+                funcs_.push_back(f);
+            } else {
+                funcs_.push_back(make_param_func(p, name()));
+            }
             parameters_.push_back(p);
         } else {
             auto e = in.expr();
