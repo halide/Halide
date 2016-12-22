@@ -21,7 +21,8 @@ int main(int argc, char **argv) {
     f.set_error_handler(&halide_error);
     error_occurred = false;
 
-    f.realize(Realization(x_out, sin_x_out));
+    Realization r(x_out, sin_x_out);
+    f.realize(r);
 
     if (!error_occurred) {
         printf("There should have been an error\n");

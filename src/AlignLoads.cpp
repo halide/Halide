@@ -43,6 +43,15 @@ private:
                                  index, load->image, load->param));
     }
 
+    void visit(const Call *op) {
+        // We shouldn't mess with load inside an address_of.
+        if (op->is_intrinsic(Call::address_of)) {
+            expr = op;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const Load *op) {
         if (!op->type.is_vector()) {
             // Nothing to do for scalar loads.

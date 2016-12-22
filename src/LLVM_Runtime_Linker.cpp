@@ -12,19 +12,16 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
 
-    auto ret_val = llvm::parseBitcodeFile(bitcode_buffer, *context);
 #if LLVM_VERSION >= 40
-    llvm::Error Err = ret_val.takeError();
-    handleAllErrors(std::move(Err), [&](llvm::ErrorInfoBase &EIB) {
-        internal_error << "Could not parse built-in bitcode file " << id
-                       << " llvm error is " <<  EIB.message() << "\n";
-    });
+    auto ret_val = llvm::expectedToErrorOr(
+        llvm::parseBitcodeFile(bitcode_buffer, *context));
 #else
+    auto ret_val = llvm::parseBitcodeFile(bitcode_buffer, *context);
+#endif
     if (!ret_val) {
         internal_error << "Could not parse built-in bitcode file " << id
                        << " llvm error is " << ret_val.getError() << "\n";
     }
-#endif
 
     std::unique_ptr<llvm::Module> result(std::move(*ret_val));
     result->setModuleIdentifier(id);
@@ -740,7 +737,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.has_feature(Target::MSAN)) {
                 modules.push_back(get_initmod_msan(c, bits_64, debug));
             } else {
-                modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));                
+                modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
             }
         }
 

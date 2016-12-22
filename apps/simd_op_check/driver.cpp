@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include "filter_headers.h"
 
+extern "C" void *memalign(size_t alignment, size_t size);
+
 struct filter {
     const char *name;
     int (*fn)(buffer_t *, // float32
