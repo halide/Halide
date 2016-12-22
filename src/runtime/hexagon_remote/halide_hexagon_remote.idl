@@ -30,4 +30,16 @@ interface halide_hexagon_remote
 
     // Retrieve the current profiling Func ID
     long poll_profiler_state(rout long func, rout long threads);
+
+    // Two more ways for powering on HVX
+    long power_hvx_on_mode(in long mode);
+    long power_hvx_on_perf(in long set_mips,
+                           in unsigned long mipsPerThread,
+                           in unsigned long mipsTotal,
+                           in long set_bus_bw,
+                           in unsigned long bwMegabytesPerSec,
+                           in unsigned long busbwUsagePercentage,
+                           in long set_latency,
+                           in long latency);
+
 };

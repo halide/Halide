@@ -10,6 +10,7 @@
 #include <vector>
 #include <cassert>
 #include <atomic>
+#include <algorithm>
 #include <stdint.h>
 #include <string.h>
 
@@ -21,6 +22,18 @@
 #define ALWAYS_INLINE __forceinline
 #else
 #define ALWAYS_INLINE __attribute__((always_inline))
+#endif
+
+#ifndef EXPORT
+#if defined(_WIN32) && defined(Halide_SHARED)
+#ifdef Halide_EXPORTS
+#define EXPORT __declspec(dllexport)
+#else
+#define EXPORT __declspec(dllimport)
+#endif
+#else
+#define EXPORT
+#endif
 #endif
 
 // gcc 5.1 has a false positive warning on this code
@@ -36,6 +49,14 @@ struct halide_dimension_t {
 };
 
 namespace Halide {
+
+// Forward declare some methods that are needed when using Buffer in a
+// JIT context with GPU-using pipelines.
+struct Target;
+enum class DeviceAPI;
+extern EXPORT const halide_device_interface_t *get_default_device_interface_for_target(const Target &);
+extern EXPORT const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &, const Target &);
+extern EXPORT const Target &get_const_ref_to_jit_target_from_environment();
 
 template<typename Fn>
 void for_each_element(const buffer_t &buf, Fn &&f);
@@ -456,22 +477,31 @@ public:
     /** Give Buffers access to the members of Buffers of different dimensionalities and types. */
     template<typename T2, int D2> friend class Buffer;
 
-    /** Fail an assertion at runtime or compile-time if an Buffer<T, D>
-     * cannot be constructed from some other Buffer type. */
+    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
+     * If this can be determined at compile time, fail with a static assert; otherwise
+     * return a boolean based on runtime typing. */
     template<typename T2, int D2>
-    static void assert_can_convert_from(const Buffer<T2, D2> &other) {
+    static bool can_convert_from(const Buffer<T2, D2> &other) {
         static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
                       "Can't convert from a Buffer<const T> to a Buffer<T>");
         static_assert(std::is_same<typename std::remove_const<T>::type,
                                    typename std::remove_const<T2>::type>::value ||
                       T_is_void || Buffer<T2, D2>::T_is_void,
                       "type mismatch constructing Buffer");
-        if (D < D2) {
-            assert(other.dimensions() <= D);
+        if (D < D2 && other.dimensions() > D) {
+            return false;
         }
-        if (Buffer<T2, D2>::T_is_void && !T_is_void) {
-            assert(other.ty == static_halide_type());
+        if (Buffer<T2, D2>::T_is_void && !T_is_void && other.ty != static_halide_type()) {
+            return false;
         }
+        return true;
+    }
+
+    /** Fail an assertion at runtime or compile-time if an Buffer<T, D>
+     * cannot be constructed from some other Buffer type. */
+    template<typename T2, int D2>
+    static void assert_can_convert_from(const Buffer<T2, D2> &other) {
+        assert(can_convert_from(other));
     }
 
     /** Copy constructor. Does not copy underlying data. */
@@ -957,6 +987,7 @@ public:
         } else {
             assert(false && "type().bytes() must be 1, 2, 4, or 8");
         }
+        set_host_dirty();
     }
 
     /** Make an image that refers to a sub-range of this image along
@@ -1197,6 +1228,36 @@ public:
             return halide_copy_to_device(ctx, &buf, device_interface);
         }
         return 0;
+    }
+
+    /** Only use this method when jitting */
+    int copy_to_device(const Target &t = get_const_ref_to_jit_target_from_environment()) {
+        if (host_dirty()) {
+            return halide_copy_to_device(nullptr, &buf, get_default_device_interface_for_target(t));
+        }
+        return 0;
+    }
+
+    /** Only use this method when jitting */
+    int copy_to_device(const DeviceAPI &d, const Target &t = get_const_ref_to_jit_target_from_environment()) {
+        if (host_dirty()) {
+            return halide_copy_to_device(nullptr, &buf, get_device_interface_for_device_api(d, t));
+        }
+        return 0;
+    }
+
+    int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
+        return halide_device_malloc(ctx, &buf, device_interface);
+    }
+
+    /** Only use this method when jitting */
+    int device_malloc(const Target &t = get_const_ref_to_jit_target_from_environment()) {
+        return halide_device_malloc(nullptr, &buf, get_default_device_interface_for_target(t));
+    }
+
+    /** Only use this method when jitting */
+    int device_malloc(const DeviceAPI &d, const Target &t = get_const_ref_to_jit_target_from_environment()) {
+        return halide_device_malloc(nullptr, &buf, get_device_interface_for_device_api(d, t));
     }
 
     int device_free(void *ctx = nullptr) {
@@ -1463,6 +1524,7 @@ public:
 
     void fill(not_void_T val) {
         for_each_value([=](T &v) {v = val;});
+        set_host_dirty();
     }
 
 private:
@@ -1604,7 +1666,7 @@ struct for_each_element_helpers {
     ALWAYS_INLINE
     static auto for_each_element_variadic(int, int d, Fn &&f, const buffer_t &buf, Args... args)
         -> decltype(f(args...)) {
-        f(args...);
+        return f(args...);
     }
 
     /** If the above overload is impossible, we add an outer loop over
