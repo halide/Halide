@@ -137,7 +137,7 @@ Target calculate_host_target() {
         const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
         const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
-            initial_features.push_back(Target::AVX2);            
+            initial_features.push_back(Target::AVX2);
         }
         if ((info2[1] & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
@@ -313,11 +313,6 @@ Target get_jit_target_from_environment() {
             << "Host is " << host.to_string() << ".\n";
         return t;
     }
-}
-
-const Target &get_const_ref_to_jit_target_from_environment() {
-    static Target t = get_jit_target_from_environment();
-    return t;
 }
 
 namespace {
