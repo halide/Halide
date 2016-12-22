@@ -45,12 +45,12 @@
 #include "SlidingWindow.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
+#include "SplitTuples.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "Substitute.h"
 #include "Tracing.h"
 #include "TrimNoOps.h"
-#include "TupleSplitting.h"
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
 #include "UnrollLoops.h"
@@ -180,7 +180,7 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
         s = inject_image_intrinsics(s, env);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
     }
-
+    
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";

@@ -345,6 +345,7 @@ SOURCE_FILES = \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
+  SplitTuples.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -353,7 +354,6 @@ SOURCE_FILES = \
   Tracing.cpp \
   TrimNoOps.cpp \
   Tuple.cpp \
-  TupleSplitting.cpp \
   Type.cpp \
   UnifyDuplicateLets.cpp \
   UniquifyVariableNames.cpp \
@@ -477,6 +477,7 @@ HEADER_FILES = \
   SkipStages.h \
   SlidingWindow.h \
   Solve.h \
+  SplitTuples.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
@@ -485,7 +486,6 @@ HEADER_FILES = \
   Tracing.h \
   TrimNoOps.h \
   Tuple.h \
-  TupleSplitting.h \
   Type.h \
   UnifyDuplicateLets.h \
   UniquifyVariableNames.h \

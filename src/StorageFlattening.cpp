@@ -15,6 +15,7 @@ using std::string;
 using std::vector;
 using std::map;
 using std::pair;
+using std::set;
 
 namespace {
     
@@ -267,9 +268,17 @@ class ConnectOutputBuffers : public IRMutator {
         if (it != env.end()) {
             const Function &f = it->second.first;
             int idx = it->second.second;
-            output_buf = f.output_buffers()[idx];
-        }
 
+            // We only want to do this for actual pipeline outputs,
+            // even though every Function has an output buffer. Any
+            // constraints you set on the output buffer of a Func that
+            // isn't actually an output is ignored. This is a language
+            // wart.
+            if (outputs.count(f.name())) {
+                output_buf = f.output_buffers()[idx];
+            }
+        }                        
+        
         if (output_buf.defined()) {
             stmt = Store::make(op->name, op->value, op->index, output_buf);
         } else {
@@ -277,10 +286,16 @@ class ConnectOutputBuffers : public IRMutator {
         }
     }
 
-    const std::map<string, pair<Function, int>> &env;
-
+    const map<string, pair<Function, int>> &env;
+    set<string> outputs;
+    
 public:
-    ConnectOutputBuffers(const std::map<string, pair<Function, int>> &e) : env(e) {}
+    ConnectOutputBuffers(const std::map<string, pair<Function, int>> &e,
+                         const vector<Function> &o) : env(e) {
+        for (auto &f : o) {
+            outputs.insert(f.name());
+        }
+    }
 };
 
 }  // namespace
@@ -305,7 +320,7 @@ Stmt storage_flattening(Stmt s,
 
     s = FlattenDimensions(outputs, tuple_env, target).mutate(s);
     s = PromoteToMemoryType().mutate(s);
-    s = ConnectOutputBuffers(tuple_env).mutate(s);
+    s = ConnectOutputBuffers(tuple_env, outputs).mutate(s);
     return s;
 }
 
