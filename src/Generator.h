@@ -201,6 +201,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "BufferPtr.h"
 #include "Func.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
@@ -889,10 +890,10 @@ enum class IOKind { Scalar, Function, Buffer };
  * StubInputBuffer is the placeholder that a Stub uses when it requires 
  * a Buffer for an input (rather than merely a Func or Expr). It is constructed
  * to allow only two possible sorts of input:
- * -- Assignment of an Input<Buffer<>>, with compatible type and dimensions;
- * this is useful in both AOT and JIT compilation modes.
- * -- Assignment of a Buffer<>, with compatible type and dimensions;
- * this is useful only in JIT compilation modes (and shouldn't be usable otherwise).
+ * -- Assignment of an Input<Buffer<>>, with compatible type and dimensions,
+ * essentially allowing us to pipe a parameter from an enclosing Generator to an internal Stub.
+ * -- Assignment of a Buffer<>, with compatible type and dimensions,
+ * causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
  */
 template<typename T = void, int D = 4>
 class StubInputBuffer {
@@ -921,9 +922,10 @@ class StubInputBuffer {
 public:
     StubInputBuffer() {}
 
-    // *not* explicit -- this ctor should only be used when jitting.
-    // Note that Buffer arguments are always converted to a static type of 
-    // Buffer<void> (but retain their dynamic type-and-dimensions internally).    
+    // *not* explicit -- this ctor should only be used when you want
+    // to pass a literal Buffer<> for a Stub Input; this Buffer<> will be
+    // compiled into the Generator's product, rather than becoming
+    // a runtime Parameter.
     template<typename T2, int D2>
     StubInputBuffer(const Buffer<T2, D2> &b) : parameter_(parameter_from_buffer(b)) {}
 };
@@ -964,10 +966,11 @@ public:
  * StubOutputBuffer is the placeholder that a Stub uses when it requires 
  * a Buffer for an output (rather than merely a Func). It is constructed
  * to allow only two possible sorts of things:
- * -- Assignment to an Output<Buffer<>>, with compatible type and dimensions;
- * this is useful in both AOT and JIT compilation modes.
+ * -- Assignment to an Output<Buffer<>>, with compatible type and dimensions,
+ * essentially allowing us to pipe a parameter from the result of a Stub to an 
+ * enclosing Generator
  * -- Realization into a Buffer<>; this is useful only in JIT compilation modes 
- * (and shouldn't be usable otherwise).
+ * (and shouldn't be usable otherwise)
  * 
  * It is deliberate that StubOutputBuffer is not (easily) convertible to Func.
  */
@@ -986,22 +989,20 @@ public:
 // of the expected/required kind.
 class StubInput {
     const IOKind kind_;
+    // Exactly one of the following fields should be defined:
     const Parameter parameter_;
     const Func func_;
     const Expr expr_;
 public:
     // *not* explicit. 
-    StubInput(const StubInputBuffer<> &b) : StubInput(b.parameter_) {}
+    template<typename T2, int D2>
+    StubInput(const StubInputBuffer<T2, D2> &b) : kind_(IOKind::Buffer), parameter_(b.parameter_) {}
     StubInput(const Func &f) : kind_(IOKind::Function), func_(f) {}
     StubInput(const Expr &e) : kind_(IOKind::Scalar), expr_(e) {}
 
 private:
     friend class GeneratorInputBase;
     friend class GeneratorStub;
-
-    StubInput(const Parameter &p) : kind_(IOKind::Buffer), parameter_(p) {
-        internal_assert(p.is_buffer());
-    }
 
     IOKind kind() const {
         return kind_;
@@ -2348,7 +2349,7 @@ protected:
 
     template<typename T = void, int D = 4>
     static std::vector<StubInput> to_stub_input_vector(const StubInputBuffer<T, D> &b) {
-        return { StubInput(b.parameter_) };
+        return { StubInput(b) };
     }
 
     template <typename T>
