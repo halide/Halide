@@ -289,14 +289,14 @@ public:
 #define HALIDE_BUFFER_FORWARD_CONST(method)                             \
     template<typename ...Args>                                          \
     auto method(Args&&... args) const ->                                \
-        decltype(get()->method(std::forward<Args>(args)...)) {          \
+        decltype(((const Runtime::Buffer<T> &)Runtime::Buffer<T>()).method(std::forward<Args>(args)...)) { \
         return get()->method(std::forward<Args>(args)...);              \
     }
 
 #define HALIDE_BUFFER_FORWARD(method)                                   \
     template<typename ...Args>                                          \
     auto method(Args&&... args) ->                                      \
-        decltype(get()->method(std::forward<Args>(args)...)) {          \
+        decltype(Runtime::Buffer<T>().method(std::forward<Args>(args)...)) { \
         return get()->method(std::forward<Args>(args)...);              \
     }
 
