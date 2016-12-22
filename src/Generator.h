@@ -202,8 +202,8 @@
 #include <vector>
 
 #include "Func.h"
-#include "ObjectInstanceRegistry.h"
 #include "Introspection.h"
+#include "ObjectInstanceRegistry.h"
 #include "Target.h"
 
 namespace Halide {
@@ -844,30 +844,34 @@ namespace Internal {
 
 enum class IOKind { Scalar, Function };
 
-// This is a union class that allows for convenient initialization of Stub Inputs
+// This is a union-like class that allows for convenient initialization of Stub Inputs
 // via C++11 initializer-list syntax; it is only used in situations where the
 // downstream consumer will be able to explicitly check that each value is
 // of the expected/required kind.
-class FuncOrExpr {
+class StubInput {
     const IOKind kind_;
-    const Halide::Func func_;
-    const Halide::Expr expr_;
+    const Func func_;
+    const Expr expr_;
 public:
-    // *not* explicit 
-    FuncOrExpr(const Func &f) : kind_(IOKind::Function), func_(f), expr_(Expr()) {}
-    FuncOrExpr(const Expr &e) : kind_(IOKind::Scalar), func_(Func()), expr_(e) {}
+    // *not* explicit. 
+    StubInput(const Func &f) : kind_(IOKind::Function), func_(f) {}
+    StubInput(const Expr &e) : kind_(IOKind::Scalar), expr_(e) {}
+
+private:
+    friend class GeneratorInputBase;
+    friend class GeneratorStub;
 
     IOKind kind() const {
         return kind_;
     }
 
     Func func() const {
-        internal_assert(kind_ == IOKind::Function) << "Expected Func, got Expr";
+        internal_assert(kind_ == IOKind::Function);
         return func_;
     }
 
     Expr expr() const {
-        internal_assert(kind_ == IOKind::Scalar) << "Expected Expr, got Func";
+        internal_assert(kind_ == IOKind::Scalar);
         return expr_;
     }
 };
@@ -974,11 +978,15 @@ protected:
     std::vector<Parameter> parameters_;
 
     EXPORT void init_internals();
-    EXPORT void set_inputs(const std::vector<FuncOrExpr> &inputs);
+    EXPORT void set_inputs(const std::vector<StubInput> &inputs);
 
     EXPORT virtual void set_def_min_max();
 
     EXPORT void verify_internals() const override;
+
+    friend class StubEmitter;
+
+    virtual std::string get_c_type() const = 0;
 
 private:
     EXPORT void init_parameters();
@@ -1053,6 +1061,10 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
+    std::string get_c_type() const override {
+        return "Func";
+    }
+
 public:
     GeneratorInput_Func(const std::string &name, const Type &t, int d)
         : Super(name, IOKind::Function, {t}, d) {
@@ -1121,6 +1133,10 @@ protected:
         for (Parameter &p : this->parameters_) {
             p.set_scalar<TBase>(def_);
         }
+    }
+
+    std::string get_c_type() const override {
+        return "Expr";
     }
 
 public:
@@ -1220,7 +1236,7 @@ protected:
     // since we can't use std::enable_if on ctors, define the argument to be one that
     // can only be properly resolved for TBase=Func.
     struct Unused;
-    using IntIfFunc =
+    using IntIfNonScalar =
         typename Internal::select_type<
             Internal::cond<std::is_same<TBase, Func>::value, int>,
             Internal::cond<true,                             Unused>
@@ -1258,7 +1274,7 @@ public:
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
-    GeneratorInput(const std::string &name, IntIfFunc d)
+    GeneratorInput(const std::string &name, IntIfNonScalar d)
         : Super(name, d) {
     }
 
@@ -1272,7 +1288,7 @@ public:
 
     // Avoid ambiguity between Func-with-dim and int-with-default
     //template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
-    GeneratorInput(size_t array_size, const std::string &name, IntIfFunc d)
+    GeneratorInput(size_t array_size, const std::string &name, IntIfNonScalar d)
         : Super(array_size, name, d) {
     }
 
@@ -1287,20 +1303,27 @@ class GeneratorOutputBase : public GIOBase {
 protected:
     EXPORT GeneratorOutputBase(size_t array_size, 
                         const std::string &name, 
+                        IOKind kind, 
                         const std::vector<Type> &t, 
                         int d);
 
     EXPORT GeneratorOutputBase(const std::string &name, 
+                               IOKind kind, 
                                const std::vector<Type> &t, 
                                int d)
-      : GeneratorOutputBase(1, name, t, d) {}
+      : GeneratorOutputBase(1, name, kind, t, d) {}
 
     EXPORT ~GeneratorOutputBase() override;
 
     friend class GeneratorBase;
+    friend class StubEmitter;
 
     EXPORT void init_internals();
     EXPORT void resize(size_t size);
+
+    virtual std::string get_c_type() const {
+        return "Func";
+    }
 };
 
 template<typename T>
@@ -1317,24 +1340,24 @@ protected:
         // Only allow T2 not-an-array
         !std::is_array<T2>::value
     >::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, const std::vector<Type> &t, int d)
-        : GeneratorOutputBase(name, t, d) {
+    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+        : GeneratorOutputBase(name, kind, t, d) {
     }
 
     template <typename T2 = T, typename std::enable_if<
         // Only allow T2[kSomeConst]
         std::is_array<T2>::value && std::rank<T2>::value == 1 && (std::extent<T2, 0>::value > 0)
     >::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, const std::vector<Type> &t, int d)
-        : GeneratorOutputBase(std::extent<T2, 0>::value, name, t, d) {
+    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+        : GeneratorOutputBase(std::extent<T2, 0>::value, name, kind, t, d) {
     }
 
     template <typename T2 = T, typename std::enable_if<
         // Only allow T2[]
         std::is_array<T2>::value && std::rank<T2>::value == 1 && std::extent<T2, 0>::value == 0
     >::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, const std::vector<Type> &t, int d)
-        : GeneratorOutputBase(-1, name, t, d) {
+    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+        : GeneratorOutputBase(-1, name, kind, t, d) {
     }
 
 public:
@@ -1397,11 +1420,11 @@ protected:
 
 protected:
     GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d)
-        : Super(name, t, d) {
+        : Super(name, IOKind::Function, t, d) {
     }
 
     GeneratorOutput_Func(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
-        : Super(array_size, name, t, d) {
+        : Super(array_size, name, IOKind::Function, t, d) {
     }
 };
 
@@ -1415,11 +1438,11 @@ protected:
 
 protected:
     explicit GeneratorOutput_Arithmetic(const std::string &name) 
-        : Super(name, {type_of<TBase>()}, 0) {
+        : Super(name, IOKind::Function, {type_of<TBase>()}, 0) {
     }
 
     GeneratorOutput_Arithmetic(size_t array_size, const std::string &name) 
-        : Super(array_size, name, {type_of<TBase>()}, 0) {
+        : Super(array_size, name, IOKind::Function, {type_of<TBase>()}, 0) {
     }
 };
 
@@ -1600,7 +1623,11 @@ protected:
     EXPORT virtual void call_schedule() = 0;
 
     EXPORT void pre_build();
+    EXPORT void post_build();
     EXPORT void pre_generate();
+    EXPORT void post_generate();
+    EXPORT void pre_schedule();
+    EXPORT void post_schedule();
     EXPORT Pipeline produce_pipeline();
 
     template<typename T>
@@ -1629,7 +1656,6 @@ private:
     std::string generator_name;
 
     EXPORT void build_params(bool force = false);
-    EXPORT void init_inputs_and_outputs();
 
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods
@@ -1647,7 +1673,7 @@ private:
         generator_name = n;
     }
 
-    EXPORT void set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs);
+    EXPORT void set_inputs(const std::vector<std::vector<StubInput>> &inputs);
 
     GeneratorBase(const GeneratorBase &) = delete;
     void operator=(const GeneratorBase &) = delete;
@@ -1748,6 +1774,7 @@ private:
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
         pre_build();
         Pipeline p = ((T *)this)->build();
+        post_build();
         build_pipeline_called = true;
         return p;
     }
@@ -1773,12 +1800,11 @@ private:
     template <typename T2 = T,
               typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
     void call_generate_impl() {
-        user_assert(!generate_called) << "You may not call the generate() method more than once per instance.";
         typedef typename std::result_of<decltype(&T::generate)(T)>::type GenerateRetType;
         static_assert(std::is_void<GenerateRetType>::value, "generate() must return void");
         pre_generate();
         ((T *)this)->generate();
-        generate_called = true;
+        post_generate();
     }
 
     // Implementations for call_schedule_impl(), specialized on whether we
@@ -1793,12 +1819,11 @@ private:
     template <typename T2 = T,
               typename std::enable_if<has_schedule_method<T2>::value>::type * = nullptr>
     void call_schedule_impl() {
-        user_assert(generate_called) << "You must call the generate() method before calling the schedule() method.";
-        user_assert(!schedule_called) << "You may not call the schedule() method more than once per instance.";
         typedef typename std::result_of<decltype(&T::schedule)(T)>::type ScheduleRetType;
         static_assert(std::is_void<ScheduleRetType>::value, "schedule() must return void");
+        pre_schedule();
         ((T *)this)->schedule();
-        schedule_called = true;
+        post_schedule();
     }
 
 protected:
@@ -1833,7 +1858,7 @@ namespace Internal {
 class GeneratorStub : public NamesInterface {
 public:
     // default ctor
-    GeneratorStub() {}
+    GeneratorStub() = default;
 
     // move constructor
     GeneratorStub(GeneratorStub&& that) : generator(std::move(that.generator)) {}
@@ -1847,11 +1872,8 @@ public:
     Target get_target() const { return generator->get_target(); }
 
     // schedule method
-    void schedule(const std::map<std::string, std::string> &schedule_params,
-                  const std::map<std::string, LoopLevel> &schedule_params_looplevels) {
-        generator->set_schedule_param_values(schedule_params, schedule_params_looplevels);
-        generator->call_schedule();
-    }
+    EXPORT void schedule(const std::map<std::string, std::string> &schedule_params,
+                         const std::map<std::string, LoopLevel> &schedule_params_looplevels);
 
     // Overloads for first output
     operator Func() const { 
@@ -1893,15 +1915,15 @@ protected:
     EXPORT GeneratorStub(const GeneratorContext *context,
                   GeneratorFactory generator_factory,
                   const std::map<std::string, std::string> &generator_params,
-                  const std::vector<std::vector<Internal::FuncOrExpr>> &inputs);
+                  const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
     // TODO: identify vars used
-    Func get_output(const std::string &n) { 
+    Func get_output(const std::string &n) const { 
         return generator->get_output(n); 
     }
 
-    std::vector<Func> get_output_vector(const std::string &n) { 
+    std::vector<Func> get_output_vector(const std::string &n) const { 
         return generator->get_output_vector(n); 
     }
 
@@ -1914,19 +1936,22 @@ protected:
         return (double)Ratio::num / (double)Ratio::den;
     }
 
-    template <typename T>
-    static std::vector<FuncOrExpr> to_func_or_expr_vector(const T &t) {
-        return { FuncOrExpr(t) };
+    static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
+        return { StubInput(e) };
+    }
+
+    static std::vector<StubInput> to_stub_input_vector(const Func &f) {
+        return { StubInput(f) };
     }
 
     template <typename T>
-    static std::vector<FuncOrExpr> to_func_or_expr_vector(const std::vector<T> &v) {
-        std::vector<FuncOrExpr> r;
+    static std::vector<StubInput> to_stub_input_vector(const std::vector<T> &v) {
+        std::vector<StubInput> r;
         std::copy(v.begin(), v.end(), std::back_inserter(r));
         return r;
     }
 
-    EXPORT void verify_same_funcs(Func a, Func b);
+    EXPORT void verify_same_funcs(const Func &a, const Func &b);
     EXPORT void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
 
 private:

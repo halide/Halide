@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon().vectorize(x, 16);
     }
-    f.output_buffer().set_stride(0, Expr());
+    f.output_buffer().dim(0).set_stride(Expr());
     f.realize(out);
 
     // Put some data in the full host buffer, avoiding the region

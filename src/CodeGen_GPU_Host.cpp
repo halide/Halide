@@ -135,7 +135,7 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
                                                  const std::string &simple_name,
-                                                 const std::string &/* extern_name */) {
+                                                 const std::string &extern_name) {
     function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
@@ -144,7 +144,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     }
 
     // Call the base implementation to create the function.
-    CodeGen_CPU::compile_func(f, f.name, f.name);
+    CodeGen_CPU::compile_func(f, simple_name, extern_name);
 
     // We need to insert code after the existing entry block, so that
     // the destructor stack slots exist before we do the assertions
@@ -392,8 +392,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             // store the size of the argument. BufferPtr arguments get
             // the dev field, which is 64-bits.
-            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits();
-            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
+            int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
+            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
                                  builder->CreateConstGEP2_32(
                                     gpu_arg_sizes_arr_type,
                                     gpu_arg_sizes_arr,

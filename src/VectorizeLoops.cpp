@@ -12,6 +12,7 @@
 #include "Solve.h"
 #include "Simplify.h"
 #include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
 
 namespace Halide {
 namespace Internal {
@@ -212,6 +213,146 @@ public:
         var(Variable::make(Int(32), v)), alloc(a), lanes(l) {}
 };
 
+class UsesGPUVars : public IRVisitor {
+private:
+    using IRVisitor::visit;
+    void visit(const Variable *op) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            debug(3) << "Found gpu loop var: " << op->name << "\n";
+            uses_gpu = true;
+        }
+    }
+public:
+    bool uses_gpu = false;
+};
+
+bool uses_gpu_vars(Expr s) {
+    UsesGPUVars uses;
+    s.accept(&uses);
+    return uses.uses_gpu;
+}
+
+// Wrap a vectorized predicate around a Load/Store node.
+class PredicateLoadStore : public IRMutator {
+    string var;
+    Expr vector_predicate;
+    bool in_hexagon;
+    const Target &target;
+    int lanes;
+    bool valid;
+    bool vectorized;
+
+    using IRMutator::visit;
+
+    bool should_predicate_store_load(int bit_size) {
+        if (in_hexagon) {
+            internal_assert(target.features_any_of({Target::HVX_64, Target::HVX_128}))
+                << "We are inside a hexagon loop, but the target doesn't have hexagon's features\n";
+            return true;
+        } else if (target.arch == Target::X86) {
+            // Should only attempt to predicate store/load if the lane size is
+            // no less than 4
+            return (bit_size == 32) && (lanes >= 4);
+        }
+        // For other architecture, do not predicate vector load/store
+        return false;
+    }
+
+    void visit(const Load *op) {
+        valid = valid && should_predicate_store_load(op->type.bits());
+        if (!valid) {
+            expr = op;
+            return;
+        }
+        if (!op->index.type().is_scalar()) {
+            Expr src = Call::make(Handle().with_lanes(lanes), Call::address_of, {Expr(op)}, Call::Intrinsic);
+            expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
+            vectorized = true;
+        } else if (expr_uses_var(op->index, var)) {
+            Expr index = Broadcast::make(op->index, lanes);
+            Expr src = Call::make(Handle().with_lanes(lanes), Call::address_of,
+                                  {Load::make(op->type, op->name, index, op->image, op->param)},
+                                  Call::Intrinsic);
+            expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
+            vectorized = true;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Store *op) {
+        valid = valid && should_predicate_store_load(op->value.type().bits());
+        if (!valid) {
+            stmt = op;
+            return;
+        }
+        if (!op->index.type().is_scalar()) {
+            internal_assert(op->index.type().lanes() == lanes);
+            internal_assert(op->value.type().lanes() == lanes);
+            Expr value = mutate(op->value);
+            Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
+                                   {Load::make(op->value.type(), op->name, op->index, BufferPtr(), op->param)},
+                                   Call::Intrinsic);
+            stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
+                                             {dest, vector_predicate, value},
+                                             Call::Intrinsic));
+            vectorized = true;
+        } else if (expr_uses_var(op->index, var)) {
+            Expr value = Broadcast::make(op->value, lanes);
+            Expr index = Broadcast::make(op->index, lanes);
+            Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
+                                   {Load::make(value.type(), op->name, index, BufferPtr(), op->param)},
+                                   Call::Intrinsic);
+            stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
+                                             {dest, vector_predicate, mutate(value)},
+                                             Call::Intrinsic));
+            vectorized = true;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    Expr merge_predicate(Expr pred, Expr new_pred) {
+        if (pred.type().lanes() == new_pred.type().lanes()) {
+            Expr res = simplify(pred && new_pred);
+            return res;
+        }
+        valid = false;
+        return pred;
+    }
+
+    void visit(const Call *op) {
+        if (!valid) {
+            IRMutator::visit(op);
+            return;
+        }
+        if (op->is_intrinsic(Call::predicated_store) || op->is_intrinsic(Call::predicated_load)) {
+            vector<Expr> new_args(op->args);
+            new_args[1] = merge_predicate(op->args[1], vector_predicate);
+            if (!valid) {
+                expr = op;
+                return;
+            }
+            expr = Call::make(op->type, op->name, new_args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+            vectorized = true;
+        } else {
+            valid = valid && op->is_pure();
+            expr = op;
+        }
+    }
+
+public:
+    PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t) :
+            var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
+            lanes(vpred.type().lanes()), valid(true), vectorized(false) {
+        internal_assert(lanes > 1);
+    }
+
+    bool is_vectorized() const  {
+        return valid && vectorized;
+    }
+};
 
 // Substitutes a vector for a scalar var in a Stmt. Used on the
 // body of every vectorized loop.
@@ -221,6 +362,10 @@ class VectorSubs : public IRMutator {
 
     // What we're replacing it with. Usually a ramp.
     Expr replacement;
+
+    const Target &target;
+
+    bool in_hexagon; // Are we inside the hexagon loop?
 
     // A suffix to attach to widened variables.
     string widening_suffix;
@@ -512,15 +657,35 @@ class VectorSubs : public IRMutator {
         debug(3) << "Vectorizing over " << var << "\n"
                  << "Old: " << op->condition << "\n"
                  << "New: " << cond << "\n";
+
+        Stmt then_case = mutate(op->then_case);
+        Stmt else_case = mutate(op->else_case);
+
         if (lanes > 1) {
             // We have an if statement with a vector condition,
             // which would mean control flow divergence within the
             // SIMD lanes.
 
+            bool vectorize_predicate = !uses_gpu_vars(cond);
+            Stmt predicated_stmt;
+            if (vectorize_predicate) {
+                PredicateLoadStore p(var, cond, in_hexagon, target);
+                predicated_stmt = p.mutate(then_case);
+                vectorize_predicate = p.is_vectorized();
+            }
+            if (vectorize_predicate && else_case.defined()) {
+                PredicateLoadStore p(var, !cond, in_hexagon, target);
+                predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
+                vectorize_predicate = p.is_vectorized();
+            }
+
+            debug(4) << "IfThenElse should vectorize predicate over var " << var << "? " << vectorize_predicate << "; cond: " << cond << "\n";
+            debug(4) << "Predicated stmt:\n" << predicated_stmt << "\n";
+
             // First check if the condition is marked as likely.
             const Call *c = cond.as<Call>();
             if (c && (c->is_intrinsic(Call::likely) ||
-                      c->is_intrinsic(Call::likely_if_innermost))) {
+                c->is_intrinsic(Call::likely_if_innermost))) {
 
                 // The meaning of the likely intrinsic is that
                 // Halide should optimize for the case in which
@@ -533,27 +698,38 @@ class VectorSubs : public IRMutator {
                 all_true = Call::make(Bool(), c->name,
                                       {all_true}, Call::PureIntrinsic);
 
-                // We should strip the likelies from the case
-                // that's going to scalarize, because it's no
-                // longer likely.
-                Stmt without_likelies =
-                    IfThenElse::make(op->condition.as<Call>()->args[0],
-                                     op->then_case, op->else_case);
-
-                stmt =
-                    IfThenElse::make(all_true,
-                                     mutate(op->then_case),
-                                     scalarize(without_likelies));
+                if (!vectorize_predicate) {
+                    // We should strip the likelies from the case
+                    // that's going to scalarize, because it's no
+                    // longer likely.
+                    Stmt without_likelies =
+                        IfThenElse::make(op->condition.as<Call>()->args[0],
+                                         op->then_case, op->else_case);
+                    stmt =
+                        IfThenElse::make(all_true,
+                                         then_case,
+                                         scalarize(without_likelies));
+                    debug(4) << "...With all_true likely: \n" << stmt << "\n";
+                } else {
+                    stmt =
+                        IfThenElse::make(all_true,
+                                         then_case,
+                                         predicated_stmt);
+                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                }
             } else {
-                // It's some arbitrary vector condition. Scalarize
-                // it.
-                stmt = scalarize(op);
+                // It's some arbitrary vector condition.
+                if (!vectorize_predicate) {
+                    debug(4) << "...Scalarizing vector predicate: \n" << stmt << "\n";
+                    stmt = scalarize(op);
+                } else {
+                    stmt = predicated_stmt;
+                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                }
             }
         } else {
             // It's an if statement on a scalar, we're ok to vectorize the innards.
             debug(3) << "Not scalarizing if then else\n";
-            Stmt then_case = mutate(op->then_case);
-            Stmt else_case = mutate(op->else_case);
             if (cond.same_as(op->condition) &&
                 then_case.same_as(op->then_case) &&
                 else_case.same_as(op->else_case)) {
@@ -640,10 +816,20 @@ class VectorSubs : public IRMutator {
         Stmt body = op->body;
 
         // Rewrite loads and stores to this allocation like so:
-        // foo[x] -> foo[x*lanes + var]
-        body = RewriteAccessToVectorAlloc(var, op->name, lanes).mutate(body);
+        // foo[x] -> foo[x*lanes + v]
+        string v = unique_name('v');
+        body = RewriteAccessToVectorAlloc(v, op->name, lanes).mutate(body);
 
+        scope.push(v, Ramp::make(0, 1, lanes));
         body = mutate(body);
+        scope.pop(v);
+
+        // Replace the widened 'v' with the actual ramp
+        // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(0, 1, lanes)]
+        body = substitute(v + widening_suffix, Ramp::make(0, 1, lanes), body);
+
+        // The variable itself could still exist inside an inner scalarized block.
+        body = substitute(v, Variable::make(Int(32), var), body);
 
         stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
     }
@@ -698,16 +884,25 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(string v, Expr r) : var(v), replacement(r) {
+    VectorSubs(string v, Expr r, bool in_hexagon, const Target &t) :
+            var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
         widening_suffix = ".x" + std::to_string(replacement.type().lanes());
     }
 };
 
 // Vectorize all loops marked as such in a Stmt
 class VectorizeLoops : public IRMutator {
+    const Target &target;
+    bool in_hexagon;
+
     using IRMutator::visit;
 
     void visit(const For *for_loop) {
+        bool old_in_hexagon = in_hexagon;
+        if (for_loop->device_api == DeviceAPI::Hexagon) {
+            in_hexagon = true;
+        }
+
         if (for_loop->for_type == ForType::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
@@ -717,28 +912,27 @@ class VectorizeLoops : public IRMutator {
                            << "constant extent > 1\n";
             }
 
-            Expr for_var = Variable::make(Int(32), for_loop->name);
-
-            Stmt body = for_loop->body;
-            if (!is_zero(for_loop->min)) {
-                Expr adjusted = for_var + for_loop->min;
-                body = substitute(for_loop->name, adjusted, for_loop->body);
-            }
-
             // Replace the var with a ramp within the body
-            Expr replacement = Ramp::make(0, 1, extent->value);
-            stmt = VectorSubs(for_loop->name, replacement).mutate(body);
+            Expr for_var = Variable::make(Int(32), for_loop->name);
+            Expr replacement = Ramp::make(for_loop->min, 1, extent->value);
+            stmt = VectorSubs(for_loop->name, replacement, in_hexagon, target).mutate(for_loop->body);
         } else {
             IRMutator::visit(for_loop);
         }
+
+        if (for_loop->device_api == DeviceAPI::Hexagon) {
+            in_hexagon = old_in_hexagon;
+        }
     }
 
+public:
+    VectorizeLoops(const Target &t) : target(t), in_hexagon(false) {}
 };
 
 } // Anonymous namespace
 
-Stmt vectorize_loops(Stmt s) {
-    return VectorizeLoops().mutate(s);
+Stmt vectorize_loops(Stmt s, const Target &t) {
+    return VectorizeLoops(t).mutate(s);
 }
 
 }
