@@ -63,7 +63,7 @@ _HALIDE_TARGET_CONFIG_INFO = [
     # Special case: Android-ARMEABI. Note that we are using an illegal Target
     # string for Halide; this is intentional. It allows us to add another
     # config_setting to match the armeabi-without-v7a required for certain build
-    # scenarios; we special-case this in _select_multitarget to translate it 
+    # scenarios; we special-case this in _select_multitarget to translate it
     # back into a legal Halide target.
     #
     # Note that this won't produce a build that is useful (it will SIGILL on
@@ -93,8 +93,17 @@ _HALIDE_TARGET_MAP_DEFAULT = {
 }
 
 
+def halide_library_default_target_map():
+  return _HALIDE_TARGET_MAP_DEFAULT
+
+
+_HALIDE_RUNTIME_OVERRIDES = {
+    # Empty placeholder for now; we may add target-specific
+    # overrides here in the future.
+}
+
+
 def _halide_host_config_settings():
-  # TODO: this is incomplete for (e.g.) Windows and will need further specialization.
   _host_cpus = [
       "darwin",
       "darwin_x86_64",
@@ -115,12 +124,25 @@ def _halide_host_config_settings():
 
 
 def halide_config_settings():
-  """Define the config_settings used internally by these build rules."""
+  """Define config_settings for halide_library.
+
+       These settings are used to distinguish build targets for
+       halide_library() based on target CPU and configs. This is provided
+       to allow algorithmic generation of the config_settings based on
+       internal data structures; it should not be used outside of Halide.
+
+  """
   _halide_host_config_settings()
   for base_target, cpu, android_cpu, ios_cpu in _HALIDE_TARGET_CONFIG_INFO:
     if android_cpu == None:
+      # "armeabi" is the default value for --android_cpu and isn't considered legal
+      # here, so we use the value to assume we aren't building for Android.
       android_cpu = "armeabi"
     if ios_cpu == None:
+      # The default value for --ios_cpu is "x86_64", i.e. for the 64b OS X simulator.
+      # Assuming that the i386 version of the simulator will be used along side
+      # arm32 apps, we consider this value to mean the flag was unspecified; this
+      # won't work for 32 bit simulator builds for A6 or older phones.
       ios_cpu = "x86_64"
     if cpu != None:
       values = {
@@ -159,6 +181,9 @@ def _canonicalize_target(halide_target):
   return "-".join(tokens[0:3] + sorted(tokens[3:]))
 
 
+# Converts comma and dash separators to underscore and alphabetizes
+# the features part of the target to make sure they always match no
+# matter the concatenation order of the target string pieces.
 def _halide_target_to_bazel_rule_name(multitarget):
   subtargets = multitarget.split(",")
   subtargets = [_canonicalize_target(st).replace("-", "_") for st in subtargets]
@@ -203,9 +228,16 @@ def _gengen_outputs(filename, halide_target, outputs):
       fail("Unknown output: " + o)
     ext, is_multiple = _output_extensions[o]
     if is_multiple and len(halide_target) > 1:
+      # Special handling needed for ".s.txt" and similar: the suffix from the
+      # is_multiple case always goes before the final .
+      # (i.e. "filename.s_suffix.txt", not "filename_suffix.s.txt")
+      # -- this is awkward, but is what Halide does, so we must match it.
+      pieces = ext.rsplit(".", 1)
+      extra = (".%s" % pieces[0]) if len(pieces) > 1 else ""
+      ext = pieces[-1]
       for h in halide_target:
-        new_outputs[o + h] = "%s_%s.%s" % (
-            filename, _canonicalize_target(h).replace("-", "_"), ext)
+        new_outputs[o + h] = "%s%s_%s.%s" % (
+            filename, extra, _canonicalize_target(h).replace("-", "_"), ext)
     else:
       new_outputs[o] = "%s.%s" % (filename, ext)
   return new_outputs
@@ -235,17 +267,21 @@ def _gengen_impl(ctx):
           ctx.attr.outputs).values()
   ]
 
-  arguments = [
-      "-o",
-      outputs[0].dirname,
-      "-g",
-      ctx.attr.generator_closure.generator_name,
-  ]
-  if ctx.attr.filename:
-    arguments += ["-n", ctx.attr.filename]
-  if ctx.attr.halide_function_name:
-    arguments += ["-f", ctx.attr.halide_function_name]
-  if len(ctx.attr.outputs) > 0:
+  arguments = ["-o", outputs[0].dirname]
+  if ctx.attr.generate_runtime:
+    arguments += ["-r", ctx.attr.filename]
+    if len(halide_target) > 1:
+      fail("Only one halide_target allowed here")
+    if ctx.attr.halide_function_name:
+      fail("halide_function_name not allowed here")
+  else:
+    arguments += ["-g", ctx.attr.generator_closure.generator_name]
+    if ctx.attr.filename:
+      arguments += ["-n", ctx.attr.filename]
+    if ctx.attr.halide_function_name:
+      arguments += ["-f", ctx.attr.halide_function_name]
+
+  if ctx.attr.outputs:
     arguments += ["-e", ",".join(ctx.attr.outputs)]
     arguments += ["-x", ",".join(remaps)]
   arguments += ["target=%s" % ",".join(halide_target)]
@@ -267,9 +303,10 @@ def _gengen_impl(ctx):
       executable,
       mnemonic="ExecuteHalideGenerator",
       outputs=outputs,
-      progress_message="Executing generator %s with args (%s)..." %
+      progress_message="Executing generator %s with target (%s) args (%s)..." %
       (ctx.attr.generator_closure.generator_name,
-       ctx.attr.halide_generator_args),)
+       ",".join(halide_target),
+       ctx.attr.halide_generator_args))
 
 
 _gengen = rule(
@@ -279,6 +316,8 @@ _gengen = rule(
             attr.int(),
         "filename":
             attr.string(),
+        "generate_runtime":
+            attr.bool(default=False),
         "generator_closure":
             attr.label(
                 cfg="host", providers=["generator_binary", "generator_name"]),
@@ -314,7 +353,9 @@ def _has_dupes(some_list):
   return sorted(some_list) != sorted(clean)
 
 
-def _select_multitarget(base_target, halide_target_features, halide_target_map):
+def _select_multitarget(base_target,
+                        halide_target_features,
+                        halide_target_map):
   if base_target == "armeabi-32-android":
     base_target = "arm-32-android"
   wildcard_target = halide_target_map.get("*")
@@ -369,6 +410,7 @@ def halide_generator(name,
                      srcs,
                      deps=[],
                      generator_name="",
+                     tags=[],
                      visibility=None,
                      includes=[]):
   # TODO: this enforcement may be overkill, but enforcing rather
@@ -385,8 +427,8 @@ def halide_generator(name,
       alwayslink=1,
       copts=halide_language_copts(),
       deps=["@halide//:language"] + deps,
-      tags=["manual"],
-      visibility=["//visibility:private"],)
+      tags=tags,
+      visibility=["//visibility:private"])
 
   native.cc_binary(
       name="%s_binary" % name,
@@ -396,38 +438,46 @@ def halide_generator(name,
           ":%s_library" % name,
           "@halide//:internal_halide_generator_glue",
       ],
-      tags=["manual"],
-      visibility=["//visibility:private"],)
+      tags=tags,
+      visibility=["//visibility:private"])
   _gengen_closure(
       name="%s_closure" % name,
       generator_binary="%s_binary" % name,
       halide_generator_name=generator_name,
-      visibility=["//visibility:private"],)
+      visibility=["//visibility:private"])
 
-  # The specific target doesn't matter (much), but we need
-  # something that is valid, so uniformly choose first entry
-  # so that build product cannot vary by build host
-  stub_header_target = _select_multitarget(
-      base_target=_HALIDE_TARGET_CONFIG_INFO[0][0],
-      halide_target_features=[],
-      halide_target_map={})
-  _gengen(
-      name="%s_stub_gen" % name,
-      filename=name[:-10],  # strip "_generator" suffix
-      generator_closure=":%s_closure" % name,
-      halide_target=stub_header_target,
-      outputs=["cpp_stub"],
-      tags=["manual"],
-      visibility=["//visibility:private"],)
+  # If srcs is empty, we're building the halide-library-runtime,
+  # which has no stub: just skip it.
+  stub_gen_hdrs_target = []
+  if srcs:
+    # The specific target doesn't matter (much), but we need
+    # something that is valid, so uniformly choose first entry
+    # so that build product cannot vary by build host
+    stub_header_target = _select_multitarget(
+        base_target=_HALIDE_TARGET_CONFIG_INFO[0][0],
+        halide_target_features=[],
+        halide_target_map={})
+    _gengen(
+        name="%s_stub_gen" % name,
+        filename=name[:-10],  # strip "_generator" suffix
+        generator_closure=":%s_closure" % name,
+        halide_target=stub_header_target,
+        outputs=["cpp_stub"],
+        tags=tags,
+        visibility=["//visibility:private"])
+    stub_gen_hdrs_target = [":%s_stub_gen" % name]
 
   native.cc_library(
       name=name,
       alwayslink=1,
-      hdrs=[":%s_stub_gen" % name],
-      deps=[":%s_library" % name, "@halide//:language"],
+      hdrs=stub_gen_hdrs_target,
+      deps=[
+          ":%s_library" % name,
+          "@halide//:language"
+        ],
       includes=includes,
       visibility=visibility,
-      tags=["manual"])
+      tags=tags)
 
 
 def halide_library(name,
@@ -438,9 +488,10 @@ def halide_library(name,
                    generator=None,
                    generator_args="",
                    halide_target_features=[],
-                   halide_target_map=_HALIDE_TARGET_MAP_DEFAULT,
+                   halide_target_map=halide_library_default_target_map(),
                    includes=[],
                    namespace=None,
+                   tags=[],
                    trace_level=0,
                    visibility=None):
   if not function_name:
@@ -471,7 +522,7 @@ def halide_library(name,
     multitarget = _select_multitarget(
         base_target=base_target,
         halide_target_features=halide_target_features,
-        halide_target_map=halide_target_map,)
+        halide_target_map=halide_target_map)
     arch = _halide_target_to_bazel_rule_name(base_target)
     sub_name = "%s_%s" % (name, arch)
     _gengen(
@@ -486,6 +537,7 @@ def halide_library(name,
             "//conditions:default": "",
         }),
         debug_codegen_level=debug_codegen_level,
+        tags=tags,
         trace_level=trace_level,
         outputs=outputs)
     libname = "halide_internal_%s_%s" % (name, arch)
@@ -493,6 +545,7 @@ def halide_library(name,
       native.cc_library(
           name=libname,
           srcs=[":%s.a" % sub_name],
+          tags=tags,
           visibility=["//visibility:private"])
     elif "cpp" in outputs:
       # TODO: yuck. hacky for apps/c_backend.
@@ -505,10 +558,13 @@ def halide_library(name,
       native.cc_library(
           name=libname,
           srcs=[":%s.cpp" % sub_name],
+          tags=tags,
           visibility=["//visibility:private"])
     else:
       fail("either cpp or static_library required")
-    condition_deps[_config_setting(base_target)] = [":%s" % libname]
+    condition_deps[_config_setting(
+        base_target)] = _HALIDE_RUNTIME_OVERRIDES.get(
+            base_target, []) + [":%s" % libname]
 
   # Note that we always build the .h file using the first entry in
   # the _HALIDE_TARGET_CONFIG_INFO table.
@@ -521,6 +577,8 @@ def halide_library(name,
     # to force everything to be multitarget. In that
     # case, just use the first entry.
     header_target = [header_target[0]]
+
+  outputs = ["h"]
   _gengen(
       name="%s_header" % name,
       filename=name,
@@ -528,13 +586,15 @@ def halide_library(name,
       generator_closure=generator_closure,
       halide_target=header_target,
       halide_function_name=function_name,
-      outputs=["h"])
+      outputs=outputs,
+      tags=tags)
 
   native.cc_library(
       name=name,
       hdrs=[":%s_header" % name],
       deps=["@halide//:runtime"] + select(condition_deps) + deps,
       includes=includes,
+      tags=tags,
       visibility=visibility)
 
 
@@ -548,7 +608,7 @@ def halide_library(name,
 #                    debug_codegen_level=0,
 #                    trace_level=0,
 #                    halide_target_features=[],
-#                    halide_target_map=_HALIDE_TARGET_MAP_DEFAULT,
+#                    halide_target_map=halide_library_default_target_map(),
 #                    extra_outputs=[],
 #                    includes=[],
 #                    srcs=None,
