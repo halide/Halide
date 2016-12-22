@@ -144,15 +144,13 @@ public:
                                      im(complex_result(x, y)));
         }
 
-        input.set_stride(0, input_comps)
-             .set_min(2, 0)
-             .set_extent(2, input_comps)
-             .set_stride(2, 1);
+        input
+            .dim(0).set_stride(input_comps)
+            .dim(2).set_min(0).set_extent(input_comps).set_stride(1);
 
-        result.output_buffer().set_stride(0, output_comps)
-                              .set_min(2, 0)
-                              .set_extent(2, output_comps)
-                              .set_stride(2, 1);
+        result.output_buffer()
+            .dim(0).set_stride(output_comps)
+            .dim(2).set_min(0).set_extent(output_comps).set_stride(1);
 
         return result;
     }

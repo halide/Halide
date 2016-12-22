@@ -49,6 +49,7 @@ load(
     generator = ":reaction_diffusion_2_%s_generator" % phase,
     halide_target_features = ["metal", "user_context"],
     includes = ["."],
+    tags=["manual"],
 ) for phase in [
     "init",
     "update",
@@ -71,6 +72,7 @@ objc_library(
         ":reaction_diffusion_2_metal_update",
         "//:runtime",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
+    tags=["manual"],
 )
 
 objc_binary(
@@ -87,10 +89,12 @@ objc_binary(
     deps = [
         ":HelloiOS",
     ],
+    tags=["manual"],
 )
 
 ios_application(
     name = "ios-app",
     binary = ":ios-app-binary",
     infoplist = "HelloiOS-Info.plist",
+    tags=["manual"],
 )

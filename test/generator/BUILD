@@ -86,6 +86,14 @@ halide_library(
 )
 
 halide_library(
+    name = "cxx_mangling_gpu",
+    generator = ":cxx_mangling_generator",
+    halide_target_features = ["cuda"],
+    includes = ["."],
+    namespace = "HalideTest",
+)
+
+halide_library(
     name = "cxx_mangling_define_extern",
     generator = ":cxx_mangling_define_extern_generator",
     halide_target_features = ["user_context"],
@@ -198,7 +206,13 @@ halide_library(
 halide_library(
     name = "stubtest",
     generator = ":stubtest_generator",
-    generator_args = "input.type=float32 input.size=2 int_arg.size=2 f.type=float32,float32",
+    generator_args = " ".join([
+        "simple_input.type=float32",
+        "array_input.type=float32", 
+        "array_input.size=2",
+        "int_arg.size=2",
+        "tuple_output.type=float32,float32",
+    ]),
     includes = ["."],
 )
 
@@ -253,7 +267,6 @@ halide_library(
     "acquire_release",
     "argvcall",
     "can_use_target",
-    "cxx_mangling",
     "cxx_mangling_define_extern",
     "embed_image",
     "error_codes",
@@ -283,6 +296,17 @@ cc_test(
         "@halide//:language",
         ":cleanup_on_error",
         "//:device_interface",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
+    ],
+)
+
+cc_test(
+    name = "cxx_mangling_aottest",
+    srcs = ["cxx_mangling_aottest.cpp"],
+    linkopts = halide_runtime_linkopts(),
+    deps = [
+        "@halide//:language",
+        ":cxx_mangling",
+        ":cxx_mangling_gpu",
     ],
 )
 

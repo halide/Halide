@@ -15,9 +15,9 @@ public:
         // schedule 
         if (get_target().has_gpu_feature()) {
             initial.reorder(c, x, y).bound(c, 0, 3).vectorize(c).gpu_tile(x, y, 4, 4);
-            initial.output_buffer().set_bounds(2, 0, 3);
-            initial.output_buffer().set_stride(0, 3);
-            initial.output_buffer().set_stride(2, 1);
+            initial.output_buffer()
+                .dim(0).set_stride(3)
+                .dim(2).set_bounds(0, 3).set_stride(1);
         }
         
         return initial;
@@ -106,7 +106,7 @@ public:
         new_state(clobber.x, clobber.y, c) = select(radius < 400.0f, 1.0f, new_state(clobber.x, clobber.y, c));
 
         // schedule
-        state.set_bounds(2, 0, 3);
+        state.dim(2).set_bounds(0, 3);
         new_state.reorder(c, x, y).bound(c, 0, 3).unroll(c);
 
         if (get_target().has_gpu_feature()) {
@@ -125,12 +125,12 @@ public:
             new_state.update(3).gpu_tile(y, 8);
             new_state.update(4).gpu_tile(clobber.x, clobber.y, 1, 1);
 
-            state.set_stride(0, 3);
-            state.set_stride(2, 1);
-            state.set_extent(2, 3);
-            new_state.output_buffer().set_stride(0, 3);
-            new_state.output_buffer().set_stride(2, 1);
-            new_state.output_buffer().set_extent(2, 3);
+            state
+                .dim(0).set_stride(3)
+                .dim(2).set_stride(1).set_extent(3);
+            new_state.output_buffer()
+                .dim(0).set_stride(3)
+                .dim(2).set_stride(1).set_extent(3);
         } else {
             Var yi;
             new_state.split(y, y, yi, 64).parallel(y);
@@ -183,9 +183,9 @@ public:
 
         // schedule
         if (get_target().has_gpu_feature()) {
-            state.set_bounds(2, 0, 3);
-            state.set_stride(2, 1);
-            state.set_stride(0, 3);
+            state
+                .dim(0).set_stride(3)
+                .dim(2).set_stride(1).set_bounds(0, 3);
             render.gpu_tile(x, y, 32, 4);
         } else {
             render.vectorize(x, 4);
