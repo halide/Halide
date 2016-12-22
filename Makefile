@@ -353,6 +353,7 @@ SOURCE_FILES = \
   Tracing.cpp \
   TrimNoOps.cpp \
   Tuple.cpp \
+  TupleSplitting.cpp \
   Type.cpp \
   UnifyDuplicateLets.cpp \
   UniquifyVariableNames.cpp \
@@ -484,6 +485,7 @@ HEADER_FILES = \
   Tracing.h \
   TrimNoOps.h \
   Tuple.h \
+  TupleSplitting.h \
   Type.h \
   UnifyDuplicateLets.h \
   UniquifyVariableNames.h \
