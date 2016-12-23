@@ -21,11 +21,10 @@ namespace {
     
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const vector<Function> &outputs, const map<string, pair<Function, int>> &e, const Target &t)
-        : outputs(outputs), env(e), target(t) {}
+    FlattenDimensions(const map<string, pair<Function, int>> &e, const Target &t)
+        : env(e), target(t) {}
     Scope<int> scope;
 private:
-    const vector<Function> &outputs;
     const map<string, pair<Function, int>> &env;
     const Target &target;
     Scope<int> realizations;
@@ -318,7 +317,7 @@ Stmt storage_flattening(Stmt s,
         }
     }
 
-    s = FlattenDimensions(outputs, tuple_env, target).mutate(s);
+    s = FlattenDimensions(tuple_env, target).mutate(s);
     s = PromoteToMemoryType().mutate(s);
     s = ConnectOutputBuffers(tuple_env, outputs).mutate(s);
     return s;
