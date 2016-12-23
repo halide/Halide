@@ -142,7 +142,7 @@ public:
         }
 
         // Add it to the numbering.
-        if ((e.as<Load>() == nullptr) || !protect_loads_in_scope) {
+        if (!(e.as<Load>() && protect_loads_in_scope)) {
             Entry entry = {e, 0};
             number = (int)entries.size();
             numbering[with_cache(e)] = number;
@@ -174,10 +174,8 @@ public:
 
     void visit(const Call *call) {
         bool old_protect_loads_in_scope = protect_loads_in_scope;
-        if (call->is_intrinsic(Call::address_of) ||
-            call->is_intrinsic(Call::predicated_store) ||
-            call->is_intrinsic(Call::predicated_load)) {
-            // We shouldn't lift load out of a address_of/predicated_store/predicated_load node
+        if (call->is_intrinsic(Call::address_of)) {
+            // We shouldn't lift a load out of an address_of node
             protect_loads_in_scope = true;
         }
         IRMutator::visit(call);
