@@ -346,6 +346,23 @@ public:
 #undef HALIDE_BUFFER_FORWARD
 #undef HALIDE_BUFFER_FORWARD_CONST
 
+    static constexpr bool has_static_halide_type() {
+        return Runtime::Buffer<T>::has_static_halide_type();
+    }
+
+    static halide_type_t static_halide_type() {
+        return Runtime::Buffer<T>::static_halide_type();
+    }
+
+    template<typename T2>
+    static bool can_convert_from(const Buffer<T2> &other) {
+        // TODO: This effectively disables dimension checking inside the
+        // runtime version of can_convert_from. Per conversation with
+        // Andrew, we're going with this for now and will revisit for arbitrary
+        // dimensionality buffer_t.
+        Halide::Runtime::Buffer<T>::can_convert_from(*other.get());
+    }
+
     Type type() const {
         return contents->buf.type();
     }
