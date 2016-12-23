@@ -221,8 +221,21 @@ class PromoteToMemoryType : public IRMutator {
 
     Type upgrade(Type t) {
         return t.with_bits(((t.bits() + 7)/8)*8);
-    }
+    }   
     
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::address_of)) {
+            Expr load = mutate(op->args[0]);
+            if (const Cast *cast = load.as<Cast>()) {
+                expr = cast->value;
+            } else {
+                expr = load;
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const Load *op) {
         Type t = upgrade(op->type);
         if (t != op->type) {
