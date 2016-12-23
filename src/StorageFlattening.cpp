@@ -227,10 +227,9 @@ class PromoteToMemoryType : public IRMutator {
         if (op->is_intrinsic(Call::address_of)) {
             Expr load = mutate(op->args[0]);
             if (const Cast *cast = load.as<Cast>()) {
-                expr = cast->value;
-            } else {
-                expr = load;
+                load = cast->value;
             }
+            expr = Call::make(op->type, op->name, {load}, op->call_type);
         } else {
             IRMutator::visit(op);
         }
