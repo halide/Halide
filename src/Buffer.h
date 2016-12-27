@@ -360,7 +360,7 @@ public:
         // runtime version of can_convert_from. Per conversation with
         // Andrew, we're going with this for now and will revisit for arbitrary
         // dimensionality buffer_t.
-        Halide::Runtime::Buffer<T>::can_convert_from(*other.get());
+        return Halide::Runtime::Buffer<T>::can_convert_from(*other.get());
     }
 
     Type type() const {

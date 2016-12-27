@@ -1,9 +1,6 @@
 #include "Float16.h"
 #include "Error.h"
-#include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/ErrorHandling.h"
+#include "LLVM_Headers.h"
 
 using namespace Halide;
 
@@ -32,7 +29,7 @@ getLLVMAPFRoundingMode(Halide::RoundingMode mode) {
 float16_t toFP16(llvm::APFloat v) {
     uint64_t bits = v.bitcastToAPInt().getZExtValue();
     internal_assert(bits <= 0xFFFF) << "Invalid bits for float16_t\n";
-    return float16_t::make_from_bits(bits);
+    return float16_t::make_from_bits((uint16_t) bits);
 }
 
 llvm::APFloat toLLVMAPF(float16_t v) {
