@@ -352,8 +352,18 @@ public:
     EXPORT Realization realize(int x_size,
                                const Target &target = Target());
     EXPORT Realization realize(const Target &target = Target());
-    EXPORT void realize(Realization dst, const Target &target = Target());
     // @}
+
+    /** Evaluate this Pipeline into an existing allocated buffer or
+     * buffers. If the buffer is also one of the arguments to the
+     * function, strange things may happen, as the pipeline isn't
+     * necessarily safe to run in-place. The realization should
+     * contain one Buffer per tuple component per output Func. For
+     * each individual output Func, all Buffers must have the same
+     * shape, but the shape can vary across the different output
+     * Funcs. This form of realize does *not* automatically copy data
+     * back from the GPU. */
+    EXPORT void realize(Realization dst, const Target &target = Target());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
