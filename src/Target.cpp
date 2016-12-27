@@ -315,6 +315,11 @@ Target get_jit_target_from_environment() {
     }
 }
 
+const Target &get_const_ref_to_jit_target_from_environment() {
+    static Target t = get_jit_target_from_environment();
+    return t;
+}
+
 namespace {
 bool merge_string(Target &t, const std::string &target) {
     string rest = target;

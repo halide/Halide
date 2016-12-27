@@ -75,6 +75,9 @@ public:
     /** Tell the code generator which LLVM context to use. */
     void set_context(llvm::LLVMContext &context);
 
+    /** Initialize internal llvm state for the enabled targets. */
+    static void initialize_llvm();
+
 protected:
     CodeGen_LLVM(Target t);
 
@@ -111,9 +114,6 @@ protected:
 
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
-
-    /** Initialize internal llvm state for the enabled targets. */
-    static void initialize_llvm();
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently

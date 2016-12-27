@@ -151,6 +151,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_device_release",
         "halide_hexagon_host_get_symbol",
         "halide_hexagon_power_hvx_on",
+        "halide_hexagon_power_hvx_on_mode",
+        "halide_hexagon_power_hvx_on_perf",
         "halide_hexagon_power_hvx_off",
         "halide_hexagon_power_hvx_off_as_destructor",
         "halide_qurt_hvx_lock",
@@ -301,8 +303,9 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     llvm::LLVMContext &context = to.getContext();
 
     bool use_soft_float_abi = false;
-    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi))
+    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi)) {
         to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
+    }
 
     std::string mcpu;
     if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
