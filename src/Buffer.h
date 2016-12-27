@@ -29,11 +29,14 @@ struct all_ints_and_optional_name<First, Rest...> :
         meta_and<std::is_convertible<First, int>,
                  all_ints_and_optional_name<Rest...>> {};
 
-template<> struct all_ints_and_optional_name<std::string> : std::true_type {};
-template<> struct all_ints_and_optional_name<const char *> : std::true_type {};
+template<typename T> struct all_ints_and_optional_name<T> :
+        meta_or<std::is_convertible<T, std::string>,
+                std::is_convertible<T, int>> {};
+
 template<> struct all_ints_and_optional_name<> : std::true_type {};
 
-template<typename T>
+template<typename T,
+         typename = typename std::enable_if<!std::is_convertible<T, std::string>::value>::type>
 std::string get_name_from_end_of_parameter_pack(T&&) {
     return "";
 }

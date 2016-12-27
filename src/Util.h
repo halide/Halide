@@ -156,6 +156,12 @@ struct meta_and : std::true_type {};
 template<typename T1, typename... Args>
 struct meta_and<T1, Args...> : std::integral_constant<bool, T1::value && meta_and<Args...>::value> {};
 
+template<typename... T>
+struct meta_or : std::false_type {};
+
+template<typename T1, typename... Args>
+struct meta_or<T1, Args...> : std::integral_constant<bool, T1::value || meta_or<Args...>::value> {};
+
 template<typename To, typename... Args>
 struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
@@ -182,10 +188,10 @@ struct FileStat {
  */
 EXPORT std::string file_make_temp(const std::string &prefix, const std::string &suffix);
 
-/** Create a unique directory in an arbitrary (but writable) directory; this is 
- * typically somewhere inside /tmp, but the specific location is not guaranteed. 
+/** Create a unique directory in an arbitrary (but writable) directory; this is
+ * typically somewhere inside /tmp, but the specific location is not guaranteed.
  * The directory will be empty (i.e., this will never return /tmp itself,
- * but rather a new directory inside /tmp). The caller is responsible for removing the 
+ * but rather a new directory inside /tmp). The caller is responsible for removing the
  * directory after use.
  */
 EXPORT std::string dir_make_temp();
