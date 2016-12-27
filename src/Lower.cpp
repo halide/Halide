@@ -46,6 +46,7 @@
 #include "SlidingWindow.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
+#include "SplitTuples.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "Substitute.h"
@@ -184,7 +185,11 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
         s = inject_image_intrinsics(s, env);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
     }
-
+    
+    debug(1) << "Destructuring tuple-valued realizations...\n";
+    s = split_tuples(s, env);
+    debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
+    
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
