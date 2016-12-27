@@ -1539,7 +1539,8 @@ Stage &Stage::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI dev
     return *this;
 }
 
-Stage &Stage::gpu_single_thread(VarOrRVar block, DeviceAPI device_api) {
+Stage &Stage::gpu_single_thread(DeviceAPI device_api) {
+    Var block;
     split(Var::outermost(), Var::outermost(), block, 1);
     set_dim_device_api(block, device_api);
     set_dim_type(block, ForType::GPUBlock);
@@ -2023,9 +2024,9 @@ Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI devic
     return *this;
 }
 
-Func &Func::gpu_single_thread(VarOrRVar block, DeviceAPI device_api) {
+Func &Func::gpu_single_thread(DeviceAPI device_api) {
     invalidate_cache();
-    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_single_thread(block, device_api);
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_single_thread(device_api);
     return *this;
 }
 

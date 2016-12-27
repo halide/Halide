@@ -219,7 +219,7 @@ public:
 
     // TODO(psuriana): For now we need to expand "tx" into Var and RVar versions
     // due to conflict with the deprecated interfaces since Var can be implicitly
-    // converted into either VarOrRvar or Expr. Merge this later once we remove
+    // converted into either VarOrRVar or Expr. Merge this later once we remove
     // the deprecated interfaces.
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
@@ -1387,7 +1387,7 @@ public:
      * block. This is not an efficient use of your GPU, but it can be
      * useful to avoid copy-back for intermediate update stages that
      * touch a very small part of your Func. */
-    EXPORT Func &gpu_single_thread(VarOrRVar block, DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     /** \deprecated Old name for #gpu_threads. */
     // @{
@@ -1977,8 +1977,7 @@ namespace Internal {
 inline void schedule_scalar(Func f) {
     Target t = get_jit_target_from_environment();
     if (t.has_gpu_feature()) {
-        Var var; // Dummy GPU block var
-        f.gpu_single_thread(var);
+        f.gpu_single_thread();
     }
     if (t.has_feature(Target::HVX_64) || t.has_feature(Target::HVX_128)) {
         f.hexagon();
