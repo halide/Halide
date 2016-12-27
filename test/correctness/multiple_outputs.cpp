@@ -43,8 +43,7 @@ int main(int argc, char **argv) {
                            {best_x, best_y, best_so_far});
 
         if (use_gpu) {
-            Var thread;
-            g.gpu_single_thread(thread);
+            g.gpu_single_thread();
         }
 
         Realization result = g.realize();
