@@ -411,7 +411,7 @@ bool scalar_arg_type_or_buffer(Type &t) {
 }
 
 template <>
-inline bool scalar_arg_type_or_buffer<struct buffer_t *>(Type &t) {
+inline bool scalar_arg_type_or_buffer<struct halide_buffer_t *>(Type &t) {
     return true;
 }
 

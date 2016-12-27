@@ -554,7 +554,7 @@ class InjectBufferCopies : public IRMutator {
             // just register a destructor with the buffer creation.)
             inner_body = Allocate::make(op->name, op->type, op->extents, op->condition, inner_body,
                                         Call::make(Handle(), Call::extract_buffer_host,
-                                                   { Variable::make(type_of<struct buffer_t *>(), op->name + ".buffer") },
+                                                   { Variable::make(type_of<struct halide_buffer_t *>(), op->name + ".buffer") },
                                                    Call::Intrinsic),
                                         "halide_device_host_nop_free"); // TODO: really should not have to introduce this routine to get a nop free
             // Wrap combined malloc around Allocate.
@@ -574,7 +574,7 @@ class InjectBufferCopies : public IRMutator {
             // TODO: handle this case by creating the args from scratch?
             internal_assert(!create_buffer_args.empty());
 
-            stmt = LetStmt::make(op->name + ".buffer", Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, create_buffer_args, Call::Intrinsic), inner_body);
+            stmt = LetStmt::make(op->name + ".buffer", Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t, create_buffer_args, Call::Intrinsic), inner_body);
 
             // Rebuild any wrapped lets outside the one for the create_buffer_t.
             for (size_t i = body_lets.size(); i > 0; i--) {

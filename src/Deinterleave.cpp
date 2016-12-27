@@ -505,6 +505,15 @@ class Interleaver : public IRMutator {
         IRMutator::visit(op);
     }
 
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::address_of)) {
+            // Don't attempt to deinterleave loads inside address_of.
+            expr = op;
+            return;
+        }
+        IRMutator::visit(op);
+    }
+
     void visit(const Load *op) {
         bool old_should_deinterleave = should_deinterleave;
         int old_num_lanes = num_lanes;
