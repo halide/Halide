@@ -894,7 +894,7 @@ enum class IOKind { Scalar, Function, Buffer };
  * -- Assignment of a Buffer<>, with compatible type and dimensions,
  * causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
  */
-template<typename T = void, int D = 4>
+template<typename T = void>
 class StubInputBuffer {
     friend class GeneratorStub;
     friend class StubInput;
@@ -973,7 +973,7 @@ public:
  *
  * It is deliberate that StubOutputBuffer is not (easily) convertible to Func.
  */
-template<typename T = void, int D = 4>
+template<typename T = void>
 class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2> friend class GeneratorOutput_Buffer;
     friend class GeneratorStub;
@@ -2352,8 +2352,8 @@ protected:
         return { StubInput(f) };
     }
 
-    template<typename T = void, int D = 4>
-    static std::vector<StubInput> to_stub_input_vector(const StubInputBuffer<T, D> &b) {
+    template<typename T = void>
+    static std::vector<StubInput> to_stub_input_vector(const StubInputBuffer<T> &b) {
         return { StubInput(b) };
     }
 
