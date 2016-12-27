@@ -207,7 +207,7 @@ public:
         curved.realize(output);
 
         // Now take the best of 3 runs for timing.
-        double best_time;
+        double best_time = 0.0;
         for (int i = 0; i < 3; i++) {
 
             double t1 = current_time();
