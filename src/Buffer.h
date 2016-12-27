@@ -285,18 +285,24 @@ public:
     }
     // @}
 
+private:
+    // Helpers for decltypes used below
+    static const Runtime::Buffer<T> &dummy_const_runtime_buffer();
+    static Runtime::Buffer<T> &dummy_runtime_buffer();
+public:
+
     // We forward numerous methods from the underlying Buffer
 #define HALIDE_BUFFER_FORWARD_CONST(method)                             \
     template<typename ...Args>                                          \
     auto method(Args&&... args) const ->                                \
-        decltype(((const Runtime::Buffer<T> &)Runtime::Buffer<T>()).method(std::forward<Args>(args)...)) { \
+        decltype(dummy_const_runtime_buffer().method(std::forward<Args>(args)...)) { \
         return get()->method(std::forward<Args>(args)...);              \
     }
 
 #define HALIDE_BUFFER_FORWARD(method)                                   \
     template<typename ...Args>                                          \
     auto method(Args&&... args) ->                                      \
-        decltype(Runtime::Buffer<T>().method(std::forward<Args>(args)...)) { \
+        decltype(dummy_runtime_buffer().method(std::forward<Args>(args)...)) { \
         return get()->method(std::forward<Args>(args)...);              \
     }
 
@@ -378,33 +384,33 @@ public:
 
     template<typename ...Args>
     auto operator()(int first, Args&&... args) ->
-        decltype((*get())(first, std::forward<Args>(args)...)) {
+        decltype(dummy_runtime_buffer()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
     template<typename ...Args>
     auto operator()(int first, Args&&... args) const ->
-        decltype((*get())(first, std::forward<Args>(args)...)) {
+        decltype(dummy_const_runtime_buffer()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
     auto operator()(const int *pos) ->
-        decltype((*get())(pos)) {
+        decltype(dummy_runtime_buffer()(pos)) {
         return (*get())(pos);
     }
 
     auto operator()(const int *pos) const ->
-        decltype((*get())(pos)) {
+        decltype(dummy_const_runtime_buffer()(pos)) {
         return (*get())(pos);
     }
 
     auto operator()() ->
-        decltype((*get())()) {
+        decltype(dummy_runtime_buffer()()) {
         return (*get())();
     }
 
     auto operator()() const ->
-        decltype((*get())()) {
+        decltype(dummy_const_runtime_buffer()()) {
         return (*get())();
     }
     // @}
