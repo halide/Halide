@@ -621,7 +621,7 @@ public:
         for (int i = 0; i < dimensions(); i++) {
             size /= dim(i).extent();
         }
-        assert(size == ty.bytes() && "Error: Overflow computing total size of buffer.");
+        assert(size == (size_t)ty.bytes() && "Error: Overflow computing total size of buffer.");
     }
 
     /** Allocate memory for this Buffer. Drops the reference to any
