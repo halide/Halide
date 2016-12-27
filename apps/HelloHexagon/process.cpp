@@ -49,8 +49,8 @@ int main(int argc, char **argv) {
 
     // Hexagon's device_malloc implementation will also set the host
     // pointer if it is null, giving a zero copy buffer.
-    Halide::Buffer<uint8_t> in(nullptr, W, H, 3);
-    Halide::Buffer<uint8_t> out(nullptr, W, H, 3);
+    Halide::Runtime::Buffer<uint8_t> in(nullptr, W, H, 3);
+    Halide::Runtime::Buffer<uint8_t> out(nullptr, W, H, 3);
 
     in.device_malloc(halide_hexagon_device_interface());
     out.device_malloc(halide_hexagon_device_interface());

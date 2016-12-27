@@ -6,7 +6,7 @@
 #include "HalideRuntimeOpenGL.h"
 #include "HalideBuffer.h"
 
-using Halide::Buffer;
+using Halide::Runtime::Buffer;
 
 #include "halide_blur_glsl.h"
 #include "halide_ycc_glsl.h"
