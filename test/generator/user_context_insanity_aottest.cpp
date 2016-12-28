@@ -22,7 +22,7 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
     Buffer<float> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
-            input(x, y) = x * y;
+            input(x, y) = (float)(x * y);
         }
     }
     Buffer<float> output(10, 10);
