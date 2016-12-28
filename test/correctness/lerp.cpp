@@ -190,27 +190,27 @@ int main(int argc, char **argv) {
                                     "<uint32_t, uint32_t> all zero starts");
   #endif
 
-    check_range<float, float>(0, 100, 0, .01,
-                              0, 100, 0, .01,
-                              0, 100, 0, .01,
+    check_range<float, float>(0, 100, 0, .01f,
+                              0, 100, 0, .01f,
+                              0, 100, 0, .01f,
                               "<float, float> float values 0 to 1 by 1/100ths");
 
-    check_range<float, float>(0, 100, -5, .1,
-                              0, 100, 0, .1,
-                              0, 100, 0, .1,
+    check_range<float, float>(0, 100, -5, .1f,
+                              0, 100, 0, .1f,
+                              0, 100, 0, .1f,
                               "<float, float> float values -5 to 5 by 1/100ths");
 
     // Verify float values with integer weights
-    check_range<float, uint8_t>(0, 100, -5, .1,
-                              0, 100, 0, .1,
+    check_range<float, uint8_t>(0, 100, -5, .1f,
+                              0, 100, 0, .1f,
                               0, 255, 0, 1,
                               "<float, uint8_t> float values -5 to 5 by 1/100ths");
-    check_range<float, uint16_t>(0, 100, -5, .1,
-                                 0, 100, 0, .1,
+    check_range<float, uint16_t>(0, 100, -5, .1f,
+                                 0, 100, 0, .1f,
                                  0, 255, 0, 257,
                                  "<float, uint16_t> float values -5 to 5 by 1/100ths");
-    check_range<float, uint32_t>(0, 100, -5, .1,
-                                 0, 100, 0, .1,
+    check_range<float, uint32_t>(0, 100, -5, .1f,
+                                 0, 100, 0, .1f,
                                  std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1,
                                  "<float, uint32_t> float values -5 to 5 by 1/100ths");
 
