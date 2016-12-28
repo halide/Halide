@@ -28,7 +28,7 @@ public:
             .unroll(xio)
             .unroll(yi)
             .gpu_blocks(x, y).gpu_threads(xii);
-        prod.compute_at(out, Var::gpu_threads())
+        prod.compute_at(out, xii)
             .unroll(x)
             .unroll(y)
             .update()
@@ -43,8 +43,8 @@ public:
         OutputImageParam bufs[] = {A, B, prod.output_buffer()};
         for (auto &buf : bufs) {
             buf.set_host_alignment(16)
-                .set_bounds(0, 0, size)
-                .set_stride(1, size);
+                .dim(0).set_bounds(0, size)
+                .dim(1).set_stride(size);
         }
 
         return out;
