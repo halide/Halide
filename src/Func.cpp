@@ -2885,6 +2885,10 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     pipeline().set_custom_print(cust_print);
 }
 
+void Func::set_jit_externs(const std::map<std::string, JITExtern> &externs) {
+    pipeline().set_jit_externs(externs);
+}
+
 void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
     pipeline().add_custom_lowering_pass(pass, deleter);
 }

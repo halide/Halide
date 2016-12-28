@@ -813,6 +813,12 @@ public:
      * used by JIT. */
     EXPORT const Internal::JITHandlers &jit_handlers();
 
+    /** Install a set of external C functions or Funcs to satisfy
+     * dependencies introduced by HalideExtern and define_extern
+     * mechanisms. These will be used by calls to realize,
+     * infer_bounds, and compile_jit. */
+    EXPORT void set_jit_externs(const std::map<std::string, JITExtern> &externs);
+
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
      * the lowered Stmt, instrument it with extra code, or otherwise
