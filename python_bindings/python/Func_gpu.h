@@ -172,7 +172,6 @@ void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class) {
     func_or_stage_class
         .def("gpu_single_thread", &FuncOrStage::gpu_single_thread,
              (bp::arg("self"),
-              bp::arg("block"),
               bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
              bp::return_internal_reference<1>(),
              "Tell Halide to run this stage using a single gpu thread and "
