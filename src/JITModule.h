@@ -20,6 +20,8 @@ class Type;
 
 namespace Halide {
 
+struct ExternCFunction;
+struct JITExtern;
 struct Target;
 class Module;
 
@@ -116,7 +118,7 @@ struct JITModule {
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
     EXPORT void add_extern_for_export(const std::string &name,
-                                      const ExternSignature &signature, void *address);
+                                      const ExternCFunction &extern_c_function);
 
     /** Look up a symbol by name in this module or its dependencies. */
     EXPORT Symbol find_symbol_by_name(const std::string &) const;
