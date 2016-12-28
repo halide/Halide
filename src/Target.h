@@ -77,7 +77,7 @@ struct Target {
         AVX512 = halide_target_feature_avx512,
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
-        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,        
+        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -169,7 +169,7 @@ struct Target {
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-      return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
     }
 
     /** Does this target allow using a certain type. Generally all
