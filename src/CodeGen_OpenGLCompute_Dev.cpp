@@ -122,7 +122,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
+        internal_assert((loop->for_type == ForType::GPUBlock) ||
+                        (loop->for_type == ForType::GPUThread))
+            << "kernel loop must be either gpu block or gpu thread\n";
         internal_assert(is_zero(loop->min));
 
         debug(4) << "loop extent is " << loop->extent << "\n";

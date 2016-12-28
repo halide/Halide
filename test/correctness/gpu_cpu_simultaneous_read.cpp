@@ -10,7 +10,7 @@ int main() {
         return 0;
     }
 
-    Var x, y;
+    Var x, y, xi, yi;
     ImageParam table(Int(32), 1);
 
     Func f, g, h;
@@ -23,9 +23,9 @@ int main() {
     g(x, y) = x + y*2 + table(y);
     h(x, y) = select(table(0) == 0, f(x, y), g(x, y));
 
-    f.compute_root().gpu_tile(x, y, 8, 8);
-    g.compute_root().gpu_tile(x, y, 8, 8);
-    h.compute_root().gpu_tile(x, y, 8, 8);
+    f.compute_root().gpu_tile(x, y, xi, yi, 8, 8);
+    g.compute_root().gpu_tile(x, y, xi, yi, 8, 8);
+    h.compute_root().gpu_tile(x, y, xi, yi, 8, 8);
 
     Buffer<int32_t> t(32);
     t.fill(17);
