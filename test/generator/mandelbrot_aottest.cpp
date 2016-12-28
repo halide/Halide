@@ -10,7 +10,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Buffer<int> output(100, 30);
     const char *code = " .:-~*={}&%#@";
-    const int iters = strlen(code) - 1;
+    const int iters = (int) strlen(code) - 1;
 
     // Compute 100 different julia sets
     for (float t = 0; t < 100; t++) {
