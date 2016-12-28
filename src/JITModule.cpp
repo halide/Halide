@@ -14,6 +14,7 @@
 #include "Debug.h"
 #include "LLVM_Output.h"
 #include "CodeGen_LLVM.h"
+#include "Pipeline.h"
 
 
 #ifdef _MSC_VER
@@ -414,9 +415,9 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-void JITModule::add_extern_for_export(const std::string &name, const ExternSignature &signature, void *address) {
+void JITModule::add_extern_for_export(const std::string &name, const ExternCFunction &extern_c_function) {
     Symbol symbol;
-    symbol.address = address;
+    symbol.address = extern_c_function.address;
 
     // Struct types are uniqued on the context, but the lookup API is only available
     // on the Module, not the Context.
@@ -428,14 +429,14 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
 
     llvm::Type *ret_type;
-    if (signature.is_void_return) {
+    if (extern_c_function.signature.is_void_return) {
         ret_type = llvm::Type::getVoidTy(jit_module->context);
     } else {
-        ret_type = llvm_type_of(&jit_module->context, signature.ret_type);
+        ret_type = llvm_type_of(&jit_module->context, extern_c_function.signature.ret_type);
     }
 
     std::vector<llvm::Type *> llvm_arg_types;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : signature.arg_types) {
+    for (const ScalarOrBufferT &scalar_or_buffer_t : extern_c_function.signature.arg_types) {
         if (scalar_or_buffer_t.is_buffer) {
             llvm_arg_types.push_back(buffer_t_star);
         } else {

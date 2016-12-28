@@ -443,23 +443,32 @@ void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
 
 }
 
-struct JITExtern {
-    // assert pipeline.defined() == (c_function == nullptr) -- strictly one or the other
-    // which should be enforced by the constructors.
-    Pipeline pipeline;
-
-    void *c_function;
+struct ExternCFunction {
+    void *address{nullptr};
     ExternSignature signature;
 
-    EXPORT JITExtern(Pipeline pipeline);
-    EXPORT JITExtern(Func func);
+    ExternCFunction() = default;
 
     template <typename RT, typename... Args>
-    JITExtern(RT (*f)(Args... args)) {
-        c_function = (void *)f;
+    ExternCFunction(RT (*f)(Args... args)) {
+        address = (void *)f;
         signature.is_void_return = voidable_halide_type<RT>(signature.ret_type);
         init_arg_types<Args...>(signature.arg_types);
     }
+};
+
+struct JITExtern {
+    // assert pipeline.defined() == (extern_c_function.address == nullptr) -- strictly one or the other
+    // which should be enforced by the constructors.
+    Pipeline pipeline;
+    ExternCFunction extern_c_function;
+
+    EXPORT JITExtern(Pipeline pipeline);
+    EXPORT JITExtern(Func func);
+    EXPORT JITExtern(const ExternCFunction &extern_c_function);
+
+    template <typename RT, typename... Args>
+    JITExtern(RT (*f)(Args... args)) : JITExtern(ExternCFunction(f)) {}
 };
 
 }  // namespace Halide

@@ -1023,9 +1023,10 @@ Pipeline::make_externs_jit_module(const Target &target,
 
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
             free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
-            iter->second.c_function = pipeline_contents.jit_module.entrypoint_symbol().address;
-            iter->second.signature.is_void_return = false;
-            iter->second.signature.ret_type = Int(32);
+            auto &extern_c_function = iter->second.extern_c_function;
+            extern_c_function.address = pipeline_contents.jit_module.entrypoint_symbol().address;
+            extern_c_function.signature.is_void_return = false;
+            extern_c_function.signature.ret_type = Int(32);
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
                  ScalarOrBufferT arg_type_info;
@@ -1033,17 +1034,17 @@ Pipeline::make_externs_jit_module(const Target &target,
                  if (!arg_type_info.is_buffer) {
                      arg_type_info.scalar_type = arg.arg.type;
                  }
-                 iter->second.signature.arg_types.push_back(arg_type_info);
+                 extern_c_function.signature.arg_types.push_back(arg_type_info);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
                 ScalarOrBufferT arg_type_info;
                 arg_type_info.is_buffer = true;
-                iter->second.signature.arg_types.push_back(arg_type_info);
+                extern_c_function.signature.arg_types.push_back(arg_type_info);
             }
             iter->second.pipeline = Pipeline();
         } else {
-            free_standing_jit_externs.add_extern_for_export(iter->first, jit_extern.signature, jit_extern.c_function);
+            free_standing_jit_externs.add_extern_for_export(iter->first, jit_extern.extern_c_function);
         }
     }
     if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
@@ -1275,11 +1276,15 @@ void Pipeline::invalidate_cache() {
 }
 
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline(pipeline), c_function(nullptr) {
+    : pipeline(pipeline) {
 }
 
 JITExtern::JITExtern(Func func)
-    : pipeline(func), c_function(nullptr) {
+    : pipeline(func) {
+}
+
+JITExtern::JITExtern(const ExternCFunction &extern_c_function)
+    : extern_c_function(extern_c_function) {
 }
 
 }  // namespace Halide
