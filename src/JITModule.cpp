@@ -739,7 +739,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * runtime modules. As with all JITModules, the shared runtime is ref
  * counted, but a global keeps one ref alive until shutdown or when
  * JITSharedRuntime::release_all is called. If
- * JITSharedRuntime::release_all is called, the global state is rest
+ * JITSharedRuntime::release_all is called, the global state is reset
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
@@ -797,7 +797,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
 // caller provided user context work with JIT. (At present, this
 // cascaded handler calls cannot work with the right context as
 // JITModule needs its context to be passed in case the called handler
-// calls another callback wich is not overriden by the caller.)
+// calls another callback which is not overriden by the caller.)
 void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
                                              void *user_context, const JITHandlers &handlers) {
     jit_user_context.handlers = active_handlers;
