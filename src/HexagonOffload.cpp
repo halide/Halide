@@ -192,10 +192,14 @@ class InjectHexagonRpc : public IRMutator {
             std::vector<Expr> arg_flags;
 
             for (const auto& i : c.buffers) {
-                // TODO(abadams): Talk to dsharlet about how to fix this.
-                internal_error << "Copying buffers to Hexagon not yet supported in new_buffer_t_v2 branch";
-                arg_sizes.push_back(Expr((uint64_t) sizeof(halide_buffer_t*)));
-                arg_ptrs.push_back(Variable::make(type_of<halide_buffer_t *>(), i.first + ".buffer"));
+                // The Hexagon runtime expects buffer args to be
+                // passed as just the device and host field.
+                Expr device = Variable::make(UInt(64), i.first + ".device");
+                Expr host = Variable::make(Handle(), i.first + ".host");
+                Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
+                arg_ptrs.push_back(pseudo_buffer);
+                arg_sizes.push_back(Expr((uint64_t)(pseudo_buffer.type().bytes())));
+
                 // In the flags parameter, bit 0 set indicates the
                 // buffer is read, bit 1 set indicates the buffer is
                 // written. If neither are set, the argument is a scalar.

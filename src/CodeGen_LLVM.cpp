@@ -768,10 +768,10 @@ void CodeGen_LLVM::compile_buffer(const BufferPtr &buf) {
     shape = ConstantExpr::getPointerCast(shape, dimension_t_type->getPointerTo());
 
     // For now, we assume buffers that aren't scalar are constant,
-    // while scalars can be mutated. This accomodates all our existing
+    // while scalars can be mutated. This accommodates all our existing
     // use cases, which is that all buffers are constant, except those
     // used to store stateful module information in offloading runtimes.
-    bool constant = b.dimensions() == 0;
+    bool constant = b.dimensions() != 0;
 
     vector<char> data_blob((char *)b.data(), (char *)b.data() + b.size_in_bytes());
 
@@ -2850,8 +2850,8 @@ void CodeGen_LLVM::visit(const Call *op) {
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_bool()) {
                     call_args.push_back(builder->CreateSelect(
-                        codegen(op->args[i]), 
-                        codegen(StringImm::make("true")), 
+                        codegen(op->args[i]),
+                        codegen(StringImm::make("true")),
                         codegen(StringImm::make("false"))));
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_int()) {
