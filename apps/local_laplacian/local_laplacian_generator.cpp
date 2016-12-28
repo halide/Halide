@@ -93,7 +93,8 @@ public:
 
         if (get_target().has_gpu_feature()) {
             // gpu schedule
-            output.compute_root().gpu_tile(x, y, 16, 8);
+            Var xi, yi;
+            output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
             for (int j = 0; j < J; j++) {
                 int blockw = 16, blockh = 8;
                 if (j > 3) {
@@ -101,10 +102,10 @@ public:
                     blockh = 2;
                 }
                 if (j > 0) {
-                    inGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh);
-                    gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, blockw, blockh);
+                    inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
+                    gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
                 }
-                outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh);
+                outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
             }
         } else {
             // cpu schedule

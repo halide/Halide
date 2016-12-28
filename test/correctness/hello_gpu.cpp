@@ -6,7 +6,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    Var x("x"), y("y");
+    Var x("x"), y("y"), xi("xi"), yi("yi");
     Func f("f");
 
     printf("Defining function...\n");
@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, y, 8, 8);
+        f.gpu_tile(x, y, xi, yi, 8, 8);
     }
 
     printf("Realizing function...\n");

@@ -17,7 +17,8 @@ int main(int argc, char **argv) {
 
     f(x, y, z) = x*y+z*k+1;
 
-    f.gpu_tile(x, y, 16, 16);
+    Var xi, yi;
+    f.gpu_tile(x, y, xi, yi, 16, 16);
     f.parallel(z);
 
     Buffer<int> im = f.realize(64, 64, 64);

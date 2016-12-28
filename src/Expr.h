@@ -327,13 +327,15 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
 
 namespace Internal {
 
-/** An enum describing a type of loop traversal. Used in schedules,
- * and in the For loop IR node. */
+/** An enum describing a type of loop traversal. Used in schedules, and in
+ * the For loop IR node. GPUBlock and GPUThread are implicitly parallel */
 enum class ForType {
     Serial,
     Parallel,
     Vectorized,
-    Unrolled
+    Unrolled,
+    GPUBlock,
+    GPUThread
 };
 
 

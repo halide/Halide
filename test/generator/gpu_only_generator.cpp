@@ -15,7 +15,8 @@ public:
 
         Target target = get_target();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 16, 16);
+            Var xo, yo, xi, yi;
+            f.gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
         }
         return f;
     }

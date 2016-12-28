@@ -232,6 +232,7 @@ set(HEADER_FILES
   BoundsInference.h
   BufferPtr.h
   CSE.h
+  CanonicalizeGPUVars.h
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
@@ -400,6 +401,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
+  CanonicalizeGPUVars.cpp
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp

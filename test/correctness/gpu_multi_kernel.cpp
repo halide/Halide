@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char *argv[]) {
-    Var x;
+    Var x, xi;
 
     Func kernel1;
     kernel1(x) = floor((x + 0.5f) / 3.0f);
@@ -17,9 +17,9 @@ int main(int argc, char *argv[]) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        kernel1.gpu_tile(x, 32).compute_root();
-        kernel2.gpu_tile(x, 32).compute_root();
-        kernel3.gpu_tile(x, 32);
+        kernel1.gpu_tile(x, xi, 32).compute_root();
+        kernel2.gpu_tile(x, xi, 32).compute_root();
+        kernel3.gpu_tile(x, xi, 32);
     } else {
         kernel1.compute_root();
         kernel2.compute_root();
