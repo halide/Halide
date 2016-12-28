@@ -475,6 +475,36 @@ void CodeGen_Hexagon::init_module() {
     }
 }
 
+void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm::Value *buffer) {
+
+    // Buffers come in to hexagon kernels as just a dev/host pair
+    StructType *struct_type = StructType::get(*context, {i64_t, i8_t->getPointerTo()});
+    llvm::Type *type = struct_type->getPointerTo();
+    buffer = builder->CreatePointerCast(buffer, type);
+    Value *device_ptr = builder->CreateLoad(create_gep(struct_type, buffer, {0, 0}));
+    Value *host_ptr = builder->CreateLoad(create_gep(struct_type, buffer, {0, 1}));
+
+    // Track this buffer name so that loads and stores from it
+    // don't try to be too aligned.
+    external_buffer.insert(name);
+
+    // Push the buffer pointer as well, to pass through to
+    // sub-functions. TODO: This might have nasty implications for
+    // extern stages on hexagon that take buffers passed through from
+    // the input, but we are constrained by how the hexagon runtime
+    // (which is hard to update) chose to treat buffer arguments.
+    sym_push(name + ".buffer", buffer);
+    sym_push(name + ".host", host_ptr);
+    sym_push(name + ".device", device_ptr);
+}
+
+void CodeGen_Hexagon::pop_buffer(const std::string &name, int dimensions) {
+    sym_pop(name + ".buffer");
+    sym_pop(name + ".host");
+    sym_pop(name + ".device");
+}
+
+
 llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(int id, Type ret_ty, const string &name,
                                                       const vector<Type> &arg_types, bool broadcast_scalar_word) {
     internal_assert(id != Intrinsic::not_intrinsic);

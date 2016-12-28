@@ -576,8 +576,8 @@ WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct halide_buf
     }
     handle->buffer = ion_buf;
     handle->size = size;
-    buf->device_interface->use_module();
     buf->device_interface = &hexagon_device_interface;
+    buf->device_interface->use_module();
     buf->device = reinterpret<uint64_t>(handle);
     return 0;
 }

@@ -233,8 +233,8 @@ protected:
     /** Take an llvm Value representing a pointer to a buffer_t,
      * and populate the symbol table with its constituent parts.
      */
-    void push_buffer(const std::string &name, int dimensions, llvm::Value *buffer);
-    void pop_buffer(const std::string &name, int dimensions);
+    virtual void push_buffer(const std::string &name, int dimensions, llvm::Value *buffer);
+    virtual void pop_buffer(const std::string &name, int dimensions);
 
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */

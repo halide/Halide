@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    int (*pipeline)(buffer_t *, buffer_t*);
+    int (*pipeline)(halide_buffer_t *, halide_buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
         pipeline = pipeline_cpu;
         printf("Using CPU schedule\n");
