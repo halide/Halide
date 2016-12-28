@@ -36,7 +36,8 @@ int main(int argc, char **argv) {
     // Schedule.
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        dilate3x3.gpu_tile(x, y, 16, 16);
+        Var xi("xi"), yi("yi");
+        dilate3x3.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         dilate3x3.hexagon().vectorize(x, 64);
     } else {

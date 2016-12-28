@@ -45,7 +45,8 @@ int main(int argc, char **argv) {
     Func f;
     f(x, y, z, w) = 3*x + 2*y + z + 4*w;
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, y, 16, 16);
+        Var xi, yi;
+        f.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon().vectorize(x, 16);
     }

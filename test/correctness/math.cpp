@@ -60,10 +60,10 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
             return;                                                     \
         }                                                               \
         Func test_##name("test_" #name);                                \
-        Var x("x");                                                     \
+        Var x("x"), xi("xi");                                           \
         test_##name(x) = name(in(x));                                   \
         if (target.has_gpu_feature()) {                                 \
-            test_##name.gpu_tile(x, 8);                                 \
+            test_##name.gpu_tile(x, xi, 8);                             \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) { \
             test_##name.hexagon();                                      \
         }                                                               \
@@ -79,16 +79,16 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
 
 // Version for a one argument function
 #define fun_2(type_ret, type, name, c_name)                                         \
-    void test_##type##_##name(Buffer<type> in) {                                     \
+    void test_##type##_##name(Buffer<type> in) {                                    \
         Target target = get_jit_target_from_environment();                          \
         if (!target.supports_type(type_of<type>())) {                               \
             return;                                                                 \
         }                                                                           \
         Func test_##name("test_" #name);                                            \
-        Var x("x");                                                                 \
+        Var x("x"), xi("xi");                                                       \
         test_##name(x) = name(in(0, x), in(1, x));                                  \
         if (target.has_gpu_feature()) {                                             \
-            test_##name.gpu_tile(x, 8);                                             \
+            test_##name.gpu_tile(x, xi, 8);                                         \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
