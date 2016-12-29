@@ -687,31 +687,31 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         if (runtime_kind == MainShared) {
             runtime_internal_handlers.custom_print =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_print", print_handler);
+                hook_function(runtime.exports(), "halide_set_custom_print", print_handler);
 
             runtime_internal_handlers.custom_malloc =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_malloc", malloc_handler);
+                hook_function(runtime.exports(), "halide_set_custom_malloc", malloc_handler);
 
             runtime_internal_handlers.custom_free =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_free", free_handler);
+                hook_function(runtime.exports(), "halide_set_custom_free", free_handler);
 
             runtime_internal_handlers.custom_do_task =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_task", do_task_handler);
+                hook_function(runtime.exports(), "halide_set_custom_do_task", do_task_handler);
 
             runtime_internal_handlers.custom_do_par_for =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+                hook_function(runtime.exports(), "halide_set_custom_do_par_for", do_par_for_handler);
 
             runtime_internal_handlers.custom_error =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_error_handler", error_handler_handler);
+                hook_function(runtime.exports(), "halide_set_error_handler", error_handler_handler);
 
             runtime_internal_handlers.custom_trace =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_trace", trace_handler);
+                hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
 
             if (default_cache_size != 0) {
-                shared_runtimes(MainShared).memoization_cache_set_size(default_cache_size);
+                runtime.memoization_cache_set_size(default_cache_size);
             }
 
             runtime.jit_module->name = "MainShared";
