@@ -1014,37 +1014,29 @@ Pipeline::make_externs_jit_module(const Target &target,
     for (std::map<std::string, JITExtern>::iterator iter = externs_in_out.begin();
          iter != externs_in_out.end();
          iter++) {
-        JITExtern &jit_extern(iter->second);
-        if (iter->second.pipeline.defined()) {
-            PipelineContents &pipeline_contents(*jit_extern.pipeline.contents);
+        Pipeline pipeline = iter->second.pipeline();
+        if (pipeline.defined()) {
+            PipelineContents &pipeline_contents(*pipeline.contents);
 
             // Ensure that the pipeline is compiled.
-            jit_extern.pipeline.compile_jit(target);
+            pipeline.compile_jit(target);
 
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
             free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
-            auto &extern_c_function = iter->second.extern_c_function;
-            extern_c_function.address = pipeline_contents.jit_module.entrypoint_symbol().address;
-            extern_c_function.signature.is_void_return = false;
-            extern_c_function.signature.ret_type = Int(32);
+            void *address = pipeline_contents.jit_module.entrypoint_symbol().address;
+            std::vector<ScalarOrBufferT> arg_types;
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
-                 ScalarOrBufferT arg_type_info;
-                 arg_type_info.is_buffer = arg.arg.is_buffer();
-                 if (!arg_type_info.is_buffer) {
-                     arg_type_info.scalar_type = arg.arg.type;
-                 }
-                 extern_c_function.signature.arg_types.push_back(arg_type_info);
+                 arg_types.push_back({arg.arg.type, arg.arg.is_buffer()});
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
-                ScalarOrBufferT arg_type_info;
-                arg_type_info.is_buffer = true;
-                extern_c_function.signature.arg_types.push_back(arg_type_info);
+                arg_types.push_back({Type(), /*is_buffer*/ true});
             }
-            iter->second.pipeline = Pipeline();
+            ExternSignature signature(Int(32), false, arg_types);
+            iter->second = ExternCFunction(address, signature);
         } else {
-            free_standing_jit_externs.add_extern_for_export(iter->first, jit_extern.extern_c_function);
+            free_standing_jit_externs.add_extern_for_export(iter->first, iter->second.extern_c_function());
         }
     }
     if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
@@ -1276,15 +1268,15 @@ void Pipeline::invalidate_cache() {
 }
 
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline(pipeline) {
+    : pipeline_(pipeline) {
 }
 
 JITExtern::JITExtern(Func func)
-    : pipeline(func) {
+    : pipeline_(func) {
 }
 
 JITExtern::JITExtern(const ExternCFunction &extern_c_function)
-    : extern_c_function(extern_c_function) {
+    : extern_c_function_(extern_c_function) {
 }
 
 }  // namespace Halide

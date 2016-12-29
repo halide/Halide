@@ -391,41 +391,42 @@ private:
 
 };
 
+struct ScalarOrBufferT {
+private:
+    Type scalar_type_;       // Only meaningful if is_buffer is false; must be default value otherwise
+    bool is_buffer_{false};
+
+public:
+    ScalarOrBufferT() = default;
+
+    ScalarOrBufferT(const Type &scalar_type, bool is_buffer)
+        : scalar_type_(scalar_type)
+        , is_buffer_(is_buffer) {
+        internal_assert(!(is_buffer && scalar_type != Type())); 
+    }
+
+    // Can't specialize on a default-shaped ctor. Use static method instead.
+    template <typename T>
+    static ScalarOrBufferT make() {
+        return ScalarOrBufferT(type_of<T>(), std::is_same<T, struct buffer_t *>::value);
+    }
+
+    const Type &scalar_type() const { 
+        internal_assert(!is_buffer()); 
+        return scalar_type_; 
+    }
+
+    bool is_buffer() const {
+        return is_buffer_; 
+    }
+};
+
 namespace {
-
-template <typename T>
-bool voidable_halide_type(Type &t) {
-    t = type_of<T>();
-    return false;
-}
-
-template<>
-inline bool voidable_halide_type<void>(Type &t) {
-    return true;
-}
-
-template <typename T>
-bool scalar_arg_type_or_buffer(Type &t) {
-    t = type_of<T>();
-    return false;
-}
-
-template <>
-inline bool scalar_arg_type_or_buffer<struct buffer_t *>(Type &t) {
-    return true;
-}
-
-template <typename T>
-ScalarOrBufferT arg_type_info() {
-    ScalarOrBufferT result;
-    result.is_buffer = scalar_arg_type_or_buffer<T>(result.scalar_type);
-    return result;
-}
 
 template <typename A1, typename... Args>
 struct make_argument_list {
     static void add_args(std::vector<ScalarOrBufferT> &arg_types) {
-       arg_types.push_back(arg_type_info<A1>());
+       arg_types.push_back(ScalarOrBufferT::make<A1>());
        make_argument_list<Args...>::add_args(arg_types);
     }
 };
@@ -437,38 +438,86 @@ struct make_argument_list<void> {
 
 
 template <typename... Args>
-void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
+std::vector<ScalarOrBufferT> init_arg_types() {
+    std::vector<ScalarOrBufferT> arg_types;
     make_argument_list<Args..., void>::add_args(arg_types);
+    return arg_types;
 }
 
-}
+}  // namespace
 
-struct ExternCFunction {
-    void *address{nullptr};
-    ExternSignature signature;
+struct ExternSignature {
+private:
+    Type ret_type_;       // Only meaningful if is_void_return is false; must be default value otherwise
+    bool is_void_return_{false};
+    std::vector<ScalarOrBufferT> arg_types_;
 
-    ExternCFunction() = default;
+public:
+    ExternSignature() = default;
+
+    ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<ScalarOrBufferT> &arg_types)
+        : ret_type_(ret_type)
+        , is_void_return_(is_void_return)
+        , arg_types_(arg_types) {
+        internal_assert(!(is_void_return && ret_type != Type())); 
+    }
 
     template <typename RT, typename... Args>
-    ExternCFunction(RT (*f)(Args... args)) {
-        address = (void *)f;
-        signature.is_void_return = voidable_halide_type<RT>(signature.ret_type);
-        init_arg_types<Args...>(signature.arg_types);
+    ExternSignature(RT (*f)(Args... args)) 
+        : ret_type_(type_of<RT>())
+        , is_void_return_(std::is_void<RT>::value)
+        , arg_types_(init_arg_types<Args...>()) {
+    }
+
+    const Type &ret_type() const { 
+        internal_assert(!is_void_return()); 
+        return ret_type_; 
+    }
+
+    bool is_void_return() const {
+        return is_void_return_; 
+    }
+
+    const std::vector<ScalarOrBufferT> &arg_types() const { 
+        return arg_types_; 
     }
 };
 
-struct JITExtern {
-    // assert pipeline.defined() == (extern_c_function.address == nullptr) -- strictly one or the other
-    // which should be enforced by the constructors.
-    Pipeline pipeline;
-    ExternCFunction extern_c_function;
+struct ExternCFunction {
+private:
+    void *address_{nullptr};
+    ExternSignature signature_;
 
+public:
+    ExternCFunction() = default;
+
+    ExternCFunction(void *address, const ExternSignature &signature)
+        : address_(address), signature_(signature) {}
+
+    template <typename RT, typename... Args>
+    ExternCFunction(RT (*f)(Args... args)) : ExternCFunction((void *)f, ExternSignature(f)) {}
+
+    void *address() const { return address_; }
+    const ExternSignature &signature() const { return signature_; }
+};
+
+struct JITExtern {
+private:
+    // Note that exactly one of pipeline_ and extern_c_function_ 
+    // can be set in a given JITExtern instance.
+    Pipeline pipeline_;
+    ExternCFunction extern_c_function_;
+
+public:
     EXPORT JITExtern(Pipeline pipeline);
     EXPORT JITExtern(Func func);
     EXPORT JITExtern(const ExternCFunction &extern_c_function);
 
     template <typename RT, typename... Args>
     JITExtern(RT (*f)(Args... args)) : JITExtern(ExternCFunction(f)) {}
+
+    const Pipeline &pipeline() const { return pipeline_; }
+    const ExternCFunction &extern_c_function() const { return extern_c_function_; }
 };
 
 }  // namespace Halide
