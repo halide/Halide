@@ -557,22 +557,32 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
                               const std::string& extern_name, const std::vector<LoweredArgument>& args) {
     current_function_args = args;
 
+    // Deduce the types of the arguments to our function
+    vector<llvm::Type *> arg_types(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer()) {
+            arg_types[i] = buffer_t_type->getPointerTo();
+        } else {
+            arg_types[i] = llvm_type_of(args[i].type);
+        }
+    }
+    FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
+
     // Make our function. There may already be a declaration of it.
     function = module->getFunction(extern_name);
     if (!function) {
-        // Deduce the types of the arguments to our function
-        vector<llvm::Type *> arg_types(args.size());
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer()) {
-                arg_types[i] = buffer_t_type->getPointerTo();
-            } else {
-                arg_types[i] = llvm_type_of(args[i].type);
-            }
-        }
-        FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
         function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
     } else {
-        internal_assert(function->isDeclaration());
+        user_assert(function->isDeclaration())
+            << "Another function with the name " << extern_name
+            << " already exists in the same module";
+        if (func_t != function->getFunctionType()) {
+            std::cerr << "Desired function type for " << extern_name << ":\n";
+            func_t->dump();
+            std::cerr << "Declared function type of " << extern_name << ":\n";
+            function->getFunctionType()->dump();
+            user_error << "Cannot create a function with a declaration of mismatched type.\n";
+        }
     }
     set_function_attributes_for_target(function, target);
 
