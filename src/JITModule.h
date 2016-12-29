@@ -25,23 +25,6 @@ struct JITExtern;
 struct Target;
 class Module;
 
-// TODO: Consider moving these two types elsewhere and seeing if they
-// can be combined with other types used for argument handling, or used
-// elsewhere.
-struct ScalarOrBufferT {
-    bool is_buffer;
-    Type scalar_type; // Only meaningful if is_buffer is false.
-    ScalarOrBufferT() : is_buffer(false) { }
-};
-
-struct ExternSignature {
-    bool is_void_return;
-    Type ret_type;
-    std::vector<ScalarOrBufferT> arg_types;
-
-    ExternSignature() : is_void_return(false) { }
-};
-
 namespace Internal {
 
 class JITModuleContents;
