@@ -132,6 +132,10 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
+std::vector<Internal::LoweredFunc> &Module::functions() {
+    return contents->functions;
+}
+
 void Module::append(const Internal::BufferPtr &buffer) {
     contents->buffers.push_back(buffer);
 }

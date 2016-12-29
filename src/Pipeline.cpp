@@ -9,6 +9,7 @@
 #include "Lower.h"
 #include "Outputs.h"
 #include "PrintLoopNest.h"
+#include "WrapExternStages.h"
 
 using namespace Halide::Internal;
 
@@ -624,6 +625,9 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     public_body = LetStmt::make(private_result_name, call_private, public_body);
 
     module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
+
+    // Append any wrappers for extern stages that expect the old buffer_t
+    wrap_extern_stages(module);
 
     contents->module = module;
 

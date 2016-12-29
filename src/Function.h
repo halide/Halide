@@ -195,12 +195,16 @@ public:
     /** Check if the function has an extern definition */
     EXPORT bool extern_definition_is_c_plus_plus() const;
 
+    /** Check if the extern function being called expects the legacy buffer_t type */
+    EXPORT bool extern_definition_uses_old_buffer_t() const;
+
     /** Add an external definition of this Func */
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
                               int dimensionality,
-                              bool is_c_plus_plus);
+                              bool is_c_plus_plus,
+                              bool use_old_buffer_t);
 
     /** Retrive the arguments of the extern definition */
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;

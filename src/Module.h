@@ -83,6 +83,7 @@ public:
     // @{
     EXPORT const std::vector<Internal::BufferPtr> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
+    EXPORT std::vector<Internal::LoweredFunc> &functions();
     // @}
 
     /** Add a declaration to this module. */

@@ -557,19 +557,23 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
                               const std::string& extern_name, const std::vector<LoweredArgument>& args) {
     current_function_args = args;
 
-    // Deduce the types of the arguments to our function
-    vector<llvm::Type *> arg_types(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            arg_types[i] = buffer_t_type->getPointerTo();
-        } else {
-            arg_types[i] = llvm_type_of(args[i].type);
+    // Make our function. There may already be a declaration of it.
+    function = module->getFunction(extern_name);
+    if (!function) {
+        // Deduce the types of the arguments to our function
+        vector<llvm::Type *> arg_types(args.size());
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer()) {
+                arg_types[i] = buffer_t_type->getPointerTo();
+            } else {
+                arg_types[i] = llvm_type_of(args[i].type);
+            }
         }
+        FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
+        function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
+    } else {
+        internal_assert(function->isDeclaration());
     }
-
-    // Make our function
-    FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
     set_function_attributes_for_target(function, target);
 
     // Mark the buffer args as no alias
@@ -626,8 +630,8 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     current_function_args.clear();
 }
 
-  void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
-                                  const std::string &extern_name) {
+void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
+                                const std::string &extern_name) {
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
@@ -2770,7 +2774,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
 
             // Create an struct on the stack.
-            StructType *struct_t = StructType::create(types);
+            StructType *struct_t = StructType::get(*context, types);
             Value *ptr = create_alloca_at_entry(struct_t, 1);
 
             // Put the elements in the struct.
