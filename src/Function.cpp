@@ -46,6 +46,7 @@ struct FunctionContents {
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
     bool extern_is_c_plus_plus;
+    bool extern_uses_old_buffer_t;
 
     bool trace_loads, trace_stores, trace_realizations;
 
@@ -305,6 +306,7 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->debug_file = src->debug_file;
     dst->extern_function_name = src->extern_function_name;
     dst->extern_is_c_plus_plus = src->extern_is_c_plus_plus;
+    dst->extern_uses_old_buffer_t = src->extern_uses_old_buffer_t;
     dst->trace_loads = src->trace_loads;
     dst->trace_stores = src->trace_stores;
     dst->trace_realizations = src->trace_realizations;
@@ -677,7 +679,8 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &args,
                              const std::vector<Type> &types,
                              int dimensionality,
-                             bool is_c_plus_plus) {
+                             bool is_c_plus_plus,
+                             bool use_old_buffer_t) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -691,6 +694,7 @@ void Function::define_extern(const std::string &function_name,
     contents->extern_arguments = args;
     contents->output_types = types;
     contents->extern_is_c_plus_plus = is_c_plus_plus;
+    contents->extern_uses_old_buffer_t = use_old_buffer_t;
 
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
@@ -800,6 +804,10 @@ bool Function::has_extern_definition() const {
 
 bool Function::extern_definition_is_c_plus_plus() const {
     return contents->extern_is_c_plus_plus;
+}
+
+bool Function::extern_definition_uses_old_buffer_t() const {
+    return contents->extern_uses_old_buffer_t;
 }
 
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {

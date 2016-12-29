@@ -573,7 +573,8 @@ public:
 
             // Make the extern call
             Expr e = Call::make(Int(32), extern_name, bounds_inference_args,
-                                func.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus : Call::Extern);
+                                func.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus : Call::Extern,
+                                func.get_contents());
             // Check if it succeeded
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);

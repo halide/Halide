@@ -363,7 +363,8 @@ SOURCE_FILES = \
   Var.cpp \
   VaryingAttributes.cpp \
   VectorizeLoops.cpp \
-  WrapCalls.cpp
+  WrapCalls.cpp \
+  WrapExternStages.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
 HEADER_FILES = \
@@ -496,7 +497,8 @@ HEADER_FILES = \
   Var.h \
   VaryingAttributes.h \
   VectorizeLoops.h \
-  WrapCalls.h
+  WrapCalls.h \
+  WrapExternStages.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
