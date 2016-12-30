@@ -16,12 +16,14 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 #if CACHE_DEBUGGING
 WEAK void debug_print_buffer(void *user_context, const char *buf_name, const halide_buffer_t &buf) {
-    debug(user_context) << buf_name
-                        << ": elem_size " << buf.elem_size << ", "
-                        << "(" << buf.dim[0].min << ", " << buf.dim[0].extent << ", " << buf.dim[0].stride << ") "
-                        << "(" << buf.dim[1].min << ", " << buf.dim[1].extent << ", " << buf.dim[1].stride << ") "
-                        << "(" << buf.dim[2].min << ", " << buf.dim[2].extent << ", " << buf.dim[2].stride << ") "
-                        << "(" << buf.dim[3].min << ", " << buf.dim[3].extent << ", " << buf.dim[3].stride << ")\n";
+    debug(user_context) << buf_name << ": elem_size " << buf.type.bytes() << " dimensions " << buf.dimensions << ", ";
+    for (int i = 0; i < buf.dimensions; i++) {
+        debug(user_context) << "(" << buf.dim[i].min
+                            << ", " << buf.dim[i].extent
+                            << ", " << buf.dim[i].stride << ") ";
+    }
+    debug(user_context) << "\n";
+
 }
 
 WEAK char to_hex_char(int val) {
@@ -149,9 +151,6 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     buf = (halide_buffer_t *)metadata_storage;
     computed_bounds = (halide_dimension_t *)(metadata_storage + shape_offset);
     key = metadata_storage + key_offset;
-    for (uint32_t i = 0; i < tuple_count; i++) {
-        buf[i].dim = computed_bounds + (i+1)*dimensions;
-    }
 
     // Copy over the key
     for (size_t i = 0; i < key_size; i++) {
@@ -166,6 +165,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     // Copy over the tuple buffers and the shapes of the allocated regions
     for (uint32_t i = 0; i < tuple_count; i++) {
         buf[i] = *tuple_buffers[i];
+        buf[i].dim = computed_bounds + (i+1)*dimensions;
         for (int j = 0; j < dimensions; j++) {
             buf[i].dim[j] = tuple_buffers[i]->dim[j];
         }
@@ -244,6 +244,10 @@ WEAK void validate_cache() {
     }
     if (entries_in_hash_table != entries_from_lru) {
         halide_print(NULL, "cache invalid case 4\n");
+        __builtin_trap();
+    }
+    if (current_cache_size < 0) {
+        halide_print(NULL, "cache size is negative\n");
         __builtin_trap();
     }
 }
