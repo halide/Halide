@@ -107,8 +107,9 @@ public:
      \code
      ImageParam img(Int(32), 2);
      output(x, y) = img(y, x);
-     output.compute_root().gpu_tile(x, y, 8, 8);
-     img.in().compute_at(output, Var::gpu_blocks()).unroll(_0, 2).unroll(_1, 2).gpu_threads(x, y);
+     Var tx, ty;
+     output.compute_root().gpu_tile(x, y, tx, ty, 8, 8);
+     img.in().compute_at(output, x).unroll(_0, 2).unroll(_1, 2).gpu_threads(x, y);
      \endcode
      *
      * Note that we use implicit vars to name the dimensions of the wrapper Func

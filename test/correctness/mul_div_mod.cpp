@@ -285,7 +285,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
 
     // Compute the multiplication, check that the results match.
     Func f;
-    Var x, y;
+    Var x, y, xi, yi;
     f(x, y) = cast(rt, a(x, y)) * cast(rt, b(x, y));
     if (vector_width > 1) {
         f.vectorize(x, vector_width);
@@ -294,7 +294,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
         case CPU:
             break;
         case TiledGPU:
-            f.compute_root().gpu_tile(x, y, 16, 16);
+            f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
             break;
         case Hexagon:
             f.compute_root().hexagon();
@@ -370,7 +370,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
 
     // Compute division and mod, and check they satisfy the requirements of Euclidean division.
     Func f;
-    Var x, y;
+    Var x, y, xi, yi;
     f(x, y) = Tuple(a(x, y) / b(x, y), a(x, y) % b(x, y));  // Using Halide division operation.
     if (vector_width > 1) {
         f.vectorize(x, vector_width);
@@ -379,7 +379,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
         case CPU:
             break;
         case TiledGPU:
-            f.compute_root().gpu_tile(x, y, 16, 16);
+            f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
             break;
         case Hexagon:
             f.compute_root().hexagon();
