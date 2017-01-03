@@ -625,15 +625,17 @@ extract_llvm_objects: $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(BUILD_DIR)/llvm_objects
 	touch $(BUILD_DIR)/llvm_objects/list
 	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LIBDL) -lz -lpthread | egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list.new
-	# if the list has changed since the previous build, then delete the old object files and regenerate the extractor script
-	if cmp -s $(BUILD_DIR)/llvm_objects/list.new $(BUILD_DIR)/llvm_objects/list; \
+	# if the list has changed since the previous build, then
+	# delete the old object files and re-extract the required
+	# object files
+	cd $(BUILD_DIR)/llvm_objects; \
+	if cmp -s list.new list; \
 	then \
 	echo "No changes in LLVM deps"; \
 	else \
-	rm -f $(BUILD_DIR)/llvm_objects/llvm_*; \
-	mv $(BUILD_DIR)/llvm_objects/list.new $(BUILD_DIR)/llvm_objects/list; \
-	cat $(BUILD_DIR)/llvm_objects/list | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" > $(BUILD_DIR)/llvm_objects/extract.sh; \
-	cd $(BUILD_DIR)/llvm_objects; bash ./extract.sh; \
+	rm -f llvm_*.o*; \
+	mv list.new list; \
+	cat list | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash -; \
 	fi
 
 $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) extract_llvm_objects
