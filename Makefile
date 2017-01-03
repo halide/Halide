@@ -616,17 +616,27 @@ endif
 .PHONY: all
 all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
 
-$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
+.PHONY: extract_llvm_objects
+extract_llvm_objects: $(OBJECTS) $(INITIAL_MODULES)
 	# Determine the relevant object files from llvm with a dummy
 	# compilation. Passing -t to the linker gets it to list which
 	# object files in which archives it uses to resolve
 	# symbols. We only care about the libLLVM ones.
-	@rm -rf $(BUILD_DIR)/llvm_objects
 	@mkdir -p $(BUILD_DIR)/llvm_objects
-	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LIBDL) -lz -lpthread | egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list
-	cat $(BUILD_DIR)/llvm_objects/list | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" > $(BUILD_DIR)/llvm_objects/extract.sh
-	# Extract the necessary object files from the llvm archives.
-	cd $(BUILD_DIR)/llvm_objects; bash ./extract.sh
+	touch $(BUILD_DIR)/llvm_objects/list
+	$(CXX) -o /dev/null -shared $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) $(LIBDL) -lz -lpthread | egrep "libLLVM" > $(BUILD_DIR)/llvm_objects/list.new
+	# if the list has changed since the previous build, then delete the old object files and regenerate the extractor script
+	if cmp -s $(BUILD_DIR)/llvm_objects/list.new $(BUILD_DIR)/llvm_objects/list; \
+	then \
+	echo "No changes in LLVM deps"; \
+	else \
+	rm -f $(BUILD_DIR)/llvm_objects/llvm_*; \
+	mv $(BUILD_DIR)/llvm_objects/list.new $(BUILD_DIR)/llvm_objects/list; \
+	cat $(BUILD_DIR)/llvm_objects/list | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" > $(BUILD_DIR)/llvm_objects/extract.sh; \
+	cd $(BUILD_DIR)/llvm_objects; bash ./extract.sh; \
+	fi
+
+$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) extract_llvm_objects
 	# Archive together all the halide and llvm object files
 	@-mkdir -p $(LIB_DIR)
 	@rm -f $(LIB_DIR)/libHalide.a
@@ -634,7 +644,7 @@ $(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	echo $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/llvm_*.o* | xargs -n200 ar q $(LIB_DIR)/libHalide.a
 	ranlib $(LIB_DIR)/libHalide.a
 
-$(BIN_DIR)/libHalide.$(SHARED_EXT): $(LIB_DIR)/libHalide.a
+$(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p $(BIN_DIR)
 	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LD_FLAGS) $(LIBDL) -lz -lpthread -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
