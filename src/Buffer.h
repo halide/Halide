@@ -421,13 +421,13 @@ public:
     /** Make an Expr that loads from this concrete buffer at a computed coordinate. */
     // @{
     template<typename ...Args>
-    Expr operator()(Expr first, Args... rest) {
+    Expr operator()(Expr first, Args... rest) const {
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
     };
 
     template<typename ...Args>
-    Expr operator()(const std::vector<Expr> &args) {
+    Expr operator()(const std::vector<Expr> &args) const {
         return buffer_accessor(Buffer<>(*this), args);
     };
     // @}
