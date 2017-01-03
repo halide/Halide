@@ -437,11 +437,11 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternCFunc
     }
 
     std::vector<llvm::Type *> llvm_arg_types;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : signature.arg_types()) {
-        if (scalar_or_buffer_t.is_buffer()) {
+    for (const Type &t : signature.arg_types()) {
+        if (t == type_of<struct buffer_t *>()) {
             llvm_arg_types.push_back(buffer_t_star);
         } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, scalar_or_buffer_t.scalar_type()));
+            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, t));
         }
     }
 

@@ -1024,14 +1024,21 @@ Pipeline::make_externs_jit_module(const Target &target,
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
             free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
             void *address = pipeline_contents.jit_module.entrypoint_symbol().address;
-            std::vector<ScalarOrBufferT> arg_types;
+            std::vector<Type> arg_types;
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
-                 arg_types.push_back({arg.arg.type, arg.arg.is_buffer()});
+                // TODO: it's not clear whether arg.arg.type is correct for
+                // the arg.is_buffer() case (AFAIK, is_buffer()==true isn't possible
+                // in current mtrunk Halide, but may be in some side branches that
+                // have not yet landed, e.g. JavaScript). Forcing it to be 
+                // the correct type here, just in case.
+                arg_types.push_back(arg.arg.is_buffer() ? 
+                                    type_of<struct buffer_t *>() :
+                                    arg.arg.type);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
-                arg_types.push_back({Type(), /*is_buffer*/ true});
+                arg_types.push_back(type_of<struct buffer_t *>());
             }
             ExternSignature signature(Int(32), false, arg_types);
             iter->second = ExternCFunction(address, signature);
