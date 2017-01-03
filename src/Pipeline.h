@@ -391,82 +391,27 @@ private:
 
 };
 
-struct ScalarOrBufferT {
-private:
-    Type scalar_type_;       // Only meaningful if is_buffer is false; must be default value otherwise
-    bool is_buffer_{false};
-
-public:
-    ScalarOrBufferT() = default;
-
-    ScalarOrBufferT(const Type &scalar_type, bool is_buffer)
-        : scalar_type_(scalar_type)
-        , is_buffer_(is_buffer) {
-        internal_assert(!(is_buffer && scalar_type != Type())); 
-    }
-
-    // Can't specialize on a default-shaped ctor. Use static method instead.
-    template <typename T>
-    static ScalarOrBufferT make() {
-        return ScalarOrBufferT(type_of<T>(), std::is_same<T, struct buffer_t *>::value);
-    }
-
-    const Type &scalar_type() const { 
-        internal_assert(!is_buffer()); 
-        return scalar_type_; 
-    }
-
-    bool is_buffer() const {
-        return is_buffer_; 
-    }
-};
-
-namespace {
-
-template <typename A1, typename... Args>
-struct make_argument_list {
-    static void add_args(std::vector<ScalarOrBufferT> &arg_types) {
-       arg_types.push_back(ScalarOrBufferT::make<A1>());
-       make_argument_list<Args...>::add_args(arg_types);
-    }
-};
-
-template <>
-struct make_argument_list<void> {
-    static void add_args(std::vector<ScalarOrBufferT> &) { }
-};
-
-
-template <typename... Args>
-std::vector<ScalarOrBufferT> init_arg_types() {
-    std::vector<ScalarOrBufferT> arg_types;
-    make_argument_list<Args..., void>::add_args(arg_types);
-    return arg_types;
-}
-
-}  // namespace
-
 struct ExternSignature {
 private:
     Type ret_type_;       // Only meaningful if is_void_return is false; must be default value otherwise
     bool is_void_return_{false};
-    std::vector<ScalarOrBufferT> arg_types_;
+    std::vector<Type> arg_types_;
 
 public:
     ExternSignature() = default;
 
-    ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<ScalarOrBufferT> &arg_types)
-        : ret_type_(ret_type)
-        , is_void_return_(is_void_return)
-        , arg_types_(arg_types) {
+    ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<Type> &arg_types)
+        : ret_type_(ret_type),
+          is_void_return_(is_void_return),
+          arg_types_(arg_types) {
         internal_assert(!(is_void_return && ret_type != Type())); 
     }
 
     template <typename RT, typename... Args>
     ExternSignature(RT (*f)(Args... args)) 
-        : ret_type_(type_of<RT>())
-        , is_void_return_(std::is_void<RT>::value)
-        , arg_types_(init_arg_types<Args...>()) {
+        : ret_type_(type_of<RT>()),
+          is_void_return_(std::is_void<RT>::value),
+          arg_types_({type_of<Args>()...}) {
     }
 
     const Type &ret_type() const { 
@@ -478,7 +423,7 @@ public:
         return is_void_return_; 
     }
 
-    const std::vector<ScalarOrBufferT> &arg_types() const { 
+    const std::vector<Type> &arg_types() const { 
         return arg_types_; 
     }
 };
