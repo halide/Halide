@@ -12,12 +12,19 @@ using namespace Halide;
 
 namespace {
 
+int load_library_calls = 0;
+int get_library_symbol_calls = 0;
+
 void my_error_handler(void* u, const char *msg) {
     if (!strstr(msg, "OpenCL API not found")) {
         fprintf(stderr, "Saw unexpected error: %s\n", msg);
         exit(-1);
     }
     printf("Saw expected error: %s\n", msg);
+    if (load_library_calls == 0 || get_library_symbol_calls == 0) {
+        fprintf(stderr, "Should have seen load_library and get_library_symbol calls!\n");
+        exit(-1);
+    }
     printf("Success!\n");
     exit(0);
 }
@@ -28,6 +35,7 @@ void *my_get_symbol_impl(const char *name) {
 }
 
 void *my_load_library_impl(const char *name) {
+    load_library_calls++;
     if (!strstr(name, "OpenCL") && !strstr(name, "opencl")) {
         fprintf(stderr, "Saw unexpected call: load_library(%s)\n", name);
         exit(-1);
@@ -37,6 +45,7 @@ void *my_load_library_impl(const char *name) {
 }
 
 void *my_get_library_symbol_impl(void *lib, const char *name) {
+    get_library_symbol_calls++;
     if (lib != nullptr || strcmp(name, "clGetPlatformIDs") != 0) {
         fprintf(stderr, "Saw unexpected call: get_library_symbol(%p, %s)\n", lib, name);
         exit(-1);
