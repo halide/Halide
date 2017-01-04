@@ -4,7 +4,7 @@
 #include "embed_image.h"
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
     Buffer<float> input(10, 10, 3);

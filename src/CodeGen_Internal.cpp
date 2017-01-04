@@ -20,7 +20,7 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
     for (const pair<string, Type> &i : closure.vars) {
         res.push_back(llvm_type_of(&context, i.second));
     }
-    for (const pair<string, Closure::BufferRef> &i : closure.buffers) {
+    for (const pair<string, Closure::Buffer> &i : closure.buffers) {
         res.push_back(llvm_type_of(&context, i.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
