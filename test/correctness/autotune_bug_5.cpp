@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Func upsampledx("upsampledx");
     Var x("x"), y("y");
 
-    Func clamped;//("clamped");
+    Func clamped("clamped");
     clamped(x, y) = input(x, y);
 
     upsampledx(x, y) = select((x % 2) == 0,
