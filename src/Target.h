@@ -308,13 +308,6 @@ EXPORT Target get_target_from_environment();
  * useful for controlling the feature set. */
 EXPORT Target get_jit_target_from_environment();
 
-/** Return a const ref to the jit target from HL_JIT_TARGET. Calls
- * get_jit_target_from_environment once and caches the result in a
- * static. This function exists so that there is a way to get the jit
- * target in a context in which Target is still an incomplete type (in
- * HalideBuffer.h) */
-EXPORT const Target &get_const_ref_to_jit_target_from_environment(); 
-
 /** Get the Target feature corresponding to a DeviceAPI. For device
  * apis that do not correspond to any single target feature, returns
  * Target::FeatureEnd */

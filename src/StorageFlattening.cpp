@@ -18,7 +18,7 @@ using std::pair;
 using std::set;
 
 namespace {
-    
+
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, pair<Function, int>> &e, const Target &t)
@@ -144,7 +144,7 @@ private:
 
         // Create a buffer_t object for this allocation.
         vector<Expr> args(dims*3 + 2);
-        Expr first_elem = Load::make(op->types[0], op->name, 0, BufferPtr(), Parameter());
+        Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter());
         args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
         args[1] = make_zero(op->types[0]);
         for (int i = 0; i < dims; i++) {
@@ -166,13 +166,13 @@ private:
             Expr stride = stride_var[prev_j] * extent_var[prev_j];
             stmt = LetStmt::make(stride_name[j], stride, stmt);
         }
-        
+
         // Innermost stride is one
         if (dims > 0) {
             int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
             stmt = LetStmt::make(stride_name[innermost], 1, stmt);
         }
-        
+
         // Assign the mins and extents stored
         for (size_t i = op->bounds.size(); i > 0; i--) {
             stmt = LetStmt::make(min_name[i-1], op->bounds[i-1].min, stmt);
@@ -184,7 +184,7 @@ private:
         internal_assert(op->values.size() == 1);
 
         Expr idx = mutate(flatten_args(op->name, op->args));
-        Expr value = mutate(op->values[0]);        
+        Expr value = mutate(op->values[0]);
         stmt = Store::make(op->name, value, idx, Parameter());
     }
 
@@ -221,8 +221,8 @@ class PromoteToMemoryType : public IRMutator {
 
     Type upgrade(Type t) {
         return t.with_bits(((t.bits() + 7)/8)*8);
-    }   
-    
+    }
+
     void visit(const Call *op) {
         if (op->is_intrinsic(Call::address_of)) {
             Expr load = mutate(op->args[0]);
@@ -254,7 +254,7 @@ class PromoteToMemoryType : public IRMutator {
     }
 
     void visit(const Allocate *op) {
-        Type t = upgrade(op->type);        
+        Type t = upgrade(op->type);
         if (t != op->type) {
             vector<Expr> extents;
             for (Expr e : op->extents) {
@@ -288,8 +288,8 @@ class ConnectOutputBuffers : public IRMutator {
             if (outputs.count(f.name())) {
                 output_buf = f.output_buffers()[idx];
             }
-        }                        
-        
+        }
+
         if (output_buf.defined()) {
             stmt = Store::make(op->name, op->value, op->index, output_buf);
         } else {
@@ -299,7 +299,7 @@ class ConnectOutputBuffers : public IRMutator {
 
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
-    
+
 public:
     ConnectOutputBuffers(const std::map<string, pair<Function, int>> &e,
                          const vector<Function> &o) : env(e) {
@@ -310,7 +310,7 @@ public:
 };
 
 }  // namespace
-    
+
 Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
                         const map<string, Function> &env,

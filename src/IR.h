@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "BufferPtr.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"
@@ -17,6 +16,7 @@
 #include "Parameter.h"
 #include "Type.h"
 #include "Util.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
@@ -200,12 +200,12 @@ struct Load : public ExprNode<Load> {
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
-    BufferPtr image;
+    Buffer<> image;
 
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, std::string name, Expr index, BufferPtr image, Parameter param);
+    EXPORT static Expr make(Type type, std::string name, Expr index, Buffer<> image, Parameter param);
 
     static const IRNodeType _type_info = IRNodeType::Load;
 };
@@ -525,7 +525,7 @@ struct Call : public ExprNode<Call> {
 
     // If it's a call to an image, this call nodes hold a
     // pointer to that image's buffer
-    BufferPtr image;
+    Buffer<> image;
 
     // If it's a call to an image parameter, this call node holds a
     // pointer to that
@@ -533,19 +533,19 @@ struct Call : public ExprNode<Call> {
 
     EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                             IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
-                            BufferPtr image = BufferPtr(), Parameter param = Parameter());
+                            Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
     EXPORT static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(BufferPtr image, const std::vector<Expr> &args) {
+    static Expr make(Buffer<> image, const std::vector<Expr> &args) {
         return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, nullptr, 0, BufferPtr(), param);
+        return make(param.type(), param.name(), args, Image, nullptr, 0, Buffer<>(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that
@@ -583,28 +583,29 @@ struct Variable : public ExprNode<Variable> {
     Parameter param;
 
     /** References to properties of literal image parameters. */
-    BufferPtr image;
+    Buffer<> image;
 
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
     static Expr make(Type type, std::string name, unsigned int unique = 0) {
-        return make(type, name, BufferPtr(), Parameter(), ReductionDomain(), unique);
+        return make(type, name, Buffer<>(), Parameter(), ReductionDomain(), unique);
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, BufferPtr(), param, ReductionDomain(), 0);
+        return make(type, name, Buffer<>(), param, ReductionDomain(), 0);
     }
 
-    static Expr make(Type type, std::string name, BufferPtr image) {
+    static Expr make(Type type, std::string name, Buffer<> image) {
         return make(type, name, image, Parameter(), ReductionDomain(), 0);
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, BufferPtr(), Parameter(), reduction_domain, 0);
+        return make(type, name, Buffer<>(), Parameter(), reduction_domain, 0);
     }
 
-    EXPORT static Expr make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain, unsigned int unique = 0);
+    EXPORT static Expr make(Type type, std::string name, Buffer<> image,
+                            Parameter param, ReductionDomain reduction_domain, unsigned int unique = 0);
 
     static const IRNodeType _type_info = IRNodeType::Variable;
 };

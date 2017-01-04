@@ -49,14 +49,7 @@ struct halide_dimension_t {
 };
 
 namespace Halide {
-
-// Forward declare some methods that are needed when using Buffer in a
-// JIT context with GPU-using pipelines.
-struct Target;
-enum class DeviceAPI;
-extern EXPORT const halide_device_interface_t *get_default_device_interface_for_target(const Target &);
-extern EXPORT const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &, const Target &);
-extern EXPORT const Target &get_const_ref_to_jit_target_from_environment();
+namespace Runtime {
 
 template<typename Fn>
 void for_each_element(const buffer_t &buf, Fn &&f);
@@ -64,24 +57,13 @@ void for_each_element(const buffer_t &buf, Fn &&f);
 // Forward-declare our Buffer class
 template<typename T, int D> class Buffer;
 
-// This declaration exists so that Buffer is extensible with custom
-// operator()(Args...) methods. Add implementations of it for whatever
-// types you like. Use enable_if if necessary to stop the overloads
-// being ambiguous.
-template<typename Ret, typename T, int D, typename ...Args>
-Ret image_accessor(const Buffer<T, D> &, Args...);
-
 // A helper to check if a parameter pack is entirely implicitly
 // int-convertible to use with std::enable_if
 template<typename ...Args>
-struct AllInts {
-    static const bool value = false;
-};
+struct AllInts : std::false_type {};
 
 template<>
-struct AllInts<> {
-    static const bool value = true;
-};
+struct AllInts<> : std::true_type {};
 
 template<typename T, typename ...Args>
 struct AllInts<T, Args...> {
@@ -92,14 +74,10 @@ struct AllInts<T, Args...> {
 // doing so produces a warning we treat as an error, so just disallow
 // it here.
 template<typename ...Args>
-struct AllInts<float, Args...> {
-    static const bool value = false;
-};
+struct AllInts<float, Args...> : std::false_type {};
 
 template<typename ...Args>
-struct AllInts<double, Args...> {
-    static const bool value = false;
-};
+struct AllInts<double, Args...> : std::false_type {};
 
 /** A struct acting as a header for allocations owned by the Buffer
  * class itself. */
@@ -112,7 +90,7 @@ struct AllocationHeader {
  * functionality. When using Halide from C++, this is the preferred
  * way to create input and output buffers. The overhead of using this
  * class relative to a naked buffer_t is minimal - it uses another
- * ~100 bytes on the stack, and does no dynamic allocations when using
+ * 32 bytes on the stack, and does no dynamic allocations when using
  * it to represent existing memory. This overhead will shrink further
  * in the future once buffer_t is deprecated.
  *
@@ -193,9 +171,7 @@ private:
     /** Increment the reference count of any owned allocation */
     void incref() const {
         if (!manages_memory()) return;
-        if (alloc) {
-            alloc->ref_count++;
-        }
+        alloc->ref_count++;
         if (buf.dev) {
             if (!dev_ref_count) {
                 // I seem to have a non-zero dev field but no
@@ -213,12 +189,10 @@ private:
      * and device memory if it hits zero. Sets alloc to nullptr. */
     void decref() {
         if (!manages_memory()) return;
-        if (alloc) {
-            int new_count = --(alloc->ref_count);
-            if (new_count == 0) {
-                void (*fn)(void *) = alloc->deallocate_fn;
-                fn(alloc);
-            }
+        int new_count = --(alloc->ref_count);
+        if (new_count == 0) {
+            void (*fn)(void *) = alloc->deallocate_fn;
+            fn(alloc);
         }
         buf.host = nullptr;
         alloc = nullptr;
@@ -466,7 +440,7 @@ public:
 
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
-        return (size_t)((uint8_t *)end() - (uint8_t *)begin());
+        return (size_t)((const uint8_t *)end() - (const uint8_t *)begin());
     }
 
     Buffer() : ty(static_halide_type()) {}
@@ -555,7 +529,6 @@ public:
                                      ty(other.ty),
                                      alloc(other.alloc),
                                      dev_ref_count(other.dev_ref_count) {
-        assert_can_convert_from(other);
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
     }
@@ -565,6 +538,9 @@ public:
      * type is compatible at runtime. */
     template<typename T2, int D2>
     Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
+        if ((const void *)this == (const void *)&other) {
+            return *this;
+        }
         assert_can_convert_from(other);
         other.incref();
         decref();
@@ -577,6 +553,9 @@ public:
     }
 
     Buffer<T, D> &operator=(const Buffer<T, D> &other) {
+        if (this == &other) {
+            return *this;
+        }
         other.incref();
         decref();
         dev_ref_count = other.dev_ref_count;
@@ -725,6 +704,18 @@ public:
         }
     }
 
+    /** Allocate a new image of known type using a vector of ints as the size. */
+    Buffer(const std::vector<int> &sizes) : ty(static_halide_type()) {
+        assert(sizes.size() <= D);
+        initialize_shape(sizes);
+        buf.elem_size = ty.bytes();
+        dims = (int)sizes.size();
+        if (!any_zero(sizes)) {
+            check_overflow();
+            allocate();
+        }
+    }
+
     /** Make an Buffer that refers to a statically sized array. Does not
      * take ownership of the data, and does not set the host_dirty flag. */
     template<typename Array, size_t N>
@@ -835,7 +826,8 @@ public:
     }
 
     /** Destructor. Will release any underlying owned allocation if
-     * this is the last reference to it. */
+     * this is the last reference to it. Will assert fail if there are
+     * weak references to this Buffer outstanding. */
     ~Buffer() {
         decref();
     }
@@ -848,16 +840,6 @@ public:
 
     const buffer_t *raw_buffer() const {
         return &buf;
-    }
-    // @}
-
-    /** Access to the untyped host pointer */
-    // @{
-    const void *host_ptr() const {
-        return buf.host;
-    }
-    void *host_ptr() {
-        return buf.host;
     }
     // @}
 
@@ -874,7 +856,7 @@ public:
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
     Buffer<T2, D2> &as() & {
-        Buffer<T2, D2>::assert_can_convert_from(*this);
+        Buffer<T2, D>::assert_can_convert_from(*this);
         return *((Buffer<T2, D2> *)this);
     }
 
@@ -885,7 +867,7 @@ public:
     template<typename T2, int D2 = D,
              typename = typename std::enable_if<(D2 <= D)>::type>
     const Buffer<T2, D2> &as() const &  {
-        Buffer<T2, D2>::assert_can_convert_from(*this);
+        Buffer<T2, D>::assert_can_convert_from(*this);
         return *((const Buffer<T2, D2> *)this);
     }
 
@@ -1202,7 +1184,7 @@ public:
      * for_each_element below for more details. */
     template<typename Fn>
     void for_each_element(Fn f) const {
-        Halide::for_each_element(buf, f);
+        Halide::Runtime::for_each_element(buf, f);
     }
 
     /** Methods for managing any GPU allocation. */
@@ -1237,41 +1219,15 @@ public:
         return 0;
     }
 
-    /** Only use this method when jitting */
-    int copy_to_device(const Target &t = get_const_ref_to_jit_target_from_environment()) {
-        if (host_dirty()) {
-            return halide_copy_to_device(nullptr, &buf, get_default_device_interface_for_target(t));
-        }
-        return 0;
-    }
-
-    /** Only use this method when jitting */
-    int copy_to_device(const DeviceAPI &d, const Target &t = get_const_ref_to_jit_target_from_environment()) {
-        if (host_dirty()) {
-            return halide_copy_to_device(nullptr, &buf, get_device_interface_for_device_api(d, t));
-        }
-        return 0;
-    }
-
     int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         return halide_device_malloc(ctx, &buf, device_interface);
-    }
-
-    /** Only use this method when jitting */
-    int device_malloc(const Target &t = get_const_ref_to_jit_target_from_environment()) {
-        return halide_device_malloc(nullptr, &buf, get_default_device_interface_for_target(t));
-    }
-
-    /** Only use this method when jitting */
-    int device_malloc(const DeviceAPI &d, const Target &t = get_const_ref_to_jit_target_from_environment()) {
-        return halide_device_malloc(nullptr, &buf, get_device_interface_for_device_api(d, t));
     }
 
     int device_free(void *ctx = nullptr) {
         if (dev_ref_count) {
             // Multiple people may be holding onto this dev field
             assert(*dev_ref_count == 1 &&
-                   "Multiple Halide::Buffer objects share this device "
+                   "Multiple Halide::Runtime::Buffer objects share this device "
                    "allocation. Freeing it would create dangling references. "
                    "Don't call device_free on Halide buffers that you have copied or "
                    "passed by value.");
@@ -1357,7 +1313,7 @@ public:
     /** Make a buffer with the same shape and memory nesting order as
      * another buffer. It may have a different type. */
     template<typename T2, int D2>
-    static Buffer<T, D> make_with_shape_of(Halide::Buffer<T2, D2> src,
+    static Buffer<T, D> make_with_shape_of(Buffer<T2, D2> src,
                                            void *(*allocate_fn)(size_t) = nullptr,
                                            void (*deallocate_fn)(void *) = nullptr) {
         assert(D >= src.dimensions());
@@ -1508,27 +1464,6 @@ public:
     }
     // @}
 
-    /** Other calls to operator()(Args...) get redirected to a call to
-     * image_accessor(const Buffer<T, D> &, Args...). This makes it
-     * possible for later code to add new Buffer access methods for
-     * types not convertible to int (e.g. Exprs). To add a custom
-     * accessor, define an overload of image_accessor that takes the
-     * expected arguments. See
-     * test/correctness/custom_image_accessor.cpp for an example. */
-    // @{
-    template<typename ...Args>
-    auto operator()(Args... args) const ->
-        decltype(image_accessor(*this, args...)) {
-        return image_accessor(*this, args...);
-    }
-
-    template<typename ...Args>
-    auto operator()(Args... args) ->
-        decltype(image_accessor(*this, args...)) {
-        return image_accessor(*this, args...);
-    }
-    // @}
-
     void fill(not_void_T val) {
         for_each_value([=](T &v) {v = val;});
         set_host_dirty();
@@ -1657,8 +1592,6 @@ public:
             for_each_value_helper<D-1, false>(f, t, begin(), (other_buffers.begin())...);
         }
     }
-
-
 };
 
 /** Some helpers for for_each_element. */
@@ -1855,10 +1788,7 @@ void for_each_element(const buffer_t &buf, Fn &&f) {
     for_each_element_helpers<Fn>::for_each_element(0, buf, std::forward<Fn>(f));
 }
 
-// Image is an alias for Buffer. Will be deprecated.
-template<typename T = void, int D = 4> using Image = Buffer<T, D>;
-
-
+}  // namespace Runtime
 }  // namespace Halide
 
 #undef ALWAYS_INLINE

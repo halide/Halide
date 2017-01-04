@@ -523,8 +523,8 @@ public:
     EXPORT explicit Func(Internal::Function f);
 
     /** Construct a new Func to wrap a Buffer. */
-    template<typename T, int D>
-    NO_INLINE explicit Func(const Buffer<T, D> &im) : Func() {
+    template<typename T>
+    NO_INLINE explicit Func(Buffer<T> &im) : Func() {
         (*this)(_) = im(_);
     }
 
@@ -573,9 +573,7 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    // @{
-    EXPORT void realize(BufferRefs dst, const Target &target = Target());
-    // @}
+    EXPORT void realize(Realization dst, const Target &target = Target());
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -584,7 +582,7 @@ public:
      * ImageParams. */
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(BufferRefs dst);
+    EXPORT void infer_input_bounds(Realization dst);
     // @}
 
     /** Statically compile this function to llvm bitcode, with the

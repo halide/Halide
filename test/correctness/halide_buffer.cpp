@@ -1,7 +1,7 @@
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 template<typename T1, typename T2>
 void check_equal_shape(const Buffer<T1> &a, const Buffer<T2> &b) {
@@ -123,5 +123,6 @@ int main(int argc, char **argv) {
         });
     }
 
+    printf("Success!\n");
     return 0;
 }
