@@ -759,7 +759,7 @@ private:
             internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
             loop_level = LoopLevel(it->second, Var(var));
         }
-        Site s = {f->for_type == ForType::Parallel ||
+        Site s = {f->is_parallel() ||
                   f->for_type == ForType::Vectorized,
                   loop_level};
         sites.push_back(s);

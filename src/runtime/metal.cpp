@@ -107,7 +107,7 @@ WEAK bool is_buffer_managed(mtl_buffer *buffer) {
     if ((*method1)(buffer, sel_getUid("respondsToSelector:"), storage_mode_sel)) {
         typedef int (*storage_mode_method)(objc_id obj, objc_sel sel);
         storage_mode_method method = (storage_mode_method)&objc_msgSend;
-        int storage_mode = (*method)(buffer, sel_getUid("storageMode"));
+        int storage_mode = (*method)(buffer, storage_mode_sel);
         return storage_mode == 1; // MTLStorageModeManaged
     }
     return false;

@@ -232,6 +232,7 @@ set(HEADER_FILES
   BoundsInference.h
   BufferPtr.h
   CSE.h
+  CanonicalizeGPUVars.h
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
@@ -330,6 +331,7 @@ set(HEADER_FILES
   SkipStages.h
   SlidingWindow.h
   Solve.h
+  SplitTuples.h
   StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
@@ -399,6 +401,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
+  CanonicalizeGPUVars.cpp
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
@@ -472,6 +475,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   SkipStages.cpp
   SlidingWindow.cpp
   Solve.cpp
+  SplitTuples.cpp
   StmtToHtml.cpp
   StorageFlattening.cpp
   StorageFolding.cpp

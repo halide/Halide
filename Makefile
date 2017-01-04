@@ -273,6 +273,7 @@ SOURCE_FILES = \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
+  CanonicalizeGPUVars.cpp \
   Debug.cpp \
   DebugToFile.cpp \
   DeepCopy.cpp \
@@ -345,6 +346,7 @@ SOURCE_FILES = \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
+  SplitTuples.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -394,6 +396,7 @@ HEADER_FILES = \
   ConciseCasts.h \
   CPlusPlusMangle.h \
   CSE.h \
+  CanonicalizeGPUVars.h \
   Debug.h \
   DebugToFile.h \
   DeepCopy.h \
@@ -476,6 +479,7 @@ HEADER_FILES = \
   SkipStages.h \
   SlidingWindow.h \
   Solve.h \
+  SplitTuples.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
@@ -896,6 +900,8 @@ $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
+	semityped_input_buffer.dim=3 \
+	untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3 \
 	output.type=float32,float32 output.dim=3 \
 	input_not_nod.type=uint8 input_not_nod.dim=3 \
 	input_nod.dim=3 \
@@ -970,6 +976,7 @@ $(BIN_DIR)/stubuser.generator: $(BIN_DIR)/stubtest_generator.o
 # usage (the types can be inferred), but for AOT compilation, we must make the types
 # concrete via generator args.
 STUBTEST_GENERATOR_ARGS=\
+    untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3 \
 	simple_input.type=float32 \
 	array_input.type=float32 array_input.size=2 \
 	int_arg.size=2 \
@@ -1048,7 +1055,7 @@ tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators_usage.s
 	PATH="$${PATH}:$(CURDIR)/$(BIN_DIR)" source $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh
 	@-echo
 
-$(BIN_DIR)/tutorial_lesson_16_rgb_generate: $(ROOT_DIR)/tutorial/lesson_16_rgb_generate.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
+$(BIN_DIR)/tutorial_lesson_16_rgb_generate: $(ROOT_DIR)/tutorial/lesson_16_rgb_generate.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(BIN_DIR)/GenGen.o
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< $(BIN_DIR)/GenGen.o \
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(LIBPNG_LIBS) -o $@
 

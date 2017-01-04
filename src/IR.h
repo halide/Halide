@@ -630,6 +630,12 @@ struct For : public StmtNode<For> {
 
     EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
 
+    bool is_parallel() const {
+        return (for_type == ForType::Parallel ||
+                for_type == ForType::GPUBlock ||
+                for_type == ForType::GPUThread);
+    }
+
     static const IRNodeType _type_info = IRNodeType::For;
 };
 

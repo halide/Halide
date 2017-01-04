@@ -152,7 +152,9 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
+        internal_assert((loop->for_type == ForType::GPUBlock) ||
+                        (loop->for_type == ForType::GPUThread))
+            << "kernel loop must be either gpu block or gpu thread\n";
         internal_assert(is_zero(loop->min));
 
         do_indent();

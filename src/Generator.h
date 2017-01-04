@@ -201,6 +201,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "BufferPtr.h"
 #include "Func.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
@@ -208,7 +209,46 @@
 
 namespace Halide {
 
+template<typename T, int D> class Buffer;
+
 namespace Internal {
+
+/**
+ * ValueTracker is an internal utility class that attempts to track and flag certain
+ * obvious Stub-related errors at Halide compile time: it tracks the constraints set
+ * on any Parameter-based argument (i.e., Input<Buffer> and Output<Buffer>) to
+ * ensure that incompatible values aren't set. 
+ *
+ * e.g.: if a Generator A requires stride[0] == 1, 
+ * and Generator B uses Generator A via stub, but requires stride[0] == 4,
+ * we should be able to detect this at Halide compilation time, and fail immediately,
+ * rather than producing code that fails at runtime and/or runs slowly due to
+ * vectorization being unavailable.
+ *
+ * We do this by tracking the active values at entrance and exit to all user-provided
+ * Generator methods (build()/generate()/schedule()); if we ever find more than two unique
+ * values active, we know we have a potential conflict. ("two" here because the first
+ * value is the default value for a given constraint.)
+ *
+ * Note that this won't catch all cases:
+ * -- JIT compilation has no way to check for conflicts at the top-level
+ * -- constraints that match the default value (e.g. if dim(0).set_stride(1) is the
+ * first value seen by the tracker) will be ignored, so an explicit requirement set
+ * this way can be missed
+ *
+ * Nevertheless, this is likely to be much better than nothing when composing multiple
+ * layers of Stubs in a single fused result.
+ */
+class ValueTracker {
+private:
+    std::map<std::string, std::vector<std::vector<Expr>>> values_history;
+    const size_t max_unique_values;
+public:
+    explicit ValueTracker(size_t max_unique_values = 2) : max_unique_values(max_unique_values) {}
+    EXPORT void track_values(const std::string &name, const std::vector<Expr> &values);
+};
+
+EXPORT std::vector<Expr> parameter_constraints(const Parameter &p);
 
 template <typename T>
 NO_INLINE std::string enum_to_string(const std::map<std::string, T> &enum_map, const T& t) {
@@ -842,7 +882,106 @@ decltype(!(T)0) operator!(const GeneratorParam<T> &a) { return !(T)a; }
 
 namespace Internal {
 
-enum class IOKind { Scalar, Function };
+template<typename T2> class GeneratorInput_Buffer;
+
+enum class IOKind { Scalar, Function, Buffer };
+
+/**
+ * StubInputBuffer is the placeholder that a Stub uses when it requires 
+ * a Buffer for an input (rather than merely a Func or Expr). It is constructed
+ * to allow only two possible sorts of input:
+ * -- Assignment of an Input<Buffer<>>, with compatible type and dimensions,
+ * essentially allowing us to pipe a parameter from an enclosing Generator to an internal Stub.
+ * -- Assignment of a Buffer<>, with compatible type and dimensions,
+ * causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
+ */
+template<typename T = void, int D = 4>
+class StubInputBuffer {
+    friend class GeneratorStub;
+    friend class StubInput;
+    template<typename T2> friend class GeneratorInput_Buffer;
+
+    Parameter parameter_;
+
+    NO_INLINE explicit StubInputBuffer(const Parameter &p) : parameter_(p) {
+        // Create an empty 1-element buffer with the right runtime typing and dimensions,
+        // which we'll use only to pass to can_convert_from() to verify this
+        // Parameter is compatible with our constraints.
+        Buffer<> other(p.type(), nullptr, std::vector<int>(p.dimensions(), 1));
+        internal_assert((Buffer<T, D>::can_convert_from(other)));
+    }
+
+    template<typename T2, int D2>
+    NO_INLINE static Parameter parameter_from_buffer(const Buffer<T2, D2> &b) {
+        user_assert((Buffer<T, D>::can_convert_from(b)));
+        Parameter p(b.type(), true, b.dimensions());
+        p.set_buffer(b);
+        return p;
+    }
+
+public:
+    StubInputBuffer() {}
+
+    // *not* explicit -- this ctor should only be used when you want
+    // to pass a literal Buffer<> for a Stub Input; this Buffer<> will be
+    // compiled into the Generator's product, rather than becoming
+    // a runtime Parameter.
+    template<typename T2, int D2>
+    StubInputBuffer(const Buffer<T2, D2> &b) : parameter_(parameter_from_buffer(b)) {}
+};
+
+class GeneratorBase;
+
+class StubOutputBufferBase {
+protected:
+    Func f;
+    std::shared_ptr<GeneratorBase> generator;
+
+    EXPORT void check_scheduled(const char* m) const;
+    EXPORT Target get_target() const;
+
+    explicit StubOutputBufferBase(const Func &f, std::shared_ptr<GeneratorBase> generator) : f(f), generator(generator) {}
+    StubOutputBufferBase() {}
+
+public:
+    Realization realize(std::vector<int32_t> sizes) { 
+        check_scheduled("realize");
+        return f.realize(sizes, get_target()); 
+    }
+    
+    template <typename... Args> 
+    Realization realize(Args&&... args) { 
+        check_scheduled("realize");
+        return f.realize(std::forward<Args>(args)..., get_target()); 
+    }
+
+    template<typename Dst> 
+    void realize(Dst dst) { 
+        check_scheduled("realize");
+        f.realize(dst, get_target()); 
+    }
+};
+
+/**
+ * StubOutputBuffer is the placeholder that a Stub uses when it requires 
+ * a Buffer for an output (rather than merely a Func). It is constructed
+ * to allow only two possible sorts of things:
+ * -- Assignment to an Output<Buffer<>>, with compatible type and dimensions,
+ * essentially allowing us to pipe a parameter from the result of a Stub to an 
+ * enclosing Generator
+ * -- Realization into a Buffer<>; this is useful only in JIT compilation modes 
+ * (and shouldn't be usable otherwise)
+ * 
+ * It is deliberate that StubOutputBuffer is not (easily) convertible to Func.
+ */
+template<typename T = void, int D = 4>
+class StubOutputBuffer : public StubOutputBufferBase {
+    template<typename T2> friend class GeneratorOutput_Buffer;
+    friend class GeneratorStub;
+    explicit StubOutputBuffer(const Func &f, std::shared_ptr<GeneratorBase> generator) : StubOutputBufferBase(f, generator) {}
+public:
+    StubOutputBuffer() {}
+};
 
 // This is a union-like class that allows for convenient initialization of Stub Inputs
 // via C++11 initializer-list syntax; it is only used in situations where the
@@ -850,10 +989,14 @@ enum class IOKind { Scalar, Function };
 // of the expected/required kind.
 class StubInput {
     const IOKind kind_;
+    // Exactly one of the following fields should be defined:
+    const Parameter parameter_;
     const Func func_;
     const Expr expr_;
 public:
     // *not* explicit. 
+    template<typename T2, int D2>
+    StubInput(const StubInputBuffer<T2, D2> &b) : kind_(IOKind::Buffer), parameter_(b.parameter_) {}
     StubInput(const Func &f) : kind_(IOKind::Function), func_(f) {}
     StubInput(const Expr &e) : kind_(IOKind::Scalar), expr_(e) {}
 
@@ -865,6 +1008,11 @@ private:
         return kind_;
     }
 
+    Parameter parameter() const {
+        internal_assert(kind_ == IOKind::Buffer);
+        return parameter_;
+    }
+
     Func func() const {
         internal_assert(kind_ == IOKind::Function);
         return func_;
@@ -873,6 +1021,30 @@ private:
     Expr expr() const {
         internal_assert(kind_ == IOKind::Scalar);
         return expr_;
+    }
+};
+
+class Constrainable {
+public:
+    virtual ~Constrainable() {}
+
+    virtual Parameter parameter() const = 0;
+
+    Dimension dim(int i) {
+        return Dimension(parameter(), i);
+    }
+
+    const Dimension dim(int i) const {
+        return Dimension(parameter(), i);
+    }
+
+    int host_alignment() const {
+        return parameter().host_alignment();
+    }
+
+    Constrainable &set_host_alignment(int alignment) {
+        parameter().set_host_alignment(alignment);
+        return *this;
     }
 };
 
@@ -944,6 +1116,15 @@ protected:
 
     template<typename ElemType>
     const std::vector<ElemType> &get_values() const;
+
+    virtual bool allow_synthetic_generator_params() const {
+        return true;
+    }
+
+    virtual Parameter parameter() const {
+        internal_error << "Unimplemented";
+        return Parameter();
+    }
 
 private:
     explicit GIOBase(const GIOBase &) = delete;
@@ -1052,6 +1233,71 @@ public:
         return get_values<ValueType>().end();
     }
 };
+
+template<typename T>
+class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func>, public Constrainable {
+private:
+    using Super = GeneratorInputImpl<T, Func>;
+
+protected:
+    using TBase = typename Super::TBase;
+
+    bool allow_synthetic_generator_params() const override {
+        return !T::has_static_halide_type();
+    }
+
+    std::string get_c_type() const override {
+        if (T::has_static_halide_type()) {
+            return "Halide::Internal::StubInputBuffer<" + 
+                halide_type_to_c_type(T::static_halide_type()) + 
+                ">";
+        } else {
+            return "Halide::Internal::StubInputBuffer<>";
+        }
+    }
+
+    Parameter parameter() const override {
+        internal_assert(this->parameters_.size() == 1);
+        return this->parameters_.at(0);
+    }
+
+public:
+    GeneratorInput_Buffer(const std::string &name)
+        : Super(name, IOKind::Buffer,
+                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, 
+                -1) {
+    }
+
+    GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
+        : Super(name, IOKind::Buffer, {t}, d) {
+        static_assert(!T::has_static_halide_type(), "Cannot use pass a Type argument for a Buffer with a non-void static type");
+    }
+
+    GeneratorInput_Buffer(const std::string &name, int d)
+        : Super(name, IOKind::Buffer, std::vector<Type>{ T::static_halide_type() }, d) {
+        static_assert(T::has_static_halide_type(), "Must pass a Type argument for a Buffer with a static type of void");
+    }
+
+
+    template <typename... Args>
+    Expr operator()(Args&&... args) const {
+        return this->funcs().at(0)(std::forward<Args>(args)...);
+    }
+
+    Expr operator()(std::vector<Expr> args) const {
+        return this->funcs().at(0)(args);
+    }
+
+    template<typename T2, int D2>
+    operator StubInputBuffer<T2, D2>() const {
+        return StubInputBuffer<T2, D2>(parameter());
+    }
+
+    operator Func() const { 
+        return this->funcs().at(0); 
+    }
+};
+
 
 template<typename T>
 class GeneratorInput_Func : public GeneratorInputImpl<T, Func> {
@@ -1215,12 +1461,22 @@ public:
     }
 };
 
+template<typename> 
+struct type_sink { typedef void type; };
+
+template<typename T2, typename = void> 
+struct has_static_halide_type_method : std::false_type {}; 
+
+template<typename T2> 
+struct has_static_halide_type_method<T2, typename type_sink<decltype(T2::static_halide_type())>::type> : std::true_type {};
+
 template<typename T, typename TBase = typename std::remove_all_extents<T>::type> 
 using GeneratorInputImplBase =
     typename select_type<
-        cond<std::is_same<TBase, Func>::value, GeneratorInput_Func<T>>,
-        cond<std::is_arithmetic<TBase>::value, GeneratorInput_Arithmetic<T>>,
-        cond<std::is_scalar<TBase>::value,     GeneratorInput_Scalar<T>>
+        cond<has_static_halide_type_method<TBase>::value, GeneratorInput_Buffer<T>>,
+        cond<std::is_same<TBase, Func>::value,            GeneratorInput_Func<T>>,
+        cond<std::is_arithmetic<TBase>::value,            GeneratorInput_Arithmetic<T>>,
+        cond<std::is_scalar<TBase>::value,                GeneratorInput_Scalar<T>>
     >::type;
 
 }  // namespace Internal
@@ -1238,8 +1494,9 @@ protected:
     struct Unused;
     using IntIfNonScalar =
         typename Internal::select_type<
+            Internal::cond<Internal::has_static_halide_type_method<TBase>::value, int>,
             Internal::cond<std::is_same<TBase, Func>::value, int>,
-            Internal::cond<true,                             Unused>
+            Internal::cond<true, Unused>
         >::type;
 
 public:
@@ -1411,6 +1668,114 @@ public:
 };
 
 template<typename T>
+class GeneratorOutput_Buffer : public GeneratorOutputImpl<T>, public Constrainable {
+private:
+    using Super = GeneratorOutputImpl<T>;
+
+protected:
+    using TBase = typename Super::TBase;
+
+protected:
+    GeneratorOutput_Buffer(const std::string &name)
+        : Super(name, IOKind::Buffer, 
+                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, 
+                -1) {
+    }
+
+    GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d = -1)
+        : Super(name, IOKind::Buffer, 
+                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : t, 
+                d) {
+        if (T::has_static_halide_type()) {
+            user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
+        } else {
+            user_assert(t.size() == 1) << "Output<Buffer<>> requires exactly one Type\n";
+        }
+    }
+
+    GeneratorOutput_Buffer(const std::string &name, int d)
+        : Super(name, IOKind::Buffer, std::vector<Type>{ T::static_halide_type() }, d) {
+        static_assert(T::has_static_halide_type(), "Must pass a Type argument for a Buffer with a static type of void");
+    }
+
+    NO_INLINE std::string get_c_type() const override {
+        if (T::has_static_halide_type()) {
+            return "Halide::Internal::StubOutputBuffer<" + 
+                halide_type_to_c_type(T::static_halide_type()) + 
+                ">";
+        } else {
+            return "Halide::Internal::StubOutputBuffer<>";
+        }
+    }
+
+    Parameter parameter() const override {
+        internal_assert(this->funcs().size() == 1);
+        return this->funcs().at(0).output_buffer().parameter();
+    }
+
+public:
+
+    // Allow assignment from a Buffer<> to an Output<Buffer<>>;
+    // this allows us to use a statically-compiled buffer inside a Generator
+    // to assign to an output.
+    template<typename T2, int D2>
+    NO_INLINE GeneratorOutput_Buffer<T> &operator=(const Buffer<T2, D2> &buffer) {
+        user_assert(T::can_convert_from(buffer)) 
+            << "Cannot assign to the Output \"" << this->name() 
+            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+
+        if (this->types_defined()) {
+            user_assert(Type(buffer.type()) == this->type()) 
+                << "Output should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
+        }
+        if (this->dimensions_defined()) {
+            user_assert(buffer.dimensions() == this->dimensions()) 
+                << "Output should have dim=" << this->dimensions() << " but saw dim=" << buffer.dimensions() << "\n";
+        }
+
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        user_assert(!this->funcs_.at(0).defined());
+        this->funcs_.at(0)(_) = buffer(_);
+
+        return *this;
+    }
+
+    // Allow assignment from a StubOutputBuffer to an Output<Buffer>;
+    // this allows us to pipeline the results of a Stub to the results
+    // of the enclosing Generator.
+    template<typename T2, int D2>
+    NO_INLINE GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2, D2> &stub_output_buffer) {
+        const auto &f = stub_output_buffer.f;
+        internal_assert(f.defined());
+
+        const auto &output_types = f.output_types();
+        user_assert(output_types.size() == 1) 
+            << "Output should have size=1 but saw size=" << output_types.size() << "\n";
+
+        Buffer<> other(output_types.at(0), nullptr, std::vector<int>(f.dimensions(), 1));
+        user_assert(T::can_convert_from(other)) 
+            << "Cannot assign to the Output \"" << this->name() 
+            << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
+
+        if (this->types_defined()) {
+            user_assert(output_types.at(0) == this->type()) 
+                << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
+        }
+        if (this->dimensions_defined()) {
+            user_assert(f.dimensions() == this->dimensions()) 
+                << "Output should have dim=" << this->dimensions() << " but saw dim=" << f.dimensions() << "\n";
+        }
+
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        user_assert(!this->funcs_.at(0).defined());
+        this->funcs_[0] = f;
+
+        return *this;
+    }
+};
+
+
+template<typename T>
 class GeneratorOutput_Func : public GeneratorOutputImpl<T> {
 private:
     using Super = GeneratorOutputImpl<T>;
@@ -1449,6 +1814,7 @@ protected:
 template<typename T, typename TBase = typename std::remove_all_extents<T>::type> 
 using GeneratorOutputImplBase =
     typename select_type<
+        cond<has_static_halide_type_method<TBase>::value, GeneratorOutput_Buffer<T>>,
         cond<std::is_same<TBase, Func>::value, GeneratorOutput_Func<T>>,
         cond<std::is_arithmetic<TBase>::value, GeneratorOutput_Arithmetic<T>>
     >::type;
@@ -1498,7 +1864,25 @@ public:
     GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, t, d) {
     }
+
+    template <typename T2, int D2>
+    GeneratorOutput<T> &operator=(const Buffer<T2, D2> &buffer) {
+        Super::operator=(buffer);
+        return *this;
+    }
+
+    template <typename T2, int D2>
+    GeneratorOutput<T> &operator=(const Internal::StubOutputBuffer<T2, D2> &stub_output_buffer) {
+        Super::operator=(stub_output_buffer);
+        return *this;
+    }
 };
+
+namespace Internal {
+
+class GeneratorStub;
+
+}  // namespace Internal
 
 /** GeneratorContext is an abstract interface that is used when constructing a Generator Stub;
  * it is used to allow the outer context (typically, either a Generator or "top-level" code)
@@ -1509,6 +1893,9 @@ class GeneratorContext {
 public:
     virtual ~GeneratorContext() {};
     virtual Target get_target() const = 0;
+protected:
+    friend class Internal::GeneratorStub;
+    virtual std::shared_ptr<Internal::ValueTracker> get_value_tracker() const = 0;
 };
 
 /** JITGeneratorContext is a utility implementation of GeneratorContext that
@@ -1527,10 +1914,15 @@ public:
  */
 class JITGeneratorContext : public GeneratorContext {
 public:
-    explicit JITGeneratorContext(const Target &t) : target(t) {}
+    explicit JITGeneratorContext(const Target &t) 
+        : target(t)
+        , value_tracker(std::make_shared<Internal::ValueTracker>()) {}
     Target get_target() const override { return target; }
+protected:
+    std::shared_ptr<Internal::ValueTracker> get_value_tracker() const override { return value_tracker; }
 private:
     const Target target;
+    const std::shared_ptr<Internal::ValueTracker> value_tracker;
 };
 
 class NamesInterface {
@@ -1622,6 +2014,10 @@ protected:
     EXPORT virtual void call_generate() = 0;
     EXPORT virtual void call_schedule() = 0;
 
+    std::shared_ptr<ValueTracker> get_value_tracker() const override { return value_tracker; }
+
+    EXPORT void track_parameter_values(bool include_outputs);
+
     EXPORT void pre_build();
     EXPORT void post_build();
     EXPORT void pre_generate();
@@ -1643,12 +2039,14 @@ protected:
 private:
     friend class GeneratorStub;
     friend class SimpleGeneratorFactory;
+    friend class StubOutputBufferBase;
 
     const size_t size;
     std::vector<Internal::Parameter *> filter_params;
     std::vector<Internal::GeneratorInputBase *> filter_inputs;
     std::vector<Internal::GeneratorOutputBase *> filter_outputs;
     std::vector<Internal::GeneratorParamBase *> generator_params;
+    std::shared_ptr<Internal::ValueTracker> value_tracker;
     bool params_built{false};
     bool generator_params_set{false};
     bool schedule_params_set{false};
@@ -1923,6 +2321,11 @@ protected:
         return generator->get_output(n); 
     }
 
+    template<typename T2>
+    T2 get_output_buffer(const std::string &n) const {
+        return T2(get_output(n), generator);
+    }
+
     std::vector<Func> get_output_vector(const std::string &n) const { 
         return generator->get_output_vector(n); 
     }
@@ -1944,6 +2347,11 @@ protected:
         return { StubInput(f) };
     }
 
+    template<typename T = void, int D = 4>
+    static std::vector<StubInput> to_stub_input_vector(const StubInputBuffer<T, D> &b) {
+        return { StubInput(b) };
+    }
+
     template <typename T>
     static std::vector<StubInput> to_stub_input_vector(const std::vector<T> &v) {
         std::vector<StubInput> r;
@@ -1953,6 +2361,11 @@ protected:
 
     EXPORT void verify_same_funcs(const Func &a, const Func &b);
     EXPORT void verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b);
+
+    template<typename T2, int D2>
+    void verify_same_funcs(const StubOutputBuffer<T2, D2> &a, const StubOutputBuffer<T2, D2> &b) {
+        verify_same_funcs(a.f, b.f);
+    }
 
 private:
     std::shared_ptr<GeneratorBase> generator;

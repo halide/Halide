@@ -172,8 +172,14 @@ class Buffer {
      * systems. */
     using storage_T = typename std::conditional<std::is_pointer<T>::value, uint64_t, not_void_T>::type;
 
+public:
+    /** Return true if the Halide type is not void (or const void). */
+    static constexpr bool has_static_halide_type() {
+        return !T_is_void;
+    }
+
     /** Get the Halide type of T. Callers should not use the result if
-     * T is void. */
+     * has_static_halide_type() returns false. */
     static halide_type_t static_halide_type() {
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
@@ -183,6 +189,7 @@ class Buffer {
         return alloc != nullptr;
     }
 
+private:
     /** Increment the reference count of any owned allocation */
     void incref() const {
         if (!manages_memory()) return;
@@ -614,7 +621,7 @@ public:
         for (int i = 0; i < dimensions(); i++) {
             size /= dim(i).extent();
         }
-        assert(size == ty.bytes() && "Error: Overflow computing total size of buffer.");
+        assert(size == (size_t)ty.bytes() && "Error: Overflow computing total size of buffer.");
     }
 
     /** Allocate memory for this Buffer. Drops the reference to any

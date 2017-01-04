@@ -35,7 +35,8 @@ int main(int argc, char **argv) {
             f(x, y) = copy(x, y);
 
             if (target.has_gpu_feature()) {
-                f.gpu_tile(x, y, 8, 8);
+                Var xi, yi;
+                f.gpu_tile(x, y, xi, yi, 8, 8);
             } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
                 f.hexagon();
             }

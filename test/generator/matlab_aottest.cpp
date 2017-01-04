@@ -73,7 +73,7 @@ EXPORT size_t mxGetNumberOfDimensions_730(const mxArray *a) {
 }
 
 EXPORT int mxGetNumberOfDimensions_700(const mxArray *a) {
-    return a->get_number_of_dimensions();
+    return (int) a->get_number_of_dimensions();
 }
 
 EXPORT const size_t *mxGetDimensions_730(const mxArray *a) {
@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 5; j++) {
-            input(i, j) = i * 5 + j;
+            input(i, j) = (float)(i * 5 + j);
         }
     }
 

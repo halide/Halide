@@ -52,7 +52,7 @@ namespace Internal {
 /** An aggressive form of reinterpret cast used for correct type-punning. */
 template<typename DstType, typename SrcType>
 DstType reinterpret_bits(const SrcType &src) {
-    assert(sizeof(SrcType) == sizeof(DstType));
+    static_assert(sizeof(SrcType) == sizeof(DstType), "Types must be same size");
     DstType dst;
     memcpy(&dst, &src, sizeof(SrcType));
     return dst;
