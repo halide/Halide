@@ -9,7 +9,6 @@
 
 #include <vector>
 
-#include "BufferPtr.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
@@ -58,8 +57,8 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<Internal::BufferPtr> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
-    std::vector<const void *> prepare_jit_call_arguments(BufferRefs &dst, const Target &target);
+    std::vector<Buffer<>> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
+    std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
@@ -353,9 +352,18 @@ public:
     EXPORT Realization realize(int x_size,
                                const Target &target = Target());
     EXPORT Realization realize(const Target &target = Target());
-
-    EXPORT void realize(BufferRefs bufs, const Target &target = Target());
     // @}
+
+    /** Evaluate this Pipeline into an existing allocated buffer or
+     * buffers. If the buffer is also one of the arguments to the
+     * function, strange things may happen, as the pipeline isn't
+     * necessarily safe to run in-place. The realization should
+     * contain one Buffer per tuple component per output Func. For
+     * each individual output Func, all Buffers must have the same
+     * shape, but the shape can vary across the different output
+     * Funcs. This form of realize does *not* automatically copy data
+     * back from the GPU. */
+    EXPORT void realize(Realization dst, const Target &target = Target());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -364,7 +372,7 @@ public:
      * ImageParams. */
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(BufferRefs bufs);
+    EXPORT void infer_input_bounds(Realization dst);
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:

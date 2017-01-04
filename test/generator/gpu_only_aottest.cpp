@@ -10,7 +10,7 @@
 #endif
 
 #include "gpu_only.h"
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL) || defined(TEST_CUDA)

@@ -10,7 +10,7 @@
 #include "metadata_tester.h"
 #include "metadata_tester_ucon.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int kSize = 32;
 

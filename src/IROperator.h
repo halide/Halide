@@ -1821,7 +1821,7 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
 
 /** Create an Expr that that guarantees a precondition.
  * If 'condition' is true, the return value is equal to the first Expr.
- * If 'condition' is false, halide_error() is called, and the return value 
+ * If 'condition' is false, halide_error() is called, and the return value
  * is arbitrary. Any additional arguments after the first Expr are stringified
  * and passed as a user-facing message to halide_error(), similar to print().
  *

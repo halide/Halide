@@ -9,7 +9,7 @@
 #include "HalideBuffer.h"
 #include "memory_profiler_mandelbrot.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 using std::map;
 using std::string;
 

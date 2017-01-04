@@ -230,7 +230,7 @@ set(HEADER_FILES
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
-  BufferPtr.h
+  Buffer.h
   CSE.h
   CanonicalizeGPUVars.h
   Closure.h
@@ -381,7 +381,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
-  BufferPtr.cpp
+  Buffer.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
