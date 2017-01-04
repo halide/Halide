@@ -51,7 +51,6 @@ void *my_get_library_symbol_impl(void *lib, const char *name) {
 }
 
 int main(int argc, char **argv) {
-#ifdef WITH_HEXAGON
     // These calls are only available for AOT-compiled code:
     //
     //   halide_set_custom_get_symbol(my_get_symbol_impl);
@@ -84,7 +83,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-#else
-    printf("Skipping test because it requires an LLVM built with Hexagon support.\n");
-#endif
 }
