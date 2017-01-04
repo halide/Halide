@@ -14,6 +14,7 @@
 #include "Debug.h"
 #include "LLVM_Output.h"
 #include "CodeGen_LLVM.h"
+#include "Pipeline.h"
 
 
 #ifdef _MSC_VER
@@ -414,9 +415,9 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-void JITModule::add_extern_for_export(const std::string &name, const ExternSignature &signature, void *address) {
+void JITModule::add_extern_for_export(const std::string &name, const ExternCFunction &extern_c_function) {
     Symbol symbol;
-    symbol.address = address;
+    symbol.address = extern_c_function.address();
 
     // Struct types are uniqued on the context, but the lookup API is only available
     // on the Module, not the Context.
@@ -428,18 +429,19 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
 
     llvm::Type *ret_type;
-    if (signature.is_void_return) {
+    auto signature = extern_c_function.signature();
+    if (signature.is_void_return()) {
         ret_type = llvm::Type::getVoidTy(jit_module->context);
     } else {
-        ret_type = llvm_type_of(&jit_module->context, signature.ret_type);
+        ret_type = llvm_type_of(&jit_module->context, signature.ret_type());
     }
 
     std::vector<llvm::Type *> llvm_arg_types;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : signature.arg_types) {
-        if (scalar_or_buffer_t.is_buffer) {
+    for (const Type &t : signature.arg_types()) {
+        if (t == type_of<struct buffer_t *>()) {
             llvm_arg_types.push_back(buffer_t_star);
         } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, scalar_or_buffer_t.scalar_type));
+            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, t));
         }
     }
 
@@ -686,31 +688,31 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         if (runtime_kind == MainShared) {
             runtime_internal_handlers.custom_print =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_print", print_handler);
+                hook_function(runtime.exports(), "halide_set_custom_print", print_handler);
 
             runtime_internal_handlers.custom_malloc =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_malloc", malloc_handler);
+                hook_function(runtime.exports(), "halide_set_custom_malloc", malloc_handler);
 
             runtime_internal_handlers.custom_free =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_free", free_handler);
+                hook_function(runtime.exports(), "halide_set_custom_free", free_handler);
 
             runtime_internal_handlers.custom_do_task =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_task", do_task_handler);
+                hook_function(runtime.exports(), "halide_set_custom_do_task", do_task_handler);
 
             runtime_internal_handlers.custom_do_par_for =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+                hook_function(runtime.exports(), "halide_set_custom_do_par_for", do_par_for_handler);
 
             runtime_internal_handlers.custom_error =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_error_handler", error_handler_handler);
+                hook_function(runtime.exports(), "halide_set_error_handler", error_handler_handler);
 
             runtime_internal_handlers.custom_trace =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_trace", trace_handler);
+                hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
 
             if (default_cache_size != 0) {
-                shared_runtimes(MainShared).memoization_cache_set_size(default_cache_size);
+                runtime.memoization_cache_set_size(default_cache_size);
             }
 
             runtime.jit_module->name = "MainShared";

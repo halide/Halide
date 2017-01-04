@@ -1014,36 +1014,36 @@ Pipeline::make_externs_jit_module(const Target &target,
     for (std::map<std::string, JITExtern>::iterator iter = externs_in_out.begin();
          iter != externs_in_out.end();
          iter++) {
-        JITExtern &jit_extern(iter->second);
-        if (iter->second.pipeline.defined()) {
-            PipelineContents &pipeline_contents(*jit_extern.pipeline.contents);
+        Pipeline pipeline = iter->second.pipeline();
+        if (pipeline.defined()) {
+            PipelineContents &pipeline_contents(*pipeline.contents);
 
             // Ensure that the pipeline is compiled.
-            jit_extern.pipeline.compile_jit(target);
+            pipeline.compile_jit(target);
 
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
             free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
-            iter->second.c_function = pipeline_contents.jit_module.entrypoint_symbol().address;
-            iter->second.signature.is_void_return = false;
-            iter->second.signature.ret_type = Int(32);
+            void *address = pipeline_contents.jit_module.entrypoint_symbol().address;
+            std::vector<Type> arg_types;
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
-                 ScalarOrBufferT arg_type_info;
-                 arg_type_info.is_buffer = arg.arg.is_buffer();
-                 if (!arg_type_info.is_buffer) {
-                     arg_type_info.scalar_type = arg.arg.type;
-                 }
-                 iter->second.signature.arg_types.push_back(arg_type_info);
+                // TODO: it's not clear whether arg.arg.type is correct for
+                // the arg.is_buffer() case (AFAIK, is_buffer()==true isn't possible
+                // in current mtrunk Halide, but may be in some side branches that
+                // have not yet landed, e.g. JavaScript). Forcing it to be 
+                // the correct type here, just in case.
+                arg_types.push_back(arg.arg.is_buffer() ? 
+                                    type_of<struct buffer_t *>() :
+                                    arg.arg.type);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
-                ScalarOrBufferT arg_type_info;
-                arg_type_info.is_buffer = true;
-                iter->second.signature.arg_types.push_back(arg_type_info);
+                arg_types.push_back(type_of<struct buffer_t *>());
             }
-            iter->second.pipeline = Pipeline();
+            ExternSignature signature(Int(32), false, arg_types);
+            iter->second = ExternCFunction(address, signature);
         } else {
-            free_standing_jit_externs.add_extern_for_export(iter->first, jit_extern.signature, jit_extern.c_function);
+            free_standing_jit_externs.add_extern_for_export(iter->first, iter->second.extern_c_function());
         }
     }
     if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
@@ -1285,11 +1285,15 @@ void Pipeline::invalidate_cache() {
 }
 
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline(pipeline), c_function(nullptr) {
+    : pipeline_(pipeline) {
 }
 
 JITExtern::JITExtern(Func func)
-    : pipeline(func), c_function(nullptr) {
+    : pipeline_(func) {
+}
+
+JITExtern::JITExtern(const ExternCFunction &extern_c_function)
+    : extern_c_function_(extern_c_function) {
 }
 
 }  // namespace Halide
