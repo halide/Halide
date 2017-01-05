@@ -155,7 +155,7 @@ check_symbol      my_second_generator_3.a my_second_generator_3
 # files.
 
 echo "The halide runtime:"
-nm my_second_generator_1.a | grep "[SW] _\?halide_"
+nm my_second_generator_1.a | grep "[SWT] _\?halide_"
 
 # Let's define some functions to check that the runtime exists in a file.
 check_runtime()
