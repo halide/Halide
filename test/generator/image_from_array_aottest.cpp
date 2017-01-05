@@ -7,7 +7,7 @@
 #include <vector>
 
 using namespace std;
-using namespace Halide;
+using namespace Halide::Runtime;
 
 //-----------------------------------------------------------------------------
 // Returns the dimension sizes of a statically sized array from inner to outer.

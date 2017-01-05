@@ -42,7 +42,7 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     return stream;
 }
 
-ostream &operator <<(ostream &stream, const Internal::BufferPtr &buffer) {
+ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
     return stream << "buffer " << buffer.name() << " = {...}\n";
 }
 
@@ -151,6 +151,12 @@ ostream &operator<<(ostream &out, const ForType &type) {
         break;
     case ForType::Vectorized:
         out << "vectorized";
+        break;
+    case ForType::GPUBlock:
+        out << "gpu_block";
+        break;
+    case ForType::GPUThread:
+        out << "gpu_thread";
         break;
     }
     return out;

@@ -87,7 +87,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
 
     ref(x, y) = 10;
     ref(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
-    Image<int> im_ref = ref.realize(170, 170);
+    Buffer<int> im_ref = ref.realize(170, 170);
 
     f(x, y) = 10;
     f(r.x, r.y) += g(2*r.x, r.y) + g(2*r.x + 1, r.y);
@@ -100,7 +100,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test() {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
 
-    Image<int> im = f.realize(170, 170);
+    Buffer<int> im = f.realize(170, 170);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -117,7 +117,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
     g.compute_root();
 
     ref(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
-    Image<int> im_ref = ref.realize(size, size);
+    Buffer<int> im_ref = ref.realize(size, size);
 
     f(x, y) = select(x < 23, g(size-x, y) * 2 + g(20-x, y), undef<int>());
 
@@ -130,7 +130,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
 
-    Image<int> im = f.realize(size, size);
+    Buffer<int> im = f.realize(size, size);
     auto func = [&im_ref, &im](int x, int y, int z) {
         // For x >= 23, the buffer is undef
         return (x < 23) ? im_ref(x, y, z) : im(x, y, z);
@@ -155,7 +155,7 @@ int multiple_vectorized_predicate_test() {
 
     ref(x, y) = 10;
     ref(r.x, r.y) = g(size-r.x, r.y) * 2 + g(67-r.x, r.y);
-    Image<int> im_ref = ref.realize(size, size);
+    Buffer<int> im_ref = ref.realize(size, size);
 
     f(x, y) = 10;
     f(r.x, r.y) = g(size-r.x, r.y) * 2 + g(67-r.x, r.y);
@@ -169,7 +169,7 @@ int multiple_vectorized_predicate_test() {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
 
-    Image<int> im = f.realize(size, size);
+    Buffer<int> im = f.realize(size, size);
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -189,7 +189,7 @@ int scalar_load_test() {
 
     ref(x, y) = 10;
     ref(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
-    Image<int> im_ref = ref.realize(160, 160);
+    Buffer<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
     f(r.x, r.y) += 1 + max(g(0, 1), g(2*r.x + 1, r.y));
@@ -202,7 +202,7 @@ int scalar_load_test() {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
 
-    Image<int> im = f.realize(160, 160);
+    Buffer<int> im = f.realize(160, 160);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -222,7 +222,7 @@ int scalar_store_test() {
 
     ref(x, y) = 10;
     ref(13, 13) = max(g(0, 1), g(2*r.x + 1, r.y));
-    Image<int> im_ref = ref.realize(160, 160);
+    Buffer<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
     f(13, 13) = max(g(0, 1), g(2*r.x + 1, r.y));
@@ -237,7 +237,7 @@ int scalar_store_test() {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
 
-    Image<int> im = f.realize(160, 160);
+    Buffer<int> im = f.realize(160, 160);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -257,7 +257,7 @@ int not_dependent_on_vectorized_var_test() {
 
     ref(x, y, z) = 10;
     ref(r.x, r.y, 1) = max(g(0, 1, 2), g(r.x + 1, r.y, 2));
-    Image<int> im_ref = ref.realize(160, 160, 160);
+    Buffer<int> im_ref = ref.realize(160, 160, 160);
 
     f(x, y, z) = 10;
     f(r.x, r.y, 1) = max(g(0, 1, 2), g(r.x + 1, r.y, 2));
@@ -272,7 +272,7 @@ int not_dependent_on_vectorized_var_test() {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
     }
 
-    Image<int> im = f.realize(160, 160, 160);
+    Buffer<int> im = f.realize(160, 160, 160);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -290,7 +290,7 @@ int no_op_store_test() {
     ref(x, y) = x + y;
     ref(2*r.x + 1, r.y) = ref(2*r.x + 1, r.y);
     ref(2*r.x, 3*r.y) = ref(2*r.x, 3*r.y);
-    Image<int> im_ref = ref.realize(240, 240);
+    Buffer<int> im_ref = ref.realize(240, 240);
 
     f(x, y) = x + y;
     f(2*r.x + 1, r.y) = f(2*r.x + 1, r.y);
@@ -306,7 +306,7 @@ int no_op_store_test() {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(false, false));
     }
 
-    Image<int> im = f.realize(240, 240);
+    Buffer<int> im = f.realize(240, 240);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -326,7 +326,7 @@ int vectorized_predicated_predicate_with_pure_call_test() {
 
     ref(x, y) = 10;
     ref(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
-    Image<int> im_ref = ref.realize(160, 160);
+    Buffer<int> im_ref = ref.realize(160, 160);
 
     f(x, y) = 10;
     f(r.x, r.y) += abs(r.x*r.y) + g(2*r.x + 1, r.y);
@@ -339,7 +339,7 @@ int vectorized_predicated_predicate_with_pure_call_test() {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
     }
 
-    Image<int> im = f.realize(160, 160);
+    Buffer<int> im = f.realize(160, 160);
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;

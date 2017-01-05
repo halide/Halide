@@ -377,6 +377,10 @@ private:
             stream << keyword("vectorized");
         } else if (op->for_type == ForType::Unrolled) {
             stream << keyword("unrolled");
+        } else if (op->for_type == ForType::GPUBlock) {
+            stream << keyword("gpu_block");
+        } else if (op->for_type == ForType::GPUThread) {
+            stream << keyword("gpu_thread");
         } else {
             internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
@@ -600,8 +604,8 @@ public:
         scope.pop(op.name);
     }
 
-    void print(const BufferPtr &op) {
-        stream << open_div("BufferPtr");
+    void print(const Buffer<> &op) {
+        stream << open_div("Buffer<>");
         stream << keyword("buffer ") << var(op.name());
         stream << close_div();
     }

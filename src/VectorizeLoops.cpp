@@ -291,7 +291,7 @@ class PredicateLoadStore : public IRMutator {
             internal_assert(op->value.type().lanes() == lanes);
             Expr value = mutate(op->value);
             Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                   {Load::make(op->value.type(), op->name, op->index, BufferPtr(), op->param)},
+                                   {Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param)},
                                    Call::Intrinsic);
             stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
                                              {dest, vector_predicate, value},
@@ -301,7 +301,7 @@ class PredicateLoadStore : public IRMutator {
             Expr value = Broadcast::make(op->value, lanes);
             Expr index = Broadcast::make(op->index, lanes);
             Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                   {Load::make(value.type(), op->name, index, BufferPtr(), op->param)},
+                                   {Load::make(value.type(), op->name, index, Buffer<>(), op->param)},
                                    Call::Intrinsic);
             stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
                                              {dest, vector_predicate, mutate(value)},

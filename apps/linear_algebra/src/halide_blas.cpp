@@ -3,7 +3,7 @@
 #include "halide_blas.h"
 #include "HalideBuffer.h"
 
-using Halide::Buffer;
+using Halide::Runtime::Buffer;
 
 #define assert_no_error(func)                                       \
   if (func != 0) {                                                  \

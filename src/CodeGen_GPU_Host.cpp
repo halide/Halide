@@ -390,7 +390,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument. BufferPtr arguments get
+            // store the size of the argument. Buffer arguments get
             // the dev field, which is 64-bits.
             int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
@@ -431,7 +431,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
-        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
+        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]))
+            << bounds.num_threads[3] << ", " << bounds.num_blocks[3] << "\n";
         debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
         debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
         debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
