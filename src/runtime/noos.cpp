@@ -4,10 +4,6 @@
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-typedef void *(*halide_get_symbol_t)(const char *);
-typedef void *(*halide_load_library_t)(const char *);
-typedef void *(*halide_get_library_symbol_t)(void *, const char *);
-
 WEAK halide_print_t custom_print = NULL;
 WEAK halide_error_handler_t error_handler = NULL;
 WEAK halide_malloc_t custom_malloc = NULL;
@@ -70,6 +66,24 @@ WEAK halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t f) {
     return result;
 }
 
+WEAK halide_get_symbol_t halide_set_custom_get_symbol(halide_get_symbol_t f) {
+    halide_get_symbol_t result = custom_get_symbol;
+    custom_get_symbol = f;
+    return result;
+}
+
+WEAK halide_load_library_t halide_set_custom_load_library(halide_load_library_t f) {
+    halide_load_library_t result = custom_load_library;
+    custom_load_library = f;
+    return result;
+}
+
+WEAK halide_get_library_symbol_t halide_set_custom_get_library_symbol(halide_get_library_symbol_t f) {
+    halide_get_library_symbol_t result = custom_get_library_symbol;
+    custom_get_library_symbol = f;
+    return result;
+}
+
 WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
                         uint8_t *closure) {
     return (*custom_do_task)(user_context, f, idx, closure);
@@ -112,10 +126,9 @@ int halide_noos_set_runtime(halide_malloc_t user_malloc,
     halide_set_error_handler(error);
     halide_set_custom_do_par_for(do_par_for);
     halide_set_custom_do_task(do_task);
-
-    custom_load_library = load_library;
-    custom_get_symbol = get_symbol;
-    custom_get_library_symbol = get_library_symbol;
+    halide_set_custom_get_symbol(get_symbol);
+    halide_set_custom_load_library(load_library);
+    halide_set_custom_get_library_symbol(get_library_symbol);
 
     return 0;
 }
