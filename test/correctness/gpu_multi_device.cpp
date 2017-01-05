@@ -4,7 +4,7 @@
 using namespace Halide;
 
 struct MultiDevicePipeline {
-    Var x, y, c;
+    Var x, y, c, xi, yi;
     Func stage[4];
     size_t current_stage;
 
@@ -17,12 +17,12 @@ struct MultiDevicePipeline {
         Target jit_target(get_jit_target_from_environment());
         if (jit_target.has_feature(Target::OpenCL)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, TailStrategy::Auto, DeviceAPI::OpenCL);
+            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, xi, yi, 32, 32, TailStrategy::Auto, DeviceAPI::OpenCL);
             current_stage++;
         }
         if (jit_target.has_feature(Target::CUDA)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, TailStrategy::Auto, DeviceAPI::CUDA);
+            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, xi, yi, 32, 32, TailStrategy::Auto, DeviceAPI::CUDA);
             current_stage++;
         }
         if (jit_target.has_feature(Target::OpenGL)) {
@@ -32,7 +32,7 @@ struct MultiDevicePipeline {
         }
         if (jit_target.has_feature(Target::OpenGLCompute)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, TailStrategy::Auto, DeviceAPI::OpenGLCompute);
+            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, xi, yi, 32, 32, TailStrategy::Auto, DeviceAPI::OpenGLCompute);
             current_stage++;
         }
     }

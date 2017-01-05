@@ -460,7 +460,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                 mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
             } else if (arg.kind == Argument::InputBuffer ||
                        arg.kind == Argument::OutputBuffer) {
-                mangle_args.push_back(ExternFuncArgument(BufferPtr()));
+                mangle_args.push_back(ExternFuncArgument(Buffer<>()));
             }
         }
         names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
@@ -735,7 +735,7 @@ void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stac
     builder->CreateCall(call_destructor, args);
 }
 
-void CodeGen_LLVM::compile_buffer(const BufferPtr &buf) {
+void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     // Embed the buffer declaration as a global.
     internal_assert(buf.defined());
 
@@ -2823,8 +2823,8 @@ void CodeGen_LLVM::visit(const Call *op) {
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_bool()) {
                     call_args.push_back(builder->CreateSelect(
-                        codegen(op->args[i]), 
-                        codegen(StringImm::make("true")), 
+                        codegen(op->args[i]),
+                        codegen(StringImm::make("true")),
                         codegen(StringImm::make("false"))));
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_int()) {

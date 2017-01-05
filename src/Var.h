@@ -149,13 +149,13 @@ public:
         return Internal::Variable::make(Int(32), name());
     }
 
-    /** Vars to use for scheduling producer/consumer pairs on the gpu. */
+    /** Vars to use for scheduling producer/consumer pairs on the gpu. Deprecated. */
     // @{
     static Var gpu_blocks() {
-        return Var("__block_id_x");
+        return Var("__deprecated_block_id_x");
     }
     static Var gpu_threads() {
-        return Var("__thread_id_x");
+        return Var("__deprecated_thread_id_x");
     }
     // @}
 

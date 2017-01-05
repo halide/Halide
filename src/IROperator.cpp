@@ -5,6 +5,8 @@
 
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IREquality.h"
+#include "Var.h"
 #include "Debug.h"
 #include "CSE.h"
 
@@ -705,10 +707,10 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
     user_assert(condition.type().is_bool()) << "Require condition must be a boolean type\n";
     user_assert(args.at(0).defined()) << "Require of undefined value\n";
 
-    Expr requirement_failed_error = 
-        Internal::Call::make(Int(32), 
+    Expr requirement_failed_error =
+        Internal::Call::make(Int(32),
                              "halide_error_requirement_failed",
-                             {stringify({condition}), combine_strings(args)}, 
+                             {stringify({condition}), combine_strings(args)},
                              Internal::Call::Extern);
     // Just cast to the type expected by the success path: since the actual
     // value will never be used in the failure branch, it doesn't really matter

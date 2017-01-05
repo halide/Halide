@@ -215,8 +215,8 @@ public:
     // @{
     EXPORT RDom(const Buffer<> &);
     EXPORT RDom(ImageParam);
-    template<typename T, int D>
-    NO_INLINE RDom(const Buffer<T, D> &im) : RDom(Buffer<>(im)) {}
+    template<typename T>
+    NO_INLINE RDom(const Buffer<T> &im) : RDom(Buffer<>(im)) {}
     // @}
 
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */

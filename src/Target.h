@@ -77,7 +77,7 @@ struct Target {
         AVX512 = halide_target_feature_avx512,
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
-        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,        
+        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -169,7 +169,7 @@ struct Target {
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-      return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
     }
 
     /** Does this target allow using a certain type. Generally all
@@ -307,13 +307,6 @@ EXPORT Target get_target_from_environment();
  * and OS of the target do not match the host target, so this is only
  * useful for controlling the feature set. */
 EXPORT Target get_jit_target_from_environment();
-
-/** Return a const ref to the jit target from HL_JIT_TARGET. Calls
- * get_jit_target_from_environment once and caches the result in a
- * static. This function exists so that there is a way to get the jit
- * target in a context in which Target is still an incomplete type (in
- * HalideBuffer.h) */
-EXPORT const Target &get_const_ref_to_jit_target_from_environment(); 
 
 /** Get the Target feature corresponding to a DeviceAPI. For device
  * apis that do not correspond to any single target feature, returns
