@@ -615,6 +615,15 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_trace) {
         base.custom_trace = addins.custom_trace;
     }
+    if (addins.custom_get_symbol) {
+        base.custom_get_symbol = addins.custom_get_symbol;
+    }
+    if (addins.custom_load_library) {
+        base.custom_load_library = addins.custom_load_library;
+    }
+    if (addins.custom_get_library_symbol) {
+        base.custom_get_library_symbol = addins.custom_get_library_symbol;
+    }
 }
 
 void print_handler(void *context, const char *msg) {
@@ -682,9 +691,21 @@ int32_t trace_handler(void *context, const halide_trace_event *e) {
     }
 }
 
+void *get_symbol_handler(const char *name) {
+    return (*active_handlers.custom_get_symbol)(name);
+}
+
+void *load_library_handler(const char *name) {
+    return (*active_handlers.custom_load_library)(name);
+}
+
+void *get_library_symbol_handler(void *lib, const char *name) {
+    return (*active_handlers.custom_get_library_symbol)(lib, name);
+}
+
 template <typename function_t>
-function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const char *hook_name, function_t hook) {
-    std::map<std::string, JITModule::Symbol>::const_iterator iter = exports.find(hook_name);
+function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
+    auto iter = exports.find(hook_name);
     internal_assert(iter != exports.end());
     function_t (*hook_setter)(function_t) =
         reinterpret_bits<function_t (*)(function_t)>(iter->second.address);
@@ -832,6 +853,15 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
             runtime_internal_handlers.custom_trace =
                 hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
+
+            runtime_internal_handlers.custom_get_symbol =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_symbol", get_symbol_handler);
+
+            runtime_internal_handlers.custom_load_library =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_load_library", load_library_handler);
+
+            runtime_internal_handlers.custom_get_library_symbol =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);

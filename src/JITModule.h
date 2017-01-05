@@ -139,17 +139,16 @@ struct JITModule {
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
 
 struct JITHandlers {
-    void (*custom_print)(void *, const char *);
-    void *(*custom_malloc)(void *, size_t);
-    void (*custom_free)(void *, void *);
-    int (*custom_do_task)(void *, halide_task, int, uint8_t *);
-    int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
-    void (*custom_error)(void *, const char *);
-    int32_t (*custom_trace)(void *, const halide_trace_event *);
-    JITHandlers() : custom_print(nullptr), custom_malloc(nullptr), custom_free(nullptr),
-                    custom_do_task(nullptr), custom_do_par_for(nullptr),
-                    custom_error(nullptr), custom_trace(nullptr) {
-    }
+    void (*custom_print)(void *, const char *){nullptr};
+    void *(*custom_malloc)(void *, size_t){nullptr};
+    void (*custom_free)(void *, void *){nullptr};
+    int (*custom_do_task)(void *, halide_task, int, uint8_t *){nullptr};
+    int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *){nullptr};
+    void (*custom_error)(void *, const char *){nullptr};
+    int32_t (*custom_trace)(void *, const halide_trace_event *){nullptr};
+    void *(*custom_get_symbol)(const char *name){nullptr};
+    void *(*custom_load_library)(const char *name){nullptr};
+    void *(*custom_get_library_symbol)(void *lib, const char *name){nullptr};
 };
 
 struct JITUserContext {

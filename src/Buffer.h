@@ -19,7 +19,7 @@ struct BufferContents {
     Runtime::Buffer<> buf;
 };
 
-Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
+EXPORT Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
 
 template<typename ...Args>
 struct all_ints_and_optional_name : std::false_type {};
@@ -321,6 +321,10 @@ public:
     HALIDE_BUFFER_FORWARD_CONST(min)
     HALIDE_BUFFER_FORWARD_CONST(extent)
     HALIDE_BUFFER_FORWARD_CONST(stride)
+    HALIDE_BUFFER_FORWARD_CONST(left)
+    HALIDE_BUFFER_FORWARD_CONST(right)
+    HALIDE_BUFFER_FORWARD_CONST(top)
+    HALIDE_BUFFER_FORWARD_CONST(bottom)    
     HALIDE_BUFFER_FORWARD_CONST(number_of_elements)
     HALIDE_BUFFER_FORWARD_CONST(size_in_bytes)
     HALIDE_BUFFER_FORWARD_CONST(begin)

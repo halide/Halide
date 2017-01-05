@@ -185,7 +185,9 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 
 /** Halide calls these functions to interact with the underlying
  * system runtime functions. To replace in AOT code on platforms that
- * support weak linking, define these functions yourself.
+ * support weak linking, define these functions yourself, or use
+ * the halide_set_custom_load_library() and halide_set_custom_get_library_symbol()
+ * functions. In JIT-compiled code, use JITSharedRuntime::set_default_handlers().
  *
  * halide_load_library and halide_get_library_symbol are equivalent to
  * dlopen and dlsym. halide_get_symbol(sym) is equivalent to
@@ -195,6 +197,12 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 extern void *halide_get_symbol(const char *name);
 extern void *halide_load_library(const char *name);
 extern void *halide_get_library_symbol(void *lib, const char *name);
+typedef void *(*halide_get_symbol_t)(const char *name);
+typedef void *(*halide_load_library_t)(const char *name);
+typedef void *(*halide_get_library_symbol_t)(void *lib, const char *name);
+extern halide_get_symbol_t halide_set_custom_get_symbol(halide_get_symbol_t user_get_symbol);
+extern halide_load_library_t halide_set_custom_load_library(halide_load_library_t user_load_library);
+extern halide_get_library_symbol_t halide_set_custom_get_library_symbol(halide_get_library_symbol_t user_get_library_symbol);
 //@}
 
 /** Called when debug_to_file is used inside %Halide code.  See
