@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     const int size = 32;
 
-    Image<float> noise(size, size);
+    Buffer<float> noise(size, size);
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
             noise(j,i) = (float)rand() / RAND_MAX;
@@ -34,8 +34,8 @@ int main(int argc, char **argv) {
                                               energy(r.x, r.y - 1),
                                               energy(xp,  r.y - 1));
 
-    Image<float> im_energy = energy.realize(size,size);
-    Image<float> ref_energy(size, size);
+    Buffer<float> im_energy = energy.realize(size,size);
+    Buffer<float> ref_energy(size, size);
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
             int xm = std::max(x - 1, 0);

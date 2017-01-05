@@ -8,7 +8,8 @@
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
+using namespace Halide::Tools;
 
 namespace {
 
@@ -31,21 +32,21 @@ T clamp(T x, T min, T max) {
 }
 
 template<typename T>
-void save_untransformed(Image<T> t, const std::string& filename) {
-    Tools::save_image(t, filename);
+void save_untransformed(Buffer<T> t, const std::string& filename) {
+    save_image(t, filename);
     printf("Saved %s\n", filename.c_str());
 }
 
 template<typename T>
-void save_transformed(Image<T> t, const std::string& filename) {
-    Image<T> rearranged(t.width()*2, t.height(), 1);
+void save_transformed(Buffer<T> t, const std::string& filename) {
+    Buffer<T> rearranged(t.width()*2, t.height(), 1);
     for (int y = 0; y < t.height(); y++) {
         for (int x = 0; x < t.width(); x++) {
             rearranged(x, y, 0) = clamp(t(x, y, 0), 0.0f, 1.0f);
             rearranged(x + t.width(), y, 0) = clamp(t(x, y, 1)*4.f + 0.5f, 0.0f, 1.0f);
         }
     }
-    Tools::save_image(rearranged, filename);
+    save_image(rearranged, filename);
     printf("Saved %s\n", filename.c_str());
 }
 
@@ -57,9 +58,9 @@ int main(int argc, char **argv) {
     const std::string src_image = argv[1];
     const std::string dirname = argv[2];
 
-    Image<float> input = Tools::load_image(src_image);
-    Image<float> transformed(input.width()/2, input.height(), 2);
-    Image<float> inverse_transformed(input.width(), input.height(), 1);
+    Buffer<float> input = load_image(src_image);
+    Buffer<float> transformed(input.width()/2, input.height(), 2);
+    Buffer<float> inverse_transformed(input.width(), input.height(), 1);
 
     _assert(haar_x(input, transformed) == 0, "haar_x failed");
     save_transformed(transformed, dirname + "/haar_x.png");

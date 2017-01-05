@@ -32,18 +32,18 @@ int main(int argc, char **argv) {
     buf.stride[2] = 0;
     buf.elem_size = 1;
 
-    Image<uint8_t> param_buf(buf);
+    Buffer<uint8_t> param_buf(buf);
     ImageParam input(UInt(8), 3);
     input.set(param_buf);
 
     Var x;
     Func grand_total;
-    grand_total() = cast<uint64_t>(input(0, 0, 0) + input(input.extent(0)-1, input.extent(1)-1, input.extent(2)-1));
+    grand_total() = cast<uint64_t>(input(0, 0, 0) + input(input.dim(0).extent()-1, input.dim(1).extent()-1, input.dim(2).extent()-1));
     grand_total.set_error_handler(&halide_error);
 
     Target t = get_jit_target_from_environment();
 
-    Image<uint64_t> result;
+    Buffer<uint64_t> result;
     if (t.bits != 32) {
         grand_total.compile_jit(t.with_feature(Target::LargeBuffers));
         result = grand_total.realize();

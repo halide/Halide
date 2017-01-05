@@ -143,9 +143,8 @@ private:
 
     void visit(const For *loop) {
         bool old_kernel_loop = inside_kernel_loop;
-        if (loop->for_type == ForType::Parallel &&
-            (loop->device_api == DeviceAPI::GLSL ||
-                loop->device_api == DeviceAPI::Renderscript)) {
+        if ((loop->for_type == ForType::GPUBlock || loop->for_type == ForType::GPUThread) &&
+            loop->device_api == DeviceAPI::GLSL) {
             inside_kernel_loop = true;
         }
         IRMutator::visit(loop);

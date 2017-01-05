@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     Func g;
     g(v0) = f(v0 % 2, (v0 / 2) % 2, (v0 / 4) % 2, (v0 / 8) % 2, (v0 / 16) % 2);
 
-    Image<int> result = g.realize(32);
+    Buffer<int> result = g.realize(32);
 
     // Delete this code once this test works.
     printf("Error: I should not have successfully compiled.\n");

@@ -1,30 +1,40 @@
 include ../support/Makefile.inc
 
-all: process
+BIN ?= bin
 
-local_laplacian_gen: local_laplacian_gen.cpp
-	$(CXX) $(CXXFLAGS) local_laplacian_gen.cpp -g $(LIB_HALIDE) -o local_laplacian_gen \
-	$(LDFLAGS) $(LLVM_SHARED_LIBS)
+all: $(BIN)/process
 
-local_laplacian.a: local_laplacian_gen
-	./local_laplacian_gen
+$(BIN)/local_laplacian_exec: local_laplacian_generator.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-process: process.cpp local_laplacian.a
-	$(CXX) $(CXXFLAGS) -Wall -O3 process.cpp local_laplacian.a -o process $(LDFLAGS) $(PNGFLAGS) $(OPENGL_LDFLAGS)
+$(BIN)/local_laplacian.a: $(BIN)/local_laplacian_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN)  target=$(HL_TARGET)
 
-out.png: process
-	./process ../images/rgb.png 8 1 1 10 out.png
+$(BIN)/process: process.cpp $(BIN)/local_laplacian.a
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+
+$(BIN)/out.png: $(BIN)/process
+	@-mkdir -p $(BIN)
+	$(BIN)/process $(IMAGES)/rgb.png 8 1 1 10 $(BIN)/out.png
 
 # Build rules for generating a visualization of the pipeline using HalideTraceViz
-process_viz: local_laplacian_viz.a
-	$(CXX) $(CXXFLAGS) -Wall -O3 process.cpp local_laplacian_viz.a -o process_viz $(LDFLAGS) $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+$(BIN)/viz/local_laplacian.a: $(BIN)/local_laplacian_exec
+	@-mkdir -p $(BIN)/viz
+	HL_TRACE=3 $^ -o $(BIN)/viz target=$(HL_TARGET) pyramid_levels=6
 
-local_laplacian_viz.a: local_laplacian_gen
-	HL_TRACE=3 ./local_laplacian_gen 6
-	mv local_laplacian.a local_laplacian_viz.a
+$(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
+	@-mkdir -p $(BIN)/viz
+	$(CXX) $(CXXFLAGS) -I$(BIN)/viz -Wall -O3 $^ -o $@ $(LDFLAGS) $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
-local_laplacian.mp4: process_viz
+../../bin/HalideTraceViz:
+	$(MAKE) -C ../../ bin/HalideTraceViz
+
+$(BIN)/local_laplacian.mp4: $(BIN)/process_viz ../../bin/HalideTraceViz
+	@-mkdir -p $(BIN)
 	bash viz.sh
 
 clean:
-	rm -f process local_laplacian.a process_viz local_laplacian_viz.a local_laplacian_gen local_laplacian.mp4
+	rm -rf $(BIN)

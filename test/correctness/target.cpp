@@ -46,22 +46,10 @@ int main(int argc, char **argv) {
     // Full specification round-trip, crazy features
     t1 = Target(Target::Android, Target::ARM, 32,
                 {Target::JIT, Target::SSE41, Target::AVX, Target::AVX2,
-                 Target::CUDA, Target::OpenCL, Target::OpenGL, Target::OpenGLCompute, Target::Renderscript,
+                 Target::CUDA, Target::OpenCL, Target::OpenGL, Target::OpenGLCompute,
                  Target::Debug});
     ts = t1.to_string();
-    if (ts != "arm-32-android-avx-avx2-cuda-debug-jit-opencl-opengl-openglcompute-renderscript-sse41") {
-       printf("to_string failure: %s\n", ts.c_str());
-       return -1;
-    }
-    if (!Target::validate_target_string(ts)) {
-       printf("validate_target_string failure: %s\n", ts.c_str());
-       return -1;
-    }
-
-    // Full specification round-trip, PNacl
-    t1 = Target(Target::NaCl, Target::PNaCl, 32);
-    ts = t1.to_string();
-    if (ts != "pnacl-32-nacl") {
+    if (ts != "arm-32-android-avx-avx2-cuda-debug-jit-opencl-opengl-openglcompute-sse41") {
        printf("to_string failure: %s\n", ts.c_str());
        return -1;
     }

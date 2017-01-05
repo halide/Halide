@@ -55,7 +55,7 @@ bool test(int vec_width, const Target &target) {
     int W = 1024;
     int H = 1;
 
-    Image<A> input(W, H);
+    Buffer<A> input(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             input(x, y) = (A)((rand()&0xffff)*0.1);
@@ -68,7 +68,8 @@ bool test(int vec_width, const Target &target) {
     f(x, y) = cast<B>(input(x, y));
 
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, 64);
+        Var xo, xi;
+        f.gpu_tile(x, xo, xi, 64);
     } else {
         if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             // TODO: Non-native vector widths hang the compiler here.
@@ -79,7 +80,7 @@ bool test(int vec_width, const Target &target) {
         }
     }
 
-    Image<B> output = f.realize(W, H);
+    Buffer<B> output = f.realize(W, H);
 
     /*
     for (int y = 0; y < H; y++) {

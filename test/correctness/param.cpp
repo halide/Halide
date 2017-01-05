@@ -25,16 +25,17 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, 256);
+        Var xo, xi;
+        f.gpu_tile(x, xo, xi, 256);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon().vectorize(x, 32);
     }
 
     u.set(17);
-    Image<int> out_17 = f.realize(1024, target);
+    Buffer<int> out_17 = f.realize(1024, target);
 
     u.set(123);
-    Image<int> out_123 = f.realize(1024, target);
+    Buffer<int> out_123 = f.realize(1024, target);
 
     for (int i = 0; i < 1024; i++) {
         if (out_17(i) != 17 || out_123(i) != 123) {

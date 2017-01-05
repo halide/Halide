@@ -83,7 +83,7 @@ struct ModuleContents {
     mutable RefCount ref_count;
     std::string name;
     Target target;
-    std::vector<Internal::BufferPtr> buffers;
+    std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
 };
 
@@ -125,7 +125,7 @@ const std::string &Module::name() const {
     return contents->name;
 }
 
-const std::vector<Internal::BufferPtr> &Module::buffers() const {
+const std::vector<Buffer<>> &Module::buffers() const {
     return contents->buffers;
 }
 
@@ -133,7 +133,7 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
-void Module::append(const Internal::BufferPtr &buffer) {
+void Module::append(const Buffer<> &buffer) {
     contents->buffers.push_back(buffer);
 }
 
@@ -190,11 +190,7 @@ void Module::compile(const Outputs &output_files) const {
             {
                 debug(1) << "Module.compile(): object_name " << object_name << "\n";
                 auto out = make_raw_fd_ostream(object_name);
-                if (target().arch == Target::PNaCl) {
-                    compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
-                } else {
-                    compile_llvm_module_to_object(*llvm_module, *out);
-                }
+                compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();
             }
 
@@ -207,11 +203,7 @@ void Module::compile(const Outputs &output_files) const {
         if (!output_files.assembly_name.empty()) {
             debug(1) << "Module.compile(): assembly_name " << output_files.assembly_name << "\n";
             auto out = make_raw_fd_ostream(output_files.assembly_name);
-            if (target().arch == Target::PNaCl) {
-                compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
-            } else {
-                compile_llvm_module_to_assembly(*llvm_module, *out);
-            }
+            compile_llvm_module_to_assembly(*llvm_module, *out);
         }
         if (!output_files.bitcode_name.empty()) {
             debug(1) << "Module.compile(): bitcode_name " << output_files.bitcode_name << "\n";
@@ -291,9 +283,6 @@ void compile_multitarget(const std::string &fn_name,
 
     // JIT makes no sense.
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
-
-    // PNaCl might work, but is untested in this path.
-    user_assert(base_target.arch != Target::PNaCl) << "PNaCl not allowed for compile_multitarget.\n";
 
     // If only one target, don't bother with the runtime feature detection wrapping.
     if (targets.size() == 1) {

@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 #include "msan.h"
 
 using namespace std;
-using namespace Halide;
+using namespace Halide::Runtime;
 
 // Just copies in -> out.
 extern "C" int msan_extern_stage(buffer_t *in, buffer_t *out) {
@@ -155,7 +155,7 @@ int main()
     printf("Testing interleaved...\n");
     {
         auto out = Buffer<int32_t>::make_interleaved(4, 4, 3);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -177,7 +177,7 @@ int main()
         };
         std::vector<int32_t> data(((4 * 3) + kPad) * 4);
         auto out = Buffer<int32_t>(data.data(), 3, shape);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -191,7 +191,7 @@ int main()
     printf("Testing planar...\n");
     {
         auto out = Buffer<int32_t>(4, 4, 3);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -212,7 +212,7 @@ int main()
         };
         std::vector<int32_t> data((4 + kPad) * 4 * 3);
         auto out = Buffer<int32_t>(data.data(), 3, shape);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -226,7 +226,7 @@ int main()
     printf("Testing error case...\n");
     {
         auto out = Buffer<int32_t>(1, 1, 1);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
             exit(-1);

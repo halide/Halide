@@ -5,8 +5,8 @@
 
 using namespace Halide;
 
-Image<uint16_t> input;
-Image<uint16_t> output;
+Buffer<uint16_t> input;
+Buffer<uint16_t> output;
 
 #define MIN 1
 #define MAX 1020
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     // Try doing vector loads with a boundary condition in various
     // ways and compare the performance.
 
-    input = Image<uint16_t>(1024+8, 320);
+    input = Buffer<uint16_t>(1024+8, 320);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    output = Image<uint16_t>(1024, 320);
+    output = Buffer<uint16_t>(1024, 320);
 
     Var x, y;
 
@@ -127,8 +127,8 @@ int main(int argc, char **argv) {
     // main exits, because destroying the module touches globals
     // inside of llvm, and destructor order of globals is not
     // guaranteed.
-    input = Image<uint16_t>();
-    output = Image<uint16_t>();
+    input = Buffer<uint16_t>();
+    output = Buffer<uint16_t>();
 
     return 0;
 }

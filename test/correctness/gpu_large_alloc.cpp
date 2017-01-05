@@ -22,13 +22,14 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        f.compute_root().gpu_tile(x, y, 16, 16);
-        g.compute_root().gpu_tile(x, y, 16, 16);
+        Var xi, yi;
+        f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
+        g.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
     }
 
     printf("Realizing function...\n");
 
-    Image<int> img = g.realize(W, H, target);
+    Buffer<int> img = g.realize(W, H, target);
 
     for (int i = 0; i < W; i++) {
         for (int j = 0; j < H; j++) {

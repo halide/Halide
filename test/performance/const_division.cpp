@@ -28,7 +28,7 @@ bool test(int w, bool div) {
         num_vals = 126;
     }
 
-    Image<T> input(w, num_vals);
+    Buffer<T> input(w, num_vals);
 
     for (int y = 0; y < num_vals; y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -69,13 +69,13 @@ bool test(int w, bool div) {
     g.compile_jit();
     h.compile_jit();
 
-    Image<T> correct = g.realize(input.width(), num_vals);
+    Buffer<T> correct = g.realize(input.width(), num_vals);
     double t_correct = benchmark(5, 200, [&]() { g.realize(correct); });
 
-    Image<T> fast = f.realize(input.width(), num_vals);
+    Buffer<T> fast = f.realize(input.width(), num_vals);
     double t_fast = benchmark(5, 200, [&]() { f.realize(fast); });
 
-    Image<T> fast_dynamic = h.realize(input.width(), num_vals);
+    Buffer<T> fast_dynamic = h.realize(input.width(), num_vals);
     double t_fast_dynamic = benchmark(5, 200, [&]() { h.realize(fast_dynamic); });
 
     printf("%6.3f                  %6.3f\n", t_correct / t_fast, t_correct / t_fast_dynamic);

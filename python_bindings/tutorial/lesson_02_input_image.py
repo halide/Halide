@@ -18,11 +18,6 @@
 # The only Halide header file you need is Halide.h. It includes all of Halide.
 #include "Halide.h"
 
-# Include some support code for loading pngs. It assumes there's an
-# Image type, so we'll pull the one from Halide namespace
-#using Halide::Image
-#include "image_io.h"
-
 import halide as h
 import numpy as np
 from scipy.misc import imread, imsave
@@ -38,8 +33,8 @@ def main():
     input_data = imread(image_path)
     assert input_data.dtype == np.uint8
 
-    # We create an Image object to wrap the numpy array
-    input = h.Image(input_data)
+    # We create a Buffer object to wrap the numpy array
+    input = h.Buffer(input_data)
 
     # Next we define our Func object that represents our one pipeline
     # stage.
@@ -100,10 +95,10 @@ def main():
     # error at runtime telling us we're trying to read out of bounds
     # on the input image.
     output_image = brighter.realize(input.width(), input.height(), input.channels())
-    assert type(output_image) == h.Image_uint8
+    assert type(output_image) == h.Buffer_uint8
 
     # Save the output for inspection. It should look like a bright parrot.
-    output_data = h.image_to_ndarray(output_image)
+    output_data = h.buffer_to_ndarray(output_image)
     #print("output_data", output_data)
     #print("output_data.shape", output_data.shape)
     imsave("brighter.png", output_data)

@@ -29,7 +29,7 @@ check_symbol()
     SYM=$2
     if !(nm $FILE | grep $SYM > /dev/null); then
         echo "$SYM not found in $FILE"
-	exit -1
+    exit -1
     fi
 }
 
@@ -162,7 +162,7 @@ check_runtime()
 {
     if !(nm $1 | grep "[TSW] _\?halide_" > /dev/null); then
         echo "Halide runtime not found in $1"
-	exit -1
+    exit -1
     fi
 }
 
@@ -170,7 +170,7 @@ check_no_runtime()
 {
     if nm $1 | grep "[TSW] _\?halide_" > /dev/null; then
         echo "Halide runtime found in $1"
-	exit -1
+    exit -1
     fi
 }
 

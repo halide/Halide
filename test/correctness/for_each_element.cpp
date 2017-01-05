@@ -1,11 +1,11 @@
-#include "Halide.h"
+#include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
     // Try several different ways of accessing a the pixels of an image,
     // and check that they all do the same thing.
-    Image<int, 3> im(1000, 1000, 3);
+    Buffer<int> im(1000, 1000, 3);
 
     // Make the image non-dense in memory to make life more interesting
     im = im.cropped(0, 100, 800).cropped(1, 200, 600);
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     }
 
     // Test a zero-dimensional image too.
-    Image<int, 0> scalar_im = Image<int, 0>::make_scalar();
+    Buffer<int> scalar_im = Buffer<int>::make_scalar();
     scalar_im() = 5;
 
     // Not sure why you'd ever do this, but it verifies that

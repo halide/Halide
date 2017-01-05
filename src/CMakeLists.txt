@@ -4,6 +4,12 @@ add_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 if (MSVC)
+  # disable irrelevant warnings
+  target_compile_options(build_halide_h PUBLIC /wd4996)
+  target_compile_options(bitcode2cpp PUBLIC /wd4996)
+endif()
+
+if (MSVC)
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
@@ -52,7 +58,6 @@ set(RUNTIME_CPP
   module_jit_ref_count
   msan
   msan_stubs
-  nacl_host_cpu_count
   noos
   opencl
   opengl
@@ -74,7 +79,6 @@ set(RUNTIME_CPP
   profiler_inlined
   qurt_allocator
   qurt_hvx
-  renderscript
   runtime_api
   ssp
   thread_pool
@@ -98,10 +102,8 @@ set (RUNTIME_LL
   hvx_64
   hvx_128
   mips
-  pnacl_math
   posix_math
   ptx_dev
-  renderscript_dev
   win32_math
   x86
   x86_avx
@@ -113,9 +115,17 @@ set (RUNTIME_BC
   compute_35
 )
 
+# Replace escaped space with a simple space ('\ ' -> ' ')
+function(recover_escaped_space INPUT_PATH)
+  string(REPLACE "\\ " " " TEMP "${${INPUT_PATH}}")
+  set(${INPUT_PATH} "${TEMP}" PARENT_SCOPE)
+endfunction ()
+
 set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
 file(TO_NATIVE_PATH "${RUNTIME_DIR}/" NATIVE_RUNTIME_DIR)
+recover_escaped_space(NATIVE_RUNTIME_DIR)
 file(TO_NATIVE_PATH "${CMAKE_CFG_INTDIR}/" NATIVE_INT_DIR)
+recover_escaped_space(NATIVE_INT_DIR)
 
 # ./ seems to confuse cmake on linux
 if("${NATIVE_INT_DIR}" STREQUAL "./")
@@ -128,62 +138,73 @@ set (CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
-foreach (i ${RUNTIME_CPP} )
-  foreach (j ${ARCHS} )
-    IF (${j} EQUAL 32)
-      IF (${i} MATCHES "windows_.*")
-        # win32 uses the stdcall calling convention, which is x86-specific
-        set(TARGET "i386-unknown-unknown-unknown")
+
+function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
+  foreach (i ${TARGET_RUNTIME_FILES} )
+    foreach (j ${ARCHS} )
+      IF (${j} EQUAL 32)
+        IF (${i} MATCHES "windows_.*")
+          # win32 uses the stdcall calling convention, which is x86-specific
+          set(TARGET "i386-unknown-unknown-unknown")
+        ELSE()
+          # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
+          set(TARGET "le32-unknown-nacl-unknown")
+        ENDIF()
       ELSE()
-        set(TARGET "le32-unknown-nacl-unknown")
+        # generic 64-bit code
+        set(TARGET "le64-unknown-unknown-unknown")
       ENDIF()
-    ELSE()
-      # generic 64-bit code
-      set(TARGET "le64-unknown-unknown-unknown")
-    ENDIF()
-    set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
-    set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
-    set(LL "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
-    set(BC_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.bc")
-    set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
-    set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
-    set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
+      set(SOURCE "${TARGET_RUNTIME_DIR}${i}.cpp")
+      set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
+      set(LL "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
+      set(BC_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.bc")
+      set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
+      set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
+      set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
+      set(INCLUDE_DIRS -I"${TARGET_RUNTIME_DIR}")
 
-    add_custom_command(OUTPUT "${LL_D}"
-                       DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
-                       COMMENT "${SOURCE} -> ${LL_D}"
-                       # Make sure that the output of this command also depends
-                       # on the header files that ${SOURCE} uses
-                       # FIXME: Only works for makefile generator
-                       IMPLICIT_DEPENDS CXX "${SOURCE}"
-                      )
-    add_custom_command(OUTPUT "${LL}"
-                       DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
-                       COMMENT "${SOURCE} -> ${LL}")
+      add_custom_command(OUTPUT "${LL_D}"
+                         DEPENDS "${SOURCE}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" ${INCLUDE_DIRS} -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                         COMMENT "${SOURCE} -> ${LL_D}"
+                         # Make sure that the output of this command also depends
+                         # on the header files that ${SOURCE} uses
+                         # FIXME: Only works for makefile generator
+                         IMPLICIT_DEPENDS CXX "${SOURCE}"
+                        )
+      add_custom_command(OUTPUT "${LL}"
+                         DEPENDS "${SOURCE}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" ${INCLUDE_DIRS} -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                         COMMENT "${SOURCE} -> ${LL}")
 
-    add_custom_command(OUTPUT "${BC_D}"
-                       DEPENDS "${LL_D}"
-                       COMMAND "${LLVM_AS}" "${LL_D}" -o "${BC_D}"
-                       COMMENT "${LL_D} -> ${BC_D}")
-    add_custom_command(OUTPUT "${BC}"
-                       DEPENDS "${LL}"
-                       COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
-                       COMMENT "${LL} -> ${BC}")
+      add_custom_command(OUTPUT "${BC_D}"
+                         DEPENDS "${LL_D}"
+                         COMMAND "${LLVM_AS}" "${LL_D}" -o "${BC_D}"
+                         COMMENT "${LL_D} -> ${BC_D}")
+      add_custom_command(OUTPUT "${BC}"
+                         DEPENDS "${LL}"
+                         COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
+                         COMMENT "${LL} -> ${BC}")
 
-    add_custom_command(OUTPUT "${INITMOD_D}"
-                       DEPENDS "${BC_D}"
-                       COMMAND bitcode2cpp "${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
-                       COMMENT "${BC_D} -> ${INITMOD_D}")
-    add_custom_command(OUTPUT "${INITMOD}"
-                       DEPENDS "${BC}"
-                       COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
-                       COMMENT "${BC} -> ${INITMOD}")
-    list(APPEND INITIAL_MODULES ${INITMOD})
-    list(APPEND INITIAL_MODULES ${INITMOD_D})
+      add_custom_command(OUTPUT "${INITMOD_D}"
+                         DEPENDS "${BC_D}"
+                         COMMAND bitcode2cpp "${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
+                         COMMENT "${BC_D} -> ${INITMOD_D}")
+      add_custom_command(OUTPUT "${INITMOD}"
+                         DEPENDS "${BC}"
+                         COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
+                         COMMENT "${BC} -> ${INITMOD}")
+      list(APPEND INITIAL_MODULES ${INITMOD})
+      list(APPEND INITIAL_MODULES ${INITMOD_D})
+    endforeach()
   endforeach()
-endforeach()
+  # This seems to be how you return values from functions in cmake.
+  # I just threw up in my mouth a little.
+  set(INITIAL_MODULES "${INITIAL_MODULES}" PARENT_SCOPE)
+endfunction (add_runtime_modules)
+
+add_runtime_modules("${RUNTIME_CPP}" "${NATIVE_RUNTIME_DIR}")
+
 foreach (i ${RUNTIME_LL} )
   set(LL "${NATIVE_RUNTIME_DIR}${i}.ll")
   set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}.bc")
@@ -212,13 +233,15 @@ set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
   AllocationBoundsInference.h
+  ApplySplit.h
   Argument.h
   Associativity.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
-  BufferPtr.h
+  Buffer.h
   CSE.h
+  CanonicalizeGPUVars.h
   Closure.h
   CodeGen_ARM.h
   CodeGen_C.h
@@ -232,11 +255,9 @@ set(HEADER_FILES
   CodeGen_Metal_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_OpenGLCompute_Dev.h
-  CodeGen_PNaCl.h
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
-  CodeGen_Renderscript_Dev.h
   CodeGen_X86.h
   ConciseCasts.h
   CPlusPlusMangle.h
@@ -301,6 +322,7 @@ set(HEADER_FILES
   Parameter.h
   PartitionLoops.h
   Pipeline.h
+  Prefetch.h
   Profiling.h
   Qualify.h
   RDom.h
@@ -319,6 +341,7 @@ set(HEADER_FILES
   SkipStages.h
   SlidingWindow.h
   Solve.h
+  SplitTuples.h
   StmtToHtml.h
   StorageFlattening.h
   StorageFolding.h
@@ -342,6 +365,7 @@ set(HEADER_FILES
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
+recover_escaped_space(NATIVE_INCLUDE_PATH)
 add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   COMMAND build_halide_h ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
@@ -355,26 +379,20 @@ configure_file(runtime/HalideRuntimeMetal.h "${CMAKE_BINARY_DIR}/include" COPYON
 configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeRenderscript.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 configure_file(runtime/HalideBuffer.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
 
-
-set(BITWRITER_FILES
-  BitWriter_3_2/BitcodeWriter.cpp
-  BitWriter_3_2/BitcodeWriterPass.cpp
-  BitWriter_3_2/ValueEnumerator.cpp
-)
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp
   AddParameterChecks.cpp
   AlignLoads.cpp
   AllocationBoundsInference.cpp
+  ApplySplit.cpp
   Associativity.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
-  BufferPtr.cpp
+  Buffer.cpp
   Closure.cpp
   CodeGen_ARM.cpp
   CodeGen_C.cpp
@@ -389,14 +407,13 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_Metal_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
   CodeGen_OpenGLCompute_Dev.cpp
-  CodeGen_PNaCl.cpp
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
-  CodeGen_Renderscript_Dev.cpp
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
+  CanonicalizeGPUVars.cpp
   Debug.cpp
   Debug.cpp
   DebugToFile.cpp
@@ -452,6 +469,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   PartitionLoops.cpp
   Pipeline.cpp
   PrintLoopNest.cpp
+  Prefetch.cpp
   Profiling.cpp
   Qualify.cpp
   RDom.cpp
@@ -469,6 +487,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   SkipStages.cpp
   SlidingWindow.cpp
   Solve.cpp
+  SplitTuples.cpp
   StmtToHtml.cpp
   StorageFlattening.cpp
   StorageFolding.cpp
@@ -486,7 +505,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   VaryingAttributes.cpp
   VectorizeLoops.cpp
   WrapCalls.cpp
-  ${BITWRITER_FILES}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
   ${INITIAL_MODULES}
@@ -512,10 +530,6 @@ list(APPEND LLVM_COMPONENTS passes)
 # that link against the Halide library inherit those options and definitions
 target_include_directories(Halide PRIVATE ${LLVM_INCLUDE})
 target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
-
-if (TARGET_NATIVE_CLIENT)
-  target_compile_definitions(Halide PRIVATE "-DWITH_NATIVE_CLIENT=1")
-endif()
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
@@ -566,7 +580,16 @@ target_compile_definitions(Halide PRIVATE "-DCOMPILING_HALIDE")
 
 if (MSVC)
   # Suppress some warnings
+  # 4244: conversion, possible loss of data
+  # 4267: conversion, possible loss of data
+  # 4800: BOOL -> true or false
+  # 4996: compiler encountered deprecated declaration
   target_compile_options(Halide PUBLIC /wd4244 /wd4267 /wd4800 /wd4996)
+  # Injected from recent LLVM:
+  target_compile_options(Halide PUBLIC /wd4141)  # 'inline' used more than once
+  target_compile_options(Halide PUBLIC /wd4146)  # unary minus applied to unsigned type
+  target_compile_options(Halide PUBLIC /wd4291)  # No matching operator delete found
+
   target_compile_definitions(Halide PUBLIC "-D_CRT_SECURE_NO_WARNINGS" "-D_SCL_SECURE_NO_WARNINGS")
   # To compile LLVM headers following was taken from LLVM CMake files:
   # Disable sized deallocation if the flag is supported. MSVC fails to compile
@@ -592,7 +615,7 @@ set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(MSVC)
   file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
 else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS} 
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS}
                   RESULT_VARIABLE LLVM_CONFIG_RESULT
                   OUTPUT_VARIABLE LIBS_UNSTRIPPED
                   ERROR_VARIABLE LLVM_CONFIG_ERROR)

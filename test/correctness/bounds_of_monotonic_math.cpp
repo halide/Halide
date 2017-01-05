@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     f.infer_input_bounds(10);
 
-    Image<float> in = input.get();
+    Buffer<float> in = input.get();
 
     int correct = 26;
     if (in.width() != correct) {

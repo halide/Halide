@@ -22,16 +22,17 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.compute_root().gpu_tile(x, y, 1, 1).reorder_storage(y, x).debug_to_file("f2.tmp");
-            g.compute_root().gpu_tile(x, y, 1, 1).reorder_storage(y, x).debug_to_file("g2.tmp");
-            h.compute_root().gpu_tile(x, y, 1, 1).debug_to_file("h2.tmp");
+            Var xi, yi;
+            f.compute_root().gpu_tile(x, y, xi, yi, 1, 1).reorder_storage(y, x).debug_to_file("f2.tmp");
+            g.compute_root().gpu_tile(x, y, xi, yi, 1, 1).reorder_storage(y, x).debug_to_file("g2.tmp");
+            h.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file("h2.tmp");
         } else {
             f.compute_root().reorder_storage(y, x).debug_to_file("f2.tmp");
             g.compute_root().reorder_storage(y, x).debug_to_file("g2.tmp");
             h.compute_root().debug_to_file("h2.tmp");
         }
 
-        Image<float> im = h.realize(size_x, size_y, target);
+        Buffer<float> im = h.realize(size_x, size_y, target);
     }
 
     FILE *f = fopen("f2.tmp", "rb");

@@ -112,11 +112,16 @@ struct Pattern {
         ExactLog2Op1 = 1 << 3, // Replace operand 1 with its log base 2, if the log base 2 is exact.
         ExactLog2Op2 = 1 << 4, // Save as above, but for operand 2.
 
+        BeginExactLog2Op = 1,   // BeginExactLog2Op and EndExactLog2Op ensure that we check only op1 and op2
+        EndExactLog2Op = 3,     // for ExactLog2Op
+
         DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
         DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
         DeinterleaveOp2 = 1 << 7,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
 
+        BeginDeinterleaveOp = 0, // BeginDeinterleaveOp and EndDeinterleaveOp ensure that we check only three
+        EndDeinterleaveOp = 3,   // deinterleave Op0, 1 and 2.
         // Many patterns are instructions that widen only
         // operand 0, which need to both deinterleave operand 0, and then
         // re-interleave the result.
@@ -125,7 +130,8 @@ struct Pattern {
         NarrowOp0 = 1 << 10,  // Replace operand 0 with its half-width equivalent.
         NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
         NarrowOp2 = 1 << 12,
-        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2,
+        NarrowOp3 = 1 << 13,
+        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2 | NarrowOp3,
 
         NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
         NarrowUnsignedOp1 = 1 << 16,
@@ -186,11 +192,11 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             }
             if (!is_match) continue;
 
-            for (size_t i = 1; i < matches.size() && is_match; i++) {
+            for (size_t i = Pattern::BeginExactLog2Op; i < Pattern::EndExactLog2Op && is_match; i++) {
                 // This flag is mainly to capture shifts. When the
                 // operand of a div or mul is a power of 2, we can use
                 // a shift instead.
-                if (p.flags & (Pattern::ExactLog2Op1 << (i - 1))) {
+                if (p.flags & (Pattern::ExactLog2Op1 << (i - Pattern::BeginExactLog2Op))) {
                     int pow;
                     if (is_const_power_of_two_integer(matches[i], &pow)) {
                         matches[i] = cast(matches[i].type().with_lanes(1), pow);
@@ -201,8 +207,9 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             }
             if (!is_match) continue;
 
-            for (size_t i = 0; i < matches.size(); i++) {
-                if (p.flags & (Pattern::DeinterleaveOp0 << i)) {
+            for (size_t i = Pattern::BeginDeinterleaveOp; i < Pattern::EndDeinterleaveOp; i++) {
+                if (p.flags &
+                    (Pattern::DeinterleaveOp0 << (i - Pattern::BeginDeinterleaveOp))) {
                     internal_assert(matches[i].type().is_vector());
                     matches[i] = native_deinterleave(matches[i]);
                 }
@@ -268,6 +275,12 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
 class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
+    static Expr halide_hexagon_add_mpy_mpy(string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
+        Type t = v0.type();
+        Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
+        Expr call = Call::make(result_type, "halide.hexagon.add_mpy_mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
+        return native_interleave(call);
+    }
 
     void visit(const Mul *op) {
         static vector<Pattern> scalar_muls = {
@@ -328,7 +341,52 @@ private:
     }
 
     void visit(const Add *op) {
+        // vmpa instructions have a lot of quirky conditions and
+        // matching operations, and would require flags used only by
+        // these instructions (a double narrowing). Instead, just
+        // handle them manually here.
+        Expr vmpa_ub_pattern = wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16);
+        Expr vmpa_h_pattern = wild_i32x*bc(wild_i32) + wild_i32x*bc(wild_i32);
+        vector<Expr> matches;
+        if (expr_match(vmpa_ub_pattern, op, matches)) {
+            // Narrow the operands.
+            Expr v0 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[0]);
+            Expr v1 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[2]);
+            Expr c0 = lossless_cast(Int(8), matches[1]);
+            Expr c1 = lossless_cast(Int(8), matches[3]);
+
+            if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
+                v0 = mutate(v0);
+                v1 = mutate(v1);
+                c0 = mutate(c0);
+                c1 = mutate(c1);
+                expr = halide_hexagon_add_mpy_mpy(".vub.vub.b.b", v0, v1, c0, c1);
+                return;
+            }
+        } else if (expr_match(vmpa_h_pattern, op, matches)) {
+            // Narrow the operands.
+            Expr v0 = lossless_cast(Int(16).with_lanes(op->type.lanes()), matches[0]);
+            Expr v1 = lossless_cast(Int(16).with_lanes(op->type.lanes()), matches[2]);
+            Expr c0 = lossless_cast(Int(8), matches[1]);
+            Expr c1 = lossless_cast(Int(8), matches[3]);
+
+            if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
+                v0 = mutate(v0);
+                v1 = mutate(v1);
+                c0 = mutate(c0);
+                c1 = mutate(c1);
+                expr = halide_hexagon_add_mpy_mpy(".vh.vh.b.b", v0, v1, c0, c1);
+                return;
+            }
+        }
+
         static vector<Pattern> adds = {
+            // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
+            // To differentiate those from the widening ones, we encode the return type in the name here.
+            { "halide.hexagon.add_vuh.vub.vub", wild_u16x + wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.add_vuw.vuh.vuh", wild_u32x + wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.add_vw.vh.vh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+
             // Widening multiply-accumulates with a scalar.
             { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
             { "halide.hexagon.add_mpy.vh.vub.b",   wild_i16x + wild_i16x*bc(wild_i16), Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
@@ -382,6 +440,17 @@ private:
             if (!expr.same_as(op)) return;
         }
         IRMutator::visit(op);
+
+        // After recursively substituting patterns for the operands, we might be able to change vmpa to an accumulating vmpa.
+        static vector<Pattern> post_process_adds = {
+            // Accumulating vmpa, we generated non-accumulating vmpa above.
+            { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_mpy_mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_mpy_mpy(".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+        };
+
+        if (!expr.same_as(op) && expr.as<Add>()) {
+            expr = apply_commutative_patterns(expr.as<Add>(), post_process_adds, this);
+        }
     }
 
     void visit(const Sub *op) {
@@ -391,6 +460,17 @@ private:
             if (neg_b.defined()) {
                 expr = mutate(op->a + neg_b);
                 return;
+            } else {
+                static vector<Pattern> subs = {
+                    // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
+                    // To differentiate those from the widening ones, we encode the return type in the name here.
+                    { "halide.hexagon.sub_vuh.vub.vub", wild_u16x - wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                    { "halide.hexagon.sub_vuw.vuh.vuh", wild_u32x - wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                    { "halide.hexagon.sub_vw.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                };
+
+                expr = apply_patterns(op, subs, this);
+                if (!expr.same_as(op)) return;
             }
         }
         IRMutator::visit(op);
@@ -452,6 +532,20 @@ private:
             { "halide.hexagon.trunc_satb_rnd.vh",  i8_sat((wild_i32x + 128)/256), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
             { "halide.hexagon.trunc_satuh_rnd.vw", u16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
             { "halide.hexagon.trunc_sath_rnd.vw",  i16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
+
+            // Multiply keep high half
+            { "halide.hexagon.trunc_mpy.vw.vw", i32((wild_i64x*wild_i64x)/Expr(static_cast<int64_t>(1) << 32)), Pattern::NarrowOps },
+
+            // Scalar multiply keep high half, with multiplication by 2.
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((wild_i32x*bc(wild_i32))/32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((bc(wild_i32)*wild_i32x)/32768), Pattern::NarrowOps | Pattern::SwapOps01 },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((wild_i32x*bc(wild_i32) + 16384)/32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((bc(wild_i32)*wild_i32x + 16384)/32768), Pattern::NarrowOps | Pattern::SwapOps01 },
+
+            // Vector multiply keep high half, with multiplication by 2.
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat((wild_i32x*wild_i32x + 16384)/32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satdw_mpy2.vw.vw", i32_sat((wild_i64x*wild_i64x)/Expr(static_cast<int64_t>(1) << 31)), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32_sat((wild_i64x*wild_i64x + (1 << 30))/Expr(static_cast<int64_t>(1) << 31)), Pattern::NarrowOps },
 
             // Saturating narrowing casts
             { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
@@ -594,59 +688,66 @@ public:
 // IR operations. When an interleave collides with a deinterleave,
 // they cancel out.
 class EliminateInterleaves : public IRMutator {
-private:
     Scope<bool> vars;
 
-    // We need some special handling for expressions that are modified
-    // by eliminate_bool_vectors. mutate_with_interleave allows
-    // interleaves to be removed, but not added to the resulting
-    // expression, returned as a flag indicating the result should be
-    // interleaved instead. This is necessary because expressions
-    // returning boolean vectors can't be interleaved, the expression
-    // using it must be interleaved instead.
-    bool interleave_expr;
-    int allow_interleave_expr = 0;
+    // We can't interleave booleans, so we handle them specially.
+    bool in_bool_to_mask = false;
+    bool interleave_mask = false;
 
-    pair<Expr, bool> mutate_with_interleave(Expr e) {
-        int old_allow_interleave_expr = allow_interleave_expr;
-        allow_interleave_expr = 1;
-        interleave_expr = false;
-        Expr ret = mutate(e);
-        allow_interleave_expr = old_allow_interleave_expr;
-        return std::make_pair(ret, interleave_expr);
-    }
-
-public:
-    Expr mutate(Expr e) {
-        --allow_interleave_expr;
-        Expr ret = IRMutator::mutate(e);
-        ++allow_interleave_expr;
-        return ret;
-    }
-    using IRMutator::mutate;
-
-private:
     // Check if x is an expression that is either an interleave, or
-    // can pretend to be one (is a scalar or a broadcast).
-    bool yields_interleave(Expr x) {
+    // transitively is an interleave.
+    bool yields_removable_interleave(Expr x) {
         if (is_native_interleave(x)) {
             return true;
-        } else if (x.type().is_scalar() || x.as<Broadcast>()) {
-            return true;
         }
+
+        if (const Let *let = x.as<Let>()) {
+            return yields_removable_interleave(let->body);
+        }
+
         const Variable *var = x.as<Variable>();
         if (var && vars.contains(var->name + ".deinterleaved")) {
             return true;
         }
+
         return false;
     }
 
-    // Check that at least one of exprs is an interleave, and that all
-    // of the exprs can yield an interleave.
+    // Check if x either has a removable interleave, or it can pretend
+    // to be an interleave at no cost (a scalar or a broadcast).
+    bool yields_interleave(Expr x) {
+        if (yields_removable_interleave(x)) {
+            return true;
+        }
+
+        // These yield an interleave, but we shouldn't
+        // deinterleave them if we want to remove an actual
+        // interleave.
+        if (x.type().is_scalar() || x.as<Broadcast>()) {
+            return true;
+        }
+
+        if (const Let *let = x.as<Let>()) {
+            return yields_interleave(let->body);
+        }
+
+        // This is different from the deinterleaved lets handled in
+        // yields_removable_interleave. These are lets that can be
+        // deinterleaved freely, but are not actually interleaves.
+        const Variable *var = x.as<Variable>();
+        if (var && vars.contains(var->name + ".weak_deinterleaved")) {
+            return true;
+        }
+
+        return false;
+    }
+
+    // Check that at least one of exprs is an interleave that should
+    // be removed, and that all of the exprs can yield an interleave.
     bool yields_removable_interleave(const vector<Expr> &exprs) {
         bool any_is_interleave = false;
         for (const Expr &i : exprs) {
-            if (is_native_interleave(i)) {
+            if (yields_removable_interleave(i)) {
                 any_is_interleave = true;
             } else if (!yields_interleave(i)) {
                 return false;
@@ -663,11 +764,24 @@ private:
         } else if (x.type().is_scalar() || x.as<Broadcast>()) {
             return x;
         }
-        const Variable *var = x.as<Variable>();
-        if (var) {
-            internal_assert(vars.contains(var->name + ".deinterleaved"));
-            return Variable::make(var->type, var->name + ".deinterleaved");
+
+        if (const Variable *var = x.as<Variable>()) {
+            if (vars.contains(var->name + ".deinterleaved")) {
+                return Variable::make(var->type, var->name + ".deinterleaved");
+            } else if (vars.contains(var->name + ".weak_deinterleaved")) {
+                return Variable::make(var->type, var->name + ".weak_deinterleaved");
+            }
         }
+
+        if (const Let *let = x.as<Let>()) {
+            Expr body = remove_interleave(let->body);
+            if (!body.same_as(let->body)) {
+                return Let::make(let->name, let->value, remove_interleave(let->body));
+            } else {
+                return x;
+            }
+        }
+
         internal_error << "Expression '" << x << "' does not yield an interleave.\n";
         return x;
     }
@@ -676,20 +790,15 @@ private:
     void visit_binary(const T* op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
-        // We only want to pull out an interleave if at least one of
-        // the operands is an actual interleave. Furthermore, we can
-        // only attempt to do this if we are allowing the expr to be
-        // interleaved via interleave_expr, or the result is not boolean.
-        bool can_interleave = op->type.bits() != 1;
-        if ((can_interleave || allow_interleave_expr == 0) && yields_removable_interleave({a, b})) {
+        if (yields_removable_interleave({a, b})) {
             a = remove_interleave(a);
             b = remove_interleave(b);
             expr = T::make(a, b);
-            if (can_interleave) {
-                expr = native_interleave(expr);
+            if (expr.type().bits() == 1) {
+                internal_assert(!interleave_mask);
+                interleave_mask = true;
             } else {
-                internal_assert(!interleave_expr);
-                interleave_expr = true;
+                expr = native_interleave(expr);
             }
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
@@ -761,10 +870,24 @@ private:
     template <typename NodeType, typename LetType>
     void visit_let(NodeType &result, const LetType *op) {
         Expr value = mutate(op->value);
-        string deinterleaved_name = op->name + ".deinterleaved";
+        string deinterleaved_name;
         NodeType body;
-        if (is_native_interleave(value)) {
+        // Other code in this mutator needs to be able to tell the
+        // difference between a Let that yields a deinterleave, and a
+        // let that has a removable deinterleave. Lets that can
+        // pretend to be deinterleaved at no cost are given an
+        // alternative let labelled "weak_deinterleaved", while lets
+        // that have a removable interleave are given an alternative
+        // let labelled "deinterleaved".
+        if (yields_removable_interleave(value)) {
             // We can provide a deinterleaved version of this let value.
+            deinterleaved_name = op->name + ".deinterleaved";
+            vars.push(deinterleaved_name, true);
+            body = mutate(op->body);
+            vars.pop(deinterleaved_name);
+        } else if (yields_interleave(value)) {
+            // We have a soft deinterleaved version of this let value.
+            deinterleaved_name = op->name + ".weak_deinterleaved";
             vars.push(deinterleaved_name, true);
             body = mutate(op->body);
             vars.pop(deinterleaved_name);
@@ -787,8 +910,16 @@ private:
                 // lets, using the deinterleaved one to generate the
                 // interleaved one.
                 Expr deinterleaved = remove_interleave(value);
-                Expr deinterleaved_var = Variable::make(deinterleaved.type(), deinterleaved_name);
-                result = LetType::make(op->name, native_interleave(deinterleaved_var), result);
+
+                // If we actually removed an interleave from the
+                // value, re-interleave it to get the interleaved let
+                // value.
+                Expr interleaved = Variable::make(deinterleaved.type(), deinterleaved_name);
+                if (!deinterleaved.same_as(value)) {
+                    interleaved = native_interleave(interleaved);
+                }
+
+                result = LetType::make(op->name, interleaved, result);
                 result = LetType::make(deinterleaved_name, deinterleaved, result);
             } else if (deinterleaved_used) {
                 // Only the deinterleaved value is used, we can eliminate the interleave.
@@ -803,20 +934,24 @@ private:
         }
     }
 
-    void visit(const Let *op) { visit_let(expr, op); }
+    void visit(const Let *op) {
+        visit_let(expr, op);
+
+        // Lift interleaves out of Let expression bodies.
+        const Let *let = expr.as<Let>();
+        if (yields_removable_interleave(let->body)) {
+            expr = native_interleave(Let::make(let->name, let->value, remove_interleave(let->body)));
+        }
+    }
+
     void visit(const LetStmt *op) { visit_let(stmt, op); }
 
     void visit(const Cast *op) {
         if (op->type.bits() == op->value.type().bits()) {
             // We can only move interleaves through casts of the same size.
+            Expr value = mutate(op->value);
 
-            Expr value;
-            bool interleave;
-            std::tie(value, interleave) = mutate_with_interleave(op->value);
-
-            if (interleave) {
-                expr = native_interleave(Cast::make(op->type, value));
-            } else if (is_native_interleave(value)) {
+            if (yields_removable_interleave(value)) {
                 value = remove_interleave(value);
                 expr = native_interleave(Cast::make(op->type, value));
             } else if (!value.same_as(op->value)) {
@@ -829,7 +964,7 @@ private:
         }
     }
 
-    bool is_interleavable(const Call *op) {
+    static bool is_interleavable(const Call *op) {
         // These calls can have interleaves moved from operands to the
         // result...
         static set<string> interleavable = {
@@ -872,7 +1007,37 @@ private:
         return true;
     }
 
+    void visit_bool_to_mask(const Call *op) {
+        bool old_in_bool_to_mask = in_bool_to_mask;
+        in_bool_to_mask = true;
+
+        Expr arg = mutate(op->args[0]);
+        if (!arg.same_as(op->args[0]) || interleave_mask) {
+            expr = Call::make(op->type, Call::bool_to_mask, {arg}, Call::PureIntrinsic);
+            if (interleave_mask) {
+                expr = native_interleave(expr);
+                interleave_mask = false;
+            }
+        } else {
+            expr = op;
+        }
+
+        in_bool_to_mask = old_in_bool_to_mask;
+    }
+
     void visit(const Call *op) {
+        if (op->is_intrinsic(Call::bool_to_mask)) {
+            visit_bool_to_mask(op);
+            return;
+        }
+
+        if (op->is_intrinsic(Call::concat_vectors)) {
+            // The loads we care about for storage deinterleaving are
+            // concat_vectors calls.
+            visit_concat_vectors(op);
+            return;
+        }
+
         vector<Expr> args(op->args);
 
         // mutate all the args.
@@ -889,21 +1054,25 @@ private:
         // does not deinterleave, and then opportunistically select
         // the interleaving alternative when we can cancel out to the
         // interleave.
-        struct DeinterleavingAlternative {
-            string name;
-            vector<Expr> extra_args;
+        static std::map<string, string> deinterleaving_alts = {
+            { "halide.hexagon.pack.vh", "halide.hexagon.trunc.vh" },
+            { "halide.hexagon.pack.vw", "halide.hexagon.trunc.vw" },
+            { "halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh" },
+            { "halide.hexagon.packhi.vw", "halide.hexagon.trunclo.vw" },
+            { "halide.hexagon.pack_satub.vh", "halide.hexagon.trunc_satub.vh" },
+            { "halide.hexagon.pack_sath.vw", "halide.hexagon.trunc_sath.vw" },
+            { "halide.hexagon.pack_satuh.vw", "halide.hexagon.trunc_satuh.vw" },
         };
-        static std::map<string, DeinterleavingAlternative> deinterleaving_alts = {
-            { "halide.hexagon.pack.vh", { "halide.hexagon.trunc.vh" } },
-            { "halide.hexagon.pack.vw", { "halide.hexagon.trunc.vw" } },
-            { "halide.hexagon.packhi.vh", { "halide.hexagon.trunclo.vh" } },
-            { "halide.hexagon.packhi.vw", { "halide.hexagon.trunclo.vw" } },
-            { "halide.hexagon.pack_satub.vh", { "halide.hexagon.trunc_satub.vh" } },
-            { "halide.hexagon.pack_sath.vw", { "halide.hexagon.trunc_sath.vw" } },
-            // For this one, we don't have a simple alternative. But,
-            // we have a shift-saturate-narrow that we can use with a
-            // shift of 0.
-            { "halide.hexagon.pack_satuh.vw", { "halide.hexagon.trunc_satuh_shr.vw.w", { 0 } } },
+
+        // The reverse mapping of the above.
+        static std::map<string, string> interleaving_alts = {
+            { "halide.hexagon.trunc.vh", "halide.hexagon.pack.vh" },
+            { "halide.hexagon.trunc.vw", "halide.hexagon.pack.vw" },
+            { "halide.hexagon.trunclo.vh", "halide.hexagon.packhi.vh" },
+            { "halide.hexagon.trunclo.vw", "halide.hexagon.packhi.vw" },
+            { "halide.hexagon.trunc_satub.vh", "halide.hexagon.pack_satub.vh" },
+            { "halide.hexagon.trunc_sath.vw", "halide.hexagon.pack_sath.vw" },
+            { "halide.hexagon.trunc_satuh.vw", "halide.hexagon.pack_satuh.vw" },
         };
 
         if (is_native_deinterleave(op) && yields_interleave(args[0])) {
@@ -925,20 +1094,162 @@ private:
             // This call has a deinterleaving alternative, and the
             // arguments are interleaved, so we should use the
             // alternative instead.
-            const DeinterleavingAlternative &alt = deinterleaving_alts[op->name];
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
-            for (Expr i : alt.extra_args) {
-                args.push_back(i);
-            }
-            expr = Call::make(op->type, alt.name, args, op->call_type);
+            expr = Call::make(op->type, deinterleaving_alts[op->name], args, op->call_type);
+        } else if (interleaving_alts.count(op->name) && is_native_deinterleave(args[0])) {
+            // This is an interleaving alternative with a
+            // deinterleave, which can be generated when we
+            // deinterleave storage. Revert back to the interleaving
+            // op so we can remove the deinterleave.
+            Expr arg = args[0].as<Call>()->args[0];
+            expr = Call::make(op->type, interleaving_alts[op->name], { arg }, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
         } else if (changed) {
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else {
             expr = op;
         }
+    }
+
+    // Track whether buffers are interleaved or not.
+    enum class BufferState {
+        Unknown,         // We don't know if this buffer is interleaved or not.
+        Interleaved,     // We know the buffer is interleaved.
+        NotInterleaved,  // We know the buffer is not interleaved.
+    };
+    Scope<BufferState> buffers;
+
+    // Buffers we should deinterleave the storage of.
+    Scope<bool> deinterleave_buffers;
+
+    void visit(const Allocate *op) {
+        Expr condition = mutate(op->condition);
+
+        // First, we need to mutate the op, to pull native interleaves
+        // down, and to gather information about the loads and stores.
+        buffers.push(op->name, BufferState::Unknown);
+        Stmt body = mutate(op->body);
+        bool deinterleave = buffers.get(op->name) == BufferState::Interleaved;
+        buffers.pop(op->name);
+
+        // Second, if we decided it would be useful to deinterleave
+        // the storage of this buffer, do so now.
+        if (deinterleave) {
+            deinterleave_buffers.push(op->name, true);
+            body = mutate(op->body);
+            deinterleave_buffers.pop(op->name);
+        }
+
+        if (!body.same_as(op->body) || !condition.same_as(op->condition)) {
+            stmt = Allocate::make(op->name, op->type, op->extents, condition, body,
+                                  op->new_expr, op->free_function);
+        } else {
+            stmt = op;
+        }
+    }
+
+    void visit(const Store *op) {
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+
+        if (buffers.contains(op->name)) {
+            // When inspecting the stores to a buffer, update the state.
+            BufferState &state = buffers.ref(op->name);
+            if (yields_removable_interleave(value)) {
+                // The value yields a removable interleave. If we aren't tracking
+                // this buffer, mark it as interleaved.
+                if (state == BufferState::Unknown) {
+                    state = BufferState::Interleaved;
+                }
+            } else if (!yields_interleave(value)) {
+                // The value does not yield an interleave. Mark the
+                // buffer as not interleaved.
+                state = BufferState::NotInterleaved;
+            } else {
+                // If the buffer yields an interleave, but is not an
+                // interleave itself, we don't want to change the
+                // buffer state.
+            }
+        }
+
+        if (deinterleave_buffers.contains(op->name)) {
+            // We're deinterleaving this buffer, remove the interleave
+            // from the store.
+            value = remove_interleave(value);
+        }
+
+        if (value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index, op->param);
+        }
+    }
+
+    // We need to be able to find loads of multiples of pairs from a
+    // buffer, concatenated into one vector.
+    static const std::string *is_double_vector_load(const Call *op) {
+        if (!op->is_intrinsic(Call::concat_vectors)) {
+            return nullptr;
+        }
+
+        if (op->args.size() % 2 != 0) {
+            return nullptr;
+        }
+
+        Expr first = op->args.front();
+        const Load *example = first.as<Load>();
+        if (!example) {
+            return nullptr;
+        }
+
+        for (size_t i = 1; i < op->args.size(); i++) {
+            const Load *load_i = op->args[i].as<Load>();
+            if (!load_i || load_i->name != example->name) {
+                return nullptr;
+            }
+        }
+        return &example->name;
+    }
+
+    void visit_concat_vectors(const Call *op) {
+        expr = op;
+
+        const std::string *load_from = is_double_vector_load(op);
+        if (load_from) {
+            if (buffers.contains(*load_from)) {
+                // We don't want to actually do anything to the buffer
+                // state here. We know we can interleave the load if
+                // necessary, but we don't want to cause it to be
+                // interleaved unless it is a useful improvement,
+                // which is only true if any of the stores are
+                // actually interleaved (and don't just yield an
+                // interleave).
+            }
+
+            if (deinterleave_buffers.contains(*load_from)) {
+                expr = native_interleave(expr);
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        if (buffers.contains(op->name)) {
+            // When inspecting the stores to a buffer, update the state.
+            BufferState &state = buffers.ref(op->name);
+
+            // If we found a load, it must have been outside a
+            // concat_vectors intrinsic (handled above), and so it
+            // must not be a double vector load (since we've broken up
+            // loads into native vector loads). Therefore, we can't
+            // deinterleave the storage of this buffer.
+            state = BufferState::NotInterleaved;
+        }
+        IRMutator::visit(op);
     }
 
     using IRMutator::visit;
@@ -954,7 +1265,7 @@ class FuseInterleaves : public IRMutator {
     void visit(const Call *op) {
         // This is a list of {f, g} pairs that if the first operation
         // is interleaved, interleave(f(x)) is equivalent to g(x).
-        static std::vector<std::pair<std::string, std::string>> non_deinterleaving_alts = {
+        static std::vector<std::pair<string, string>> non_deinterleaving_alts = {
             { "halide.hexagon.zxt.vub", "halide.hexagon.unpack.vub" },
             { "halide.hexagon.sxt.vb", "halide.hexagon.unpack.vb" },
             { "halide.hexagon.zxt.vuh", "halide.hexagon.unpack.vuh" },
@@ -1014,8 +1325,18 @@ class OptimizeShuffles : public IRMutator {
     int lut_alignment;
     Scope<Interval> bounds;
     std::vector<std::pair<string, Expr>> lets;
+    bool inside_address_of = false;
 
     using IRMutator::visit;
+
+    void visit(const Call *op) {
+        bool old_inside_address_of = inside_address_of;
+        if (op->is_intrinsic(Call::address_of)) {
+            inside_address_of = true;
+        }
+        IRMutator::visit(op);
+        inside_address_of = old_inside_address_of;
+    }
 
     template <typename T>
     void visit_let(const T *op) {
@@ -1037,6 +1358,11 @@ class OptimizeShuffles : public IRMutator {
     void visit(const LetStmt *op) { visit_let(op); }
 
     void visit(const Load *op) {
+        if (inside_address_of) {
+            // We shouldn't mess with load inside an address_of.
+            IRMutator::visit(op);
+            return;
+        }
         if (!op->type.is_vector() || op->index.as<Ramp>()) {
             // Don't handle scalar or simple vector loads.
             IRMutator::visit(op);
@@ -1094,7 +1420,6 @@ class OptimizeShuffles : public IRMutator {
 public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
-
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
@@ -1114,11 +1439,6 @@ Stmt optimize_hexagon_instructions(Stmt s) {
     // There may be interleaves left over that we can fuse with other
     // operations.
     s = FuseInterleaves().mutate(s);
-
-    // TODO: If all of the stores to a buffer are interleaved, and all
-    // of the loads are immediately deinterleaved, then we can remove
-    // all of the interleave/deinterleaves, and just let the storage
-    // be deinterleaved.
 
     return s;
 }

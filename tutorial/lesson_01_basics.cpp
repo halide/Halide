@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     // resolution of the output image. Halide.h also provides a basic
     // templatized image type we can use. We'll make an 800 x 600
     // image.
-    Halide::Image<int32_t> output = gradient.realize(800, 600);
+    Halide::Buffer<int32_t> output = gradient.realize(800, 600);
 
     // Halide does type inference for you. Var objects represent
     // 32-bit integers, so the Expr object 'x + y' also represents a
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
     // expecting:
     for (int j = 0; j < output.height(); j++) {
         for (int i = 0; i < output.width(); i++) {
-            // We can access a pixel of an Image object using similar
+            // We can access a pixel of an Buffer object using similar
             // syntax to defining and using functions.
             if (output(i, j) != i + j) {
                 printf("Something went wrong!\n"
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     }
 
     // Everything worked! We defined a Func, then called 'realize' on
-    // it to generate and run machine code that produced an Image.
+    // it to generate and run machine code that produced an Buffer.
     printf("Success!\n");
 
     return 0;

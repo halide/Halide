@@ -15,7 +15,7 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic_ARM(Halide::Image<uint16_t> input, Halide::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
+void demosaic_ARM(Halide::Runtime::Buffer<uint16_t> input, Halide::Runtime::Buffer<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
 
 #ifdef __arm__ // only build on arm
     const int BLOCK_WIDTH  = 40;
@@ -110,11 +110,11 @@ void demosaic_ARM(Halide::Image<uint16_t> input, Halide::Image<uint8_t> out, flo
 
     // A buffer to store data after demosiac and color correction
     // but before gamma correction
-    uint16_t out16[BLOCK_WIDTH*BLOCK_HEIGHT*3];
+    __attribute__((aligned(16))) uint16_t out16[BLOCK_WIDTH*BLOCK_HEIGHT*3];
 
     // Various color channels. Only 4 of them are defined before
     // demosaic, all of them are defined after demosiac
-    int16_t scratch[VEC_WIDTH*VEC_HEIGHT*4*12];
+    __attribute__((aligned(16))) int16_t scratch[VEC_WIDTH*VEC_HEIGHT*4*12];
 
 #define R_R_OFF  (VEC_WIDTH*VEC_HEIGHT*4*0)
 #define R_GR_OFF (VEC_WIDTH*VEC_HEIGHT*4*1)
@@ -183,7 +183,6 @@ void demosaic_ARM(Halide::Image<uint16_t> input, Halide::Image<uint8_t> out, flo
 
                 for (int y = 0; y < VEC_HEIGHT; y++) {
                     for (int x = 0; x < VEC_WIDTH/2; x++) {
-
                         asm volatile("# Stage 1) Demux\n");
 
                         // The below needs to be volatile, but

@@ -74,16 +74,16 @@ public:
     // For a real input FFT, this should have the following shape:
     // Dim0: extent = size0, stride = 1
     // Dim1: extent = size1 / 2 - 1, stride = size0
+    // Dim2: extent = 1, stride = 1
     //
     // For a complex input FFT, this should have the following shape:
-    // Dim0: extent = 2, stride = 1 -- real followed by imaginary components
-    // Dim1: extent = size0, stride = 2
-    // Dim2: extent = size1, stride = size0 * 2
-    ImageParam input;
+    // Dim0: extent = size0, stride = 2
+    // Dim1: extent = size1, stride = size0 * 2
+    // Dim2: extent = 2, stride = 1 (real followed by imaginary components)
+    Input<Buffer<float>>  input{"input", 3};
+    Output<Buffer<float>> output{"output", 3};
 
-    Func build() {
-        Var c{"c"}, x{"x"}, y{"y"};
-
+    void generate() {
         _halide_user_assert(size0 > 0) << "FFT must be at least 1D\n";
 
         Fft2dDesc desc;
@@ -92,58 +92,69 @@ public:
         desc.vector_width = vector_width;
 
         // The logic below calls the specialized r2c or c2r version if
-        // applicable to take advantae of better scheduling. It is
+        // applicable to take advantage of better scheduling. It is
         // assumed that projecting a real Func to a ComplexFunc and
         // immediately back has zero cost.
 
-        Func result;
-        ComplexFunc complex_result;
-        if (input_number_type == FFTNumberType::Real) {
-            input = ImageParam(Float(32), 2, "input");
+        const int sign = (direction == FFTDirection::SamplesToFrequency) ? -1 : 1;
 
+        if (input_number_type == FFTNumberType::Real) {
             if (direction == FFTDirection::SamplesToFrequency) {
                 // TODO: Not sure why this is necessary as ImageParam
                 // -> Func conversion should happen, It may not work
                 // with implicit dimension (use of _) logic in FFT.
-                Func input_real;
-                input_real(x, y) = input(x, y);
+                Func in;
+                in(x, y) = input(x, y, 0);
 
-                complex_result = fft2d_r2c(input_real, size0, size1, target, desc);
+                complex_result = fft2d_r2c(in, size0, size1, target, desc);
             } else {
                 ComplexFunc in;
-                in(x, y) = ComplexExpr(input(x, y), 0);
+                in(x, y) = ComplexExpr(input(x, y, 0), 0);
 
-                complex_result = fft2d_c2c(in, size0, size1, 1, target, desc);
+                complex_result = fft2d_c2c(in, size0, size1, sign, target, desc);
             }
         } else {
-            input = ImageParam(Float(32), 3, "input");
-            input.set_bounds(0, 0, 2);
-            input.set_stride(1, 2);
-
             ComplexFunc in;
-            in(x, y) = ComplexExpr(input(0, x, y), input(1, x, y));
+            in(x, y) = ComplexExpr(input(x, y, 0), input(x, y, 1));
             if (output_number_type == FFTNumberType::Real &&
                 direction == FFTDirection::FrequencyToSamples) {
-                result = fft2d_c2r(in, size0, size1, target, desc);
+                real_result = fft2d_c2r(in, size0, size1, target, desc);
             } else {
-                complex_result = fft2d_c2c(in, size0, size1, 
-                                           (direction == FFTDirection::SamplesToFrequency) ? -1 : 1,
-                                           target, desc);
+                complex_result = fft2d_c2c(in, size0, size1, sign, target, desc);
             }
         }
 
         if (output_number_type == FFTNumberType::Real) {
-            if (!result.defined()) {
-                 result(x, y) = re(complex_result(x, y));
+            if (real_result.defined()) {
+                 output(x, y, c) = real_result(x, y);
+            } else {
+                 output(x, y, c) = re(complex_result(x, y));
             }
         } else {
-            result(c, x, y) = select(c == 0, re(complex_result(x, y)), im(complex_result(x, y)));
-            result.output_buffer().set_bounds(0, 0, 2);
-            result.output_buffer().set_stride(1, 2);
+            output(x, y, c) = select(c == 0, 
+                                     re(complex_result(x, y)), 
+                                     im(complex_result(x, y)));
         }
-
-        return result;
     }
+
+    void schedule() {
+        const int input_comps = (input_number_type == FFTNumberType::Real) ? 1 : 2;
+        const int output_comps = (output_number_type == FFTNumberType::Real) ? 1 : 2;
+
+        input.dim(0).set_stride(input_comps)
+             .dim(2).set_min(0).set_extent(input_comps).set_stride(1);
+
+        output.dim(0).set_stride(output_comps)
+              .dim(2).set_min(0).set_extent(output_comps).set_stride(1);
+
+        if (real_result.defined()) {
+            real_result.compute_at(output, y);
+        }
+    }
+private:
+    Var x{"x"}, y{"y"}, c{"c"};
+    Func real_result;
+    ComplexFunc complex_result;
 };
 
 Halide::RegisterGenerator<FFTGenerator> register_fft{"fft"};

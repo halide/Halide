@@ -11,6 +11,7 @@
 #include "Schedule.h"
 #include "Reduction.h"
 #include "Definition.h"
+#include "Buffer.h"
 
 #include <map>
 
@@ -26,17 +27,14 @@ struct ExternFuncArgument {
     enum ArgType {UndefinedArg = 0, FuncArg, BufferArg, ExprArg, ImageParamArg};
     ArgType arg_type;
     Internal::IntrusivePtr<Internal::FunctionContents> func;
-    Internal::BufferPtr buffer;
+    Buffer<> buffer;
     Expr expr;
     Internal::Parameter image_param;
 
     ExternFuncArgument(Internal::IntrusivePtr<Internal::FunctionContents> f): arg_type(FuncArg), func(f) {}
 
-    ExternFuncArgument(Internal::BufferPtr b): arg_type(BufferArg), buffer(b) {}
-
-    template<typename T, int D>
-    ExternFuncArgument(const Image<T, D> &im) : arg_type(BufferArg), buffer(im) {}
-
+    template<typename T>
+    ExternFuncArgument(Buffer<T> b): arg_type(BufferArg), buffer(b) {}
     ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
     ExternFuncArgument(int e): arg_type(ExprArg), expr(e) {}
     ExternFuncArgument(float e): arg_type(ExprArg), expr(e) {}

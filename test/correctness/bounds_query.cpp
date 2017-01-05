@@ -16,30 +16,30 @@ int main(int argc, char **argv) {
     second(x, y) = tmp(x-1, y-1) + tmp(x+3, y+1);
 
     // This would fail, because tmp isn't attached to an allocated buffer.
-    // Image<int> out = second.realize(1024, 1024);
+    // Buffer<int> out = second.realize(1024, 1024);
 
     // Allocate an output image.
-    Image<int> out(1024, 1024);
+    Buffer<int> out(1024, 1024);
 
     // Ask second to allocate its inputs for us.
     second.infer_input_bounds(out);
 
     // Check the buffer was allocated and is of the expected size.
-    Image<int> b = tmp.get();
+    Buffer<int> b = tmp.get();
     assert(b.data());
     assert(b.extent(0) == 1028);
     assert(b.extent(1) == 1026);
 
     // Now fill the intermediate using the first pipeline, and then
     // run the second pipeline.
-    first.realize(tmp.get());
+    first.realize(b);
     second.realize(out);
 
     // Make another version of the same thing that isn't split into two to compare.
     Func first_and_second;
     first_and_second(x, y) = first(x-1, y-1) + first(x+3, y+1);
 
-    Image<int> reference = first_and_second.realize(1024, 1024);
+    Buffer<int> reference = first_and_second.realize(1024, 1024);
 
     for (int y = 0; y < 1024; y++) {
         for (int x = 0; x < 1024; x++) {

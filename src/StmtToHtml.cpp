@@ -347,36 +347,19 @@ private:
     }
     void visit(const ProducerConsumer *op) {
         scope.push(op->name, unique_id());
-        stream << open_div("Produce");
+        stream << open_div(op->is_producer ? "Produce" : "Consumer");
         int produce_id = unique_id();
         stream << open_span("Matched");
         stream << open_expand_button(produce_id);
-        stream << keyword("produce") << " ";
+        stream << keyword(op->is_producer ? "produce" : "consume") << " ";
         stream << var(op->name);
         stream << close_expand_button() << " {";
         stream << close_span();;
-        stream << open_div("ProduceBody Indent", produce_id);
-        print(op->produce);
+        stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent", produce_id);
+        print(op->body);
         stream << close_div();
         stream << matched("}");
         stream << close_div();
-        if (op->update.defined()) {
-            stream << open_div("Update");
-            int update_id = unique_id();
-            stream << open_span("Matched");
-            stream << open_expand_button(update_id);
-            stream << keyword("update") << " ";
-            stream << var(op->name);
-            stream << close_expand_button();
-            stream << " {";
-            stream << close_span();
-            stream << open_div("UpdateBody Indent", update_id);
-            print(op->update);
-            stream << close_div();
-            stream << matched("}");
-            stream << close_div();
-        }
-        print(op->consume);
         scope.pop(op->name);
     }
     void visit(const For *op) {
@@ -394,6 +377,10 @@ private:
             stream << keyword("vectorized");
         } else if (op->for_type == ForType::Unrolled) {
             stream << keyword("unrolled");
+        } else if (op->for_type == ForType::GPUBlock) {
+            stream << keyword("gpu_block");
+        } else if (op->for_type == ForType::GPUThread) {
+            stream << keyword("gpu_thread");
         } else {
             internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
@@ -617,8 +604,8 @@ public:
         scope.pop(op.name);
     }
 
-    void print(const BufferPtr &op) {
-        stream << open_div("BufferPtr");
+    void print(const Buffer<> &op) {
+        stream << open_div("Buffer<>");
         stream << keyword("buffer ") << var(op.name());
         stream << close_div();
     }

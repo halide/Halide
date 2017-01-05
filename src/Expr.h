@@ -123,12 +123,14 @@ template<typename T>
 struct ExprNode : public BaseExprNode {
     EXPORT void accept(IRVisitor *v) const;
     virtual IRNodeType type_info() const {return T::_type_info;}
+    virtual ~ExprNode() {}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     EXPORT void accept(IRVisitor *v) const;
     virtual IRNodeType type_info() const {return T::_type_info;}
+    virtual ~StmtNode() {}
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
@@ -306,7 +308,6 @@ enum class DeviceAPI {
     CUDA,
     OpenCL,
     GLSL,
-    Renderscript,
     OpenGLCompute,
     Metal,
     Hexagon
@@ -320,20 +321,21 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::CUDA,
                                      DeviceAPI::OpenCL,
                                      DeviceAPI::GLSL,
-                                     DeviceAPI::Renderscript,
                                      DeviceAPI::OpenGLCompute,
                                      DeviceAPI::Metal,
                                      DeviceAPI::Hexagon};
 
 namespace Internal {
 
-/** An enum describing a type of loop traversal. Used in schedules,
- * and in the For loop IR node. */
+/** An enum describing a type of loop traversal. Used in schedules, and in
+ * the For loop IR node. GPUBlock and GPUThread are implicitly parallel */
 enum class ForType {
     Serial,
     Parallel,
     Vectorized,
-    Unrolled
+    Unrolled,
+    GPUBlock,
+    GPUThread
 };
 
 

@@ -1,44 +1,40 @@
 include ../support/Makefile.inc
 
-test: run run_cpp
-	./run
-	./run_cpp
+test: $(BIN)/run $(BIN)/run_cpp
+	$(BIN)/run
+	$(BIN)/run_cpp
 
-pipeline: pipeline.cpp
-	$(CXX) $(CXXFLAGS) -Wall pipeline.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline $(LDFLAGS) -g
+all: $(BIN)/test
 
-pipeline_c.cpp: pipeline
-	./pipeline
+$(BIN)/pipeline_exec: pipeline_generator.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-pipeline_c.h: pipeline
-	./pipeline
+$(BIN)/pipeline_native.a: $(BIN)/pipeline_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_native -e static_library,h target=$(HL_TARGET)
 
-pipeline_native.h: pipeline
-	./pipeline
+$(BIN)/pipeline_c.cpp: $(BIN)/pipeline_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_c -e cpp,h target=$(HL_TARGET)
 
-pipeline_native.o: pipeline
-	./pipeline
+$(BIN)/run: run.cpp $(BIN)/pipeline_c.cpp $(BIN)/pipeline_native.a
+	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) -o $@  $(LDFLAGS)
 
-run: run.cpp pipeline_native.h pipeline_c.cpp
-	$(CXX) $(CXXFLAGS) -Wall run.cpp pipeline_c.cpp pipeline_native.o $(LDFLAGS) -o run
+$(BIN)/pipeline_cpp_exec: pipeline_cpp_generator.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-pipeline_cpp: pipeline_cpp.cpp
-	$(CXX) $(CXXFLAGS) -Wall pipeline_cpp.cpp $(LDFLAGS) $(LIB_HALIDE) -o pipeline_cpp $(LDFLAGS) -g
+$(BIN)/pipeline_cpp_cpp.cpp: $(BIN)/pipeline_cpp_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_cpp_cpp -e cpp,h target=host-c_plus_plus_name_mangling
 
-pipeline_cpp_cpp.cpp: pipeline_cpp
-	./pipeline_cpp
+$(BIN)/pipeline_cpp_native.a: $(BIN)/pipeline_cpp_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f pipeline_cpp_native -e static_library,h target=host-c_plus_plus_name_mangling
 
-pipeline_cpp_cpp.h: pipeline_cpp
-	./pipeline_cpp
-
-pipeline_cpp_native.h: pipeline_cpp
-	./pipeline_cpp
-
-pipeline_cpp_native.o: pipeline_cpp
-	./pipeline_cpp
-
-run_cpp: run_cpp.cpp pipeline_cpp_native.h pipeline_cpp_cpp.cpp
-	$(CXX) $(CXXFLAGS) -Wall run_cpp.cpp pipeline_cpp_cpp.cpp pipeline_cpp_native.o $(LDFLAGS) -o run_cpp
+$(BIN)/run_cpp: run_cpp.cpp $(BIN)/pipeline_cpp_cpp.cpp $(BIN)/pipeline_cpp_native.a
+	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) -o $@  $(LDFLAGS)
 
 clean:
-	rm -f run{,_cpp} pipeline{,_cpp}_native.{h,o} pipeline{,_cpp}_c.{cpp,h} pipeline{,_cpp}
+	rm -rf $(BIN)

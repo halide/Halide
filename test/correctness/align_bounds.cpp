@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 
         p.set(3);
         h.set_custom_trace(my_trace);
-        Image<int> result = h.realize(10);
+        Buffer<int> result = h.realize(10);
 
         for (int i = 0; i < 10; i++) {
             int correct = (i&1) == 1 ? 6 : 22;
@@ -61,23 +61,25 @@ int main(int argc, char **argv) {
 
         // Bounds of f should be [-p, 10+2*p] rounded outwards
         if (trace_min != -4 || trace_extent != 18) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
 
         // Increasing p by one should have no effect
         p.set(4);
+        assert(result.data());
         h.realize(result);
         if (trace_min != -4 || trace_extent != 18) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
 
         // But increasing it again should cause a jump of two in the bounds computed.
+        assert(result.data());
         p.set(5);
         h.realize(result);
         if (trace_min != -6 || trace_extent != 22) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
     }
@@ -109,7 +111,7 @@ int main(int argc, char **argv) {
 
         p.set(3);
         h.set_custom_trace(my_trace);
-        Image<int> result = h.realize(10);
+        Buffer<int> result = h.realize(10);
 
         for (int i = 0; i < 10; i++) {
             int correct = (i&1) == 1 ? 6 : 22;
@@ -122,7 +124,7 @@ int main(int argc, char **argv) {
 
         // Now the min/max should stick to odd numbers
         if (trace_min != -3 || trace_extent != 16) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
 
@@ -130,7 +132,7 @@ int main(int argc, char **argv) {
         p.set(4);
         h.realize(result);
         if (trace_min != -5 || trace_extent != 20) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
 
@@ -138,7 +140,7 @@ int main(int argc, char **argv) {
         p.set(5);
         h.realize(result);
         if (trace_min != -5 || trace_extent != 20) {
-            printf("Wrong bounds: [%d, %d]\n", trace_min, trace_extent);
+            printf("%d: Wrong bounds: [%d, %d]\n", __LINE__, trace_min, trace_extent);
             return -1;
         }
     }

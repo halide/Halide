@@ -48,17 +48,22 @@ std::string imageparam_repr(h::ImageParam &param)  // non-const due to a Halide 
         repr = boost::str(f % param.name());
     } else {
         boost::format f("<halide.ImageParam named '%s' of type '%s(%i)' and dimensions %i %i %i %i>");
-        repr = boost::str(f % param.name() % type_code_to_string(t) % t.bits() % param.extent(0) % param.extent(1) % param.extent(2) % param.extent(3));
+        repr = boost::str(f % param.name() %
+                          type_code_to_string(t) % t.bits() %
+                          param.dim(0).extent() %
+                          param.dim(1).extent() %
+                          param.dim(2).extent() %
+                          param.dim(3).extent());
     }
     return repr;
 }
 
-h::Image<> image_param_get(h::ImageParam &param) {
+h::Buffer<> image_param_get(h::ImageParam &param) {
     return param.get();
 }
 
 template <typename T>
-void image_param_set(h::ImageParam &param, const h::Image<T> &im) {
+void image_param_set(h::ImageParam &param, const h::Buffer<T> &im) {
     param.set(im);
 }
 

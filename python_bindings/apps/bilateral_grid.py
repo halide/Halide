@@ -22,6 +22,9 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     y = Var('y')
     z = Var('z')
     c = Var('c')
+    xi = Var("xi")
+    yi = Var("yi")
+    zi = Var("zi")
 
     # Add a boundary condition
     clamped = Func('clamped')
@@ -55,9 +58,9 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
     yi = y/s_sigma
     interpolated = Func('interpolated')
     interpolated[x, y, c] = lerp(lerp(lerp(blury[xi, yi, zi, c], blury[xi+1, yi, zi, c], xf),
-                                   lerp(blury[xi, yi+1, zi, c], blury[xi+1, yi+1, zi, c], xf), yf),
-                              lerp(lerp(blury[xi, yi, zi+1, c], blury[xi+1, yi, zi+1, c], xf),
-                                   lerp(blury[xi, yi+1, zi+1, c], blury[xi+1, yi+1, zi+1, c], xf), yf), zf)
+                                      lerp(blury[xi, yi+1, zi, c], blury[xi+1, yi+1, zi, c], xf), yf),
+                                 lerp(lerp(blury[xi, yi, zi+1, c], blury[xi+1, yi, zi+1, c], xf),
+                                      lerp(blury[xi, yi+1, zi+1, c], blury[xi+1, yi+1, zi+1, c], xf), yf), zf)
 
     # Normalize
     bilateral_grid = Func('bilateral_grid')
@@ -73,11 +76,11 @@ def get_bilateral_grid(input, r_sigma, s_sigma):
         print ("Compiling for GPU.")
         histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
         histogram = histogram.update() # Because returns ScheduleHandle
-        histogram.reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c)
-        blurx.compute_root().gpu_tile(x, y, z, 16, 16, 1)
-        blury.compute_root().gpu_tile(x, y, z, 16, 16, 1)
-        blurz.compute_root().gpu_tile(x, y, z, 8, 8, 4)
-        bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma)
+        histogram.reorder(c, r.x, r.y, x, y).gpu_tile(x, y, xi, yi, 8, 8).unroll(c)
+        blurx.compute_root().gpu_tile(x, y, z, xi, yi, zi, 16, 16, 1)
+        blury.compute_root().gpu_tile(x, y, z, xi, yi, zi, 16, 16, 1)
+        blurz.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 4)
+        bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma)
     else:
         # CPU schedule
         print ("Compiling for CPU.")
@@ -102,6 +105,7 @@ def generate_compiled_file(bilateral_grid):
     arguments.append(Argument('input', InputBuffer, UInt(16), 2))
     bilateral_grid.compile_to_file("bilateral_grid",
                                    arguments,
+                                   "bilateral_grid",
                                    target)
     print("Generated compiled file for bilateral_grid function.")
     return
@@ -129,11 +133,11 @@ def filter_test_image(bilateral_grid, input):
 
     # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
-    input_image = Image(input_data)
+    input_image = Buffer(input_data)
     input.set(input_image)
 
     output_data = np.empty(input_data.shape, dtype=input_data.dtype, order="F")
-    output_image = Image(output_data)
+    output_image = Buffer(output_data)
 
     if False:
         print("input_image", input_image)

@@ -77,10 +77,10 @@ def main():
     # also need to tell Halide the domain over which to evaluate the
     # Func, which determines the range of x and y above, and the
     # resolution of the output image. Halide.h also provides a basic
-    # templatized Image type we can use. We'll make an 800 x 600
+    # templatized image type we can use. We'll make an 800 x 600
     # image.
     output = gradient.realize(800, 600)
-    assert type(output) == h.Image_int32
+    assert type(output) == h.Buffer_int32
 
     # Halide does type inference for you. Var objects represent
     # 32-bit integers, so the Expr object 'x + y' also represents a
@@ -93,7 +93,7 @@ def main():
     # expecting:
     for j in range(output.height()):
         for i in range(output.width()):
-            # We can access a pixel of an Image object using similar
+            # We can access a pixel of an Buffer object using similar
             # syntax to defining and using functions.
             if (output(i, j) != i + j):
                 print("Something went wrong!\n"
@@ -103,7 +103,7 @@ def main():
 
 
     # Everything worked! We defined a Func, then called 'realize' on
-    # it to generate and run machine code that produced an Image.
+    # it to generate and run machine code that produced a Buffer.
     print("Success!")
 
     return 0

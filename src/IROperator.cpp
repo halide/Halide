@@ -5,6 +5,8 @@
 
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IREquality.h"
+#include "Var.h"
 #include "Debug.h"
 #include "CSE.h"
 
@@ -657,23 +659,28 @@ Expr fast_exp(Expr x_full) {
     result = common_subexpression_elimination(result);
     return result;
 }
+Expr stringify(const std::vector<Expr> &args) {
+    return Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
+                                args, Internal::Call::Intrinsic);
+}
 
-Expr print(const std::vector<Expr> &args) {
+Expr combine_strings(const std::vector<Expr> &args) {
     // Insert spaces between each expr.
-    std::vector<Expr> print_args(args.size()*2);
+    std::vector<Expr> strings(args.size()*2);
     for (size_t i = 0; i < args.size(); i++) {
-        print_args[i*2] = args[i];
+        strings[i*2] = args[i];
         if (i < args.size() - 1) {
-            print_args[i*2+1] = Expr(" ");
+            strings[i*2+1] = Expr(" ");
         } else {
-            print_args[i*2+1] = Expr("\n");
+            strings[i*2+1] = Expr("\n");
         }
     }
 
-    // Concat all the args at runtime using stringify.
-    Expr combined_string =
-        Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
-                             print_args, Internal::Call::Intrinsic);
+    return stringify(strings);
+}
+
+Expr print(const std::vector<Expr> &args) {
+    Expr combined_string = combine_strings(args);
 
     // Call halide_print.
     Expr print_call =
@@ -692,6 +699,26 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(p.type(),
                                 Internal::Call::if_then_else,
                                 {condition, p, args[0]},
+                                Internal::Call::PureIntrinsic);
+}
+
+Expr require(Expr condition, const std::vector<Expr> &args) {
+    user_assert(condition.defined()) << "Require of undefined condition\n";
+    user_assert(condition.type().is_bool()) << "Require condition must be a boolean type\n";
+    user_assert(args.at(0).defined()) << "Require of undefined value\n";
+
+    Expr requirement_failed_error =
+        Internal::Call::make(Int(32),
+                             "halide_error_requirement_failed",
+                             {stringify({condition}), combine_strings(args)},
+                             Internal::Call::Extern);
+    // Just cast to the type expected by the success path: since the actual
+    // value will never be used in the failure branch, it doesn't really matter
+    // what it is, but the type must match.
+    Expr failure_value = cast(args[0].type(), requirement_failed_error);
+    return Internal::Call::make(args[0].type(),
+                                Internal::Call::if_then_else,
+                                {likely(condition), args[0], failure_value},
                                 Internal::Call::PureIntrinsic);
 }
 

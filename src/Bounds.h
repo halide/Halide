@@ -71,6 +71,9 @@ bool boxes_overlap(const Box &a, const Box &b);
 /** The union of two boxes */
 Box box_union(const Box &a, const Box &b);
 
+/** The intersection of two boxes */
+Box box_intersection(const Box &a, const Box &b);
+
 /** Test if box a provably contains box b */
 bool box_contains(const Box &a, const Box &b);
 

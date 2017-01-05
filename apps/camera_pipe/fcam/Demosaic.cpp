@@ -72,7 +72,7 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic(Halide::Image<uint16_t> input, Halide::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
+void demosaic(Halide::Runtime::Buffer<uint16_t> input, Halide::Runtime::Buffer<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
     const int BLOCK_WIDTH = 40;
     const int BLOCK_HEIGHT = 24;
     const int G = 0, GR = 0, R = 1, B = 2, GB = 3;

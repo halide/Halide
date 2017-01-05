@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     // The region required of f is [min(x, x*x-20), max(x, x*x-20)],
     // which varies nastily with the var being vectorized.
 
-    Image<int> out = g.realize(100);
+    Buffer<int> out = g.realize(100);
 
     for (int i = 0; i < 4; i++) {
         int correct = i + i*i - 20;

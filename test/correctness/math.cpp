@@ -53,28 +53,25 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
 // for another day.
 
 // Version for a one argument function.
-#define fun_1(type_ret, type, name, c_name)                                   \
-    void test_##type##_##name(buffer_t *in_buf) {                             \
-        Target target = get_jit_target_from_environment();                    \
-        if (!target.supports_type(type_of<type>())) {                         \
-            return;                                                           \
-        }                                                                     \
-        Func test_##name("test_" #name);                                      \
-        Var x("x");                                                           \
-        ImageParam input(type_of<type>(), 1);                                 \
-        test_##name(x) = name(input(x));                                      \
-        Image<type> in_buffer(*in_buf);                                       \
-        input.set(in_buffer);                                                 \
-        if (target.has_gpu_feature()) {                                       \
-            test_##name.gpu_tile(x, 8);                                       \
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
-            test_##name.hexagon();                                                  \
-        }                                                                           \
-        Image<type_ret> result = test_##name.realize(in_buf->extent[0], target);  \
-        for (int i = 0; i < in_buf->extent[0]; i++) {                         \
-            type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]); \
+#define fun_1(type_ret, type, name, c_name)                             \
+    void test_##type##_##name(Buffer<type> in) {                        \
+        Target target = get_jit_target_from_environment();              \
+        if (!target.supports_type(type_of<type>())) {                   \
+            return;                                                     \
+        }                                                               \
+        Func test_##name("test_" #name);                                \
+        Var x("x"), xi("xi");                                           \
+        test_##name(x) = name(in(x));                                   \
+        if (target.has_gpu_feature()) {                                 \
+            test_##name.gpu_tile(x, xi, 8);                             \
+        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) { \
+            test_##name.hexagon();                                      \
+        }                                                               \
+        Buffer<type_ret> result = test_##name.realize(in.extent(0), target); \
+        for (int i = 0; i < in.extent(0); i++) {                        \
+            type_ret c_result = c_name(in(i));                          \
 	    if (!relatively_equal(c_result, result(i)))			\
-                printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)reinterpret_cast<type *>(in_buf->host)[i], (double)c_result, (double)result(i)); \
+                printf("For " #name "(%.20f) == %.20f from cpu and %.20f from GPU.\n", (double)in(i), (double)c_result, (double)result(i)); \
             assert(relatively_equal(c_result, result(i)) &&             \
                    "Failure on function " #name);                       \
         }                                                               \
@@ -82,29 +79,25 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
 
 // Version for a one argument function
 #define fun_2(type_ret, type, name, c_name)                                         \
-    void test_##type##_##name(buffer_t *in_buf) {                                   \
+    void test_##type##_##name(Buffer<type> in) {                                    \
         Target target = get_jit_target_from_environment();                          \
         if (!target.supports_type(type_of<type>())) {                               \
             return;                                                                 \
         }                                                                           \
         Func test_##name("test_" #name);                                            \
-        Var x("x");                                                                 \
-        ImageParam input(type_of<type>(), 2);                                       \
-        test_##name(x) = name(input(0, x), input(1, x));                            \
-        Image<type> in_buffer(*in_buf);                                             \
-        input.set(in_buffer);                                                       \
+        Var x("x"), xi("xi");                                                       \
+        test_##name(x) = name(in(0, x), in(1, x));                                  \
         if (target.has_gpu_feature()) {                                             \
-            test_##name.gpu_tile(x, 8);                                             \
+            test_##name.gpu_tile(x, xi, 8);                                         \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
-        Image<type_ret> result = test_##name.realize(in_buf->extent[1], target);    \
-        for (int i = 0; i < in_buf->extent[1]; i++) {                               \
-            type_ret c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i * 2], \
-                                       reinterpret_cast<type *>(in_buf->host)[i * 2 + 1]); \
-            assert(relatively_equal(c_result, result(i)) &&             \
-                   "Failure on function " #name);                       \
-        }                                                               \
+        Buffer<type_ret> result = test_##name.realize(in.height(), target);          \
+        for (int i = 0; i < in.height(); i++) {                                     \
+            type_ret c_result = c_name(in(0, i), in(1, i));                         \
+            assert(relatively_equal(c_result, result(i)) &&                         \
+                   "Failure on function " #name);                                   \
+        }                                                                           \
     }
 
 #define fun_1_float_types(name)    \
@@ -166,7 +159,7 @@ fun_2(uint32_t, uint32_t, absd, absd)
 
 template <typename T>
 struct TestArgs {
-    Image<T> data;
+    Buffer<T> data;
 
     TestArgs(int steps, T start, T end)
       : data(steps) {
@@ -184,8 +177,6 @@ struct TestArgs {
             data(1, i) = (T)((double)start_y + i * ((double)end_y - start_y) / steps);
           }
       }
-
-    operator buffer_t *() { return data.raw_buffer(); }
 };
 
 // Note this test is more oriented toward making sure the paths
@@ -198,14 +189,14 @@ struct TestArgs {
     {                                                             \
     printf("Testing " #name "(" #type ")\n");                     \
     TestArgs<type> args(steps, start, end);                       \
-    test_##type##_##name(args);                                   \
+    test_##type##_##name(args.data);                              \
     }
 
 #define call_2(type, name, steps, start1, end1, start2, end2)     \
     {                                                             \
     printf("Testing " #name "(" #type ")\n");                     \
     TestArgs<type> args(steps, start1, end1, start2, end2);       \
-    test_##type##_##name(args);                                   \
+    test_##type##_##name(args.data);                              \
     }
 
 #define call_1_float_types(name, steps, start, end)               \
@@ -220,18 +211,18 @@ int main(int argc, char **argv) {
     call_1_float_types(abs, 256, -1000, 1000);
     call_1_float_types(sqrt, 256, 0, 1000000);
 
-    call_1_float_types(sin, 256, 5 * -3.1415, 5 * 3.1415);
-    call_1_float_types(cos, 256, 5 * -3.1415, 5 * 3.1415);
-    call_1_float_types(tan, 256, 5 * -3.1415, 5 * 3.1415);
+    call_1_float_types(sin, 256, 5 * -3.1415f, 5 * 3.1415f);
+    call_1_float_types(cos, 256, 5 * -3.1415f, 5 * 3.1415f);
+    call_1_float_types(tan, 256, 5 * -3.1415f, 5 * 3.1415f);
 
     call_1_float_types(asin, 256, -1.0, 1.0);
     call_1_float_types(acos, 256, -1.0, 1.0);
     call_1_float_types(atan, 256, -256, 100);
-    call_2_float_types(atan2, 256, -20, 20, -2, 2.001);
+    call_2_float_types(atan2, 256, -20, 20, -2, 2.001f);
 
-    call_1_float_types(sinh, 256, 5 * -3.1415, 5 * 3.1415);
+    call_1_float_types(sinh, 256, 5 * -3.1415f, 5 * 3.1415f);
     call_1_float_types(cosh, 256, 0, 1);
-    call_1_float_types(tanh, 256, 5 * -3.1415, 5 * 3.1415);
+    call_1_float_types(tanh, 256, 5 * -3.1415f, 5 * 3.1415f);
 
 #ifndef _MSC_VER
     call_1_float_types(asinh, 256, -10.0, 10.0);
@@ -245,7 +236,7 @@ int main(int argc, char **argv) {
     call_1_float_types(floor, 256, -25, 25);
     call_1_float_types(ceil, 256, -25, 25);
     call_1_float_types(trunc, 256, -25, 25);
-    call_2_float_types(pow, 256, .1, 20, .1, 2);
+    call_2_float_types(pow, 256, .1f, 20, .1f, 2);
 
     const int8_t int8_min = std::numeric_limits<int8_t>::min();
     const int16_t int16_min = std::numeric_limits<int16_t>::min();

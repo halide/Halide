@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
 
         Realization results = h.realize(16);
         for (int i = 0; i < elements; i++) {
-            Image<float> result = results[i];
+            Buffer<float> result = results[i];
             for (int x = 0; x < 16; x++) {
                 float correct = ((x % 2) == 0) ? (1.0f/(sinf(x/2 + i))) : (cosf(x/2 + i)*17.0f);
                 float delta = result(x) - correct;
@@ -140,12 +140,14 @@ int main(int argc, char **argv) {
 
         interleaved
             .output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 3)
-            .set_stride(1, 1)
-            .set_extent(1, 3);
+            .dim(0)
+                .set_stride(3)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(3);
 
-        Image<float> buff3(3, 16);
+        Buffer<float> buff3(3, 16);
         buff3.transpose(0, 1);
 
         interleaved.realize(buff3);
@@ -186,14 +188,16 @@ int main(int argc, char **argv) {
             .vectorize(x, 4);
 
         output4.output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 4)
-            .set_stride(1, 1)
-            .set_extent(1, 4);
+            .dim(0)
+                .set_stride(4)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(4);
 
         check_interleave_count(output4, 1);
 
-        Image<float> buff4(4, 16);
+        Buffer<float> buff4(4, 16);
         buff4.transpose(0, 1);
 
         output4.realize(buff4);
@@ -224,15 +228,17 @@ int main(int argc, char **argv) {
             .vectorize(x, 4);
 
         output5.output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 5)
-            .set_stride(1, 1)
-            .set_extent(1, 5);
+            .dim(0)
+                .set_stride(5)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(5);
 
 
         check_interleave_count(output5, 1);
 
-        Image<float> buff5(5, 16);
+        Buffer<float> buff5(5, 16);
         buff5.transpose(0, 1);
 
         output5.realize(buff5);
@@ -316,8 +322,8 @@ int main(int argc, char **argv) {
 
                 Realization outs = output6.realize(50, 4);
                 for (int e = 0; e < elements; e++) {
-                    Image<uint8_t> ref = (*refs)[e];
-                    Image<uint8_t> out = outs[e];
+                    Buffer<uint8_t> ref = (*refs)[e];
+                    Buffer<uint8_t> out = outs[e];
                     for (int y = 0; y < ref.height(); y++) {
                         for (int x = 0; x < ref.width(); x++) {
                             if (out(x, y) != ref(x, y)) {
@@ -361,17 +367,27 @@ int main(int argc, char **argv) {
             .vectorize(y);
 
         trans1.output_buffer()
-            .set_min(0,0).set_min(1,0)
-            .set_stride(0,1).set_stride(1,8)
-            .set_extent(0,8).set_extent(1,8);
+            .dim(0)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(8)
+            .dim(1)
+                .set_min(0)
+                .set_stride(8)
+                .set_extent(8);
 
         trans2.output_buffer()
-            .set_min(0,0).set_min(1,0)
-            .set_stride(0,1).set_stride(1,8)
-            .set_extent(0,8).set_extent(1,8);
+            .dim(0)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(8)
+            .dim(1)
+                .set_min(0)
+                .set_stride(8)
+                .set_extent(8);
 
-        Image<uint16_t> result6(8, 8);
-        Image<uint16_t> result7(8, 8);
+        Buffer<uint16_t> result6(8, 8);
+        Buffer<uint16_t> result7(8, 8);
         trans1.realize(result6);
         trans2.realize(result7);
 

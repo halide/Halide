@@ -34,9 +34,7 @@ std::string output_name(const string &filename, const Module &m, const char* ext
 
 Outputs static_library_outputs(const string &filename_prefix, const Target &target) {
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.static_library(filename_prefix + ".a");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.static_library(filename_prefix + ".lib");
     } else {
         outputs = outputs.static_library(filename_prefix + ".a");
@@ -54,7 +52,7 @@ Outputs static_library_outputs(const string &filename_prefix, const Target &targ
 struct InferredArgument {
     Argument arg;
     Parameter param;
-    BufferPtr buffer;
+    Buffer<> buffer;
 
     bool operator<(const InferredArgument &other) const {
         if (arg.is_buffer() && !other.arg.is_buffer()) {
@@ -156,14 +154,12 @@ bool Pipeline::defined() const {
 }
 
 Pipeline::Pipeline(Func output) : contents(new PipelineContents) {
-    output.compute_root().store_root();
     output.function().freeze();
     contents->outputs.push_back(output.function());
 }
 
 Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents) {
     for (Func f: outputs) {
-        f.compute_root().store_root();
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -271,8 +267,9 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
 
 void Pipeline::compile_to_static_library(const string &filename_prefix,
                                          const vector<Argument> &args,
+                                         const std::string &fn_name,
                                          const Target &target) {
-    Module m = compile_to_module(args, filename_prefix, target);
+    Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = static_library_outputs(filename_prefix, target);
     m.compile(outputs);
 }
@@ -289,13 +286,12 @@ void Pipeline::compile_to_multitarget_static_library(const std::string &filename
 
 void Pipeline::compile_to_file(const string &filename_prefix,
                                const vector<Argument> &args,
+                               const std::string &fn_name,
                                const Target &target) {
-    Module m = compile_to_module(args, filename_prefix, target);
+    Module m = compile_to_module(args, fn_name, target);
     Outputs outputs = Outputs().c_header(filename_prefix + ".h");
 
-    if (target.arch == Target::PNaCl) {
-        outputs = outputs.bitcode(filename_prefix + ".bc");
-    } else if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
+    if (target.os == Target::Windows && !target.has_feature(Target::MinGW)) {
         outputs = outputs.object(filename_prefix + ".obj");
     } else {
         outputs = outputs.object(filename_prefix + ".o");
@@ -384,16 +380,30 @@ private:
             min = p.get_min_value();
             max = p.get_max_value();
         }
+
         InferredArgument a = {
             Argument(p.name(),
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                      p.type(), p.dimensions(), def, min, max),
             p,
-            BufferPtr()};
+            Buffer<>()};
         args.push_back(a);
+
+        // Visit child expressions
+        if (!p.is_buffer()) {
+            visit_expr(def);
+            visit_expr(min);
+            visit_expr(max);
+        } else {
+            for (int i = 0; i < p.dimensions(); i++) {
+                visit_expr(p.min_constraint(i));
+                visit_expr(p.extent_constraint(i));
+                visit_expr(p.stride_constraint(i));
+            }
+        }
     }
 
-    void include_buffer(BufferPtr b) {
+    void include_buffer(Buffer<> b) {
         if (!b.defined()) return;
         if (already_have(b.name())) return;
 
@@ -480,30 +490,19 @@ class FindExterns : public IRGraphVisitor {
                 address = get_symbol_address(underscored_name.c_str());
             }
             if (address != NULL) {
-                struct JITExtern jit_extern;
-                jit_extern.c_function = address;
-                jit_extern.signature.is_void_return = op->type.bits() == 0;
                 // TODO: here and below for arguments, we force types to scalar,
                 // which means this code cannot support functions which actually do
                 // take vectors. But generally the function is actually scalar and
                 // call sites which use vectors will have to be scalarized into a
                 // separate call per lane. Not sure there is anywhere to get
                 // information to make a distinction in the current design.
-                jit_extern.signature.ret_type = op->type.element_of();
+                std::vector<Type> arg_types;
                 for (Expr e : op->args) {
-                    ScalarOrBufferT this_arg;
-                    this_arg.scalar_type = e.type().element_of();
-                    if (e.type().is_handle()) {
-                        const Variable *v = e.as<Variable>();
-                        // This code heuristically matches the patterns define_extern uses to pass buffer arguments and result parameters.
-                        // TODO: Come up with a way to keep the buffer typing through lowering.
-                        this_arg.is_buffer = (v != NULL) && buffer_like_name(v->name);
-                    } else {
-                        this_arg.is_buffer = false;
-                    }
-                    jit_extern.signature.arg_types.push_back(this_arg);
+                    arg_types.push_back(e.type().element_of());
                 }
-                externs[op->name] = jit_extern;
+                ExternCFunction f(address, ExternSignature(op->type.element_of(), op->type.bits() == 0, arg_types));
+                JITExtern jit_extern(f);
+                externs.emplace(op->name, jit_extern);
             }
         }
     }
@@ -521,10 +520,10 @@ vector<Argument> Pipeline::infer_arguments() {
 
 /** Check that all the necessary arguments are in an args vector. Any
  * images in the source that aren't in the args vector are returned. */
-vector<BufferPtr> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
+vector<Buffer<>> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
     infer_arguments(body);
 
-    vector<BufferPtr> images_to_embed;
+    vector<Buffer<>> images_to_embed;
 
     for (const InferredArgument &arg : contents->inferred_args) {
 
@@ -652,7 +651,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = build_public_args(args, target);
 
-    vector<BufferPtr> global_images = validate_arguments(public_args, private_body);
+    vector<Buffer<>> global_images = validate_arguments(public_args, private_body);
 
     // Create a module with all the global images in it.
     Module module(simple_new_fn_name, target);
@@ -660,7 +659,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // Add all the global images to the module, and add the global
     // images used to the private argument list.
     vector<Argument> private_args = public_args;
-    for (BufferPtr buf : global_images) {
+    for (Buffer<> buf : global_images) {
         module.append(buf);
         private_args.push_back(Argument(buf.name(),
                                         Argument::InputBuffer,
@@ -756,7 +755,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
         if (debug::debug_level >= 3) {
             std::ofstream js_debug((name + ".js").c_str());
             js_debug << out.str();
-	}
+        }
 
         std::map<std::string, JITExtern> externs_js;
         externs_js = contents->jit_externs;
@@ -877,14 +876,14 @@ const JITHandlers &Pipeline::jit_handlers() {
 Realization Pipeline::realize(vector<int32_t> sizes,
                               const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    vector<Image<>> bufs;
+    vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
     realize(r, target);
-    for (Image<> &im : r) {
-        im.copy_to_host();
+    for (size_t i = 0; i < r.size(); i++) {
+        r[i].copy_to_host();
     }
     return r;
 }
@@ -1021,7 +1020,7 @@ struct JITFuncCallContext {
 
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
-// params. 
+// params.
 std::pair<vector<const void *>, vector<Argument>>
 Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
@@ -1050,6 +1049,25 @@ Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
         << ") for realizing pipeline with " << output_buffer_types.size()
         << " outputs\n";
 
+    // Check the type and dimensionality of the buffer
+    for (size_t i = 0; i < dst.size(); i++) {
+        Function func = output_buffer_types[i].func;
+        int  dims = output_buffer_types[i].dims;
+        Type type = output_buffer_types[i].type;
+        user_assert(dst[i].dimensions() == dims)
+            << "Can't realize Func \"" << func.name()
+            << "\" into Buffer at " << (void *)dst[i].data()
+            << " because Buffer is " << dst[i].dimensions()
+            << "-dimensional, but Func \"" << func.name()
+            << "\" is " << dims << "-dimensional.\n";
+        user_assert(dst[i].type() == type)
+            << "Can't realize Func \"" << func.name()
+            << "\" into Buffer at " << (void *)dst[i].data()
+            << " because Buffer has type " << Type(dst[i].type())
+            << ", but Func \"" << func.name()
+            << "\" has type " << type << ".\n";
+    }
+
     // Come up with the void * arguments to pass to the argv function
     const vector<InferredArgument> &input_args = contents->inferred_args;
     vector<const void *> arg_values;
@@ -1059,7 +1077,7 @@ Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     for (InferredArgument arg : input_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
-            BufferPtr buf = arg.param.get_buffer();
+            Buffer<> buf = arg.param.get_buffer();
             if (buf.defined()) {
                 arg_values.push_back(buf.raw_buffer());
             } else {
@@ -1085,26 +1103,11 @@ Pipeline::prepare_jit_call_arguments(Realization dst, const Target &target) {
     // while constructing outputs.
     for (size_t i = 0; i < dst.size(); i++) {
         Function func = output_buffer_types[i].func;
-        int  dims = output_buffer_types[i].dims;
-        Type type = output_buffer_types[i].type;
-        user_assert(dst[i].dimensions() == dims)
-            << "Can't realize Func \"" << func.name()
-            << "\" into Buffer at " << (void *)dst[i].host_ptr()
-            << " because Buffer is " << dst[i].dimensions()
-            << "-dimensional, but Func \"" << func.name()
-            << "\" is " << dims << "-dimensional.\n";
-        user_assert(dst[i].type() == type)
-            << "Can't realize Func \"" << func.name()
-            << "\" into Buffer at " << (void *)dst[i].host_ptr()
-            << " because Buffer has type " << Type(dst[i].type())
-            << ", but Func \"" << func.name()
-            << "\" has type " << type << ".\n";
-
-	const Image<> &buf(dst[i]);
+        const Buffer<> &buf(dst[i]);
         arg_values.push_back(buf.raw_buffer());
         arg_types.push_back(Argument(func.name(), Argument::OutputBuffer, buf.type(), buf.dimensions()));
         const void *ptr = arg_values.back();
-        debug(1) << "JIT output buffer @ " << ptr << "\n";
+        debug(1) << "JIT output buffer @ " << ptr << ", " << dst[i].data() << "\n";
     }
 
     return std::make_pair(arg_values, arg_types);
@@ -1127,36 +1130,36 @@ Pipeline::make_externs_jit_module(const Target &target,
     for (std::map<std::string, JITExtern>::iterator iter = externs_in_out.begin();
          iter != externs_in_out.end();
          iter++) {
-        JITExtern &jit_extern(iter->second);
-        if (iter->second.pipeline.defined()) {
-            PipelineContents &pipeline_contents(*jit_extern.pipeline.contents);
+        Pipeline pipeline = iter->second.pipeline();
+        if (pipeline.defined()) {
+            PipelineContents &pipeline_contents(*pipeline.contents);
 
             // Ensure that the pipeline is compiled.
-            jit_extern.pipeline.compile_jit(no_js_target);
+            pipeline.compile_jit(no_js_target);
 
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
             free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
-            iter->second.c_function = pipeline_contents.jit_module.entrypoint_symbol().address;
-            iter->second.signature.is_void_return = false;
-            iter->second.signature.ret_type = Int(32);
+            void *address = pipeline_contents.jit_module.entrypoint_symbol().address;
+            std::vector<Type> arg_types;
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
-                 ScalarOrBufferT arg_type_info;
-                 arg_type_info.is_buffer = arg.arg.is_buffer();
-                 if (!arg_type_info.is_buffer) {
-                     arg_type_info.scalar_type = arg.arg.type;
-                 }
-                 iter->second.signature.arg_types.push_back(arg_type_info);
+                // TODO: it's not clear whether arg.arg.type is correct for
+                // the arg.is_buffer() case (AFAIK, is_buffer()==true isn't possible
+                // in current mtrunk Halide, but may be in some side branches that
+                // have not yet landed, e.g. JavaScript). Forcing it to be 
+                // the correct type here, just in case.
+                arg_types.push_back(arg.arg.is_buffer() ? 
+                                    type_of<struct buffer_t *>() :
+                                    arg.arg.type);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {
-                ScalarOrBufferT arg_type_info;
-                arg_type_info.is_buffer = true;
-                iter->second.signature.arg_types.push_back(arg_type_info);
+                arg_types.push_back(type_of<struct buffer_t *>());
             }
-            iter->second.pipeline = Pipeline();
+            ExternSignature signature(Int(32), false, arg_types);
+            iter->second = ExternCFunction(address, signature);
         } else {
-            free_standing_jit_externs.add_extern_for_export(iter->first, jit_extern.signature, jit_extern.c_function);
+            free_standing_jit_externs.add_extern_for_export(iter->first, iter->second.extern_c_function());
         }
     }
     if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {
@@ -1195,6 +1198,12 @@ void Pipeline::realize(Realization dst, const Target &t) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
     debug(2) << "Realizing Pipeline for " << target.to_string() << "\n";
+
+    for (size_t i = 0; i < dst.size(); i++) {
+        user_assert(dst[i].data() != nullptr)
+            << "Buffer at " << &(dst[i]) << " is unallocated. "
+            << "The Buffers in a Realization passed to realize must all be allocated\n";
+    }
 
     // If target is unspecified...
     if (target.os == Target::OSUnknown) {
@@ -1311,10 +1320,11 @@ void Pipeline::infer_input_bounds(Realization dst) {
     std::pair<vector<const void *>, vector<Argument>> args = prepare_jit_call_arguments(dst, target);
 
     struct TrackedBuffer {
-        // The query buffer.
-        buffer_t query;
-        // A backup copy of it to test if it changed.
-        buffer_t orig;
+        // The query buffer, and a backup to check for changes. We
+        // want wrappers around actual buffer_ts so that we can copy
+        // the metadata, not shared pointers to a single buffer, so
+        // it's simpler to use the runtime buffer class.
+        Runtime::Buffer<> query, orig;
     };
     vector<TrackedBuffer> tracked_buffers(args.first.size());
 
@@ -1322,8 +1332,13 @@ void Pipeline::infer_input_bounds(Realization dst) {
     for (size_t i = 0; i < args.first.size(); i++) {
         if (args.first[i] == nullptr) {
             query_indices.push_back(i);
-            memset(&tracked_buffers[i], 0, sizeof(TrackedBuffer));
-            args.first[i] = &tracked_buffers[i].query;
+            InferredArgument ia = contents->inferred_args[i];
+            internal_assert(ia.param.defined() && ia.param.is_buffer());
+            // Make some empty Buffers of the right dimensionality
+            vector<int> initial_shape(ia.param.dimensions(), 0);
+            tracked_buffers[i].query = Runtime::Buffer<>(ia.param.type(), nullptr, initial_shape);
+            tracked_buffers[i].orig = Runtime::Buffer<>(ia.param.type(), nullptr, initial_shape);
+            args.first[i] = tracked_buffers[i].query.raw_buffer();
         }
     }
 
@@ -1340,6 +1355,7 @@ void Pipeline::infer_input_bounds(Realization dst) {
     for (iter = 0; iter < max_iters; iter++) {
         // Make a copy of the buffers that might be mutated
         for (TrackedBuffer &tb : tracked_buffers) {
+            // Make a copy of the buffer sizes, etc.
             tb.orig = tb.query;
         }
 
@@ -1349,10 +1365,14 @@ void Pipeline::infer_input_bounds(Realization dst) {
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
 
-        // Check if there were any changed
+        // Check if there were any changes
         for (TrackedBuffer &tb : tracked_buffers) {
-            if (memcmp(&tb.query, &tb.orig, sizeof(buffer_t))) {
-                changed = true;
+            for (int i = 0; i < tb.query.dimensions(); i++) {
+                if (tb.query.dim(i).min() != tb.orig.dim(i).min() ||
+                    tb.query.dim(i).extent() != tb.orig.dim(i).extent() ||
+                    tb.query.dim(i).stride() != tb.orig.dim(i).stride()) {
+                    changed = true;
+                }
             }
         }
         if (!changed) {
@@ -1373,21 +1393,13 @@ void Pipeline::infer_input_bounds(Realization dst) {
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
         internal_assert(!ia.param.get_buffer().defined());
-        buffer_t buf = tracked_buffers[i].query;
 
-        Internal::debug(1) << "Inferred bounds for " << ia.param.name() << ": ("
-                           << buf.min[0] << ","
-                           << buf.min[1] << ","
-                           << buf.min[2] << ","
-                           << buf.min[3] << ")..("
-                           << buf.min[0] + buf.extent[0] << ","
-                           << buf.min[1] + buf.extent[1] << ","
-                           << buf.min[2] + buf.extent[2] << ","
-                           << buf.min[3] + buf.extent[3] << ")\n";
+        // Allocate enough memory with the right type and dimensionality.
+        tracked_buffers[i].query.allocate();
 
-        Image<> im(ia.param.type(), buf);
-        im.allocate();
-        ia.param.set_buffer(im);
+        // Bind this parameter to this buffer, giving away the
+        // buffer. The user retrieves it via ImageParam::get.
+        ia.param.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
     }
 }
 
@@ -1400,7 +1412,7 @@ void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size
     if (z_size) size.push_back(z_size);
     if (w_size) size.push_back(w_size);
 
-    vector<Image<>> bufs;
+    vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, size);
     }
@@ -1414,16 +1426,16 @@ void Pipeline::invalidate_cache() {
     }
 }
 
-JITExtern::JITExtern()
-    : pipeline(), c_function(NULL) {
-}
-
 JITExtern::JITExtern(Pipeline pipeline)
-    : pipeline(pipeline), c_function(nullptr) {
+    : pipeline_(pipeline) {
 }
 
 JITExtern::JITExtern(Func func)
-    : pipeline(func), c_function(nullptr) {
+    : pipeline_(func) {
+}
+
+JITExtern::JITExtern(const ExternCFunction &extern_c_function)
+    : extern_c_function_(extern_c_function) {
 }
 
 }  // namespace Halide

@@ -10,7 +10,7 @@
 
 #include "cleanup_on_error.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int size = 64;
 
@@ -45,11 +45,11 @@ void my_halide_error(void *user_context, const char *msg) {
 // the number of calls to free matches the number of calls to malloc.
 extern "C" int halide_device_free(void *user_context, struct buffer_t *buf) {
     device_frees++;
-    const halide_device_interface *interface = halide_get_device_interface(buf->dev);
+    const halide_device_interface_t *interface = halide_get_device_interface(buf->dev);
     return interface->device_free(user_context, buf);
 }
 
-extern "C" int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
+extern "C" int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface_t *interface) {
     device_mallocs++;
     return interface->device_malloc(user_context, buf);
 }
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     halide_set_custom_free(&my_halide_free);
     halide_set_error_handler(&my_halide_error);
 
-    Image<int32_t> output(size);
+    Buffer<int32_t> output(size);
     int result = cleanup_on_error(output);
 
     if (result != halide_error_code_out_of_memory) {

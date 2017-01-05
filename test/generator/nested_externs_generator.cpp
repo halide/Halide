@@ -4,123 +4,105 @@ using namespace Halide;
 
 namespace {
 
-void set_interleaved(OutputImageParam m) {
-    m.set_stride(0, 3);
-    //m.set_stride(0, 3).set_stride(2, 1).set_bounds(2, 0, 3);
+template<typename T>
+void set_interleaved(T &t) {
+    t.dim(0).set_stride(3)
+     .dim(2).set_min(0).set_extent(3).set_stride(1);
 }
 
 // Add two inputs
 class NestedExternsCombine : public Generator<NestedExternsCombine> {
 public:
-    ImageParam input_a{ Float(32), 3, "a" };
-    ImageParam input_b{ Float(32), 3, "b" };
+    Input<Buffer<float>>  input_a{ "input_a", 3 };
+    Input<Buffer<float>>  input_b{ "input_b", 3 };
+    Output<Buffer<>>      combine{ "combine" };  // unspecified type-and-dim will be inferred
 
-    Func build() {
-        Func result("combine");
+    void generate() {
         Var x, y, c;
+        combine(x, y, c) = input_a(x, y, c) + input_b(x, y, c);
+    }
 
+    void schedule() {
         set_interleaved(input_a);
         set_interleaved(input_b);
-
-        result(x, y, c) = input_a(x, y, c) + input_b(x, y, c);
-
-        set_interleaved(result.output_buffer());
-
-        return result;
+        set_interleaved(combine);
     }
 };
 
 // Call two extern stages then pass the two results to another extern stage.
 class NestedExternsInner : public Generator<NestedExternsInner> {
 public:
-    Param<float> value {"value", 1.0f};
+    Input<float>            value{ "value", 1.0f };
+    Output<Buffer<float>>   inner{ "inner", 3 };
 
-    Func build() {
-        Func extern_stage_1;
+    void generate() {
         extern_stage_1.define_extern("nested_externs_leaf", {value}, Float(32), 3);
-        extern_stage_1.reorder_storage(extern_stage_1.args()[2],
-                                        extern_stage_1.args()[0],
-                                        extern_stage_1.args()[1]);
-        extern_stage_1.compute_root();
-
-        Func extern_stage_2;
         extern_stage_2.define_extern("nested_externs_leaf", {value+1}, Float(32), 3);
-        extern_stage_2.reorder_storage(extern_stage_2.args()[2],
-                                        extern_stage_2.args()[0],
-                                        extern_stage_2.args()[1]);
-        extern_stage_2.compute_root();
-
-        Func extern_stage_combine;
         extern_stage_combine.define_extern("nested_externs_combine", 
             {extern_stage_1, extern_stage_2}, Float(32), 3);
-        extern_stage_combine.compute_root();
-
-        set_interleaved(extern_stage_combine.output_buffer());
-
-        return extern_stage_combine;
+        inner(x, y, c) = extern_stage_combine(x, y, c);
     }
+
+    void schedule() {
+        for (Func f : { extern_stage_1, extern_stage_2, extern_stage_combine }) {
+            auto args = f.args();
+            f.compute_root().reorder_storage(args[2], args[0], args[1]);
+        }
+        set_interleaved(inner);
+    }
+
+private:
+    Var x, y, c;
+    Func extern_stage_1, extern_stage_2, extern_stage_combine;
 };
 
 // Basically a memset.
 class NestedExternsLeaf : public Generator<NestedExternsLeaf> {
 public:
+    Input<float>            value{ "value", 1.0f };
+    Output<Buffer<float>>   leaf{ "leaf", 3 };
 
-    Param<float> value {"value", 1.0f};
-
-    Func build() {
-        Func f("leaf");
+    void generate() {
         Var x, y, c;
-        f(x, y, c) = value;
+        leaf(x, y, c) = value;
+    }
 
-        set_interleaved(f.output_buffer());
-
-        return f;
+    void schedule() {
+        set_interleaved(leaf);
     }
 };
 
 // Call two extern stages then pass the two results to another extern stage.
 class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
-    Param<float> value {"value", 1.0f};
+    Input<float>           value{ "value", 1.0f };
+    Output<Buffer<float>>  root{ "root", 3 };
 
-    Func build() {
-        Func extern_stage_1;
+    void generate() {
         extern_stage_1.define_extern("nested_externs_inner", {value}, Float(32), 3);
-        extern_stage_1.reorder_storage(extern_stage_1.args()[2],
-                                        extern_stage_1.args()[0],
-                                        extern_stage_1.args()[1]);
-
-        Func extern_stage_2;
         extern_stage_2.define_extern("nested_externs_inner", {value+1}, Float(32), 3);
-        extern_stage_2.reorder_storage(extern_stage_2.args()[2],
-                                        extern_stage_2.args()[0],
-                                        extern_stage_2.args()[1]);
-
-        Func extern_stage_combine;
         extern_stage_combine.define_extern("nested_externs_combine", 
             {extern_stage_1, extern_stage_2}, Float(32), 3);
-        extern_stage_combine.reorder_storage(extern_stage_combine.args()[2],
-                                             extern_stage_combine.args()[0],
-                                             extern_stage_combine.args()[1]);
-        set_interleaved(extern_stage_combine.output_buffer());
-
-        Func wrapper;
-        Var x, y, c;
-        wrapper(x, y, c) = extern_stage_combine(x, y, c);
-
-        wrapper.reorder(c, x, y);
-        extern_stage_1.compute_at(wrapper, y);
-        extern_stage_2.compute_at(wrapper, y);
-        extern_stage_combine.compute_at(wrapper, y);
-        set_interleaved(wrapper.output_buffer());
-
-        return wrapper;
+        root(x, y, c) = extern_stage_combine(x, y, c);
     }
+
+    void schedule() {
+        for (Func f : { extern_stage_1, extern_stage_2, extern_stage_combine }) {
+            auto args = f.args();
+            f.compute_at(root, y).reorder_storage(args[2], args[0], args[1]);
+        }
+        set_interleaved(root);
+        Func(root).reorder_storage(c, x, y);
+    }
+
+private:
+    Var x, y, c;
+    Func extern_stage_1, extern_stage_2, extern_stage_combine;
 };
 
-RegisterGenerator<NestedExternsCombine> register_combine_gen{"nested_externs_combine"};
-RegisterGenerator<NestedExternsInner> register_inner_gen{"nested_externs_inner"};
-RegisterGenerator<NestedExternsLeaf> register_leaf_gen{"nested_externs_leaf"};
-RegisterGenerator<NestedExternsRoot> register_root_gen{"nested_externs_root"};
+HALIDE_REGISTER_GENERATOR(NestedExternsCombine, "nested_externs_combine")
+HALIDE_REGISTER_GENERATOR(NestedExternsInner, "nested_externs_inner")
+HALIDE_REGISTER_GENERATOR(NestedExternsLeaf, "nested_externs_leaf")
+HALIDE_REGISTER_GENERATOR(NestedExternsRoot, "nested_externs_root")
 
 }  // namespace

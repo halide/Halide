@@ -11,8 +11,10 @@ int main() {
 #include <stdlib.h>
 #include <stddef.h>
 #include <cstring>
-#include "../src/runtime/mini_opengl.h"
+
 #include "Halide.h"
+
+#include "runtime/mini_opengl.h"
 
 extern "C" void glGenTextures(GLsizei, GLuint *);
 extern "C" void glTexParameteri(GLenum, GLenum, GLint);
@@ -225,7 +227,7 @@ class KnownState
 
     public:
 
-    bool errors;
+    bool errors{false};
 
 
     // This sets most values to generated or arbitrary values, which the
@@ -312,20 +314,23 @@ class KnownState
 using namespace Halide;
 
 int main() {
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
     KnownState known_state;
 
-    Image<uint8_t> input(255, 10, 3);
-    Image<uint8_t> out(UInt(8), 255, 10, 3);
+    Buffer<uint8_t> input(255, 10, 3);
+    Buffer<uint8_t> out(UInt(8), 255, 10, 3);
 
     Var x, y, c;
     Func g;
     g(x, y, c) = input(x, y, c);
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
-    g.realize(out); // let Halide initialize OpenGL
+    g.realize(out, target); // let Halide initialize OpenGL
 
     known_state.setup(true);
-    g.realize(out);
+    g.realize(out, target);
     known_state.check("realize");
 
     known_state.setup(true);
@@ -333,7 +338,7 @@ int main() {
     known_state.check("copy_to_host");
 
     known_state.setup(false);
-    g.realize(out);
+    g.realize(out, target);
     known_state.check("realize");
 
     known_state.setup(false);

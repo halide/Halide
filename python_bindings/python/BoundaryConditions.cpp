@@ -48,7 +48,7 @@ h::Func constant_exterior_bounds(h::Func func, h::Expr value, p::object bounds_)
 // C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_constant_exterior_for_image() {
-    p::def("constant_exterior", &constant_exterior0<h::Image<T>>, p::args("source", "value"));
+    p::def("constant_exterior", &constant_exterior0<h::Buffer<T>>, p::args("source", "value"));
     def_constant_exterior_for_image<Types...>();  // recursive call
     return;
 }
@@ -74,7 +74,7 @@ h::Func repeat_edge_bounds(h::Func func, p::object bounds_) {
 // C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_repeat_edge_for_image() {
-    p::def("repeat_edge", &repeat_edge0<h::Image<T>>, p::args("source"));
+    p::def("repeat_edge", &repeat_edge0<h::Buffer<T>>, p::args("source"));
     def_repeat_edge_for_image<Types...>();  // recursive call
     return;
 }
@@ -100,7 +100,7 @@ h::Func repeat_image_bounds(h::Func func, p::object bounds_) {
 // C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_repeat_image_for_image() {
-    p::def("repeat_image", &repeat_image0<h::Image<T>>, p::args("source"));
+    p::def("repeat_image", &repeat_image0<h::Buffer<T>>, p::args("source"));
     def_repeat_image_for_image<Types...>();  // recursive call
     return;
 }
@@ -126,7 +126,7 @@ h::Func mirror_image_bounds(h::Func func, p::object bounds_) {
 // C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_mirror_image_for_image() {
-    p::def("mirror_image", &mirror_image0<h::Image<T>>, p::args("source"));
+    p::def("mirror_image", &mirror_image0<h::Buffer<T>>, p::args("source"));
     def_mirror_image_for_image<Types...>();  // recursive call
     return;
 }
@@ -152,7 +152,7 @@ h::Func mirror_interior_bounds(h::Func func, p::object bounds_) {
 // C++ fun, variadic template recursive function !
 template <typename T = void, typename... Types>
 void def_mirror_interior_for_image() {
-    p::def("mirror_interior", &mirror_interior0<h::Image<T>>, p::args("source"));
+    p::def("mirror_interior", &mirror_interior0<h::Buffer<T>>, p::args("source"));
     def_mirror_interior_for_image<Types...>();  // recursive call
     return;
 }
@@ -172,7 +172,7 @@ void defineBoundaryConditions() {
            "everywhere outside the boundary. Generally the expression will be a "
            "constant, though the code currently allows accessing the arguments  "
            "of source.\n\n"
-           "An ImageParam, Image<T>, or similar can be passed instead of a Func. If this  "
+           "An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this  "
            "is done and no bounds are given, the boundaries will be taken from the  "
            "min and extent methods of the passed object.\n\n"
            "(This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_BORDER  "
@@ -190,7 +190,7 @@ void defineBoundaryConditions() {
     p::def("repeat_edge", &repeat_edge0<h::ImageParam>, p::args("source"),
            "Impose a boundary condition such that the nearest edge sample is returned "
            "everywhere outside the given region.\n\n"
-           "An ImageParam, Image<T>, or similar can be passed instead of a Func. If this "
+           "An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this "
            "is done and no bounds are given, the boundaries will be taken from the "
            "min and extent methods of the passed object.\n\n"
            "(This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_EDGE.)");
@@ -207,7 +207,7 @@ void defineBoundaryConditions() {
     p::def("repeat_image", &repeat_image0<h::ImageParam>, p::args("source"),
            "Impose a boundary condition such that the entire coordinate space is "
            "tiled with copies of the image abutted against each other.\n\n"
-           "An ImageParam, Image<T>, or similar can be passed instead of a Func. If this "
+           "An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this "
            "is done and no bounds are given, the boundaries will be taken from the "
            "min and extent methods of the passed object.\n\n"
            "(This is similar to setting GL_TEXTURE_WRAP_* to GL_REPEAT.)");
@@ -225,7 +225,7 @@ void defineBoundaryConditions() {
            "Impose a boundary condition such that the entire coordinate space is "
            "tiled with copies of the image abutted against each other, but mirror "
            "them such that adjacent edges are the same.\n\n"
-           "An ImageParam, Image<T>, or similar can be passed instead of a Func. If this "
+           "An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this "
            "is done and no bounds are given, the boundaries will be taken from the "
            "min and extent methods of the passed object.\n\n"
            "(This is similar to setting GL_TEXTURE_WRAP_* to GL_MIRRORED_REPEAT.)");
@@ -244,7 +244,7 @@ void defineBoundaryConditions() {
            "tiled with copies of the image abutted against each other, but mirror "
            "them such that adjacent edges are the same and then overlap the edges.\n\n"
            "This produces an error if any extent is 1 or less. (TODO: check this.)\n\n"
-           "An ImageParam, Image<T>, or similar can be passed instead of a Func. If this "
+           "An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this "
            "is done and no bounds are given, the boundaries will be taken from the "
            "min and extent methods of the passed object. "
            "(I do not believe there is a direct GL_TEXTURE_WRAP_* equivalent for this.)");

@@ -25,8 +25,7 @@ bool is_opengl_es(const Target &target) {
     // versions (desktop GL, GLES2, GLES3, ...), probably by making it part of
     // Target.
     return (target.os == Target::Android ||
-            target.os == Target::IOS ||
-            target.os == Target::NaCl);
+            target.os == Target::IOS);
 }
 
 // Maps Halide types to appropriate GLSL types or emit error if no equivalent
@@ -361,6 +360,9 @@ void CodeGen_GLSL::visit(const Let *op) {
 void CodeGen_GLSL::visit(const For *loop) {
     if (ends_with(loop->name, ".__block_id_x") ||
         ends_with(loop->name, ".__block_id_y")) {
+        internal_assert(loop->for_type == ForType::GPUBlock)
+            << "kernel loop must be gpu block\n";
+
         debug(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
 
         string idx;

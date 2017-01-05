@@ -16,7 +16,7 @@ void defineExternFuncArgument() {
                                   "An argument to an extern-defined Func. May be a Function, Buffer, "
                                   "ImageParam or Expr.",
                                   p::no_init)
-        .def(p::init<h::Image<>>(p::args("self", "b")))
+        .def(p::init<h::Buffer<>>(p::args("self", "b")))
         .def(p::init<h::Expr>(p::args("self", "e")))
         .def(p::init<int>(p::args("self", "e")))
         .def(p::init<float>(p::args("self", "e")))

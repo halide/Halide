@@ -50,8 +50,8 @@ int main(int argc, char **argv) {
 
     // Compute the output in tiles of the appropriate size to simplify
     // the mod and div above. Not important for the stage skipping behavior.
-    output.bound(x, 0, (image.extent(0)/tile_size)*tile_size)
-          .bound(y, 0, (image.extent(1)/tile_size)*tile_size)
+    output.bound(x, 0, (image.dim(0).extent()/tile_size)*tile_size)
+          .bound(y, 0, (image.dim(0).extent()/tile_size)*tile_size)
           .tile(x, y, xi, yi, tile_size, tile_size);
 
     // Vectorize within tiles. We would also parallelize across tiles,
@@ -68,16 +68,16 @@ int main(int argc, char **argv) {
 
     output.compile_jit();
 
-    Image<bool> bitmap_buf(10, 10);
+    Buffer<bool> bitmap_buf(10, 10);
     bitmap_buf.fill(false);
     bitmap_buf(5, 5) = true;
     bitmap.set(bitmap_buf);
 
-    Image<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);
+    Buffer<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);
     image.set(image_buf);
 
     call_count = 0;
-    Image<float> result = output.realize(10 * tile_size, 10 * tile_size);
+    Buffer<float> result = output.realize(10 * tile_size, 10 * tile_size);
 
     // Force a reload of call_count
     my_powf(1, 1);

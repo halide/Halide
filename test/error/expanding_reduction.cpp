@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 
     g.infer_input_bounds(100, 100);
 
-    Image<int> in(input.get());
+    Buffer<int> in(input.get());
     assert(in.height() == 102 && in.width() == 100);
 
     return 0;

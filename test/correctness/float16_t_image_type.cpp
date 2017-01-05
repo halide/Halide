@@ -13,7 +13,7 @@ void h_assert(bool condition, const char* msg) {
 }
 
 int main() {
-    Halide::Image<float16_t> simple(/*x=*/10, /*y=*/3);
+    Halide::Buffer<float16_t> simple(/*x=*/10, /*y=*/3);
 
     h_assert(sizeof(float16_t) == 2, "float16_t has invalid size");
 

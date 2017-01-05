@@ -21,7 +21,7 @@ Expr mid3(Expr a, Expr b, Expr c) {
 
 int main(int arch, char **argv) {
     const int W = 256, H = 256;
-    Image<uint8_t> in(W, H);
+    Buffer<uint8_t> in(W, H);
     // Set up the input.
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -52,7 +52,8 @@ int main(int arch, char **argv) {
     // Schedule.
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        median3x3.gpu_tile(x, y, 16, 16);
+        Var xi("xi"), yi("yi");
+        median3x3.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         median3x3.hexagon().vectorize(x, 64);
     } else {
@@ -60,7 +61,7 @@ int main(int arch, char **argv) {
     }
 
     // Run the pipeline and verify the results are correct.
-    Image<uint8_t> out = median3x3.realize(W, H, target);
+    Buffer<uint8_t> out = median3x3.realize(W, H, target);
 
     for (int y = 1; y < H-1; y++) {
         for (int x = 1; x < W-1; x++) {

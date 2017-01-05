@@ -26,9 +26,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target, llvm::LLVMCo
 /** Create an llvm module containing the support code for ptx device. */
 std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target, llvm::LLVMContext *c);
 
-/** Create an llvm module containing the support code for renderscript. */
-std::unique_ptr<llvm::Module> get_initial_module_for_renderscript_device(Target target, llvm::LLVMContext *c);
-
 }  // namespace Internal
 }  // namespace Halide
 

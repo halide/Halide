@@ -19,8 +19,8 @@ int main(int argc, char **argv) {
 
     // Create input and output buffers. The input pixels are never accessed,
     // but we initialize them anyway.
-    Image<int> input(5);
-    Image<int> out(10);
+    Buffer<int> input(5);
+    Buffer<int> out(10);
     input.fill(0);
     out.fill(0);
 

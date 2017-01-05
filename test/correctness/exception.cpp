@@ -94,10 +94,10 @@ int main(int argc, char **argv) {
     }
     check_error(error);
     // Oops, forgot to bind im. Lets try again:
-    Image<float> an_image(10);
+    Buffer<float> an_image(10);
     lambda(x, x*7.0f).realize(an_image);
     im.set(an_image);
-    Image<float> result = f2.realize(10);
+    Buffer<float> result = f2.realize(10);
     for (size_t i = 0; i < 10; i++) {
         float correct = i * 14.0f;
         if (result(i) != correct) {
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
         Func f3;
         f3(x) = x;
         f3.vectorize(x, 8);
-        Image<int> result = f3.realize(4);
+        Buffer<int> result = f3.realize(4);
     } catch (const Halide::RuntimeError &e) {
         error = true;
         std::cout << "Expected runtime error:\n" << e.what() << "\n";

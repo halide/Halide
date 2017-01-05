@@ -141,7 +141,7 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
     init_vars(name);
 }
 
-RDom::RDom(const Image<> &b) {
+RDom::RDom(const Buffer<> &b) {
     string name = unique_name('r');
     static string var_names[] = {"x", "y", "z", "w"};
     std::vector<ReductionVariable> vars;
@@ -164,8 +164,8 @@ RDom::RDom(ImageParam p) {
     for (int i = 0; i < p.dimensions(); i++) {
         ReductionVariable var = {
             p.name() + "$" + var_names[i],
-            p.min(i),
-            p.extent(i)
+            p.dim(i).min(),
+            p.dim(i).extent()
         };
         vars.push_back(var);
     }

@@ -17,7 +17,7 @@ void blur(std::string suffix, ImageParam input) {
                        clamped(x, y, c) +
                        clamped(x + 1, y, c)) / 3;
 
-    Func result("result");
+    Func result("avg_filter");
     result(x, y, c) = (blur_x(x, y - 1, c) +
                        blur_x(x, y, c) +
                        blur_x(x, y + 1, c)) / 3;
@@ -29,8 +29,9 @@ void blur(std::string suffix, ImageParam input) {
           .reorder_storage(c, x, y)
           .reorder(c, x, y);
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        result.vectorize(c, 4)
-              .gpu_tile(x, y, 64, 64);
+        Var xi("xi"), yi("yi");
+        result.unroll(c)
+              .gpu_tile(x, y, xi, yi, 64, 64);
     } else {
         Var yi("yi");
         result
@@ -45,8 +46,8 @@ void blur(std::string suffix, ImageParam input) {
             .vectorize(x, 4);
     }
 
-    std::string filename("avg_filter");
-    result.compile_to_file(filename + suffix, {input});
+    std::string fn_name = std::string("avg_filter") + suffix;
+    result.compile_to_file(fn_name, {input}, fn_name);
 }
 
 int main(int argc, char** argv) {

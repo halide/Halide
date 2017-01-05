@@ -16,7 +16,7 @@ void test_saturating() {
     target_t target_min = std::numeric_limits<target_t>::lowest();
     target_t target_max = std::numeric_limits<target_t>::max();
 
-    Image<source_t> in(7);
+    Buffer<source_t> in(7);
     in(0) = (source_t)0;
     in(1) = (source_t)1;
     // This can intentionally change the value if source_t is unsigned
@@ -32,7 +32,7 @@ void test_saturating() {
 
     f(x) = saturating_cast<target_t>(in(x));
 
-    Image<target_t> result = f.realize(7);
+    Buffer<target_t> result = f.realize(7);
 
     for (int32_t i = 0; i < 7; i++) {
         bool source_signed = std::numeric_limits<source_t>::is_signed;
@@ -115,7 +115,7 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
     target_t target_min = std::numeric_limits<target_t>::min();
     target_t target_max = std::numeric_limits<target_t>::max();
 
-    Image<source_t> in(7);
+    Buffer<source_t> in(7);
     in(0) = (source_t)0;
     in(1) = (source_t)1;
     // This can intentionally change the value if source_t is unsigned
@@ -131,7 +131,7 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
 
     f(x) = cast_maker(in(x));
 
-    Image<target_t> result = f.realize(7);
+    Buffer<target_t> result = f.realize(7);
 
     for (int32_t i = 0; i < 7; i++) {
         bool source_signed = std::numeric_limits<source_t>::is_signed;

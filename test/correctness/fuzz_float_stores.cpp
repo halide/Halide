@@ -16,8 +16,8 @@ int main(int argc, char **argv) {
         f.vectorize(x, 8);
 
         // Pipelines that only use a few significant bits of the float should be unaffected
-        Image<float> im_ref = f.realize(size, target);
-        Image<float> im_fuzzed = f.realize(size, target_fuzzed);
+        Buffer<float> im_ref = f.realize(size, target);
+        Buffer<float> im_fuzzed = f.realize(size, target_fuzzed);
 
         for (int i = 0; i < im_ref.width(); i++) {
             // Test for exact floating point equality, which is exactly
@@ -36,8 +36,8 @@ int main(int argc, char **argv) {
         f(x) = sqrt(x - 42.3333333f) / 17.0f - tan(x);
         f.vectorize(x, 8);
 
-        Image<float> im_ref = f.realize(size, target);
-        Image<float> im_fuzzed = f.realize(size, target_fuzzed);
+        Buffer<float> im_ref = f.realize(size, target);
+        Buffer<float> im_fuzzed = f.realize(size, target_fuzzed);
 
         int differences = 0;
         for (int i = 0; i < im_ref.width(); i++) {

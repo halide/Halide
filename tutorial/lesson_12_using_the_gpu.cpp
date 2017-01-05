@@ -28,7 +28,7 @@ using namespace Halide::Tools;
 #include "clock.h"
 
 // Define some Vars to use.
-Var x, y, c, i;
+Var x, y, c, i, ii, xo, yo, xi, yi;
 
 // We're going to want to schedule a pipeline in several ways, so we
 // define the pipeline in a class so that we can recreate it several
@@ -36,9 +36,9 @@ Var x, y, c, i;
 class MyPipeline {
 public:
     Func lut, padded, padded16, sharpen, curved;
-    Image<uint8_t> input;
+    Buffer<uint8_t> input;
 
-    MyPipeline(Image<uint8_t> in) : input(in) {
+    MyPipeline(Buffer<uint8_t> in) : input(in) {
         // For this lesson, we'll use a two-stage pipeline that sharpens
         // and then applies a look-up-table (LUT).
 
@@ -130,9 +130,9 @@ public:
         // This is a very common scheduling pattern on the GPU, so
         // there's a shorthand for it:
 
-        // lut.gpu_tile(i, 16);
+        // lut.gpu_tile(i, block, thread, 16);
 
-        // Func::gpu_tile method is similar to Func::tile, except that
+        // Func::gpu_tile behaves the same as Func::tile, except that
         // it also specifies that the tile coordinates correspond to
         // GPU blocks, and the coordinates within each tile correspond
         // to GPU threads.
@@ -144,7 +144,7 @@ public:
               .unroll(c);
 
         // Compute curved in 2D 8x8 tiles using the GPU.
-        curved.gpu_tile(x, y, 8, 8);
+        curved.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
 
         // This is equivalent to:
         // curved.tile(x, y, xo, yo, xi, yi, 8, 8)
@@ -153,11 +153,10 @@ public:
 
         // We'll leave sharpen as inlined into curved.
 
-        // Compute the padded input as needed per GPU block, storing the
-        // intermediate result in shared memory. Var::gpu_blocks, and
-        // Var::gpu_threads exist to help you schedule producers within
-        // GPU threads and blocks.
-        padded.compute_at(curved, Var::gpu_blocks());
+        // Compute the padded input as needed per GPU block, storing
+        // the intermediate result in shared memory. In the schedule
+        // above xo corresponds to GPU blocks.
+        padded.compute_at(curved, xo);
 
         // Use the GPU threads for the x and y coordinates of the
         // padded input.
@@ -201,13 +200,13 @@ public:
     void test_performance() {
         // Test the performance of the scheduled MyPipeline.
 
-        Image<uint8_t> output(input.width(), input.height(), input.channels());
+        Buffer<uint8_t> output(input.width(), input.height(), input.channels());
 
         // Run the filter once to initialize any GPU runtime state.
         curved.realize(output);
 
         // Now take the best of 3 runs for timing.
-        double best_time;
+        double best_time = 0.0;
         for (int i = 0; i < 3; i++) {
 
             double t1 = current_time();
@@ -231,8 +230,8 @@ public:
         printf("%1.4f milliseconds\n", best_time);
     }
 
-    void test_correctness(Image<uint8_t> reference_output) {
-        Image<uint8_t> output =
+    void test_correctness(Buffer<uint8_t> reference_output) {
+        Buffer<uint8_t> output =
             curved.realize(input.width(), input.height(), input.channels());
 
         // Check against the reference output.
@@ -258,10 +257,10 @@ bool have_opencl_or_metal();
 
 int main(int argc, char **argv) {
     // Load an input image.
-    Image<uint8_t> input = load_image("images/rgb.png");
+    Buffer<uint8_t> input = load_image("images/rgb.png");
 
     // Allocated an image that will store the correct output
-    Image<uint8_t> reference_output(input.width(), input.height(), input.channels());
+    Buffer<uint8_t> reference_output(input.width(), input.height(), input.channels());
 
     printf("Testing performance on CPU:\n");
     MyPipeline p1(input);

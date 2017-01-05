@@ -27,10 +27,10 @@ void test_deinterleave() {
     // Allocate two 16 megapixel, 3 channel, 8-bit images -- input and output
 
     // Setup src to be RGB interleaved, with no extra padding between channels or rows.
-    Image<uint8_t> src_image = Image<uint8_t>::make_interleaved(1 << 12, 1 << 12, 3);
+    Buffer<uint8_t> src_image = Buffer<uint8_t>::make_interleaved(1 << 12, 1 << 12, 3);
 
     // Setup dst to be planar, with no extra padding between channels or rows.
-    Image<uint8_t> dst_image(1 << 12, 1 << 12, 3);
+    Buffer<uint8_t> dst_image(1 << 12, 1 << 12, 3);
 
     src_image.for_each_element([&](int x, int y) {
             src_image(x, y, 0) = 0;
@@ -60,7 +60,7 @@ void test_deinterleave() {
         });
 
     // Setup a semi-planar output case.
-    dst_image = Image<uint8_t>(1 << 12, 3, 1 << 12);
+    dst_image = Buffer<uint8_t>(1 << 12, 3, 1 << 12);
     dst_image.transpose(1, 2);
     dst_image.fill(0);
 
@@ -102,10 +102,10 @@ void test_interleave(bool fast) {
     // Allocate two 16 megapixel, 3 channel, 8-bit images -- input and output
 
     // Setup src to be planar
-    Image<uint8_t> src_image(1 << 12, 1 << 12, 3);
+    Buffer<uint8_t> src_image(1 << 12, 1 << 12, 3);
 
     // Setup dst to be interleaved
-    Image<uint8_t> dst_image = Image<uint8_t>::make_interleaved(1 << 12, 1 << 12, 3);
+    Buffer<uint8_t> dst_image = Buffer<uint8_t>::make_interleaved(1 << 12, 1 << 12, 3);
 
     src_image.for_each_element([&](int x, int y) {
             src_image(x, y, 0) = 0;

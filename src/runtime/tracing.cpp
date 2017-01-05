@@ -90,7 +90,6 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
                                      "Begin realization",
                                      "End realization",
                                      "Produce",
-                                     "Update",
                                      "Consume",
                                      "End consume",
                                      "Begin pipeline",

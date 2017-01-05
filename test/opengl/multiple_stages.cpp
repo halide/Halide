@@ -4,12 +4,8 @@ using namespace Halide;
 
 int main() {
 
-    // This test must be run with an OpenGL target
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL)) {
-        fprintf(stderr, "ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Func f,g,h;
     Var x, y, c;
@@ -20,7 +16,7 @@ int main() {
     h.bound(c, 0, 3).compute_root();
     g.bound(c, 0, 3).compute_root().glsl(x, y, c);
 
-    Image<uint8_t> result = f.realize(10, 10, 3);
+    Buffer<uint8_t> result = f.realize(10, 10, 3, target);
     result.copy_to_host();
 
     for (int i=0; i<10; i++) {
@@ -42,8 +38,7 @@ int main() {
     f2.bound(c, 0, 3).glsl(x, y, c).compute_root();
     g2.bound(c, 0, 3).glsl(x, y, c);
 
-    Image<float> result2 = g2.realize(10, 10, 3);
-
+    Buffer<float> result2 = g2.realize(10, 10, 3, target);
     for (int i=0; i<10; i++) {
         for (int j=0; j<10; j++) {
             for (int k=0; k<3; k++) {

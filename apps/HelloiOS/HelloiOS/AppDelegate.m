@@ -8,6 +8,7 @@
 
 #import "AppDelegate.h"
 #import "HalideView.h"
+#import "HalideViewController.h"
 #include <algorithm>
 #include "HalideRuntime.h"
 #include "reaction_diffusion_2_init.h"
@@ -19,6 +20,10 @@
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
     self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+
+    HalideViewController *halide_view_controller = [[HalideViewController alloc] init];
+
+    self.window.rootViewController = halide_view_controller;
         
     // Add a view for image output
     int image_width, image_height;
@@ -36,6 +41,7 @@
         [ self.window addSubview: output_image ];
         [ output_image setUserInteractionEnabled:true ];
     }
+    halide_view_controller.halide_view = output_image;
     
     // Add a view for text output
     UITextView *output_log = [ UITextView alloc ];

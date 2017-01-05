@@ -6,22 +6,22 @@
 
 #include <vector>
 using std::vector;
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Image<float> input(1024, 1024);
+    Buffer<float> input(1024, 1024);
 
     // Put some junk in the input. Keep it to small integers so the float averaging stays exact.
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
-            input(x, y) = ((x * 17 + y)/8) % 32;
+            input(x, y) = (float) (((x * 17 + y)/8) % 32);
         }
     }
 
-    vector<Image<float>> levels(10);
+    vector<Buffer<float>> levels(10);
 
     for (int l = 0; l < 10; l++) {
-        levels[l] = Image<float>(1024 >> l, 1024 >> l);
+        levels[l] = Buffer<float>(1024 >> l, 1024 >> l);
     }
 
     // Will throw a compiler error if we didn't compile the generator with 10 levels.

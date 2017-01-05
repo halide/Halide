@@ -53,11 +53,11 @@ def main():
     # inputs and outputs.
     input = ImageParam(UInt(8), 2)
 
-    # If we were jit-compiling, these would just be an int and an
-    # Image, but because we want to compile the pipeline once and
+    # If we were jit-compiling, these would just be an int and a
+    # Buffer, but because we want to compile the pipeline once and
     # have it work for any value of the parameter, we need to make a
     # Param object, which can be used like an Expr, and an ImageParam
-    # object, which can be used like an Image.
+    # object, which can be used like a Buffer.
 
     # Define the Func.
     brighter[x, y] = input[x, y] + offset
@@ -72,7 +72,7 @@ def main():
     # For AOT-compiled code, we need to explicitly declare the
     # arguments to the routine. This routine takes two. Arguments are
     # usually Params or ImageParams.
-    brighter.compile_to_file("lesson_10_halide", [input, offset])
+    brighter.compile_to_file("lesson_10_halide", [input, offset], "lesson_10_halide")
 
     print("Halide pipeline compiled, but not yet run.")
 

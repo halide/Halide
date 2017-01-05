@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 
         g.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = g.realize(100, 1000, 3);
+        Buffer<int> im = g.realize(100, 1000, 3);
 
         size_t expected_size = 101*4*sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 
         g.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = g.realize(100, 1000, 3);
+        Buffer<int> im = g.realize(100, 1000, 3);
 
         size_t expected_size = 101*1002*3*sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 
         g.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = g.realize(100, 1000);
+        Buffer<int> im = g.realize(100, 1000);
 
         size_t expected_size = 101*3*sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
 
         f.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = f.realize(1000, 1000);
+        Buffer<int> im = f.realize(1000, 1000);
 
         if (custom_malloc_size != 0) {
             printf("There should not have been a heap allocation\n");
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
 
         f.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = f.realize(1000, 1000);
+        Buffer<int> im = f.realize(1000, 1000);
 
         if (custom_malloc_size != 0) {
             printf("There should not have been a heap allocation\n");
@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
 
         f.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = f.realize(1000, 1000);
+        Buffer<int> im = f.realize(1000, 1000);
 
         // Halide allocates one extra scalar, so we account for that.
         size_t expected_size = 2*1002*4*sizeof(int) + sizeof(int);
@@ -217,7 +217,7 @@ int main(int argc, char **argv) {
 
         f.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = f.realize(1000, 1000);
+        Buffer<int> im = f.realize(1000, 1000);
 
         // Halide allocates one extra scalar, so we account for that.
         size_t expected_size = 1000*8*sizeof(int) + sizeof(int);
@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
 
         f.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = f.realize(1000, 1000);
+        Buffer<int> im = f.realize(1000, 1000);
 
         // Halide allocates one extra scalar, so we account for that.
         size_t expected_size = 2*1002*3*sizeof(int) + sizeof(int);
@@ -289,7 +289,7 @@ int main(int argc, char **argv) {
 
         f.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = f.realize(1000, 1000);
+        Buffer<int> im = f.realize(1000, 1000);
 
         // Halide allocates one extra scalar, so we account for that.
         size_t expected_size = 1000*2*sizeof(int) + sizeof(int);
@@ -322,7 +322,7 @@ int main(int argc, char **argv) {
 
         g.set_custom_allocator(my_malloc, my_free);
 
-        Image<int> im = g.realize(100, 1000, 3);
+        Buffer<int> im = g.realize(100, 1000, 3);
 
         size_t expected_size = 101*3*sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {

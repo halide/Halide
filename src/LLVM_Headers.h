@@ -25,9 +25,14 @@
 
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
+#include "llvm/Support/ErrorHandling.h"
 #include <llvm/Support/FileSystem.h>
-
+#if LLVM_VERSION >= 40
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#else
 #include <llvm/Bitcode/ReaderWriter.h>
+#endif
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Support/raw_ostream.h>
@@ -42,10 +47,11 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include <llvm/ADT/StringMap.h>
-#if !defined(WITH_NATIVE_CLIENT)
 #include <llvm/Object/ArchiveWriter.h>
-#endif
 #include <llvm/Object/ObjectFile.h>
 
 #if LLVM_VERSION >= 39
@@ -64,10 +70,6 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/IR/MDBuilder.h>
-
-#if defined(WITH_NATIVE_CLIENT)
-#include <llvm/Transforms/NaCl.h>
-#endif
 
 // No msvc warnings from llvm headers please
 #ifdef _MSC_VER

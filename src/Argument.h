@@ -6,13 +6,11 @@
  * generated halide pipeline
  */
 
-#include "BufferPtr.h"
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
+#include "Buffer.h"
 #include "runtime/HalideRuntime.h"
-#include "runtime/HalideBuffer.h"
-
 
 namespace Halide {
 
@@ -60,11 +58,12 @@ struct Argument {
     Expr def, min, max;
 
     Argument() : kind(InputScalar), dimensions(0) {}
-    Argument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions,
+    Argument(const std::string &_name, Kind _kind, const Type &_type, int _dimensions,
                 Expr _def = Expr(),
                 Expr _min = Expr(),
                 Expr _max = Expr()) :
-        name(_name), kind(_kind), dimensions(_dimensions), type(_type), def(_def), min(_min), max(_max) {
+        name(_name), kind(_kind), dimensions((uint8_t) _dimensions), type(_type), def(_def), min(_min), max(_max) {
+        internal_assert(_dimensions >= 0 && _dimensions <= 255);
         user_assert(!(is_scalar() && dimensions != 0))
             << "Scalar Arguments must specify dimensions of 0";
         user_assert(!(is_buffer() && def.defined()))
@@ -75,9 +74,9 @@ struct Argument {
             << "Scalar max must not be defined for Buffer Arguments";
     }
 
-    template<typename T, int D>
-    Argument(const Image<T, D> &im) :
-        name(Internal::BufferPtr(im).name()),
+    template<typename T>
+    Argument(Buffer<T> im) :
+        name(im.name()),
         kind(InputBuffer),
         dimensions(im.dimensions()),
         type(im.type()) {}

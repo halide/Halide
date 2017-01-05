@@ -23,8 +23,6 @@ class ImageParam : public OutputImageParam {
     /** Helper function to initialize the Func representation of this ImageParam. */
     EXPORT void init_func();
 
-    EXPORT void set(Internal::BufferPtr b);
-    
 public:
 
     /** Construct a nullptr image parameter handle. */
@@ -40,21 +38,17 @@ public:
 
     /** Bind an Image to this ImageParam. Only relevant for jitting */
     // @{
-    template<typename T, int D>
-    NO_INLINE void set(const Image<T, D> &im) {
-        set(Internal::BufferPtr(im));
-    }
+    EXPORT void set(Buffer<> im);
     // @}
 
-    /** Get the Image bound to this ImageParam. Only relevant for jitting */
+    /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting. */
     // @{
-    EXPORT const Image<> &get() const;
-    EXPORT Image<> &get();
+    EXPORT Buffer<> get() const;
     // @}
 
-    /** Unbind any bound Image */
+    /** Unbind any bound Buffer */
     EXPORT void reset();
-    
+
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
      * variables to match the dimensionality of the image
@@ -113,8 +107,9 @@ public:
      \code
      ImageParam img(Int(32), 2);
      output(x, y) = img(y, x);
-     output.compute_root().gpu_tile(x, y, 8, 8);
-     img.in().compute_at(output, Var::gpu_blocks()).unroll(_0, 2).unroll(_1, 2).gpu_threads(x, y);
+     Var tx, ty;
+     output.compute_root().gpu_tile(x, y, tx, ty, 8, 8);
+     img.in().compute_at(output, x).unroll(_0, 2).unroll(_1, 2).gpu_threads(x, y);
      \endcode
      *
      * Note that we use implicit vars to name the dimensions of the wrapper Func

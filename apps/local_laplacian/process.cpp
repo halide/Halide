@@ -7,7 +7,8 @@
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc < 7) {
@@ -16,22 +17,22 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Image<uint16_t> input = Tools::load_image(argv[1]);
+    Buffer<uint16_t> input = load_image(argv[1]);
     int levels = atoi(argv[2]);
     float alpha = atof(argv[3]), beta = atof(argv[4]);
-    Image<uint16_t> output(input.width(), input.height(), 3);
+    Buffer<uint16_t> output(input.width(), input.height(), 3);
     int timing = atoi(argv[5]);
 
     // Timing code
     double best = benchmark(timing, 1, [&]() {
-        local_laplacian(levels, alpha/(levels-1), beta, input, output);
+        local_laplacian(input, levels, alpha/(levels-1), beta, output);
     });
     printf("%gus\n", best * 1e6);
 
 
-    local_laplacian(levels, alpha/(levels-1), beta, input, output);
+    local_laplacian(input, levels, alpha/(levels-1), beta, output);
 
-    Tools::save_image(output, argv[6]);
+    save_image(output, argv[6]);
 
     return 0;
 }

@@ -110,13 +110,13 @@ private:
 
     void visit(const ProducerConsumer *op) {
         in_pipeline.push(op->name, 0);
-        if (op->name != buffer) {
-            op->produce.accept(this);
-            if (op->update.defined()) {
-                op->update.accept(this);
+        if (op->is_producer) {
+            if (op->name != buffer) {
+                op->body.accept(this);
             }
+        } else {
+            IRVisitor::visit(op);
         }
-        op->consume.accept(this);
         in_pipeline.pop(op->name);
     }
 
@@ -313,21 +313,13 @@ private:
         // vectorized we should bail out.
         IRMutator::visit(op);
 
-        op = stmt.as<ProducerConsumer>();
-        internal_assert(op);
-        if (op->name == buffer) {
-            Stmt produce = op->produce, update = op->update;
-            if (update.defined()) {
-                Expr predicate_var = Variable::make(Bool(), buffer + ".needed");
-                Stmt produce = IfThenElse::make(predicate_var, op->produce);
-                Stmt update = IfThenElse::make(predicate_var, op->update);
-                stmt = ProducerConsumer::make(op->name, produce, update, op->consume);
-                stmt = LetStmt::make(buffer + ".needed", compute_predicate, stmt);
-            } else {
-                Stmt produce = IfThenElse::make(compute_predicate, op->produce);
-                stmt = ProducerConsumer::make(op->name, produce, Stmt(), op->consume);
+        if (op->is_producer) {
+            op = stmt.as<ProducerConsumer>();
+            internal_assert(op);
+            if (op->name == buffer) {
+                Stmt body = IfThenElse::make(compute_predicate, op->body);
+                stmt = ProducerConsumer::make(op->name, op->is_producer, body);
             }
-
         }
     }
 };
@@ -485,10 +477,10 @@ class MightBeSkippable : public IRVisitor {
     }
 
     void visit(const ProducerConsumer *op) {
-        if (op->name == func) {
+        if (!op->is_producer && (op->name == func)) {
             bool old_result = result;
             result = true;
-            op->consume.accept(this);
+            op->body.accept(this);
             result = result || old_result;
         } else {
             IRVisitor::visit(op);

@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     Var x;
 
     // Make some input data in the range [-99, 0]
-    Image<uint8_t> input(100);
+    Buffer<uint8_t> input(100);
     input.set_min(-99);
     lambda(x, cast<uint8_t>(x*x)).realize(input);
 
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     Var xi;
     h.vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
-    Image<uint8_t> result = h.realize(100);
+    Buffer<uint8_t> result = h.realize(100);
 
     for (int i = 0; i < 100; i++) {
         uint8_t correct = 4*i*i;

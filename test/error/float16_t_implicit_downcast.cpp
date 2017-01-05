@@ -16,12 +16,12 @@ int main() {
     Halide::Func f;
     Halide::Var x, y;
 
-    // This should throw an error because downcasting will loose precision which
+    // This should throw an error because downcasting will lose precision which
     // should only happen if the user explicitly asks for it
     f(x, y) = 0.1f;
 
     // Use JIT for computation
-    Image<float16_t> simple = f.realize(10, 3);
+    Buffer<float16_t> simple = f.realize(10, 3);
 
     // Assert some basic properties of the image
     h_assert(simple.extent(0) == 10, "invalid width");

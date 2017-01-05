@@ -8,13 +8,13 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-set(LLVM_BIN "llvm3.6/bin/Debug/"
+set(LLVM_BIN "llvm3.7/bin/Debug/"
   CACHE PATH "Path to LLVM bin directory")
-set(LLVM_LIB "llvm3.6/lib/Debug/"
+set(LLVM_LIB "llvm3.7/lib/Debug/"
   CACHE PATH "Path to LLVM lib directory")
-set(LLVM_INCLUDE "llvm3.6/include/"
+set(LLVM_INCLUDE "llvm3.7/include/"
   CACHE PATH "Path to LLVM include directory")
-set(LLVM_VERSION "36" CACHE STRING "First two digits of LLVM version (omitting '.')")
+set(LLVM_VERSION "37" CACHE STRING "First two digits of LLVM version (omitting '.')")
 
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
@@ -60,13 +60,12 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 3.5 is \"35\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 3.7 is \"37\"")
 endif()
-if (LLVM_VERSION LESS 35)
-  message(FATAL_ERROR "LLVM version must be 3.5 or newer")
+if (LLVM_VERSION LESS 37)
+  message(FATAL_ERROR "LLVM version must be 3.7 or newer")
 endif()
 
-option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
 option(TARGET_X86 "Include x86 target" ON)
 option(TARGET_ARM "Include ARM target" ON)
 option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ON)
@@ -88,12 +87,23 @@ option(HALIDE_ENABLE_RTTI "Build with RTTI enabled" OFF)
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
+  if (MSVC)
+  else()
+    target_compile_options("${name}" PUBLIC "-std=c++11") # Halide clients need C++11
+    if(NOT HALIDE_ENABLE_RTTI)
+      target_compile_options("${name}" PUBLIC "-fno-rtti")
+    endif()
+  endif()
   target_link_libraries("${name}" PRIVATE Halide)
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
-    set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
+    # 4006: "already defined, second definition ignored"
+    # 4088: "/FORCE used, image may not work"
+    # (Note that MSVC apparently considers 4088 too important to allow us to ignore it;
+    # I'm nevertheless leaving this here to document that we don't care about it.)
+    set_target_properties(${name} PROPERTIES LINK_FLAGS "/ignore:4006 /ignore:4088")
     target_compile_definitions("${name}" PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_link_libraries("${name}" PRIVATE Kernel32)
   endif()

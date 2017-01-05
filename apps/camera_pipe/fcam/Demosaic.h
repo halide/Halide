@@ -17,8 +17,8 @@ namespace FCam {
  * it uses the frame's platform's \ref Platform::rawToRGBColorMatrix
  * method to retrieve the correct white-balanced color conversion
  * matrix. */
-void demosaic(Halide::Image<uint16_t> input,
-              Halide::Image<uint8_t> out,
+void demosaic(Halide::Runtime::Buffer<uint16_t> input,
+              Halide::Runtime::Buffer<uint8_t> out,
               float colorTemp = 3700.0f,
               float contrast = 50.0f,
               bool denoise = true, int blackLevel = 25,

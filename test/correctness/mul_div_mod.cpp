@@ -169,11 +169,11 @@ BIG minimum() {
 // The left pattern occurs when unique is odd; the right pattern when unique is even.
 
 template<typename T, typename BIG>
-Image<T> init(Type t, int unique, int width, int height) {
+Buffer<T> init(Type t, int unique, int width, int height) {
     if (width < 2) width = 2;
     if (height < 2) height = 2;
 
-    Image<T> result(width, height);
+    Buffer<T> result(width, height);
 
     if (t.is_int()) {
         // Signed integer type with specified number of bits.
@@ -281,12 +281,12 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
     bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
-    Image<T1> a = init<T1, BIG>(t1, 1, WIDTH, HEIGHT);
-    Image<T2> b = init<T2, BIG>(t2, 2, WIDTH, HEIGHT);
+    Buffer<T1> a = init<T1, BIG>(t1, 1, WIDTH, HEIGHT);
+    Buffer<T2> b = init<T2, BIG>(t2, 2, WIDTH, HEIGHT);
 
     // Compute the multiplication, check that the results match.
     Func f;
-    Var x, y;
+    Var x, y, xi, yi;
     f(x, y) = cast(rt, a(x, y)) * cast(rt, b(x, y));
     if (vector_width > 1) {
         f.vectorize(x, vector_width);
@@ -295,14 +295,14 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
         case CPU:
             break;
         case TiledGPU:
-            f.compute_root().gpu_tile(x, y, 16, 16);
+            f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
             break;
         case Hexagon:
             f.compute_root().hexagon();
             break;
     };
 
-    Image<RT> r = f.realize(WIDTH, HEIGHT, target);
+    Buffer<RT> r = f.realize(WIDTH, HEIGHT, target);
 
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -352,8 +352,8 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
     bool success = true;
 
     // The parameter bits can be used to control the maximum data value.
-    Image<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
-    Image<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
+    Buffer<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
+    Buffer<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.
@@ -371,7 +371,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
 
     // Compute division and mod, and check they satisfy the requirements of Euclidean division.
     Func f;
-    Var x, y;
+    Var x, y, xi, yi;
     f(x, y) = Tuple(a(x, y) / b(x, y), a(x, y) % b(x, y));  // Using Halide division operation.
     if (vector_width > 1) {
         f.vectorize(x, vector_width);
@@ -380,7 +380,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
         case CPU:
             break;
         case TiledGPU:
-            f.compute_root().gpu_tile(x, y, 16, 16);
+            f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
             break;
         case Hexagon:
             f.compute_root().hexagon();
@@ -388,8 +388,8 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
     };
 
     Realization R = f.realize(WIDTH, HEIGHT, target);
-    Image<T> q(R[0]);
-    Image<T> r(R[1]);
+    Buffer<T> q(R[0]);
+    Buffer<T> r(R[1]);
 
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -452,9 +452,9 @@ bool f_mod() {
     Type t = type_of<T>();
     bool success = true;
 
-    Image<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
-    Image<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
-    Image<T> out(WIDTH,HEIGHT);
+    Buffer<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
+    Buffer<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
+    Buffer<T> out(WIDTH,HEIGHT);
 
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.

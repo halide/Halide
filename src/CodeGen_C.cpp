@@ -604,12 +604,9 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         stream << "\n\n";
     }
-
-    if (is_header()) {
-    }
 }
 
-void CodeGen_C::compile(const BufferPtr &buffer) {
+void CodeGen_C::compile(const Buffer<> &buffer) {
     // Don't define buffers in headers.
     if (is_header()) {
         return;
@@ -1343,20 +1340,13 @@ void CodeGen_C::visit(const AssertStmt *op) {
 }
 
 void CodeGen_C::visit(const ProducerConsumer *op) {
-
     do_indent();
-    stream << "// produce " << op->name << '\n';
-    print_stmt(op->produce);
-
-    if (op->update.defined()) {
-        do_indent();
-        stream << "// update " << op->name << '\n';
-        print_stmt(op->update);
+    if (op->is_producer) {
+        stream << "// produce " << op->name << '\n';
+    } else {
+        stream << "// consume " << op->name << '\n';
     }
-
-    do_indent();
-    stream << "// consume " << op->name << '\n';
-    print_stmt(op->consume);
+    print_stmt(op->body);
 }
 
 void CodeGen_C::visit(const For *op) {

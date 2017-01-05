@@ -82,7 +82,7 @@ using namespace Halide::Runtime::Internal;
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
-extern WEAK halide_device_interface opengl_device_interface;
+extern WEAK halide_device_interface_t opengl_device_interface;
 
 WEAK const char *gl_error_name(int32_t err) {
   const char *result;
@@ -227,8 +227,8 @@ WEAK GlobalState global_state;
 class GLStateSaver {
     public:
 
-    GLStateSaver() { save(); }
-    ~GLStateSaver() { restore(); }
+    __attribute__((always_inline)) GLStateSaver() { save(); }
+    __attribute__((always_inline)) ~GLStateSaver() { restore(); }
 
     private:
 
@@ -2062,7 +2062,7 @@ WEAK int halide_opengl_device_and_host_free(void *user_context, struct buffer_t 
     return halide_default_device_and_host_free(user_context, buf, &opengl_device_interface);
 }
 
-WEAK const halide_device_interface *halide_opengl_device_interface() {
+WEAK const halide_device_interface_t *halide_opengl_device_interface() {
     return &opengl_device_interface;
 }
 
@@ -2180,7 +2180,7 @@ WEAK void halide_opengl_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
-WEAK halide_device_interface opengl_device_interface = {
+WEAK halide_device_interface_t opengl_device_interface = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_opengl_device_malloc,

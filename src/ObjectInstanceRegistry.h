@@ -25,6 +25,8 @@ public:
         Invalid,
         Generator,
         GeneratorParam,
+        GeneratorInput,
+        GeneratorOutput,
         FilterParam
     };
 

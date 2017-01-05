@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         f.set_custom_trace(&my_trace);
         f.trace_stores();
 
-        Image<int> out(100);
+        Buffer<int> out(100);
 
         // Just check that all the specialization didn't change the output.
         param.set(true);
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
         }
 
         // Now try a smaller input
-        out = Image<int>(3);
+        out = Buffer<int>(3);
         param.set(true);
         reset_trace();
         f.realize(out);
@@ -215,7 +215,7 @@ int main(int argc, char **argv) {
     {
         // Specialize for interleaved vs planar inputs
         ImageParam im(Float(32), 1);
-        im.set_stride(0, Expr()); // unconstrain the stride
+        im.dim(0).set_stride(Expr()); // unconstrain the stride
 
         Func f;
         Var x;
@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
         f(x) = im(x);
 
         // If we have a stride of 1 it's worth vectorizing, but only if the width is also > 8.
-        f.specialize(im.stride(0) == 1 && im.width() >= 8).vectorize(x, 8);
+        f.specialize(im.dim(0).stride() == 1 && im.width() >= 8).vectorize(x, 8);
 
         f.trace_stores();
         f.set_custom_trace(&my_trace);
@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
         }
 
         // Check we don't crash with a larger input, and that it uses vector stores
-        Image<float> image(100);
+        Buffer<float> image(100);
         im.set(image);
 
         reset_trace();
@@ -322,7 +322,7 @@ int main(int argc, char **argv) {
         f.specialize(param);
 
         param.set(false);
-        Image<float> image(10);
+        Buffer<float> image(10);
         im.set(image);
         // The image is too small, but that should be OK, because the
         // param is false so the image will never be used.
@@ -374,15 +374,15 @@ int main(int argc, char **argv) {
         h(x) = g(x);
         out(x) = h(x);
 
-        Expr w = out.output_buffer().extent(0);
-        out.output_buffer().set_min(0, 0);
+        Expr w = out.output_buffer().dim(0).extent();
+        out.output_buffer().dim(0).set_min(0);
 
         f.compute_root().specialize(w >= 4).vectorize(x, 4);
         g.compute_root().vectorize(x, 4);
         h.compute_root().vectorize(x, 4);
         out.specialize(w >= 4).vectorize(x, 4);
 
-        Image<int> input(3), output(3);
+        Buffer<int> input(3), output(3);
         // Shouldn't throw a bounds error:
         im.set(input);
         out.realize(output);
@@ -406,7 +406,7 @@ int main(int argc, char **argv) {
             pass1.mutate(ff.body);
         }
 
-        Image<int> input(3, 3), output(3, 3);
+        Buffer<int> input(3, 3), output(3, 3);
         // Shouldn't throw a bounds error:
         im.set(input);
         out.realize(output);
@@ -435,7 +435,7 @@ int main(int argc, char **argv) {
             pass2.mutate(ff.body);
         }
 
-        Image<int> input(3, 3), output(3, 3);
+        Buffer<int> input(3, 3), output(3, 3);
         // Shouldn't throw a bounds error:
         im.set(input);
         out.realize(output);

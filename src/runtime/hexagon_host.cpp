@@ -14,7 +14,7 @@ struct ion_device_handle {
 
 WEAK halide_mutex thread_lock = { { 0 } };
 
-extern WEAK halide_device_interface hexagon_device_interface;
+extern WEAK halide_device_interface_t hexagon_device_interface;
 
 // Define dynamic version of hexagon_remote/halide_hexagon_remote.h
 typedef struct _remote_buffer__seq_octet _remote_buffer__seq_octet;
@@ -33,6 +33,8 @@ typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
 typedef int (*remote_power_fn)();
+typedef int (*remote_power_mode_fn)(int);
+typedef int (*remote_power_perf_fn)(int, unsigned int, unsigned int, int, unsigned int, unsigned int, int, int);
 
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
@@ -45,6 +47,8 @@ WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 WEAK remote_poll_log_fn remote_poll_log = NULL;
 WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
 WEAK remote_power_fn remote_power_hvx_on = NULL;
+WEAK remote_power_mode_fn remote_power_hvx_on_mode = NULL;
+WEAK remote_power_perf_fn remote_power_hvx_on_perf = NULL;
 WEAK remote_power_fn remote_power_hvx_off = NULL;
 
 WEAK host_malloc_init_fn host_malloc_init = NULL;
@@ -129,6 +133,8 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
     get_symbol(user_context, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
+    get_symbol(user_context, "halide_hexagon_remote_power_hvx_on_mode", remote_power_hvx_on_mode, /* required */ false);
+    get_symbol(user_context, "halide_hexagon_remote_power_hvx_on_perf", remote_power_hvx_on_perf, /* required */ false);
     get_symbol(user_context, "halide_hexagon_remote_power_hvx_off", remote_power_hvx_off, /* required */ false);
 
     host_malloc_init();
@@ -656,6 +662,76 @@ WEAK int halide_hexagon_power_hvx_on(void *user_context) {
     return 0;
 }
 
+WEAK int halide_hexagon_power_hvx_on_mode(void *user_context, halide_hvx_power_mode_t mode) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
+    debug(user_context) << "halide_hexagon_power_hvx_on_mode\n";
+    if (!remote_power_hvx_on_mode) {
+        // The power on mode function is not available in this version of the
+        // runtime.  Fallback to the default power on function.
+        return halide_hexagon_power_hvx_on(user_context);
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    debug(user_context) << "    remote_power_hvx_on_mode -> ";
+    result = remote_power_hvx_on_mode(mode);
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "remote_power_hvx_on_mode failed.\n";
+        return result;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
+WEAK int halide_hexagon_power_hvx_on_perf(void *user_context, halide_hvx_power_perf_t *perf) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
+    debug(user_context) << "halide_hexagon_power_hvx_on_perf\n";
+    if (!remote_power_hvx_on_perf) {
+        // The power on perf function is not available in this version of the
+        // runtime.  Fallback to the default power on function.
+        return halide_hexagon_power_hvx_on(user_context);
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    debug(user_context) << "    remote_power_hvx_on_perf -> ";
+    result = remote_power_hvx_on_perf(perf->set_mips,
+                                      perf->mipsPerThread,
+                                      perf->mipsTotal,
+                                      perf->set_bus_bw,
+                                      perf->bwMegabytesPerSec,
+                                      perf->busbwUsagePercentage,
+                                      perf->set_latency,
+                                      perf->latency);
+
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "remote_power_hvx_on_perf failed.\n";
+        return result;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
 WEAK int halide_hexagon_power_hvx_off(void *user_context) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
@@ -691,7 +767,7 @@ WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * 
     halide_hexagon_power_hvx_off(user_context);
 }
 
-WEAK const halide_device_interface *halide_hexagon_device_interface() {
+WEAK const halide_device_interface_t *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
 }
 
@@ -728,7 +804,7 @@ WEAK void halide_hexagon_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
-WEAK halide_device_interface hexagon_device_interface = {
+WEAK halide_device_interface_t hexagon_device_interface = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_hexagon_device_malloc,

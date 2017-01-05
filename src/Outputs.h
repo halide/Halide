@@ -56,7 +56,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also an object file with the given name. */
-    Outputs object(const std::string &object_name) {
+    Outputs object(const std::string &object_name) const {
         Outputs updated = *this;
         updated.object_name = object_name;
         return updated;
@@ -64,7 +64,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also an assembly file with the given name. */
-    Outputs assembly(const std::string &assembly_name) {
+    Outputs assembly(const std::string &assembly_name) const {
         Outputs updated = *this;
         updated.assembly_name = assembly_name;
         return updated;
@@ -72,7 +72,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also an llvm bitcode file with the given name. */
-    Outputs bitcode(const std::string &bitcode_name) {
+    Outputs bitcode(const std::string &bitcode_name) const {
         Outputs updated = *this;
         updated.bitcode_name = bitcode_name;
         return updated;
@@ -80,7 +80,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also an llvm assembly file with the given name. */
-    Outputs llvm_assembly(const std::string &llvm_assembly_name) {
+    Outputs llvm_assembly(const std::string &llvm_assembly_name) const {
         Outputs updated = *this;
         updated.llvm_assembly_name = llvm_assembly_name;
         return updated;
@@ -88,7 +88,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also a C header file with the given name. */
-    Outputs c_header(const std::string &c_header_name) {
+    Outputs c_header(const std::string &c_header_name) const {
         Outputs updated = *this;
         updated.c_header_name = c_header_name;
         return updated;
@@ -96,7 +96,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also a C source file with the given name. */
-    Outputs c_source(const std::string &c_source_name) {
+    Outputs c_source(const std::string &c_source_name) const {
         Outputs updated = *this;
         updated.c_source_name = c_source_name;
         return updated;
@@ -104,7 +104,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also a stmt file with the given name. */
-    Outputs stmt(const std::string &stmt_name) {
+    Outputs stmt(const std::string &stmt_name) const {
         Outputs updated = *this;
         updated.stmt_name = stmt_name;
         return updated;
@@ -112,7 +112,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also a stmt.html file with the given name. */
-    Outputs stmt_html(const std::string &stmt_html_name) {
+    Outputs stmt_html(const std::string &stmt_html_name) const {
         Outputs updated = *this;
         updated.stmt_html_name = stmt_html_name;
         return updated;
@@ -120,7 +120,7 @@ struct Outputs {
 
     /** Make a new Outputs struct that emits everything this one does
      * and also a static library file with the given name. */
-    Outputs static_library(const std::string &static_library_name) {
+    Outputs static_library(const std::string &static_library_name) const {
         Outputs updated = *this;
         updated.static_library_name = static_library_name;
         return updated;

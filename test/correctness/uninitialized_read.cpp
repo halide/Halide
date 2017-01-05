@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 
     // One pixel of this is needed.
     h(x) = g(x) + 2;
-    h.output_buffer().set_bounds(0, 0, 1);
+    h.output_buffer().dim(0).set_bounds(0, 1);
 
     f.trace_realizations();
     h.set_custom_trace(&my_trace);

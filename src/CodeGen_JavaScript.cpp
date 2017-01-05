@@ -458,7 +458,7 @@ void CodeGen_JavaScript::compile(const LoweredFunc &f) {
            << "}\n";
 }
 
-void CodeGen_JavaScript::compile(const BufferPtr &buffer) {
+void CodeGen_JavaScript::compile(const Buffer<> &buffer) {
     string name = print_name(buffer.name());
     buffer_t b = *(buffer.raw_buffer());
 
@@ -1832,17 +1832,7 @@ void CodeGen_JavaScript::visit(const AssertStmt *op) {
 void CodeGen_JavaScript::visit(const ProducerConsumer *op) {
     do_indent();
     stream << "// produce " << op->name << '\n';
-    print_stmt(op->produce);
-
-    if (op->update.defined()) {
-        do_indent();
-        stream << "// update " << op->name << '\n';
-        print_stmt(op->update);
-    }
-
-    do_indent();
-    stream << "// consume " << op->name << '\n';
-    print_stmt(op->consume);
+    print_stmt(op->body);
 }
 
 void CodeGen_JavaScript::visit(const For *op) {
@@ -1990,7 +1980,7 @@ void CodeGen_JavaScript::test() {
 
     ostringstream source;
     CodeGen_JavaScript cg(source);
-    cg.compile(s, "test1", args, vector<BufferPtr>());
+    cg.compile(s, "test1", args, vector<Buffer<>>());
 
     string src = source.str();
     string correct_source = preamble +

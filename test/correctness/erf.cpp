@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     f(x) = erf((x-50000)/10000.0f);
     f.vectorize(x, 8);
 
-    Image<float> im = f.realize(100000);
+    Buffer<float> im = f.realize(100000);
 
     int max_err = 0;
     float max_err_x = 0;

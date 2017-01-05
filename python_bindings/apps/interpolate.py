@@ -134,18 +134,18 @@ def get_interpolate(input, levels):
 
         # Some gpus don't have enough memory to process the entire
         # image, so we process the image in tiles.
-        yo, yi, xo, xi = Var('yo'), Var('yi'), Var('xo'), Var('xi')
+        yo, yi, xo, xi, ci = Var('yo'), Var('yi'), Var('xo'), Var("ci")
         final.reorder(c, x, y).bound(c, 0, 3).vectorize(x, 4)
         final.tile(x, y, xo, yo, xi, yi, input.width()/4, input.height()/4)
-        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16, GPU_Default).unroll(c)
+        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, xi, yi, 16, 16, GPU_Default).unroll(c)
 
         # Start from level 1 to save memory - level zero will be computed on demand
         for l in range(1, levels):
             tile_size = 32 >> l;
             if tile_size < 1: tile_size = 1
             if tile_size > 16: tile_size = 16
-            downsampled[l].compute_root().gpu_tile(x, y, c, tile_size, tile_size, 4, GPU_Default)
-            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4, GPU_Default)
+            downsampled[l].compute_root().gpu_tile(x, y, c, xi, yi, ci, tile_size, tile_size, 4, GPU_Default)
+            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, xi, yi, ci, tile_size, tile_size, 4, GPU_Default)
 
     else:
         print("No schedule with this number.")
@@ -180,7 +180,7 @@ def main():
     # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
     assert input_data.shape[2] == 4
-    input_image = Image(input_data)
+    input_image = Buffer(input_data)
     input.set(input_image)
 
     input_width, input_height = input_data.shape[:2]
@@ -190,7 +190,7 @@ def main():
     t1 = datetime.now()
     print('Interpolated in %.5f secs' % (t1-t0).total_seconds())
 
-    output_data = image_to_ndarray(output_image)
+    output_data = buffer_to_ndarray(output_image)
 
     # save results
     input_path = "interpolate_input.png"

@@ -109,7 +109,6 @@ void defineExpr() {
         .value("CUDA", h::DeviceAPI::CUDA)
         .value("OpenCL", h::DeviceAPI::OpenCL)
         .value("GLSL", h::DeviceAPI::GLSL)
-        .value("Renderscript", h::DeviceAPI::Renderscript)
         .export_values();
 
     return;

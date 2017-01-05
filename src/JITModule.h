@@ -20,24 +20,12 @@ class Type;
 
 namespace Halide {
 
+struct ExternCFunction;
+struct JITExtern;
 struct Target;
 class Module;
 struct JITExtern;
 
-// TODO: Consider moving these two types elsewhere and seeing if they
-// can be combined with other types used for argument handling, or used
-// elsewhere.
-struct ScalarOrBufferT {
-    bool is_buffer;
-    Type scalar_type; // Only meaningful if is_buffer is false.
-    ScalarOrBufferT() : is_buffer(false) { }
-};
-
-struct ExternSignature {
-    bool is_void_return;
-    Type ret_type;
-    std::vector<ScalarOrBufferT> arg_types;
-};
 
 namespace Internal {
 
@@ -126,7 +114,7 @@ struct JITModule {
      * info into an LLVM type, which allows type safe linkage of
      * external routines. */
     EXPORT Symbol add_extern_for_export(const std::string &name,
-                                        const ExternSignature &signature, void *address);
+                                        const ExternCFunction &extern_c_function);
 
     /** Look up a symbol by name in this module or its dependencies. */
     EXPORT Symbol find_symbol_by_name(const std::string &) const;

@@ -15,13 +15,14 @@ int main(int argc, char **argv) {
     f(x) = Tuple(x, sin(x));
 
     // These should be the same size
-    Image<int> x_out(100);
-    Image<float> sin_x_out(101);
+    Buffer<int> x_out(100);
+    Buffer<float> sin_x_out(101);
 
     f.set_error_handler(&halide_error);
     error_occurred = false;
 
-    f.realize(Realization(x_out, sin_x_out));
+    Realization r(x_out, sin_x_out);
+    f.realize(r);
 
     if (!error_occurred) {
         printf("There should have been an error\n");

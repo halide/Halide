@@ -14,7 +14,7 @@
 #include <iostream>
 #include <random>
 #include <string>
-#include "Halide.h"
+#include "HalideBuffer.h"
 #include "halide_blas.h"
 #include "clock.h"
 #include "macros.h"
@@ -23,8 +23,8 @@
 template<class T>
 struct BenchmarksBase {
     typedef T Scalar;
-    typedef Halide::Buffer Vector;
-    typedef Halide::Buffer Matrix;
+    typedef Halide::Runtime::Buffer<T> Vector;
+    typedef Halide::Runtime::Buffer<T> Matrix;
 
     std::random_device rand_dev;
     std::default_random_engine rand_eng{rand_dev()};
@@ -37,8 +37,8 @@ struct BenchmarksBase {
     }
 
     Vector random_vector(int N) {
-        Vector buff(Halide::type_of<T>(), N);
-        Scalar *x = (Scalar*)buff.host_ptr();
+        Vector buff(N);
+        Scalar *x = (Scalar*)buff.data();
         for (int i=0; i<N; ++i) {
             x[i] = random_scalar();
         }
@@ -46,8 +46,8 @@ struct BenchmarksBase {
     }
 
     Matrix random_matrix(int N) {
-        Matrix buff(Halide::type_of<T>(), N, N);
-        Scalar *A = (Scalar*)buff.host_ptr();
+        Matrix buff(N, N);
+        Scalar *A = (Scalar*)buff.data();
         for (int i=0; i<N*N; ++i) {
             A[i] = random_scalar();
         }
@@ -101,10 +101,10 @@ struct BenchmarksBase {
 struct BenchmarksFloat : public BenchmarksBase<float> {
     BenchmarksFloat(std::string n) :
             BenchmarksBase(n),
-            result(Halide::Float(32), 1)
+            result(1)
     {}
 
-    Halide::Buffer result;
+    Halide::Runtime::Buffer<float> result;
 
     L1Benchmark(copy, "s", halide_scopy(x.raw_buffer(), y.raw_buffer()))
     L1Benchmark(scal, "s", halide_sscal(alpha, x.raw_buffer()))
@@ -136,10 +136,10 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 struct BenchmarksDouble : public BenchmarksBase<double> {
     BenchmarksDouble(std::string n) :
             BenchmarksBase(n),
-            result(Halide::Float(64), 1)
+            result(1)
     {}
 
-    Halide::Buffer result;
+    Halide::Runtime::Buffer<double> result;
 
     L1Benchmark(copy, "d", halide_dcopy(x.raw_buffer(), y.raw_buffer()))
     L1Benchmark(scal, "d", halide_dscal(alpha, x.raw_buffer()))

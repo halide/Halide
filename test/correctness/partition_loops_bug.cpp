@@ -4,7 +4,7 @@
 
 using namespace Halide;
 
-Image<double> test(bool with_vectorize) {
+Buffer<double> test(bool with_vectorize) {
     ImageParam input(Float(64), 2);
 
     Func output;
@@ -21,13 +21,17 @@ Image<double> test(bool with_vectorize) {
         output.vectorize(y,4);
     }
 
-    Image<double> img = lambda(x, y, Expr(1.0)).realize(4, 4);
+    Buffer<double> img = lambda(x, y, Expr(1.0)).realize(4, 4);
     input.set(img);
 
-    Image<double> result(4, 4);
+    Buffer<double> result(4, 4);
 
-    input.set_bounds(0, 0, 4).set_bounds(1, 0, 4);
-    output.output_buffer().set_bounds(0, 0, 4).set_bounds(1, 0, 4);
+    input
+        .dim(0).set_bounds(0, 4)
+        .dim(1).set_bounds(0, 4);
+    output.output_buffer()
+        .dim(0).set_bounds(0, 4)
+        .dim(1).set_bounds(0, 4);
 
     output.realize(result);
 
@@ -44,8 +48,8 @@ int main (int argc, char const *argv[]) {
         // void {anonymous}::SelectionDAGLegalize::LegalizeOp(llvm::SDNode*): Assertion `(TLI.getTypeAction(*DAG.getContext(), Node->getOperand(i).getValueType()) == TargetLowering::TypeLegal || Node->getOperand(i).getOpcode() == ISD::TargetConstant) && "Unexpected illegal type!"' failed.
     }
 
-    Image<double> im1 = test(true);
-    Image<double> im2 = test(false);
+    Buffer<double> im1 = test(true);
+    Buffer<double> im2 = test(false);
 
     for (int y = 0; y < im1.height(); y++) {
         for (int x = 0; x < im1.width(); x++) {

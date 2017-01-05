@@ -146,7 +146,7 @@ struct CheckVars : public IRGraphVisitor {
                 if (!pure_args[i].empty()) {
                     user_assert(var && var->name == pure_args[i])
                         << "In definition of Func \"" << name << "\":\n"
-                        << "All of a functions recursive references to itself"
+                        << "All of a function's recursive references to itself"
                         << " must contain the same pure variables in the same"
                         << " places as on the left-hand-side.\n";
                 }

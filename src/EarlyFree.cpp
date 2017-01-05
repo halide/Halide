@@ -80,26 +80,6 @@ private:
         in_loop = old_in_loop;
     }
 
-    void visit(const ProducerConsumer *pipe) {
-        if (in_loop) {
-            IRVisitor::visit(pipe);
-        } else {
-
-            Stmt old_containing_stmt = containing_stmt;
-
-            containing_stmt = pipe->produce;
-            pipe->produce.accept(this);
-
-            if (pipe->update.defined()) {
-                containing_stmt = pipe->update;
-                pipe->update.accept(this);
-            }
-
-            containing_stmt = old_containing_stmt;
-            pipe->consume.accept(this);
-        }
-    }
-
     void visit(const Block *block) {
         if (in_loop) {
             IRVisitor::visit(block);
@@ -146,24 +126,6 @@ private:
             return Block::make(s, make_free(func, inject_device_free));
         } else {
             return mutate(s);
-        }
-    }
-
-    void visit(const ProducerConsumer *pipe) {
-        // Do it in reverse order, so the injection occurs in the last instance of the stmt.
-        Stmt new_consume = inject_marker(pipe->consume);
-        Stmt new_update;
-        if (pipe->update.defined()) {
-            new_update = inject_marker(pipe->update);
-        }
-        Stmt new_produce = inject_marker(pipe->produce);
-
-        if (new_produce.same_as(pipe->produce) &&
-            new_update.same_as(pipe->update) &&
-            new_consume.same_as(pipe->consume)) {
-            stmt = pipe;
-        } else {
-            stmt = ProducerConsumer::make(pipe->name, new_produce, new_update, new_consume);
         }
     }
 

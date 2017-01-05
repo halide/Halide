@@ -38,7 +38,7 @@ def main():
     # first horizontally, and then vertically.
     if True:
         # Take a color 8-bit input
-        input = Image(imread(image_path))
+        input = Buffer(imread(image_path))
         assert input.type() == UInt(8)
 
         # Upgrade it to 16-bit, so we can do math without it overflowing.
@@ -66,7 +66,7 @@ def main():
 
         # Now let's realize it...
 
-        # Image<uint8_t> result = output.realize(input.width(), input.height(), 3)
+        # result = output.realize(input.width(), input.height(), 3)
 
         # Except that the line above is not going to work. Uncomment
         # it to see what happens.
@@ -86,7 +86,7 @@ def main():
         # over a domain shifted inwards by one pixel, we won't be
         # asking the Halide routine to read out of bounds. We saw how
         # to do this in the previous lesson:
-        result = Image(UInt(8), input.width() - 2, input.height() - 2, 3)
+        result = Buffer(UInt(8), input.width() - 2, input.height() - 2, 3)
         result.set_min(1, 1)
         output.realize(result)
 
@@ -94,7 +94,7 @@ def main():
         # parrot, and it should be two pixels narrower and two pixels
         # shorter than the input image.
 
-        result_data = image_to_ndarray(result)
+        result_data = buffer_to_ndarray(result)
         print("result.shape", result_data.shape)
 
         imsave("blurry_parrot_1.png", result_data)
@@ -108,7 +108,7 @@ def main():
     # The same pipeline, with a boundary condition on the input.
     if True:
         # Take a color 8-bit input
-        input = Image(imread(image_path))
+        input = Buffer(imread(image_path))
         assert input.type() == UInt(8)
 
         # This time, we'll wrap the input in a Func that prevents
@@ -165,7 +165,7 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the
         # input.
-        result_data = image_to_ndarray(result)
+        result_data = buffer_to_ndarray(result)
         print("result.shape", result_data.shape)
 
         imsave("blurry_parrot_2.png", result_data)

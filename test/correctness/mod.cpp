@@ -9,7 +9,7 @@ bool test() {
     Func f;
     f(x) = cast<T>(x) % 2;
 
-    Image<T> im = f.realize(16);
+    Buffer<T> im = f.realize(16);
 
     for (int i = 0; i < 16; i++) {
         if (im(i) != (T)(i%2)) {
@@ -27,7 +27,7 @@ bool test() {
     Func nf;
     nf(x) = cast<T>(-x) % 4;
 
-    Image<T> nim = nf.realize(16);
+    Buffer<T> nim = nf.realize(16);
 
     for (int i = 1; i < 16; i++) {
       if (nim(i) != (T)((4 - (i % 4)) % 4)) {

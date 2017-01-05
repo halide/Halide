@@ -183,6 +183,9 @@ void YuvBufferT::rotate180() {
     case ChromaStorage::kInterleavedVFirst:
         chromaStorage_ = ChromaStorage::kInterleavedUFirst;
         break;
+    default:
+        // nothing
+        break;
     };
 }
 

@@ -6,7 +6,7 @@
 #include "pipeline_cpp_native.h"
 #include "pipeline_cpp_cpp.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 extern "C" int an_extern_c_func(int a1, float a2) {
     return (int)(a1 + a2);
@@ -66,7 +66,7 @@ int cpp_extern_2(int a1, float a2) {
 }
 
 int main(int argc, char **argv) {
-    Image<uint16_t> in(100, 100);
+    Buffer<uint16_t> in(100, 100);
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {
@@ -74,8 +74,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    Image<uint16_t> out_native(100, 100);
-    Image<uint16_t> out_c(100, 100);
+    Buffer<uint16_t> out_native(100, 100);
+    Buffer<uint16_t> out_c(100, 100);
 
     pipeline_cpp_native(in, out_native);
 

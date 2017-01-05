@@ -1,6 +1,7 @@
 include ../support/Makefile.inc
 
 CXXFLAGS += -g -Wall
+BIN ?= bin
 
 .PHONY: clean
 
@@ -9,34 +10,49 @@ CXXFLAGS += -DWITH_FFTW
 LDFLAGS += -lfftw3f
 endif
 
-bench_fft: main.cpp fft.cpp fft.h complex.h funct.h
-	$(CXX) $(CXXFLAGS) main.cpp fft.cpp $(LIB_HALIDE) -o bench_fft \
-	$(LDFLAGS) $(LLVM_SHARED_LIBS)
+$(BIN)/bench_fft: main.cpp fft.cpp fft.h complex.h funct.h
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) main.cpp fft.cpp $(LIB_HALIDE) -o $@ $(LDFLAGS) $(LLVM_SHARED_LIBS)
 
-bench_16x16: bench_fft
-	./bench_fft 16 16
+bench_16x16: $(BIN)/bench_fft
+	$(BIN)/bench_fft 16 16 $(BIN)/
 
-bench_32x32: bench_fft
-	./bench_fft 32 32
+bench_32x32: $(BIN)/bench_fft
+	$(BIN)/bench_fft 32 32 $(BIN)/
 
-bench_48x48: bench_fft
-	./bench_fft 48 48
+bench_48x48: $(BIN)/bench_fft
+	$(BIN)/bench_fft 48 48 $(BIN)/
 
-bench_64x64: bench_fft
-	./bench_fft 64 64
+bench_64x64: $(BIN)/bench_fft
+	$(BIN)/bench_fft 64 64 $(BIN)/
+
+$(BIN)/fft_generator_exec: fft_generator.cpp fft.cpp fft.h $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 # Generate four AOT compiled FFT variants. Forward versions have gain set to 1 / 256.0
-generated/fft_forward_r2c.o: fft_generator.cpp fft.cpp fft.h
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c "c++ -I." -l $(LIB_HALIDE) -e o,h -o generated -s fft_generator.cpp -s fft.cpp -f fft_forward_r2c target=host direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=real output_number_type=complex
-generated/fft_inverse_c2r.o: fft_generator.cpp fft.cpp fft.h
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c "c++ -I." -l $(LIB_HALIDE) -e o,h -o generated -s fft_generator.cpp -s fft.cpp -f fft_inverse_c2r target=host direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=real
-generated/fft_forward_c2c.o: fft_generator.cpp fft.cpp fft.h
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c "c++ -I." -l $(LIB_HALIDE) -e o,h -o generated -s fft_generator.cpp -s fft.cpp -f fft_forward_c2c target=host direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=complex output_number_type=complex
-generated/fft_inverse_c2c.o: fft_generator.cpp fft.cpp fft.h
-	$(HALIDE_SRC_PATH)/tools/gengen.sh -c "c++ -I." -l $(LIB_HALIDE) -e o,h -o generated -s fft_generator.cpp -s fft.cpp -f fft_inverse_c2c target=host direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=complex
+$(BIN)/fft_forward_r2c.a: $(BIN)/fft_generator_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f fft_forward_r2c target=$(HL_TARGET) direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=real output_number_type=complex
 
-fft_aot_test: fft_aot_test.cpp fft.cpp fft_generator.cpp fft.h generated/fft_forward_r2c.o generated/fft_inverse_c2r.o generated/fft_forward_c2c.o generated/fft_inverse_c2c.o
-	$(CXX) fft_aot_test.cpp generated/fft_forward_r2c.o generated/fft_inverse_c2r.o generated/fft_forward_c2c.o generated/fft_inverse_c2c.o -o fft_aot_test
+$(BIN)/fft_inverse_c2r.a: $(BIN)/fft_generator_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f fft_inverse_c2r target=$(HL_TARGET) direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=real
+
+$(BIN)/fft_forward_c2c.a: $(BIN)/fft_generator_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f fft_forward_c2c target=$(HL_TARGET) direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=complex output_number_type=complex
+
+$(BIN)/fft_inverse_c2c.a: $(BIN)/fft_generator_exec
+	@-mkdir -p $(BIN)
+	$^ -o $(BIN) -f fft_inverse_c2c target=$(HL_TARGET) direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=complex
+
+$(BIN)/fft_aot_test: fft_aot_test.cpp $(BIN)/fft_forward_r2c.a $(BIN)/fft_inverse_c2r.a $(BIN)/fft_forward_c2c.a $(BIN)/fft_inverse_c2c.a
+	@-mkdir -p $(BIN)
+	$(CXX) -I$(BIN) -I$(HALIDE_BIN_PATH)/include/ -std=c++11 $^ -o $@ $(LDFLAGS)
 
 clean:
-	rm -f bench_fft c2c.html r2c.html c2r.html
+	rm -rf $(BIN)
+
+fft_aot_test: $(BIN)/fft_aot_test
+	$(BIN)/fft_aot_test

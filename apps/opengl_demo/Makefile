@@ -44,55 +44,58 @@ MAIN_LIBS      = -lpng -ldrawtext $(OPENGL_LIBS)
 GENERATOR_LIBS = -lHalide -lz -lcurses
 CXXFLAGS       = -std=c++11 -g -DDTX_FONT=\"$(DTX_FONT)\" $(HALIDE_INC_PATH)
 
+# Output directory.
+BIN ?= bin
+
 .PHONY: run clean
 
 default:	run
 
-run:	build/opengl_demo
-	build/opengl_demo image.png
+run:	$(BIN)/opengl_demo
+	$(BIN)/opengl_demo image.png
 
 clean:
-	rm -rf build
+	rm -rf $(BIN)
 
-build/opengl_demo: \
-    build/main.o \
-    build/layout.o \
-    build/timer.o \
-    build/glfw_helpers.o \
-    build/opengl_helpers.o \
-    build/png_helpers.o \
-    build/sample_filter_cpu.o \
-    build/sample_filter_opengl.o
+$(BIN)/opengl_demo: \
+    $(BIN)/main.o \
+    $(BIN)/layout.o \
+    $(BIN)/timer.o \
+    $(BIN)/glfw_helpers.o \
+    $(BIN)/opengl_helpers.o \
+    $(BIN)/png_helpers.o \
+    $(BIN)/sample_filter_cpu.o \
+    $(BIN)/sample_filter_opengl.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(MAIN_LIBS)
 
 #
 # Explicitly list the dependency on the generated filter header files,
 # to ensure that they are created first.
 #
-build/main.o: \
-    build/sample_filter_cpu.h \
-    build/sample_filter_opengl.h
+$(BIN)/main.o: \
+    $(BIN)/sample_filter_cpu.h \
+    $(BIN)/sample_filter_opengl.h
 
 #
 # Rules to AOT-compile the halide filter for both CPU and OpenGL; the
-# compiled filters depend on build/generate_sample_filter, which in turn
+# compiled filters depend on $(BIN)/generate_sample_filter, which in turn
 # depends on the halide filter source in sample_filter.cpp
 #
-build/sample_filter_cpu.o build/sample_filter_cpu.h: build/generate_sample_filter
-	LD_LIBRARY_PATH=../../bin build/generate_sample_filter -e o,h,stmt -o build -f sample_filter_cpu target=host
+$(BIN)/sample_filter_cpu.o $(BIN)/sample_filter_cpu.h: $(BIN)/generate_sample_filter
+	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_cpu target=$(HL_TARGET)
 
-build/sample_filter_opengl.o build/sample_filter_opengl.h: build/generate_sample_filter
-	LD_LIBRARY_PATH=../../bin build/generate_sample_filter -e o,h,stmt -o build -f sample_filter_opengl target=host-opengl-debug
+$(BIN)/sample_filter_opengl.o $(BIN)/sample_filter_opengl.h: $(BIN)/generate_sample_filter
+	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_opengl target=host-opengl-debug
 
-build/generate_sample_filter: sample_filter.cpp
-	@mkdir -p build
+$(BIN)/generate_sample_filter: sample_filter.cpp
+	@mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -fno-rtti -o $@ $^ $(HALIDE_TOOLS_DIR)/GenGen.cpp $(HALIDE_LIB_PATH) $(GENERATOR_LIBS)
 
 #
 # Build in subdir using auto-dependency mechanism
 #
-build/%.o: %.cpp
+$(BIN)/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) -c $(CXXFLAGS) -MMD -MF $(patsubst %.o,%.d,$@) -o $@ $<
+	$(CXX) -c $(CXXFLAGS) -I$(BIN) -MMD -MF $(patsubst %.o,%.d,$@) -o $@ $<
 
--include $(wildcard build/*.d)
+-include $(wildcard $(BIN)/*.d)

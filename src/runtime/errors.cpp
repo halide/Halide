@@ -193,5 +193,11 @@ WEAK int halide_error_fold_factor_too_small(void *user_context, const char *func
     return halide_error_code_fold_factor_too_small;
 }
 
+WEAK int halide_error_requirement_failed(void *user_context, const char *condition, const char *message) {
+    error(user_context)
+        << "Requirement Failed: (" << condition << ") " << message;
+    return halide_error_code_requirement_failed;
+}
+
 
 }  // extern "C"

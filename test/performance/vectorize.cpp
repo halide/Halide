@@ -26,7 +26,7 @@ bool test(int vec_width) {
     int W = vec_width*1;
     int H = 10000;
 
-    Image<A> input(W, H+20);
+    Buffer<A> input(W, H+20);
     for (int y = 0; y < H+20; y++) {
         for (int x = 0; x < W; x++) {
             input(x, y) = (A)((rand() & 0xffff)*0.125 + 1.0);
@@ -54,8 +54,8 @@ bool test(int vec_width) {
     // is small enough to fit in cache.
     g.reorder(y, x);
 
-    Image<A> outputg = g.realize(W, H);
-    Image<A> outputf = f.realize(W, H);
+    Buffer<A> outputg = g.realize(W, H);
+    Buffer<A> outputf = f.realize(W, H);
 
     double t_g = benchmark(10, 10, [&]() {
         g.realize(outputg);

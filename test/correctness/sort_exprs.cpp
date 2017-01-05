@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
         g(i) = exprs[i];
     }
 
-    Image<float> result = g.realize(N);
+    Buffer<float> result = g.realize(N);
 
     for (int i = 0; i < N; i++) {
         printf("%f ", result(i));

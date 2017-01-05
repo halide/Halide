@@ -1,11 +1,17 @@
 #include "PrintLoopNest.h"
+#include "DeepCopy.h"
 #include "FindCalls.h"
 #include "Function.h"
+#include "Func.h"
 #include "RealizationOrder.h"
-#include "ScheduleFunctions.h"
 #include "IRPrinter.h"
+#include "ScheduleFunctions.h"
 #include "Simplify.h"
+#include "SimplifySpecializations.h"
 #include "Target.h"
+#include "WrapCalls.h"
+
+#include <tuple>
 
 namespace Halide {
 namespace Internal {
@@ -118,14 +124,14 @@ private:
 
     void visit(const ProducerConsumer *op) {
         do_indent();
-        out << "compute " << simplify_func_name(op->name) << ":\n";
-        indent += 2;
-        op->produce.accept(this);
-        if (op->update.defined()) {
-            op->update.accept(this);
+        if (op->is_producer) {
+            out << "produce " << simplify_func_name(op->name) << ":\n";
+        } else {
+            out << "consume " << simplify_func_name(op->name) << ":\n";
         }
+        indent += 2;
+        op->body.accept(this);
         indent -= 2;
-        op->consume.accept(this);
     }
 
     void visit(const Provide *op) {
@@ -144,18 +150,34 @@ private:
     }
 };
 
-string print_loop_nest(const vector<Function> &outputs) {
+string print_loop_nest(const vector<Function> &output_funcs) {
     // Do the first part of lowering:
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : outputs) {
+    for (Function f : output_funcs) {
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
+    // Create a deep-copy of the entire graph of Funcs.
+    vector<Function> outputs;
+    std::tie(outputs, env) = deep_copy(output_funcs, env);
+
+    // Output functions should all be computed and stored at root.
+    for (Function f: outputs) {
+        Func(f).compute_root().store_root();
+    }
+
+    // Substitute in wrapper Funcs
+    env = wrap_func_calls(env);
+
     // Compute a realization order
     vector<string> order = realization_order(outputs, env);
+
+    // Try to simplify the RHS/LHS of a function definition by propagating its
+    // specializations' conditions
+    simplify_specializations(env);
 
     // For the purposes of printing the loop nest, we don't want to
     // worry about which features are and aren't enabled.

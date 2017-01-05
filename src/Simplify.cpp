@@ -133,6 +133,38 @@ bool propagate_indeterminate_expression(Expr e0, Expr e1, Expr e2, Type t, Expr 
            propagate_indeterminate_expression(e2, t, expr);
 }
 
+class ExprIsPure : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        if (!op->image.defined() && !op->param.defined()) {
+            // It's a load from an internal buffer, which could
+            // mutate.
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    bool result = true;
+};
+
+/** Test if an expression's value could be different at different
+ * points in the code. */
+bool expr_is_pure(Expr e) {
+    ExprIsPure pure;
+    e.accept(&pure);
+    return pure.result;
+}
+
 }
 
 class Simplify : public IRMutator {
@@ -602,6 +634,14 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Add>(op);
+            } else {
+                expr = hoist_slice_vector<Add>(Add::make(a, b));
+            }
         } else if (ramp_a &&
                    ramp_b) {
             // Ramp + Ramp
@@ -1410,7 +1450,15 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
-        } else if (broadcast_a && broadcast_b) {
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Mul>(op);
+            } else {
+                expr = hoist_slice_vector<Mul>(Mul::make(a, b));
+            }
+        }else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
             Expr m = broadcast_b->value;
@@ -2371,6 +2419,14 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Min>(op);
+            } else {
+                expr = hoist_slice_vector<Min>(min(a, b));
+            }
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    is_const(sub_a->a) &&
@@ -2723,10 +2779,18 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
+        } else if (call_a && call_b &&
+                   call_a->is_intrinsic(Call::slice_vector) &&
+                   call_b->is_intrinsic(Call::slice_vector)) {
+            if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = hoist_slice_vector<Max>(op);
+            } else {
+                expr = hoist_slice_vector<Max>(max(a, b));
+            }
         } else if (no_overflow(op->type) &&
                    sub_a &&
-                   is_const(sub_a->a) &&
-                   is_const(b)) {
+                   is_simple_const(sub_a->a) &&
+                   is_simple_const(b)) {
             // max(8 - x, 3) -> 8 - min(x, 5)
             expr = mutate(sub_a->a - min(sub_a->b, sub_a->a - b));
         } else if (select_a &&
@@ -2819,13 +2883,15 @@ private:
         } else if (sel && is_zero(sel->true_value)) {
             // select(c, 0, f) == 0 -> c || (f == 0)
             expr = mutate(sel->condition || (sel->false_value == zero));
-        } else if (sel && is_const(sel->true_value)) {
+        } else if (sel &&
+                   (is_positive_const(sel->true_value) || is_negative_const(sel->true_value))) {
             // select(c, 4, f) == 0 -> !c && (f == 0)
             expr = mutate((!sel->condition) && (sel->false_value == zero));
         } else if (sel && is_zero(sel->false_value)) {
             // select(c, t, 0) == 0 -> !c || (t == 0)
             expr = mutate((!sel->condition) || (sel->true_value == zero));
-        } else if (sel && is_const(sel->false_value)) {
+        } else if (sel &&
+                   (is_positive_const(sel->false_value) || is_negative_const(sel->false_value))) {
             // select(c, t, 4) == 0 -> c && (t == 0)
             expr = mutate((sel->condition) && (sel->true_value == zero));
         } else {
@@ -3947,6 +4013,51 @@ private:
             } else {
                 internal_error << "Unreachable";
             }
+        } else if (op->is_intrinsic(Call::predicated_store)) {
+            IRMutator::visit(op);
+            const Call *call = expr.as<Call>();
+
+            Expr pred = call->args[1];
+            internal_assert(pred.defined());
+            if (is_zero(pred)) {
+                // Predicate of a predicated store is always false
+                expr = make_zero(op->type);
+                return;
+            }
+
+            internal_assert(call->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
+            const Call *addr = call->args[0].as<Call>();
+            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
+                << "The first argument to predicated_store must be call to address_of of the store\n";
+            const Broadcast *broadcast = addr->args[0].as<Broadcast>();
+            const Load *load = broadcast ? broadcast->value.as<Load>() : addr->args[0].as<Load>();
+            internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
+
+            const Call *val = call->args[2].as<Call>();
+            if (val && val->is_intrinsic(Call::predicated_load)) {
+                const Call *load_addr = call->args[0].as<Call>();
+                internal_assert(load_addr);
+                const Broadcast *b = load_addr->args[0].as<Broadcast>();
+                const Load *l = b ? b->value.as<Load>() : load_addr->args[0].as<Load>();
+                Expr store_index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
+                Expr val_index = b ? Broadcast::make(l->index, b->lanes) : l->index;
+                if (l && (l->name == load->name) && equal(val_index, store_index)) {
+                    // foo[ramp(x, 0, 1)] = foo[ramp(x, 0, 1)] is a no-op
+                    expr = make_zero(op->type);
+                }
+            }
+
+        } else if (op->is_intrinsic(Call::predicated_load)) {
+            IRMutator::visit(op);
+            const Call *call = expr.as<Call>();
+
+            Expr pred = call->args[1];
+            internal_assert(pred.defined());
+            if (is_zero(pred)) {
+                // Predicate of a predicated load is always false. Replace
+                // with undef
+                expr = undef(call->type);
+            }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
@@ -4086,6 +4197,59 @@ private:
             IRMutator::visit(op);
         }
     }
+    template <typename T>
+    Expr hoist_slice_vector(Expr e) {
+        const T *op = e.as<T>();
+        internal_assert(op);
+        debug(4) << "Trying to hoist slice vector " << (Expr) op << "\n";
+
+        const Call *call_a = op->a.template as<Call>();
+        const Call *call_b = op->b.template as<Call>();
+
+        internal_assert(call_a && call_b &&
+                        call_a->is_intrinsic(Call::slice_vector) &&
+                        call_b->is_intrinsic(Call::slice_vector));
+
+        if (!equal(call_a->args[1], call_b->args[1]) ||
+            !equal(call_a->args[2], call_b->args[2])) {
+            debug(4) << " ...unable to hoist - slice vector arguments don't match\n";
+            return e;
+        }
+
+        const Call *concat_a = call_a->args[0].as<Call>();
+        const Call *concat_b = call_b->args[0].as<Call>();
+        if (!concat_a || !concat_b) {
+            debug(4) << " ...unable to hoist - both operands are not concat_vectors\n";
+            return e;
+        }
+
+        const std::vector<Expr> &slices_a = concat_a->args;
+        const std::vector<Expr> &slices_b = concat_b->args;
+        if (slices_a.size() != slices_b.size()) {
+            return e;
+        }
+
+        for (size_t i = 0; i < slices_a.size(); i++) {
+            if (slices_a[i].type() != slices_b[i].type()) {
+                debug(4) << " ...unable to hoist - type mismatch\n";
+                return e;
+            }
+        }
+
+        vector<Expr> new_slices;
+        for (size_t i = 0; i < slices_a.size(); i++) {
+            new_slices.push_back(T::make(slices_a[i], slices_b[i]));
+        }
+
+        Expr start_lane = call_a->args[1];
+        Expr result_lanes = call_a->args[3];
+        Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
+        Expr ret_expr = Call::make(op->type, Call::slice_vector,
+                                   {concat_v, start_lane, call_a->args[2], result_lanes},
+                                   Call::PureIntrinsic);
+        debug(4) << "Hoisting slice_vector: " << ret_expr << "\n";
+        return ret_expr;
+    }
 
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
@@ -4117,14 +4281,19 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
-
+            const Call *call = new_value.as<Call>();
             const Variable *var_b = nullptr;
+            const Variable *var_a = nullptr;
             if (add) {
                 var_b = add->b.as<Variable>();
             } else if (sub) {
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
                 var_b = mul->b.as<Variable>();
+            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                       (call->args.size() == 2)) {
+                var_a = call->args[0].as<Variable>();
+                var_b = call->args[1].as<Variable>();
             }
 
             if (is_const(new_value)) {
@@ -4172,6 +4341,20 @@ private:
                 new_value = cast->value;
                 new_var = Variable::make(new_value.type(), new_name);
                 replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
+            } else if (call && call->is_intrinsic(Call::slice_vector)) {
+                new_value = call->args[0];
+                new_var = Variable::make(new_value.type(), new_name);
+                replacement = substitute(new_name, Call::make(call->type, Call::slice_vector,
+                                                              {new_var, call->args[1], call->args[2], call->args[3]},
+                                                              Call::PureIntrinsic), replacement);
+            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                       ((var_a && !var_b) || (!var_a && var_b))) {
+                new_var = Variable::make(var_a ? call->args[1].type() : call->args[0].type(), new_name);
+                Expr op_a = var_a ? call->args[0] : new_var;
+                Expr op_b = var_a ? new_var : call->args[1];
+                replacement = substitute(new_name, Call::make(call->type, Call::concat_vectors,
+                                                              {op_a, op_b}, Call::PureIntrinsic), replacement);
+                new_value = var_a ? call->args[1] : call->args[0];
             } else {
                 break;
             }
@@ -4399,48 +4582,15 @@ private:
         }
     }
 
-
     void visit(const ProducerConsumer *op) {
-        Stmt produce = mutate(op->produce);
-        Stmt update = op->update;
-        if (update.defined()) {
-            update = mutate(update);
-            if (is_no_op(update)) {
-                update = Stmt();
-            }
-        }
-        Stmt consume = mutate(op->consume);
+        Stmt body = mutate(op->body);
 
-        const IfThenElse *produce_if = produce.as<IfThenElse>();
-        const IfThenElse *update_if  = update.as<IfThenElse>();
-        const IfThenElse *consume_if = consume.as<IfThenElse>();
-
-        if (is_no_op(produce) &&
-            is_no_op(consume) &&
-            is_no_op(update)) {
+        if (is_no_op(body)) {
             stmt = Evaluate::make(0);
-        } else if (produce_if &&
-                   !produce_if->else_case.defined() &&
-                   consume_if &&
-                   !consume_if->else_case.defined() &&
-                   equal(produce_if->condition, consume_if->condition) &&
-                   (!update.defined() ||
-                    (update_if &&
-                     !update_if->else_case.defined() &&
-                     equal(produce_if->condition, update_if->condition)))) {
-            // All parts are guarded by the same condition. Lift it outwards.
-            Expr condition = produce_if->condition;
-            produce = produce_if->then_case;
-            if (update_if) update = update_if->then_case;
-            consume = consume_if->then_case;
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
-            stmt = IfThenElse::make(condition, stmt);
-        } else if (produce.same_as(op->produce) &&
-                   update.same_as(op->update) &&
-                   consume.same_as(op->consume)) {
+        } else if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         }
     }
 
@@ -4454,30 +4604,33 @@ private:
         const IfThenElse *if_first = first.as<IfThenElse>();
         const IfThenElse *if_rest = rest.as<IfThenElse>();
 
-        // Check if first is a no-op.
-        if (is_no_op(first)) {
+        if (is_no_op(first) &&
+            is_no_op(rest)) {
+            stmt = Evaluate::make(0);
+        } else if (is_no_op(first)) {
             stmt = rest;
         } else if (is_no_op(rest)) {
             stmt = first;
         } else if (let_first &&
                    let_rest &&
-                   equal(let_first->value, let_rest->value)) {
+                   equal(let_first->value, let_rest->value) &&
+                   expr_is_pure(let_first->value)) {
 
             // Do both first and rest start with the same let statement (occurs when unrolling).
             Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
 
-            // We're just going to use the first name, so if the
-            // second name is different we need to rewrite it.
-            if (let_rest->name != let_first->name) {
-                new_block = substitute(let_rest->name,
-                                       Variable::make(let_first->value.type(), let_first->name),
-                                       new_block);
-            }
+            // We need to make a new name since we're pulling it out to a
+            // different scope.
+            string var_name = unique_name('t');
+            Expr new_var = Variable::make(let_first->value.type(), var_name);
+            new_block = substitute(let_first->name, new_var, new_block);
+            new_block = substitute(let_rest->name, new_var, new_block);
 
-            stmt = LetStmt::make(let_first->name, let_first->value, new_block);
+            stmt = LetStmt::make(var_name, let_first->value, new_block);
         } else if (if_first &&
                    if_rest &&
-                   equal(if_first->condition, if_rest->condition)) {
+                   equal(if_first->condition, if_rest->condition) &&
+                   expr_is_pure(if_first->condition)) {
             // Two ifs with matching conditions
             Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
             Stmt else_case;
@@ -4493,6 +4646,8 @@ private:
         } else if (if_first &&
                    if_rest &&
                    !if_rest->else_case.defined() &&
+                   expr_is_pure(if_first->condition) &&
+                   expr_is_pure(if_rest->condition) &&
                    is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
             // Two ifs where the second condition is tighter than
             // the first condition.  The second if can be nested
@@ -4885,6 +5040,26 @@ void check_vectors() {
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
+
+    {
+        Expr test = select(ramp(const_true(), const_true(), 2),
+                           ramp(const_false(), const_true(), 2),
+                           broadcast(const_false(), 2)) ==
+                    broadcast(const_false(), 2);
+        Expr expected = !(ramp(const_true(), const_true(), 2)) ||
+                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        check(test, expected);
+    }
+
+    {
+        Expr test = select(ramp(const_true(), const_true(), 2),
+                           broadcast(const_true(), 2),
+                           ramp(const_false(), const_true(), 2)) ==
+                    broadcast(const_false(), 2);
+        Expr expected = (!ramp(const_true(), const_true(), 2)) &&
+                        (ramp(const_false(), const_true(), 2) == broadcast(const_false(), 2));
+        check(test, expected);
+    }
 }
 
 void check_bounds() {
@@ -5635,7 +5810,7 @@ void check_indeterminate_ops(Expr e, bool e_is_zero, bool e_is_indeterminate) {
 
 void check_indeterminate() {
     const int32_t values[] = {
-        -2147483648,
+        int32_t(0x80000000),
         -2147483647,
         -2,
         -1,
@@ -5803,9 +5978,9 @@ void simplify_test() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), BufferPtr(), Parameter());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), BufferPtr(), Parameter());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), BufferPtr(), Parameter());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter());
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter());
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter());
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -5813,7 +5988,7 @@ void simplify_test() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), BufferPtr(), Parameter());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter());
         e = interleave_vectors({load1, load3});
         check(e, e);
 
@@ -5834,6 +6009,23 @@ void simplify_test() {
         Expr e = Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2));
         Expr expected = Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2));
         check(e, expected);
+    }
+
+    {
+        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
+        Expr index = ramp(x + y, 1, 8);
+
+        Expr load = Load::make(index.type(), "f", index, Buffer<>(), Parameter());
+        Expr src = Call::make(Handle().with_lanes(8), Call::address_of, {load}, Call::Intrinsic);
+        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+
+        Expr dest = Call::make(Handle().with_lanes(8), Call::address_of,
+                               {Load::make(index.type(), "f", index, Buffer<>(), Parameter())},
+                               Call::Intrinsic);
+        Stmt stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
+                                         {dest, pred, value},
+                                         Call::Intrinsic));
+        check(stmt, Evaluate::make(make_zero(value.type())));
     }
 
     std::cout << "Simplify test passed" << std::endl;

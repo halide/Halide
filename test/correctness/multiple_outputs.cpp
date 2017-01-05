@@ -4,6 +4,8 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    const bool use_gpu = get_jit_target_from_environment().has_gpu_feature();
+
     // An internal Func that produces multiple values.
     {
         Func f, g;
@@ -14,6 +16,10 @@ int main(int argc, char **argv) {
 
         Tuple t = f(x);
         g(x) = t[0] + t[1];
+
+        if (use_gpu) {
+            g.gpu_tile(x, 8);
+        }
 
         g.realize(100);
     }
@@ -36,10 +42,14 @@ int main(int argc, char **argv) {
                            {r.x, r.y, next_value},
                            {best_x, best_y, best_so_far});
 
+        if (use_gpu) {
+            g.gpu_single_thread();
+        }
+
         Realization result = g.realize();
-        // int result_x = Image<int>(result[0])(0);
-        // int result_y = Image<int>(result[1])(0);
-        float result_val = Image<float>(result[2])(0);
+        // int result_x = Buffer<int>(result[0])(0);
+        // int result_y = Buffer<int>(result[1])(0);
+        float result_val = Buffer<float>(result[2])(0);
         if (result_val < 0.9999) {
             printf("Argmax of sin(x*y) is underwhelming: %f. We expected it to be closer to one.\n", result_val);
             return 1;
@@ -52,9 +62,21 @@ int main(int argc, char **argv) {
         Var x;
         f(x) = 100*x;
         g(x) = x;
-        Image<int> f_im(100);
-        Image<int> g_im(10);
+
+        if (use_gpu) {
+            f.gpu_tile(x, 8);
+            g.gpu_tile(x, 8);
+        }
+
+        Buffer<int> f_im(100);
+        Buffer<int> g_im(10);
         Pipeline({f, g}).realize({f_im, g_im});
+
+        if (use_gpu) {
+            assert(f_im.device_dirty() && g_im.device_dirty());
+            f_im.copy_to_host();
+            g_im.copy_to_host();
+        }
 
         for (int x = 0; x < f_im.width(); x++) {
             if (f_im(x) != 100*x) {
@@ -80,9 +102,27 @@ int main(int argc, char **argv) {
         h(x) = {f(x) + 17, f(x) - 17};
         g(x, y) = {f(x + y) * 2, h(x)[0] * y, h(x)[1] - 2};
 
-        Image<int> f_im(100), g_im0(20, 20), g_im1(20, 20), g_im2(20, 20), h_im0(50), h_im1(50);
+        if (get_jit_target_from_environment().has_gpu_feature()) {
+            g.gpu_tile(x, y, 1, 1);
+        }
+
+        Buffer<int> f_im(100), g_im0(20, 20), g_im1(20, 20), g_im2(20, 20), h_im0(50), h_im1(50);
 
         Pipeline({h, g, f}).realize({h_im0, h_im1, g_im0, g_im1, g_im2, f_im});
+
+        if (use_gpu) {
+            // g should have been written on the device
+            assert(g_im0.device_dirty() &&
+                   g_im1.device_dirty() &&
+                   g_im2.device_dirty());
+            // f and h should have been copied to the device for g to read
+            assert(f_im.has_device_allocation() &&
+                   h_im0.has_device_allocation() &&
+                   h_im1.has_device_allocation());
+            g_im0.copy_to_host();
+            g_im1.copy_to_host();
+            g_im2.copy_to_host();
+        }
 
         for (int x = 0; x < 100; x++) {
             if (f_im(x) != x) {

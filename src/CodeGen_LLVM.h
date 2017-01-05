@@ -104,13 +104,16 @@ public:
                                      ARGVWrapperReturnResultKind result_kind);
     // @}
 
+    /** Initialize internal llvm state for the enabled targets. */
+    static void initialize_llvm();
+
 protected:
     CodeGen_LLVM(Target t);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
     virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
-    virtual void compile_buffer(const BufferPtr &buffer);
+    virtual void compile_buffer(const Buffer<> &buffer);
     // @}
 
     /** Helper functions for compiling Halide functions to llvm
@@ -140,9 +143,6 @@ protected:
 
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
-
-    /** Initialize internal llvm state for the enabled targets. */
-    static void initialize_llvm();
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
@@ -521,6 +521,11 @@ private:
     llvm::Constant *embed_constant_expr(Expr e);
 
     llvm::Function *add_argv_wrapper(const std::string &name);
+
+    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
+
+    virtual void codegen_predicated_vector_load(const Call *load_addr, Expr predicate);
+    virtual void codegen_predicated_vector_store(const Call *store_addr, Expr predicate, Expr value);
 };
 
 }

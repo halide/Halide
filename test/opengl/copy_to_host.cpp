@@ -5,13 +5,8 @@
 using namespace Halide;
 
 int main() {
-
-    // This test must be run with an OpenGL target
-    const Target &target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenGL))  {
-        fprintf(stderr,"ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
-        return 1;
-    }
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Func gpu("gpu"), cpu("cpu");
     Var x, y, c;
@@ -27,8 +22,8 @@ int main() {
     // This should trigger a copy_to_host operation
     cpu(x, y, c) = gpu(x, y, c);
 
-    Image<uint8_t> out(10, 10, 3);
-    cpu.realize(out);
+    Buffer<uint8_t> out(10, 10, 3);
+    cpu.realize(out, target);
 
     for (int y=0; y<out.height(); y++) {
         for (int x=0; x<out.width(); x++) {

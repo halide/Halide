@@ -13,12 +13,12 @@ int main(int argc, char **argv) {
     Func f, g;
     Var x, y;
     ImageParam param(Int(32), 2);
-    Image<int> image1(128, 73);
-    Image<int> image2(144, 23);
+    Buffer<int> image1(128, 73);
+    Buffer<int> image2(144, 23);
 
     f(x, y) = param(x, y)*2;
 
-    param.set_bounds(0, 0, 128);
+    param.dim(0).set_bounds(0, 128);
 
     f.set_error_handler(my_error_handler);
 
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     // Now try constraining the output buffer of a function
     g(x, y) = x*y;
     g.set_error_handler(my_error_handler);
-    g.output_buffer().set_stride(0, 2);
+    g.output_buffer().dim(0).set_stride(2);
     error_occurred = false;
     g.realize(image1);
     if (!error_occurred) {
@@ -56,9 +56,11 @@ int main(int argc, char **argv) {
     h(x, y) = x*y;
     h.set_error_handler(my_error_handler);
     h.output_buffer()
-        .set_stride(0, 1)
-        .set_bounds(1, 0, image1.extent(1))
-        .set_bounds(0, 0, ((h.output_buffer().extent(0))/8)*8);
+        .dim(0)
+            .set_stride(1)
+            .set_bounds(0, ((h.output_buffer().dim(0).extent())/8)*8)
+        .dim(1)
+            .set_bounds(0, image1.dim(1).extent());
     error_occurred = false;
     h.realize(image1);
     // Also check it compiles ok without an inferred argument list

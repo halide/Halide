@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     h.compute_root().vectorize(x, 4);
     g.compute_root().vectorize(x, 4);
 
-    Image<int> out = f.realize(36, 2);
+    Buffer<int> out = f.realize(36, 2);
 
     for (int y = 0; y < 2; y++) {
         for (int x = 0; x < 36; x++) {

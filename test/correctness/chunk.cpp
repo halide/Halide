@@ -16,14 +16,14 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
-        Var xi, yi;
-        g.gpu_tile(x, y, 8, 8);
-        f.compute_at(g, Var::gpu_blocks()).gpu_threads(x, y);
+        Var xo, yo, xi, yi;
+        g.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
+        f.compute_at(g, xo).gpu_threads(x, y);
     }
 
     printf("Realizing function...\n");
 
-    Image<float> im = g.realize(32, 32, target);
+    Buffer<float> im = g.realize(32, 32, target);
 
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {

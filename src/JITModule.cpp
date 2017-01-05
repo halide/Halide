@@ -3,6 +3,10 @@
 #include <mutex>
 #include <set>
 
+#ifndef _WIN32
+#include <sys/mman.h>
+#endif
+
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "JITModule.h"
@@ -10,6 +14,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Debug.h"
 #include "LLVM_Output.h"
+#include "CodeGen_LLVM.h"
 #include "Pipeline.h"
 
 namespace Halide {
@@ -248,12 +253,6 @@ EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
 
 namespace {
 
-#ifdef __arm__
-// On ARM we need to track the addresses of all the functions we
-// retrieve so that we can flush the icache.
-char *start, *end;
-#endif
-
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
@@ -267,16 +266,6 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
 
     debug(2) << "Function " << name << " is at " << f << "\n";
 
-#ifdef __arm__
-    if (start == nullptr) {
-        start = (char *)f;
-        end = (char *)f;
-    } else {
-        start = std::min(start, (char *)f);
-        end = std::max(end, (char *)f + 32);
-    }
-#endif
-
     return symbol;
 }
 
@@ -284,11 +273,12 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &na
 // TODO: Does this need to be conditionalized to llvm 3.6?
 class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<JITModule> modules;
+    std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
-    HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) { }
-  
-    virtual uint64_t getSymbolAddress(const std::string &name) {
+    HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
+
+    virtual uint64_t getSymbolAddress(const std::string &name) override {
         for (size_t i = 0; i < modules.size(); i++) {
             const JITModule &m = modules[i];
             std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
@@ -300,6 +290,47 @@ public:
             }
         }
         return SectionMemoryManager::getSymbolAddress(name);
+    }
+
+    virtual uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
+        uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
+        code_pages.push_back({result, size});
+        return result;
+    }
+
+    void work_around_llvm_bugs() {
+
+        for (auto p : code_pages) {
+            uint8_t *start = p.first;
+            uint8_t *end = p.first + p.second;
+
+            (void)start;
+            (void)end;
+#ifdef __arm__
+            // Flush each function from the dcache so that it gets pulled into
+            // the icache correctly.
+
+            // finalizeMemory should have done the trick, but as of Aug 28
+            // 2013, it doesn't work unless we also manually flush the
+            // cache. Otherwise the icache's view of the code is missing the
+            // relocations, which gets really confusing to debug, because
+            // gdb's view of the code uses the dcache, so the disassembly
+            // isn't right.
+            debug(2) << "Flushing cache from " << (void *)start
+                     << " to " << (void *)end << "\n";
+            __builtin___clear_cache(start, end);
+#endif
+
+#ifndef _WIN32
+            // As of November 2016, llvm doesn't always mark the right pages
+            // as executable either.
+            // https://llvm.org/bugs/show_bug.cgi?id=30905
+
+            start = (uint8_t *)(((uintptr_t)start) & ~4095);
+            end = (uint8_t *)(((uintptr_t)end + 4095) & ~4095);
+            mprotect((void *)start, end - start, PROT_READ | PROT_EXEC);
+#endif
+        }
     }
 };
 
@@ -323,6 +354,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
+    // Ensure that LLVM is initialized
+    CodeGen_LLVM::initialize_llvm();
+
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
@@ -340,14 +374,18 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(llvm::EngineKind::JIT);
-    engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
+    HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
+    engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(memory_manager));
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    engine_builder.setMCPU(mcpu);
+    if (!mcpu.empty()) {
+        engine_builder.setMCPU(mcpu);
+    }
     std::vector<string> mattrs_array = {mattrs};
     engine_builder.setMAttrs(mattrs_array);
 
     TargetMachine *tm = engine_builder.selectTarget();
+    internal_assert(tm) << error_string << "\n";
     #if LLVM_VERSION == 37
     DataLayout target_data_layout(*(tm->getDataLayout()));
     #else
@@ -363,10 +401,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
-
-    #ifdef __arm__
-    start = end = nullptr;
-    #endif
 
     // Do any target-specific initialization
     std::vector<llvm::JITEventListener *> listeners;
@@ -402,6 +436,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
+    memory_manager->work_around_llvm_bugs();
 
     // Do any target-specific post-compilation module meddling
     for (size_t i = 0; i < listeners.size(); i++) {
@@ -409,21 +444,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         delete listeners[i];
     }
     listeners.clear();
-
-#ifdef __arm__
-    // Flush each function from the dcache so that it gets pulled into
-    // the icache correctly.
-
-    // finalizeMemory should have done the trick, but as of Aug 28
-    // 2013, it doesn't work unless we also manually flush the
-    // cache. Otherwise the icache's view of the code is missing the
-    // relocations, which gets really confusing to debug, because
-    // gdb's view of the code uses the dcache, so the disassembly
-    // isn't right.
-    debug(2) << "Flushing cache from " << (void *)start
-             << " to " << (void *)end << "\n";
-    __builtin___clear_cache(start, end);
-#endif
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
     ee->runStaticConstructorsDestructors(false);
@@ -448,7 +468,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg, const std
     codegen->init_for_codegen("trampolines");
     std::vector<std::string> requested_exports;
     for (const std::pair<std::string, JITExtern> &extern_entry : externs) {
-        Symbol sym = result.add_extern_for_export(extern_entry.first, extern_entry.second.signature, extern_entry.second.c_function);
+        Symbol sym = result.add_extern_for_export(extern_entry.first, extern_entry.second.extern_c_function());
         codegen->add_argv_wrapper(cast<llvm::FunctionType>(sym.llvm_type),
                                   extern_entry.first + suffix, extern_entry.first,
                                   CodeGen_LLVM::LastArgPointsToResult);
@@ -518,10 +538,10 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-JITModule::Symbol JITModule::add_extern_for_export(const std::string &name,
-                                                   const ExternSignature &signature, void *address) {
+JITModule::Symbol  JITModule::add_extern_for_export(const std::string &name,
+                                                    const ExternCFunction &extern_c_function) {
     Symbol symbol;
-    symbol.address = address;
+    symbol.address = extern_c_function.address();
 
     // Struct types are uniqued on the context, but the lookup API is only available
     // on the Module, not the Context.
@@ -533,18 +553,19 @@ JITModule::Symbol JITModule::add_extern_for_export(const std::string &name,
     llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
 
     llvm::Type *ret_type;
-    if (signature.is_void_return) {
+    auto signature = extern_c_function.signature();
+    if (signature.is_void_return()) {
         ret_type = llvm::Type::getVoidTy(jit_module->context);
     } else {
-        ret_type = llvm_type_of(&jit_module->context, signature.ret_type);
+        ret_type = llvm_type_of(&jit_module->context, signature.ret_type());
     }
 
     std::vector<llvm::Type *> llvm_arg_types;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : signature.arg_types) {
-        if (scalar_or_buffer_t.is_buffer) {
+    for (const Type &t : signature.arg_types()) {
+        if (t == type_of<struct buffer_t *>()) {
             llvm_arg_types.push_back(buffer_t_star);
         } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, scalar_or_buffer_t.scalar_type));
+            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, t));
         }
     }
 
@@ -771,7 +792,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         // This function is protected by a mutex so this is thread safe.
         std::unique_ptr<llvm::Module> module(get_initial_module_for_target(one_gpu,
             &runtime.jit_module->context, true, runtime_kind != MainShared));
-        clone_target_options(*for_module, *module);
+        if (for_module) {
+            clone_target_options(*for_module, *module);
+        }
         module->setModuleIdentifier(module_name);
 
         std::set<std::string> halide_exports_unique;
@@ -790,31 +813,31 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         if (runtime_kind == MainShared) {
             runtime_internal_handlers.custom_print =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_print", print_handler);
+                hook_function(runtime.exports(), "halide_set_custom_print", print_handler);
 
             runtime_internal_handlers.custom_malloc =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_malloc", malloc_handler);
+                hook_function(runtime.exports(), "halide_set_custom_malloc", malloc_handler);
 
             runtime_internal_handlers.custom_free =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_free", free_handler);
+                hook_function(runtime.exports(), "halide_set_custom_free", free_handler);
 
             runtime_internal_handlers.custom_do_task =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_task", do_task_handler);
+                hook_function(runtime.exports(), "halide_set_custom_do_task", do_task_handler);
 
             runtime_internal_handlers.custom_do_par_for =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+                hook_function(runtime.exports(), "halide_set_custom_do_par_for", do_par_for_handler);
 
             runtime_internal_handlers.custom_error =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_error_handler", error_handler_handler);
+                hook_function(runtime.exports(), "halide_set_error_handler", error_handler_handler);
 
             runtime_internal_handlers.custom_trace =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_trace", trace_handler);
+                hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
 
             if (default_cache_size != 0) {
-                shared_runtimes(MainShared).memoization_cache_set_size(default_cache_size);
+                runtime.memoization_cache_set_size(default_cache_size);
             }
 
             runtime.jit_module->name = "MainShared";
@@ -841,9 +864,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * determined from the target and the retrieved. If one does not exist
  * yet, it is made on the fly from the compiled in bitcode of the
  * runtime modules. As with all JITModules, the shared runtime is ref
- * counted, but a globabl keeps one ref alive until shutdown or when
+ * counted, but a global keeps one ref alive until shutdown or when
  * JITSharedRuntime::release_all is called. If
- * JITSharedRuntime::release_all is called, the global state is rest
+ * JITSharedRuntime::release_all is called, the global state is reset
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
@@ -851,40 +874,47 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     std::vector<JITModule> result;
 
     JITModule m = make_module(for_module, target, MainShared, result, create);
-    if (m.compiled())
+    if (m.compiled()) {
         result.push_back(m);
+    }
 
     // Add all requested GPU modules, each only depending on the main shared runtime.
     std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
         JITModule m = make_module(for_module, target, OpenCL, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::Metal)) {
         JITModule m = make_module(for_module, target, Metal, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::CUDA)) {
         JITModule m = make_module(for_module, target, CUDA, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::OpenGL)) {
         JITModule m = make_module(for_module, target, OpenGL, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         JITModule m = make_module(for_module, target, OpenGLCompute, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         JITModule m = make_module(for_module, target, Hexagon, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
 
     return result;
@@ -894,7 +924,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
 // caller provided user context work with JIT. (At present, this
 // cascaded handler calls cannot work with the right context as
 // JITModule needs its context to be passed in case the called handler
-// calls another callback wich is not overriden by the caller.)
+// calls another callback which is not overriden by the caller.)
 void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
                                              void *user_context, const JITHandlers &handlers) {
     jit_user_context.handlers = active_handlers;

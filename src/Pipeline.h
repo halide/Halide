@@ -9,7 +9,6 @@
 
 #include <vector>
 
-#include "BufferPtr.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
@@ -58,7 +57,7 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<Internal::BufferPtr> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
+    std::vector<Buffer<>> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
     std::pair<std::vector<const void *>, std::vector<Argument>>
         prepare_jit_call_arguments(Realization dst, const Target &target);
     int call_jit_code(const Target &target, std::pair<std::vector<const void *>, std::vector<Argument>> &args);
@@ -169,17 +168,17 @@ public:
     EXPORT void print_loop_nest();
 
     /** Compile to object file and header pair, with the given
-     * arguments. Also names the C function to match the filename
-     * argument. */
+     * arguments. */
     EXPORT void compile_to_file(const std::string &filename_prefix,
                                 const std::vector<Argument> &args,
+                                const std::string &fn_name,
                                 const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair, with the given
-     * arguments. Also names the C function to match the filename
-     * argument. */
+     * arguments. */
     EXPORT void compile_to_static_library(const std::string &filename_prefix,
                                           const std::vector<Argument> &args,
+                                          const std::string &fn_name,
                                           const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair once for each target;
@@ -362,15 +361,18 @@ public:
     EXPORT Realization realize(int x_size,
                                const Target &target = Target());
     EXPORT Realization realize(const Target &target = Target());
-    EXPORT void realize(Realization dst, const Target &target = Target());
-
-    template<typename T, int D>
-    NO_INLINE void realize(Image<T, D> &dst, const Target &target = Target()) {
-        Realization r(dst);
-        realize(r, target);
-        dst = r[0];
-    }
     // @}
+
+    /** Evaluate this Pipeline into an existing allocated buffer or
+     * buffers. If the buffer is also one of the arguments to the
+     * function, strange things may happen, as the pipeline isn't
+     * necessarily safe to run in-place. The realization should
+     * contain one Buffer per tuple component per output Func. For
+     * each individual output Func, all Buffers must have the same
+     * shape, but the shape can vary across the different output
+     * Funcs. This form of realize does *not* automatically copy data
+     * back from the GPU. */
+    EXPORT void realize(Realization dst, const Target &target = Target());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -380,17 +382,6 @@ public:
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(Realization dst);
-
-    template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Image<T, D> &im) {
-        // It's possible for bounds inference to also manipulate
-        // output buffers if their host pointer is null, so we must
-        // take Images by reference and communicate the bounds query
-        // result by modifying the argument.
-        Realization r(im);
-        infer_input_bounds(r);
-        im = r[0];
-    }
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
@@ -417,76 +408,78 @@ private:
 
 };
 
-namespace {
+struct ExternSignature {
+private:
+    Type ret_type_;       // Only meaningful if is_void_return is false; must be default value otherwise
+    bool is_void_return_{false};
+    std::vector<Type> arg_types_;
 
-template <typename T>
-bool voidable_halide_type(Type &t) {
-    t = type_of<T>();
-    return false;
-}
+public:
+    ExternSignature() = default;
 
-template<>
-inline bool voidable_halide_type<void>(Type &t) {
-    return true;
-}
-
-template <typename T>
-bool scalar_arg_type_or_buffer(Type &t) {
-    t = type_of<T>();
-    return false;
-}
-
-template <>
-inline bool scalar_arg_type_or_buffer<struct buffer_t *>(Type &t) {
-    return true;
-}
-
-template <typename T>
-ScalarOrBufferT arg_type_info() {
-    ScalarOrBufferT result;
-    result.is_buffer = scalar_arg_type_or_buffer<T>(result.scalar_type);
-    return result;
-}
-
-template <typename A1, typename... Args>
-struct make_argument_list {
-    static void add_args(std::vector<ScalarOrBufferT> &arg_types) {
-       arg_types.push_back(arg_type_info<A1>());
-       make_argument_list<Args...>::add_args(arg_types);
+    ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<Type> &arg_types)
+        : ret_type_(ret_type),
+          is_void_return_(is_void_return),
+          arg_types_(arg_types) {
+        internal_assert(!(is_void_return && ret_type != Type())); 
     }
-};
-
-template <>
-struct make_argument_list<void> {
-    static void add_args(std::vector<ScalarOrBufferT> &) { }
-};
-
-
-template <typename... Args>
-void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
-    make_argument_list<Args..., void>::add_args(arg_types);
-}
-
-}
-
-struct JITExtern {
-    // assert pipeline.defined() == (c_function == nullptr) -- strictly one or the other
-    // which should be enforced by the constructors.
-    Pipeline pipeline;
-
-    void *c_function;
-    ExternSignature signature;
-
-    EXPORT JITExtern();
-    EXPORT JITExtern(Pipeline pipeline);
-    EXPORT JITExtern(Func func);
 
     template <typename RT, typename... Args>
-    JITExtern(RT (*f)(Args... args)) {
-        c_function = (void *)f;
-        signature.is_void_return = voidable_halide_type<RT>(signature.ret_type);
-        init_arg_types<Args...>(signature.arg_types);
+    ExternSignature(RT (*f)(Args... args)) 
+        : ret_type_(type_of<RT>()),
+          is_void_return_(std::is_void<RT>::value),
+          arg_types_({type_of<Args>()...}) {
     }
+
+    const Type &ret_type() const { 
+        internal_assert(!is_void_return()); 
+        return ret_type_; 
+    }
+
+    bool is_void_return() const {
+        return is_void_return_; 
+    }
+
+    const std::vector<Type> &arg_types() const { 
+        return arg_types_; 
+    }
+};
+
+struct ExternCFunction {
+private:
+    void *address_{nullptr};
+    ExternSignature signature_;
+
+public:
+    ExternCFunction() = default;
+
+    ExternCFunction(void *address, const ExternSignature &signature)
+        : address_(address), signature_(signature) {}
+
+    template <typename RT, typename... Args>
+    ExternCFunction(RT (*f)(Args... args)) : ExternCFunction((void *)f, ExternSignature(f)) {}
+
+    void *address() const { return address_; }
+    const ExternSignature &signature() const { return signature_; }
+};
+
+struct JITExtern {
+private:
+    // Note that exactly one of pipeline_ and extern_c_function_ 
+    // can be set in a given JITExtern instance.
+    Pipeline pipeline_;
+    ExternCFunction extern_c_function_;
+
+public:
+    EXPORT JITExtern(Pipeline pipeline);
+    EXPORT JITExtern(Func func);
+    EXPORT JITExtern(const ExternCFunction &extern_c_function);
+
+    template <typename RT, typename... Args>
+    JITExtern(RT (*f)(Args... args)) : JITExtern(ExternCFunction(f)) {}
+
+    const Pipeline &pipeline() const { return pipeline_; }
+    const ExternCFunction &extern_c_function() const { return extern_c_function_; }
 };
 
 }  // namespace Halide

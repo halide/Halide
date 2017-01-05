@@ -32,9 +32,9 @@ int main(int argc, char **argv) {
     g.vectorize(x, 8);
     h.vectorize(x, 8);
 
-    Image<float> correct_result(2048, 768);
-    Image<float> fast_result(2048, 768);
-    Image<float> faster_result(2048, 768);
+    Buffer<float> correct_result(2048, 768);
+    Buffer<float> fast_result(2048, 768);
+    Buffer<float> faster_result(2048, 768);
 
     pows_per_pixel.set(1);
 
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 
     // All profiling runs are done into the same buffer, to avoid
     // cache weirdness.
-    Image<float> timing_scratch(256, 256);
+    Buffer<float> timing_scratch(256, 256);
     double t1 = 1e3 * benchmark(3, 3, [&]() { f.realize(timing_scratch); });
     double t2 = 1e3 * benchmark(trials, iterations, [&]() { g.realize(timing_scratch); });
     double t3 = 1e3 * benchmark(trials, iterations, [&]() { h.realize(timing_scratch); });
@@ -60,8 +60,8 @@ int main(int argc, char **argv) {
     fast_error() += cast<double>(fast_delta * fast_delta);
     faster_error() += cast<double>(faster_delta * faster_delta);
 
-    Image<double> fast_err = fast_error.realize();
-    Image<double> faster_err = faster_error.realize();
+    Buffer<double> fast_err = fast_error.realize();
+    Buffer<double> faster_err = faster_error.realize();
 
     int timing_N = timing_scratch.width() * timing_scratch.height() * 10;
     int correctness_N = fast_result.width() * fast_result.height();

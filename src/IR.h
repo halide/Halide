@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "BufferPtr.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"
@@ -17,6 +16,7 @@
 #include "Parameter.h"
 #include "Type.h"
 #include "Util.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
@@ -200,12 +200,12 @@ struct Load : public ExprNode<Load> {
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
-    BufferPtr image;
+    Buffer<> image;
 
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, std::string name, Expr index, BufferPtr image, Parameter param);
+    EXPORT static Expr make(Type type, std::string name, Expr index, Buffer<> image, Parameter param);
 
     static const IRNodeType _type_info = IRNodeType::Load;
 };
@@ -272,18 +272,23 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     static const IRNodeType _type_info = IRNodeType::AssertStmt;
 };
 
-/** This node is a helpful annotation to do with permissions. The
- * three child statements happen in order. In the 'produce'
- * statement 'buffer' is write-only. In 'update' it is
- * read-write. In 'consume' it is read-only. The 'update' node is
- * often undefined. (check update.defined() to find out). None of this
- * is actually enforced, the node is purely for informative
- * purposes to help out our analysis during lowering. */
+/** This node is a helpful annotation to do with permissions. If 'is_produce' is
+ * set to true, this represents a producer node which may also contain updates;
+ * otherwise, this represents a consumer node. If the producer node contains
+ * updates, the body of the node will be a block of 'produce' and 'update'
+ * in that order. In a producer node, the access is read-write only (or write
+ * only if it doesn't have updates). In a consumer node, the access is read-only.
+ * None of this is actually enforced, the node is purely for informative purposes
+ * to help out our analysis during lowering. For every unique ProducerConsumer,
+ * there is an associated Realize node with the same name that creates the buffer
+ * being read from or written to in the body of the ProducerConsumer.
+ */
 struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     std::string name;
-    Stmt produce, update, consume;
+    bool is_producer;
+    Stmt body;
 
-    EXPORT static Stmt make(std::string name, Stmt produce, Stmt update, Stmt consume);
+    EXPORT static Stmt make(std::string name, bool is_producer, Stmt body);
 
     static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
 };
@@ -498,7 +503,11 @@ struct Call : public ExprNode<Call> {
         mod_round_to_zero,
         slice_vector,
         call_cached_indirect_function,
+        prefetch,
+        prefetch_2d,
         signed_integer_overflow,
+        predicated_store,
+        predicated_load,
         indeterminate_expression,
         bool_to_mask,
         cast_mask,
@@ -516,7 +525,7 @@ struct Call : public ExprNode<Call> {
 
     // If it's a call to an image, this call nodes hold a
     // pointer to that image's buffer
-    BufferPtr image;
+    Buffer<> image;
 
     // If it's a call to an image parameter, this call node holds a
     // pointer to that
@@ -524,26 +533,19 @@ struct Call : public ExprNode<Call> {
 
     EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                             IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
-                            BufferPtr image = BufferPtr(), Parameter param = Parameter());
+                            Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
-        internal_assert(idx >= 0 &&
-                        idx < func.outputs())
-            << "Value index out of range in call to halide function\n";
-        internal_assert(func.has_pure_definition() || func.has_extern_definition())
-            << "Call to undefined halide function\n";
-        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, BufferPtr(), Parameter());
-    }
+    EXPORT static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(BufferPtr image, const std::vector<Expr> &args) {
+    static Expr make(Buffer<> image, const std::vector<Expr> &args) {
         return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, nullptr, 0, BufferPtr(), param);
+        return make(param.type(), param.name(), args, Image, nullptr, 0, Buffer<>(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that
@@ -579,28 +581,29 @@ struct Variable : public ExprNode<Variable> {
     Parameter param;
 
     /** References to properties of literal image parameters. */
-    BufferPtr image;
+    Buffer<> image;
 
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
     static Expr make(Type type, std::string name) {
-        return make(type, name, BufferPtr(), Parameter(), ReductionDomain());
+        return make(type, name, Buffer<>(), Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, BufferPtr(), param, ReductionDomain());
+        return make(type, name, Buffer<>(), param, ReductionDomain());
     }
 
-    static Expr make(Type type, std::string name, BufferPtr image) {
+    static Expr make(Type type, std::string name, Buffer<> image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, BufferPtr(), Parameter(), reduction_domain);
+        return make(type, name, Buffer<>(), Parameter(), reduction_domain);
     }
 
-    EXPORT static Expr make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain);
+    EXPORT static Expr make(Type type, std::string name, Buffer<> image,
+                            Parameter param, ReductionDomain reduction_domain);
 
     static const IRNodeType _type_info = IRNodeType::Variable;
 };
@@ -625,6 +628,12 @@ struct For : public StmtNode<For> {
     Stmt body;
 
     EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
+
+    bool is_parallel() const {
+        return (for_type == ForType::Parallel ||
+                for_type == ForType::GPUBlock ||
+                for_type == ForType::GPUThread);
+    }
 
     static const IRNodeType _type_info = IRNodeType::For;
 };

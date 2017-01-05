@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     // targets. This provides early warning that you may have broken
     // Halide on some other platform.
 
-    Func f;
+    Func f("f");
     Var x;
     f(x) = x;
 
@@ -30,8 +30,8 @@ int main(int argc, char **argv) {
     for (const std::string &t : targets) {
         Target target(t);
         if (!target.supported()) continue;
-        f.compile_to_file("test_object_" + t, std::vector<Argument>(), target);
-        f.compile_to_static_library("test_lib_" + t, std::vector<Argument>(), target);
+        f.compile_to_file("test_object_" + t, std::vector<Argument>(), "", target);
+        f.compile_to_static_library("test_lib_" + t, std::vector<Argument>(), "", target);
 
         std::string object_name = "test_object_" + t;
         std::string lib_name = "test_lib_" + t;
