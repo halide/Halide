@@ -526,7 +526,7 @@ private:
 
     void visit(const Call *call) {
         if (!innermost_realization_name.empty() &&
-            call->name == "_halide_buffer_init") {
+            call->name == Call::buffer_init) {
             internal_assert(call->args.size() >= 2)
                 << "RewriteMemoizedAllocations: _halide_buffer_init call with fewer than two args.\n";
             
@@ -543,7 +543,7 @@ private:
                         // Everything matches, rewrite _halide_buffer_init to use a nullptr handle for address.
                         std::vector<Expr> args = call->args;
                         args[1] = make_zero(Handle());
-                        expr = Call::make(type_of<struct buffer_t *>(), "_halide_buffer_init",
+                        expr = Call::make(type_of<struct buffer_t *>(), Call::buffer_init,
                                           args, Call::Extern);
                         return;
                     }
@@ -567,7 +567,7 @@ private:
 
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->extents, allocation->condition, body,
-                                      Call::make(Handle(), "_halide_buffer_get_host",
+                                      Call::make(Handle(), Call::buffer_get_host,
                                                  { Variable::make(type_of<struct buffer_t *>(), allocation->name + ".buffer") }, Call::Extern),
                                       "halide_memoization_cache_release");
             }

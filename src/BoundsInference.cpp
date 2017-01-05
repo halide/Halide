@@ -28,8 +28,8 @@ class DependsOnBoundsInference : public IRVisitor {
     }
 
     void visit(const Call *op) {
-        if (op->name == "_halide_buffer_get_min" ||
-            op->name == "_halide_buffer_get_max") {
+        if (op->name == Call::buffer_get_min ||
+            op->name == Call::buffer_get_max) {
             result = true;
         } else {
             IRVisitor::visit(op);
@@ -343,14 +343,14 @@ public:
                     string inner_query_name = func.name() + ".o0.bounds_query";
                     Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
-                        Expr outer_min = Call::make(Int(32), "_halide_buffer_get_min",
+                        Expr outer_min = Call::make(Int(32), Call::buffer_get_min,
                                                     {outer_query, i}, Call::Extern);
-                        Expr outer_max = Call::make(Int(32), "_halide_buffer_get_max",
+                        Expr outer_max = Call::make(Int(32), Call::buffer_get_max,
                                                     {outer_query, i}, Call::Extern);
 
-                        Expr inner_min = Call::make(Int(32), "_halide_buffer_get_min",
+                        Expr inner_min = Call::make(Int(32), Call::buffer_get_min,
                                                     {inner_query, i}, Call::Extern);
-                        Expr inner_max = Call::make(Int(32), "_halide_buffer_get_max",
+                        Expr inner_max = Call::make(Int(32), Call::buffer_get_max,
                                                     {inner_query, i}, Call::Extern);
                         
                         // Push 'inner' inside of 'outer'
@@ -381,10 +381,10 @@ public:
                     string inner_query_name = func.name() + ".o0.bounds_query";
                     Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
-                        Expr new_min = Call::make(Int(32), "_halide_buffer_get_min",
-                                                  {inner_query, i}, Call::PureExtern);
-                        Expr new_max = Call::make(Int(32), "_halide_buffer_get_max",
-                                                  {inner_query, i}, Call::PureExtern);
+                        Expr new_min = Call::make(Int(32), Call::buffer_get_min,
+                                                  {inner_query, i}, Call::Extern);
+                        Expr new_max = Call::make(Int(32), Call::buffer_get_max,
+                                                  {inner_query, i}, Call::Extern);
 
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".max", new_max, s);
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
@@ -730,9 +730,9 @@ public:
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name);
-                            Expr min = Call::make(Int(32), "_halide_buffer_get_min",
+                            Expr min = Call::make(Int(32), Call::buffer_get_min,
                                                   {buf, d}, Call::Extern);
-                            Expr max = Call::make(Int(32), "_halide_buffer_get_max",
+                            Expr max = Call::make(Int(32), Call::buffer_get_max,
                                                   {buf, d}, Call::Extern);
                             b[d] = Interval(min, max);
                         }

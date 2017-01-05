@@ -658,7 +658,7 @@ Expr BufferBuilder::build() const {
         args[10] = const_false();
     }
 
-    return Call::make(type_of<struct buffer_t *>(), "_halide_buffer_init", args, Call::Extern);   
+    return Call::make(type_of<struct buffer_t *>(), Call::buffer_init, args, Call::Extern);   
 }
     
 } // namespace Internal

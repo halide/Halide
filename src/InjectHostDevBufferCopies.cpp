@@ -91,7 +91,7 @@ class FindBuffersToTrack : public IRVisitor {
         // (because the buffer doesn't exist yet).
         const Call *c = op->value.as<Call>();
         if (ends_with(op->name, ".buffer") &&
-            c && c->name == "_halide_buffer_init") {
+            c && c->name == Call::buffer_init) {
             buffers_to_track.erase(op->name.substr(0, op->name.size() - 7));
         }
 
@@ -338,14 +338,14 @@ class InjectBufferCopies : public IRMutator {
             if (host_wrote) {
                 debug(4) << "Setting host dirty for " << i.first << "\n";
                 // If we just invalidated the dev pointer, we need to set the host dirty bit.
-                Expr set_host_dirty = Call::make(Int(32), "_halide_buffer_set_host_dirty",
+                Expr set_host_dirty = Call::make(Int(32), Call::buffer_set_host_dirty,
                                                  {buffer, const_true()}, Call::Extern);
                 s = Block::make(s, Evaluate::make(set_host_dirty));
             }
 
             if (device_wrote) {
                 // If we just invalidated the host pointer, we need to set the dev dirty bit.
-                Expr set_dev_dirty = Call::make(Int(32), "_halide_buffer_set_dev_dirty",
+                Expr set_dev_dirty = Call::make(Int(32), Call::buffer_set_dev_dirty,
                                                 {buffer, const_true()}, Call::Extern);
                 s = Block::make(s, Evaluate::make(set_dev_dirty));
             }
@@ -566,26 +566,26 @@ class InjectBufferCopies : public IRMutator {
             // and dev ones to facilitate this, but it seems better to
             // just register a destructor with the buffer creation.)
             inner_body = Allocate::make(op->name, op->type, op->extents, op->condition, inner_body,
-                                        Call::make(Handle(), "_halide_buffer_get_host",
+                                        Call::make(Handle(), Call::buffer_get_host,
                                                    { Variable::make(type_of<struct buffer_t *>(), op->name + ".buffer") },
-                                                   Call::PureExtern),
+                                                   Call::Extern),
                                         "halide_device_host_nop_free"); // TODO: really should not have to introduce this routine to get a nop free
             // Wrap combined malloc around Allocate.
             inner_body = Block::make(combined_malloc, inner_body);
 
-            // Rewrite original _halide_buffer_init call and wrap it around the combined malloc.
+            // Rewrite original buffer_init call and wrap it around the combined malloc.
             std::vector<Expr> create_buffer_args;
             internal_assert(buffer_init_let) << "Could not find definition of " << op->name << ".buffer\n";
 
             const Call *possible_create_buffer = buffer_init_let->value.as<Call>();
             if (possible_create_buffer != nullptr &&
-                possible_create_buffer->name == "_halide_buffer_init") {
+                possible_create_buffer->name == Call::buffer_init) {
                 // Use the same args, but with a zero host pointer.
                 create_buffer_args = possible_create_buffer->args;
                 create_buffer_args[1] = make_zero(Handle()); 
             }
 
-            Expr buf = Call::make(type_of<struct buffer_t *>(), "_halide_buffer_init",
+            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::buffer_init,
                                   create_buffer_args, Call::Extern);
             stmt = LetStmt::make(op->name + ".buffer", buf, inner_body);
             
@@ -617,10 +617,10 @@ class InjectBufferCopies : public IRMutator {
             if (!state[buf_name].host_touched) {
                 // Use null as a host pointer if there's no host allocation
                 const Call *create_buffer = op->value.as<Call>();
-                internal_assert(create_buffer && create_buffer->name == "_halide_buffer_init");
+                internal_assert(create_buffer && create_buffer->name == Call::buffer_init);
                 vector<Expr> args = create_buffer->args;
                 args[1] = make_zero(Handle());
-                value = Call::make(type_of<struct buffer_t *>(), "_halide_buffer_init", args, Call::Extern);
+                value = Call::make(type_of<struct buffer_t *>(), Call::buffer_init, args, Call::Extern);
                 stmt = LetStmt::make(op->name, value, op->body);
             }
         }
