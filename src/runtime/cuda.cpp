@@ -132,9 +132,9 @@ public:
     int error;
 
     // Constructor sets 'error' if any occurs.
-    Context(void *user_context) : user_context(user_context),
-                                  context(NULL),
-                                  error(CUDA_SUCCESS) {
+    INLINE Context(void *user_context) : user_context(user_context),
+                                         context(NULL),
+                                         error(CUDA_SUCCESS) {
         if (cuInit == NULL) {
             load_libcuda(user_context);
         }
@@ -151,7 +151,7 @@ public:
         error = cuCtxPushCurrent(context);
     }
 
-    ~Context() {
+    INLINE ~Context() {
         CUcontext old;
         cuCtxPopCurrent(&old);
 

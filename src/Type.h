@@ -306,18 +306,20 @@ struct Type {
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
     Type with_code(halide_type_code_t new_code) const {
-        return Type(new_code, bits(), lanes());
+        return Type(new_code, bits(), lanes(),
+                    (new_code == code()) ? handle_type : nullptr);
     }
 
     /** Return Type with same type code and lanes, but new_bits for the number of bits. */
     Type with_bits(int new_bits) const {
-        return Type(code(), new_bits, lanes());
+        return Type(code(), new_bits, lanes(),
+                    (new_bits == bits()) ? handle_type : nullptr);
     }
 
     /** Return Type with same type code and number of bits,
      * but new_lanes for the number of vector lanes. */
     Type with_lanes(int new_lanes) const {
-        return Type(code(), bits(), new_lanes);
+        return Type(code(), bits(), new_lanes, handle_type);
     }
 
     /** Type to be printed when declaring handles of this type. */
@@ -363,7 +365,7 @@ struct Type {
 
     /** Produce the scalar type (that of a single element) of this vector type */
     Type element_of() const {
-        return Type(code(), bits(), 1);
+        return with_lanes(1);
     }
 
     /** Can this type represent all values of another type? */
