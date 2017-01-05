@@ -85,10 +85,9 @@ class InjectHexagonRpc : public IRMutator {
     Expr state_var(const std::string& name, Type type) {
         Expr& var = state_vars[name];
         if (!var.defined()) {
-            auto storage = Buffer<void *>::make_scalar();
+            auto storage = Buffer<void *>::make_scalar(name + "_buf");
             storage() = nullptr;
-            BufferPtr buf(storage, name + "_buf");
-            var = Load::make(type_of<void*>(), name + "_buf", 0, buf, Parameter());
+            var = Load::make(type_of<void*>(), storage.name(), 0, storage, Parameter());
         }
         return var;
     }
@@ -109,10 +108,9 @@ class InjectHexagonRpc : public IRMutator {
     // Create a Buffer containing the given buffer/size, and return an
     // expression for a pointer to the first element.
     Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
-        Buffer<uint8_t> code((int)size);
+        Buffer<uint8_t> code((int)size, name);
         memcpy(code.data(), buffer, (int)size);
-        BufferPtr buf(code, name);
-        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, buf, Parameter());
+        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter());
         return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
     }
 

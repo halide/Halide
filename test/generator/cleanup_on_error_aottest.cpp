@@ -10,7 +10,7 @@
 
 #include "cleanup_on_error.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int size = 64;
 

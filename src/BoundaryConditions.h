@@ -67,9 +67,12 @@ inline NO_INLINE Func func_like_to_func(const T &func_like) {
  *  constant, though the code currently allows accessing the arguments
  *  of source.
  *
- *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
- *  is done and no bounds are given, the boundaries will be taken from the
- *  min and extent methods of the passed object.
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a
+ *  Func. If this is done and no bounds are given, the boundaries will
+ *  be taken from the min and extent methods of the passed
+ *  object. Note that objects are taken by mutable ref. Pipelines
+ *  capture Buffers via mutable refs, because running a pipeline might
+ *  alter the Buffer metadata (e.g. device allocation state).
  *
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_BORDER
  *   and putting value in the border of the texture.)

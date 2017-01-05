@@ -19,7 +19,7 @@ bool test(int vec_width) {
     int W = vec_width*1;
     int H = 50000;
 
-    Image<A> input(W, H+20);
+    Buffer<A> input(W, H+20);
     for (int y = 0; y < H+20; y++) {
         for (int x = 0; x < W; x++) {
             input(x, y) = (A)((rand() & 0xffff)*0.125 + 1.0);
@@ -47,8 +47,8 @@ bool test(int vec_width) {
     g(r.x, r.y) = e;
     f.update(0).vectorize(r.x);
 
-    Image<A> outputg = g.realize(W, H);
-    Image<A> outputf = f.realize(W, H);
+    Buffer<A> outputg = g.realize(W, H);
+    Buffer<A> outputf = f.realize(W, H);
 
     double t_g = benchmark(1, 10, [&]() {
         g.realize(outputg);

@@ -20,7 +20,7 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
     for (const pair<string, Type> &i : closure.vars) {
         res.push_back(llvm_type_of(&context, i.second));
     }
-    for (const pair<string, Closure::BufferRef> &i : closure.buffers) {
+    for (const pair<string, Closure::Buffer> &i : closure.buffers) {
         res.push_back(llvm_type_of(&context, i.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
@@ -149,7 +149,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
-        "halide_hexagon_host_get_symbol",
         "halide_hexagon_power_hvx_on",
         "halide_hexagon_power_hvx_on_mode",
         "halide_hexagon_power_hvx_on_perf",

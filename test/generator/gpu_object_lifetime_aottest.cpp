@@ -14,9 +14,9 @@
 
 #include "test/common/gpu_object_lifetime_tracker.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
-Internal::GpuObjectLifetimeTracker tracker;
+Halide::Internal::GpuObjectLifetimeTracker tracker;
 
 void my_halide_print(void *user_context, const char *str) {
     printf("%s", str);
