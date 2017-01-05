@@ -8,7 +8,7 @@
 # TODO apps/opengl_demo
 # TODO apps/openglcompute
 # TODO apps/simd_op_check
-# TODO apps/templates
+# TODO apps/templates -- should probably be upgraded to Bazel-only?
 
 package(
     default_visibility = ["//visibility:private"],
@@ -227,7 +227,7 @@ genrule(
     ]),
     tools = [
         "//tools:static_link.sh",
-        "//tools/defaults:crosstool",  # TODO: should not be necessary, see https://github.com/bazelbuild/bazel/issues/2058
+        "//tools/defaults:crosstool",  # This is necessary to access $(CC); see https://github.com/bazelbuild/bazel/issues/2058
     ],
 )
 
@@ -235,7 +235,7 @@ genrule(
 # which doesn't appear to be feasible right now?
 cc_binary(
     name = "libHalide.so",
-    # TODO: this *should be correct and necessary to make a fully-self-contained
+    # TODO: this *should* be correct and necessary to make a fully-self-contained
     # .so file (and on OSX, it seems to); something is amiss on Linux, so
     # disabled for now, since the downstream distro rules don't use it (yet).
     # linkopts = ["-static"],
@@ -353,7 +353,6 @@ _DISTRIB_PKG = [
 
 pkg_tar(
     name = "halide",
-    # TODO: tgz doesn't seem to work correctly, http_archive() won't recognize it
     extension = "tar.gz",
     package_dir = "halide",
     deps = [":distrib_%s" % path.replace("/", "_") for path, targets in _DISTRIB_PKG],
