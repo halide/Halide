@@ -201,9 +201,9 @@ Stmt add_image_checks(Stmt s,
                 Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
-                    Expr min = Call::make(Int(32), "_halide_buffer_get_min",
+                    Expr min = Call::make(Int(32), Call::buffer_get_min,
                                           {query_buf, j}, Call::Extern);
-                    Expr max = Call::make(Int(32), "_halide_buffer_get_max",
+                    Expr max = Call::make(Int(32), Call::buffer_get_max,
                                           {query_buf, j}, Call::Extern);
                     query_box.push_back(Interval(min, max));
                 }

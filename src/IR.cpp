@@ -633,5 +633,13 @@ Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
+
+Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
+Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";    
+Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
+Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
+Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
+Call::ConstString Call::buffer_init = "_halide_buffer_init";    
+
 }
 }
