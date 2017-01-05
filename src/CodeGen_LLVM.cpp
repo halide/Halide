@@ -2632,29 +2632,17 @@ void CodeGen_LLVM::visit(const Call *op) {
                 all_same_type &= op->args[i].type() == op->args[0].type();
             }
 
-            if (all_same_type) {
-                // Create a stack array. The IR is simpler.
-                ArrayType *array_t = ArrayType::get(types[0], types.size());                
-                value = create_alloca_at_entry(array_t, 1, false);
-                for (size_t i = 0; i < args.size(); i++) {
-                    Value *elem_ptr = builder->CreateConstInBoundsGEP1_32(types[0], value, i);
-                    builder->CreateStore(args[i], elem_ptr);
-                }
-            } else {           
-                // Create an struct on the stack.
-                StructType *struct_t = StructType::get(*context, types);
-                value = create_alloca_at_entry(struct_t, 1);
-                
-                // Put the elements in the struct.
-                for (size_t i = 0; i < args.size(); i++) {
-                    Value *field_ptr =
-                        builder->CreateConstInBoundsGEP2_32(
-                                                            struct_t,
-                                                            value,
-                                                            0,
-                                                            i);
-                    builder->CreateStore(args[i], field_ptr);
-                }
+            // Use either a fixed-size array or a struct. The struct
+            // type would always be correct, but the array type
+            // produces slightly simpler IR.
+            llvm::Type *aggregate_t = (all_same_type ?
+                                       (llvm::Type *)ArrayType::get(types[0], types.size()) :
+                                       (llvm::Type *)StructType::get(*context, types));
+
+            value = create_alloca_at_entry(aggregate_t, 1);
+            for (size_t i = 0; i < args.size(); i++) {
+                Value *elem_ptr = builder->CreateConstInBoundsGEP2_32(aggregate_t, value, 0, i);
+                builder->CreateStore(args[i], elem_ptr);
             }
         }
 
@@ -2772,10 +2760,10 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::copy_memory)) {
         // Just like memcpy, copy_memory returns the destination address.
         Value *dst = codegen(op->args[0]);
-        builder->CreateMemCpy(dst, 
+        builder->CreateMemCpy(dst,
                               codegen(op->args[1]),
                               codegen(op->args[2]), 0);
-        value = dst;        
+        value = dst;
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
