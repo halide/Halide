@@ -1,7 +1,7 @@
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 template<typename T1, typename T2>
 void check_equal_shape(const Buffer<T1> &a, const Buffer<T2> &b) {
@@ -123,46 +123,6 @@ int main(int argc, char **argv) {
         });
     }
 
-    {
-        const int W = 5, H = 4, C = 3;
-
-        // Check for each value and for each element on Buffers where
-        // the shape doesn't fit into the buffer class.
-        auto b1 = Buffer<float, 2>::make_interleaved(W, H, C);
-
-        b1.fill(17.0f);
-
-        int count = 0;
-        b1.for_each_element([&](int x, int y, int c) {
-            count++;
-            b1(x, y, c) = x*100.0f + y*10.0f + c;
-        });
-        if (count != W * H * C) {
-            printf("Incorrect number of elements: %d\n", count);
-        }
-
-        // Assign to buffer when the source shape does not fit in the class
-        Buffer<float> b2 = b1;
-        b1.for_each_element([&](int x, int y, int c) {
-            float correct = x*100.0f + y*10.0f + c;
-            if (b1(x, y, c) != correct) {
-                printf("b1(%d, %d, %d) = %f instead of %f\n",
-                       x, y, c, b1(x, y, c), correct);
-            }
-        });
-
-        // Copy to a buffer where the destination shape does not fit in the class
-        auto b3 = Buffer<float, 0>::make_with_shape_of(b2);
-        b3.copy_from(b1);
-        b3.for_each_element([&](int x, int y, int c) {
-            float correct = x*100.0f + y*10.0f + c;
-            if (b3(x, y, c) != correct) {
-                printf("b3(%d, %d, %d) = %f instead of %f\n",
-                       x, y, c, b3(x, y, c), correct);
-            }
-        });
-    }
-
-
+    printf("Success!\n");
     return 0;
 }

@@ -508,7 +508,7 @@ public:
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
-                    BufferPtr b = args[j].buffer;
+                    Buffer<> b = args[j].buffer;
                     string name = args[j].is_image_param() ? p.name() : b.name();
                     int dims = args[j].is_image_param() ? p.dimensions() : b.dimensions();
 

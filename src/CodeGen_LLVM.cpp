@@ -461,7 +461,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
                 mangle_args.push_back(ExternFuncArgument(make_zero(arg.type)));
             } else if (arg.kind == Argument::InputBuffer ||
                        arg.kind == Argument::OutputBuffer) {
-                mangle_args.push_back(ExternFuncArgument(BufferPtr()));
+                mangle_args.push_back(ExternFuncArgument(Buffer<>()));
             }
         }
         names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
@@ -759,25 +759,24 @@ void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stac
     builder->CreateCall(call_destructor, args);
 }
 
-void CodeGen_LLVM::compile_buffer(const BufferPtr &buf) {
+void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     // Embed the buffer declaration as a global.
     internal_assert(buf.defined());
 
-    Halide::Buffer<> b = buf.get();
-    user_assert(b.data())
+    user_assert(buf.data())
         << "Can't embed buffer " << buf.name() << " because it has a null host pointer.\n";
-    user_assert(!b.device_dirty())
+    user_assert(!buf.device_dirty())
         << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
     Constant *type_fields[] = {
-        ConstantInt::get(i8_t, b.type().code),
-        ConstantInt::get(i8_t, b.type().bits),
-        ConstantInt::get(i16_t, b.type().lanes)
+        ConstantInt::get(i8_t, buf.type().code()),
+        ConstantInt::get(i8_t, buf.type().bits()),
+        ConstantInt::get(i16_t, buf.type().lanes())
     };
 
-    size_t shape_size = b.dimensions() * sizeof(halide_dimension_t);
-    vector<char> shape_blob((char *)b.raw_buffer()->dim, (char *)b.raw_buffer()->dim + shape_size);
+    size_t shape_size = buf.dimensions() * sizeof(halide_dimension_t);
+    vector<char> shape_blob((char *)buf.raw_buffer()->dim, (char *)buf.raw_buffer()->dim + shape_size);
     Constant *shape = create_binary_blob(shape_blob, buf.name() + ".shape");
     shape = ConstantExpr::getPointerCast(shape, dimension_t_type->getPointerTo());
 
@@ -785,9 +784,9 @@ void CodeGen_LLVM::compile_buffer(const BufferPtr &buf) {
     // while scalars can be mutated. This accommodates all our existing
     // use cases, which is that all buffers are constant, except those
     // used to store stateful module information in offloading runtimes.
-    bool constant = b.dimensions() != 0;
+    bool constant = buf.dimensions() != 0;
 
-    vector<char> data_blob((char *)b.data(), (char *)b.data() + b.size_in_bytes());
+    vector<char> data_blob((const char *)buf.data(), (const char *)buf.data() + buf.size_in_bytes());
 
     Constant *fields[] = {
         ConstantInt::get(i64_t, 0),                                 // device

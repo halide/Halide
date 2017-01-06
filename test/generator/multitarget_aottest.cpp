@@ -5,7 +5,7 @@
 #include "multitarget.h"
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 void my_error_handler(void *user_context, const char *message) {
     printf("Saw Error: (%s)\n", message);

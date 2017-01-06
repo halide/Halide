@@ -13,7 +13,7 @@ struct ParameterContents {
     const int dimensions;
     const std::string name;
     const std::string handle_type;
-    BufferPtr buffer;
+    Buffer<> buffer;
     uint64_t data;
     int host_alignment;
     std::vector<Expr> min_constraint;
@@ -24,7 +24,7 @@ struct ParameterContents {
     const bool is_explicit_name;
     const bool is_registered;
     ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
-        : type(t), dimensions(d), name(n), buffer(BufferPtr()), data(0),
+        : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
           host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r) {
 
         min_constraint.resize(dimensions);
@@ -173,19 +173,19 @@ Expr Parameter::get_scalar_expr() const {
     return Expr();
 }
 
-BufferPtr Parameter::get_buffer() const {
+Buffer<> Parameter::get_buffer() const {
     check_is_buffer();
     return contents->buffer;
 }
 
-void Parameter::set_buffer(BufferPtr b) {
+void Parameter::set_buffer(Buffer<> b) {
     check_is_buffer();
     if (b.defined()) {
         user_assert(contents->type == b.type())
             << "Can't bind Parameter " << name()
             << " of type " << contents->type
             << " to Buffer " << b.name()
-            << " of type " << b.type() << "\n";
+            << " of type " << Type(b.type()) << "\n";
     }
     contents->buffer = b;
 }

@@ -90,9 +90,9 @@ WEAK void get_remote_profiler_state(int *func, int *threads) {
 }
 
 template <typename T>
-__attribute__((always_inline)) void get_symbol(void *user_context, const char* name, T &sym, bool required = true) {
+__attribute__((always_inline)) void get_symbol(void *user_context, void *host_lib, const char* name, T &sym, bool required = true) {
     debug(user_context) << "    halide_get_library_symbol('" << name << "') -> \n";
-    sym = (T)halide_hexagon_host_get_symbol(user_context, name);
+    sym = (T) halide_get_library_symbol(host_lib, name);
     debug(user_context) << "        " << (void *)sym << "\n";
     if (!sym && required) {
         error(user_context) << "Required Hexagon runtime symbol '" << name << "' not found.\n";
@@ -106,36 +106,42 @@ WEAK int init_hexagon_runtime(void *user_context) {
         return 0;
     }
 
+    // The "support library" for Hexagon is essentially a way to delegate Hexagon
+    // code execution based on the runtime; devices with Hexagon hardware will
+    // simply provide conduits for execution on that hardware, while test/desktop/etc
+    // environments can instead connect a simulator via the API.
+    void *host_lib = halide_load_library("libhalide_hexagon_host.so");
+
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Get the symbols we need from the library.
-    get_symbol(user_context, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
     if (!remote_initialize_kernels) return -1;
-    get_symbol(user_context, "halide_hexagon_remote_get_symbol", remote_get_symbol);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol);
     if (!remote_get_symbol) return -1;
-    get_symbol(user_context, "halide_hexagon_remote_run", remote_run);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
-    get_symbol(user_context, "halide_hexagon_remote_release_kernels", remote_release_kernels);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels", remote_release_kernels);
     if (!remote_release_kernels) return -1;
 
-    get_symbol(user_context, "halide_hexagon_host_malloc_init", host_malloc_init);
+    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_init", host_malloc_init);
     if (!host_malloc_init) return -1;
-    get_symbol(user_context, "halide_hexagon_host_malloc_deinit", host_malloc_deinit);
+    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_deinit", host_malloc_deinit);
     if (!host_malloc_deinit) return -1;
-    get_symbol(user_context, "halide_hexagon_host_malloc", host_malloc);
+    get_symbol(user_context, host_lib, "halide_hexagon_host_malloc", host_malloc);
     if (!host_malloc) return -1;
-    get_symbol(user_context, "halide_hexagon_host_free", host_free);
+    get_symbol(user_context, host_lib, "halide_hexagon_host_free", host_free);
     if (!host_free) return -1;
 
     // These symbols are optional.
-    get_symbol(user_context, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
-    get_symbol(user_context, "halide_hexagon_remote_poll_profiler_state", remote_poll_profiler_state, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_profiler_state", remote_poll_profiler_state, /* required */ false);
 
     // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
-    get_symbol(user_context, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
-    get_symbol(user_context, "halide_hexagon_remote_power_hvx_on_mode", remote_power_hvx_on_mode, /* required */ false);
-    get_symbol(user_context, "halide_hexagon_remote_power_hvx_on_perf", remote_power_hvx_on_perf, /* required */ false);
-    get_symbol(user_context, "halide_hexagon_remote_power_hvx_off", remote_power_hvx_off, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_on_mode", remote_power_hvx_on_mode, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_on_perf", remote_power_hvx_on_perf, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_off", remote_power_hvx_off, /* required */ false);
 
     host_malloc_init();
 
@@ -769,28 +775,6 @@ WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * 
 
 WEAK const halide_device_interface_t *halide_hexagon_device_interface() {
     return &hexagon_device_interface;
-}
-
-WEAK void* halide_hexagon_host_get_symbol(void* user_context, const char *name) {
-    // The "support library" for Hexagon is essentially a way to delegate Hexagon
-    // code execution based on the runtime; devices with Hexagon hardware will
-    // simply provide conduits for execution on that hardware, while test/desktop/etc
-    // environments can instead connect a simulator via the API.
-    //
-    // By default, we look for "libhalide_hexagon_host.so" for this library
-    // (which is a bit of a confusing name: it's loaded and run on the host
-    // but contains functions for both host and remote usage); however, the
-    // intent of the halide_hexagon_host_get_symbol() bottleneck is to allow
-    // for runtimes that statically link the necessary support code if
-    // desired, which can simplify build and link requirements in some environments.
-    const char * const host_lib_name = "libhalide_hexagon_host.so";
-    static void *host_lib = halide_load_library(host_lib_name);
-    if (!host_lib) {
-        error(user_context) << host_lib_name << " not found.\n";
-        return NULL;
-    }
-    // If name isn't found, don't error: the name might not be required. Let the caller decide.
-    return halide_get_library_symbol(host_lib, name);
 }
 
 namespace {
