@@ -14,6 +14,12 @@
     HalideView *_halide_view;
 }
 
+- (void)viewWillAppear:(BOOL)animated
+{
+    [super viewWillAppear:animated];
+    [_halide_view initiateRender];
+}
+
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
     [_halide_view touchesBegan:touches withEvent:event];
 }
