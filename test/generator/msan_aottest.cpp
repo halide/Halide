@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 #include "msan.h"
 
 using namespace std;
-using namespace Halide;
+using namespace Halide::Runtime;
 
 // Just copies in -> out.
 extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
@@ -37,7 +37,7 @@ extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->type != out->type) {
         return -1;
     }
-    Halide::Buffer<>(*out).copy_from(Halide::Buffer<>(*in));
+    Buffer<>(*out).copy_from(Buffer<>(*in));
     out->set_host_dirty();
     return 0;
 }
@@ -143,7 +143,7 @@ int main()
     printf("Testing interleaved...\n");
     {
         auto out = Buffer<int32_t>::make_interleaved(4, 4, 3);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -165,7 +165,7 @@ int main()
         };
         std::vector<int32_t> data(((4 * 3) + kPad) * 4);
         auto out = Buffer<int32_t>(data.data(), 3, shape);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -179,7 +179,7 @@ int main()
     printf("Testing planar...\n");
     {
         auto out = Buffer<int32_t>(4, 4, 3);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -200,7 +200,7 @@ int main()
         };
         std::vector<int32_t> data((4 + kPad) * 4 * 3);
         auto out = Buffer<int32_t>(data.data(), 3, shape);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) != 0) {
             fprintf(stderr, "Failure!\n");
             exit(-1);
@@ -214,7 +214,7 @@ int main()
     printf("Testing error case...\n");
     {
         auto out = Buffer<int32_t>(1, 1, 1);
-        reset_state(out.host_ptr());
+        reset_state(out.data());
         if (msan(out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
             exit(-1);

@@ -17,8 +17,8 @@ uint64_t fn(int i0, int i1, int i2, int i3, int i4, int i5, int i6, int i7) {
 int main(int argc, char **argv) {
     {
         // Make an 8-dimensional image
-        Buffer<uint64_t> in({2, 3, 4, 5, 6, 7, 8, 9});
-        Buffer<uint64_t> out({2, 3, 4, 5, 6, 7, 8, 9});
+        Buffer<uint64_t> in(2, 3, 4, 5, 6, 7, 8, 9);
+        Buffer<uint64_t> out(2, 3, 4, 5, 6, 7, 8, 9);
 
         // Move the origin
         in.set_min(90, 80, 70, 60, 50, 40, 30, 20);
@@ -41,6 +41,23 @@ int main(int argc, char **argv) {
                     }
                 }
             }
+        }
+
+        // Check that for_each_element works with this many dimensions
+        int count = 0;
+        in.for_each_element([&](int i0, int i1, int i2, int i3, int i4, int i5, int i6, int i7) {
+            count++;
+            uint64_t correct = fn(i0, i1, i2, i3, i4, i5, i6, i7);
+            uint64_t actual = in(i0, i1, i2, i3, i4, i5, i6, i7);
+            if (actual != correct) {
+                printf("in(%d, %d, %d, %d, %d, %d, %d, %d) = %llu instead of %llu\n",
+                       i0, i1, i2, i3, i4, i5, i6, i7, (long long unsigned)actual, (long long unsigned)correct);
+                abort();
+            }
+        });
+        if (count != (int)in.number_of_elements()) {
+            printf("count = %d instead of %d\n", count, (int)in.number_of_elements());
+            return -1;
         }
 
         // Write Halide code that squares it and subtracts 3
@@ -74,6 +91,7 @@ int main(int argc, char **argv) {
                                             printf("out(%d, %d, %d, %d, %d, %d, %d, %d) = %llu instead of %llu\n",
                                                    i0, i1, i2, i3, i4, i5, i6, i7,
                                                    (long long unsigned)actual, (long long unsigned)correct);
+                                            abort();
                                         }
                                     }
                                 }

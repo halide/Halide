@@ -4,7 +4,7 @@
 #include "HalideBuffer.h"
 #include "stubtest.h"
 
-using Halide::Buffer;
+using Halide::Runtime::Buffer;
 
 const int kSize = 32;
 

@@ -3,7 +3,7 @@
 
 #include "stubuser.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int kSize = 32;
 

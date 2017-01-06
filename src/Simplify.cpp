@@ -5978,9 +5978,9 @@ void simplify_test() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), BufferPtr(), Parameter());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), BufferPtr(), Parameter());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), BufferPtr(), Parameter());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter());
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter());
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter());
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -5988,7 +5988,7 @@ void simplify_test() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), BufferPtr(), Parameter());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter());
         e = interleave_vectors({load1, load3});
         check(e, e);
 
@@ -6015,12 +6015,12 @@ void simplify_test() {
         Expr pred = ramp(x*y + x*z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
 
-        Expr load = Load::make(index.type(), "f", index, BufferPtr(), Parameter());
+        Expr load = Load::make(index.type(), "f", index, Buffer<>(), Parameter());
         Expr src = Call::make(Handle().with_lanes(8), Call::address_of, {load}, Call::Intrinsic);
         Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
 
         Expr dest = Call::make(Handle().with_lanes(8), Call::address_of,
-                               {Load::make(index.type(), "f", index, BufferPtr(), Parameter())},
+                               {Load::make(index.type(), "f", index, Buffer<>(), Parameter())},
                                Call::Intrinsic);
         Stmt stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
                                          {dest, pred, value},

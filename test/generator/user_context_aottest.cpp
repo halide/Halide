@@ -6,7 +6,7 @@
 #include "HalideBuffer.h"
 #include "user_context.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 static void *context_pointer = (void *)(intptr_t)0xf00dd00d;
 

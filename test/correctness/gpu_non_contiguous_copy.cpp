@@ -12,7 +12,9 @@ int main(int argc, char **argv) {
     const int x_off = 4, y_off = 8, z_off = 2, w_off = 4;
     const int x_size = 16, y_size = 16, z_size = 3, w_size = 3;
 
-    Buffer<int> cropped(full);
+    // We want to construct a new Buffer that refers to the same data
+    // but a different buffer_t.
+    Buffer<int> cropped(*full.raw_buffer());
     cropped.raw_buffer()->host = (uint8_t *)&(full(x_off, y_off, z_off, w_off));
     cropped.raw_buffer()->dim[0].extent = x_size;
     cropped.raw_buffer()->dim[1].extent = y_size;

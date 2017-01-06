@@ -390,7 +390,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument. BufferPtr arguments get
+            // store the size of the argument. Buffer arguments get
             // the dev field, which is 64-bits.
             int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
