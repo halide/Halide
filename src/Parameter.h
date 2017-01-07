@@ -8,6 +8,8 @@
 #include "Expr.h"
 #include "Buffer.h"
 
+#include "IntrusivePtr.h"
+
 namespace Halide {
 
 class OutputImageParam;

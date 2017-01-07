@@ -85,7 +85,7 @@ bool test(int vec_width, const Target &target) {
     /*
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-	    printf("%d %d -> %d %d\n", x, y, (int)(input(x, y)), (int)(output(x, y)));
+            printf("%d %d -> %d %d\n", x, y, (int)(input(x, y)), (int)(output(x, y)));
         }
     }
     */

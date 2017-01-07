@@ -93,6 +93,9 @@ Outputs compute_outputs(const Target &target,
             output_files.static_library_name = base_path + get_extension(".a", options);
         }
     }
+    if (options.emit_javascript) {
+        output_files.javascript_name = base_path + get_extension(".js", options);
+    }
     return output_files;
 }
 
@@ -772,7 +775,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-e EMIT_OPTIONS] [-x EXTENSION_OPTIONS] [-n FILE_BASE_NAME] "
                           "target=target-string[,target-string...] [generator_arg=value [...]]\n\n"
                           "  -e  A comma separated list of files to emit. Accepted values are "
-                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub]. If omitted, default value is [static_library, h].\n"
+                          "[assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, javascript]. If omitted, default value is [static_library, h].\n"
                           "  -x  A comma separated list of file extension pairs to substitute during file naming, "
                           "in the form [.old=.new[,.old2=.new2]]\n";
 
@@ -886,9 +889,11 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                 emit_options.emit_static_library = true;
             } else if (opt == "cpp_stub") {
                 emit_options.emit_cpp_stub = true;
+            } else if (opt == "javascript") {
+                emit_options.emit_javascript = true;
             } else if (!opt.empty()) {
                 cerr << "Unrecognized emit option: " << opt
-                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub], ignoring.\n";
+                     << " not one of [assembly, bitcode, cpp, h, html, o, static_library, stmt, cpp_stub, javascript], ignoring.\n";
             }
         }
     }

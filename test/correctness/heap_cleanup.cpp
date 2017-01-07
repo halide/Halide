@@ -28,6 +28,13 @@ void my_error_handler(void *user_context, const char *) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        // TODO: Add JavaScript custom malloc/free.
+        printf("Skipping heap_cleanup test for JavaScript as it depends on custom malloc/free.\n");
+        return 0;
+    }
+
     Func f, g, h;
     Var x;
 

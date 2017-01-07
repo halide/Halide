@@ -21,6 +21,7 @@ extern "C" DLLEXPORT float my_powf(float x, float y) {
 HalideExtern_2(float, my_powf, float, float);
 
 int main(int argc, char **argv) {
+
     // Brighten some tiles of an image, where that region is given by
     // a lower-res bitmap.
 

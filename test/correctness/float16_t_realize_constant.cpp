@@ -13,6 +13,13 @@ void h_assert(bool condition, const char *msg) {
 }
 
 int main() {
+    // TODO: See if float16_t working can work in Javascript.
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping float16_t_realize_constant test for JavaScript as Javascript does not have float16_t yet.\n");
+        return 0;
+    }
+
     Halide::Func f;
     Halide::Var x, y;
 

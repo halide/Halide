@@ -783,7 +783,11 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
-    halide_target_feature_end = 42 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_javascript = 42, ///< Compile to JavaScript and execute immediately. Requires JIT and only works with realize. (For testing mainly.)
+    halide_target_feature_javascript_simd = 43, ///< Enable SIMD.js use for vectorization.
+    halide_target_feature_javascript_v8 = 44, ///< Use the V8 JavaScript engine.
+    halide_target_feature_javascript_spidermonkey = 45, ///< Use the SpiderMonkey JavaScript engine.
+    halide_target_feature_end = 46 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

@@ -8,6 +8,7 @@
 #endif
 
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
@@ -16,28 +17,131 @@
 #include "CodeGen_LLVM.h"
 #include "Pipeline.h"
 
+namespace Halide {
+namespace Internal {
+
+using std::string;
 
 #ifdef _MSC_VER
 #define NOMINMAX
 #endif
 #ifdef _WIN32
 #include <windows.h>
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(nullptr), s) != nullptr;
+
+void *get_symbol_address(const char *s) {
+    return GetProcAddress(GetModuleHandle(nullptr), s);
 }
 #else
 #include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(nullptr, s) != nullptr;
+void *get_symbol_address(const char *s) {
+    // Mac OS 10.11 fails to return a symbol address if nullptr or RTLD_DEFAULT
+    // is passed to dlsym. This seems to work.
+    void *handle = dlopen(nullptr, RTLD_LAZY);
+    void *result = dlsym(handle, s);
+    dlclose(handle);
+    return result;
 }
 #endif
 
-namespace Halide {
-namespace Internal {
+static bool have_symbol(const char *s) {
+    return get_symbol_address(s) != nullptr;
+}
 
-using std::string;
+#if 0
+llvm::Type *copy_llvm_type_to_module(llvm::Module *to_module, llvm::Type *from_type) {
+    llvm::LLVMContext &context(to_module->getContext());
+    if (&from_type->getContext() == &context) {
+        return from_type;
+    }
 
-namespace {
+    switch (from_type->getTypeID()) {
+    case llvm::Type::VoidTyID:
+        return llvm::Type::getVoidTy(context);
+        break;
+    case llvm::Type::HalfTyID:
+        return llvm::Type::getHalfTy(context);
+        break;
+    case llvm::Type::FloatTyID:
+        return llvm::Type::getFloatTy(context);
+        break;
+    case llvm::Type::DoubleTyID:
+        return llvm::Type::getDoubleTy(context);
+        break;
+    case llvm::Type::X86_FP80TyID:
+        return llvm::Type::getX86_FP80Ty(context);
+        break;
+    case llvm::Type::FP128TyID:
+        return llvm::Type::getFP128Ty(context);
+        break;
+    case llvm::Type::PPC_FP128TyID:
+        return llvm::Type::getPPC_FP128Ty(context);
+        break;
+    case llvm::Type::LabelTyID:
+        return llvm::Type::getLabelTy(context);
+        break;
+    case llvm::Type::MetadataTyID:
+        return llvm::Type::getMetadataTy(context);
+        break;
+    case llvm::Type::X86_MMXTyID:
+        return llvm::Type::getX86_MMXTy(context);
+        break;
+    case llvm::Type::IntegerTyID:
+        return llvm::Type::getIntNTy(context, from_type->getIntegerBitWidth());
+        break;
+    case llvm::Type::FunctionTyID: {
+        llvm::FunctionType *f = llvm::cast<llvm::FunctionType>(from_type);
+        llvm::Type *return_type = copy_llvm_type_to_module(to_module, f->getReturnType());
+        std::vector<llvm::Type *> arg_types;
+        for (size_t i = 0; i < f->getNumParams(); i++) {
+            arg_types.push_back(copy_llvm_type_to_module(to_module, f->getParamType(i)));
+        }
+        return llvm::FunctionType::get(return_type, arg_types, f->isVarArg());
+    } break;
+    case llvm::Type::StructTyID: {
+        llvm::StructType *result;
+        llvm::StructType *s = llvm::cast<llvm::StructType>(from_type);
+        std::vector<llvm::Type *> element_types;
+        for (size_t i = 0; i < s->getNumElements(); i++) {
+            element_types.push_back(copy_llvm_type_to_module(to_module, s->getElementType(i)));
+        }
+        if (s->isLiteral()) {
+            result = llvm::StructType::get(context, element_types, s->isPacked());
+        } else {
+            result = to_module->getTypeByName(s->getName());
+            if (result == NULL) {
+                result = llvm::StructType::create(context, s->getName());
+                if (!element_types.empty()) {
+                    result->setBody(element_types, s->isPacked());
+                }
+            } else {
+                if (result->isOpaque() &&
+                    !element_types.empty()) {
+                    result->setBody(element_types, s->isPacked());
+                }
+            }
+        }
+        return result;
+    } break;
+    case llvm::Type::ArrayTyID: {
+        llvm::ArrayType *a = llvm::cast<llvm::ArrayType>(from_type);
+        return llvm::ArrayType::get(copy_llvm_type_to_module(to_module, a->getElementType()), a->getNumElements());
+    } break;
+    case llvm::Type::PointerTyID: {
+        llvm::PointerType *p = llvm::cast<llvm::PointerType>(from_type);
+        return llvm::PointerType::get(copy_llvm_type_to_module(to_module, p->getElementType()), p->getAddressSpace());
+    } break;
+    case llvm::Type::VectorTyID: {
+        llvm::VectorType *v = llvm::cast<llvm::VectorType>(from_type);
+        return llvm::VectorType::get(copy_llvm_type_to_module(to_module, v->getElementType()), v->getNumElements());
+    } break;
+    default: {
+        internal_error << "Unhandled LLVM type\n";
+        return NULL;
+    }
+    }
+
+}
+#endif
 
 typedef struct CUctx_st *CUcontext;
 
@@ -114,8 +218,6 @@ void load_metal() {
 #endif
 }
 
-}
-
 using namespace llvm;
 
 class JITModuleContents {
@@ -174,7 +276,6 @@ class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
-
     HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
 
     virtual uint64_t getSymbolAddress(const std::string &name) override {
@@ -356,6 +457,28 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     jit_module->name = function_name;
 }
 
+JITModule JITModule::make_trampolines_module(const Target &target_arg, const std::map<std::string, JITExtern> &externs,
+                                             const std::string &suffix,
+                                             const std::vector<JITModule> &deps) {
+    Target target = target_arg;
+    target.set_feature(Target::JIT);
+
+    JITModule result; 
+    CodeGen_LLVM *codegen = CodeGen_LLVM::new_for_target(target, result.jit_module->context);
+    codegen->init_for_codegen("trampolines");
+    std::vector<std::string> requested_exports;
+    for (const std::pair<std::string, JITExtern> &extern_entry : externs) {
+        Symbol sym = result.add_extern_for_export(extern_entry.first, extern_entry.second.extern_c_function());
+        codegen->add_argv_wrapper(cast<llvm::FunctionType>(sym.llvm_type),
+                                  extern_entry.first + suffix, extern_entry.first,
+                                  CodeGen_LLVM::LastArgPointsToResult);
+        requested_exports.push_back(extern_entry.first + suffix);
+    }
+    result.compile_module(codegen->finalize_module(), "", target, deps,
+                          requested_exports);
+    return result;
+}
+
 const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module->exports;
 }
@@ -415,7 +538,8 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-void JITModule::add_extern_for_export(const std::string &name, const ExternCFunction &extern_c_function) {
+JITModule::Symbol  JITModule::add_extern_for_export(const std::string &name,
+                                                    const ExternCFunction &extern_c_function) {
     Symbol symbol;
     symbol.address = extern_c_function.address();
 
@@ -447,6 +571,7 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternCFunc
 
     symbol.llvm_type = llvm::FunctionType::get(ret_type, llvm_arg_types, false);
     jit_module->exports[name] = symbol;
+    return symbol;
 }
 
 void JITModule::memoization_cache_set_size(int64_t size) const {

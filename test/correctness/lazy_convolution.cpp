@@ -18,7 +18,6 @@ extern "C" DLLEXPORT float call_counter(float x) {
 HalideExtern_1(float, call_counter, float);
 
 int main(int argc, char **argv) {
-
     Func f;
     Var x, y;
     f(x, y) = call_counter(sin(x*3 + y));

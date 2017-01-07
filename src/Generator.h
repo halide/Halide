@@ -1970,7 +1970,7 @@ public:
     GeneratorParam<Target> target{ "target", Halide::get_host_target() };
 
     struct EmitOptions {
-        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
+        bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub, emit_javascript;
         // This is an optional map used to replace the default extensions generated for
         // a file: if an key matches an output extension, emit those files with the
         // corresponding value instead (e.g., ".s" -> ".assembly_text"). This is
@@ -1980,7 +1980,7 @@ public:
         std::map<std::string, std::string> substitutions;
         EmitOptions()
             : emit_o(false), emit_h(true), emit_cpp(false), emit_assembly(false),
-              emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true), emit_cpp_stub(false) {}
+          emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true), emit_cpp_stub(false), emit_javascript(false) {}
     };
 
     EXPORT virtual ~GeneratorBase();

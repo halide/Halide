@@ -11,6 +11,13 @@ void halide_error(void *ctx, const char *msg) {
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    // TODO: See if this can be tested somehow.
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping input_larger_than_two_gigs test for JavaScript as executor support fails creating and array larger than 2^32 -1 bytes.\n");
+        return 0;
+    }
+
     uint8_t c[4096];
     memset(c, 42, sizeof(c));
 

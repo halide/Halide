@@ -78,6 +78,10 @@ struct Target {
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
+        JavaScript = halide_target_feature_javascript,
+        JavaScript_SIMD = halide_target_feature_javascript_simd,
+        JavaScript_V8 = halide_target_feature_javascript_v8,
+        JavaScript_SpiderMonkey = halide_target_feature_javascript_spidermonkey,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -182,7 +186,7 @@ struct Target {
                 return !has_feature(Metal) &&
                        (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
             } else {
-                return !has_feature(Metal);
+                return !(has_feature(Metal) || has_feature(JavaScript));
             }
         }
         return true;

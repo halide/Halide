@@ -12,8 +12,9 @@ using Halide::Internal::Call;
 // To ensure that the extremes of the data values are included in testing, the upper
 // left corner of each matrix contains the extremes.
 
-// The code uses 64 bit arithmetic to ensure that results are correct in 32 bits and fewer,
-// even if overflow occurs.
+// The code uses 64 bit arithmetic in C++ to ensure that results are
+// correct in 32 bits and fewer, even if overflow occurs. (64-bit
+// results in Halide are not used or tested.)
 
 // Dimensions of the test data, and rate of salting with extreme values (1 in SALTRATE)
 #define WIDTH 1024
@@ -501,6 +502,11 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
 
+    if (!(target.supports_type(Int(64)) && target.supports_type(Int(64)))) {
+        printf("Target doesn't support signed and unsigned 64-bit types, skipping.\n");
+	return 0;
+    }
+
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;
@@ -527,11 +533,11 @@ int main(int argc, char **argv) {
     for (int vector_width : vector_widths) {
         // Non-widening multiplication.
         success &= mul<uint8_t, uint8_t, uint8_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target);
-        success &= mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target);
-        success &= mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
+	success &= mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target);
+	success &= mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
+	success &= mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target);
+	success &= mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target);
+	success &= mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
 
         // Widening multiplication.
         success &= mul<uint8_t, uint8_t, uint16_t, uint64_t>(vector_width, scheduling, target);

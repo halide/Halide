@@ -178,7 +178,7 @@ class KeyInfo {
 // There is a plan to change the hash function used in the cache and
 // after that happens, we'll measure performance again and maybe decide
 // to choose one path or the other here and remove the #ifdef.
-#define USE_FULL_NAMES_IN_KEY 0
+#define USE_FULL_NAMES_IN_KEY 1
 #if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
@@ -250,7 +250,7 @@ public:
         Expr name_size = (int32_t)function_name.size();
         writes.push_back(Store::make(key_name,
                                      Cast::make(Int(32), name_size),
-                                     (index / Int(32).bytes())));
+                                     (index / Int(32).bytes()), Parameter()));
         index += 4;
         writes.push_back(call_copy_memory(key_name, function_name, index));
         index += name_size;

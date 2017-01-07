@@ -22,6 +22,11 @@ void my_free(void *user_context, void *ptr) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping custom_allocator test for JavaScript as it uses a C extern function.\n");
+        return 0;
+    }
     Func f, g;
     Var x;
 

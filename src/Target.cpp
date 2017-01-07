@@ -276,6 +276,10 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    {"javascript", Target::JavaScript},
+    {"javascript_simd", Target::JavaScript_SIMD},
+    {"v8", Target::JavaScript_V8},
+    {"spidermonkey", Target::JavaScript_SpiderMonkey},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {

@@ -38,6 +38,11 @@ extern "C" void handler(void *user_context, const char *msg) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::JavaScript)) {
+        printf("Skipping out of memory test for JavaScript.\n");
+        return 0;
+    }
     const int big = 1 << 26;
     Var x;
     std::vector<Func> funcs;

@@ -31,7 +31,6 @@ void check(Buffer<int> im) {
 }
 
 int main(int argc, char **argv) {
-
     Var x, y;
 
     {
