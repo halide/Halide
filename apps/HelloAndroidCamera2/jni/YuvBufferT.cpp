@@ -22,19 +22,19 @@ YuvBufferT::YuvBufferT(uint8_t *lumaPointer,
         {0, lumaWidth, lumaElementStrideBytes},
         {0, lumaHeight, lumaRowStrideBytes}
     };
-    luma_ = Halide::Buffer<uint8_t>(lumaPointer, 2, lumaShape);
+    luma_ = Halide::Runtime::Buffer<uint8_t>(lumaPointer, 2, lumaShape);
 
     halide_dimension_t chromaUShape[] = {
         {0, chromaUWidth, chromaUElementStrideBytes},
         {0, chromaUHeight, chromaURowStrideBytes}
     };
-    chromaU_ = Halide::Buffer<uint8_t>(chromaUPointer, 2, chromaUShape);
+    chromaU_ = Halide::Runtime::Buffer<uint8_t>(chromaUPointer, 2, chromaUShape);
 
     halide_dimension_t chromaVShape[] = {
         {0, chromaVWidth, chromaVElementStrideBytes},
         {0, chromaVHeight, chromaVRowStrideBytes}
     };
-    chromaV_ = Halide::Buffer<uint8_t>(chromaVPointer, 2, chromaVShape);
+    chromaV_ = Halide::Runtime::Buffer<uint8_t>(chromaVPointer, 2, chromaVShape);
 
     // See if chroma is stored according to a well known format.
     chromaStorage_ = ChromaStorage::kOther;
@@ -75,13 +75,13 @@ YuvBufferT::YuvBufferT(uint8_t *lumaPointer,
             {0, chromaUWidth*2, 1},
             {0, chromaUHeight, chromaURowStrideBytes}
         };
-        interleavedChromaView_ = Halide::Buffer<uint8_t>(chromaUPointer, 2, chromaShape);
+        interleavedChromaView_ = Halide::Runtime::Buffer<uint8_t>(chromaUPointer, 2, chromaShape);
     } else if (chromaStorage_ == ChromaStorage::kInterleavedVFirst) {
         halide_dimension_t chromaShape[] = {
             {0, chromaVWidth*2, 1},
             {0, chromaVHeight, chromaVRowStrideBytes}
         };
-        interleavedChromaView_ = Halide::Buffer<uint8_t>(chromaVPointer, 2, chromaShape);
+        interleavedChromaView_ = Halide::Runtime::Buffer<uint8_t>(chromaVPointer, 2, chromaShape);
     } else if (chromaStorage_ == ChromaStorage::kPlanarPackedUFirst) {
         packedPlanarChromaView_ = chromaU_;
         packedPlanarChromaView_.crop(1, 0, chromaUHeight*2);
@@ -101,15 +101,15 @@ bool YuvBufferT::isNull() const {
     return luma_.data() == nullptr;
 }
 
-Halide::Buffer<uint8_t> YuvBufferT::luma() const {
+Halide::Runtime::Buffer<uint8_t> YuvBufferT::luma() const {
     return luma_;
 }
 
-Halide::Buffer<uint8_t> YuvBufferT::chromaU() const {
+Halide::Runtime::Buffer<uint8_t> YuvBufferT::chromaU() const {
     return chromaU_;
 }
 
-Halide::Buffer<uint8_t> YuvBufferT::chromaV() const {
+Halide::Runtime::Buffer<uint8_t> YuvBufferT::chromaV() const {
     return chromaV_;
 }
 
@@ -117,11 +117,11 @@ YuvBufferT::ChromaStorage YuvBufferT::chromaStorage() const {
     return chromaStorage_;
 }
 
-Halide::Buffer<uint8_t> YuvBufferT::interleavedChromaView() const {
+Halide::Runtime::Buffer<uint8_t> YuvBufferT::interleavedChromaView() const {
     return interleavedChromaView_;
 }
 
-Halide::Buffer<uint8_t> YuvBufferT::packedPlanarChromaView() const {
+Halide::Runtime::Buffer<uint8_t> YuvBufferT::packedPlanarChromaView() const {
     return packedPlanarChromaView_;
 }
 
@@ -156,13 +156,13 @@ void YuvBufferT::fillUV(uint8_t u, uint8_t v) {
 }
 
 namespace {
-Halide::Buffer<uint8_t> rotateBuffer180(Halide::Buffer<uint8_t> buf) {
+Halide::Runtime::Buffer<uint8_t> rotateBuffer180(Halide::Runtime::Buffer<uint8_t> buf) {
     if (buf.data() == nullptr) return buf;
     halide_dimension_t shape[] = {
         {0, buf.dim(0).extent(), -buf.dim(0).stride()},
         {0, buf.dim(1).extent(), -buf.dim(1).stride()},
     };
-    return Halide::Buffer<uint8_t>(&buf(buf.width()-1, buf.height()-1), 2, shape);
+    return Halide::Runtime::Buffer<uint8_t>(&buf(buf.width()-1, buf.height()-1), 2, shape);
 }
 };
 
