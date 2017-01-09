@@ -15,7 +15,8 @@ public:
         // Use the GPU for this f if a GPU is available.
         Target target = get_target();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 16, 16).compute_root();
+            Var bx("bx"), by("by"), tx("tx"), ty("ty");
+            f.gpu_tile(x, y, bx, by, tx, ty, 16, 16).compute_root();
         }
         return f;
     }

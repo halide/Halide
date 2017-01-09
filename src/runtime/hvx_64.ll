@@ -186,6 +186,31 @@ define weak_odr <32 x i32> @halide.hexagon.mul.vuw.vuw(<32 x i32> %a, <32 x i32>
   ret <32 x i32> %ab
 }
 
+; 32 bit multiply keep high half.
+declare <16 x i32> @llvm.hexagon.V6.vmpyewuh(<16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vmpyowh.sacc(<16 x i32>, <16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vmpyowh.rnd.sacc(<16 x i32>, <16 x i32>, <16 x i32>)
+declare <16 x i32> @llvm.hexagon.V6.vasrw(<16 x i32>, i32)
+
+define weak_odr <16 x i32> @halide.hexagon.trunc_mpy.vw.vw(<16 x i32> %a, <16 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %ab1 = call <16 x i32> @llvm.hexagon.V6.vmpyewuh(<16 x i32> %a, <16 x i32> %b)
+  %ab2 = call <16 x i32> @llvm.hexagon.V6.vmpyowh.sacc(<16 x i32> %ab1, <16 x i32> %a, <16 x i32> %b)
+  %ab = call <16 x i32> @llvm.hexagon.V6.vasrw(<16 x i32> %ab2, i32 1)
+  ret <16 x i32> %ab
+}
+
+define weak_odr <16 x i32> @halide.hexagon.trunc_satdw_mpy2.vw.vw(<16 x i32> %a, <16 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %ab1 = call <16 x i32> @llvm.hexagon.V6.vmpyewuh(<16 x i32> %a, <16 x i32> %b)
+  %ab = call <16 x i32> @llvm.hexagon.V6.vmpyowh.sacc(<16 x i32> %ab1, <16 x i32> %a, <16 x i32> %b)
+  ret <16 x i32> %ab
+}
+
+define weak_odr <16 x i32> @halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw(<16 x i32> %a, <16 x i32> %b) nounwind uwtable readnone alwaysinline {
+  %ab1 = call <16 x i32> @llvm.hexagon.V6.vmpyewuh(<16 x i32> %a, <16 x i32> %b)
+  %ab = call <16 x i32> @llvm.hexagon.V6.vmpyowh.rnd.sacc(<16 x i32> %ab1, <16 x i32> %a, <16 x i32> %b)
+  ret <16 x i32> %ab
+}
+
 ; Hexagon is missing shifts for byte sized operands.
 declare <16 x i32> @llvm.hexagon.V6.vaslh(<16 x i32>, i32)
 declare <16 x i32> @llvm.hexagon.V6.vasrh(<16 x i32>, i32)
@@ -340,4 +365,15 @@ define weak_odr <32 x i32> @halide.hexagon.acc_add_mpy_mpy.vw.vh.vh.b.b(<32 x i3
   %dv1 = call <32 x i32> @llvm.hexagon.V6.vcombine(<16 x i32> %high, <16 x i32> %low)
   %res = call <32 x i32> @llvm.hexagon.V6.vmpahb.acc(<32 x i32> %acc, <32 x i32> %dv1, i32 %const)
   ret <32 x i32> %res
+}
+
+; Define a missing saturating narrow instruction in terms of a saturating narrowing shift.
+declare <16 x i32> @llvm.hexagon.V6.vasrwuhsat(<16 x i32>, <16 x i32>, i32)
+
+define weak_odr <32 x i16> @halide.hexagon.trunc_satuh.vw(<32 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %e = call <16 x i32> @llvm.hexagon.V6.lo(<32 x i32> %arg)
+  %o = call <16 x i32> @llvm.hexagon.V6.hi(<32 x i32> %arg)
+  %r_32 = call <16 x i32> @llvm.hexagon.V6.vasrwuhsat(<16 x i32> %o, <16 x i32> %e, i32 0)
+  %r = bitcast <16 x i32> %r_32 to <32 x i16>
+  ret <32 x i16> %r
 }

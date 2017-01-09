@@ -53,6 +53,7 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const 
 int main(int argc, char **argv) {
     constexpr int kArrayCount = 2;
 
+    Buffer<uint8_t> buffer_input = make_image<uint8_t>(0);
     Buffer<float> simple_input = make_image<float>(0);
     Buffer<float> array_input[kArrayCount] = {
         make_image<float>(0),
@@ -68,6 +69,8 @@ int main(int argc, char **argv) {
         JITGeneratorContext(Halide::get_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
+            buffer_input,  // typed_buffer_input
+            buffer_input,  // untyped_buffer_input
             Func(simple_input),
             { Func(array_input[0]), Func(array_input[1]) },
             1.25f,
@@ -100,6 +103,18 @@ int main(int argc, char **argv) {
         Buffer<int16_t> g0 = array_output_realized;
         verify(array_input[i], 1.0f, int_args[i], g0);
     }
+
+    Halide::Realization typed_buffer_output_realized = gen.typed_buffer_output.realize(kSize, kSize, 3);
+    Buffer<float> b0 = typed_buffer_output_realized;
+    verify(buffer_input, 1.f, 0, b0);
+
+    Halide::Realization untyped_buffer_output_realized = gen.untyped_buffer_output.realize(kSize, kSize, 3);
+    Buffer<float> b1 = untyped_buffer_output_realized;
+    verify(buffer_input, 1.f, 0, b1);
+
+    Halide::Realization static_compiled_buffer_output_realized = gen.static_compiled_buffer_output.realize(kSize, kSize, 3);
+    Buffer<uint8_t> b2 = static_compiled_buffer_output_realized;
+    verify(buffer_input, 1.f, 42, b2);
 
     printf("Success!\n");
     return 0;

@@ -1,8 +1,8 @@
-#include "Image.h"
-
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/format.hpp>
 #include <boost/python.hpp>
+
+#include "Image.h"
 
 #define USE_NUMPY
 
@@ -19,7 +19,6 @@
 #include <boost/functional/hash/hash.hpp>
 #include <boost/mpl/list.hpp>
 
-#include "../../src/runtime/HalideBuffer.h"
 #include "Func.h"
 #include "Type.h"
 
@@ -179,6 +178,68 @@ void buffer_copy_to_host(h::Buffer<T> &im) {
 }
 
 template <typename T>
+void buffer_set_host_dirty(h::Buffer<T> &im, bool value) {
+    im.set_host_dirty(value);
+}
+
+template <typename T>
+int buffer_channels(h::Buffer<T> &im) {
+    return im.channels();
+}
+
+template <typename T>
+int buffer_width(h::Buffer<T> &im) {
+    return im.width();
+}
+
+template <typename T>
+int buffer_height(h::Buffer<T> &im) {
+    return im.height();
+}
+
+template <typename T>
+int buffer_dimensions(h::Buffer<T> &im) {
+    return im.dimensions();
+}
+
+template <typename T>
+int buffer_left(h::Buffer<T> &im) {
+    return im.left();
+}
+
+template <typename T>
+int buffer_right(h::Buffer<T> &im) {
+    return im.right();
+}
+
+template <typename T>
+int buffer_top(h::Buffer<T> &im) {
+    return im.top();
+}
+
+template <typename T>
+int buffer_bottom(h::Buffer<T> &im) {
+    return im.bottom();
+}
+
+template <typename T>
+int buffer_stride(h::Buffer<T> &im, int d) {
+    return im.stride(d);
+}
+
+template <typename T>
+int buffer_min(h::Buffer<T> &im, int d) {
+    return im.min(d);
+}
+
+template <typename T>
+int buffer_extent(h::Buffer<T> &im, int d) {
+    return im.extent(d);
+}
+
+
+
+template <typename T>
 void defineBuffer_impl(const std::string suffix, const h::Type type) {
     using h::Buffer;
     using h::Expr;
@@ -222,74 +283,74 @@ void defineBuffer_impl(const std::string suffix, const h::Type type) {
             "Wrap a buffer_t in an Buffer object, so that we can access its pixels."));
 
     buffer_class
-        .def("__repr__", &buffer_repr<T>, p::arg("self"));
+        .def("__repr__", buffer_repr<T>, p::arg("self"));
 
     buffer_class
-        .def("data", &buffer_data<T>, p::arg("self"),
+        .def("data", buffer_data<T>, p::arg("self"),
              p::return_value_policy<p::return_opaque_pointer>(),  // not sure this will do what we want
              "Get a pointer to the element at the min location.")
 
-        .def("copy_to_host", &buffer_copy_to_host<T>, p::arg("self"),
+        .def("copy_to_host", buffer_copy_to_host<T>, p::arg("self"),
              "Manually copy-back data to the host, if it's on a device. ")
-        .def("set_host_dirty", &Buffer<T>::set_host_dirty,
+        .def("set_host_dirty", buffer_set_host_dirty<T>,
              (p::arg("self"), p::arg("dirty") = true),
              "Mark the buffer as dirty-on-host. ")
         .def("type", get_type_function_wrapper<T>(),
              "Return Type instance for the data type of the buffer.")
-        .def("channels", &Buffer<T>::channels, p::arg("self"),
+        .def("channels", buffer_channels<T>, p::arg("self"),
              "Get the extent of dimension 2, which by convention we use as"
              "the number of color channels (often 3). Unlike extent(2), "
              "returns one if the buffer has fewer than three dimensions.")
-        .def("dimensions", &Buffer<T>::dimensions, p::arg("self"),
+        .def("dimensions", buffer_dimensions<T>, p::arg("self"),
              "Get the dimensionality of the data. Typically two for grayscale images, and three for color images.")
-        .def("stride", &Buffer<T>::stride, p::args("self", "dim"),
+        .def("stride", buffer_stride<T>, p::args("self", "dim"),
              "Get the number of elements in the buffer between two adjacent "
              "elements in the given dimension. For example, the stride in "
              "dimension 0 is usually 1, and the stride in dimension 1 is "
              "usually the extent of dimension 0. This is not necessarily true though.")
-        .def("extent", &Buffer<T>::extent, p::args("self", "dim"),
+        .def("extent", buffer_extent<T>, p::args("self", "dim"),
              "Get the size of a dimension.")
-        .def("min", &Buffer<T>::min, p::args("self", "dim"),
+        .def("min", buffer_min<T>, p::args("self", "dim"),
              "Get the min coordinate of a dimension. The top left of the "
              "buffer represents this point in a function that was realized "
              "into this buffer.");
 
     buffer_class
-        .def("set_min", &buffer_set_min1<T>,
+        .def("set_min", buffer_set_min1<T>,
              p::args("self", "m0"),
              "Set the coordinates corresponding to the host pointer.")
-        .def("set_min", &buffer_set_min2<T>,
+        .def("set_min", buffer_set_min2<T>,
              p::args("self", "m0", "m1"),
              "Set the coordinates corresponding to the host pointer.")
-        .def("set_min", &buffer_set_min3<T>,
+        .def("set_min", buffer_set_min3<T>,
              p::args("self", "m0", "m1", "m2"),
              "Set the coordinates corresponding to the host pointer.")
-        .def("set_min", &buffer_set_min4<T>,
+        .def("set_min", buffer_set_min4<T>,
              p::args("self", "m0", "m1", "m2", "m3"),
              "Set the coordinates corresponding to the host pointer.");
 
     buffer_class
-        .def("width", &Buffer<T>::width, p::arg("self"),
+        .def("width", buffer_width<T>, p::arg("self"),
              "Get the extent of dimension 0, which by convention we use as "
              "the width of the image. Unlike extent(0), returns one if the "
              "buffer is zero-dimensional.")
-        .def("height", &Buffer<T>::height, p::arg("self"),
+        .def("height", buffer_height<T>, p::arg("self"),
              "Get the extent of dimension 1, which by convention we use as "
              "the height of the image. Unlike extent(1), returns one if the "
              "buffer has fewer than two dimensions.")
-        .def("left", &Buffer<T>::left, p::arg("self"),
+        .def("left", buffer_left<T>, p::arg("self"),
              "Get the minimum coordinate in dimension 0, which by convention "
              "is the coordinate of the left edge of the image. Returns zero "
              "for zero-dimensional images.")
-        .def("right", &Buffer<T>::right, p::arg("self"),
+        .def("right", buffer_right<T>, p::arg("self"),
              "Get the maximum coordinate in dimension 0, which by convention "
              "is the coordinate of the right edge of the image. Returns zero "
              "for zero-dimensional images.")
-        .def("top", &Buffer<T>::top, p::arg("self"),
+        .def("top", buffer_top<T>, p::arg("self"),
              "Get the minimum coordinate in dimension 1, which by convention "
              "is the top of the image. Returns zero for zero- or "
              "one-dimensional images.")
-        .def("bottom", &Buffer<T>::bottom, p::arg("self"),
+        .def("bottom", buffer_bottom<T>, p::arg("self"),
              "Get the maximum coordinate in dimension 1, which by convention "
              "is the bottom of the image. Returns zero for zero- or "
              "one-dimensional images.");
@@ -299,49 +360,49 @@ void defineBuffer_impl(const std::string suffix, const h::Type type) {
 
     // Access operators (to Expr, and to actual value)
     buffer_class
-        .def("__getitem__", &buffer_call_operator<Expr, T, Expr>,
+        .def("__getitem__", buffer_call_operator<Expr, T, Expr>,
              p::args("self", "x"),
              get_item_doc);
     buffer_class
-        .def("__getitem__", &buffer_call_operator<Expr, T, Expr, Expr>,
+        .def("__getitem__", buffer_call_operator<Expr, T, Expr, Expr>,
              p::args("self", "x", "y"),
              get_item_doc);
     buffer_class
-        .def("__getitem__", &buffer_call_operator<Expr, T, Expr, Expr, Expr>,
+        .def("__getitem__", buffer_call_operator<Expr, T, Expr, Expr, Expr>,
              p::args("self", "x", "y", "z"),
              get_item_doc)
-        .def("__getitem__", &buffer_call_operator<Expr, T, Expr, Expr, Expr, Expr>,
+        .def("__getitem__", buffer_call_operator<Expr, T, Expr, Expr, Expr, Expr>,
              p::args("self", "x", "y", "z", "w"),
              get_item_doc)
-        .def("__getitem__", &buffer_call_operator_tuple<T>,
+        .def("__getitem__", buffer_call_operator_tuple<T>,
              p::args("self", "tuple"),
              get_item_doc)
         // Note that we return copy values (not references like in the C++ API)
-        .def("__getitem__", &buffer_call_operator<T, T>,
+        .def("__getitem__", buffer_call_operator<T, T>,
              p::arg("self"),
              "Assuming this buffer is zero-dimensional, get its value")
-        .def("__call__", &buffer_call_operator<T, T, int>,
+        .def("__call__", buffer_call_operator<T, T, int>,
              p::args("self", "x"),
              "Assuming this buffer is one-dimensional, get the value of the element at position x")
-        .def("__call__", &buffer_call_operator<T, T, int, int>,
+        .def("__call__", buffer_call_operator<T, T, int, int>,
              p::args("self", "x", "y"),
              "Assuming this buffer is two-dimensional, get the value of the element at position (x, y)")
-        .def("__call__", &buffer_call_operator<T, T, int, int, int>,
+        .def("__call__", buffer_call_operator<T, T, int, int, int>,
              p::args("self", "x", "y", "z"),
              "Assuming this buffer is three-dimensional, get the value of the element at position (x, y, z)")
-        .def("__call__", &buffer_call_operator<T, T, int, int, int, int>,
+        .def("__call__", buffer_call_operator<T, T, int, int, int, int>,
              p::args("self", "x", "y", "z", "w"),
              "Assuming this buffer is four-dimensional, get the value of the element at position (x, y, z, w)")
 
-        .def("__setitem__", &buffer_to_setitem_operator0<T>, p::args("self", "x", "value"),
+        .def("__setitem__", buffer_to_setitem_operator0<T>, p::args("self", "x", "value"),
              "Assuming this buffer is one-dimensional, set the value of the element at position x")
-        .def("__setitem__", &buffer_to_setitem_operator1<T>, p::args("self", "x", "y", "value"),
+        .def("__setitem__", buffer_to_setitem_operator1<T>, p::args("self", "x", "y", "value"),
              "Assuming this buffer is two-dimensional, set the value of the element at position (x, y)")
-        .def("__setitem__", &buffer_to_setitem_operator2<T>, p::args("self", "x", "y", "z", "value"),
+        .def("__setitem__", buffer_to_setitem_operator2<T>, p::args("self", "x", "y", "z", "value"),
              "Assuming this buffer is three-dimensional, set the value of the element at position (x, y, z)")
-        .def("__setitem__", &buffer_to_setitem_operator3<T>, p::args("self", "x", "y", "z", "w", "value"),
+        .def("__setitem__", buffer_to_setitem_operator3<T>, p::args("self", "x", "y", "z", "w", "value"),
              "Assuming this buffer is four-dimensional, set the value of the element at position (x, y, z, w)")
-        .def("__setitem__", &buffer_to_setitem_operator4<T>, p::args("self", "tuple", "value"),
+        .def("__setitem__", buffer_to_setitem_operator4<T>, p::args("self", "tuple", "value"),
              "Assuming this buffer is one to four-dimensional, "
              "set the value of the element at position indicated by tuple (x, y, z, w)");
 
@@ -471,7 +532,7 @@ bn::ndarray buffer_to_ndarray(p::object buffer_object) {
     }
 
     return bn::from_data(
-        im.host_ptr(),
+        im.data(),
         type_to_dtype(im.type()),
         extent,
         stride,

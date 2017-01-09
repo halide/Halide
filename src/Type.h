@@ -278,7 +278,7 @@ struct Type {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    Type(halide_type_code_t code, uint8_t bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
+    Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
         : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
     }
 
@@ -306,18 +306,20 @@ struct Type {
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
     Type with_code(halide_type_code_t new_code) const {
-        return Type(new_code, bits(), lanes());
+        return Type(new_code, bits(), lanes(),
+                    (new_code == code()) ? handle_type : nullptr);
     }
 
     /** Return Type with same type code and lanes, but new_bits for the number of bits. */
-    Type with_bits(uint8_t new_bits) const {
-        return Type(code(), new_bits, lanes());
+    Type with_bits(int new_bits) const {
+        return Type(code(), new_bits, lanes(),
+                    (new_bits == bits()) ? handle_type : nullptr);
     }
 
     /** Return Type with same type code and number of bits,
      * but new_lanes for the number of vector lanes. */
-    Type with_lanes(uint16_t new_lanes) const {
-        return Type(code(), bits(), new_lanes);
+    Type with_lanes(int new_lanes) const {
+        return Type(code(), bits(), new_lanes, handle_type);
     }
 
     /** Type to be printed when declaring handles of this type. */
@@ -363,7 +365,7 @@ struct Type {
 
     /** Produce the scalar type (that of a single element) of this vector type */
     Type element_of() const {
-        return Type(code(), bits(), 1);
+        return with_lanes(1);
     }
 
     /** Can this type represent all values of another type? */

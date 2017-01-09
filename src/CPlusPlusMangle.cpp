@@ -430,7 +430,7 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
         }
         if (modifier & halide_handle_cplusplus_type::Const) {
             quals += "K";
-        } 
+        }
 
         if (!quals.empty()) {
             prevs.prepend_name_part(quals, name_part);
@@ -442,7 +442,7 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
           break;
         }
     }
- 
+
     if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
         prevs.prepend_name_part("R", name_part);
     } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
@@ -575,7 +575,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
                                             const Target &target) {
     std::string result("_Z");
 
-    PrevPrefixes prevs; 
+    PrevPrefixes prevs;
     result += mangle_qualified_name(name, namespaces, {}, false, prevs).full_name;
 
     if (args.size() == 0) {
@@ -797,7 +797,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32),
-                                                 { ExternFuncArgument(42), ExternFuncArgument(BufferPtr()) }, target));
+                                                 { ExternFuncArgument(42), ExternFuncArgument(Buffer<>()) }, target));
 
     halide_handle_cplusplus_type enclosed_type_info(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),
@@ -811,8 +811,8 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32),
-                                                 { ExternFuncArgument(42), ExternFuncArgument(BufferPtr()),
-                                                   ExternFuncArgument(BufferPtr()) }, target));
+                                                 { ExternFuncArgument(42), ExternFuncArgument(Buffer<>()),
+                                                   ExternFuncArgument(Buffer<>()) }, target));
 
     halide_handle_cplusplus_type qual1(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),

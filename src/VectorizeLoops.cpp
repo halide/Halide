@@ -291,7 +291,7 @@ class PredicateLoadStore : public IRMutator {
             internal_assert(op->value.type().lanes() == lanes);
             Expr value = mutate(op->value);
             Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                   {Load::make(op->value.type(), op->name, op->index, BufferPtr(), op->param)},
+                                   {Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param)},
                                    Call::Intrinsic);
             stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
                                              {dest, vector_predicate, value},
@@ -301,7 +301,7 @@ class PredicateLoadStore : public IRMutator {
             Expr value = Broadcast::make(op->value, lanes);
             Expr index = Broadcast::make(op->index, lanes);
             Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                   {Load::make(value.type(), op->name, index, BufferPtr(), op->param)},
+                                   {Load::make(value.type(), op->name, index, Buffer<>(), op->param)},
                                    Call::Intrinsic);
             stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
                                              {dest, vector_predicate, mutate(value)},
@@ -827,6 +827,9 @@ class VectorSubs : public IRMutator {
         // Replace the widened 'v' with the actual ramp
         // foo[x*lanes + widened_v] -> foo[x*lanes + ramp(0, 1, lanes)]
         body = substitute(v + widening_suffix, Ramp::make(0, 1, lanes), body);
+
+        // The variable itself could still exist inside an inner scalarized block.
+        body = substitute(v, Variable::make(Int(32), var), body);
 
         stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body, new_expr, op->free_function);
     }
