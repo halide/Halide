@@ -68,14 +68,16 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
+        Var xi("xi"), yi("yi");
+
         // Initialization (basically memset) done in a GPU kernel
-        blur1.gpu_tile(x, y, 16, 16);
+        blur1.gpu_tile(x, y, xi, yi, 16, 16);
 
         // Summation is done as an outermost loop on the cpu
-        blur1.update().reorder(x, y, r.x, r.y).gpu_tile(x, y, 16, 16);
+        blur1.update().reorder(x, y, r.x, r.y).gpu_tile(x, y, xi, yi, 16, 16);
 
         // Summation is done as a sequential loop within each gpu thread
-        blur2.gpu_tile(x, y, 16, 16);
+        blur2.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.has_feature(Target::HVX_64)) {
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");

@@ -109,7 +109,9 @@ string simt_intrinsic(const string &name) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
+        internal_assert((loop->for_type == ForType::GPUBlock) ||
+                        (loop->for_type == ForType::GPUThread))
+            << "kernel loop must be either gpu block or gpu thread\n";
         internal_assert(is_zero(loop->min));
 
         do_indent();
@@ -585,8 +587,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
             alloc.type = args[i].type;
             allocations.push(args[i].name, alloc);
         } else {
+            Type t = args[i].type;
+            // Bools are passed as a uint8.
+            t = t.with_bits(t.bytes() * 8);
             stream << " const "
-                   << print_type(args[i].type)
+                   << print_type(t)
                    << " "
                    << print_name(args[i].name);
         }

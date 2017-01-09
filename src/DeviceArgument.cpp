@@ -17,7 +17,7 @@ std::vector<DeviceArgument> HostClosure::arguments() {
         debug(2) << "var: " << i.first << "\n";
         res.push_back(DeviceArgument(i.first, false, i.second, 0));
     }
-    for (const std::pair<std::string, BufferRef> &i : buffers) {
+    for (const std::pair<std::string, Buffer> &i : buffers) {
         debug(2) << "buffer: " << i.first << " " << i.second.size;
         if (i.second.read) debug(2) << " (read)";
         if (i.second.write) debug(2) << " (write)";
@@ -49,7 +49,7 @@ void HostClosure::visit(const Call *op) {
         internal_assert(string_imm);
 
         std::string bufname = string_imm->value;
-        BufferRef &ref = buffers[bufname];
+        Buffer &ref = buffers[bufname];
         ref.type = op->type;
         // TODO: do we need to set ref.dimensions?
 

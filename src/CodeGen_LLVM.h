@@ -75,13 +75,16 @@ public:
     /** Tell the code generator which LLVM context to use. */
     void set_context(llvm::LLVMContext &context);
 
+    /** Initialize internal llvm state for the enabled targets. */
+    static void initialize_llvm();
+
 protected:
     CodeGen_LLVM(Target t);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
     virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
-    virtual void compile_buffer(const BufferPtr &buffer);
+    virtual void compile_buffer(const Buffer<> &buffer);
     // @}
 
     /** Helper functions for compiling Halide functions to llvm
@@ -111,9 +114,6 @@ protected:
 
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
-
-    /** Initialize internal llvm state for the enabled targets. */
-    static void initialize_llvm();
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently

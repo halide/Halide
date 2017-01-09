@@ -12,7 +12,7 @@
 #include "brighten_either.h"
 #include "brighten_specialized.h"
 
-// We'll use the Halide::Buffer class for passing data into and out of
+// We'll use the Halide::Runtime::Buffer class for passing data into and out of
 // the pipeline.
 #include "HalideBuffer.h"
 
@@ -39,13 +39,13 @@ double tick(const char *name) {
 int main(int argc, char **argv) {
 
     // Let's make some images stored with interleaved and planar
-    // memory. Halide::Buffer is planar by default.
-    Halide::Buffer<uint8_t> planar_input(1024, 768, 3);
-    Halide::Buffer<uint8_t> planar_output(1024, 768, 3);
-    Halide::Buffer<uint8_t> interleaved_input =
-        Halide::Buffer<uint8_t>::make_interleaved(1024, 768, 3);
-    Halide::Buffer<uint8_t> interleaved_output =
-        Halide::Buffer<uint8_t>::make_interleaved(1024, 768, 3);
+    // memory. Halide::Runtime::Buffer is planar by default.
+    Halide::Runtime::Buffer<uint8_t> planar_input(1024, 768, 3);
+    Halide::Runtime::Buffer<uint8_t> planar_output(1024, 768, 3);
+    Halide::Runtime::Buffer<uint8_t> interleaved_input =
+        Halide::Runtime::Buffer<uint8_t>::make_interleaved(1024, 768, 3);
+    Halide::Runtime::Buffer<uint8_t> interleaved_output =
+        Halide::Runtime::Buffer<uint8_t>::make_interleaved(1024, 768, 3);
 
     // Let's check the strides are what we expect, given the
     // constraints we set up in the generator.

@@ -14,44 +14,23 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 using std::map;
+using std::pair;
+using std::set;
 
 namespace {
-// Visitor and helper function to test if a piece of IR uses an extern image.
-class UsesExternImage : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Call *c) {
-        if (c->call_type == Call::Image) {
-            result = true;
-        } else {
-            IRVisitor::visit(c);
-        }
-    }
-public:
-    UsesExternImage() : result(false) {}
-    bool result;
-};
-
-inline bool uses_extern_image(Stmt s) {
-    UsesExternImage uses;
-    s.accept(&uses);
-    return uses.result;
-}
-}
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const vector<Function> &outputs, const map<string, Function> &e, const Target &t)
-        : outputs(outputs), env(e), target(t) {}
+    FlattenDimensions(const map<string, pair<Function, int>> &e, const Target &t)
+        : env(e), target(t) {}
     Scope<int> scope;
 private:
-    const vector<Function> &outputs;
-    const map<string, Function> &env;
+    const map<string, pair<Function, int>> &env;
     const Target &target;
     Scope<int> realizations;
 
-    Expr flatten_args(const string &name, const vector<Expr> &args,
-                      bool internal) {
+    Expr flatten_args(const string &name, const vector<Expr> &args) {
+        bool internal = realizations.contains(name);
         Expr idx = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
@@ -106,27 +85,28 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Realize *realize) {
-        realizations.push(realize->name, 1);
+    void visit(const Realize *op) {
+        realizations.push(op->name, 0);
 
-        Stmt body = mutate(realize->body);
+        Stmt body = mutate(op->body);
 
         // Compute the size
         std::vector<Expr> extents;
-        for (size_t i = 0; i < realize->bounds.size(); i++) {
-            extents.push_back(realize->bounds[i].extent);
+        for (size_t i = 0; i < op->bounds.size(); i++) {
+            extents.push_back(op->bounds[i].extent);
             extents[i] = mutate(extents[i]);
         }
-        Expr condition = mutate(realize->condition);
+        Expr condition = mutate(op->condition);
 
-        realizations.pop(realize->name);
+        realizations.pop(op->name);
 
         vector<int> storage_permutation;
         {
-            map<string, Function>::const_iterator iter = env.find(realize->name);
+            auto iter = env.find(op->name);
+            Function f = iter->second.first;
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-            const vector<StorageDim> &storage_dims = iter->second.schedule().storage_dims();
-            const vector<string> args = iter->second.args();
+            const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
+            const vector<string> &args = f.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j] == storage_dims[i].var) {
@@ -141,248 +121,81 @@ private:
             }
         }
 
-        internal_assert(storage_permutation.size() == realize->bounds.size());
+        internal_assert(storage_permutation.size() == op->bounds.size());
 
         stmt = body;
-        for (size_t idx = 0; idx < realize->types.size(); idx++) {
-            string buffer_name = realize->name;
-            if (realize->types.size() > 1) {
-                buffer_name = buffer_name + '.' + std::to_string(idx);
-            }
+        internal_assert(op->types.size() == 1);
 
-            // Make the names for the mins, extents, and strides
-            int dims = realize->bounds.size();
-            vector<string> min_name(dims), extent_name(dims), stride_name(dims);
-            for (int i = 0; i < dims; i++) {
-                string d = std::to_string(i);
-                min_name[i] = buffer_name + ".min." + d;
-                stride_name[i] = buffer_name + ".stride." + d;
-                extent_name[i] = buffer_name + ".extent." + d;
-            }
-            vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
-            for (int i = 0; i < dims; i++) {
-                min_var[i] = Variable::make(Int(32), min_name[i]);
-                extent_var[i] = Variable::make(Int(32), extent_name[i]);
-                stride_var[i] = Variable::make(Int(32), stride_name[i]);
-            }
+        // Make the names for the mins, extents, and strides
+        int dims = op->bounds.size();
+        vector<string> min_name(dims), extent_name(dims), stride_name(dims);
+        for (int i = 0; i < dims; i++) {
+            string d = std::to_string(i);
+            min_name[i] = op->name + ".min." + d;
+            stride_name[i] = op->name + ".stride." + d;
+            extent_name[i] = op->name + ".extent." + d;
+        }
+        vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
+        for (int i = 0; i < dims; i++) {
+            min_var[i] = Variable::make(Int(32), min_name[i]);
+            extent_var[i] = Variable::make(Int(32), extent_name[i]);
+            stride_var[i] = Variable::make(Int(32), stride_name[i]);
+        }
 
-            // Promote the type to be a multiple of 8 bits
-            Type t = realize->types[idx].with_bits(realize->types[idx].bytes() * 8);
+        // Create a buffer_t object for this allocation.
+        vector<Expr> args(dims*3 + 2);
+        Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter());
+        args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
+        args[1] = make_zero(op->types[0]);
+        for (int i = 0; i < dims; i++) {
+            args[3*i+2] = min_var[i];
+            args[3*i+3] = extent_var[i];
+            args[3*i+4] = stride_var[i];
+        }
+        Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
+                              args, Call::Intrinsic);
+        stmt = LetStmt::make(op->name + ".buffer", buf, stmt);
 
-            // Create a buffer_t object for this allocation.
-            vector<Expr> args(dims*3 + 2);
-            //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-            Expr first_elem = Load::make(t, buffer_name, 0, BufferPtr(), Parameter());
-            args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
-            args[1] = make_zero(realize->types[idx]);
-            for (int i = 0; i < dims; i++) {
-                args[3*i+2] = min_var[i];
-                args[3*i+3] = extent_var[i];
-                args[3*i+4] = stride_var[i];
-            }
-            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                  args, Call::Intrinsic);
-            stmt = LetStmt::make(buffer_name + ".buffer",
-                                 buf,
-                                 stmt);
+        // Make the allocation node
+        stmt = Allocate::make(op->name, op->types[0], extents, condition, stmt);
 
-            // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
+        // Compute the strides
+        for (int i = (int)op->bounds.size()-1; i > 0; i--) {
+            int prev_j = storage_permutation[i-1];
+            int j = storage_permutation[i];
+            Expr stride = stride_var[prev_j] * extent_var[prev_j];
+            stmt = LetStmt::make(stride_name[j], stride, stmt);
+        }
 
-            // Compute the strides
-            for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
-                int prev_j = storage_permutation[i-1];
-                int j = storage_permutation[i];
-                Expr stride = stride_var[prev_j] * extent_var[prev_j];
-                stmt = LetStmt::make(stride_name[j], stride, stmt);
-            }
-            // Innermost stride is one
-            if (dims > 0) {
-                int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
-                stmt = LetStmt::make(stride_name[innermost], 1, stmt);
-            }
+        // Innermost stride is one
+        if (dims > 0) {
+            int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
+            stmt = LetStmt::make(stride_name[innermost], 1, stmt);
+        }
 
-            // Assign the mins and extents stored
-            for (size_t i = realize->bounds.size(); i > 0; i--) {
-                stmt = LetStmt::make(min_name[i-1], realize->bounds[i-1].min, stmt);
-                stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
-            }
+        // Assign the mins and extents stored
+        for (size_t i = op->bounds.size(); i > 0; i--) {
+            stmt = LetStmt::make(min_name[i-1], op->bounds[i-1].min, stmt);
+            stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
         }
     }
 
-    struct ProvideValue {
-        Expr value;
-        string name;
-    };
+    void visit(const Provide *op) {
+        internal_assert(op->values.size() == 1);
 
-    void flatten_provide_values(vector<ProvideValue> &values, const Provide *provide) {
-        values.resize(provide->values.size());
-
-        for (size_t i = 0; i < values.size(); i++) {
-            Expr value = mutate(provide->values[i]);
-
-            // Promote the type to be a multiple of 8 bits
-            Type t = value.type().with_bits(value.type().bytes() * 8);
-            if (t.bits() != value.type().bits()) {
-                value = Cast::make(t, value);
-            }
-
-            values[i].value = value;
-            if (values.size() > 1) {
-                values[i].name = provide->name + "." + std::to_string(i);
-            } else {
-                values[i].name = provide->name;
-            }
-        }
+        Expr idx = mutate(flatten_args(op->name, op->args));
+        Expr value = mutate(op->values[0]);
+        stmt = Store::make(op->name, value, idx, Parameter());
     }
 
-    // Lower a set of provides
-    Stmt flatten_provide_atomic(const Provide *provide) {
-        vector<ProvideValue> values;
-        flatten_provide_values(values, provide);
-
-        vector<Parameter> output_buffers;
-        bool is_output = false;
-        for (Function f : outputs) {
-            is_output |= f.name() == provide->name;
-            if (is_output) {
-                output_buffers = f.output_buffers();
-                internal_assert(output_buffers.size() == values.size());
-                break;
-            }
-        }
-
-        Stmt result;
-        for (size_t i = 0; i < values.size(); i++) {
-            const ProvideValue &cv = values[i];
-
-            Expr val;
-            if (is_undef(cv.value)) {
-                val = cv.value;
-            } else {
-                val = Variable::make(cv.value.type(), cv.name + ".value");
-            }
-
-            Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
-            Stmt store = Store::make(cv.name, val, idx, is_output ? output_buffers[i] : Parameter());
-
-            if (result.defined()) {
-                result = Block::make(result, store);
-            } else {
-                result = store;
-            }
-        }
-
-        for (size_t i = values.size(); i > 0; i--) {
-            const ProvideValue &cv = values[i-1];
-            if (!is_undef(cv.value)) {
-                result = LetStmt::make(cv.name + ".value", cv.value, result);
-            }
-        }
-        return result;
-    }
-
-    Stmt flatten_provide(const Provide *provide) {
-        vector<ProvideValue> values;
-        flatten_provide_values(values, provide);
-
-        vector<Parameter> output_buffers;
-        bool is_output = false;
-        for (Function f : outputs) {
-            is_output |= f.name() == provide->name;
-            if (is_output) {
-                output_buffers = f.output_buffers();
-                internal_assert(output_buffers.size() == values.size());
-                break;
-            }
-        }
-
-        Stmt result;
-        for (size_t i = 0; i < values.size(); i++) {
-            const ProvideValue &cv = values[i];
-
-            Expr idx = mutate(flatten_args(cv.name, provide->args, !is_output));
-            Stmt store = Store::make(cv.name, cv.value, idx, is_output ? output_buffers[i] : Parameter());
-
-            if (result.defined()) {
-                result = Block::make(result, store);
-            } else {
-                result = store;
-            }
-        }
-        return result;
-    }
-
-    void visit(const Provide *provide) {
-        Stmt result;
-
-        // Handle the provide atomically if necessary. This logic is
-        // currently very conservative, it will lower many provides
-        // atomically that do not require it.
-        if (provide->values.size() == 1) {
-            // If there is only one value, we don't need to worry
-            // about atomicity.
-            result = flatten_provide(provide);
-        } else if (!realizations.contains(provide->name) &&
-                   uses_extern_image(provide)) {
-            // If the provide is not a realization and it uses an
-            // input image, it might be aliased. Flatten it atomically
-            // because we can't prove the boxes don't overlap.
-            result = flatten_provide_atomic(provide);
+    void visit(const Call *op) {
+        if (op->call_type == Call::Halide ||
+            op->call_type == Call::Image) {
+            internal_assert(op->value_index == 0);
+            Expr idx = mutate(flatten_args(op->name, op->args));
+            expr = Load::make(op->type, op->name, idx, op->image, op->param);
         } else {
-            Box provided = box_provided(Stmt(provide), provide->name);
-            Box required = box_required(Stmt(provide), provide->name);
-
-            if (boxes_overlap(provided, required)) {
-                // The boxes provided and required might overlap, so
-                // the provide must be done atomically.
-                result = flatten_provide_atomic(provide);
-            } else {
-                // The boxes don't overlap.
-                result = flatten_provide(provide);
-            }
-        }
-        stmt = result;
-    }
-
-    void visit(const Call *call) {
-        if (call->call_type == Call::Halide ||
-            call->call_type == Call::Image) {
-            string name = call->name;
-            auto it = env.find(call->name);
-            if (call->call_type == Call::Halide &&
-                it->second.outputs() > 1) {
-                name = name + '.' + std::to_string(call->value_index);
-            }
-
-            bool is_output = false;
-            for (Function f : outputs) {
-                is_output |= f.name() == call->name;
-            }
-
-            bool is_input = env.find(call->name) == env.end();
-
-            // Promote the type to be a multiple of 8 bits
-            Type t = call->type.with_bits(call->type.bytes() * 8);
-
-            Expr idx = mutate(flatten_args(name, call->args, !(is_output || is_input)));
-            expr = Load::make(t, name, idx, call->image, call->param);
-
-            if (call->type.bits() != t.bits()) {
-                expr = Cast::make(call->type, expr);
-            }
-        } else {
-            vector<Expr> args(call->args.size());
-            bool changed = false;
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(call->args[i]);
-                if (!args[i].same_as(call->args[i])) changed = true;
-            }
-            if (!changed) {
-                expr = call;
-            } else {
-                expr = Call::make(call->type, call->name, args, call->call_type);
-            }
+            IRMutator::visit(op);
         }
     }
 
@@ -401,12 +214,125 @@ private:
     }
 };
 
+// Realizations, stores, and loads must all be on types that are
+// multiples of 8-bits. This really only affects bools
+class PromoteToMemoryType : public IRMutator {
+    using IRMutator::visit;
+
+    Type upgrade(Type t) {
+        return t.with_bits(((t.bits() + 7)/8)*8);
+    }
+
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::address_of)) {
+            Expr load = mutate(op->args[0]);
+            if (const Cast *cast = load.as<Cast>()) {
+                load = cast->value;
+            }
+            expr = Call::make(op->type, op->name, {load}, op->call_type);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        Type t = upgrade(op->type);
+        if (t != op->type) {
+            expr = Cast::make(op->type, Load::make(t, op->name, mutate(op->index), op->image, op->param));
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Store *op) {
+        Type t = upgrade(op->value.type());
+        if (t != op->value.type()) {
+            stmt = Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index), op->param);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Allocate *op) {
+        Type t = upgrade(op->type);
+        if (t != op->type) {
+            vector<Expr> extents;
+            for (Expr e : op->extents) {
+                extents.push_back(mutate(e));
+            }
+            stmt = Allocate::make(op->name, t, extents,
+                                  mutate(op->condition), mutate(op->body),
+                                  mutate(op->new_expr), op->free_function);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+};
+
+// Connect Store nodes to their output buffers
+class ConnectOutputBuffers : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const Store *op) {
+        Parameter output_buf;
+        auto it = env.find(op->name);
+        if (it != env.end()) {
+            const Function &f = it->second.first;
+            int idx = it->second.second;
+
+            // We only want to do this for actual pipeline outputs,
+            // even though every Function has an output buffer. Any
+            // constraints you set on the output buffer of a Func that
+            // isn't actually an output is ignored. This is a language
+            // wart.
+            if (outputs.count(f.name())) {
+                output_buf = f.output_buffers()[idx];
+            }
+        }
+
+        if (output_buf.defined()) {
+            stmt = Store::make(op->name, op->value, op->index, output_buf);
+        } else {
+            stmt = op;
+        }
+    }
+
+    const map<string, pair<Function, int>> &env;
+    set<string> outputs;
+
+public:
+    ConnectOutputBuffers(const std::map<string, pair<Function, int>> &e,
+                         const vector<Function> &o) : env(e) {
+        for (auto &f : o) {
+            outputs.insert(f.name());
+        }
+    }
+};
+
+}  // namespace
 
 Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
                         const map<string, Function> &env,
                         const Target &target) {
-    return FlattenDimensions(outputs, env, target).mutate(s);
+    // Make an environment that makes it easier to figure out which
+    // Function corresponds to a tuple component. foo.0, foo.1, foo.2,
+    // all point to the function foo.
+    map<string, pair<Function, int>> tuple_env;
+    for (auto p : env) {
+        if (p.second.outputs() > 1) {
+            for (int i = 0; i < p.second.outputs(); i++) {
+                tuple_env[p.first + "." + std::to_string(i)] = {p.second, i};
+            }
+        } else {
+            tuple_env[p.first] = {p.second, 0};
+        }
+    }
+
+    s = FlattenDimensions(tuple_env, target).mutate(s);
+    s = PromoteToMemoryType().mutate(s);
+    s = ConnectOutputBuffers(tuple_env, outputs).mutate(s);
+    return s;
 }
 
 }
