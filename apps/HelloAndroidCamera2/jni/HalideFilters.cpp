@@ -34,7 +34,7 @@ extern "C" void halide_print(void *, const char *msg) {
 
 extern "C" {
 
-bool assertEqualExtents(YuvBufferT *src, YuvBufferT *dst) {
+bool checkEqualExtents(YuvBufferT *src, YuvBufferT *dst) {
     if (src->luma().width()  != dst->luma().width() ||
         src->luma().height() != dst->luma().height() ||
         src->chromaU().width()  != dst->chromaU().width() ||
@@ -67,7 +67,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHa
     YuvBufferT *src = reinterpret_cast<YuvBufferT *>(srcYuvBufferTHandle);
     YuvBufferT *dst = reinterpret_cast<YuvBufferT *>(dstYuvBufferTHandle);
 
-    if (!assertEqualExtents(src, dst)) {
+    if (!checkEqualExtents(src, dst)) {
         return false;
     }
 
@@ -89,9 +89,9 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHa
         dst->luma().copy_from(src->luma());
 
         // Use Halide to deinterleave the chroma channels.
-        Halide::Buffer<uint8_t> srcInterleavedChroma = src->interleavedChromaView();
-        Halide::Buffer<uint8_t> dstPlanarChromaU = dst->chromaU();
-        Halide::Buffer<uint8_t> dstPlanarChromaV = dst->chromaV();
+        auto srcInterleavedChroma = src->interleavedChromaView();
+        auto dstPlanarChromaU = dst->chromaU();
+        auto dstPlanarChromaV = dst->chromaV();
         if (srcChromaStorage == YuvBufferT::ChromaStorage::kInterleavedUFirst) {
             halideErrorCode = deinterleave(srcInterleavedChroma,
                                            dstPlanarChromaU,
@@ -122,7 +122,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_edgeDe
     YuvBufferT *src = reinterpret_cast<YuvBufferT *>(srcYuvBufferTHandle);
     YuvBufferT *dst = reinterpret_cast<YuvBufferT *>(dstYuvBufferTHandle);
 
-    if (!assertEqualExtents(src, dst)) {
+    if (!checkEqualExtents(src, dst)) {
         return false;
     }
 
@@ -141,8 +141,8 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_edgeDe
     // Set chrominance to 128 to appear grayscale.
     dst->fillUV(128, 128);
 
-    Halide::Buffer<uint8_t> srcLuma = src->luma();
-    Halide::Buffer<uint8_t> dstLuma = dst->luma();
+    auto srcLuma = src->luma();
+    auto dstLuma = dst->luma();
     int64_t t1 = halide_current_time_ns();
     int err = edge_detect(srcLuma, dstLuma);
     if (err != halide_error_code_success) {

@@ -51,30 +51,30 @@ public:
 
     bool isNull() const;
 
-    Halide::Buffer<uint8_t> luma() const;
+    Halide::Runtime::Buffer<uint8_t> luma() const;
 
-    Halide::Buffer<uint8_t> chromaU() const;
+    Halide::Runtime::Buffer<uint8_t> chromaU() const;
 
-    Halide::Buffer<uint8_t> chromaV() const;
+    Halide::Runtime::Buffer<uint8_t> chromaV() const;
 
     ChromaStorage chromaStorage() const;
 
     // If chroma channels are interleaved, return an interleaved
-    // Halide::Buffer<uint8_t> with:
+    // Halide::Runtime::Buffer<uint8_t> with:
     // - The host pointer pointing to whichever chroma buffer is first in
     //   memory.
     // - Twice the width.
-    // Otherwise, returns a Halide::Buffer<uint8_t> pointing to nullptr.
-    Halide::Buffer<uint8_t> interleavedChromaView() const;
+    // Otherwise, returns a Halide::Runtime::Buffer<uint8_t> pointing to nullptr.
+    Halide::Runtime::Buffer<uint8_t> interleavedChromaView() const;
 
     // If chroma channels are planar and tightly packed (one directly
     // follows the other, with the same size and strides), then
-    // returns a Halide::Buffer<uint8_t> with:
+    // returns a Halide::Runtime::Buffer<uint8_t> with:
     // - The host pointer pointing to whichever chroma buffer is first in
     //   memory.
     // - Twice the height.
-    // Otherwise, returns a Halide::Buffer<uint8_t> pointing to nullptr.
-    Halide::Buffer<uint8_t> packedPlanarChromaView() const;
+    // Otherwise, returns a Halide::Runtime::Buffer<uint8_t> pointing to nullptr.
+    Halide::Runtime::Buffer<uint8_t> packedPlanarChromaView() const;
 
     // Rotate the buffer 180 degrees. Cheap. Just messes with the strides.
     void rotate180();
@@ -90,14 +90,14 @@ public:
 
 private:
 
-    Halide::Buffer<uint8_t> luma_;
-    Halide::Buffer<uint8_t> chromaU_;
-    Halide::Buffer<uint8_t> chromaV_;
+    Halide::Runtime::Buffer<uint8_t> luma_;
+    Halide::Runtime::Buffer<uint8_t> chromaU_;
+    Halide::Runtime::Buffer<uint8_t> chromaV_;
 
     ChromaStorage chromaStorage_;
 
-    Halide::Buffer<uint8_t> interleavedChromaView_;
-    Halide::Buffer<uint8_t> packedPlanarChromaView_;
+    Halide::Runtime::Buffer<uint8_t> interleavedChromaView_;
+    Halide::Runtime::Buffer<uint8_t> packedPlanarChromaView_;
 };
 
 #endif // YUV_BUFFER_T_H
