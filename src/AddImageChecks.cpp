@@ -201,10 +201,10 @@ Stmt add_image_checks(Stmt s,
                 Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
-                    Expr min = Call::make(Int(32), Call::extract_buffer_min,
-                                          {query_buf, j}, Call::Intrinsic);
-                    Expr max = Call::make(Int(32), Call::extract_buffer_max,
-                                          {query_buf, j}, Call::Intrinsic);
+                    Expr min = Call::make(Int(32), Call::buffer_get_min,
+                                          {query_buf, j}, Call::Extern);
+                    Expr max = Call::make(Int(32), Call::buffer_get_max,
+                                          {query_buf, j}, Call::Extern);
                     query_box.push_back(Interval(min, max));
                 }
                 merge_boxes(touched, query_box);
@@ -213,7 +213,10 @@ Stmt add_image_checks(Stmt s,
 
         // An expression returning whether or not we're in inference mode
         ReductionDomain rdom;
-        Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null", image, param, rdom);
+        Expr host_ptr = Variable::make(Handle(), name + ".host", image, param, rdom);
+        Expr dev = Variable::make(UInt(64), name + ".dev", image, param, rdom);
+        Expr inference_mode = (host_ptr == make_zero(host_ptr.type()) &&
+                               dev == make_zero(dev.type()));
 
         maybe_return_condition = maybe_return_condition || inference_mode;
 
@@ -338,16 +341,18 @@ Stmt add_image_checks(Stmt s,
         }
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
-        Expr buffer_name_expr = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
-        vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
+        BufferBuilder builder;
+        builder.buffer_memory = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
+        builder.type = type;
+        builder.dimensions = dimensions;
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
-            args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
-            args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
-            args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
+            builder.mins.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
+            builder.extents.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
+            builder.strides.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
         }
-        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, nullptr, 0, image, param);
-        Stmt rewrite = Evaluate::make(call);
+        Stmt rewrite = Evaluate::make(builder.build());
+
         rewrite = IfThenElse::make(inference_mode, rewrite);
         buffer_rewrites.push_back(rewrite);
 
