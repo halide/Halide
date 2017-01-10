@@ -131,19 +131,19 @@ const string globals =
     "\n"
     "inline uint8_t *_halide_buffer_get_host(const buffer_t *buf) {\n"
     " return buf->host;\n"
-    "}\n"    
+    "}\n"
     "inline int _halide_buffer_get_min(const buffer_t *buf, int d) {\n"
     " return buf->min[d];\n"
     "}\n"
     "inline int _halide_buffer_get_max(const buffer_t *buf, int d) {\n"
     " return buf->min[d] + buf->extent[d] - 1;\n"
-    "}\n"        
+    "}\n"
     "inline int _halide_buffer_set_dev_dirty(buffer_t *buf, bool val) {\n"
     " buf->dev_dirty = val;\n"
     " return 0;\n"
     "}\n"
     "inline int _halide_buffer_set_host_dirty(buffer_t *buf, bool val) {\n"
-    " buf->dev_dirty = val;\n"
+    " buf->host_dirty = val;\n"
     " return 0;\n"
     "}\n"
     "inline buffer_t *_halide_buffer_init(buffer_t *dst, void *host, uint64_t dev, int /*type_code*/, int type_bits, int dimensions, \n"
@@ -164,7 +164,7 @@ const string globals =
     "  dst->stride[i] = 0;\n"
     " }\n"
     " return dst;\n"
-    "}\n"  
+    "}\n"
     "\n";
 }
 
@@ -684,7 +684,7 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
            << name << "_dev = "
            << buf_name << "->dev;\n";
     do_indent();
-    stream << "(void)" << name << "_dev;\n";    
+    stream << "(void)" << name << "_dev;\n";
 
     for (int j = 0; j < 4; j++) {
         do_indent();
@@ -1057,7 +1057,7 @@ void CodeGen_C::visit(const Call *op) {
             string array_name = unique_name('a');
             stream << "uint64_t " << array_name << "[" << size << "];";
             rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
-        }        
+        }
     } else if (op->is_intrinsic(Call::copy_memory)) {
         internal_assert(op->args.size() == 3);
         string dest = print_expr(op->args[0]);
@@ -1067,10 +1067,10 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->args.size() == 0) {
             rhs << "NULL";
-        } else {       
+        } else {
             // Emit a line something like:
             // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
-            
+
             // Get the args
             vector<string> values;
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -1527,7 +1527,7 @@ void CodeGen_C::test() {
         " uint8_t * _buf_host = _buf_buffer->host;\n"
         " (void)_buf_host;\n"
         " const uint64_t _buf_dev = _buf_buffer->dev;\n"
-        " (void)_buf_dev;\n"        
+        " (void)_buf_dev;\n"
         " const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
         " (void)_buf_min_0;\n"
         " const int32_t _buf_min_1 = _buf_buffer->min[1];\n"
