@@ -103,6 +103,7 @@ set (RUNTIME_LL
   hvx_128
   mips
   posix_math
+  powerpc
   ptx_dev
   win32_math
   x86
@@ -498,13 +499,9 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${INITIAL_MODULES}
 )
 
-   if (WIN32)
-     if (MSVC)
-           # empty
-     else()
-       set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
-     endif()
-   endif()
+if (WIN32 AND NOT MSVC)
+  set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
+endif()
 
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support
@@ -516,34 +513,44 @@ list(APPEND LLVM_COMPONENTS passes)
 
 # Note when PUBLIC or INTERFACE scope is used in target_compile_* then targets
 # that link against the Halide library inherit those options and definitions
-target_include_directories(Halide PRIVATE ${LLVM_INCLUDE})
+target_include_directories(Halide PRIVATE ${LLVM_INCLUDE_DIRS})
 target_include_directories(Halide INTERFACE "${CMAKE_BINARY_DIR}/include")
 
 # TODO: For targets we can link against even fewer libraries by specifying
 # only the components we **REALLY** need (e.g. x86asmprinter;x86codegen rather than x86)
 if (TARGET_X86)
   target_compile_definitions(Halide PRIVATE "-DWITH_X86=1")
-  list(APPEND LLVM_COMPONENTS x86)
+  list(APPEND LLVM_COMPONENTS X86)
 endif()
 
 if (TARGET_ARM)
   target_compile_definitions(Halide PRIVATE "-DWITH_ARM=1")
-  list(APPEND LLVM_COMPONENTS arm)
+  list(APPEND LLVM_COMPONENTS ARM)
 endif()
 
 if (TARGET_AARCH64)
   target_compile_definitions(Halide PRIVATE "-DWITH_AARCH64=1")
-  list(APPEND LLVM_COMPONENTS aarch64)
+  list(APPEND LLVM_COMPONENTS AArch64)
 endif()
 
 if (TARGET_HEXAGON)
   target_compile_definitions(Halide PRIVATE "-DWITH_HEXAGON=1")
-  list(APPEND LLVM_COMPONENTS hexagon)
+  list(APPEND LLVM_COMPONENTS Hexagon)
+endif()
+
+if (TARGET_MIPS)
+  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS=1")
+  list(APPEND LLVM_COMPONENTS Mips)
+endif()
+
+if (TARGET_POWERPC)
+  target_compile_definitions(Halide PRIVATE "-DWITH_POWERPC=1")
+  list(APPEND LLVM_COMPONENTS PowerPC)
 endif()
 
 if (TARGET_PTX)
   target_compile_definitions(Halide PRIVATE "-DWITH_PTX=1")
-  list(APPEND LLVM_COMPONENTS nvptx)
+  list(APPEND LLVM_COMPONENTS NVPTX)
 endif()
 
 if (TARGET_OPENCL)
@@ -552,11 +559,6 @@ endif()
 
 if (TARGET_OPENGL)
   target_compile_definitions(Halide PRIVATE "-DWITH_OPENGL=1")
-endif()
-
-if (TARGET_MIPS)
-  target_compile_definitions(Halide PRIVATE "-DWITH_MIPS=1")
-  list(APPEND LLVM_COMPONENTS mips)
 endif()
 
 if (TARGET_METAL)
@@ -591,7 +593,10 @@ else()
   # I'm not sure if we want targets that link against Halide to inherit
   # the LLVM definitions so make the scope PRIVATE for now.
   # FIXME: These defines should come from ``llvm-config --cppflags``
-  target_compile_definitions(Halide PRIVATE "-D__STDC_LIMIT_MACROS" "-D__STDC_CONSTANT_MACROS" "-D__STDC_FORMAT_MACROS")
+  target_compile_definitions(Halide PRIVATE ${LLVM_DEFINITIONS})
+  if (NOT LLVM_ENABLE_ASSERTIONS)
+    target_compile_definitions(Halide PRIVATE NDEBUG)
+  endif()
   target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
   if(NOT HALIDE_ENABLE_RTTI)
     target_compile_options(Halide PUBLIC "-fno-rtti")
@@ -599,19 +604,11 @@ else()
 endif()
 
 # Get the LLVM libraries we need
-set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
+set(LLVM_CONFIG ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
 if(MSVC)
-  file(GLOB LIBS "${LLVM_LIB}/LLVM*.lib")
+  file(GLOB LIBS "${LLVM_LIBRARY_DIRS}/LLVM*.lib")
 else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles ${LLVM_COMPONENTS}
-                  RESULT_VARIABLE LLVM_CONFIG_RESULT
-                  OUTPUT_VARIABLE LIBS_UNSTRIPPED
-                  ERROR_VARIABLE LLVM_CONFIG_ERROR)
-  if (${LLVM_CONFIG_RESULT})
-    message(FATAL_ERROR "llvm-config failed: ${LLVM_CONFIG_ERROR}")
-  endif()
-  string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
-  string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
+  llvm_map_components_to_libnames(LIBS ${LLVM_COMPONENTS})
 endif()
 
 # When building a shared library the LLVM libraries will be
