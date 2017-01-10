@@ -10,9 +10,9 @@ WEAK void default_error_handler(void *user_context, const char *msg) {
     // We still have one character free. Add a newline if there
     // isn't one already.
     if (dst[-1] != '\n') {
-        dst[0] = '\n';
-        dst[1] = 0;
+        *dst++ = '\n';
     }
+    *dst = 0;
     halide_print(user_context, buf);
     abort();
 }
