@@ -470,18 +470,10 @@ struct Call : public ExprNode<Call> {
         rewrite_buffer,
         random,
         lerp,
-        create_buffer_t,
-        copy_buffer_t,
-        extract_buffer_min,
-        extract_buffer_max,
-        extract_buffer_host,
-        set_host_dirty,
-        set_dev_dirty,
         popcount,
         count_leading_zeros,
         count_trailing_zeros,
         undef,
-        null_handle,
         address_of,
         return_second,
         if_then_else,
@@ -495,6 +487,7 @@ struct Call : public ExprNode<Call> {
         make_struct,
         stringify,
         memoize_expr,
+        alloca,
         copy_memory,
         likely,
         likely_if_innermost,
@@ -512,6 +505,17 @@ struct Call : public ExprNode<Call> {
         bool_to_mask,
         cast_mask,
         select_mask;
+
+    // We also declare some symbolic names for some of the runtime
+    // functions that we want to construct Call nodes to here to avoid
+    // magic string constants and the potential risk of typos.
+    EXPORT static ConstString
+        buffer_get_min,
+        buffer_get_max,
+        buffer_get_host,
+        buffer_set_host_dirty,
+        buffer_set_dev_dirty,
+        buffer_init;   
 
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference

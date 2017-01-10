@@ -143,19 +143,20 @@ private:
         }
 
         // Create a buffer_t object for this allocation.
-        vector<Expr> args(dims*3 + 2);
-        Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter());
-        args[0] = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
-        args[1] = make_zero(op->types[0]);
-        for (int i = 0; i < dims; i++) {
-            args[3*i+2] = min_var[i];
-            args[3*i+3] = extent_var[i];
-            args[3*i+4] = stride_var[i];
+        if (dims <= 4) {
+            BufferBuilder builder;
+            Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter());
+            builder.host = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
+            builder.type = op->types[0];
+            builder.dimensions = dims;
+            for (int i = 0; i < dims; i++) {
+                builder.mins.push_back(min_var[i]);
+                builder.extents.push_back(extent_var[i]);
+                builder.strides.push_back(stride_var[i]);                    
+            }
+            stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
         }
-        Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                              args, Call::Intrinsic);
-        stmt = LetStmt::make(op->name + ".buffer", buf, stmt);
-
+        
         // Make the allocation node
         stmt = Allocate::make(op->name, op->types[0], extents, condition, stmt);
 
