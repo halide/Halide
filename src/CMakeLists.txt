@@ -598,9 +598,7 @@ else()
     target_compile_definitions(Halide PRIVATE NDEBUG)
   endif()
   target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
-  if(NOT HALIDE_ENABLE_RTTI)
-    target_compile_options(Halide PUBLIC "-fno-rtti")
-  endif()
+  target_compile_options(Halide PUBLIC "-fno-rtti")
 endif()
 
 # Get the LLVM libraries we need
