@@ -19,11 +19,7 @@ int call_count = 0;
 extern "C" DLLEXPORT int count_calls(buffer_t *out) {
     if (out->host) {
         call_count++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = 42;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t>(*out).fill(42);
     }
     return 0;
 }
@@ -33,11 +29,7 @@ int call_count_with_arg = 0;
 extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, buffer_t *out) {
     if (out->host) {
         call_count_with_arg++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = val;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t>(*out).fill(val);
     }
     return 0;
 }
@@ -47,11 +39,7 @@ int call_count_with_arg_parallel[8];
 extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, buffer_t *out) {
     if (out->host) {
         call_count_with_arg_parallel[out->min[2]]++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] = val;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t>(*out).fill(val);
     }
     return 0;
 }
@@ -69,12 +57,8 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t
     } else if (out->host) {
         assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
-        for (int32_t i = 0; i < out->extent[0]; i++) {
-            for (int32_t j = 0; j < out->extent[1]; j++) {
-                out->host[i * out->stride[0] + j * out->stride[1]] =
-                  in->host[i * in->stride[0] + j * in->stride[1]] + val;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t> out_buf(*out), in_buf(*in);
+        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) {out = in + val;}, in_buf);
     }
     return 0;
 }
