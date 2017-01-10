@@ -4015,9 +4015,9 @@ private:
             }
         } else if (op->is_intrinsic(Call::predicated_store)) {
             IRMutator::visit(op);
-            const Call *call = expr.as<Call>();
+            const Call *store = expr.as<Call>();
 
-            Expr pred = call->args[1];
+            Expr pred = store->args[1];
             internal_assert(pred.defined());
             if (is_zero(pred)) {
                 // Predicate of a predicated store is always false
@@ -4025,17 +4025,17 @@ private:
                 return;
             }
 
-            internal_assert(call->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
-            const Call *addr = call->args[0].as<Call>();
+            internal_assert(store->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
+            const Call *addr = store->args[0].as<Call>();
             internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
                 << "The first argument to predicated_store must be call to address_of of the store\n";
             const Broadcast *broadcast = addr->args[0].as<Broadcast>();
             const Load *load = broadcast ? broadcast->value.as<Load>() : addr->args[0].as<Load>();
             internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
 
-            const Call *val = call->args[2].as<Call>();
+            const Call *val = store->args[2].as<Call>();
             if (val && val->is_intrinsic(Call::predicated_load)) {
-                const Call *load_addr = call->args[0].as<Call>();
+                const Call *load_addr = val->args[0].as<Call>();
                 internal_assert(load_addr);
                 const Broadcast *b = load_addr->args[0].as<Broadcast>();
                 const Load *l = b ? b->value.as<Load>() : load_addr->args[0].as<Load>();
