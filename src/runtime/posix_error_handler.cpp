@@ -12,7 +12,9 @@ WEAK void default_error_handler(void *user_context, const char *msg) {
     if (dst[-1] != '\n') {
         dst[0] = '\n';
         dst[1] = 0;
+        dst += 1;
     }
+    halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
     halide_print(user_context, buf);
     abort();
 }
