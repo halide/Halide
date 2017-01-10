@@ -90,20 +90,22 @@ public:
     }
 
     Printer &operator<<(const halide_type_t &t) {
+        const char *code_name = NULL;
         switch(t.code) {
         case halide_type_int:
-            dst = halide_string_to_string(dst, end, "int");
+            code_name = "int";
             break;
         case halide_type_uint:
-            dst = halide_string_to_string(dst, end, "uint");
+            code_name = "uint";
             break;
         case halide_type_float:
-            dst = halide_string_to_string(dst, end, "float");
+            code_name = "float";
             break;
         case halide_type_handle:
-            dst = halide_string_to_string(dst, end, "handle");
+            code_name = "handle";
             break;
         }
+        dst = halide_string_to_string(dst, end, code_name);
         halide_uint64_to_string(dst, end, t.bits, 1);
         if (t.lanes != 1) {
             dst = halide_string_to_string(dst, end, "x");
