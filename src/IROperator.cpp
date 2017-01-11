@@ -627,7 +627,7 @@ Expr BufferBuilder::build() const {
     if (host.defined()) {
         args[2] = host;
     } else {
-        args[2] = make_zero(type_of<uint8_t *>());
+        args[2] = make_zero(type_of<void *>());
     }
 
     if (device.defined()) {
@@ -666,7 +666,7 @@ Expr BufferBuilder::build() const {
         // per-dimension flags, currently unused.
         shape.push_back(0);
     }
-    Expr shape_arg = Call::make(Handle(), Call::make_struct, shape, Call::Intrinsic);
+    Expr shape_arg = Call::make(type_of<halide_dimension_t *>(), Call::make_struct, shape, Call::Intrinsic);
     if (shape_memory.defined()) {
         args[8] = shape_arg;
     } else if (dimensions == 0) {
