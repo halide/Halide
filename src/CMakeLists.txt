@@ -1,12 +1,12 @@
 include(CheckCXXCompilerFlag)
 
 add_executable(build_halide_h ../tools/build_halide_h.cpp)
-add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
+add_executable(binary2cpp ../tools/binary2cpp.cpp)
 
 if (MSVC)
   # disable irrelevant warnings
   target_compile_options(build_halide_h PUBLIC /wd4996)
-  target_compile_options(bitcode2cpp PUBLIC /wd4996)
+  target_compile_options(binary2cpp PUBLIC /wd4996)
 endif()
 
 if (MSVC)
@@ -180,11 +180,11 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
 
       add_custom_command(OUTPUT "${INITMOD_D}"
                          DEPENDS "${BC_D}"
-                         COMMAND bitcode2cpp "${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
+                         COMMAND binary2cpp "initmod_${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
                          COMMENT "${BC_D} -> ${INITMOD_D}")
       add_custom_command(OUTPUT "${INITMOD}"
                          DEPENDS "${BC}"
-                         COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
+                         COMMAND binary2cpp "initmod_${i}_${j}" < "${BC}" > "${INITMOD}"
                          COMMENT "${BC} -> ${INITMOD}")
       list(APPEND INITIAL_MODULES ${INITMOD})
       list(APPEND INITIAL_MODULES ${INITMOD_D})
@@ -207,14 +207,14 @@ foreach (i ${RUNTIME_LL} )
                      COMMENT "${LL} -> ${BC}")
   add_custom_command(OUTPUT "${INITMOD}"
                      DEPENDS "${BC}"
-                     COMMAND bitcode2cpp ${i}_ll < "${BC}" > "${INITMOD}"
+                     COMMAND binary2cpp "initmod_${i}_ll" < "${BC}" > "${INITMOD}"
                      COMMENT "${BC} -> ${INITMOD}")
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 foreach (i ${RUNTIME_BC} )
   set(INITMOD "${INITMOD_PREFIX}ptx_${i}.cpp")
   add_custom_command(OUTPUT "${INITMOD}"
-                     COMMAND bitcode2cpp "ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
+                     COMMAND binary2cpp "initmod_ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
                      COMMENT "Building initial module ptx_${i}..."
                      VERBATIM)
   list(APPEND INITIAL_MODULES "${INITMOD}")
@@ -632,6 +632,6 @@ if (NOT MSVC)
 endif()
 
 add_dependencies(Halide
-  bitcode2cpp
+  binary2cpp
   build_halide_h
 )

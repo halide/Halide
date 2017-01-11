@@ -37,19 +37,7 @@ extern "C" int msan_extern_stage(buffer_t *in, buffer_t *out) {
     if (in->elem_size != out->elem_size) {
         return -1;
     }
-    for (int c = 0; c < in->extent[2]; c++) {
-        for (int y = 0; y < in->extent[1]; y++) {
-            for (int x = 0; x < in->extent[0]; x++) {
-                const uint64_t in_off = (x * in->stride[0] +
-                                         y * in->stride[1] +
-                                         c * in->stride[2]) * in->elem_size;
-                const uint64_t out_off = (x * out->stride[0] +
-                                          y * out->stride[1] +
-                                          c * out->stride[2]) * out->elem_size;
-                memcpy(out->host + out_off, in->host + in_off, in->elem_size);
-            }
-        }
-    }
+    Buffer<int32_t>(*out).copy_from(Buffer<int32_t>(*in));
     out->host_dirty = true;
     return 0;
 }
