@@ -663,6 +663,9 @@ enum halide_error_code_t {
 
     /** User-specified require() expression was not satisfied. */
     halide_error_code_requirement_failed = -27,
+
+    /** At least one of the buffer's extents are negative. */
+    halide_error_code_buffer_extents_negative = -28,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -691,6 +694,7 @@ extern int halide_error_access_out_of_bounds(void *user_context, const char *fun
                                              int min_valid, int max_valid);
 extern int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name,
                                                     uint64_t allocation_size, uint64_t max_size);
+extern int halide_error_buffer_extents_negative(void *user_context, const char *buffer_name, int dimension, int extent);
 extern int halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name,
                                                  int64_t actual_size, int64_t max_size);
 extern int halide_error_constraints_make_required_region_smaller(void *user_context, const char *buffer_name,
