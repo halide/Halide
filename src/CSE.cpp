@@ -528,6 +528,19 @@ void cse_test() {
         check(e, correct);
     }
 
+    {
+        Expr handle_a = reinterpret(type_of<int *>(), make_zero(UInt(64)));
+        Expr handle_b = reinterpret(type_of<float *>(), make_zero(UInt(64)));
+        Expr handle_c = reinterpret(type_of<float *>(), make_zero(UInt(64)));
+        e = Call::make(Int(32), "dummy", {handle_a, handle_b, handle_c}, Call::Extern);
+
+        Expr t0 = Variable::make(handle_b.type(), "t0");
+        correct = Let::make("t0", handle_b,
+                            Call::make(Int(32), "dummy", {handle_a, t0, t0}, Call::Extern));
+        check(e, correct);
+
+    }
+
     debug(0) << "common_subexpression_elimination test passed\n";
 }
 
