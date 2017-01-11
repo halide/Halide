@@ -154,12 +154,15 @@ public:
     ~Printer() {
         if (!buf) {
             halide_error(user_context, allocation_error());
-        } else if (type == ErrorPrinter) {
-            halide_error(user_context, buf);
-        } else if (type == BasicPrinter) {
-            halide_print(user_context, buf);
         } else {
-            // It's a stringstream. Do nothing.
+          halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
+          if (type == ErrorPrinter) {
+              halide_error(user_context, buf);
+          } else if (type == BasicPrinter) {
+              halide_print(user_context, buf);
+          } else {
+              // It's a stringstream. Do nothing.
+          }
         }
 
         if (own_mem) {
