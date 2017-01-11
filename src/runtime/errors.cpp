@@ -65,7 +65,7 @@ WEAK int halide_error_buffer_extents_negative(void *user_context, const char *bu
     error(user_context)
         << "The extents for buffer " << buffer_name
         << " dimension " << dimension
-        << " is negative (" << extent << ", which is never legal.";
+        << " is negative (" << extent << ")";
     return halide_error_code_buffer_extents_negative;
 }
 

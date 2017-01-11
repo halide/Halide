@@ -55,12 +55,21 @@ int main(int argc, char **argv) {
     check(result, correct);
     in.extent[0] = 64;
 
-    // Input buffer extent negative
-    in.extent[0] = -42;
-    result = error_codes(&in, 64, &out);
-    correct = halide_error_code_buffer_extents_negative;
-    check(result, correct);
-    in.extent[0] = 64;
+    // buffer extent negative, but in a way that doesn't trigger oob checks
+    {
+        buffer_t i = in, o = out;
+        i.extent[0] = 64;
+        i.extent[1] = -64;
+        i.stride[0] = 1;
+        i.stride[1] = 64;
+        o.extent[0] = 64;
+        o.extent[1] = -64;
+        o.stride[0] = 1;
+        o.stride[1] = 64;
+        result = error_codes(&i, 0, &o);
+        correct = halide_error_code_buffer_extents_negative;
+        check(result, correct);
+    }
 
     // Input buffer larger than 2GB
     in.extent[0] = 10000000;
