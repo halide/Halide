@@ -49,13 +49,13 @@ halide_dimension_t *_halide_buffer_get_shape(halide_buffer_t *buf) {
 HALIDE_BUFFER_HELPER_ATTRS
 halide_buffer_t *_halide_buffer_init(halide_buffer_t *dst,
                                      halide_dimension_t *dst_shape,
-                                     uint8_t *host,
+                                     void *host,
                                      uint64_t device, halide_device_interface_t *device_interface,
                                      int type_code, int type_bits,
                                      int dimensions,
                                      halide_dimension_t *shape,
                                      uint64_t flags) {
-    dst->host = host;
+    dst->host = (uint8_t *)host;
     dst->device = device;
     dst->device_interface = device_interface;
     dst->type.code = (halide_type_code_t)type_code;

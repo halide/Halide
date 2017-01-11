@@ -24,10 +24,16 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "float";
         break;
     case Type::Handle:
-        out << "handle";
+        if (type.handle_type) {
+            out << "(" << type.handle_type->inner_name.name << " *)";
+        } else {
+            out << "(void *)";
+        }
         break;
     }
-    out << type.bits();
+    if (!type.is_handle()) {
+        out << type.bits();
+    }
     if (type.lanes() > 1) out << 'x' << type.lanes();
     return out;
 }
@@ -448,6 +454,10 @@ void IRPrinter::visit(const Broadcast *op) {
 void IRPrinter::visit(const Call *op) {
     // TODO: Print indication of C vs C++?
     stream << op->name << "(";
+    if (op->is_intrinsic(Call::reinterpret) || op->is_intrinsic(Call::make_struct)) {
+        // For reinterpret casts, you really need the type too
+        stream << op->type << ", ";
+    }
     for (size_t i = 0; i < op->args.size(); i++) {
         print(op->args[i]);
         if (i < op->args.size() - 1) {

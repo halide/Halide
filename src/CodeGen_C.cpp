@@ -239,7 +239,13 @@ string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
 
 string CodeGen_C::print_reinterpret(Type type, Expr e) {
     ostringstream oss;
-    oss << "reinterpret<" << print_type(type) << ">(" << print_expr(e) << ")";
+    if (type.is_handle()) {
+        // Use a c-style cast
+        oss << "(" << print_type(type) << ")";
+    } else {
+        oss << "reinterpret<" << print_type(type) << ">";
+    }
+    oss << "(" << print_expr(e) << ")";
     return oss.str();
 }
 
@@ -312,7 +318,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (op->args[i].as<StringImm>()) {
                 stream << "const char *";
             } else {
-              stream << type_to_c_type(op->args[i].type(), true);
+                stream << type_to_c_type(op->args[i].type(), true);
             }
         }
         stream << ");\n";
@@ -331,26 +337,31 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
 public:
-  ExternCallPrototypes(std::set<string> &emitted, bool in_c_plus_plus)
-      : emitted(emitted) {
-        size_t j = 0;
+    ExternCallPrototypes(std::set<string> &emitted, bool in_c_plus_plus)
+        : emitted(emitted) {
         // Make sure we don't catch calls that are already in the global declarations
-        for (size_t i = 0; i < globals.size(); i++) {
-            char c = globals[i];
-            if (c == '(' && i > j+1) {
-                // Could be the end of a function_name.
-                emitted.insert(globals.substr(j+1, i-j-1));
-            }
+        const char *strs[] = {globals.c_str(),
+                              (const char *)halide_internal_initmod_declarations,
+                              (const char *)halide_internal_initmod_inlined_c};
+        for (const char *str : strs) {
+            size_t j = 0;
+            for (size_t i = 0; str[i]; i++) {
+                char c = str[i];
+                if (c == '(' && i > j+1) {
+                    // Could be the end of a function_name.
+                    string name(str + j + 1, i-j-1);
+                    emitted.insert(name);
+                }
 
-            if (('A' <= c && c <= 'Z') ||
-                ('a' <= c && c <= 'z') ||
-                c == '_' ||
-                ('0' <= c && c <= '9')) {
-                // Could be part of a function name.
-            } else {
-                j = i;
+                if (('A' <= c && c <= 'Z') ||
+                    ('a' <= c && c <= 'z') ||
+                    c == '_' ||
+                    ('0' <= c && c <= '9')) {
+                    // Could be part of a function name.
+                } else {
+                    j = i;
+                }
             }
-
         }
     }
 
@@ -1048,11 +1059,11 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::alloca)) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->type.is_handle());
-        if (op->type == type_of<struct buffer_t *>() &&
-            is_const(op->args[0], (int)sizeof(buffer_t))) {
+        if (op->type == type_of<struct halide_buffer_t *>() &&
+            is_const(op->args[0], (int)sizeof(halide_buffer_t))) {
             do_indent();
             string buf_name = unique_name('b');
-            stream << "buffer_t " << buf_name << ";";
+            stream << "halide_buffer_t " << buf_name << ";\n";
             rhs << "&" << buf_name;
         } else {
             // Make a stack of uint64_ts
@@ -1094,7 +1105,10 @@ void CodeGen_C::visit(const Call *op) {
                 stream << values[i];
             }
             stream << "};\n";
-            // Return a pointer to it.
+            // Return a pointer to it of the appropriate type
+            if (op->type.handle_type) {
+                rhs << "(" << print_type(op->type) << ")";
+            }
             rhs << "(&" << struct_name << ")";
         }
     } else if (op->is_intrinsic(Call::stringify)) {
@@ -1524,8 +1538,7 @@ void CodeGen_C::test() {
         "#ifdef __cplusplus\n"
         "extern \"C\" {\n"
         "#endif\n"
-        "int32_t  halide_print(void *, char const *);\n"
-        "\n\n"
+        "\n"
         "int test1(halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
