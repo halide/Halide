@@ -55,6 +55,13 @@ int main(int argc, char **argv) {
     check(result, correct);
     in.extent[0] = 64;
 
+    // Input buffer extent negative
+    in.extent[0] = -42;
+    result = error_codes(&in, 64, &out);
+    correct = halide_error_code_buffer_extents_negative;
+    check(result, correct);
+    in.extent[0] = 64;
+
     // Input buffer larger than 2GB
     in.extent[0] = 10000000;
     in.extent[1] = 10000000;

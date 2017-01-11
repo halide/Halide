@@ -259,6 +259,11 @@ Stmt add_image_checks(Stmt s,
                            << j << "\n";
             }
 
+            Expr negative_extent_condition = actual_extent >= 0;
+            Expr negative_extent_error = Call::make(Int(32), "halide_error_buffer_extents_negative",
+                                                    {error_name, j, actual_extent}, Call::Extern);
+            asserts_required.push_back(AssertStmt::make(negative_extent_condition, negative_extent_error));
+
             Expr min_required = touched[j].min;
             Expr extent_required = touched[j].max + 1 - touched[j].min;
 
