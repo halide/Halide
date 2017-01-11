@@ -149,8 +149,7 @@ class IsNoOp : public IRVisitor {
     void visit(const Call *op) {
         // Certain intrinsics that may appear in loops have side-effects. Most notably: image_store.
         if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::rewrite_buffer ||
-             op->name == Call::image_store ||
+            (op->name == Call::image_store ||
              op->name == Call::copy_memory)) {
             condition = const_false();
             return;

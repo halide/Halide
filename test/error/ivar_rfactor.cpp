@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     f.compute_root();
     g(x, imp) = f(x);
 
-    Image<int> im = g.realize(10, 2);
+    Buffer<int> im = g.realize(10, 2);
 
     printf("Should have failed!\n");
     return -1;

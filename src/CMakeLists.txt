@@ -32,6 +32,7 @@ set(RUNTIME_CPP
   android_opengl_context
   android_tempfile
   arm_cpu_features
+  buffer_t
   cache
   can_use_target
   cuda

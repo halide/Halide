@@ -89,7 +89,7 @@ void histogram_test(bool use_rfactor) {
     histogram.compute_root();
 
     output(x_implicit, y_implicit, bin) = histogram(bin);
-    Image<int32_t> hists = output.realize(2, 2, 31);
+    Buffer<int32_t> hists = output.realize(2, 2, 31);
 
     uint8_t input_data[2][2][3][3];
     for (int32_t x_i = 0; x_i < 2; x_i++) {
@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
         h(x, y) = input(x, y) * 2;
         output(x_implicit, y_implicit) = g() + h(x_implicit, y_implicit);
 
-        Image<int32_t> result = output.realize(10, 10);
+        Buffer<int32_t> result = output.realize(10, 10);
         for (int32_t y = 0; y < 10; y++) {
             for (int32_t x = 0; x < 10; x++) {
                 assert(result(x, y) == (x + y * 256) * 3 + 42);
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
                                  row(r.x - 2) + row(r.x - 1)));
         whythoff(x, y) = row(x);
 
-        Image<int32_t> result = whythoff.realize(10, 10);
+        Buffer<int32_t> result = whythoff.realize(10, 10);
         for (int y = 1; y < 10; y++) {
             for (int x = 1; x < 10; x++) {
                 assert(result(x, y) == whythoff_cxx(x, y));
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
         Func pascal_unwrap("pascal_wrap");
         pascal_unwrap(k, n) = pascal(k);
 
-        Image<int32_t> result = pascal_unwrap.realize(10, 10);
+        Buffer<int32_t> result = pascal_unwrap.realize(10, 10);
         for (int y = 0; y < 10; y++) {
             for (int x = 0; x <= y; x++) {
                 assert(result(x, y) == fact_cxx(y) / (fact_cxx(x) * fact_cxx(y - x)));
@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
         // TODO: convert to an assertion
         top.print_loop_nest();
         top.compile_to_lowered_stmt("/tmp/top.stmt", { });
-        Image<float> result = top.realize(3, 3, 3);
+        Buffer<float> result = top.realize(3, 3, 3);
     }
 
     // Implicit used with define_extern
@@ -249,7 +249,7 @@ int main(int argc, char **argv) {
         Func blurred_frames("blurred_frames");
         blurred_frames(_, frame) = cast<uint8_t>(blur_y(_) / 9);
 
-        Image<uint8_t> result = blurred_frames.realize(320, 320, 3, 4);
+        Buffer<uint8_t> result = blurred_frames.realize(320, 320, 3, 4);
 
         for (int32_t frame = 0; frame < 4; frame++) {
             for (int32_t c = 0; c < 3; c++) {
@@ -277,7 +277,7 @@ int main(int argc, char **argv) {
         Func i("i");
         i(_, tx, ty) = g(_);
 
-        Image<int32_t> result = i.realize(16, 16, 2, 2);
+        Buffer<int32_t> result = i.realize(16, 16, 2, 2);
 
         for (int32_t ty = 0; ty < 2; ty++) {
             for (int32_t tx = 0; tx < 2; tx++) {
@@ -315,7 +315,7 @@ int main(int argc, char **argv) {
 
         blur_x.compute_root();
 
-        Image<float> result = out.realize(16, 16, 4, 4);
+        Buffer<float> result = out.realize(16, 16, 4, 4);
         for (int32_t ty = 0; ty < 4; ty++) {
             for (int32_t tx = 0; tx < 4; tx++) {
                 for (int32_t y = 0; y < 16; y++) {

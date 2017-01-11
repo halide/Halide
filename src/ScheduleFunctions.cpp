@@ -381,8 +381,6 @@ Stmt build_produce(Function f, const Target &target) {
             const vector<string> f_args = f.all_args();
             for (int j = 0; j < f.outputs(); j++) {
 
-                vector<Expr> buffer_args(2);
-
                 vector<Expr> top_left;
                 for (int k = 0; k < f.dimensions(); k++) {
                     string var = stage_name + f_args[k];
@@ -391,20 +389,21 @@ Stmt build_produce(Function f, const Target &target) {
                 Expr host_ptr = Call::make(f, top_left, j);
                 host_ptr = Call::make(Handle(), Call::address_of, {host_ptr}, Call::Intrinsic);
 
-                buffer_args[0] = host_ptr;
-                buffer_args[1] = make_zero(f.output_types()[j]);
-                for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f_args[k];
+                BufferBuilder builder;
+                builder.host = host_ptr;
+                builder.type = f.output_types()[j];
+                builder.dimensions = f.dimensions();
+                int k = 0;
+                for (const string arg : f.all_args()) {
+                    string var = stage_name + arg;
                     Expr min = Variable::make(Int(32), var + ".min");
                     Expr max = Variable::make(Int(32), var + ".max");
-                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k));
-                    buffer_args.push_back(min);
-                    buffer_args.push_back(max - min + 1);
-                    buffer_args.push_back(stride);
+                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k++));
+                    builder.mins.push_back(min);
+                    builder.extents.push_back(max - min + 1);
+                    builder.strides.push_back(stride);
                 }
-
-                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                                  buffer_args, Call::Intrinsic);
+                Expr output_buffer_t = builder.build();
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
                 extern_call_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));

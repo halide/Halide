@@ -599,20 +599,11 @@ Call::ConstString Call::abs = "abs";
 Call::ConstString Call::absd = "absd";
 Call::ConstString Call::lerp = "lerp";
 Call::ConstString Call::random = "random";
-Call::ConstString Call::rewrite_buffer = "rewrite_buffer";
-Call::ConstString Call::create_buffer_t = "create_buffer_t";
-Call::ConstString Call::copy_buffer_t = "copy_buffer_t";
-Call::ConstString Call::extract_buffer_host = "extract_buffer_host";
-Call::ConstString Call::extract_buffer_min = "extract_buffer_min";
-Call::ConstString Call::extract_buffer_max = "extract_buffer_max";
-Call::ConstString Call::set_host_dirty = "set_host_dirty";
-Call::ConstString Call::set_dev_dirty = "set_dev_dirty";
 Call::ConstString Call::popcount = "popcount";
 Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
 Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
 Call::ConstString Call::undef = "undef";
 Call::ConstString Call::address_of = "address_of";
-Call::ConstString Call::null_handle = "null_handle";
 Call::ConstString Call::trace = "trace";
 Call::ConstString Call::trace_expr = "trace_expr";
 Call::ConstString Call::return_second = "return_second";
@@ -625,6 +616,7 @@ Call::ConstString Call::image_store = "image_store";
 Call::ConstString Call::make_struct = "make_struct";
 Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
+Call::ConstString Call::alloca = "alloca";
 Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
 Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
@@ -642,5 +634,13 @@ Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
+
+Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
+Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";    
+Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
+Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
+Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
+Call::ConstString Call::buffer_init = "_halide_buffer_init";    
+
 }
 }

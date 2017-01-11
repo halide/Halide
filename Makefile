@@ -509,6 +509,7 @@ RUNTIME_CPP_COMPONENTS = \
   android_opengl_context \
   android_tempfile \
   arm_cpu_features \
+  buffer_t \
   cache \
   can_use_target \
   cuda \
@@ -616,8 +617,7 @@ endif
 .PHONY: all
 all: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_internal
 
-.PHONY: extract_llvm_objects
-extract_llvm_objects: $(OBJECTS) $(INITIAL_MODULES)
+$(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	# Determine the relevant object files from llvm with a dummy
 	# compilation. Passing -t to the linker gets it to list which
 	# object files in which archives it uses to resolve
@@ -628,16 +628,16 @@ extract_llvm_objects: $(OBJECTS) $(INITIAL_MODULES)
 	# is no list from a previous build, then delete any old object
 	# files and re-extract the required object files
 	cd $(BUILD_DIR)/llvm_objects; \
-	if cmp -s list.new list.old; \
+	if cmp -s list.new list; \
 	then \
 	echo "No changes in LLVM deps"; \
 	else \
 	rm -f llvm_*.o*; \
 	cat list.new | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash -; \
-	mv list.new list.old; \
+	mv list.new list; \
 	fi
 
-$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) extract_llvm_objects
+$(LIB_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/list
 	# Archive together all the halide and llvm object files
 	@-mkdir -p $(LIB_DIR)
 	@rm -f $(LIB_DIR)/libHalide.a

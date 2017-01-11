@@ -652,8 +652,8 @@ private:
                 Call::make(t, op->name, {interval.max}, op->call_type,
                            op->func, op->value_index, op->image, op->param));
 
-        } else if (op->is_intrinsic(Call::extract_buffer_min) ||
-                   op->is_intrinsic(Call::extract_buffer_max)) {
+        } else if (op->name == Call::buffer_get_min ||
+                   op->name == Call::buffer_get_max) {
             // Bounds query results should have perfect nesting. Their
             // max over a loop is just the same bounds query call at
             // an outer loop level. This requires that the query is
@@ -662,9 +662,8 @@ private:
             //
             // TODO: There should be an assert injected in the inner
             // loop to check perfect nesting.
-            interval = Interval(
-                Call::make(Int(32), Call::extract_buffer_min, op->args, Call::PureIntrinsic),
-                Call::make(Int(32), Call::extract_buffer_max, op->args, Call::PureIntrinsic));
+            interval = Interval(Call::make(Int(32), Call::buffer_get_min, op->args, Call::Extern),
+                                Call::make(Int(32), Call::buffer_get_max, op->args, Call::Extern));
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
