@@ -21,6 +21,7 @@ using std::ostringstream;
 using std::map;
 
 extern "C" unsigned char halide_internal_initmod_declarations[];
+extern "C" unsigned char halide_internal_initmod_inlined_c[];
 
 namespace {
 
@@ -40,8 +41,9 @@ const string globals =
     "}\n"
     "\n"
 
-    // TODO: this next chunk is copy-pasted from posix_math.cpp. A
-    // better solution for the C runtime would be nice.
+    // We now add definitions of things in the runtime which are
+    // intended to be inlined into every module but are only expressed
+    // in .ll. The redundancy is regrettable (FIXME).
     "#ifdef _WIN32\n"
     "float roundf(float);\n"
     "double round(double);\n"
@@ -94,23 +96,13 @@ const string globals =
     "inline float inf_f32() {return INFINITY;}\n"
     "inline bool is_nan_f32(float x) {return x != x;}\n"
     "inline bool is_nan_f64(double x) {return x != x;}\n"
-    "inline float float_from_bits(uint32_t bits) {\n"
-    " union {\n"
-    "  uint32_t as_uint;\n"
-    "  float as_float;\n"
-    " } u;\n"
-    " u.as_uint = bits;\n"
-    " return u.as_float;\n"
-    "}\n"
+    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
+    "inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}\n"
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
+    "\n";
 
-    // This may look wasteful, but it's the right way to do
-    // it. Compilers understand memcpy and will convert it to a no-op
-    // when used in this way. See http://blog.regehr.org/archives/959
-    // for a detailed comparison of type-punning methods.
-    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n";
 }
 
 CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind), extern_c_open(false) {
@@ -126,6 +118,10 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
             << globals;
     }
     stream << halide_internal_initmod_declarations << '\n';
+
+    if (!is_header()) {
+        stream << halide_internal_initmod_inlined_c << '\n';
+    }
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
     // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
@@ -697,13 +693,18 @@ void CodeGen_C::push_buffer(Type t, int dims, const std::string &buffer_name) {
     stream << "(void)" << name << ";\n";
 
     do_indent();
-    stream << "const bool "
-           << name
-           << "_host_and_device_are_null = ("
-           << buf_name << "->host == NULL) && ("
-           << buf_name << "->device == 0);\n";
+    stream << "uint8_t * "
+           << name << "_host = "
+           << buf_name << "->host;\n";
     do_indent();
-    stream << "(void)" << name << "_host_and_device_are_null;\n";
+    stream << "(void)" << name << "_host;\n";
+
+    do_indent();
+    stream << "const uint64_t "
+           << name << "_device = "
+           << buf_name << "->device;\n";
+    do_indent();
+    stream << "(void)" << name << "_device;\n";
 
     string dim_fields[] = {"min", "extent", "stride"};
     for (string f : dim_fields) {
@@ -984,35 +985,6 @@ void CodeGen_C::visit(const Call *op) {
         string a0 = print_expr(op->args[0]);
         string a1 = print_expr(op->args[1]);
         rhs << a0 << " >> " << a1;
-    } else if (op->is_intrinsic(Call::rewrite_buffer)) {
-        int dims = ((int)(op->args.size())-2)/3;
-        (void)dims; // In case internal_assert is ifdef'd to do nothing
-        internal_assert((int)(op->args.size()) == dims*3 + 2);
-
-        const Variable *v = op->args[0].as<Variable>();
-        internal_assert(v);
-        string buf = "((halide_buffer_t *)" + print_name(v->name) + ")";
-        Type t = op->args[1].type();
-        vector<string> shape(dims * 3);
-        for (size_t i = 0; i < shape.size(); i++) {
-            shape[i] = print_expr(op->args[i+2]);
-        }
-
-        // We want to assign a bunch of fields, but we need to act
-        // as an expression that evaluates to true. Fortunately
-        // assignment in C is an expression, so we can just emit
-        // comma-separated assignments.
-        rhs << "("
-            << buf << "->type.code = (halide_type_code_t)(" << (int)t.code() << "), "
-            << buf << "->type.bits = " << t.bits() << ", "
-            << buf << "->type.lanes = " << t.lanes() << ", "
-            << buf << "->dimensions = " << dims << ", ";
-        for (int i = 0; i < dims; i++) {
-            rhs << buf << "->dim[" << i << "].min = " << shape[i*3] << ", "
-                << buf << "->dim[" << i << "].extent = " << shape[i*3+1] << ", "
-                << buf << "->dim[" << i << "].stride = " << shape[i*3+2] << ", ";
-        }
-        rhs << "true)";
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -1023,8 +995,6 @@ void CodeGen_C::visit(const Call *op) {
         Expr b = op->args[1];
         Expr e = select(a < b, b - a, a - b);
         rhs << print_expr(e);
-    } else if (op->is_intrinsic(Call::null_handle)) {
-        rhs << "nullptr";
     } else if (op->is_intrinsic(Call::address_of)) {
         const Load *l = op->args[0].as<Load>();
         internal_assert(op->args.size() == 1 && l);
@@ -1067,103 +1037,6 @@ void CodeGen_C::visit(const Call *op) {
         close_scope("if " + cond_id + " else");
 
         rhs << result_id;
-    } else if (op->is_intrinsic(Call::copy_buffer_t)) {
-        internal_assert(op->args.size() == 2);
-        const int64_t *dims = as_const_int(op->args[1]);
-        internal_assert(dims);
-
-        string arg = print_expr(op->args[0]);
-        arg = "(halide_buffer_t *)(" + arg + ")";
-
-        string buf_id = unique_name('B');
-
-        // Copy the buffer struct
-        do_indent();
-        stream << "halide_buffer_t " << buf_id << " = *" << arg << ";\n";
-
-        // Copy the shape
-        do_indent();
-        stream << "halide_dimension_t " << buf_id << "_shape[] = {";
-        for (int64_t i = 0; i < *dims; i++) {
-            stream << arg << "->dim[" << i << "]";
-            if (i < *dims - 1) {
-                stream << ", ";
-            }
-        }
-        stream << "};\n";
-
-        // Use the copy of the shape
-        do_indent();
-        stream << buf_id << "->dim = " << buf_id << "_shape;\n";
-
-        rhs << "(&" << buf_id << ")";
-    } else if (op->is_intrinsic(Call::create_buffer_t)) {
-         internal_assert(op->args.size() >= 2);
-
-         int dims = (op->args.size() - 2) / 3;
-
-         string host = "(uint8_t *)(" + print_expr(op->args[0]) + ")";
-         Type t = op->args[1].type();
-         vector<string> shape;
-         for (size_t i = 2; i < op->args.size(); i++) {
-             shape.push_back(print_expr(op->args[i]));
-         }
-
-         string buf_id = unique_name('B');
-
-         // Emit the shape
-         do_indent();
-         stream << "halide_dimension_t " << buf_id << "_shape[] = {";
-         for (int i = 0; i < dims; i++) {
-             stream << "halide_dimension_t(" << shape[i*3 + 0]
-                    << ", " << shape[i*3 + 1]
-                    << ", " << shape[i*3 + 2] << ")";
-             if (i < dims - 1) {
-                 stream << ", ";
-             }
-         }
-         stream << "};\n";
-
-         // Emit the buffer struct
-         do_indent();
-         stream << "halide_buffer_t " << buf_id << " = {"
-                << "0, "    // device
-                << "NULL, " // device_interface
-                << host << ", "
-                << "0, "    // flags
-                << "halide_type_t(halide_type_code_t(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
-                << dims << ", "
-                << buf_id << "_shape};\n";
-         rhs << "(&" + buf_id + ")";
-    } else if (op->is_intrinsic(Call::extract_buffer_max)) {
-        internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << "(((halide_buffer_t *)(" << a0 << "))->dim[" << a1 << "].min + " <<
-            "((halide_buffer_t *)(" << a0 << "))->dim[" << a1 << "].extent - 1)";
-    } else if (op->is_intrinsic(Call::extract_buffer_min)) {
-        internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << "((halide_buffer_t *)(" << a0 << "))->dim[" << a1 << "].min";
-    } else if (op->is_intrinsic(Call::extract_buffer_host)) {
-        internal_assert(op->args.size() == 1);
-        string a0 = print_expr(op->args[0]);
-        rhs << "((halide_buffer_t *)(" << a0 << "))->host";
-    } else if (op->is_intrinsic(Call::set_host_dirty)) {
-        internal_assert(op->args.size() == 1);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        do_indent();
-        stream << "((halide_buffer_t *)(" << a0 << "))->set_host_dirty(true);\n";
-        rhs << "0";
-    } else if (op->is_intrinsic(Call::set_device_dirty)) {
-        internal_assert(op->args.size() == 1);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        do_indent();
-        stream << "((halide_buffer_t *)(" << a0 << "))->set_device_dirty(true);\n";
-        rhs << "0";
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
         Expr a0 = op->args[0];
@@ -1172,6 +1045,23 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() >= 1);
         string arg = print_expr(op->args[0]);
         rhs << "(" << arg << ")";
+    } else if (op->is_intrinsic(Call::alloca)) {
+        internal_assert(op->args.size() == 1);
+        internal_assert(op->type.is_handle());
+        if (op->type == type_of<struct buffer_t *>() &&
+            is_const(op->args[0], (int)sizeof(buffer_t))) {
+            do_indent();
+            string buf_name = unique_name('b');
+            stream << "buffer_t " << buf_name << ";";
+            rhs << "&" << buf_name;
+        } else {
+            // Make a stack of uint64_ts
+            string size = print_expr(simplify((op->args[0] + 7)/8));
+            do_indent();
+            string array_name = unique_name('a');
+            stream << "uint64_t " << array_name << "[" << size << "];";
+            rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
+        }
     } else if (op->is_intrinsic(Call::copy_memory)) {
         internal_assert(op->args.size() == 3);
         string dest = print_expr(op->args[0]);
@@ -1179,30 +1069,34 @@ void CodeGen_C::visit(const Call *op) {
         string size = print_expr(op->args[2]);
         rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
     } else if (op->is_intrinsic(Call::make_struct)) {
-        // Emit a line something like:
-        // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
+        if (op->args.size() == 0) {
+            rhs << "NULL";
+        } else {
+            // Emit a line something like:
+            // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
 
-        // Get the args
-        vector<string> values;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            values.push_back(print_expr(op->args[i]));
+            // Get the args
+            vector<string> values;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                values.push_back(print_expr(op->args[i]));
+            }
+            do_indent();
+            stream << "struct {";
+            // List the types.
+            for (size_t i = 0; i < op->args.size(); i++) {
+                stream << "const " << print_type(op->args[i].type()) << " f_" << i << "; ";
+            }
+            string struct_name = unique_name('s');
+            stream << "}  " << struct_name << " = {";
+            // List the values.
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i > 0) stream << ", ";
+                stream << values[i];
+            }
+            stream << "};\n";
+            // Return a pointer to it.
+            rhs << "(&" << struct_name << ")";
         }
-        do_indent();
-        stream << "struct {";
-        // List the types.
-        for (size_t i = 0; i < op->args.size(); i++) {
-            stream << "const " << print_type(op->args[i].type()) << " f_" << i << "; ";
-        }
-        string struct_name = unique_name('s');
-        stream << "}  " << struct_name << " = {";
-        // List the values.
-        for (size_t i = 0; i < op->args.size(); i++) {
-            if (i > 0) stream << ", ";
-            stream << values[i];
-        }
-        stream << "};\n";
-        // Return a pointer to it.
-        rhs << "(&" << struct_name << ")";
     } else if (op->is_intrinsic(Call::stringify)) {
         // Rewrite to an snprintf
         vector<string> printf_args;
@@ -1276,7 +1170,6 @@ void CodeGen_C::visit(const Call *op) {
                op->call_type == Call::PureIntrinsic) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
-
     } else {
         // Generic calls
         vector<string> args(op->args.size());
@@ -1623,6 +1516,7 @@ void CodeGen_C::test() {
         headers +
         globals +
         string((const char *)halide_internal_initmod_declarations) + '\n' +
+        string((const char *)halide_internal_initmod_inlined_c) + '\n' +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"
         "#endif\n"
@@ -1635,8 +1529,10 @@ void CodeGen_C::test() {
         "int test1(halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
-        " const bool _buf_host_and_device_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->device == 0);\n"
-        " (void)_buf_host_and_device_are_null;\n"
+        " uint8_t * _buf_host = _buf_buffer->host;\n"
+        " (void)_buf_host;\n"
+        " const uint64_t _buf_device = _buf_buffer->device;\n"
+        " (void)_buf_device;\n"
         " const int32_t _buf_min_0 = _buf_buffer->dim[0].min;\n"
         " (void)_buf_min_0;\n"
         " const int32_t _buf_min_1 = _buf_buffer->dim[1].min;\n"
@@ -1712,8 +1608,11 @@ void CodeGen_C::test() {
         internal_error
             << "Correct source code:\n" << correct_source
             << "Actual source code:\n" << src
-            << "\nDifference starts at: " << src.substr(diff, diff_end - diff) << "\n"
-            << "vs: " << correct_source.substr(diff, diff_end - diff) << "\n";
+            << "Difference starts at:\n"
+            << "Correct: " << correct_source.substr(diff, diff_end - diff) << "\n"
+            << "Actual: " << src.substr(diff, diff_end - diff) << "\n";
+
+
     }
 
 

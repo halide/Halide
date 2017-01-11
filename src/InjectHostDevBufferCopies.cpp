@@ -91,7 +91,7 @@ class FindBuffersToTrack : public IRVisitor {
         // interesting either (because the buffer doesn't exist yet).
         const Call *c = op->value.as<Call>();
         if (ends_with(op->name, ".buffer") &&
-            c && c->name == Call::create_buffer_t) {
+            c && c->name == Call::buffer_init) {
             buffers_to_track.erase(op->name.substr(0, op->name.size() - 7));
         }
 
@@ -208,9 +208,9 @@ class InjectBufferCopies : public IRMutator {
     }
 
     enum CopyDirection {
-      NoCopy,
-      ToHost,
-      ToDevice
+        NoCopy,
+        ToHost,
+        ToDevice
     };
 
     Stmt make_buffer_copy(CopyDirection direction, string buf_name, DeviceAPI target_device_api) {
@@ -338,13 +338,15 @@ class InjectBufferCopies : public IRMutator {
             if (host_wrote) {
                 debug(4) << "Setting host dirty for " << i.first << "\n";
                 // If we just invalidated the dev pointer, we need to set the host dirty bit.
-                Expr set_host_dirty = Call::make(Int(32), Call::set_host_dirty, {buffer}, Call::Intrinsic);
+                Expr set_host_dirty = Call::make(Int(32), Call::buffer_set_host_dirty,
+                                                 {buffer, const_true()}, Call::Extern);
                 s = Block::make(s, Evaluate::make(set_host_dirty));
             }
 
             if (device_wrote) {
                 // If we just invalidated the host pointer, we need to set the dev dirty bit.
-                Expr set_device_dirty = Call::make(Int(32), Call::set_device_dirty, {buffer}, Call::Intrinsic);
+                Expr set_device_dirty = Call::make(Int(32), Call::buffer_set_device_dirty,
+                                                   {buffer, const_true()}, Call::Extern);
                 s = Block::make(s, Evaluate::make(set_device_dirty));
             }
 
@@ -357,10 +359,15 @@ class InjectBufferCopies : public IRMutator {
                 s = Block::make(make_buffer_copy(direction, i.first, touching_device), s);
             }
 
-            buf.on_single_device = (non_host_devices_reading_count <= 1) && (non_host_devices_writing_count <= 1) && buf.device_first_touched != DeviceAPI::None;
+            buf.on_single_device =
+                (non_host_devices_reading_count <= 1) &&
+                (non_host_devices_writing_count <= 1) &&
+                buf.device_first_touched != DeviceAPI::None;
 
             // Inject a dev_malloc if needed.
-            if (!buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::None) {
+            if (!buf.dev_allocated &&
+                buf.device_first_touched != DeviceAPI::Host &&
+                buf.device_first_touched != DeviceAPI::None) {
                 debug(4) << "Injecting device malloc for " << i.first << " on " <<
                     static_cast<int>(buf.device_first_touched) << "\n";
                 Stmt dev_malloc = make_dev_malloc(i.first, buf.device_first_touched, false);
@@ -521,6 +528,12 @@ class InjectBufferCopies : public IRMutator {
 
         BufferInfo &buf_info(state[buf_name]);
 
+        if (buf_info.dev_touched) {
+            user_assert(op->extents.size() <= 4)
+                << "Buffer " << op->name
+                << " cannot be used on the GPU, because it has more than four dimensions.\n";
+        }
+
         // If this buffer is only ever touched on gpu, nuke the host-side allocation.
         if (!buf_info.host_touched) {
             debug(4) << "Eliding host alloc for " << op->name << "\n";
@@ -532,11 +545,11 @@ class InjectBufferCopies : public IRMutator {
             std::vector<const LetStmt *> body_lets;
             // Find LetStmt setting up buffer Variable for op->name as it will
             // now go outside.
-            const LetStmt *buffer_create_let = nullptr;
+            const LetStmt *buffer_init_let = nullptr;
             while (const LetStmt *inner_let = inner_body.as<LetStmt>()) {
                 inner_body = inner_let->body;
                 if (inner_let->name == op->name + ".buffer") {
-                    buffer_create_let = inner_let;
+                    buffer_init_let = inner_let;
                     break;
                 }
                 body_lets.push_back(inner_let);
@@ -553,30 +566,38 @@ class InjectBufferCopies : public IRMutator {
             // and dev ones to facilitate this, but it seems better to
             // just register a destructor with the buffer creation.)
             inner_body = Allocate::make(op->name, op->type, op->extents, op->condition, inner_body,
-                                        Call::make(Handle(), Call::extract_buffer_host,
+                                        Call::make(Handle(), Call::buffer_get_host,
                                                    { Variable::make(type_of<struct halide_buffer_t *>(), op->name + ".buffer") },
-                                                   Call::Intrinsic),
+                                                   Call::Extern),
                                         "halide_device_host_nop_free"); // TODO: really should not have to introduce this routine to get a nop free
             // Wrap combined malloc around Allocate.
             inner_body = Block::make(combined_malloc, inner_body);
 
-            // Rewrite original create_buffer_t call and wrap it around the combined malloc.
+            // Rewrite original buffer_init call and wrap it around the combined malloc.
             std::vector<Expr> create_buffer_args;
-            if (buffer_create_let != nullptr) {
-                const Call *possible_create_buffer = buffer_create_let->value.as<Call>();
-                if (possible_create_buffer != nullptr &&
-                    possible_create_buffer->is_intrinsic(Call::create_buffer_t)) {
-                    create_buffer_args = possible_create_buffer->args;
-                    create_buffer_args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::PureIntrinsic);
+            internal_assert(buffer_init_let) << "Could not find definition of " << op->name << ".buffer\n";
+
+            class NukeHostField : public IRMutator {
+                using IRMutator::visit;
+                void visit(const Call *call) {
+                    if (call->is_intrinsic(Call::address_of)) {
+                        const Load *l = call->args[0].as<Load>();
+                        if (l->name == buf_name) {
+                            expr = make_zero(Handle());
+                            return;
+                        }
+                    }
+                    IRMutator::visit(call);
                 }
-            }
+                std::string buf_name;
+            public:
+                NukeHostField(const std::string &b) : buf_name(b) {}
+            };
 
-            // TODO: handle this case by creating the args from scratch?
-            internal_assert(!create_buffer_args.empty());
+            Expr buf = NukeHostField(op->name).mutate(buffer_init_let->value);
+            stmt = LetStmt::make(op->name + ".buffer", buf, inner_body);
 
-            stmt = LetStmt::make(op->name + ".buffer", Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t, create_buffer_args, Call::Intrinsic), inner_body);
-
-            // Rebuild any wrapped lets outside the one for the create_buffer_t.
+            // Rebuild any wrapped lets outside the one for the _halide_buffer_init
             for (size_t i = body_lets.size(); i > 0; i--) {
                 stmt = LetStmt::make(body_lets[i - 1]->name, body_lets[i - 1]->value, stmt);
             }
@@ -603,11 +624,11 @@ class InjectBufferCopies : public IRMutator {
             Expr value = op->value;
             if (!state[buf_name].host_touched) {
                 // Use null as a host pointer if there's no host allocation
-                const Call *create_buffer_t = op->value.as<Call>();
-                internal_assert(create_buffer_t && create_buffer_t->name == Call::create_buffer_t);
-                vector<Expr> args = create_buffer_t->args;
-                args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                value = Call::make(type_of<struct halide_buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
+                const Call *create_buffer = op->value.as<Call>();
+                internal_assert(create_buffer && create_buffer->name == Call::buffer_init);
+                vector<Expr> args = create_buffer->args;
+                args[1] = make_zero(Handle());
+                value = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init, args, Call::Extern);
                 stmt = LetStmt::make(op->name, value, op->body);
             }
         }

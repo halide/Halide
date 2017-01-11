@@ -511,6 +511,7 @@ RUNTIME_CPP_COMPONENTS = \
   android_opengl_context \
   android_tempfile \
   arm_cpu_features \
+  buffer_t \
   cache \
   can_use_target \
   cuda \
@@ -604,6 +605,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
                   $(BUILD_DIR)/initmod.declarations.o \
+                  $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
@@ -720,6 +722,10 @@ $(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/binary2cpp $(BUILD_DIR)/initmod.%.bc
 
 $(BUILD_DIR)/initmod.declarations.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/HalideRuntime.h
 	./$(BIN_DIR)/binary2cpp initmod_declarations < $(SRC_DIR)/runtime/HalideRuntime.h > $@
+
+# Any c in the runtime that must be inlined needs to be copy-pasted into the output for the C backend.
+$(BUILD_DIR)/initmod.inlined_c.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/buffer_t.cpp
+	./$(BIN_DIR)/binary2cpp initmod_inlined_c < $(SRC_DIR)/runtime/buffer_t.cpp > $@
 
 $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
 	./$(BIN_DIR)/binary2cpp initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@

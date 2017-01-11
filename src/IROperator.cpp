@@ -278,7 +278,7 @@ Expr make_bool(bool val, int w) {
 
 Expr make_zero(Type t) {
     if (t.is_handle()) {
-        return Call::make(t, Call::null_handle, std::vector<Expr>(), Call::PureIntrinsic);
+        return reinterpret(t, make_zero(UInt(64)));
     } else {
         return make_const(t, 0);
     }
@@ -368,10 +368,11 @@ void check_representable(Type dst, int64_t x) {
 }
 
 void match_types(Expr &a, Expr &b) {
-    user_assert(!a.type().is_handle() && !b.type().is_handle())
-        << "Can't do arithmetic on opaque pointer types\n";
-
     if (a.type() == b.type()) return;
+
+    user_assert(!a.type().is_handle() && !b.type().is_handle())
+        << "Can't do arithmetic on opaque pointer types: "
+        << a << ", " << b << "\n";
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
@@ -605,7 +606,98 @@ void split_into_ands(Expr cond, std::vector<Expr> &result) {
     }
 }
 
+Expr BufferBuilder::build() const {
+    std::vector<Expr> args(10);
+    if (buffer_memory.defined()) {
+        args[0] = buffer_memory;
+    } else {
+        args[0] = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca, {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
+    }
+
+    std::string shape_var_name = unique_name('t');
+    Expr shape_var = Variable::make(type_of<halide_dimension_t *>(), shape_var_name);
+    if (shape_memory.defined()) {
+        args[1] = shape_memory;
+    } else if (dimensions == 0) {
+        args[1] = make_zero(type_of<halide_dimension_t *>());
+    } else {
+        args[1] = shape_var;
+    }
+
+    if (host.defined()) {
+        args[2] = host;
+    } else {
+        args[2] = make_zero(type_of<uint8_t *>());
+    }
+
+    if (device.defined()) {
+        args[3] = device;
+    } else {
+        args[3] = make_zero(UInt(64));
+    }
+
+    if (device_interface.defined()) {
+        args[4] = device_interface;
+    } else {
+        args[4] = make_zero(type_of<struct halide_device_interface_t *>());
+    }
+
+    args[5] = (int)type.code();
+    args[6] = type.bits();
+    args[7] = dimensions;
+
+    std::vector<Expr> shape;
+    for (size_t i = 0; i < (size_t)dimensions; i++) {
+        if (i < mins.size()) {
+            shape.push_back(mins[i]);
+        } else {
+            shape.push_back(0);
+        }
+        if (i < extents.size()) {
+            shape.push_back(extents[i]);
+        } else {
+            shape.push_back(0);
+        }
+        if (i < strides.size()) {
+            shape.push_back(strides[i]);
+        } else {
+            shape.push_back(0);
+        }
+        // per-dimension flags, currently unused.
+        shape.push_back(0);
+    }
+    Expr shape_arg = Call::make(Handle(), Call::make_struct, shape, Call::Intrinsic);
+    if (shape_memory.defined()) {
+        args[8] = shape_arg;
+    } else if (dimensions == 0) {
+        args[8] = make_zero(type_of<halide_dimension_t *>());
+    } else {
+        args[8] = shape_var;
+    }
+
+    Expr flags = make_zero(UInt(64));
+    if (host_dirty.defined()) {
+        flags = select(host_dirty,
+                       make_const(UInt(64), halide_buffer_flag_host_dirty),
+                       make_zero(UInt(64)));
+    }
+    if (device_dirty.defined()) {
+        flags = flags | select(device_dirty,
+                               make_const(UInt(64), halide_buffer_flag_device_dirty),
+                               make_zero(UInt(64)));
+    }
+    args[9] = flags;
+
+    Expr e = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init, args, Call::Extern);
+
+    if (!shape_memory.defined() && dimensions != 0) {
+        e = Let::make(shape_var_name, shape_arg, e);
+    }
+
+    return e;
 }
+
+} // namespace Internal
 
 Expr fast_log(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";

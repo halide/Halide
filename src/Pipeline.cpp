@@ -626,6 +626,9 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
 
+    // Append a wrapper for this pipeline that accepts old buffer_ts and upgrades them
+    // TODO
+
     // Append any wrappers for extern stages that expect the old buffer_t
     wrap_extern_stages(module);
 
@@ -1032,9 +1035,9 @@ Pipeline::make_externs_jit_module(const Target &target,
                 // TODO: it's not clear whether arg.arg.type is correct for
                 // the arg.is_buffer() case (AFAIK, is_buffer()==true isn't possible
                 // in current mtrunk Halide, but may be in some side branches that
-                // have not yet landed, e.g. JavaScript). Forcing it to be 
+                // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
-                arg_types.push_back(arg.arg.is_buffer() ? 
+                arg_types.push_back(arg.arg.is_buffer() ?
                                     type_of<struct buffer_t *>() :
                                     arg.arg.type);
             }
