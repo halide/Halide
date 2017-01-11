@@ -122,7 +122,7 @@ private:
         if (index.same_as(op->index)) {
             expr = op;
         } else {
-            expr = Load::make(op->type, op->name, index, op->image, op->param);
+            expr = Load::make(op->type, op->name, index, op->image, op->param, op->predicate);
         }
     }
 
@@ -282,13 +282,13 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param));
+            stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, op->predicate));
             predicate = Expr();
         } else if (value.same_as(op->value) &&
                    index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, op->predicate);
         }
     }
 

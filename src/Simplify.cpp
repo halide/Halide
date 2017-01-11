@@ -3786,8 +3786,12 @@ private:
 
     void visit(const Load *op) {
         // Load of a broadcast should be broadcast of the load
+        Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
-        if (const Broadcast *b = index.as<Broadcast>()) {
+        if (predicate.defined() && is_zero(predicate)) {
+            // Predicate is always false
+            expr = undef(op->type);
+        } else if (const Broadcast *b = index.as<Broadcast>()) {
             Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
             expr = Broadcast::make(load, b->lanes);
         } else if (index.same_as(op->index)) {
@@ -4012,51 +4016,6 @@ private:
                 expr = mutate(b->value);
             } else {
                 internal_error << "Unreachable";
-            }
-        } else if (op->is_intrinsic(Call::predicated_store)) {
-            IRMutator::visit(op);
-            const Call *store = expr.as<Call>();
-
-            Expr pred = store->args[1];
-            internal_assert(pred.defined());
-            if (is_zero(pred)) {
-                // Predicate of a predicated store is always false
-                expr = make_zero(op->type);
-                return;
-            }
-
-            internal_assert(store->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
-            const Call *addr = store->args[0].as<Call>();
-            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
-                << "The first argument to predicated_store must be call to address_of of the store\n";
-            const Broadcast *broadcast = addr->args[0].as<Broadcast>();
-            const Load *load = broadcast ? broadcast->value.as<Load>() : addr->args[0].as<Load>();
-            internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
-
-            const Call *val = store->args[2].as<Call>();
-            if (val && val->is_intrinsic(Call::predicated_load)) {
-                const Call *load_addr = val->args[0].as<Call>();
-                internal_assert(load_addr);
-                const Broadcast *b = load_addr->args[0].as<Broadcast>();
-                const Load *l = b ? b->value.as<Load>() : load_addr->args[0].as<Load>();
-                Expr store_index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
-                Expr val_index = b ? Broadcast::make(l->index, b->lanes) : l->index;
-                if (l && (l->name == load->name) && equal(val_index, store_index)) {
-                    // foo[ramp(x, 0, 1)] = foo[ramp(x, 0, 1)] is a no-op
-                    expr = make_zero(op->type);
-                }
-            }
-
-        } else if (op->is_intrinsic(Call::predicated_load)) {
-            IRMutator::visit(op);
-            const Call *call = expr.as<Call>();
-
-            Expr pred = call->args[1];
-            internal_assert(pred.defined());
-            if (is_zero(pred)) {
-                // Predicate of a predicated load is always false. Replace
-                // with undef
-                expr = undef(call->type);
             }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
@@ -4532,18 +4491,24 @@ private:
     }
 
     void visit(const Store *op) {
+        Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
 
         const Load *load = value.as<Load>();
 
-        if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
+        if (predicate.defined() && is_zero(predicate)) {
+            // Predicate is always false
+            stmt = Evaluate::make(0);
+        } else if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
+            stmt = IfThenElse::make(scalar_pred->value, Store::make(op->name, value, index, op->param));
+        } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
             // foo[x] = foo[x] or foo[x] = undef is a no-op
             stmt = Evaluate::make(0);
         } else if (value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, op->predicate);
         }
     }
 
@@ -6014,18 +5979,9 @@ void simplify_test() {
     {
         Expr pred = ramp(x*y + x*z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
-
-        Expr load = Load::make(index.type(), "f", index, Buffer<>(), Parameter());
-        Expr src = Call::make(Handle().with_lanes(8), Call::address_of, {load}, Call::Intrinsic);
-        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
-
-        Expr dest = Call::make(Handle().with_lanes(8), Call::address_of,
-                               {Load::make(index.type(), "f", index, Buffer<>(), Parameter())},
-                               Call::Intrinsic);
-        Stmt stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
-                                         {dest, pred, value},
-                                         Call::Intrinsic));
-        check(stmt, Evaluate::make(make_zero(value.type())));
+        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter());
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred);
+        check(stmt, Evaluate::make(0));
     }
 
     std::cout << "Simplify test passed" << std::endl;

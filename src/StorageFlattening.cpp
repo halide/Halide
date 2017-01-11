@@ -152,11 +152,11 @@ private:
             for (int i = 0; i < dims; i++) {
                 builder.mins.push_back(min_var[i]);
                 builder.extents.push_back(extent_var[i]);
-                builder.strides.push_back(stride_var[i]);                    
+                builder.strides.push_back(stride_var[i]);
             }
             stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
         }
-        
+
         // Make the allocation node
         stmt = Allocate::make(op->name, op->types[0], extents, condition, stmt);
 
@@ -239,7 +239,8 @@ class PromoteToMemoryType : public IRMutator {
     void visit(const Load *op) {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            expr = Cast::make(op->type, Load::make(t, op->name, mutate(op->index), op->image, op->param));
+            expr = Cast::make(op->type, Load::make(t, op->name, mutate(op->index),
+                                                   op->image, op->param, mutate(op->predicate)));
         } else {
             IRMutator::visit(op);
         }
@@ -248,7 +249,8 @@ class PromoteToMemoryType : public IRMutator {
     void visit(const Store *op) {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
-            stmt = Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index), op->param);
+            stmt = Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
+                                                    op->param, mutate(op->predicate));
         } else {
             IRMutator::visit(op);
         }

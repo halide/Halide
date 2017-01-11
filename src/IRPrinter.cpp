@@ -429,6 +429,10 @@ void IRPrinter::visit(const Load *op) {
     stream << op->name << "[";
     print(op->index);
     stream << "]";
+    if (op->predicate.defined() && !is_one(op->predicate)) {
+        stream << " if ";
+        print(op->predicate);
+    }
 }
 
 void IRPrinter::visit(const Ramp *op) {
@@ -521,6 +525,10 @@ void IRPrinter::visit(const Store *op) {
     print(op->index);
     stream << "] = ";
     print(op->value);
+    if (op->predicate.defined() && !is_one(op->predicate)) {
+        stream << " if ";
+        print(op->predicate);
+    }
     stream << '\n';
 }
 

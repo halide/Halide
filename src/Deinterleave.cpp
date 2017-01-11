@@ -172,7 +172,7 @@ private:
             expr = op;
         } else {
             Type t = op->type.with_lanes(new_lanes);
-            expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
+            expr = Load::make(t, op->name, mutate(op->index), op->image, op->param, op->predicate);
         }
     }
 
@@ -520,7 +520,7 @@ class Interleaver : public IRMutator {
 
         should_deinterleave = false;
         Expr idx = mutate(op->index);
-        expr = Load::make(op->type, op->name, idx, op->image, op->param);
+        expr = Load::make(op->type, op->name, idx, op->image, op->param, op->predicate);
         if (should_deinterleave) {
             expr = deinterleave_expr(expr);
         }
@@ -545,7 +545,7 @@ class Interleaver : public IRMutator {
             value = deinterleave_expr(value);
         }
 
-        stmt = Store::make(op->name, value, idx, op->param);
+        stmt = Store::make(op->name, value, idx, op->param, op->predicate);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;

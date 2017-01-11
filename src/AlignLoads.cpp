@@ -40,7 +40,7 @@ private:
     // Rewrite a load to have a new index, updating the type if necessary.
     Expr make_load(const Load *load, Expr index) {
         return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
-                                 index, load->image, load->param));
+                                 index, load->image, load->param, load->predicate));
     }
 
     void visit(const Call *op) {
