@@ -78,12 +78,14 @@ enum {
 const void* output_base = nullptr;
 const void* output_previous = nullptr;
 int bounds_inference_count = 0;
+bool expect_error = false;
 
 void reset_state(const void* base) {
     annotate_stage = expect_bounds_inference_buffer;
     output_base = base;
     output_previous = nullptr;
     bounds_inference_count = 0;
+    expect_error = false;
 }
 
 extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
@@ -98,6 +100,13 @@ extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, c
             annotate_stage = expect_intermediate_buffer;
         }
     } else if (annotate_stage == expect_intermediate_buffer) {
+        if (expect_error) {
+            if (len != 87) {
+                fprintf(stderr, "Failure: Expected error message of len=87, saw %d bytes\n", (unsigned int) len);
+                exit(-1);
+            }
+            return;  // stay in this state
+        }
         if (output_previous != nullptr || len != sizeof(buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
             exit(-1);
@@ -227,6 +236,7 @@ int main()
     {
         auto out = Buffer<int32_t>(1, 1, 1);
         reset_state(out.data());
+        expect_error = true;
         if (msan(out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
             exit(-1);
