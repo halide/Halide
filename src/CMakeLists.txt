@@ -567,6 +567,10 @@ endif()
 
 target_compile_definitions(Halide PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
 target_compile_definitions(Halide PRIVATE "-DCOMPILING_HALIDE")
+target_compile_definitions(Halide PRIVATE ${LLVM_DEFINITIONS})
+if (NOT LLVM_ENABLE_ASSERTIONS)
+  target_compile_definitions(Halide PRIVATE NDEBUG)
+endif()
 
 if (MSVC)
   # Suppress some warnings
@@ -590,24 +594,12 @@ if (MSVC)
     target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
   endif()
 else()
-  # I'm not sure if we want targets that link against Halide to inherit
-  # the LLVM definitions so make the scope PRIVATE for now.
-  # FIXME: These defines should come from ``llvm-config --cppflags``
-  target_compile_definitions(Halide PRIVATE ${LLVM_DEFINITIONS})
-  if (NOT LLVM_ENABLE_ASSERTIONS)
-    target_compile_definitions(Halide PRIVATE NDEBUG)
-  endif()
   target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
   target_compile_options(Halide PUBLIC "-fno-rtti")
 endif()
 
 # Get the LLVM libraries we need
-set(LLVM_CONFIG ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
-if(MSVC)
-  file(GLOB LIBS "${LLVM_LIBRARY_DIRS}/LLVM*.lib")
-else()
-  llvm_map_components_to_libnames(LIBS ${LLVM_COMPONENTS})
-endif()
+llvm_map_components_to_libnames(LIBS ${LLVM_COMPONENTS})
 
 # When building a shared library the LLVM libraries will be
 # embedded in the Halide library. When building a static library
@@ -617,6 +609,7 @@ endif()
 target_link_libraries(Halide PRIVATE ${LIBS})
 
 if (NOT MSVC)
+  set(LLVM_CONFIG ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
   execute_process(COMMAND "${LLVM_CONFIG}" --system-libs ${LLVM_COMPONENTS} OUTPUT_VARIABLE EXTRA_LIBS)
   string(STRIP EXTRA_LIBS "${EXTRA_LIBS}")
   string(REPLACE "-l" ";" EXTRA_LIBS "${EXTRA_LIBS}")
