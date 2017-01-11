@@ -99,6 +99,10 @@ public:
     }
 
     Expr mutate(Expr e) {
+        if (!e.defined()) {
+            return Expr();
+        }
+
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);

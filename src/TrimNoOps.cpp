@@ -81,6 +81,12 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const Store *op) {
+        bool always_false = op->predicate.defined() && is_zero(op->predicate);
+        if (always_false) {
+            condition = make_and(condition, op->predicate.defined() && is_zero(op->predicate));
+            return;
+        }
+
         if (op->value.type().is_handle()) {
             condition = const_false();
         } else {
@@ -98,7 +104,8 @@ class IsNoOp : public IRVisitor {
                 return;
             }
 
-            Expr equivalent_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), Parameter());
+            Expr equivalent_load = Load::make(op->value.type(), op->name, op->index,
+                                              Buffer<>(), Parameter(), op->predicate);
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities().mutate(is_no_op);
             // We need to call CSE since sometimes we have "let" stmt on the RHS
@@ -153,16 +160,6 @@ class IsNoOp : public IRVisitor {
              op->name == Call::copy_memory)) {
             condition = const_false();
             return;
-        } else if (((op->name == Call::predicated_load) ||
-                    (op->name == Call::predicated_store))) {
-            // If the predicate of a predicated load/store is always false,
-            // it's okay to trim it; otherwise, do nothing.
-            Expr pred = op->args[1];
-            internal_assert(pred.defined());
-            if (!is_zero(pred)) {
-                condition = const_false();
-                return;
-            }
         }
         IRVisitor::visit(op);
     }

@@ -190,13 +190,13 @@ struct Select : public ExprNode<Select> {
     static const IRNodeType _type_info = IRNodeType::Select;
 };
 
-/** Load a value from a named buffer. The buffer is treated as an
- * array of the 'type' of this Load node. That is, the buffer has
+/** Load a value from a named buffer if predicate is true. The buffer is treated
+ * as an array of the 'type' of this Load node. That is, the buffer has
  * no inherent type. */
 struct Load : public ExprNode<Load> {
     std::string name;
 
-    Expr index;
+    Expr predicate, index;
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
@@ -205,7 +205,8 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, std::string name, Expr index, Buffer<> image, Parameter param);
+    EXPORT static Expr make(Type type, std::string name, Expr index, Buffer<> image,
+                            Parameter param, Expr predicate = Expr());
 
     static const IRNodeType _type_info = IRNodeType::Load;
 };
@@ -293,16 +294,17 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
 };
 
-/** Store a 'value' to the buffer called 'name' at a given
- * 'index'. The buffer is interpreted as an array of the same type as
+/** Store a 'value' to the buffer called 'name' at a given 'index' if 'predicate'
+ * is true. The buffer is interpreted as an array of the same type as
  * 'value'. */
 struct Store : public StmtNode<Store> {
     std::string name;
-    Expr value, index;
+    Expr predicate, value, index;
     // If it's a store to an output buffer, then this parameter points to it.
     Parameter param;
 
-    EXPORT static Stmt make(std::string name, Expr value, Expr index, Parameter param);
+    EXPORT static Stmt make(std::string name, Expr value, Expr index,
+                            Parameter param, Expr predicate = Expr());
 
     static const IRNodeType _type_info = IRNodeType::Store;
 };
@@ -515,7 +517,7 @@ struct Call : public ExprNode<Call> {
         buffer_get_host,
         buffer_set_host_dirty,
         buffer_set_dev_dirty,
-        buffer_init;   
+        buffer_init;
 
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference

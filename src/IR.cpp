@@ -229,13 +229,14 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param) {
+Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param, Expr predicate) {
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
 
     Load *node = new Load;
     node->type = type;
     node->name = name;
+    node->predicate = predicate;
     node->index = index;
     node->image = image;
     node->param = param;
@@ -330,12 +331,13 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Device
     return node;
 }
 
-Stmt Store::make(std::string name, Expr value, Expr index, Parameter param) {
+Stmt Store::make(std::string name, Expr value, Expr index, Parameter param, Expr predicate) {
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
 
     Store *node = new Store;
     node->name = name;
+    node->predicate = predicate;
     node->value = value;
     node->index = index;
     node->param = param;
@@ -635,11 +637,11 @@ Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
-Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";    
+Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
 Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
-Call::ConstString Call::buffer_init = "_halide_buffer_init";    
+Call::ConstString Call::buffer_init = "_halide_buffer_init";
 
 }
 }

@@ -546,7 +546,8 @@ private:
         if (interval.is_single_point()) {
             // If the index is const we can return the load of that index
             Expr load_min =
-                Load::make(op->type.element_of(), op->name, interval.min, op->image, op->param);
+                Load::make(op->type.element_of(), op->name, interval.min,
+                           op->image, op->param, op->predicate);
             interval = Interval::single_point(load_min);
         } else {
             // Otherwise use the bounds of the type

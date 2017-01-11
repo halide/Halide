@@ -1718,7 +1718,8 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 void CodeGen_LLVM::visit(const Load *op) {
     // If it's a Handle, load it as a uint64_t and then cast
     if (op->type.is_handle()) {
-        codegen(reinterpret(op->type, Load::make(UInt(64, op->type.lanes()), op->name, op->index, op->image, op->param)));
+        codegen(reinterpret(op->type, Load::make(UInt(64, op->type.lanes()), op->name,
+                                                 op->index, op->image, op->param, op->predicate)));
         return;
     }
 
@@ -1769,8 +1770,8 @@ void CodeGen_LLVM::visit(const Load *op) {
             // Do each load.
             Expr ramp_a = Ramp::make(base_a, stride_a, ramp->lanes);
             Expr ramp_b = Ramp::make(base_b, stride_b, ramp->lanes);
-            Expr load_a = Load::make(op->type, op->name, ramp_a, op->image, op->param);
-            Expr load_b = Load::make(op->type, op->name, ramp_b, op->image, op->param);
+            Expr load_a = Load::make(op->type, op->name, ramp_a, op->image, op->param, op->predicate);
+            Expr load_b = Load::make(op->type, op->name, ramp_b, op->image, op->param, op->predicate);
             Value *vec_a = codegen(load_a);
             Value *vec_b = codegen(load_b);
 
@@ -1789,7 +1790,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             Expr flipped_base = ramp->base - ramp->lanes + 1;
             Expr flipped_stride = make_one(flipped_base.type());
             Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->lanes);
-            Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param);
+            Expr flipped_load = Load::make(op->type, op->name, flipped_index, op->image, op->param, op->predicate);
 
             Value *flipped = codegen(flipped_load);
 
@@ -3360,7 +3361,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     // memory, so convert stores of handles to stores of uint64_ts.
     if (op->value.type().is_handle()) {
         Expr v = reinterpret(UInt(64, op->value.type().lanes()), op->value);
-        codegen(Store::make(op->name, v, op->index, op->param));
+        codegen(Store::make(op->name, v, op->index, op->param, op->predicate));
         return;
     }
 
@@ -3373,7 +3374,7 @@ void CodeGen_LLVM::visit(const Store *op) {
         StoreInst *store = builder->CreateAlignedStore(val, ptr, value_type.bytes());
         add_tbaa_metadata(store, op->name, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
-        Stmt s = Store::make(op->name, op->value, let->body, op->param);
+        Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate);
         codegen(LetStmt::make(let->name, let->value, s));
     } else {
         int alignment = value_type.bytes();

@@ -31,7 +31,8 @@ class ReplaceParams : public IRMutator {
     void visit(const Load *op) {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
-            expr = Load::make(op->type, op->name, mutate(op->index), op->image, i->second);
+            expr = Load::make(op->type, op->name, mutate(op->index), op->image,
+                              i->second, mutate(op->predicate));
         } else {
             IRMutator::visit(op);
         }
@@ -40,7 +41,8 @@ class ReplaceParams : public IRMutator {
     void visit(const Store *op) {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
-            stmt = Store::make(op->name, mutate(op->value), mutate(op->index), i->second);
+            stmt = Store::make(op->name, mutate(op->value), mutate(op->index),
+                               i->second, mutate(op->predicate));
         } else {
             IRMutator::visit(op);
         }
