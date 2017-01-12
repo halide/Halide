@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "BufferPtr.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"
@@ -17,6 +16,7 @@
 #include "Parameter.h"
 #include "Type.h"
 #include "Util.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
@@ -200,12 +200,12 @@ struct Load : public ExprNode<Load> {
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
-    BufferPtr image;
+    Buffer<> image;
 
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, std::string name, Expr index, BufferPtr image, Parameter param);
+    EXPORT static Expr make(Type type, std::string name, Expr index, Buffer<> image, Parameter param);
 
     static const IRNodeType _type_info = IRNodeType::Load;
 };
@@ -470,18 +470,10 @@ struct Call : public ExprNode<Call> {
         rewrite_buffer,
         random,
         lerp,
-        create_buffer_t,
-        copy_buffer_t,
-        extract_buffer_min,
-        extract_buffer_max,
-        extract_buffer_host,
-        set_host_dirty,
-        set_dev_dirty,
         popcount,
         count_leading_zeros,
         count_trailing_zeros,
         undef,
-        null_handle,
         address_of,
         return_second,
         if_then_else,
@@ -495,6 +487,7 @@ struct Call : public ExprNode<Call> {
         make_struct,
         stringify,
         memoize_expr,
+        alloca,
         copy_memory,
         likely,
         likely_if_innermost,
@@ -513,6 +506,17 @@ struct Call : public ExprNode<Call> {
         cast_mask,
         select_mask;
 
+    // We also declare some symbolic names for some of the runtime
+    // functions that we want to construct Call nodes to here to avoid
+    // magic string constants and the potential risk of typos.
+    EXPORT static ConstString
+        buffer_get_min,
+        buffer_get_max,
+        buffer_get_host,
+        buffer_set_host_dirty,
+        buffer_set_dev_dirty,
+        buffer_init;   
+
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference
     // counting only. Self-references in update definitions do not
@@ -525,7 +529,7 @@ struct Call : public ExprNode<Call> {
 
     // If it's a call to an image, this call nodes hold a
     // pointer to that image's buffer
-    BufferPtr image;
+    Buffer<> image;
 
     // If it's a call to an image parameter, this call node holds a
     // pointer to that
@@ -533,19 +537,19 @@ struct Call : public ExprNode<Call> {
 
     EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                             IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
-                            BufferPtr image = BufferPtr(), Parameter param = Parameter());
+                            Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
     EXPORT static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(BufferPtr image, const std::vector<Expr> &args) {
+    static Expr make(Buffer<> image, const std::vector<Expr> &args) {
         return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, nullptr, 0, BufferPtr(), param);
+        return make(param.type(), param.name(), args, Image, nullptr, 0, Buffer<>(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that
@@ -581,28 +585,29 @@ struct Variable : public ExprNode<Variable> {
     Parameter param;
 
     /** References to properties of literal image parameters. */
-    BufferPtr image;
+    Buffer<> image;
 
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
     static Expr make(Type type, std::string name) {
-        return make(type, name, BufferPtr(), Parameter(), ReductionDomain());
+        return make(type, name, Buffer<>(), Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, BufferPtr(), param, ReductionDomain());
+        return make(type, name, Buffer<>(), param, ReductionDomain());
     }
 
-    static Expr make(Type type, std::string name, BufferPtr image) {
+    static Expr make(Type type, std::string name, Buffer<> image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, BufferPtr(), Parameter(), reduction_domain);
+        return make(type, name, Buffer<>(), Parameter(), reduction_domain);
     }
 
-    EXPORT static Expr make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain);
+    EXPORT static Expr make(Type type, std::string name, Buffer<> image,
+                            Parameter param, ReductionDomain reduction_domain);
 
     static const IRNodeType _type_info = IRNodeType::Variable;
 };
@@ -627,6 +632,12 @@ struct For : public StmtNode<For> {
     Stmt body;
 
     EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
+
+    bool is_parallel() const {
+        return (for_type == ForType::Parallel ||
+                for_type == ForType::GPUBlock ||
+                for_type == ForType::GPUThread);
+    }
 
     static const IRNodeType _type_info = IRNodeType::For;
 };

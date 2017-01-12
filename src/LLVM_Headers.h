@@ -25,6 +25,7 @@
 
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
+#include "llvm/Support/ErrorHandling.h"
 #include <llvm/Support/FileSystem.h>
 #if LLVM_VERSION >= 40
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -35,6 +36,7 @@
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
@@ -46,6 +48,9 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include <llvm/ADT/StringMap.h>
 #include <llvm/Object/ArchiveWriter.h>
 #include <llvm/Object/ObjectFile.h>

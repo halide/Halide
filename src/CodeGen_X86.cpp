@@ -383,7 +383,8 @@ void CodeGen_X86::visit(const Max *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    if (target.has_feature(Target::AVX2) &&
+    constexpr bool need_workaround = LLVM_VERSION < 40;
+    if (need_workaround && target.has_feature(Target::AVX2) &&
         op->is_intrinsic(Call::shift_left) &&
         op->type.is_vector() &&
         op->type.is_int() &&
@@ -392,6 +393,7 @@ void CodeGen_X86::visit(const Call *op) {
 
         // Left shift of negative integers is broken in some cases in
         // avx2: https://llvm.org/bugs/show_bug.cgi?id=27730
+        // Bug was fixed in LLVM r271796
 
         // It needs to be normalized to a 32-bit shift, because avx2
         // doesn't have a narrower version than that. We'll just do

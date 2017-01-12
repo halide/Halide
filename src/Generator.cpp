@@ -4,6 +4,7 @@
 
 #include "Generator.h"
 #include "Outputs.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -176,7 +177,83 @@ T parse_scalar(const std::string &value) {
     return t;
 }
 
+Func make_param_func(const Parameter &p, const std::string &name) {
+    internal_assert(p.is_buffer());
+    std::vector<Var> args;
+    std::vector<Expr> args_expr;
+    for (int i = 0; i < p.dimensions(); ++i) {
+        Var v = Var::implicit(i);
+        args.push_back(v);
+        args_expr.push_back(v);
+    }
+    Func f = Func(name + "_im");
+    f(args) = Internal::Call::make(p, args_expr);
+    return f;
+}
+
 }  // namespace
+
+void ValueTracker::track_values(const std::string &name, const std::vector<Expr> &values) {
+    std::vector<std::vector<Expr>> &history = values_history[name];
+    if (history.empty()) {
+        for (size_t i = 0; i < values.size(); ++i) {
+            history.push_back({values[i]});
+        }
+        return;
+    }
+
+    internal_assert(history.size() == values.size())
+        << "Expected values of size " << history.size()
+        << " but saw size " << values.size()
+        << " for name " << name << "\n";
+
+    // For each item, see if we have a new unique value
+    for (size_t i = 0; i < values.size(); ++i) {
+        Expr oldval = history[i].back();
+        Expr newval = values[i];
+        if (oldval.defined() && newval.defined()) {
+            if (can_prove(newval == oldval)) {
+                continue;
+            }
+        } else if (!oldval.defined() && !newval.defined()) {
+            // Expr::operator== doesn't work with undefined
+            // values, but they are equal for our purposes here.
+            continue;
+        }
+        history[i].push_back(newval);
+        // If we exceed max_unique_values, fail immediately.
+        // TODO: could be useful to log all the entries that
+        // overflow max_unique_values before failing.
+        // TODO: this could be more helpful about labeling the values
+        // that have multiple setttings.
+        if (history[i].size() > max_unique_values) {
+            std::ostringstream o;
+            o << "Saw too many unique values in ValueTracker[" + std::to_string(i) + "]; "
+              << "expected a maximum of " << max_unique_values << ":\n";
+            for (auto e : history[i]) {
+                o << "    " << e << "\n";
+            }
+            user_error << o.str();
+        }
+    }
+}
+
+std::vector<Expr> parameter_constraints(const Parameter &p) {
+    internal_assert(p.defined());
+    std::vector<Expr> values;
+    values.push_back(Expr(p.host_alignment()));
+    if (p.is_buffer()) {
+        for (int i = 0; i < p.dimensions(); ++i) {
+            values.push_back(p.min_constraint(i));
+            values.push_back(p.extent_constraint(i));
+            values.push_back(p.stride_constraint(i));
+        }
+    } else {
+        values.push_back(p.get_min_value());
+        values.push_back(p.get_max_value());
+    }
+    return values;
+}
 
 class StubEmitter {
 public:
@@ -305,7 +382,7 @@ void StubEmitter::emit_inputs_struct() {
     };
     std::vector<InInfo> in_info;
     for (auto input : inputs) {
-        std::string c_type(input->kind() == IOKind::Function ? "Func" : "Expr");
+        std::string c_type = input->get_c_type();
         if (input->is_array()) {
             c_type = "std::vector<" + c_type + ">";
         }
@@ -356,7 +433,7 @@ void StubEmitter::emit() {
         // on the other hand, since this file is just a couple of comments, it's
         // really not an issue if it's included multiple times.
         stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
-        stream << "/* There is no Stub for the Generator named " << generator_name << " */\n";
+        stream << "/* The Generator named " << generator_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
         return;
     }
 
@@ -377,10 +454,15 @@ void StubEmitter::emit() {
     };
     std::vector<OutputInfo> out_info;
     for (auto output : outputs) {
+        std::string c_type = output->get_c_type();
+        std::string getter;
+        if (output->is_array()) getter = "get_output_vector";
+        else if (c_type == "Func") getter = "get_output";
+        else getter = "get_output_buffer<" + c_type + ">";
         out_info.push_back({
             output->name(),
-            output->is_array() ? "std::vector<Func>" : "Func",
-            std::string(output->is_array() ? "get_output_vector" : "get_output") + "(\"" + output->name() + "\")"
+            output->is_array() ? "std::vector<" + c_type + ">" : c_type,
+            getter + "(\"" + output->name() + "\")"
         });
     }
 
@@ -436,7 +518,7 @@ void StubEmitter::emit() {
     stream << indent() << class_name << "() {}\n";
     stream << "\n";
 
-    stream << indent() << class_name << "(\n";
+    stream << indent() << "NO_INLINE " << class_name << "(\n";
     indent_level++;
     stream << indent() << "const GeneratorContext* context,\n";
     stream << indent() << "const Inputs& inputs,\n";
@@ -447,7 +529,7 @@ void StubEmitter::emit() {
     stream << indent() << ": GeneratorStub(context, &factory, params.to_string_map(), {\n";
     indent_level++;
     for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << indent() << "to_func_or_expr_vector(inputs." << inputs[i]->name() << ")";
+        stream << indent() << "to_stub_input_vector(inputs." << inputs[i]->name() << ")";
         stream << ",\n";
     }
     indent_level--;
@@ -553,12 +635,8 @@ void StubEmitter::emit() {
 
     stream << indent() << "// Output(s)\n";
     stream << indent() << "// TODO: identify vars used\n";
-    for (auto output : outputs) {
-        if (output->is_array()) {
-            stream << indent() << "std::vector<Func> " << output->name() << ";\n";
-        } else {
-            stream << indent() << "Func " << output->name() << ";\n";
-        }
+    for (const auto &out : out_info) {
+        stream << indent() << out.ctype << " " << out.name << ";\n";
     }
     stream << "\n";
 
@@ -568,7 +646,7 @@ void StubEmitter::emit() {
     indent_level--;
     stream << indent() << "protected:\n";
     indent_level++;
-    stream << indent() << "void verify() {\n";
+    stream << indent() << "NO_INLINE void verify() {\n";
     indent_level++;
     for (const auto &out : out_info) {
         stream << indent() << "verify_same_funcs(" << out.name << ", " << out.getter << ");\n";
@@ -576,7 +654,6 @@ void StubEmitter::emit() {
     indent_level--;
     stream << indent() << "}\n";
     stream << "\n";
-
 
     indent_level--;
     stream << indent() << "private:\n";
@@ -603,15 +680,23 @@ void StubEmitter::emit() {
 GeneratorStub::GeneratorStub(const GeneratorContext *context,
                              GeneratorFactory generator_factory,
                              const std::map<std::string, std::string> &generator_params,
-                             const std::vector<std::vector<Internal::FuncOrExpr>> &inputs) {
+                             const std::vector<std::vector<Internal::StubInput>> &inputs)
+    : generator(generator_factory(generator_params)) {
     user_assert(context != nullptr) << "Context may not be null";
-    generator = generator_factory(generator_params);
+    internal_assert(generator->value_tracker == nullptr);
+    generator->value_tracker = context->get_value_tracker();
     generator->target.set(context->get_target());
     generator->set_inputs(inputs);
     generator->call_generate();
 }
 
-void GeneratorStub::verify_same_funcs(Func a, Func b) {
+void GeneratorStub::schedule(const std::map<std::string, std::string> &schedule_params,
+              const std::map<std::string, LoopLevel> &schedule_params_looplevels) {
+    generator->set_schedule_param_values(schedule_params, schedule_params_looplevels);
+    generator->call_schedule();
+}
+
+void GeneratorStub::verify_same_funcs(const Func &a, const Func &b) {
     user_assert(a.function().get_contents().same_as(b.function().get_contents())) 
         << "Expected Func " << a.name() << " and " << b.name() << " to match.\n";
 }
@@ -1072,7 +1157,10 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
     }
     std::map<std::string, GIOBase *> type_names, dim_names, array_size_names;
     for (auto i : filter_inputs) {
-        if (i->kind() == IOKind::Function) {
+        if (!i->allow_synthetic_generator_params()) {
+            continue;
+        }
+        if (i->kind() != IOKind::Scalar) {
             type_names[i->name() + ".type"] = i;
             dim_names[i->name() + ".dim"] = i;
         }
@@ -1081,7 +1169,10 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
         }
     }
     for (auto o : filter_outputs) {
-        if (o->kind() == IOKind::Function) {
+        if (!o->allow_synthetic_generator_params()) {
+            continue;
+        }
+        if (o->kind() != IOKind::Scalar) {
             type_names[o->name() + ".type"] = o;
             dim_names[o->name() + ".dim"] = o;
         }
@@ -1120,7 +1211,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
                 continue;
             }
         }
-        user_error << "Generator has no GeneratorParam named: " << key;
+        user_error << "Generator " << generator_name << " has no GeneratorParam named: " << key << "\n";
     }
     generator_params_set = true;
 }
@@ -1137,7 +1228,7 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
         const std::string &key = key_value.first;
         const std::string &value = key_value.second;
         auto p = m.find(key);
-        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
+        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key << "\n";
         // It's not OK to set non-schedule params here.
         user_assert(p->second->is_schedule_param()) << "GeneratorParam cannot be specified for: " << key;
         p->second->set_from_string(value);
@@ -1146,14 +1237,14 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
         const std::string &key = key_value.first;
         const LoopLevel &value = key_value.second;
         auto p = m.find(key);
-        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key;
+        user_assert(p != m.end()) << "Generator has no GeneratorParam named: " << key << "\n";
         user_assert(p->second->is_schedule_param()) << "LoopLevel param cannot be specified for: " << key;
         static_cast<GeneratorParam<LoopLevel> *>(p->second)->set(value);
     }
     schedule_params_set = true;
 }
 
-void GeneratorBase::set_inputs(const std::vector<std::vector<FuncOrExpr>> &inputs) {
+void GeneratorBase::set_inputs(const std::vector<std::vector<StubInput>> &inputs) {
     internal_assert(!inputs_set) << "set_inputs() must be called at most once per Generator instance.\n";
     build_params();
     user_assert(inputs.size() == filter_inputs.size()) 
@@ -1165,7 +1256,32 @@ void GeneratorBase::set_inputs(const std::vector<std::vector<FuncOrExpr>> &input
     inputs_set = true;
 }
 
-void GeneratorBase::init_inputs_and_outputs() {
+void GeneratorBase::track_parameter_values(bool include_outputs) {
+    if (value_tracker == nullptr) {
+        value_tracker = std::make_shared<ValueTracker>();
+    }
+    for (auto input : filter_inputs) {
+        if (input->kind() == IOKind::Buffer) {
+            Parameter p = input->parameter();
+            // This must use p.name(), *not* input->name()
+            value_tracker->track_values(p.name(), parameter_constraints(p));
+        }
+    }
+    if (include_outputs) {
+        for (auto output : filter_outputs) {
+            if (output->kind() == IOKind::Buffer) {
+                Parameter p = output->parameter();
+                // This must use p.name(), *not* output->name()
+                value_tracker->track_values(p.name(), parameter_constraints(p));
+            }
+        }
+    }
+}
+
+void GeneratorBase::pre_generate() {
+    user_assert(!generate_called) << "You may not call the generate() method more than once per instance.";
+    user_assert(filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
+    user_assert(filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
     if (!inputs_set) {
         for (auto input : filter_inputs) {
             input->init_internals();
@@ -1175,17 +1291,33 @@ void GeneratorBase::init_inputs_and_outputs() {
     for (auto output : filter_outputs) {
         output->init_internals();
     }
+    track_parameter_values(false);
+}
+
+void GeneratorBase::post_generate() {
+    generate_called = true;
+    track_parameter_values(true);
+}
+
+void GeneratorBase::pre_schedule() {
+    user_assert(generate_called) << "You must call the generate() method before calling the schedule() method.";
+    user_assert(!schedule_called) << "You may not call the schedule() method more than once per instance.";
+    track_parameter_values(true);
+}
+
+void GeneratorBase::post_schedule() {
+    schedule_called = true;
+    track_parameter_values(true);
 }
 
 void GeneratorBase::pre_build() {
     user_assert(filter_inputs.size() == 0) << "May not use build() method with Input<>.";
     user_assert(filter_outputs.size() == 0) << "May not use build() method with Output<>.";
+    track_parameter_values(false);
 }
 
-void GeneratorBase::pre_generate() {
-    user_assert(filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
-    user_assert(filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
-    init_inputs_and_outputs();
+void GeneratorBase::post_build() {
+    track_parameter_values(true);
 }
 
 Pipeline GeneratorBase::produce_pipeline() {
@@ -1194,18 +1326,22 @@ Pipeline GeneratorBase::produce_pipeline() {
     for (auto output : filter_outputs) {
         for (const auto &f : output->funcs()) {
             user_assert(f.defined()) << "Output \"" << f.name() << "\" was not defined.\n";
-            user_assert(f.dimensions() == output->dimensions()) << "Output \"" << f.name() 
-                << "\" requires dimensions=" << output->dimensions() 
-                << " but was defined as dimensions=" << f.dimensions() << ".\n";
-            user_assert((int)f.outputs() == (int)output->types().size()) << "Output \"" << f.name() 
-                    << "\" requires a Tuple of size " << output->types().size() 
-                    << " but was defined as Tuple of size " << f.outputs() << ".\n";
-            for (size_t i = 0; i < f.output_types().size(); ++i) {
-                Type expected = output->types().at(i);
-                Type actual = f.output_types()[i];
-                user_assert(expected == actual) << "Output \"" << f.name() 
-                    << "\" requires type " << expected 
-                    << " but was defined as type " << actual << ".\n";
+            if (output->dimensions_defined()) {
+                user_assert(f.dimensions() == output->dimensions()) << "Output \"" << f.name() 
+                    << "\" requires dimensions=" << output->dimensions() 
+                    << " but was defined as dimensions=" << f.dimensions() << ".\n";
+            }
+            if (output->types_defined()) {
+                user_assert((int)f.outputs() == (int)output->types().size()) << "Output \"" << f.name() 
+                        << "\" requires a Tuple of size " << output->types().size() 
+                        << " but was defined as Tuple of size " << f.outputs() << ".\n";
+                for (size_t i = 0; i < f.output_types().size(); ++i) {
+                    Type expected = output->types().at(i);
+                    Type actual = f.output_types()[i];
+                    user_assert(expected == actual) << "Output \"" << f.name() 
+                        << "\" requires type " << expected 
+                        << " but was defined as type " << actual << ".\n";
+                }
             }
             funcs.push_back(f);
         }
@@ -1313,9 +1449,9 @@ const std::vector<Expr> &GIOBase::exprs() const {
 void GIOBase::verify_internals() const {
     user_assert(dimensions_ >= 0) << "Generator Input/Output Dimensions must have positive values";
 
-    if (kind() == IOKind::Function) {
+    if (kind() != IOKind::Scalar) {
         for (const Func &f : funcs()) {
-            user_assert(f.defined()) << "Input/Ouput " << name() << " is not defined.\n";
+            user_assert(f.defined()) << "Input/Output " << name() << " is not defined.\n";
             user_assert(f.dimensions() == dimensions()) 
                 << "Expected dimensions " << dimensions() 
                 << " but got " << f.dimensions()
@@ -1364,6 +1500,7 @@ void GIOBase::check_matching_type_and_dim(const std::vector<Type> &t, int d) {
     } else {
         types_ = t;
     }
+    internal_assert(d >= 0);
     if (dimensions_defined()) {
         user_assert(dimensions() == d) << "Dimensions mismatch for " << name() << ": expected " << dimensions() << " saw " << d;
     } else {
@@ -1399,7 +1536,7 @@ void GeneratorInputBase::set_def_min_max() {
 void GeneratorInputBase::init_parameters() {
     parameters_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
-        parameters_.emplace_back(type(), kind() == IOKind::Function, dimensions(), array_name(i), true, false);
+        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dimensions(), array_name(i), true, false);
     }
     set_def_min_max();
 }
@@ -1407,7 +1544,7 @@ void GeneratorInputBase::init_parameters() {
 void GeneratorInputBase::verify_internals() const {
     GIOBase::verify_internals();
 
-    const size_t expected = (kind() == IOKind::Function) ? funcs().size() : exprs().size();
+    const size_t expected = (kind() != IOKind::Scalar) ? funcs().size() : exprs().size();
     user_assert(parameters_.size() == expected) << "Expected parameters_.size() == " 
         << expected << ", saw " << parameters_.size() << " for " << name() << "\n";
 }
@@ -1422,17 +1559,9 @@ void GeneratorInputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
-        if (kind() == IOKind::Function) {
-            std::vector<Var> args;
-            std::vector<Expr> args_expr;
-            for (int i = 0; i < dimensions(); ++i) {
-                Var v = Var::implicit(i);
-                args.push_back(v);
-                args_expr.push_back(v);
-            }
-            Func f = Func(array_name(i) + "_im");
-            f(args) = Internal::Call::make(parameters_[i], args_expr);
-            funcs_.push_back(f);
+        if (kind() != IOKind::Scalar) {
+            internal_assert(dimensions() == parameters_[i].dimensions());
+            funcs_.push_back(make_param_func(parameters_[i], array_name(i) + "_im"));
         } else {
             Expr e = Internal::Variable::make(type(), array_name(i), parameters_[i]);
             exprs_.push_back(e);
@@ -1442,30 +1571,50 @@ void GeneratorInputBase::init_internals() {
     verify_internals();
 }
 
-void GeneratorInputBase::set_inputs(const std::vector<FuncOrExpr> &inputs) {
+void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
+    parameters_.clear();
     exprs_.clear();
     funcs_.clear();
     check_matching_array_size(inputs.size());
-    for (const FuncOrExpr & i : inputs) {
-        user_assert(i.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        const StubInput &in = inputs.at(i);
+        user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
         if (kind() == IOKind::Function) {
-            check_matching_type_and_dim(i.func().output_types(), i.func().dimensions());
-            funcs_.push_back(i.func());
+            auto f = in.func();
+            check_matching_type_and_dim(f.output_types(), f.dimensions());
+            funcs_.push_back(f);
+            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i), true, false);
+        } else if (kind() == IOKind::Buffer) {
+            auto p = in.parameter();
+            check_matching_type_and_dim({p.type()}, p.dimensions());
+            auto b = p.get_buffer();
+            if (b.defined()) {
+                // If the Parameter has an explicit BufferPtr set, bind directly to
+                // it (this happens in JIT mode and also with statically-compiled 
+                // Buffers)
+                Func f(name() + "_im");
+                f(_) = b(_);
+                funcs_.push_back(f);
+            } else {
+                funcs_.push_back(make_param_func(p, name()));
+            }
+            parameters_.push_back(p);
         } else {
-            check_matching_type_and_dim({i.expr().type()}, 0);
-            exprs_.push_back(i.expr());
+            auto e = in.expr();
+            check_matching_type_and_dim({e.type()}, 0);
+            exprs_.push_back(e);
+            parameters_.emplace_back(e.type(), false, 0, array_name(i), true, false);
         }
     }
     
-    // must re-init parameters in case some GeneratorParams changed, since
-    // it can affect the expected length of parameters_.
-    init_parameters();
+    set_def_min_max();
 
     verify_internals();
 }
 
-GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, const std::vector<Type> &t, int d) 
-    : GIOBase(array_size, name, IOKind::Function, t, d) {
+GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, IOKind kind, const std::vector<Type> &t, int d) 
+    : GIOBase(array_size, name, kind, t, d) {
+    internal_assert(kind != IOKind::Scalar);
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
                                               this, nullptr);
 }
@@ -1496,6 +1645,13 @@ void GeneratorOutputBase::resize(size_t size) {
     init_internals();
 }
 
+void StubOutputBufferBase::check_scheduled(const char* m) const { 
+    user_assert(generator->schedule_called) << "Must call schedule() before calling " << m << "()"; 
+}
+
+Target StubOutputBufferBase::get_target() const { 
+    return generator->get_target();
+}
 
 void generator_test() {
     GeneratorParam<int> gp("gp", 1);

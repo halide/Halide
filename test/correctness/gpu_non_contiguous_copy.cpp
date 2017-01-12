@@ -12,21 +12,18 @@ int main(int argc, char **argv) {
     const int x_off = 4, y_off = 8, z_off = 2, w_off = 4;
     const int x_size = 16, y_size = 16, z_size = 3, w_size = 3;
 
-    buffer_t cropped = *full.raw_buffer();
-    cropped.host = (uint8_t *)&(full(x_off, y_off, z_off, w_off));
-    cropped.min[0] = 0;
-    cropped.min[1] = 0;
-    cropped.min[2] = 0;
-    cropped.min[3] = 0;
-    cropped.extent[0] = x_size;
-    cropped.extent[1] = y_size;
-    cropped.extent[2] = z_size;
-    cropped.extent[3] = w_size;
-    cropped.stride[0] *= 2;
-    cropped.stride[1] *= 2;
-    cropped.stride[2] *= 2;
-    cropped.stride[3] *= 2;
-    Buffer<int32_t> out(cropped);
+    // We want to construct a new Buffer that refers to the same data
+    // but a different buffer_t.
+    Buffer<int> cropped(*full.raw_buffer());
+    cropped.raw_buffer()->host = (uint8_t *)&(full(x_off, y_off, z_off, w_off));
+    cropped.raw_buffer()->extent[0] = x_size;
+    cropped.raw_buffer()->extent[1] = y_size;
+    cropped.raw_buffer()->extent[2] = z_size;
+    cropped.raw_buffer()->extent[3] = w_size;
+    cropped.raw_buffer()->stride[0] *= 2;
+    cropped.raw_buffer()->stride[1] *= 2;
+    cropped.raw_buffer()->stride[2] *= 2;
+    cropped.raw_buffer()->stride[3] *= 2;
 
     // Make a bitmask representing the region inside the crop.
     Buffer<bool> in_subregion(80, 60, 10, 10);
@@ -45,12 +42,13 @@ int main(int argc, char **argv) {
     Func f;
     f(x, y, z, w) = 3*x + 2*y + z + 4*w;
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, y, 16, 16);
+        Var xi, yi;
+        f.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         f.hexagon().vectorize(x, 16);
     }
     f.output_buffer().dim(0).set_stride(Expr());
-    f.realize(out);
+    f.realize(cropped);
 
     // Put some data in the full host buffer, avoiding the region
     // being evaluated above.
@@ -58,7 +56,7 @@ int main(int argc, char **argv) {
     lambda(x, y, z, w, change_out_of_subregion).realize(full);
 
     // Copy back the output subset from the GPU.
-    out.copy_to_host();
+    cropped.copy_to_host();
 
     for (int w = 0; w < full.extent(3); ++w) {
         for (int z = 0; z < full.extent(2); ++z) {

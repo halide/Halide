@@ -182,7 +182,7 @@ class KeyInfo {
 #if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(UInt(8), key_name, index, BufferPtr(), Parameter())},
+                               {Load::make(UInt(8), key_name, index, Buffer<>(), Parameter())},
                                Call::PureIntrinsic);
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
@@ -307,7 +307,7 @@ public:
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), BufferPtr(), Parameter())},
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter())},
                                   Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -330,7 +330,7 @@ public:
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), BufferPtr(), Parameter())},
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter())},
                                   Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -411,23 +411,19 @@ private:
                                               key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
                                               cache_lookup_check);
 
-            std::vector<Expr> computed_bounds_args;
-            Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::PureIntrinsic);
-            computed_bounds_args.push_back(null_handle);
-            computed_bounds_args.push_back(make_zero(f.output_types()[0]));
-            std::string max_stage_num = std::to_string(f.updates().size());
-            const std::vector<std::string> f_args = f.args();
-            for (int32_t i = 0; i < f.dimensions(); i++) {
-                Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f_args[i] + ".min");
-                Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f_args[i] + ".max");
-                computed_bounds_args.push_back(min);
-                computed_bounds_args.push_back(max - min);
-                computed_bounds_args.push_back(0); // TODO: Verify there is no use for the stride.
-            }
 
-            Expr computed_bounds = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                              computed_bounds_args,
-                                              Call::Intrinsic);
+            BufferBuilder builder;
+            builder.dimensions = f.dimensions();
+            std::string max_stage_num = std::to_string(f.updates().size());
+            for (const std::string arg : f.args()) {
+                std::string prefix = op->name + ".s" + max_stage_num + "." + arg;
+                Expr min = Variable::make(Int(32), prefix + ".min");
+                Expr max = Variable::make(Int(32), prefix + ".max");
+                builder.mins.push_back(min);
+                builder.extents.push_back(max + 1 - min);
+            }
+            Expr computed_bounds = builder.build();
+
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
@@ -530,22 +526,25 @@ private:
 
     void visit(const Call *call) {
         if (!innermost_realization_name.empty() &&
-            call->is_intrinsic(Call::create_buffer_t)) {
-            internal_assert(call->args.size() > 0) << "RewriteMemoizedAllocations: create_buffer_t call with zero args.\n";
-
-            const Call *arg0 = call->args[0].as<Call>();
-            if (arg0 != nullptr && arg0->is_intrinsic(Call::address_of)) {
-                internal_assert(arg0->args.size() > 0) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
-                const Load *load = arg0->args[0].as<Load>();
+            call->name == Call::buffer_init) {
+            internal_assert(call->args.size() >= 2)
+                << "RewriteMemoizedAllocations: _halide_buffer_init call with fewer than two args.\n";
+            
+            // Grab the host pointer argument
+            const Call *arg1 = call->args[1].as<Call>();
+            if (arg1 != nullptr && arg1->is_intrinsic(Call::address_of)) {
+                internal_assert(arg1->args.size() > 0) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
+                const Load *load = arg1->args[0].as<Load>();
                 if (load != nullptr) {
                     const IntImm *index = load->index.as<IntImm>();
 
                     if (index != nullptr && index->value == 0 &&
                         get_realization_name(load->name) == innermost_realization_name) {
-                        // Everything matches, rewrite create_buffer_t to use a nullptr handle for address.
+                        // Everything matches, rewrite _halide_buffer_init to use a nullptr handle for address.
                         std::vector<Expr> args = call->args;
-                        args[0] = Call::make(Handle(), Call::null_handle, {}, Call::PureIntrinsic);
-                        expr = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t, args, Call::Intrinsic);
+                        args[1] = make_zero(Handle());
+                        expr = Call::make(type_of<struct buffer_t *>(), Call::buffer_init,
+                                          args, Call::Extern);
                         return;
                     }
                 }
@@ -568,8 +567,8 @@ private:
 
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->extents, allocation->condition, body,
-                                      Call::make(Handle(), Call::extract_buffer_host,
-                                                 { Variable::make(type_of<struct buffer_t *>(), allocation->name + ".buffer") }, Call::Intrinsic),
+                                      Call::make(Handle(), Call::buffer_get_host,
+                                                 { Variable::make(type_of<struct buffer_t *>(), allocation->name + ".buffer") }, Call::Extern),
                                       "halide_memoization_cache_release");
             }
 

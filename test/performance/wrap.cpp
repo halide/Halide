@@ -52,16 +52,17 @@ Func build(bool use_shared) {
 
     Func final = f[stages-1];
 
-    final.compute_root().gpu_tile(x, y, 8, 8);
+    Var xo, yo, xi, yi;
+    final.compute_root().gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
     for (int i = 0; i < stages-1; i++) {
-        f[i].compute_at(final, Var::gpu_blocks()).gpu_threads(x, y);
+        f[i].compute_at(final, xo).gpu_threads(x, y);
     }
 
     if (use_shared) {
         // If we allow staged to use one thread per value loaded, then
         // it forces up the total number of threads used by the
         // kernel, because stencils. So we unroll.
-        staged.compute_at(final, Var::gpu_blocks()).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
+        staged.compute_at(final, xo).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
     }
 
     return final;
@@ -95,14 +96,15 @@ Func build_wrap() {
 
     Func final = f[stages-1];
 
-    final.compute_root().gpu_tile(x, y, 8, 8);
+    Var xo, yo, xi, yi;
+    final.compute_root().gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
     for (int i = 0; i < stages-1; i++) {
-        f[i].compute_at(final, Var::gpu_blocks()).gpu_threads(x, y);
+        f[i].compute_at(final, xo).gpu_threads(x, y);
     }
 
     // Create a global wrapper for the input data 'host' and schedule it to load
     // the data into the GPU shared memory as needed per GPU tile.
-    host.in().compute_at(final, Var::gpu_blocks()).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
+    host.in().compute_at(final, xo).unroll(x, 2).unroll(y, 2).gpu_threads(x, y);
 
     return final;
 }

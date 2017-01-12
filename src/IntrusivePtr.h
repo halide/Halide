@@ -40,8 +40,8 @@ public:
  * template<> void destroy<MyClass>(const MyClass *c) {delete c;}
  */
 // @{
-template<typename T> EXPORT RefCount &ref_count(const T *);
-template<typename T> EXPORT void destroy(const T *);
+template<typename T> EXPORT RefCount &ref_count(const T *t);
+template<typename T> EXPORT void destroy(const T *t);
 // @}
 
 /** Intrusive shared pointers have a reference count (a

@@ -98,7 +98,7 @@ class IsNoOp : public IRVisitor {
                 return;
             }
 
-            Expr equivalent_load = Load::make(op->value.type(), op->name, op->index, BufferPtr(), Parameter());
+            Expr equivalent_load = Load::make(op->value.type(), op->name, op->index, Buffer<>(), Parameter());
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities().mutate(is_no_op);
             // We need to call CSE since sometimes we have "let" stmt on the RHS
@@ -149,8 +149,7 @@ class IsNoOp : public IRVisitor {
     void visit(const Call *op) {
         // Certain intrinsics that may appear in loops have side-effects. Most notably: image_store.
         if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::rewrite_buffer ||
-             op->name == Call::image_store ||
+            (op->name == Call::image_store ||
              op->name == Call::copy_memory)) {
             condition = const_false();
             return;
