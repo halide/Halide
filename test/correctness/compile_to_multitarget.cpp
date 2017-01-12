@@ -15,7 +15,6 @@ void testCompileToOutput(Func j) {
 #endif
     std::string expected_h = fn_object + ".h";
 
-    Internal::file_unlink_or_die(fn_object);
     Internal::file_unlink_or_die(expected_lib);
     Internal::file_unlink_or_die(expected_h);
 
@@ -25,7 +24,6 @@ void testCompileToOutput(Func j) {
     };
     j.compile_to_multitarget_static_library(fn_object, j.infer_arguments(), targets);
 
-    Internal::file_exists_or_die(fn_object);
     Internal::file_exists_or_die(expected_lib);
     Internal::file_exists_or_die(expected_h);
 }
