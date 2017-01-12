@@ -390,8 +390,7 @@ void ComputeModulusRemainder::visit(const Let *op) {
 }
 
 void ComputeModulusRemainder::visit(const Shuffle *) {
-    modulus = 1;
-    remainder = 0;
+    internal_assert(false) << "modulus_remainder of vector\n";
 }
 
 void ComputeModulusRemainder::visit(const LetStmt *) {

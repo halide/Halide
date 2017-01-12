@@ -320,6 +320,13 @@ class MonotonicVisitor : public IRVisitor {
     }
 
     void visit(const Shuffle *op) {
+        for (size_t i = 0; i < op->vectors.size(); i++) {
+            op->vectors[i].accept(this);
+            if (result != Monotonic::Constant) {
+                result = Monotonic::Unknown;
+                return;
+            }
+        }
         result = Monotonic::Constant;
     }
 
