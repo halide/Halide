@@ -41,9 +41,9 @@ def _gen_runtime_cpp_component_2(component_file, bits, suffix = "") :
 def _gen_runtime_cpp_component_3(component_file, bits, suffix = "") :
   native.genrule(
     name = "initmod.{0}_{1}{2}.cpp".format(component_file, bits, suffix),
-    tools = [ "@halide//tools:bitcode2cpp" ],
+    tools = [ "@halide//tools:binary2cpp" ],
     srcs = [ "initmod.{0}_{1}{2}.bc".format(component_file, bits, suffix), ],
-    cmd = "$(location @halide//tools:bitcode2cpp) {0}_{1}{2} < $< > $@".format(component_file, bits, suffix),
+    cmd = "$(location @halide//tools:binary2cpp) initmod_{0}_{1}{2} < $< > $@".format(component_file, bits, suffix),
     outs = [ "initmod_{0}_{1}{2}.cpp".format(component_file, bits, suffix), ]
   )
 
@@ -59,18 +59,18 @@ def _gen_runtime_ll_component_1(component_file) :
 def _gen_runtime_ll_component_2(component_file) :
   native.genrule(
     name = "initmod.{0}_ll.cpp".format(component_file),
-    tools = [ "@halide//tools:bitcode2cpp" ],
+    tools = [ "@halide//tools:binary2cpp" ],
     srcs = [ "initmod.{0}_ll.bc".format(component_file), ],
-    cmd = "$(location @halide//tools:bitcode2cpp) {0}_ll < $< > $@".format(component_file),
+    cmd = "$(location @halide//tools:binary2cpp) initmod_{0}_ll < $< > $@".format(component_file),
     outs = [ "initmod_{0}_ll.cpp".format(component_file) ]
   )
 
 def _gen_runtime_nvidia_bitcode_component(component_file) :
   native.genrule(
     name = "initmod_ptx.{0}_ll.cpp".format(component_file),
-    tools = [ "@halide//tools:bitcode2cpp" ],
+    tools = [ "@halide//tools:binary2cpp" ],
     srcs = native.glob(["src/runtime/nvidia_libdevice_bitcode/libdevice.{0}.*.bc".format(component_file)], exclude = []),
-    cmd = "$(location @halide//tools:bitcode2cpp) ptx_{0}_ll < $< > $@".format(component_file),
+    cmd = "$(location @halide//tools:binary2cpp) initmod_ptx_{0}_ll < $< > $@".format(component_file),
     outs = [ "initmod_ptx_{0}_ll.cpp".format(component_file) ]
   )
 
