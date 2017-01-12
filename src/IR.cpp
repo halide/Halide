@@ -229,7 +229,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, std::string name, Expr index, BufferPtr image, Parameter param) {
+Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param) {
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
 
@@ -496,12 +496,12 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
         << "Value index out of range in call to halide function\n";
     internal_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Call to undefined halide function\n";
-    return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, BufferPtr(), Parameter());
+    return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer<>(), Parameter());
 }
 
 Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                 IntrusivePtr<FunctionContents> func, int value_index,
-                BufferPtr image, Parameter param) {
+                Buffer<> image, Parameter param) {
     for (size_t i = 0; i < args.size(); i++) {
         internal_assert(args[i].defined()) << "Call of undefined\n";
     }
@@ -531,7 +531,7 @@ Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, Call
     return node;
 }
 
-Expr Variable::make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain) {
+Expr Variable::make(Type type, std::string name, Buffer<> image, Parameter param, ReductionDomain reduction_domain) {
     internal_assert(!name.empty());
     Variable *node = new Variable;
     node->type = type;
@@ -598,20 +598,11 @@ Call::ConstString Call::abs = "abs";
 Call::ConstString Call::absd = "absd";
 Call::ConstString Call::lerp = "lerp";
 Call::ConstString Call::random = "random";
-Call::ConstString Call::rewrite_buffer = "rewrite_buffer";
-Call::ConstString Call::create_buffer_t = "create_buffer_t";
-Call::ConstString Call::copy_buffer_t = "copy_buffer_t";
-Call::ConstString Call::extract_buffer_host = "extract_buffer_host";
-Call::ConstString Call::extract_buffer_min = "extract_buffer_min";
-Call::ConstString Call::extract_buffer_max = "extract_buffer_max";
-Call::ConstString Call::set_host_dirty = "set_host_dirty";
-Call::ConstString Call::set_dev_dirty = "set_dev_dirty";
 Call::ConstString Call::popcount = "popcount";
 Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
 Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
 Call::ConstString Call::undef = "undef";
 Call::ConstString Call::address_of = "address_of";
-Call::ConstString Call::null_handle = "null_handle";
 Call::ConstString Call::trace = "trace";
 Call::ConstString Call::trace_expr = "trace_expr";
 Call::ConstString Call::return_second = "return_second";
@@ -624,6 +615,7 @@ Call::ConstString Call::image_store = "image_store";
 Call::ConstString Call::make_struct = "make_struct";
 Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
+Call::ConstString Call::alloca = "alloca";
 Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
 Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
@@ -641,5 +633,13 @@ Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
+
+Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
+Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";    
+Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
+Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
+Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
+Call::ConstString Call::buffer_init = "_halide_buffer_init";    
+
 }
 }

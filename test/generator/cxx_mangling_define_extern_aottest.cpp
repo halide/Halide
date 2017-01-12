@@ -8,7 +8,7 @@
 
 #include "cxx_mangling_define_extern.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 int32_t extract_value_global(int32_t *arg) {
     return *arg;

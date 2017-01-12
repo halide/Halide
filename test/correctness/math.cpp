@@ -60,10 +60,10 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
             return;                                                     \
         }                                                               \
         Func test_##name("test_" #name);                                \
-        Var x("x");                                                     \
+        Var x("x"), xi("xi");                                           \
         test_##name(x) = name(in(x));                                   \
         if (target.has_gpu_feature()) {                                 \
-            test_##name.gpu_tile(x, 8);                                 \
+            test_##name.gpu_tile(x, xi, 8);                             \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) { \
             test_##name.hexagon();                                      \
         }                                                               \
@@ -79,20 +79,20 @@ uint32_t absd(uint32_t a, uint32_t b) { return a < b ? b - a : a - b; }
 
 // Version for a one argument function
 #define fun_2(type_ret, type, name, c_name)                                         \
-    void test_##type##_##name(Buffer<type> in) {                                     \
+    void test_##type##_##name(Buffer<type> in) {                                    \
         Target target = get_jit_target_from_environment();                          \
         if (!target.supports_type(type_of<type>())) {                               \
             return;                                                                 \
         }                                                                           \
         Func test_##name("test_" #name);                                            \
-        Var x("x");                                                                 \
+        Var x("x"), xi("xi");                                                       \
         test_##name(x) = name(in(0, x), in(1, x));                                  \
         if (target.has_gpu_feature()) {                                             \
-            test_##name.gpu_tile(x, 8);                                             \
+            test_##name.gpu_tile(x, xi, 8);                                         \
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {     \
             test_##name.hexagon();                                                  \
         }                                                                           \
-        Image<type_ret> result = test_##name.realize(in.height(), target);          \
+        Buffer<type_ret> result = test_##name.realize(in.height(), target);          \
         for (int i = 0; i < in.height(); i++) {                                     \
             type_ret c_result = c_name(in(0, i), in(1, i));                         \
             assert(relatively_equal(c_result, result(i)) &&                         \
@@ -211,18 +211,18 @@ int main(int argc, char **argv) {
     call_1_float_types(abs, 256, -1000, 1000);
     call_1_float_types(sqrt, 256, 0, 1000000);
 
-    call_1_float_types(sin, 256, 5 * -3.1415, 5 * 3.1415);
-    call_1_float_types(cos, 256, 5 * -3.1415, 5 * 3.1415);
-    call_1_float_types(tan, 256, 5 * -3.1415, 5 * 3.1415);
+    call_1_float_types(sin, 256, 5 * -3.1415f, 5 * 3.1415f);
+    call_1_float_types(cos, 256, 5 * -3.1415f, 5 * 3.1415f);
+    call_1_float_types(tan, 256, 5 * -3.1415f, 5 * 3.1415f);
 
     call_1_float_types(asin, 256, -1.0, 1.0);
     call_1_float_types(acos, 256, -1.0, 1.0);
     call_1_float_types(atan, 256, -256, 100);
-    call_2_float_types(atan2, 256, -20, 20, -2, 2.001);
+    call_2_float_types(atan2, 256, -20, 20, -2, 2.001f);
 
-    call_1_float_types(sinh, 256, 5 * -3.1415, 5 * 3.1415);
+    call_1_float_types(sinh, 256, 5 * -3.1415f, 5 * 3.1415f);
     call_1_float_types(cosh, 256, 0, 1);
-    call_1_float_types(tanh, 256, 5 * -3.1415, 5 * 3.1415);
+    call_1_float_types(tanh, 256, 5 * -3.1415f, 5 * 3.1415f);
 
 #ifndef _MSC_VER
     call_1_float_types(asinh, 256, -10.0, 10.0);
@@ -236,7 +236,7 @@ int main(int argc, char **argv) {
     call_1_float_types(floor, 256, -25, 25);
     call_1_float_types(ceil, 256, -25, 25);
     call_1_float_types(trunc, 256, -25, 25);
-    call_2_float_types(pow, 256, .1, 20, .1, 2);
+    call_2_float_types(pow, 256, .1f, 20, .1f, 2);
 
     const int8_t int8_min = std::numeric_limits<int8_t>::min();
     const int16_t int16_min = std::numeric_limits<int16_t>::min();

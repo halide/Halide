@@ -17,7 +17,7 @@ const float kPi = 3.14159265358979310000f;
 const int32_t kSize = 16;
 }
 
-using Halide::Buffer;
+using Halide::Runtime::Buffer;
 
 Buffer<float, 3> real_buffer(int32_t y_size = kSize) {
     return Buffer<float, 3>::make_interleaved(kSize, y_size, 1);
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
                 std::cerr << "fft_forward_r2c bad phase angle for vertical bin " << i << ": " << phase_angle << std::endl;
                 exit(1);
             }
-        }           
+        }
 
         // Check all other components are close to zero.
         for (size_t j = 0; j < kSize / 2 + 1; j++) {
@@ -225,7 +225,7 @@ int main(int argc, char **argv) {
                 std::cerr << "fft_forward_c2c bad phase angle for vertical bin " << i << ": " << phase_angle << std::endl;
                 exit(1);
             }
-        }           
+        }
 
         // Check all other components are close to zero.
         for (size_t j = 0; j < kSize; j++) {

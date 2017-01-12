@@ -74,6 +74,7 @@ DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(android_tempfile)
+DECLARE_CPP_INITMOD(buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
@@ -702,6 +703,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (module_type != ModuleJITShared) {
             // The first module for inline only case has to be C/C++ compiled otherwise the
             // datalayout is not properly setup.
+            modules.push_back(get_initmod_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_destructors(c, bits_64, debug));
 
             // Math intrinsics vary slightly across platforms
@@ -737,7 +739,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.has_feature(Target::MSAN)) {
                 modules.push_back(get_initmod_msan(c, bits_64, debug));
             } else {
-                modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));                
+                modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
             }
         }
 

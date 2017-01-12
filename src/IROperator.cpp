@@ -5,6 +5,8 @@
 
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IREquality.h"
+#include "Var.h"
 #include "Debug.h"
 #include "CSE.h"
 
@@ -276,7 +278,7 @@ Expr make_bool(bool val, int w) {
 
 Expr make_zero(Type t) {
     if (t.is_handle()) {
-        return Call::make(t, Call::null_handle, std::vector<Expr>(), Call::PureIntrinsic);
+        return reinterpret(t, make_zero(UInt(64)));
     } else {
         return make_const(t, 0);
     }
@@ -366,10 +368,11 @@ void check_representable(Type dst, int64_t x) {
 }
 
 void match_types(Expr &a, Expr &b) {
-    user_assert(!a.type().is_handle() && !b.type().is_handle())
-        << "Can't do arithmetic on opaque pointer types\n";
-
     if (a.type() == b.type()) return;
+    
+    user_assert(!a.type().is_handle() && !b.type().is_handle())
+        << "Can't do arithmetic on opaque pointer types: "
+        << a << ", " << b << "\n";
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
@@ -603,7 +606,62 @@ void split_into_ands(Expr cond, std::vector<Expr> &result) {
     }
 }
 
+Expr BufferBuilder::build() const {
+    user_assert(dimensions <= 4) << "Halide buffers are currently limited to four dimensions\n";
+
+    std::vector<Expr> args(11);
+    if (buffer_memory.defined()) {
+        args[0] = buffer_memory;
+    } else {
+        args[0] = Call::make(type_of<struct buffer_t *>(), Call::alloca, {(int)sizeof(buffer_t)}, Call::Intrinsic);
+    }
+
+    if (host.defined()) {
+        args[1] = host;
+    } else {
+        args[1] = make_zero(Handle());
+    }
+
+    if (dev.defined()) {
+        args[2] = dev;
+    } else {
+        args[2] = make_zero(UInt(64));
+    }
+
+    args[3] = (int)type.code();
+    args[4] = type.bits();
+    args[5] = dimensions;
+
+    std::vector<Expr> mins_(mins), extents_(extents), strides_(strides);
+    while ((int)mins_.size() < dimensions) {
+        mins_.push_back(0);
+    }
+    while ((int)extents_.size() < dimensions) {
+        extents_.push_back(0);
+    }
+    while ((int)strides_.size() < dimensions) {
+        strides_.push_back(0);
+    }
+    args[6] = Call::make(Handle(), Call::make_struct, mins_, Call::Intrinsic);
+    args[7] = Call::make(Handle(), Call::make_struct, extents_, Call::Intrinsic);
+    args[8] = Call::make(Handle(), Call::make_struct, strides_, Call::Intrinsic);
+
+    if (host_dirty.defined()) {
+        args[9] = host_dirty;
+    } else {
+        args[9] = const_false();
+    }
+
+    if (dev_dirty.defined()) {
+        args[10] = dev_dirty;
+    } else {
+        args[10] = const_false();
+    }
+
+    return Call::make(type_of<struct buffer_t *>(), Call::buffer_init, args, Call::Extern);   
 }
+    
+} // namespace Internal
 
 Expr fast_log(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
@@ -705,10 +763,10 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
     user_assert(condition.type().is_bool()) << "Require condition must be a boolean type\n";
     user_assert(args.at(0).defined()) << "Require of undefined value\n";
 
-    Expr requirement_failed_error = 
-        Internal::Call::make(Int(32), 
+    Expr requirement_failed_error =
+        Internal::Call::make(Int(32),
                              "halide_error_requirement_failed",
-                             {stringify({condition}), combine_strings(args)}, 
+                             {stringify({condition}), combine_strings(args)},
                              Internal::Call::Extern);
     // Just cast to the type expected by the success path: since the actual
     // value will never be used in the failure branch, it doesn't really matter
