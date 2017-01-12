@@ -20,6 +20,8 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
 
     int32_t my_id = __sync_fetch_and_add(&ids, 1);
 
+    uint8_t buffer[4096];
+
     // If we're dumping to a file, use a binary format
     int fd = halide_get_trace_file(user_context);
     if (fd > 0) {
@@ -37,7 +39,6 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         size_t value_bytes = clamped_width * bytes;
         size_t int_arg_bytes = clamped_dimensions * sizeof(int32_t);
         size_t total_bytes = header_bytes + value_bytes + int_arg_bytes;
-        uint8_t buffer[4096];
         halide_assert(user_context, total_bytes <= 4096 && "Tracing packet too large");
 
         ((int32_t *)buffer)[0] = my_id;
@@ -77,7 +78,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
         }
 
     } else {
-        stringstream ss(user_context);
+        Printer<StringStreamPrinter, sizeof(buffer)> ss(user_context, (char *)buffer);
 
         // Round up bits to 8, 16, 32, or 64
         int print_bits = 8;
@@ -166,10 +167,11 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
             }
         }
         ss << "\n";
+        ss.msan_annotate_is_initialized();
 
         {
             ScopedSpinLock lock(&halide_trace_file_lock);
-            halide_print(user_context, ss.str());
+            halide_print(user_context, (const char *)buffer);
         }
     }
 
