@@ -236,12 +236,22 @@ bool file_exists(const std::string &name) {
     #endif
 }
 
+bool file_exists_or_die(const std::string &name) {
+    internal_assert(file_exists(name)) << "file_exists failed for " << name;
+    return true;
+}
+
 void file_unlink(const std::string &name) {
     #ifdef _MSC_VER
     _unlink(name.c_str());
     #else
     ::unlink(name.c_str());
     #endif
+}
+
+void file_unlink_or_die(const std::string &name) {
+    file_unlink(name);
+    internal_assert(!file_exists(name)) << "file_unlink failed for " << name;
 }
 
 void dir_rmdir(const std::string &name) {
