@@ -27,8 +27,8 @@ cc_binary(
 )
 
 cc_binary(
-    name = "bitcode2cpp",
-    srcs = ["bitcode2cpp.cpp"],
+    name = "binary2cpp",
+    srcs = ["binary2cpp.cpp"],
     visibility = ["//visibility:public"],
 )
 
