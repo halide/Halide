@@ -288,32 +288,63 @@ struct halide_type_t {
 #endif
 };
 
-enum halide_trace_event_code {halide_trace_load = 0,
-                              halide_trace_store = 1,
-                              halide_trace_begin_realization = 2,
-                              halide_trace_end_realization = 3,
-                              halide_trace_produce = 4,
-                              halide_trace_consume = 5,
-                              halide_trace_end_consume = 6,
-                              halide_trace_begin_pipeline = 7,
-                              halide_trace_end_pipeline = 8};
+enum halide_trace_event_code_t {halide_trace_load = 0,
+                                halide_trace_store = 1,
+                                halide_trace_begin_realization = 2,
+                                halide_trace_end_realization = 3,
+                                halide_trace_produce = 4,
+                                halide_trace_end_produce = 5,
+                                halide_trace_consume = 6,
+                                halide_trace_end_consume = 7,
+                                halide_trace_begin_pipeline = 8,
+                                halide_trace_end_pipeline = 9};
 
-#pragma pack(push, 1)
-struct halide_trace_event {
+struct halide_trace_event_t {
+    /** The name of the Func or Pipeline that this event refers to */
     const char *func;
-    enum halide_trace_event_code event;
-    int32_t parent_id;
-    struct halide_type_t type;
-    int32_t value_index;
+
+    /** If the event type is a load or a store, this points to the
+     * value being loaded or stored. Use the type field to safely cast
+     * this to a concrete pointer type and retrieve it. For other
+     * events this is null. */
     void *value;
-    int32_t dimensions;
+
+    /** For loads and stores, an array which contains the location
+     * being accessed. For vector loads or stores it is an array of
+     * vectors of coordinates (the vector dimension is innermost).
+     *
+     * For realization or production-related events, this will contain
+     * the mins and extents of the region being accessed, in the order
+     * min0, extent0, min1, extent1, ...
+     *
+     * For pipeline-related events, this will be null.
+     */
     int32_t *coordinates;
+
+    /** If the event type is a load or a store, this is the type of
+     * the data. Otherwise, the value is meaningless. */
+    struct halide_type_t type;
+
+    /** The type of event */
+    enum halide_trace_event_code_t event;
+
+    /* The ID of the parent event (see below for an explanation of
+     * event ancestry). */
+    int32_t parent_id;
+
+    /** If this was a load or store of a Tuple-valued Func, this is
+     * which tuple element was accessed. */
+    int32_t value_index;
+
+    /** The length of the coordinates array */
+    int32_t dimensions;
+
+
 };
-#pragma pack(pop)
 
 /** Called when Funcs are marked as trace_load, trace_store, or
  * trace_realization. See Func::set_custom_trace. The default
- * implementation either prints events via halide_printf, or if
+ * implementation either prints events via halide_print, or if
  * HL_TRACE_FILE is defined, dumps the trace to that file in a
  * yet-to-be-documented binary format (see src/runtime/tracing.cpp to
  * reverse engineer the format). If the trace is going to be large,
@@ -324,15 +355,16 @@ struct halide_trace_event {
  * events that "belong" to the earlier event as the parent id. The
  * ownership hierarchy looks like:
  *
- * begin_realization
- *    produce
- *      store
- *      update
- *      load/store
- *      consume
- *      load
- *      end_consume
- *    end_realization
+ * begin_pipeline
+ * +--begin_realization
+ * |  +--produce
+ * |  |  +--load/store
+ * |  |  +--end_produce
+ * |  +--consume
+ * |  |  +--load
+ * |  |  +--end_consume
+ * |  +--end_realization
+ * +--end_pipeline
  *
  * Threading means that ownership cannot be inferred from the ordering
  * of events. There can be many active realizations of a given
@@ -341,8 +373,8 @@ struct halide_trace_event {
  * meaningful.
  */
 // @}
-extern int32_t halide_trace(void *user_context, const struct halide_trace_event *event);
-typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_event *);
+extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
+typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_event_t *);
 extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
 

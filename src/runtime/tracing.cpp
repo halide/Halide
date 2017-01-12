@@ -4,7 +4,7 @@
 
 extern "C" {
 
-typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
+typedef int32_t (*trace_fn)(void *, const halide_trace_event_t *);
 
 }
 
@@ -15,7 +15,7 @@ WEAK int halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
 WEAK bool halide_trace_file_internally_opened = false;
 
-WEAK int32_t default_trace(void *user_context, const halide_trace_event *e) {
+WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
     static int32_t ids = 1;
 
     int32_t my_id = __sync_fetch_and_add(&ids, 1);
@@ -216,7 +216,7 @@ WEAK int halide_get_trace_file(void *user_context) {
     return halide_trace_file;
 }
 
-WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
+WEAK int32_t halide_trace(void *user_context, const halide_trace_event_t *e) {
     return (*halide_custom_trace)(user_context, e);
 }
 
@@ -237,6 +237,31 @@ __attribute__((destructor))
 WEAK void halide_trace_cleanup() {
     halide_shutdown_trace();
 }
+}
+
+// A wrapper for halide_trace called by the pipeline. Halide Stmt IR
+// has a hard time packing structs itself.
+WEAK int halide_trace_helper(void *user_context,
+                             const char *func,
+                             void *value, int *coords,
+                             int type_code, int type_bits, int type_lanes,
+                             int code,
+                             int parent_id, int value_index, int dimensions) {
+    halide_trace_event_t event;
+    event.func = func;
+    event.coordinates = coords;
+    event.value = value;
+    event.type.code = (halide_type_code_t)type_code;
+    event.type.bits = (uint8_t)type_bits;
+    event.type.lanes = (uint16_t)type_lanes;
+    event.event = (halide_trace_event_code_t)code;
+    event.parent_id = parent_id;
+    event.value_index = value_index;
+    if (event.type.lanes > 1) {
+        dimensions *= event.type.lanes;
+    }
+    event.dimensions = dimensions;
+    return halide_trace(user_context, &event);
 }
 
 }

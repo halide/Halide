@@ -135,6 +135,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_device_release",
         "halide_start_clock",
         "halide_trace",
+        "halide_trace_helper",
         "halide_memoization_cache_lookup",
         "halide_memoization_cache_store",
         "halide_memoization_cache_release",

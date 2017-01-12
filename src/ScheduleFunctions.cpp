@@ -591,9 +591,12 @@ private:
             producer = realization.second;
         }
         producer = ProducerConsumer::make(func.name(), true, producer);
-        Stmt consumer = ProducerConsumer::make(func.name(), false, s);
-
-        return Block::make(producer, consumer);
+        if (is_no_op(s)) {
+            return producer;
+        } else {
+            Stmt consumer = ProducerConsumer::make(func.name(), false, s);
+            return Block::make(producer, consumer);
+        }
     }
 
     Stmt build_realize(Stmt s) {
