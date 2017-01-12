@@ -41,14 +41,14 @@ int main(int argc, char **argv) {
             lib_name += ".a";
         }
 
-        Internal::file_unlink_or_die(object_name);
-        Internal::file_unlink_or_die(lib_name);
+        Internal::ensure_no_file_exists(object_name);
+        Internal::ensure_no_file_exists(lib_name);
 
         f.compile_to_file("test_object_" + t, std::vector<Argument>(), "", target);
         f.compile_to_static_library("test_lib_" + t, std::vector<Argument>(), "", target);
 
-        Internal::file_exists_or_die(object_name);
-        Internal::file_exists_or_die(lib_name);
+        Internal::assert_file_exists(object_name);
+        Internal::assert_file_exists(lib_name);
     }
 
     printf("Success!\n");

@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     h.realize(image1);
 
     const char *assembly_file = "h.s";
-    Internal::file_unlink_or_die(assembly_file);
+    Internal::ensure_no_file_exists(assembly_file);
 
     // Also check it compiles ok without an inferred argument list
     h.compile_to_assembly(assembly_file, {image1}, "h");
@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    Internal::file_exists_or_die(assembly_file);
+    Internal::assert_file_exists(assembly_file);
 
     printf("Success!\n");
     return 0;

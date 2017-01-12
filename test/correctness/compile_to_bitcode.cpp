@@ -17,12 +17,12 @@ int main(int argc, char **argv) {
 
     const char *result_file = "compile_to_bitcode.bc";
 
-    Internal::file_unlink_or_die(result_file);
+    Internal::ensure_no_file_exists(result_file);
 
     std::vector<Argument> empty_args;
     j.compile_to_bitcode(result_file, empty_args);
 
-    Internal::file_exists_or_die(result_file);
+    Internal::assert_file_exists(result_file);
 
     printf("Success!\n");
     return 0;

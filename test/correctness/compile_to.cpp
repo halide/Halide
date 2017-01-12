@@ -6,26 +6,26 @@ using namespace Halide;
 void testCompileToOutput(Func j) {
     const char *fn_object = "compile_to_native.o";
 
-    Internal::file_unlink_or_die(fn_object);
+    Internal::ensure_no_file_exists(fn_object);
 
     std::vector<Argument> empty_args;
     j.compile_to(Outputs().object(fn_object), empty_args, "");
 
-    Internal::file_exists_or_die(fn_object);
+    Internal::assert_file_exists(fn_object);
 }
 
 void testCompileToOutputAndAssembly(Func j) {
     const char *fn_object = "compile_to_native1.o";
     const char *fn_assembly = "compile_to_assembly1.s";
 
-    Internal::file_unlink_or_die(fn_object);
-    Internal::file_unlink_or_die(fn_assembly);
+    Internal::ensure_no_file_exists(fn_object);
+    Internal::ensure_no_file_exists(fn_assembly);
 
     std::vector<Argument> empty_args;
     j.compile_to(Outputs().object(fn_object).assembly(fn_assembly), empty_args, "");
 
-    Internal::file_exists_or_die(fn_object);
-    Internal::file_exists_or_die(fn_assembly);
+    Internal::assert_file_exists(fn_object);
+    Internal::assert_file_exists(fn_assembly);
 }
 
 int main(int argc, char **argv) {

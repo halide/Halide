@@ -1,8 +1,5 @@
 #include "Halide.h"
 #include <stdio.h>
-#ifndef _MSC_VER
-#include <unistd.h>
-#endif
 
 using namespace Halide;
 
@@ -15,8 +12,8 @@ void testCompileToOutput(Func j) {
 #endif
     std::string expected_h = fn_object + ".h";
 
-    Internal::file_unlink_or_die(expected_lib);
-    Internal::file_unlink_or_die(expected_h);
+    Internal::ensure_no_file_exists(expected_lib);
+    Internal::ensure_no_file_exists(expected_h);
 
     std::vector<Target> targets = {
         Target("host-profile-debug"),
@@ -24,8 +21,8 @@ void testCompileToOutput(Func j) {
     };
     j.compile_to_multitarget_static_library(fn_object, j.infer_arguments(), targets);
 
-    Internal::file_exists_or_die(expected_lib);
-    Internal::file_exists_or_die(expected_h);
+    Internal::assert_file_exists(expected_lib);
+    Internal::assert_file_exists(expected_h);
 }
 
 int main(int argc, char **argv) {
