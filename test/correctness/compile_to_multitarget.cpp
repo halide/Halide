@@ -8,15 +8,6 @@ using namespace Halide;
 
 void testCompileToOutput(Func j) {
     std::string fn_object = "compile_to_multitarget";
-
-    if (Internal::file_exists(fn_object)) { Internal::file_unlink(fn_object); }
-    assert(!Internal::file_exists(fn_object) && "Output file already exists.");
-
-    std::vector<Target> targets = {
-        Target("host-profile-debug"),
-        Target("host-profile"),
-    };
-    j.compile_to_multitarget_static_library(fn_object, j.infer_arguments(), targets);
 #ifdef _MSC_VER
     std::string expected_lib = fn_object + ".lib";
 #else
@@ -24,8 +15,19 @@ void testCompileToOutput(Func j) {
 #endif
     std::string expected_h = fn_object + ".h";
 
-    assert(Internal::file_exists(expected_lib) && "Output lib not created.");
-    assert(Internal::file_exists(expected_h) && "Output h not created.");
+    Internal::file_unlink_or_die(fn_object);
+    Internal::file_unlink_or_die(expected_lib);
+    Internal::file_unlink_or_die(expected_h);
+
+    std::vector<Target> targets = {
+        Target("host-profile-debug"),
+        Target("host-profile"),
+    };
+    j.compile_to_multitarget_static_library(fn_object, j.infer_arguments(), targets);
+
+    Internal::file_exists_or_die(fn_object);
+    Internal::file_exists_or_die(expected_lib);
+    Internal::file_exists_or_die(expected_h);
 }
 
 int main(int argc, char **argv) {
