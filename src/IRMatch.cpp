@@ -190,6 +190,8 @@ public:
     void visit(const Load *op) {
         const Load *e = expr.as<Load>();
         if (result && e && types_match(op->type, e->type) && e->name == op->name) {
+            expr = e->predicate;
+            op->predicate.accept(this);
             expr = e->index;
             op->index.accept(this);
         } else {

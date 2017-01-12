@@ -271,9 +271,10 @@ class PredicateLoadStore : public IRMutator {
             expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
             vectorized = true;
         } else if (expr_uses_var(op->index, var)) {
+            Expr predicate = Broadcast::make(op->predicate, lanes);
             Expr index = Broadcast::make(op->index, lanes);
             Expr src = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                  {Load::make(op->type, op->name, index, op->image, op->param, op->predicate)},
+                                  {Load::make(op->type, op->name, index, op->image, op->param, predicate)},
                                   Call::Intrinsic);
             expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
             vectorized = true;
@@ -289,8 +290,10 @@ class PredicateLoadStore : public IRMutator {
             return;
         }
         if (!op->index.type().is_scalar()) {
+            internal_assert(op->predicate.type().lanes() == lanes);
             internal_assert(op->index.type().lanes() == lanes);
             internal_assert(op->value.type().lanes() == lanes);
+            Expr predicate = mutate(op->predicate);
             Expr value = mutate(op->value);
             Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
                                    {Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate)},
@@ -300,10 +303,11 @@ class PredicateLoadStore : public IRMutator {
                                              Call::Intrinsic));
             vectorized = true;
         } else if (expr_uses_var(op->index, var)) {
+            Expr predicate = Broadcast::make(op->predicate, lanes);
             Expr value = Broadcast::make(op->value, lanes);
             Expr index = Broadcast::make(op->index, lanes);
             Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                   {Load::make(value.type(), op->name, index, Buffer<>(), op->param, op->predicate)},
+                                   {Load::make(value.type(), op->name, index, Buffer<>(), op->param, predicate)},
                                    Call::Intrinsic);
             stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
                                              {dest, vector_predicate, mutate(value)},
@@ -463,14 +467,16 @@ class VectorSubs : public IRMutator {
     }
 
     void visit(const Load *op) {
+        Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
-        if (index.same_as(op->index)) {
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
             expr = op;
         } else {
             int w = index.type().lanes();
+            predicate = widen(predicate, w);
             expr = Load::make(op->type.with_lanes(w), op->name, index, op->image,
-                              op->param, op->predicate);
+                              op->param, predicate);
         }
     }
 
@@ -635,14 +641,16 @@ class VectorSubs : public IRMutator {
     }
 
     void visit(const Store *op) {
+        Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
 
-        if (value.same_as(op->value) && index.same_as(op->index)) {
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            int lanes = std::max(value.type().lanes(), index.type().lanes());
-            stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes), op->param);
+            int lanes = std::max(predicate.type().lanes(), std::max(value.type().lanes(), index.type().lanes()));
+            stmt = Store::make(op->name, widen(value, lanes), widen(index, lanes),
+                               op->param, widen(predicate, lanes));
         }
     }
 

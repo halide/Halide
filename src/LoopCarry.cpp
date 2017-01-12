@@ -385,20 +385,23 @@ class LoopCarryOverLoop : public IRMutator {
             for (size_t i = 0; i < c.size(); i++) {
                 const Load *orig_load = loads[c[i]][0];
                 Expr scratch_idx = scratch_index(i, orig_load->type);
-                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx, Buffer<>(), Parameter());
+                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx,
+                                                    Buffer<>(), Parameter(), const_true(orig_load->type.lanes()));
                 for (const Load *l : loads[c[i]]) {
                     core = graph_substitute(l, load_from_scratch, core);
                 }
 
                 if (i == c.size() - 1) {
-                    Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx, Parameter());
+                    Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx,
+                                                        Parameter(), const_true(orig_load->type.lanes()));
                     not_first_iteration_scratch_stores.push_back(store_to_scratch);
                 } else {
                     initial_scratch_values.push_back(orig_load);
                 }
                 if (i > 0) {
                     Stmt shuffle = Store::make(scratch, load_from_scratch,
-                                               scratch_index(i-1, orig_load->type), Parameter());
+                                               scratch_index(i-1, orig_load->type),
+                                               Parameter(), const_true(orig_load->type.lanes()));
                     scratch_shuffles.push_back(shuffle);
                 }
 
@@ -425,7 +428,9 @@ class LoopCarryOverLoop : public IRMutator {
             vector<Stmt> initial_scratch_stores;
             for (size_t i = 0; i < c.size() - 1; i++) {
                 Expr scratch_idx = scratch_index(i, initial_scratch_values[i].type());
-                Stmt store_to_scratch = Store::make(scratch, initial_scratch_values[i], scratch_idx, Parameter());
+                Stmt store_to_scratch = Store::make(scratch, initial_scratch_values[i],
+                                                    scratch_idx, Parameter(),
+                                                    const_true(scratch_idx.type().lanes()));
                 initial_scratch_stores.push_back(store_to_scratch);
             }
 

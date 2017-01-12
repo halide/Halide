@@ -145,7 +145,8 @@ private:
         // Create a buffer_t object for this allocation.
         if (dims <= 4) {
             BufferBuilder builder;
-            Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter());
+            Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter(),
+                                         const_true(op->types[0].lanes()));
             builder.host = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
             builder.type = op->types[0];
             builder.dimensions = dims;
@@ -186,7 +187,7 @@ private:
 
         Expr idx = mutate(flatten_args(op->name, op->args));
         Expr value = mutate(op->values[0]);
-        stmt = Store::make(op->name, value, idx, Parameter());
+        stmt = Store::make(op->name, value, idx, Parameter(), const_true(value.type().lanes()));
     }
 
     void visit(const Call *op) {
@@ -194,7 +195,8 @@ private:
             op->call_type == Call::Image) {
             internal_assert(op->value_index == 0);
             Expr idx = mutate(flatten_args(op->name, op->args));
-            expr = Load::make(op->type, op->name, idx, op->image, op->param);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param,
+                              const_true(op->type.lanes()));
         } else {
             IRMutator::visit(op);
         }
@@ -294,7 +296,7 @@ class ConnectOutputBuffers : public IRMutator {
         }
 
         if (output_buf.defined()) {
-            stmt = Store::make(op->name, op->value, op->index, output_buf);
+            stmt = Store::make(op->name, op->value, op->index, output_buf, const_true());
         } else {
             stmt = op;
         }

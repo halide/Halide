@@ -96,7 +96,7 @@ void IRMutator::visit(const Load *op) {
     if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
         expr = op;
     } else {
-        expr = Load::make(op->type, op->name, index, op->image, op->param, op->predicate);
+        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
     }
 }
 

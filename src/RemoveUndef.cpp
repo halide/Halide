@@ -117,12 +117,13 @@ private:
     }
 
     void visit(const Load *op) {
+        Expr pred = mutate(op->predicate);
         Expr index = mutate(op->index);
         if (!expr.defined()) return;
-        if (index.same_as(op->index)) {
+        if (pred.same_as(op->predicate) && index.same_as(op->index)) {
             expr = op;
         } else {
-            expr = Load::make(op->type, op->name, index, op->image, op->param, op->predicate);
+            expr = Load::make(op->type, op->name, index, op->image, op->param, pred);
         }
     }
 
@@ -268,6 +269,7 @@ private:
     void visit(const Store *op) {
         predicate = Expr();
 
+        Expr pred = mutate(op->predicate);
         Expr value = mutate(op->value);
         if (!value.defined()) {
             stmt = Stmt();
@@ -282,13 +284,15 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, op->predicate));
+            // TODO(psuriana): we could have combined predicate with pred
+            stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred));
             predicate = Expr();
-        } else if (value.same_as(op->value) &&
+        } else if (pred.same_as(op->predicate) &&
+                   value.same_as(op->value) &&
                    index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param, op->predicate);
+            stmt = Store::make(op->name, value, index, op->param, pred);
         }
     }
 

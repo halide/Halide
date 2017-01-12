@@ -1399,7 +1399,7 @@ class OptimizeShuffles : public IRMutator {
                     // returns a native vector size to account for this.
                     Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                           Ramp::make(base, 1, const_extent),
-                                          op->image, op->param);
+                                          op->image, op->param, const_true(const_extent));
 
                     // We know the size of the LUT is not more than 256, so we
                     // can safely cast the index to 8 bit, which

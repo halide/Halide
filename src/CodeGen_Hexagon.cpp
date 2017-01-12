@@ -160,6 +160,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     // We can't deal with bool vectors, convert them to integer vectors.
     debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
     body = eliminate_bool_vectors(body);
+    body = simplify(body);
     debug(2) << "Lowering after eliminating boolean vectors: " << body << "\n\n";
 
     // Optimize the IR for Hexagon.
@@ -1326,7 +1327,8 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Call *load_addr, Expr
 
     // If it's a Handle, load it as a uint64_t and then cast
     if (load->type.is_handle()) {
-        Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index, load->image, load->param);
+        Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index,
+                                      load->image, load->param, const_true(load->type.lanes()));
         Expr src = Call::make(Handle().with_lanes(uint64_load.type().lanes()), Call::address_of, {uint64_load}, Call::Intrinsic);
         Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, predicate}, Call::Intrinsic);
         codegen(reinterpret(load->type, expr));
@@ -1384,7 +1386,8 @@ void CodeGen_Hexagon::codegen_predicated_vector_store(const Call *store_addr, Ex
     if (value.type().is_handle()) {
         Expr v = reinterpret(UInt(64, value.type().lanes()), value);
         Expr dest = Call::make(Handle().with_lanes(v.type().lanes()), Call::address_of,
-                               {Load::make(v.type(), load->name, load->index, load->image, load->param)},
+                               {Load::make(v.type(), load->name, load->index, load->image,
+                                           load->param, const_true(v.type().lanes()))},
                                Call::Intrinsic);
         Expr expr = Call::make(v.type(), Call::predicated_store,
                                {dest, predicate, v},

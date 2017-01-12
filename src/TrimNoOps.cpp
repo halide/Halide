@@ -81,13 +81,7 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const Store *op) {
-        bool always_false = op->predicate.defined() && is_zero(op->predicate);
-        if (always_false) {
-            condition = make_and(condition, op->predicate.defined() && is_zero(op->predicate));
-            return;
-        }
-
-        if (op->value.type().is_handle()) {
+        if (op->value.type().is_handle() || is_zero(op->predicate)) {
             condition = const_false();
         } else {
             if (is_zero(condition)) {
@@ -160,6 +154,16 @@ class IsNoOp : public IRVisitor {
              op->name == Call::copy_memory)) {
             condition = const_false();
             return;
+        } else if (((op->name == Call::predicated_load) ||
+                    (op->name == Call::predicated_store))) {
+            // If the predicate of a predicated load/store is always false,
+            // it's okay to trim it; otherwise, do nothing.
+            Expr pred = op->args[1];
+            internal_assert(pred.defined());
+            if (!is_zero(pred)) {
+                condition = const_false();
+                return;
+            }
         }
         IRVisitor::visit(op);
     }

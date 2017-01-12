@@ -206,7 +206,7 @@ struct Load : public ExprNode<Load> {
     Parameter param;
 
     EXPORT static Expr make(Type type, std::string name, Expr index, Buffer<> image,
-                            Parameter param, Expr predicate = Expr());
+                            Parameter param, Expr predicate);
 
     static const IRNodeType _type_info = IRNodeType::Load;
 };
@@ -304,7 +304,7 @@ struct Store : public StmtNode<Store> {
     Parameter param;
 
     EXPORT static Stmt make(std::string name, Expr value, Expr index,
-                            Parameter param, Expr predicate = Expr());
+                            Parameter param, Expr predicate);
 
     static const IRNodeType _type_info = IRNodeType::Store;
 };
