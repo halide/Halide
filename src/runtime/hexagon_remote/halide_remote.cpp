@@ -89,7 +89,7 @@ void *halide_get_symbol(const char *name) {
     if (def) {
         return def;
     }
-     return dlsym(RTLD_DEFAULT, name);
+    return dlsym(RTLD_DEFAULT, name);
 }
 
 void *halide_load_library(const char *name) {
