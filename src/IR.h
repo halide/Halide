@@ -677,7 +677,7 @@ struct Shuffle : public ExprNode<Shuffle> {
     ///@{
     EXPORT bool is_slice() const;
     int slice_begin() const { return indices[0]; }
-    int slice_stride() const { return indices[1] - indices[0]; }
+    int slice_stride() const { return indices.size() >= 2 ? indices[1] - indices[0] : 1; }
     ///@}
 
 

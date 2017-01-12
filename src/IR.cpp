@@ -545,6 +545,7 @@ Expr Variable::make(Type type, std::string name, Buffer<> image, Parameter param
 Expr Shuffle::make(const std::vector<Expr> &vectors,
                    const std::vector<int> &indices) {
     internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
+    internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
     for (Expr i : vectors) {
