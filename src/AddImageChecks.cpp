@@ -337,6 +337,12 @@ Stmt add_image_checks(Stmt s,
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
                     dims_no_overflow_asserts.push_back(check);
                 }
+
+                // It is never legal to have a negative buffer extent.
+                Expr negative_extent_condition = actual_extent >= 0;
+                Expr negative_extent_error = Call::make(Int(32), "halide_error_buffer_extents_negative",
+                                                        {error_name, j, actual_extent}, Call::Extern);
+                asserts_required.push_back(AssertStmt::make(negative_extent_condition, negative_extent_error));
             }
         }
 

@@ -51,6 +51,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_bounds_inference_call_failed,
     (void *)&halide_error_buffer_allocation_too_large,
     (void *)&halide_error_buffer_argument_is_null,
+    (void *)&halide_error_buffer_extents_negative,
     (void *)&halide_error_buffer_extents_too_large,
     (void *)&halide_error_constraint_violated,
     (void *)&halide_error_constraints_make_required_region_smaller,
