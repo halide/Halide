@@ -611,12 +611,13 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
         }
     }
 
-    internal_assert(!verifyFunction(*function));
+    llvm::raw_os_ostream os(std::cerr);
+    internal_assert(!verifyFunction(*function, &os));
 
     current_function_args.clear();
 }
 
-  void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
+void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
                                   const std::string &extern_name) {
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
@@ -845,7 +846,8 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(const std::string &name) {
     // This call should never inline
     result->setIsNoInline();
     builder->CreateRet(result);
-    llvm::verifyFunction(*wrapper);
+    llvm::raw_os_ostream os(std::cerr);
+    llvm::verifyFunction(*wrapper, &os);
     return wrapper;
 }
 
@@ -1044,9 +1046,6 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
 
     sym_push(name + ".host", host_ptr);
     sym_push(name + ".dev", dev_ptr);
-    Value *nullity_test = builder->CreateAnd(builder->CreateIsNull(host_ptr),
-                                             builder->CreateIsNull(dev_ptr));
-    sym_push(name + ".host_and_dev_are_null", nullity_test);
     sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
     sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
     sym_push(name + ".extent.0", buffer_extent(buffer, 0));
@@ -1068,7 +1067,6 @@ void CodeGen_LLVM::pop_buffer(const string &name) {
     sym_pop(name + ".buffer");
     sym_pop(name + ".host");
     sym_pop(name + ".dev");
-    sym_pop(name + ".host_and_dev_are_null");
     sym_pop(name + ".host_dirty");
     sym_pop(name + ".dev_dirty");
     sym_pop(name + ".extent.0");
@@ -2412,120 +2410,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic(Call::copy_buffer_t)) {
-        // Make some memory for this buffer_t
-        Value *dst = create_alloca_at_entry(buffer_t_type, 1);
-        Value *src = codegen(op->args[0]);
-        src = builder->CreatePointerCast(src, buffer_t_type->getPointerTo());
-        src = builder->CreateLoad(src);
-        builder->CreateStore(src, dst);
-        value = dst;
-    } else if (op->is_intrinsic(Call::create_buffer_t)) {
-        // Make some memory for this buffer_t
-        Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
-
-        // Populate the fields
-        internal_assert(op->args[0].type().is_handle())
-            << "The first argument to create_buffer_t must be a Handle\n";
-        Value *host_ptr = codegen(op->args[0]);
-        host_ptr = builder->CreatePointerCast(host_ptr, i8_t->getPointerTo());
-        builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
-
-        // Type check integer arguments
-        for (size_t i = 2; i < op->args.size(); i++) {
-            internal_assert(op->args[i].type() == Int(32))
-                << "All arguments to create_buffer_t beyond the second must have type Int(32)\n";
-        }
-
-        // Second argument is used solely for its Type. Value is unimportant.
-        // Currenty, only the size matters, but ultimately we will encode
-        // complete type info in buffer_t.
-        Value *elem_size = codegen(op->args[1].type().bytes());
-        builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
-
-        int dims = (op->args.size() - 2) / 3;
-        user_assert(dims <= 4)
-            << "Halide currently has a limit of four dimensions on "
-            << "Funcs used on the GPU or passed to extern stages.\n";
-        for (int i = 0; i < 4; i++) {
-            Value *min, *extent, *stride;
-            if (i < dims) {
-                min    = codegen(op->args[i*3+2]);
-                extent = codegen(op->args[i*3+3]);
-                stride = codegen(op->args[i*3+4]);
-            } else {
-                min = extent = stride = ConstantInt::get(i32_t, 0);
-            }
-            builder->CreateStore(min, buffer_min_ptr(buffer, i));
-            builder->CreateStore(extent, buffer_extent_ptr(buffer, i));
-            builder->CreateStore(stride, buffer_stride_ptr(buffer, i));
-        }
-
-        builder->CreateStore(ConstantInt::get(i8_t, 0), buffer_host_dirty_ptr(buffer));
-        builder->CreateStore(ConstantInt::get(i8_t, 0), buffer_dev_dirty_ptr(buffer));
-        builder->CreateStore(ConstantInt::get(i64_t, 0), buffer_dev_ptr(buffer));
-
-        value = buffer;
-    } else if (op->is_intrinsic(Call::extract_buffer_host)) {
-        internal_assert(op->args.size() == 1);
-        Value *buffer = codegen(op->args[0]);
-        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-        value = buffer_host(buffer);
-    } else if (op->is_intrinsic(Call::extract_buffer_min)) {
-        internal_assert(op->args.size() == 2);
-        const IntImm *idx = op->args[1].as<IntImm>();
-        internal_assert(idx);
-        Value *buffer = codegen(op->args[0]);
-        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-        value = buffer_min(buffer, idx->value);
-    } else if (op->is_intrinsic(Call::extract_buffer_max)) {
-        internal_assert(op->args.size() == 2);
-        const IntImm *idx = op->args[1].as<IntImm>();
-        internal_assert(idx);
-        Value *buffer = codegen(op->args[0]);
-        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-        Value *extent = buffer_extent(buffer, idx->value);
-        Value *min = buffer_min(buffer, idx->value);
-        Value *max_plus_one = builder->CreateNSWAdd(min, extent);
-        value = builder->CreateNSWSub(max_plus_one, ConstantInt::get(i32_t, 1));
-    } else if (op->is_intrinsic(Call::rewrite_buffer)) {
-        int dims = ((int)(op->args.size())-2)/3;
-        internal_assert((int)(op->args.size()) == dims*3 + 2);
-        internal_assert(dims <= 4);
-
-        Value *buffer = codegen(op->args[0]);
-
-        // Rewrite the buffer_t using the args
-        builder->CreateStore(codegen(op->args[1]), buffer_elem_size_ptr(buffer));
-        for (int i = 0; i < dims; i++) {
-            builder->CreateStore(codegen(op->args[i*3+2]), buffer_min_ptr(buffer, i));
-            builder->CreateStore(codegen(op->args[i*3+3]), buffer_extent_ptr(buffer, i));
-            builder->CreateStore(codegen(op->args[i*3+4]), buffer_stride_ptr(buffer, i));
-        }
-        for (int i = dims; i < 4; i++) {
-            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_min_ptr(buffer, i));
-            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_extent_ptr(buffer, i));
-            builder->CreateStore(ConstantInt::get(i32_t, 0), buffer_stride_ptr(buffer, i));
-        }
-
-        // From the point of view of the continued code (a containing assert stmt), this returns true.
-        value = codegen(const_true());
-    } else if (op->is_intrinsic(Call::set_host_dirty)) {
-        internal_assert(op->args.size() == 2);
-        Value *buffer = codegen(op->args[0]);
-        Value *arg = codegen(op->args[1]);
-        builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
-        value = ConstantInt::get(i32_t, 0);
-    } else if (op->is_intrinsic(Call::set_dev_dirty)) {
-        internal_assert(op->args.size() == 2);
-        Value *buffer = codegen(op->args[0]);
-        Value *arg = codegen(op->args[1]);
-        builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
-        value = ConstantInt::get(i32_t, 0);
-    } else if (op->is_intrinsic(Call::null_handle)) {
-        internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
-        internal_assert(op->type.is_handle()) << "null_handle must return a Handle type\n";
-        value = ConstantPointerNull::get(i8_t->getPointerTo());
     } else if (op->is_intrinsic(Call::address_of)) {
         internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
         internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
@@ -2732,32 +2616,34 @@ void CodeGen_LLVM::visit(const Call *op) {
         if (op->type.is_vector()) {
             // Make a vector-of-structs
             scalarize(op);
+        } else if (op->args.empty()) {
+            // Empty structs can be emitted for arrays of size zero
+            // (e.g. the shape of a zero-dimensional buffer). We
+            // generate a null in this situation. */
+            value = ConstantPointerNull::get(dyn_cast<PointerType>(llvm_type_of(op->type)));
         } else {
             // Codegen each element.
-            assert(!op->args.empty());
+            bool all_same_type = true;
             vector<llvm::Value *> args(op->args.size());
             vector<llvm::Type *> types(op->args.size());
             for (size_t i = 0; i < op->args.size(); i++) {
                 args[i] = codegen(op->args[i]);
                 types[i] = args[i]->getType();
+                all_same_type &= op->args[i].type() == op->args[0].type();
             }
 
-            // Create an struct on the stack.
-            StructType *struct_t = StructType::create(types);
-            Value *ptr = create_alloca_at_entry(struct_t, 1);
+            // Use either a fixed-size array or a struct. The struct
+            // type would always be correct, but the array type
+            // produces slightly simpler IR.
+            llvm::Type *aggregate_t = (all_same_type ?
+                                       (llvm::Type *)ArrayType::get(types[0], types.size()) :
+                                       (llvm::Type *)StructType::get(*context, types));
 
-            // Put the elements in the struct.
+            value = create_alloca_at_entry(aggregate_t, 1);
             for (size_t i = 0; i < args.size(); i++) {
-                Value *field_ptr =
-                    builder->CreateConstInBoundsGEP2_32(
-                        struct_t,
-                        ptr,
-                        0,
-                        i);
-                builder->CreateStore(args[i], field_ptr);
+                Value *elem_ptr = builder->CreateConstInBoundsGEP2_32(aggregate_t, value, 0, i);
+                builder->CreateStore(args[i], elem_ptr);
             }
-
-            value = ptr;
         }
 
     } else if (op->is_intrinsic(Call::stringify)) {
@@ -2854,10 +2740,30 @@ void CodeGen_LLVM::visit(const Call *op) {
         // used in the cache key.
         internal_assert(op->args.size() > 0);
         value = codegen(op->args[0]);
+    } else if (op->is_intrinsic(Call::alloca)) {
+        // The argument is the number of bytes. It must be const for now.
+        internal_assert(op->args.size() == 1);
+        const int64_t *sz = as_const_int(op->args[0]);
+        internal_assert(sz);
+
+        // We can generate slightly cleaner IR with fewer alignment
+        // restrictions if we recognize the most common types we
+        // expect to get alloca'd. Right now this is just buffer_t. In
+        // the future there will also be halide_dimension_t and
+        // halide_buffer_t.
+        if (op->type == type_of<struct buffer_t *>()) {
+            value = create_alloca_at_entry(buffer_t_type, *sz / sizeof(buffer_t));
+        } else {
+            // Just use an i8* and make the users bitcast it.
+            value = create_alloca_at_entry(i8_t, *sz);
+        }
     } else if (op->is_intrinsic(Call::copy_memory)) {
-        value = builder->CreateMemCpy(codegen(op->args[0]),
-                                      codegen(op->args[1]),
-                                      codegen(op->args[2]), 0);
+        // Just like memcpy, copy_memory returns the destination address.
+        Value *dst = codegen(op->args[0]);
+        builder->CreateMemCpy(dst,
+                              codegen(op->args[1]),
+                              codegen(op->args[2]), 0);
+        value = dst;
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
