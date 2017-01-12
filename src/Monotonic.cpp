@@ -319,6 +319,10 @@ class MonotonicVisitor : public IRVisitor {
         }
     }
 
+    void visit(const Shuffle *op) {
+        result = Monotonic::Constant;
+    }
+
     void visit(const LetStmt *op) {
         internal_error << "Monotonic of statement\n";
     }

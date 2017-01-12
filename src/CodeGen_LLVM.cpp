@@ -2209,54 +2209,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     // cue for llvm to generate particular ops. In general these are
     // handled in the standard library, but ones with e.g. varying
     // types are handled here.
-    if (op->is_intrinsic(Call::shuffle_vector)) {
-        internal_assert((int) op->args.size() == 1 + op->type.lanes());
-        vector<int> indices(op->type.lanes());
-        for (size_t i = 0; i < indices.size(); i++) {
-            const IntImm *idx = op->args[i+1].as<IntImm>();
-            internal_assert(idx);
-            internal_assert(idx->value >= 0 && idx->value <= op->args[0].type().lanes());
-            indices[i] = idx->value;
-        }
-        Value *arg = codegen(op->args[0]);
-
-        value = shuffle_vectors(arg, indices);
-
-        if (op->type.is_scalar()) {
-            value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
-        }
-    } else if (op->is_intrinsic(Call::slice_vector)) {
-        internal_assert(op->args.size() == 4);
-        const int64_t *start = as_const_int(op->args[1]);
-        const int64_t *stride = as_const_int(op->args[2]);
-        const int64_t *lanes = as_const_int(op->args[3]);
-        internal_assert(start && stride && lanes) << "argument to slice_vector must be a constant.\n";
-
-        vector<int> indices(op->type.lanes());
-        for (int i = 0; i < *lanes; i++) {
-            indices[i] = *start + *stride * i;
-        }
-
-        value = shuffle_vectors(codegen(op->args[0]), indices);
-
-        if (op->type.is_scalar()) {
-            value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
-        }
-    } else if (op->is_intrinsic(Call::interleave_vectors)) {
-        vector<Value *> args;
-        args.reserve(op->args.size());
-        for (Expr i : op->args) {
-            args.push_back(codegen(i));
-        }
-        value = interleave_vectors(args);
-    } else if (op->is_intrinsic(Call::concat_vectors)) {
-        vector<Value *> args;
-        args.reserve(op->args.size());
-        for (Expr i : op->args) {
-            args.push_back(codegen(i));
-        }
-        value = concat_vectors(args);
-    } else if (op->is_intrinsic(Call::debug_to_file)) {
+    if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
         internal_assert(filename) << "Malformed debug_to_file node\n";
@@ -3496,6 +3449,33 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 
     // Discard result
     value = nullptr;
+}
+
+void CodeGen_LLVM::visit(const Shuffle *op) {
+    if (op->is_interleave()) {
+        vector<Value *> vecs;
+        for (Expr i : op->vectors) {
+            vecs.push_back(codegen(i));
+        }
+        value = interleave_vectors(vecs);
+    } else {
+        vector<Value *> vecs;
+        for (Expr i : op->vectors) {
+            vecs.push_back(codegen(i));
+        }
+        value = concat_vectors(vecs);
+        if (op->is_concat()) {
+            // If this is just a concat, we're done.
+        } else if (op->is_slice() && op->slice_stride() == 1) {
+            value = slice_vector(value, op->indices[0], op->indices.size());
+        } else {
+            value = shuffle_vectors(value, op->indices);
+        }
+    }
+
+    if (op->type.is_scalar()) {
+        value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
+    }
 }
 
 Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_initialize, const string &name) {

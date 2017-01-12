@@ -59,6 +59,7 @@ public:
     void visit(const IfThenElse *);
     void visit(const Free *);
     void visit(const Evaluate *);
+    void visit(const Shuffle *);
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -386,6 +387,11 @@ void ComputeModulusRemainder::visit(const Let *op) {
     }
     modulus = val.modulus;
     remainder = val.remainder;
+}
+
+void ComputeModulusRemainder::visit(const Shuffle *) {
+    modulus = 1;
+    remainder = 0;
 }
 
 void ComputeModulusRemainder::visit(const LetStmt *) {

@@ -88,6 +88,7 @@ private:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
+    void visit(const Shuffle *);
 };
 
 template<typename T>
@@ -434,6 +435,17 @@ void IRComparer::visit(const Evaluate *op) {
     const Evaluate *s = stmt.as<Evaluate>();
 
     compare_expr(s->value, op->value);
+}
+
+void IRComparer::visit(const Shuffle *op) {
+    const Shuffle *e = expr.as<Shuffle>();
+
+    compare_expr_vector(e->vectors, op->vectors);
+
+    compare_scalar(e->indices.size(), op->indices.size());
+    for (size_t i = 0; (i < e->indices.size()) && result == Equal; i++) {
+        compare_scalar(e->indices[i], op->indices[i]);
+    }
 }
 
 } // namespace

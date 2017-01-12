@@ -30,15 +30,12 @@ class ReplaceShuffleVectors : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Call *op) {
+    void visit(const Shuffle *op) {
         const Variable *v;
-        const int64_t *i;
-        if (op->is_intrinsic(Call::shuffle_vector) &&
-            op->args.size() == 2 &&
-            (v = op->args[0].as<Variable>()) &&
-            v->name == var &&
-            (i = as_const_int(op->args[1]))) {
-            expr = Variable::make(op->type, var + ".lane." + std::to_string(*i));
+        if (op->indices.size() == 1 &&
+            (v = op->vectors[0].as<Variable>()) &&
+            v->name == var) {
+            expr = Variable::make(op->type, var + ".lane." + std::to_string(op->indices[0]));
         } else {
             IRMutator::visit(op);
         }
