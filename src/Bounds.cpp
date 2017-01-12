@@ -733,8 +733,9 @@ private:
         }
     }
 
-    void visit(const Shuffle *) {
-        internal_error << "Bounds of shuffle\n";
+    void visit(const Shuffle *op) {
+        // TODO: We could consider the bounds of the lanes used by the Shuffle.
+        bounds_of_type(op->type.element_of());
     }
 
     void visit(const LetStmt *) {
