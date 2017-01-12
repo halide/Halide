@@ -61,6 +61,14 @@ WEAK int halide_error_buffer_allocation_too_large(void *user_context, const char
     return halide_error_code_buffer_allocation_too_large;
 }
 
+WEAK int halide_error_buffer_extents_negative(void *user_context, const char *buffer_name, int dimension, int extent) {
+    error(user_context)
+        << "The extents for buffer " << buffer_name
+        << " dimension " << dimension
+        << " is negative (" << extent << ")";
+    return halide_error_code_buffer_extents_negative;
+}
+
 WEAK int halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name, int64_t actual_size, int64_t max_size) {
     error(user_context)
         << "Product of extents for buffer " << buffer_name
