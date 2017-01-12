@@ -89,7 +89,7 @@ class InjectHexagonRpc : public IRMutator {
         if (!var.defined()) {
             auto storage = Buffer<void *>::make_scalar(name + "_buf");
             storage() = nullptr;
-            var = Load::make(type_of<void*>(), storage.name(), 0, storage, Parameter());
+            var = Load::make(type_of<void*>(), storage.name(), 0, storage, Parameter(), const_true());
         }
         return var;
     }
@@ -112,7 +112,7 @@ class InjectHexagonRpc : public IRMutator {
     Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
         Buffer<uint8_t> code((int)size, name);
         memcpy(code.data(), buffer, (int)size);
-        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter());
+        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter(), const_true());
         return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
     }
 

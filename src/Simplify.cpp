@@ -3785,19 +3785,19 @@ private:
     }
 
     void visit(const Load *op) {
-        // Load of a broadcast should be broadcast of the load
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
-        if (predicate.defined() && is_zero(predicate)) {
+        if (is_zero(predicate)) {
             // Predicate is always false
             expr = undef(op->type);
         } else if (const Broadcast *b = index.as<Broadcast>()) {
-            Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
+            // Load of a broadcast should be broadcast of the load
+            Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param, const_true());
             expr = Broadcast::make(load, b->lanes);
         } else if (index.same_as(op->index)) {
             expr = op;
         } else {
-            expr = Load::make(op->type, op->name, index, op->image, op->param);
+            expr = Load::make(op->type, op->name, index, op->image, op->param, const_true(op->type.lanes()));
         }
     }
 
@@ -3950,11 +3950,29 @@ private:
             }
             int terms = (int)new_args.size();
 
+            // Try to collapse an interleave of broadcast into a single broadcast.
+            const Broadcast *b1 = new_args[0].as<Broadcast>();
+            if (b1) {
+                bool can_collapse = true;
+                for (size_t i = 1; i < new_args.size() && can_collapse; i++) {
+                    if (const Broadcast *b2 = new_args[i].as<Broadcast>()) {
+                        Expr check = mutate(b1->value - b2->value);
+                        can_collapse &= is_zero(check);
+                    } else {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    expr = Broadcast::make(b1->value, b1->lanes * terms);
+                    return;
+                }
+            }
+
             // Try to collapse an interleave of ramps into a single ramp.
             const Ramp *r = new_args[0].as<Ramp>();
             if (r) {
                 bool can_collapse = true;
-                for (size_t i = 1; i < new_args.size(); i++) {
+                for (size_t i = 1; i < new_args.size() && can_collapse; i++) {
                     // If we collapse these terms into a single ramp,
                     // the new stride is going to be the old stride
                     // divided by the number of terms, so the
@@ -3979,10 +3997,12 @@ private:
             // Try to collapse an interleave of strided loads of ramps
             // from the same buffer into a single load of a ramp.
             if (const Load *first_load = new_args[0].as<Load>()) {
+                vector<Expr> load_predicates;
                 vector<Expr> load_indices;
                 for (Expr e : new_args) {
                     const Load *load = e.as<Load>();
                     if (load && load->name == first_load->name) {
+                        load_predicates.push_back(load->predicate);
                         load_indices.push_back(load->index);
                     }
                 }
@@ -3991,10 +4011,13 @@ private:
                     Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
                     Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::PureIntrinsic);
                     interleaved_index = mutate(interleaved_index);
+                    Expr interleaved_predicate = Call::make(t, Call::interleave_vectors, load_predicates, Call::PureIntrinsic);
+                    interleaved_predicate = mutate(interleaved_predicate);
                     if (interleaved_index.as<Ramp>()) {
                         t = first_load->type;
                         t = t.with_lanes(t.lanes() * terms);
-                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image, first_load->param);
+                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image,
+                                          first_load->param, interleaved_predicate);
                         return;
                     }
                 }
@@ -4496,12 +4519,14 @@ private:
         Expr index = mutate(op->index);
 
         const Load *load = value.as<Load>();
+        const Broadcast *scalar_pred = predicate.as<Broadcast>();
 
-        if (predicate.defined() && is_zero(predicate)) {
+        if (is_zero(predicate)) {
             // Predicate is always false
             stmt = Evaluate::make(0);
-        } else if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            stmt = IfThenElse::make(scalar_pred->value, Store::make(op->name, value, index, op->param));
+        } else if (scalar_pred && !is_one(scalar_pred->value)) {
+            stmt = IfThenElse::make(scalar_pred->value,
+                                    Store::make(op->name, value, index, op->param, const_true(value.type().lanes())));
         } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
             // foo[x] = foo[x] or foo[x] = undef is a no-op
             stmt = Evaluate::make(0);
@@ -5943,9 +5968,9 @@ void simplify_test() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8));
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -5953,7 +5978,7 @@ void simplify_test() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
         e = interleave_vectors({load1, load3});
         check(e, e);
 
@@ -5979,7 +6004,7 @@ void simplify_test() {
     {
         Expr pred = ramp(x*y + x*z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
-        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter());
+        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()));
         Stmt stmt = Store::make("f", value, index, Parameter(), pred);
         check(stmt, Evaluate::make(0));
     }

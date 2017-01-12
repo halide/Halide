@@ -1991,7 +1991,8 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Call *store_addr, Expr 
     if (value.type().is_handle()) {
         Expr v = reinterpret(UInt(64, value.type().lanes()), value);
         Expr dest = Call::make(Handle().with_lanes(v.type().lanes()), Call::address_of,
-                               {Load::make(v.type(), load->name, load->index, load->image, load->param)},
+                               {Load::make(v.type(), load->name, load->index, load->image,
+                                           load->param, const_true(v.type().lanes()))},
                                Call::Intrinsic);
         Expr expr = Call::make(v.type(), Call::predicated_store,
                                {dest, predicate, v},
@@ -2156,7 +2157,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Call *load_addr, Expr pr
 
     // If it's a Handle, load it as a uint64_t and then cast
     if (load->type.is_handle()) {
-        Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index, load->image, load->param);
+        Expr uint64_load = Load::make(UInt(64, load->type.lanes()), load->name, load->index, load->image, load->param, const_true());
         Expr src = Call::make(Handle().with_lanes(uint64_load.type().lanes()), Call::address_of, {uint64_load}, Call::Intrinsic);
         Expr expr = Call::make(uint64_load.type(), Call::predicated_load, {src, predicate}, Call::Intrinsic);
         codegen(reinterpret(load->type, expr));
@@ -2183,7 +2184,8 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Call *load_addr, Expr pr
         Expr flipped_base = ramp->base - ramp->lanes + 1;
         Expr flipped_stride = make_one(flipped_base.type());
         Expr flipped_index = Ramp::make(flipped_base, flipped_stride, ramp->lanes);
-        Expr flipped_load = Load::make(load->type, load->name, flipped_index, load->image, load->param);
+        Expr flipped_load = Load::make(load->type, load->name, flipped_index, load->image,
+                                       load->param, const_true(load->type.lanes()));
 
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = shuffle_vectors(flipped, indices);

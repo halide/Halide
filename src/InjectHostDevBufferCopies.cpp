@@ -418,7 +418,8 @@ class InjectBufferCopies : public IRMutator {
             if (l->index.same_as(new_index)) {
                 expr = op;
             } else {
-                Expr new_load = Load::make(l->type, l->name, new_index, Buffer<>(), Parameter());
+                Expr new_load = Load::make(l->type, l->name, new_index, Buffer<>(),
+                                           Parameter(), const_true(l->type.lanes()));
                 expr = Call::make(op->type, op->name, {new_load}, Call::Intrinsic);
             }
         } else if (op->is_intrinsic(Call::image_load)) {
@@ -533,7 +534,7 @@ class InjectBufferCopies : public IRMutator {
                 << "Buffer " << op->name
                 << " cannot be used on the GPU, because it has more than four dimensions.\n";
         }
-        
+
         // If this buffer is only ever touched on gpu, nuke the host-side allocation.
         if (!buf_info.host_touched) {
             debug(4) << "Eliding host alloc for " << op->name << "\n";
@@ -582,13 +583,13 @@ class InjectBufferCopies : public IRMutator {
                 possible_create_buffer->name == Call::buffer_init) {
                 // Use the same args, but with a zero host pointer.
                 create_buffer_args = possible_create_buffer->args;
-                create_buffer_args[1] = make_zero(Handle()); 
+                create_buffer_args[1] = make_zero(Handle());
             }
 
             Expr buf = Call::make(type_of<struct buffer_t *>(), Call::buffer_init,
                                   create_buffer_args, Call::Extern);
             stmt = LetStmt::make(op->name + ".buffer", buf, inner_body);
-            
+
             // Rebuild any wrapped lets outside the one for the _halide_buffer_init
             for (size_t i = body_lets.size(); i > 0; i--) {
                 stmt = LetStmt::make(body_lets[i - 1]->name, body_lets[i - 1]->value, stmt);
