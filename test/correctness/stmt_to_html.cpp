@@ -24,24 +24,24 @@ int main() {
 
 
     const char *result_file_1 = "stmt_to_html_dump_1.html";
-    Internal::file_unlink_or_die(result_file_1);
+    Internal::ensure_no_file_exists(result_file_1);
     gradient_fast.compile_to_lowered_stmt(result_file_1, {}, Halide::HTML);
-    Internal::file_exists_or_die(result_file_1);
+    Internal::assert_file_exists(result_file_1);
 
     // Also check using an image.
     const char *result_file_2 = "stmt_to_html_dump_2.html";
-    Internal::file_unlink_or_die(result_file_2);
+    Internal::ensure_no_file_exists(result_file_2);
     Buffer<int> im(800, 600);
     gradient_fast.compile_to_lowered_stmt(result_file_2, {im}, Halide::HTML);
-    Internal::file_exists_or_die(result_file_2);
+    Internal::assert_file_exists(result_file_2);
 
     // Check a multi-output pipeline.
     const char *result_file_3 = "stmt_to_html_dump_3.html";
-    Internal::file_unlink_or_die(result_file_3);
+    Internal::ensure_no_file_exists(result_file_3);
     Func tuple_func;
     tuple_func(x, y) = Tuple(x, y);
     tuple_func.compile_to_lowered_stmt(result_file_3, {}, Halide::HTML);
-    Internal::file_exists_or_die(result_file_3);
+    Internal::assert_file_exists(result_file_3);
 
     printf("Success!\n");
     return 0;

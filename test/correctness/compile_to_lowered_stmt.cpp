@@ -19,11 +19,11 @@ int main(int argc, char **argv) {
     {
         const char *result_file = "compile_to_lowered_stmt.stmt";
 
-        Internal::file_unlink_or_die(result_file);
+        Internal::ensure_no_file_exists(result_file);
 
         j.compile_to_lowered_stmt(result_file, j.infer_arguments());
 
-        Internal::file_exists_or_die(result_file);
+        Internal::assert_file_exists(result_file);
     }
 
     printf("Success!\n");
