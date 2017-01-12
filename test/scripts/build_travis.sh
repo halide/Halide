@@ -17,10 +17,7 @@ if [ ${BUILD_SYSTEM} = 'CMAKE' ]; then
   : ${HALIDE_SHARED_LIBRARY:?"HALIDE_SHARED_LIBRARY must be set"}
   LLVM_VERSION_NO_DOT="$( echo ${LLVM_VERSION} | sed 's/\.//' | cut -b1,2 )"
   mkdir -p build/ && cd build/
-  cmake -DLLVM_INCLUDE="/usr/local/llvm/include" \
-        -DLLVM_LIB="/usr/local/llvm/lib" \
-        -DLLVM_BIN="/usr/local/llvm/bin" \
-        -DLLVM_VERSION="${LLVM_VERSION_NO_DOT}" \
+  cmake -DLLVM_DIR="/usr/local/llvm/share/llvm/cmake/" \
         -DHALIDE_SHARED_LIBRARY="${HALIDE_SHARED_LIBRARY}" \
         -DWITH_APPS=ON \
         -DWITH_TESTS=ON \
