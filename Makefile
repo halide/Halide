@@ -631,6 +631,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	if cmp -s list.new list; \
 	then \
 	echo "No changes in LLVM deps"; \
+	touch list; \
 	else \
 	rm -f llvm_*.o*; \
 	cat list.new | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash -; \
