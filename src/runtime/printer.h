@@ -151,18 +151,22 @@ public:
         return "Printer buffer allocation failed.\n";
     }
 
+    void msan_annotate_is_initialized() {
+        halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
+    }
+
     ~Printer() {
         if (!buf) {
             halide_error(user_context, allocation_error());
         } else {
-          halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
-          if (type == ErrorPrinter) {
-              halide_error(user_context, buf);
-          } else if (type == BasicPrinter) {
-              halide_print(user_context, buf);
-          } else {
-              // It's a stringstream. Do nothing.
-          }
+            msan_annotate_is_initialized();
+            if (type == ErrorPrinter) {
+                halide_error(user_context, buf);
+            } else if (type == BasicPrinter) {
+                halide_print(user_context, buf);
+            } else {
+                // It's a stringstream. Do nothing.
+            }
         }
 
         if (own_mem) {
