@@ -212,6 +212,14 @@ void IRPrinter::print(Stmt ir) {
     ir.accept(this);
 }
 
+void IRPrinter::print_list(const std::vector<Expr> &exprs) {
+    for (size_t i = 0; i < exprs.size(); i++) {
+        print(exprs[i]);
+        if (i < exprs.size() - 1) {
+            stream << ", ";
+        }
+    }
+}
 
 void IRPrinter::do_indent() {
     for (int i = 0; i < indent; i++) stream << ' ';
@@ -448,12 +456,7 @@ void IRPrinter::visit(const Broadcast *op) {
 void IRPrinter::visit(const Call *op) {
     // TODO: Print indication of C vs C++?
     stream << op->name << "(";
-    for (size_t i = 0; i < op->args.size(); i++) {
-        print(op->args[i]);
-        if (i < op->args.size() - 1) {
-            stream << ", ";
-        }
-    }
+    print_list(op->args);
     stream << ")";
 }
 
@@ -527,20 +530,12 @@ void IRPrinter::visit(const Store *op) {
 void IRPrinter::visit(const Provide *op) {
     do_indent();
     stream << op->name << "(";
-    for (size_t i = 0; i < op->args.size(); i++) {
-        print(op->args[i]);
-        if (i < op->args.size() - 1) stream << ", ";
-    }
+    print_list(op->args);
     stream << ") = ";
     if (op->values.size() > 1) {
         stream << "{";
     }
-    for (size_t i = 0; i < op->values.size(); i++) {
-        if (i > 0) {
-            stream << ", ";
-        }
-        print(op->values[i]);
-    }
+    print_list(op->values);
     if (op->values.size() > 1) {
         stream << "}";
     }
@@ -642,6 +637,34 @@ void IRPrinter::visit(const Evaluate *op) {
     do_indent();
     print(op->value);
     stream << "\n";
+}
+
+void IRPrinter::visit(const Shuffle *op) {
+    if (op->is_interleave()) {
+        stream << "interleave_vectors(";
+        print_list(op->vectors);
+        stream << ")";
+    } else if (op->is_concat()) {
+        stream << "concat_vectors(";
+        print_list(op->vectors);
+        stream << ")";
+    } else if (op->is_slice()) {
+        stream << "slice_vectors(";
+        print_list(op->vectors);
+        stream << ", " << op->slice_begin() << ", " << op->slice_stride() << ", " << op->indices.size();
+        stream << ")";
+    } else {
+        stream << "shuffle(";
+        print_list(op->vectors);
+        stream << ", ";
+        for (size_t i = 0; i < op->indices.size(); i++) {
+            print(op->indices[i]);
+            if (i < op->indices.size() - 1) {
+                stream << ", ";
+            }
+        }
+        stream << ")";
+    }
 }
 
 }}

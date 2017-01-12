@@ -733,6 +733,10 @@ private:
         }
     }
 
+    void visit(const Shuffle *) {
+        internal_error << "Bounds of shuffle\n";
+    }
+
     void visit(const LetStmt *) {
         internal_error << "Bounds of statement\n";
     }
