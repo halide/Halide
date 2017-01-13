@@ -338,8 +338,6 @@ struct halide_trace_event_t {
 
     /** The length of the coordinates array */
     int32_t dimensions;
-
-
 };
 
 /** Called when Funcs are marked as trace_load, trace_store, or
@@ -377,6 +375,50 @@ extern int32_t halide_trace(void *user_context, const struct halide_trace_event_
 typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_event_t *);
 extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
+
+/** The header of a packet in a binary trace. All fields are 32-bit. */
+struct halide_trace_packet_t {
+    /** The total size of this packet in bytes. Always a multiple of
+     * four. Equivalently, the number of bytes until the next
+     * packet. */
+    uint32_t size;
+
+    /** The id of this packet (for the purpose of parent_id). */
+    int32_t id;
+
+    /** The remaining fields are equivalent to those in halide_trace_event_t */
+    // @{
+    struct halide_type_t type;
+    enum halide_trace_event_code_t event;
+    int32_t parent_id;
+    int32_t value_index;
+    int32_t dimensions;
+    // @}
+
+    #ifdef __cplusplus
+    /** Get the coordinates array, assuming this packet is laid out in
+     * memory as it was written. The coordinates array comes
+     * immediately after the packet header. */
+    const int *coordinates() const {
+        return (const int *)(this + 1);
+    }
+
+    /** Get the value, assuming this packet is laid out in memory as
+     * it was written. The packet comes immediately after the coordinates
+     * array. */
+    const void *value() const {
+        return (const void *)(coordinates() + dimensions);
+    }
+
+    /** Get the func name, assuming this packet is laid out in memory
+     * as it was written. It comes after the value. */
+    const char *func() const {
+        return (const char *)value() + type.lanes * type.bytes();
+    }
+    #endif
+};
+
+
 
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
