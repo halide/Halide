@@ -97,11 +97,11 @@ LLVM_DIR should be the folder in the LLVM installation or build tree that contai
 
 #### Building Halide and LLVM on Windows
 
-These instructions assume you have MSVC 2015. MSBuild and cmake should
-also be in your path. We assume Halide is checked out under
+Acquire MSVC 2015 Update 3 or newer. Earlier versions may work but are
+not part of our tests. MSBuild and cmake should also be in your
+path. The instructions below assume Halide is checked out under
 C:/Code/Halide, and llvm (and clang) is checked out under
 C:/Code/llvm.
-
 
     % mkdir C:\Code\llvm-build
     % cd C:\Code\llvm-build
