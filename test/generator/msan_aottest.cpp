@@ -37,19 +37,7 @@ extern "C" int msan_extern_stage(buffer_t *in, buffer_t *out) {
     if (in->elem_size != out->elem_size) {
         return -1;
     }
-    for (int c = 0; c < in->extent[2]; c++) {
-        for (int y = 0; y < in->extent[1]; y++) {
-            for (int x = 0; x < in->extent[0]; x++) {
-                const uint64_t in_off = (x * in->stride[0] +
-                                         y * in->stride[1] +
-                                         c * in->stride[2]) * in->elem_size;
-                const uint64_t out_off = (x * out->stride[0] +
-                                          y * out->stride[1] +
-                                          c * out->stride[2]) * out->elem_size;
-                memcpy(out->host + out_off, in->host + in_off, in->elem_size);
-            }
-        }
-    }
+    Buffer<int32_t>(*out).copy_from(Buffer<int32_t>(*in));
     out->host_dirty = true;
     return 0;
 }
@@ -78,12 +66,14 @@ enum {
 const void* output_base = nullptr;
 const void* output_previous = nullptr;
 int bounds_inference_count = 0;
+bool expect_error = false;
 
 void reset_state(const void* base) {
     annotate_stage = expect_bounds_inference_buffer;
     output_base = base;
     output_previous = nullptr;
     bounds_inference_count = 0;
+    expect_error = false;
 }
 
 extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
@@ -98,6 +88,13 @@ extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, c
             annotate_stage = expect_intermediate_buffer;
         }
     } else if (annotate_stage == expect_intermediate_buffer) {
+        if (expect_error) {
+            if (len != 87) {
+                fprintf(stderr, "Failure: Expected error message of len=87, saw %d bytes\n", (unsigned int) len);
+                exit(-1);
+            }
+            return;  // stay in this state
+        }
         if (output_previous != nullptr || len != sizeof(buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
             exit(-1);
@@ -227,6 +224,7 @@ int main()
     {
         auto out = Buffer<int32_t>(1, 1, 1);
         reset_state(out.data());
+        expect_error = true;
         if (msan(out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
             exit(-1);

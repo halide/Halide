@@ -132,7 +132,7 @@ struct JITHandlers {
     int (*custom_do_task)(void *, halide_task, int, uint8_t *){nullptr};
     int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *){nullptr};
     void (*custom_error)(void *, const char *){nullptr};
-    int32_t (*custom_trace)(void *, const halide_trace_event *){nullptr};
+    int32_t (*custom_trace)(void *, const halide_trace_event_t *){nullptr};
     void *(*custom_get_symbol)(const char *name){nullptr};
     void *(*custom_load_library)(const char *name){nullptr};
     void *(*custom_get_library_symbol)(void *lib, const char *name){nullptr};

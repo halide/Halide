@@ -284,7 +284,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
-    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *));
+    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
 
     /** Set the function called to print messages from the runtime.
      * If you are compiling statically, you can also just define your
@@ -412,27 +412,27 @@ public:
         : ret_type_(ret_type),
           is_void_return_(is_void_return),
           arg_types_(arg_types) {
-        internal_assert(!(is_void_return && ret_type != Type())); 
+        internal_assert(!(is_void_return && ret_type != Type()));
     }
 
     template <typename RT, typename... Args>
-    ExternSignature(RT (*f)(Args... args)) 
+    ExternSignature(RT (*f)(Args... args))
         : ret_type_(type_of<RT>()),
           is_void_return_(std::is_void<RT>::value),
           arg_types_({type_of<Args>()...}) {
     }
 
-    const Type &ret_type() const { 
-        internal_assert(!is_void_return()); 
-        return ret_type_; 
+    const Type &ret_type() const {
+        internal_assert(!is_void_return());
+        return ret_type_;
     }
 
     bool is_void_return() const {
-        return is_void_return_; 
+        return is_void_return_;
     }
 
-    const std::vector<Type> &arg_types() const { 
-        return arg_types_; 
+    const std::vector<Type> &arg_types() const {
+        return arg_types_;
     }
 };
 
@@ -456,7 +456,7 @@ public:
 
 struct JITExtern {
 private:
-    // Note that exactly one of pipeline_ and extern_c_function_ 
+    // Note that exactly one of pipeline_ and extern_c_function_
     // can be set in a given JITExtern instance.
     Pipeline pipeline_;
     ExternCFunction extern_c_function_;

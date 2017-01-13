@@ -668,10 +668,6 @@ private:
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
-        } else if (op->is_intrinsic(Call::trace_expr)) {
-            // trace_expr returns argument 4
-            internal_assert(op->args.size() >= 5);
-            op->args[4].accept(this);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {

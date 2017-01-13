@@ -105,8 +105,8 @@ void IRPrinter::test() {
     Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true());
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
 
-    Stmt producer = ProducerConsumer::make("buf", true, for_loop);
-    Stmt consumer = ProducerConsumer::make("buf", false, for_loop2);
+    Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
+    Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
     Stmt pipeline = Block::make(producer, consumer);
 
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",

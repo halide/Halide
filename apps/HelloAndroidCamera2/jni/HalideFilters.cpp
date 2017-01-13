@@ -12,11 +12,10 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "native", __VA_ARGS__)
 
 #include "AndroidBufferUtilities.h"
-#include "BufferTFunctions.h"
-#include "YuvFunctions.h"
 #include "deinterleave.h"
 #include "edge_detect.h"
 #include "HalideRuntime.h"
+#include "YuvBufferT.h"
 
 #define DEBUG 1
 
@@ -35,6 +34,29 @@ extern "C" void halide_print(void *, const char *msg) {
 
 extern "C" {
 
+bool checkEqualExtents(YuvBufferT *src, YuvBufferT *dst) {
+    if (src->luma().width()  != dst->luma().width() ||
+        src->luma().height() != dst->luma().height() ||
+        src->chromaU().width()  != dst->chromaU().width() ||
+        src->chromaU().height() != dst->chromaU().height() ||
+        src->chromaV().width()  != dst->chromaV().width() ||
+        src->chromaV().height() != dst->chromaV().height()) {
+
+        LOGE("failed: src and dst extents must be equal.\n\t"
+            "src extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.\n\t"
+            "dst extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.",
+            src->luma().width(), src->luma().height(),
+            src->chromaU().width(), src->chromaU().height(),
+            src->chromaV().width(), src->chromaV().height(),
+            dst->luma().width(), dst->luma().height(),
+            dst->chromaU().width(), dst->chromaU().height(),
+            dst->chromaV().width(), dst->chromaV().height());
+        return false;
+    } else {
+        return true;
+    }
+}
+
 JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHalide(
     JNIEnv *env, jobject obj, jlong srcYuvBufferTHandle, jlong dstYuvBufferTHandle) {
     if (srcYuvBufferTHandle == 0L || dstYuvBufferTHandle == 0L ) {
@@ -45,16 +67,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHa
     YuvBufferT *src = reinterpret_cast<YuvBufferT *>(srcYuvBufferTHandle);
     YuvBufferT *dst = reinterpret_cast<YuvBufferT *>(dstYuvBufferTHandle);
 
-    if (!equalExtents(*src, *dst)) {
-        LOGE("copyHalide failed: src and dst extents must be equal.\n\t"
-            "src extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.\n\t"
-            "dst extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.",
-            src->luma().extent[0], src->luma().extent[1],
-            src->chromaU().extent[0], src->chromaU().extent[1],
-            src->chromaV().extent[0], src->chromaV().extent[1],
-            dst->luma().extent[0], dst->luma().extent[1],
-            dst->chromaU().extent[0], dst->chromaU().extent[1],
-            dst->chromaV().extent[0], dst->chromaV().extent[1]);
+    if (!checkEqualExtents(src, dst)) {
         return false;
     }
 
@@ -71,27 +84,29 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_copyHa
          (dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarPackedUFirst ||
           dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarPackedVFirst ||
           dstChromaStorage == YuvBufferT::ChromaStorage::kPlanarGeneric)) {
-        // Always copy the luma channel directly, potentially falling back to something slow.
-        succeeded = copy2D(src->luma(), dst->luma());
-        if (succeeded) {
-            // Use Halide to deinterleave the chroma channels.
-            buffer_t srcInterleavedChroma = src->interleavedChromaView();
-            buffer_t dstPlanarChromaU = dst->chromaU();
-            buffer_t dstPlanarChromaV = dst->chromaV();
-            if (srcChromaStorage == YuvBufferT::ChromaStorage::kInterleavedUFirst) {
-                halideErrorCode = deinterleave(&srcInterleavedChroma,
-                    &dstPlanarChromaU, &dstPlanarChromaV);
-            } else {
-                halideErrorCode = deinterleave(&srcInterleavedChroma,
-                    &dstPlanarChromaV, &dstPlanarChromaU);
-            }
-            succeeded = (halideErrorCode != halide_error_code_success);
-            if (halideErrorCode != halide_error_code_success) {
-                LOGE("deinterleave failed with error code: %d", halideErrorCode);
-            }
+
+        // Copy the luma channel directly.
+        dst->luma().copy_from(src->luma());
+
+        // Use Halide to deinterleave the chroma channels.
+        auto srcInterleavedChroma = src->interleavedChromaView();
+        auto dstPlanarChromaU = dst->chromaU();
+        auto dstPlanarChromaV = dst->chromaV();
+        if (srcChromaStorage == YuvBufferT::ChromaStorage::kInterleavedUFirst) {
+            halideErrorCode = deinterleave(srcInterleavedChroma,
+                                           dstPlanarChromaU,
+                                           dstPlanarChromaV);
+        } else {
+            halideErrorCode = deinterleave(srcInterleavedChroma,
+                                           dstPlanarChromaV,
+                                           dstPlanarChromaU);
+        }
+        succeeded = (halideErrorCode != halide_error_code_success);
+        if (halideErrorCode != halide_error_code_success) {
+            LOGE("deinterleave failed with error code: %d", halideErrorCode);
         }
     } else {
-        succeeded = copy2D(*src, *dst);
+        (*dst).copy_from(*src);
     }
 
     return succeeded;
@@ -107,16 +122,7 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_edgeDe
     YuvBufferT *src = reinterpret_cast<YuvBufferT *>(srcYuvBufferTHandle);
     YuvBufferT *dst = reinterpret_cast<YuvBufferT *>(dstYuvBufferTHandle);
 
-    if (!equalExtents(*src, *dst)) {
-        LOGE("edgeDetectHalide failed: src and dst extents must be equal.\n\t"
-            "src extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.\n\t"
-            "dst extents: luma: %d, %d, chromaU: %d, %d, chromaV: %d, %d.",
-            src->luma().extent[0], src->luma().extent[1],
-            src->chromaU().extent[0], src->chromaU().extent[1],
-            src->chromaV().extent[0], src->chromaV().extent[1],
-            dst->luma().extent[0], dst->luma().extent[1],
-            dst->chromaU().extent[0], dst->chromaU().extent[1],
-            dst->chromaV().extent[0], dst->chromaV().extent[1]);
+    if (!checkEqualExtents(src, dst)) {
         return false;
     }
 
@@ -133,19 +139,12 @@ JNIEXPORT bool JNICALL Java_com_example_helloandroidcamera2_HalideFilters_edgeDe
     }
 
     // Set chrominance to 128 to appear grayscale.
-    if (dst->interleavedChromaView().host != nullptr) {
-        fill2D(dst->interleavedChromaView(), 128);
-    } else if (dst->packedPlanarChromaView().host != nullptr) {
-        fill2D(dst->packedPlanarChromaView(), 128);
-    } else {
-        fill2D(dst->chromaU(), 128);
-        fill2D(dst->chromaV(), 128);
-    }
+    dst->fillUV(128, 128);
 
-    buffer_t srcLuma = src->luma();
-    buffer_t dstLuma = dst->luma();
+    auto srcLuma = src->luma();
+    auto dstLuma = dst->luma();
     int64_t t1 = halide_current_time_ns();
-    int err = edge_detect(&srcLuma, &dstLuma);
+    int err = edge_detect(srcLuma, dstLuma);
     if (err != halide_error_code_success) {
         LOGE("edge_detect failed with error code: %d", err);
     }

@@ -490,6 +490,23 @@ class VectorSubs : public IRMutator {
 
         if (!changed) {
             expr = op;
+        } else if (op->name == Call::trace) {
+            // Call::trace vectorizes uniquely, because we want a
+            // single trace call for the entire vector, instead of
+            // scalarizing the call and tracing each element.
+            for (size_t i = 1; i <= 2; i++) {
+                // Each struct should be a struct-of-vectors, not a
+                // vector of distinct structs.
+                const Call *call = new_args[i].as<Call>();
+                internal_assert(call && call->is_intrinsic(Call::make_struct));
+                new_args[i] = Call::make(call->type.element_of(), Call::make_struct,
+                                         call->args, Call::Intrinsic);
+            }
+            // One of the arguments to the trace helper
+            // records the number of vector lanes in the type being
+            // stored.
+            new_args[5] = max_lanes;
+            expr = Call::make(op->type, Call::trace, new_args, op->call_type);
         } else {
             // Widen the args to have the same lanes as the max lanes found
             for (size_t i = 0; i < new_args.size(); i++) {

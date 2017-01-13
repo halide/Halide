@@ -20,7 +20,7 @@ void my_halide_error(void *context, const char *msg) {
     assert(context == context_pointer);
 }
 
-int32_t my_halide_trace(void *context, const halide_trace_event *e) {
+int32_t my_halide_trace(void *context, const halide_trace_event_t *e) {
     called_trace = true;
     assert(context == context_pointer);
     return 0;
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     // verify that calling via the _argv entry point
     // also produces the correct result
     const void* arg0 = context_pointer;
-    void* args[3] = { &arg0, (buffer_t *)input, (buffer_t *)output };
+    void* args[3] = { &arg0, input.raw_buffer(), output.raw_buffer() };
     called_error = false;
     called_trace = false;
     called_malloc = false;
