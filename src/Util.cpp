@@ -236,12 +236,27 @@ bool file_exists(const std::string &name) {
     #endif
 }
 
+void assert_file_exists(const std::string &name) {
+    internal_assert(file_exists(name)) << "File not found: " << name;
+}
+
+void assert_no_file_exists(const std::string &name) {
+    internal_assert(!file_exists(name)) << "File (wrongly) found: " << name;
+}
+
 void file_unlink(const std::string &name) {
     #ifdef _MSC_VER
     _unlink(name.c_str());
     #else
     ::unlink(name.c_str());
     #endif
+}
+
+void ensure_no_file_exists(const std::string &name) {
+    if (file_exists(name)) {
+        file_unlink(name);
+    }
+    assert_no_file_exists(name);
 }
 
 void dir_rmdir(const std::string &name) {
