@@ -91,6 +91,29 @@ void Closure::visit(const Variable *op) {
     }
 }
 
+void Closure::visit(const Call *op) {
+    if (op->is_intrinsic(Call::predicated_store)) {
+        for (size_t i = 0; i < op->args.size(); i++) {
+            op->args[i].accept(this);
+        }
+        const Call *store_addr = op->args[0].as<Call>();
+        internal_assert(store_addr && store_addr->is_intrinsic(Call::address_of));
+        const Broadcast *broadcast = store_addr->args[0].as<Broadcast>();
+        const Load *load = broadcast ? broadcast->value.as<Load>() : store_addr->args[0].as<Load>();
+        internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
+
+        if (!ignore.contains(load->name)) {
+            debug(3) << "Adding buffer " << load->name << " to closure\n";
+            Buffer &ref = buffers[load->name];
+            ref.type = op->type.element_of();
+            ref.write = true;
+        }
+    } else {
+        IRVisitor::visit(op);
+        return;
+    }
+}
+
 vector<string> Closure::names() const {
     vector<string> res;
     for (const pair<string, Type> &i : vars) {
