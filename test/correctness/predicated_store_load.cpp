@@ -353,7 +353,7 @@ int vectorized_predicated_predicate_with_pure_call_test() {
 }
 
 int main(int argc, char **argv) {
-    /*printf("Running vectorized dense load with stride minus one test\n");
+    printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test() != 0) {
         return -1;
     }
@@ -361,14 +361,14 @@ int main(int argc, char **argv) {
     printf("Running multiple vectorized predicate test\n");
     if (multiple_vectorized_predicate_test() != 0) {
         return -1;
-    }*/
+    }
 
     printf("Running vectorized predicated store scalarized predicated load test\n");
     if (vectorized_predicated_store_scalarized_predicated_load_test() != 0) {
         return -1;
     }
 
-    /*printf("Running scalar load test\n");
+    printf("Running scalar load test\n");
     if (scalar_load_test() != 0) {
         return -1;
     }
@@ -391,7 +391,7 @@ int main(int argc, char **argv) {
     printf("Running vectorized predicated with pure call test\n");
     if (vectorized_predicated_predicate_with_pure_call_test() != 0) {
         return -1;
-    }*/
+    }
 
     printf("Success!\n");
     return 0;
