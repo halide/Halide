@@ -9,7 +9,7 @@ bool run_tracer = false;
 int niters_expected = 0;
 int niters = 0;
 
-int intermediate_bound_depend_on_output_trace(void *user_context, const halide_trace_event *e) {
+int intermediate_bound_depend_on_output_trace(void *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -32,7 +32,7 @@ int intermediate_bound_depend_on_output_trace(void *user_context, const halide_t
     return 0;
 }
 
-int func_call_bound_trace(void *user_context, const halide_trace_event *e) {
+int func_call_bound_trace(void *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -53,7 +53,7 @@ int func_call_bound_trace(void *user_context, const halide_trace_event *e) {
     return 0;
 }
 
-int box_bound_trace(void *user_context, const halide_trace_event *e) {
+int box_bound_trace(void *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
