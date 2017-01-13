@@ -160,7 +160,6 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     // We can't deal with bool vectors, convert them to integer vectors.
     debug(1) << "Eliminating boolean vectors from Hexagon code...\n";
     body = eliminate_bool_vectors(body);
-    body = simplify(body);
     debug(2) << "Lowering after eliminating boolean vectors: " << body << "\n\n";
 
     // Optimize the IR for Hexagon.

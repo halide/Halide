@@ -279,10 +279,12 @@ class LoopCarryOverLoop : public IRMutator {
         }
 
         // For each load, move the load index forwards by one loop iteration
-        vector<Expr> indices, next_indices;
+        vector<Expr> indices, next_indices, predicates, next_predicates;
         for (const vector<const Load *> &v: loads) {
             indices.push_back(v[0]->index);
             next_indices.push_back(step_forwards(v[0]->index, linear));
+            predicates.push_back(v[0]->predicate);
+            next_predicates.push_back(step_forwards(v[0]->predicate, linear));
         }
 
         // Find loads done on this loop iteration that will be
@@ -294,7 +296,9 @@ class LoopCarryOverLoop : public IRMutator {
                 if (i == j) continue;
                 if (loads[i][0]->name == loads[j][0]->name &&
                     next_indices[j].defined() &&
-                    graph_equal(indices[i], next_indices[j])) {
+                    graph_equal(indices[i], next_indices[j]) &&
+                    next_predicates[j].defined() &&
+                    graph_equal(predicates[i], next_predicates[j])) {
                     chains.push_back({j, i});
                     debug(3) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
