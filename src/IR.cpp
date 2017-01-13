@@ -313,6 +313,14 @@ Stmt ProducerConsumer::make(std::string name, bool is_producer, Stmt body) {
     return node;
 }
 
+Stmt ProducerConsumer::make_produce(std::string name, Stmt body) {
+    return ProducerConsumer::make(name, true, body);
+}
+
+Stmt ProducerConsumer::make_consume(std::string name, Stmt body) {
+    return ProducerConsumer::make(name, false, body);
+}
+
 Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
     internal_assert(extent.defined()) << "For of undefined\n";
@@ -603,8 +611,6 @@ Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
 Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
 Call::ConstString Call::undef = "undef";
 Call::ConstString Call::address_of = "address_of";
-Call::ConstString Call::trace = "trace";
-Call::ConstString Call::trace_expr = "trace_expr";
 Call::ConstString Call::return_second = "return_second";
 Call::ConstString Call::if_then_else = "if_then_else";
 Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
@@ -635,11 +641,12 @@ Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
-Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";    
+Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
 Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
-Call::ConstString Call::buffer_init = "_halide_buffer_init";    
+Call::ConstString Call::buffer_init = "_halide_buffer_init";
+Call::ConstString Call::trace = "halide_trace_helper";
 
 }
 }

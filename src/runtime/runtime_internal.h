@@ -151,6 +151,13 @@ WEAK void halide_cond_destroy(struct halide_cond *cond);
 WEAK void halide_cond_broadcast(struct halide_cond *cond);
 WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
 
+WEAK int halide_trace_helper(void *user_context,
+                             const char *func,
+                             void *value, int *coords,
+                             int type_code, int type_bits, int type_lanes,
+                             int code,
+                             int parent_id, int value_index, int dimensions);
+
 }  // extern "C"
 
 /** A macro that calls halide_print if the supplied condition is
