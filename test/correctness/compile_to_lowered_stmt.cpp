@@ -1,8 +1,5 @@
 #include "Halide.h"
 #include <stdio.h>
-#ifndef _MSC_VER
-#include <unistd.h>
-#endif
 
 using namespace Halide;
 
@@ -21,11 +18,12 @@ int main(int argc, char **argv) {
 
     {
         const char *result_file = "compile_to_lowered_stmt.stmt";
+
+        Internal::ensure_no_file_exists(result_file);
+
         j.compile_to_lowered_stmt(result_file, j.infer_arguments());
 
-        #ifndef _MSC_VER
-        assert(access(result_file, F_OK) == 0 && "Output file not created.");
-        #endif
+        Internal::assert_file_exists(result_file);
     }
 
     printf("Success!\n");
