@@ -241,7 +241,7 @@ void assert_file_exists(const std::string &name) {
 }
 
 void assert_no_file_exists(const std::string &name) {
-    internal_assert(file_exists(name)) << "File (wrongly) found: " << name;
+    internal_assert(!file_exists(name)) << "File (wrongly) found: " << name;
 }
 
 void file_unlink(const std::string &name) {
