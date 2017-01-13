@@ -290,6 +290,9 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 
     EXPORT static Stmt make(std::string name, bool is_producer, Stmt body);
 
+    EXPORT static Stmt make_produce(std::string name, Stmt body);
+    EXPORT static Stmt make_consume(std::string name, Stmt body);
+
     static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
 };
 

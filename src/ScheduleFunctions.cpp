@@ -578,7 +578,7 @@ private:
 
     string producing;
 
-    Stmt build_pipeline(Stmt s) {
+    Stmt build_pipeline(Stmt consumer) {
         pair<Stmt, Stmt> realization = build_production(func, target);
 
         Stmt producer;
@@ -590,11 +590,18 @@ private:
             internal_assert(realization.second.defined());
             producer = realization.second;
         }
-        producer = ProducerConsumer::make(func.name(), true, producer);
-        if (is_no_op(s)) {
+        producer = ProducerConsumer::make_produce(func.name(), producer);
+
+        // Outputs don't have consume nodes
+        if (!is_output) {
+            consumer = ProducerConsumer::make_consume(func.name(), consumer);
+        }
+
+        if (is_no_op(consumer)) {
+            // For the very first output to be scheduled, the consumer
+            // Stmt will be a no-op. No point in preserving it.
             return producer;
         } else {
-            Stmt consumer = ProducerConsumer::make(func.name(), false, s);
             return Block::make(producer, consumer);
         }
     }
