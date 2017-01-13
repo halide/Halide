@@ -344,10 +344,9 @@ struct halide_trace_event_t {
  * trace_realization. See Func::set_custom_trace. The default
  * implementation either prints events via halide_print, or if
  * HL_TRACE_FILE is defined, dumps the trace to that file in a
- * yet-to-be-documented binary format (see src/runtime/tracing.cpp to
- * reverse engineer the format). If the trace is going to be large,
- * you may want to make the file a named pipe, and then read from that
- * pipe into gzip.
+ * sequence of trace packets. The header for a trace packet is defined
+ * below. If the trace is going to be large, you may want to make the
+ * file a named pipe, and then read from that pipe into gzip.
  *
  * halide_trace returns a unique ID which will be passed to future
  * events that "belong" to the earlier event as the parent id. The
