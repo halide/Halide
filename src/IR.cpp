@@ -313,6 +313,14 @@ Stmt ProducerConsumer::make(std::string name, bool is_producer, Stmt body) {
     return node;
 }
 
+Stmt ProducerConsumer::make_produce(std::string name, Stmt body) {
+    return ProducerConsumer::make(name, true, body);
+}
+
+Stmt ProducerConsumer::make_consume(std::string name, Stmt body) {
+    return ProducerConsumer::make(name, false, body);
+}
+
 Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
     internal_assert(extent.defined()) << "For of undefined\n";
