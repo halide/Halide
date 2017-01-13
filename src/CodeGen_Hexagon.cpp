@@ -1328,10 +1328,8 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
     // if none of the predicate lanes is true, just load undef. It is okay to do
     // normal load if any of the predicate lane is true since Hexagon allocates
     // one additional vector past the end of the actual allocation.
-    Expr load_expr = Expr(op);
-    debug(4) << "Predicated vector load on hexagon\n\t" << load_expr << "\n";
+    debug(4) << "Predicated vector load on hexagon\n\t" << Expr(op) << "\n";
     Value *vpred = codegen(op->predicate);
-
     Constant *lane = ConstantInt::get(i32_t, 0);
     Value *any_true = builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane));
     for (int i = 1; i < op->predicate.type().lanes(); i++) {
@@ -1345,12 +1343,13 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
     builder->CreateCondBr(any_true, true_bb, false_bb);
 
     builder->SetInsertPoint(true_bb);
-    Value *true_value = codegen(load_expr);
+    Value *true_value = codegen(Load::make(op->type, op->name, op->index, op->image,
+                                           op->param, const_true(op->type.lanes())));
     builder->CreateBr(after_bb);
     BasicBlock *true_pred = builder->GetInsertBlock();
 
     builder->SetInsertPoint(false_bb);
-    Value *false_value = UndefValue::get(llvm_type_of(load_expr.type()));
+    Value *false_value = UndefValue::get(llvm_type_of(op->type));
     builder->CreateBr(after_bb);
     BasicBlock *false_pred = builder->GetInsertBlock();
 
@@ -1365,7 +1364,7 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
 void CodeGen_Hexagon::codegen_predicated_vector_store(const Store *op) {
     // We need to scalarize the predicated store since masked store/load on
     // hexagon is not handled by the LLVM
-    debug(4) << "Scalarize predicated vector store on hexagon\n";
+    debug(4) << "Scalarize predicated vector store on hexagon\n\t" << Stmt(op) << "\n";
     Type value_type = op->value.type().element_of();
     Value *vpred = codegen(op->predicate);
     Value *vval = codegen(op->value);

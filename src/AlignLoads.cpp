@@ -41,16 +41,7 @@ private:
     Expr make_load(const Load *load, Expr index) {
         internal_assert(is_one(load->predicate)) << "Load should not be predicated.\n";
         return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
-                                 index, load->image, load->param, load->predicate));
-    }
-
-    void visit(const Call *op) {
-        // We shouldn't mess with load inside an address_of.
-        if (op->is_intrinsic(Call::address_of)) {
-            expr = op;
-        } else {
-            IRMutator::visit(op);
-        }
+                                 index, load->image, load->param, const_true(index.type().lanes())));
     }
 
     void visit(const Load *op) {
