@@ -90,7 +90,7 @@ If you wish to use cmake to build Halide, the build procedure is:
 
     % mkdir cmake_build
     % cd cmake_build
-    % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_VERSION=37 ..
+    % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_VERSION=37 /path/to/halide
     % make -j8
 
 LLVM_DIR should be the folder in the LLVM installation or build tree that contains LLVMConfig.cmake.
