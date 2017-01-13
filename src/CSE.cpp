@@ -99,10 +99,6 @@ public:
     }
 
     Expr mutate(Expr e) {
-        if (!e.defined()) {
-            return Expr();
-        }
-
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -199,10 +195,6 @@ public:
     using IRGraphVisitor::visit;
 
     void include(const Expr &e) {
-        if (!e.defined()) {
-            return;
-        }
-
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
@@ -465,7 +457,6 @@ void cse_test() {
     {
         Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-
         Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
         Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
         Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
