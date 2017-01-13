@@ -525,10 +525,10 @@ void IRPrinter::visit(const Store *op) {
     print(op->index);
     stream << "] = ";
     print(op->value);
-    //if (!is_one(op->predicate)) {
+    if (!is_one(op->predicate)) {
         stream << " if ";
         print(op->predicate);
-    //}
+    }
     stream << '\n';
 }
 

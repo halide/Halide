@@ -495,8 +495,8 @@ private:
 
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
 
-    virtual void codegen_predicated_vector_load(const Call *load_addr, Expr predicate);
-    virtual void codegen_predicated_vector_store(const Call *store_addr, Expr predicate, Expr value);
+    virtual void codegen_predicated_vector_load(const Load *op);
+    virtual void codegen_predicated_vector_store(const Store *op);
 };
 
 }

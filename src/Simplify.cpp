@@ -3787,17 +3787,20 @@ private:
     void visit(const Load *op) {
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
+
+        const Broadcast *b_index = index.as<Broadcast>();
+        const Broadcast *b_pred = predicate.as<Broadcast>();
         if (is_zero(predicate)) {
             // Predicate is always false
             expr = undef(op->type);
-        } else if (const Broadcast *b = index.as<Broadcast>()) {
+        } else if (b_index && b_pred) {
             // Load of a broadcast should be broadcast of the load
-            Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param, const_true());
-            expr = Broadcast::make(load, b->lanes);
-        } else if (index.same_as(op->index)) {
+            Expr load = Load::make(op->type.element_of(), op->name, b_index->value, op->image, op->param, b_pred->value);
+            expr = Broadcast::make(load, b_index->lanes);
+        } else if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
             expr = op;
         } else {
-            expr = Load::make(op->type, op->name, index, op->image, op->param, const_true(op->type.lanes()));
+            expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
         }
     }
 
@@ -3999,11 +4002,13 @@ private:
             if (const Load *first_load = new_args[0].as<Load>()) {
                 vector<Expr> load_predicates;
                 vector<Expr> load_indices;
+                bool always_true = true;
                 for (Expr e : new_args) {
                     const Load *load = e.as<Load>();
                     if (load && load->name == first_load->name) {
                         load_predicates.push_back(load->predicate);
                         load_indices.push_back(load->index);
+                        always_true = always_true && is_one(load->predicate);
                     }
                 }
 
@@ -4011,8 +4016,13 @@ private:
                     Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
                     Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::PureIntrinsic);
                     interleaved_index = mutate(interleaved_index);
-                    Expr interleaved_predicate = Call::make(t, Call::interleave_vectors, load_predicates, Call::PureIntrinsic);
-                    interleaved_predicate = mutate(interleaved_predicate);
+                    Expr interleaved_predicate;
+                    if (always_true) {
+                        interleaved_predicate = const_true(t.lanes());
+                    } else {
+                        interleaved_predicate = Call::make(t, Call::interleave_vectors, load_predicates, Call::PureIntrinsic);
+                        interleaved_predicate = mutate(interleaved_predicate);
+                    }
                     if (interleaved_index.as<Ramp>()) {
                         t = first_load->type;
                         t = t.with_lanes(t.lanes() * terms);
@@ -4530,10 +4540,10 @@ private:
         } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
             // foo[x] = foo[x] or foo[x] = undef is a no-op
             stmt = Evaluate::make(0);
-        } else if (value.same_as(op->value) && index.same_as(op->index)) {
+        } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param, op->predicate);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 

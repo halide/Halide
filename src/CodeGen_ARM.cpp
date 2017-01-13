@@ -632,6 +632,12 @@ void CodeGen_ARM::visit(const Max *op) {
 }
 
 void CodeGen_ARM::visit(const Store *op) {
+    // Predicated store
+    if (!is_one(op->predicate)) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
@@ -806,6 +812,12 @@ void CodeGen_ARM::visit(const Store *op) {
 }
 
 void CodeGen_ARM::visit(const Load *op) {
+    // Predicated load
+    if (!is_one(op->predicate)) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
