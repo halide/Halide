@@ -1159,7 +1159,11 @@ class EliminateInterleaves : public IRMutator {
         if (buffers.contains(op->name)) {
             // When inspecting the stores to a buffer, update the state.
             BufferState &state = buffers.ref(op->name);
-            if (yields_removable_interleave(value)) {
+            if (!is_one(predicate)) {
+                // TODO(psuriana): This store is predicated. Mark the buffer as
+                // not interleaved for now.
+                state = BufferState::NotInterleaved;
+            } else if (yields_removable_interleave(value)) {
                 // The value yields a removable interleave. If we aren't tracking
                 // this buffer, mark it as interleaved.
                 if (state == BufferState::Unknown) {
@@ -1179,6 +1183,7 @@ class EliminateInterleaves : public IRMutator {
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
             // from the store.
+            internal_assert(is_one(predicate)) << "The store shouldn't have been predicated.\n";
             value = remove_interleave(value);
         }
 
@@ -1326,18 +1331,8 @@ class OptimizeShuffles : public IRMutator {
     int lut_alignment;
     Scope<Interval> bounds;
     std::vector<std::pair<string, Expr>> lets;
-    bool inside_address_of = false;
 
     using IRMutator::visit;
-
-    void visit(const Call *op) {
-        bool old_inside_address_of = inside_address_of;
-        if (op->is_intrinsic(Call::address_of)) {
-            inside_address_of = true;
-        }
-        IRMutator::visit(op);
-        inside_address_of = old_inside_address_of;
-    }
 
     template <typename T>
     void visit_let(const T *op) {
@@ -1359,8 +1354,8 @@ class OptimizeShuffles : public IRMutator {
     void visit(const LetStmt *op) { visit_let(op); }
 
     void visit(const Load *op) {
-        if (inside_address_of) {
-            // We shouldn't mess with load inside an address_of.
+        if (!is_one(op->predicate)) {
+            // TODO(psuriana): We shouldn't mess with predicated load for now.
             IRMutator::visit(op);
             return;
         }

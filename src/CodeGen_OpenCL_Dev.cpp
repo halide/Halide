@@ -269,6 +269,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
+
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = is_ramp1(op->index);
     if (ramp_base.defined()) {
@@ -333,6 +335,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
+    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside OpenCL kernel.\n";
+
     string id_value = print_expr(op->value);
     Type t = op->value.type();
 

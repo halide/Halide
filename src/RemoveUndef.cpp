@@ -284,7 +284,6 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            // TODO(psuriana): we could have combined predicate with pred
             stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred));
             predicate = Expr();
         } else if (pred.same_as(op->predicate) &&

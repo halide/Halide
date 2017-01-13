@@ -260,64 +260,6 @@ class PredicateLoadStore : public IRMutator {
         return false;
     }
 
-    void visit(const Load *op) {
-        valid = valid && should_predicate_store_load(op->type.bits());
-        if (!valid) {
-            expr = op;
-            return;
-        }
-        if (!op->index.type().is_scalar()) {
-            Expr src = Call::make(Handle().with_lanes(lanes), Call::address_of, {Expr(op)}, Call::Intrinsic);
-            expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
-            vectorized = true;
-        } else if (expr_uses_var(op->index, var)) {
-            Expr predicate = Broadcast::make(op->predicate, lanes);
-            Expr index = Broadcast::make(op->index, lanes);
-            Expr src = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                  {Load::make(op->type, op->name, index, op->image, op->param, predicate)},
-                                  Call::Intrinsic);
-            expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
-            vectorized = true;
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
-    void visit(const Store *op) {
-        valid = valid && should_predicate_store_load(op->value.type().bits());
-        if (!valid) {
-            stmt = op;
-            return;
-        }
-        if (!op->index.type().is_scalar()) {
-            internal_assert(op->predicate.type().lanes() == lanes);
-            internal_assert(op->index.type().lanes() == lanes);
-            internal_assert(op->value.type().lanes() == lanes);
-            Expr predicate = mutate(op->predicate);
-            Expr value = mutate(op->value);
-            Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                   {Load::make(op->value.type(), op->name, op->index, Buffer<>(), op->param, op->predicate)},
-                                   Call::Intrinsic);
-            stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
-                                             {dest, vector_predicate, value},
-                                             Call::Intrinsic));
-            vectorized = true;
-        } else if (expr_uses_var(op->index, var)) {
-            Expr predicate = Broadcast::make(op->predicate, lanes);
-            Expr value = Broadcast::make(op->value, lanes);
-            Expr index = Broadcast::make(op->index, lanes);
-            Expr dest = Call::make(Handle().with_lanes(lanes), Call::address_of,
-                                   {Load::make(value.type(), op->name, index, Buffer<>(), op->param, predicate)},
-                                   Call::Intrinsic);
-            stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
-                                             {dest, vector_predicate, mutate(value)},
-                                             Call::Intrinsic));
-            vectorized = true;
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
     Expr merge_predicate(Expr pred, Expr new_pred) {
         if (pred.type().lanes() == new_pred.type().lanes()) {
             Expr res = simplify(pred && new_pred);
@@ -327,25 +269,69 @@ class PredicateLoadStore : public IRMutator {
         return pred;
     }
 
-    void visit(const Call *op) {
+    void visit(const Load *op) {
+        valid = valid && should_predicate_store_load(op->type.bits());
         if (!valid) {
+            expr = op;
+            return;
+        }
+
+        Expr predicate, index;
+        if (!op->index.type().is_scalar()) {
+            internal_assert(op->predicate.type().lanes() == lanes);
+            internal_assert(op->index.type().lanes() == lanes);
+
+            predicate = mutate(op->predicate);
+            index = mutate(op->index);
+        } else if (expr_uses_var(op->index, var)) {
+            predicate = mutate(Broadcast::make(op->predicate, lanes));
+            index = mutate(Broadcast::make(op->index, lanes));
+        } else {
             IRMutator::visit(op);
             return;
         }
-        if (op->is_intrinsic(Call::predicated_store) || op->is_intrinsic(Call::predicated_load)) {
-            vector<Expr> new_args(op->args);
-            new_args[1] = merge_predicate(op->args[1], vector_predicate);
-            if (!valid) {
-                expr = op;
-                return;
-            }
-            expr = Call::make(op->type, op->name, new_args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
-            vectorized = true;
-        } else {
-            valid = valid && op->is_pure();
+
+        predicate = merge_predicate(predicate, vector_predicate);
+        if (!valid) {
             expr = op;
+            return;
         }
+        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        vectorized = true;
+    }
+
+    void visit(const Store *op) {
+        valid = valid && should_predicate_store_load(op->value.type().bits());
+        if (!valid) {
+            stmt = op;
+            return;
+        }
+
+        Expr predicate, value, index;
+        if (!op->index.type().is_scalar()) {
+            internal_assert(op->predicate.type().lanes() == lanes);
+            internal_assert(op->index.type().lanes() == lanes);
+            internal_assert(op->value.type().lanes() == lanes);
+
+            predicate = mutate(op->predicate);
+            value = mutate(op->value);
+            index = mutate(op->index);
+        } else if (expr_uses_var(op->index, var)) {
+            predicate = mutate(Broadcast::make(op->predicate, lanes));
+            value = mutate(Broadcast::make(op->value, lanes));
+            index = mutate(Broadcast::make(op->index, lanes));
+        } else {
+            IRMutator::visit(op);
+            return;
+        }
+
+        predicate = merge_predicate(predicate, vector_predicate);
+        if (!valid) {
+            stmt = op;
+            return;
+        }
+        stmt = Store::make(op->name, value, op->index, op->param, predicate);
+        vectorized = true;
     }
 
 public:
