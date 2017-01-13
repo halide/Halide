@@ -2159,7 +2159,8 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
         Value *flipped = codegen_dense_vector_load(flipped_load.as<Load>(), vpred);
         value = shuffle_vectors(flipped, indices);
     } else { // It's not dense vector load, we need to scalarize it
-        Expr load_expr = Expr(op);
+        Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
+                                    op->param, const_true(op->type.lanes()));
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
