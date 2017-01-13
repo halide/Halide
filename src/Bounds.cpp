@@ -734,8 +734,12 @@ private:
     }
 
     void visit(const Shuffle *op) {
-        // TODO: We could consider the bounds of the lanes used by the Shuffle.
-        bounds_of_type(op->type.element_of());
+        Interval result = Interval::nothing();
+        for (Expr i : op->vectors) {
+            i.accept(this);
+            result.include(interval);
+        }
+        interval = result;
     }
 
     void visit(const LetStmt *) {

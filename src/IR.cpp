@@ -557,7 +557,7 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
     }
 
     Shuffle *node = new Shuffle;
-    node->type = element_ty.with_lanes(static_cast<int>(indices.size()));
+    node->type = element_ty.with_lanes((int)indices.size());
     node->vectors = vectors;
     node->indices = indices;
     return node;
@@ -579,7 +579,7 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
 
     std::vector<int> indices;
     for (int i = 0; i < lanes; i++) {
-        for (int j = 0; j < static_cast<int>(vectors.size()); j++) {
+        for (int j = 0; j < (int)vectors.size(); j++) {
             indices.push_back(j * lanes + i);
         }
     }
@@ -596,7 +596,7 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
 
     std::vector<int> indices;
     int lane = 0;
-    for (int i = 0; i < static_cast<int>(vectors.size()); i++) {
+    for (int i = 0; i < (int)vectors.size(); i++) {
         for (int j = 0; j < vectors[i].type().lanes(); j++) {
             indices.push_back(lane++);
         }
@@ -631,9 +631,9 @@ bool Shuffle::is_interleave() const {
         return false;
     }
 
-    for (int i = 0; i < static_cast<int>(vectors.size()); i++) {
+    for (int i = 0; i < (int)vectors.size(); i++) {
         for (int j = 0; j < lanes; j++) {
-            if (indices[j * static_cast<int>(vectors.size()) + i] != i * lanes + j) {
+            if (indices[j * (int)vectors.size() + i] != i * lanes + j) {
                 return false;
             }
         }
