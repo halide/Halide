@@ -334,6 +334,12 @@ class PredicateLoadStore : public IRMutator {
         vectorized = true;
     }
 
+    void visit(const Call *op) {
+        // We should not vectorize calls with side-effects
+        valid = valid && op->is_pure();
+        IRMutator::visit(op);
+    }
+
 public:
     PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t) :
             var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
