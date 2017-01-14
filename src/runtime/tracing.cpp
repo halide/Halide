@@ -47,17 +47,15 @@ public:
         __sync_fetch_and_xor(&lock, exclusive_held_mask);
     }
 
-    bool exclusive_waiter() {
-        return lock & (exclusive_waiting_mask | exclusive_held_mask);
-    }
-
-    SharedExclusiveLock() : lock(0) {}
+    SharedExclusiveSpinLock() : lock(0) {}
 };
 
 class TraceBuffer {
     SharedExclusiveSpinLock lock;
     uint32_t cursor;
-    uint8_t buf[4096*8];
+    uint8_t buf[1024*1024];
+
+public:
 
     // Attempt to atomically acquire space in the buffer to write a
     // packet. Returns NULL if the buffer was full.
@@ -72,8 +70,6 @@ class TraceBuffer {
             return (halide_trace_packet_t *)(buf + my_cursor);
         }
     }
-
-public:
 
     // Wait for all writers to finish with their packets, stall any
     // new writers, and flush the buffer to the fd.
@@ -94,10 +90,8 @@ public:
     halide_trace_packet_t *acquire_packet(void *user_context, int fd, uint32_t size) {
         halide_trace_packet_t *packet = NULL;
         while (!(packet = try_acquire_packet(size))) {
-            // Couldn't acquire space to write a packet. Maybe flush and try again.
-            if (!lock.exclusive_waiter()) {
-                flush(user_context, fd);
-            }
+            // Couldn't acquire space to write a packet. Flush and try again.
+            flush(user_context, fd);
         }
         return packet;
     }
