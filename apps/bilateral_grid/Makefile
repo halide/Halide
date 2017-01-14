@@ -20,7 +20,7 @@ $(BIN)/filter: $(BIN)/bilateral_grid.a filter.cpp
 	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN) filter.cpp $(BIN)/bilateral_grid.a -o $@ $(PNGFLAGS) $(LDFLAGS)
 $(BIN)/filter_viz: $(BIN)/viz/bilateral_grid.a filter.cpp
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN) filter.cpp $(BIN)/viz/bilateral_grid.a -o $@ $(PNGFLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN)/viz filter.cpp $(BIN)/viz/bilateral_grid.a -o $@ $(PNGFLAGS) $(LDFLAGS)
 
 $(BIN)/bilateral_grid.mp4: $(BIN)/filter_viz viz.sh
 	@-mkdir -p $(BIN)
