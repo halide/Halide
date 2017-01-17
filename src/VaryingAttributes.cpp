@@ -1045,12 +1045,12 @@ public:
 
                 // Find the total size of this texture in the two loop
                 // dimensions
-                Expr texture_min_0 = Call::make(Int(32), "extract_buffer_min", {output_texture, 0}, Call::PureIntrinsic);
-                Expr texture_min_1 = Call::make(Int(32), "extract_buffer_min", {output_texture, 1}, Call::PureIntrinsic);
-                Expr texture_extent_0 = Call::make(Int(32), "extract_buffer_max", {output_texture, 0}, Call::PureIntrinsic)
+                Expr texture_min_0 = Call::make(Int(32), Call::buffer_get_min, {output_texture, 0}, Call::Extern);
+                Expr texture_min_1 = Call::make(Int(32), Call::buffer_get_min, {output_texture, 1}, Call::Extern);
+                Expr texture_extent_0 = Call::make(Int(32), Call::buffer_get_max, {output_texture, 0}, Call::Extern)
                     - texture_min_0
                     + 1;
-                Expr texture_extent_1 = Call::make(Int(32), "extract_buffer_max", {output_texture, 1}, Call::PureIntrinsic)
+                Expr texture_extent_1 = Call::make(Int(32), Call::buffer_get_max, {output_texture, 1}, Call::Extern)
                     - texture_min_1
                     + 1;
 
