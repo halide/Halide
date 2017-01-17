@@ -222,6 +222,9 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
+LIBJPEG_LIBS = -ljpeg
+LIBJPEG_CXX_FLAGS ?=
+
 # We're building into the current directory $(CURDIR). Find the Halide
 # repo root directory (the location of the makefile)
 THIS_MAKEFILE = $(realpath $(filter %Makefile, $(MAKEFILE_LIST)))
@@ -834,6 +837,10 @@ endif
 # linker directive on Darwin to ensure halide_weak_device_free() is in fact weak.)
 $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer.cpp $(INCLUDE_DIR)/HalideBuffer.h $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(WEAK_BUFFER_LINKAGE_FLAGS) -o $@
+
+# The image_io test additionally needs to link to libpng and libjpeg
+$(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
+	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(LIBPNG_LIBS) $(LIBJPEG_LIBS) -o $@
 
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
