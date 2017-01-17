@@ -48,7 +48,9 @@ private:
     using IRVisitor::visit;
 
     void visit(const For *op) {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        // For GLSL, the loop bound is not transformed to zero
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) &&
+            op->device_api != DeviceAPI::GLSL) {
             internal_assert(is_zero(op->min));
         }
 
@@ -331,6 +333,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::PointerType *arg_t = i8_t->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
+        // for GLSL, we pass in the kernel ID as the first parameter
+        if (loop->device_api == DeviceAPI::GLSL) {
+            num_args++;
+        }
+
         // nullptr-terminated list
         llvm::Type *gpu_args_arr_type = ArrayType::get(arg_t, num_args+1);
         Value *gpu_args_arr =
@@ -357,21 +364,41 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         for (int i = 0; i < num_args; i++) {
             // get the closure argument
-            string name = closure_args[i].name;
             Value *val;
+            string name;
+            int size_bytes;
+            bool is_buffer;
 
-            if (closure_args[i].is_buffer) {
-                // If it's a buffer, dereference the dev handle
-                val = buffer_dev(sym_get(name + ".buffer"));
-            } else if (ends_with(name, ".varying")) {
-                // Expressions for varying attributes are passed in the
-                // expression mesh. Pass a non-nullptr value in the argument array
-                // to keep it in sync with the argument names encoded in the
-                // shader header
-                val = ConstantInt::get(target_size_t_type, 1);
+            // for GLSL, we pass in the kernel ID as the first parameter
+            if (i == 0 && loop->device_api == DeviceAPI::GLSL) {
+                CodeGen_OpenGL_Dev *glsl_codegen = static_cast<CodeGen_OpenGL_Dev*>(gpu_codegen);
+                val = ConstantInt::get(target_size_t_type, glsl_codegen->kernel_id[kernel_name]);
+                name = "kernel_id." + kernel_name;
+                size_bytes = target_size_t_type->getPrimitiveSizeInBits() / 8;
+                is_buffer = false;
             } else {
-                // Otherwise just look up the symbol
-                val = sym_get(name);
+                // get the closure argument
+                int which_arg = (loop->device_api == DeviceAPI::GLSL) ? (i - 1) : i;
+                name = closure_args[which_arg].name;
+
+                // determine the size of the argument.  Buffer arguments get
+                // the dev field, which is 64-bits.
+                is_buffer = closure_args[which_arg].is_buffer;
+                size_bytes = (is_buffer) ? 8 : closure_args[which_arg].type.bytes();
+
+                if (is_buffer) {
+                    // If it's a buffer, dereference the dev handle
+                    val = buffer_dev(sym_get(name + ".buffer"));
+                } else if (ends_with(name, ".varying")) {
+                    // Expressions for varying attributes are passed in the
+                    // expression mesh. Pass a non-nullptr value in the argument array
+                    // to keep it in sync with the argument names encoded in the
+                    // shader header
+                    val = ConstantInt::get(target_size_t_type, 1);
+                } else {
+                    // Otherwise just look up the symbol
+                    val = sym_get(name);
+                }
             }
 
             // allocate stack space to mirror the closure element. It
@@ -390,9 +417,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument. Buffer arguments get
-            // the dev field, which is 64-bits.
-            int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
+            // store the size of the argument
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
                                  builder->CreateConstGEP2_32(
                                     gpu_arg_sizes_arr_type,
@@ -400,7 +425,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
+            builder->CreateStore(ConstantInt::get(i8_t, is_buffer),
                                  builder->CreateConstGEP2_32(
                                     gpu_arg_is_buffer_arr_type,
                                     gpu_arg_is_buffer_arr,

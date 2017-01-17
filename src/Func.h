@@ -278,6 +278,9 @@ public:
 
     EXPORT Stage &allow_race_conditions();
 
+    EXPORT Stage &shader(VarOrRVar x, VarOrRVar y, VarOrRVar c, DeviceAPI device_api);
+    EXPORT Stage &glsl(VarOrRVar x, VarOrRVar y, VarOrRVar c);
+
     EXPORT Stage &hexagon(VarOrRVar x = Var::outermost());
     EXPORT Stage &prefetch(VarOrRVar var, Expr offset = 1);
     // @}
