@@ -259,9 +259,7 @@ class PredicateLoadStore : public IRMutator {
         valid = valid && should_predicate_store_load(op->type.bits());
         if (!valid) {
             expr = op;
-            return;
-        }
-        if (!op->index.type().is_scalar()) {
+        } else if (!op->index.type().is_scalar()) {
             Expr src = Call::make(Handle().with_lanes(lanes), Call::address_of, {Expr(op)}, Call::Intrinsic);
             expr = Call::make(op->type, Call::predicated_load, {src, vector_predicate}, Call::Intrinsic);
             vectorized = true;
@@ -281,9 +279,7 @@ class PredicateLoadStore : public IRMutator {
         valid = valid && should_predicate_store_load(op->value.type().bits());
         if (!valid) {
             stmt = op;
-            return;
-        }
-        if (!op->index.type().is_scalar()) {
+        } else if (!op->index.type().is_scalar()) {
             internal_assert(op->index.type().lanes() == lanes);
             internal_assert(op->value.type().lanes() == lanes);
             Expr value = mutate(op->value);
@@ -320,21 +316,22 @@ class PredicateLoadStore : public IRMutator {
 
     void visit(const Call *op) {
         if (!valid) {
-            IRMutator::visit(op);
-            return;
-        }
-        if (op->is_intrinsic(Call::predicated_store) || op->is_intrinsic(Call::predicated_load)) {
+            expr = op;
+        } else if (op->is_intrinsic(Call::predicated_store) ||
+                   op->is_intrinsic(Call::predicated_load)) {
             vector<Expr> new_args(op->args);
             new_args[1] = merge_predicate(op->args[1], vector_predicate);
             if (!valid) {
                 expr = op;
-                return;
+            } else {
+                expr = Call::make(op->type, op->name, new_args, op->call_type,
+                                  op->func, op->value_index, op->image, op->param);
+                vectorized = true;
             }
-            expr = Call::make(op->type, op->name, new_args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
-            vectorized = true;
+        } else if (op->is_pure()) {
+            IRMutator::visit(op);
         } else {
-            valid = valid && op->is_pure();
+            valid = false;
             expr = op;
         }
     }
@@ -486,6 +483,23 @@ class VectorSubs : public IRMutator {
 
         if (!changed) {
             expr = op;
+        } else if (op->name == Call::trace) {
+            // Call::trace vectorizes uniquely, because we want a
+            // single trace call for the entire vector, instead of
+            // scalarizing the call and tracing each element.
+            for (size_t i = 1; i <= 2; i++) {
+                // Each struct should be a struct-of-vectors, not a
+                // vector of distinct structs.
+                const Call *call = new_args[i].as<Call>();
+                internal_assert(call && call->is_intrinsic(Call::make_struct));
+                new_args[i] = Call::make(call->type.element_of(), Call::make_struct,
+                                         call->args, Call::Intrinsic);
+            }
+            // One of the arguments to the trace helper
+            // records the number of vector lanes in the type being
+            // stored.
+            new_args[5] = max_lanes;
+            expr = Call::make(op->type, Call::trace, new_args, op->call_type);
         } else {
             // Widen the args to have the same lanes as the max lanes found
             for (size_t i = 0; i < new_args.size(); i++) {

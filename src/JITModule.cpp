@@ -557,7 +557,7 @@ void error_handler_handler(void *context, const char *msg) {
     }
 }
 
-int32_t trace_handler(void *context, const halide_trace_event *e) {
+int32_t trace_handler(void *context, const halide_trace_event_t *e) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
         return (*jit_user_context->handlers.custom_trace)(context, e);

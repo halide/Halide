@@ -2398,114 +2398,6 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         codegen_predicated_vector_load(load_addr, op->args[1]);
 
-    } else if (op->is_intrinsic(Call::trace) ||
-               op->is_intrinsic(Call::trace_expr)) {
-
-        int int_args = (int)(op->args.size()) - 5;
-        internal_assert(int_args >= 0);
-
-        // Make a global string for the func name. Should be the same for all lanes.
-        Value *name = codegen(unbroadcast(op->args[0]));
-
-        // Codegen the event type. Should be the same for all lanes.
-        Value *event_type = codegen(unbroadcast(op->args[1]));
-
-        // Codegen the buffer id
-        Expr id = op->args[2];
-        Value *realization_id;
-        if (id.as<Broadcast>()) {
-            realization_id = codegen(unbroadcast(id));
-        } else {
-            realization_id = codegen(id);
-        }
-
-        // Codegen the value index. Should be the same for all lanes.
-        Value *value_index = codegen(unbroadcast(op->args[3]));
-
-        // Allocate and populate a stack entry for the value arg
-        Type type = op->args[4].type();
-        Value *value_stored_array = create_alloca_at_entry(llvm_type_of(type), 1);
-        Value *value_stored = codegen(op->args[4]);
-        builder->CreateStore(value_stored, value_stored_array);
-        value_stored_array = builder->CreatePointerCast(value_stored_array, i8_t->getPointerTo());
-
-        // Allocate and populate a stack array for the integer args
-        Value *coords;
-        if (int_args > 0) {
-            llvm::Type *coords_type = llvm_type_of(op->args[5].type());
-            coords = create_alloca_at_entry(coords_type, int_args);
-            for (int i = 0; i < int_args; i++) {
-                Value *coord_ptr =
-                    builder->CreateConstInBoundsGEP1_32(
-                        coords_type,
-                        coords,
-                        i);
-                builder->CreateStore(codegen(op->args[5+i]), coord_ptr);
-            }
-            coords = builder->CreatePointerCast(coords, i32_t->getPointerTo());
-        } else {
-            coords = Constant::getNullValue(i32_t->getPointerTo());
-        }
-
-        StructType *halide_type_t_type = module->getTypeByName("struct.halide_type_t");
-        internal_assert(halide_type_t_type) << "Did not find halide_type_t in module.\n";
-        Value *halide_type = create_alloca_at_entry(halide_type_t_type, 1);
-
-        Value *halide_type_members[3] = {
-            ConstantInt::get(i8_t, type.code()),
-            ConstantInt::get(i8_t, type.bits()),
-            ConstantInt::get(i16_t, type.lanes())
-        };
-
-        for (size_t i = 0; i < sizeof(halide_type_members)/sizeof(halide_type_members[0]); i++) {
-            Value *field_ptr =
-                builder->CreateConstInBoundsGEP2_32(
-                    halide_type_t_type,
-                    halide_type,
-                    0,
-                    i);
-            builder->CreateStore(halide_type_members[i], field_ptr);
-        }
-        halide_type = builder->CreateLoad(halide_type);
-
-        StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
-        user_assert(trace_event_type) << "The module being generated does not support tracing.\n";
-        Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
-
-        Value *members[8] = {
-            name,
-            event_type,
-            realization_id,
-            halide_type,
-            value_index,
-            value_stored_array,
-            ConstantInt::get(i32_t, int_args * type.lanes()),
-            coords};
-
-        for (size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++) {
-            Value *field_ptr =
-                builder->CreateConstInBoundsGEP2_32(
-                    trace_event_type,
-                    trace_event,
-                    0,
-                    i);
-            builder->CreateStore(members[i], field_ptr);
-        }
-
-        // Call the runtime function
-        vector<Value *> args(2);
-        args[0] = get_user_context();
-        args[1] = trace_event;
-
-        llvm::Function *trace_fn = module->getFunction("halide_trace");
-        internal_assert(trace_fn);
-
-        value = builder->CreateCall(trace_fn, args);
-
-        if (op->is_intrinsic(Call::trace_expr)) {
-            value = value_stored;
-        }
-
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
@@ -2567,7 +2459,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->type.is_vector()) {
-            // Make a vector-of-structs
+            // Make a vector of pointers to distinct structs
             scalarize(op);
         } else if (op->args.empty()) {
             // Empty structs can be emitted for arrays of size zero
@@ -2585,17 +2477,22 @@ void CodeGen_LLVM::visit(const Call *op) {
                 all_same_type &= op->args[i].type() == op->args[0].type();
             }
 
-            // Use either a fixed-size array or a struct. The struct
-            // type would always be correct, but the array type
-            // produces slightly simpler IR.
-            llvm::Type *aggregate_t = (all_same_type ?
-                                       (llvm::Type *)ArrayType::get(types[0], types.size()) :
-                                       (llvm::Type *)StructType::get(*context, types));
+            // Use either a single scalar, a fixed-size array, or a
+            // struct. The struct type would always be correct, but
+            // the array or scalar type produce slightly simpler IR.
+            if (args.size() == 1) {
+                value = create_alloca_at_entry(types[0], 1);
+                builder->CreateStore(args[0], value);
+            } else {
+                llvm::Type *aggregate_t = (all_same_type ?
+                                           (llvm::Type *)ArrayType::get(types[0], types.size()) :
+                                           (llvm::Type *)StructType::get(*context, types));
 
-            value = create_alloca_at_entry(aggregate_t, 1);
-            for (size_t i = 0; i < args.size(); i++) {
-                Value *elem_ptr = builder->CreateConstInBoundsGEP2_32(aggregate_t, value, 0, i);
-                builder->CreateStore(args[i], elem_ptr);
+                value = create_alloca_at_entry(aggregate_t, 1);
+                for (size_t i = 0; i < args.size(); i++) {
+                    Value *elem_ptr = builder->CreateConstInBoundsGEP2_32(aggregate_t, value, 0, i);
+                    builder->CreateStore(args[i], elem_ptr);
+                }
             }
         }
 

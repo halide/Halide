@@ -9,6 +9,8 @@
 #include <functional>
 #include <map>
 
+#include "Halide.h"
+
 typedef std::map<std::string, std::vector<std::string>> CallGraphs;
 
 // For each producer node, find all functions that it calls.
