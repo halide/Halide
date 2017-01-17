@@ -34,7 +34,7 @@ float16_t toFP16(llvm::APFloat v) {
 
 llvm::APFloat toLLVMAPF(float16_t v) {
     llvm::APInt bitRepr(16, (uint64_t)v.to_bits(), /*isSigned=*/false);
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40  && CAUGHTUP
     llvm::APFloat repr(llvm::APFloat::IEEEhalf(), bitRepr);
 #else
     llvm::APFloat repr(llvm::APFloat::IEEEhalf, bitRepr);
@@ -78,7 +78,7 @@ uint16_t getBitsFrom(T value, RoundingMode roundingMode, const char *typeName) {
     llvm::APFloat convertedValue(value);
     bool losesInfo = false;
     llvm::APFloat::opStatus status = convertedValue.convert(
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
         llvm::APFloat::IEEEhalf(),
 #else
         llvm::APFloat::IEEEhalf,
@@ -91,7 +91,7 @@ uint16_t getBitsFrom(T value, RoundingMode roundingMode, const char *typeName) {
 
 template <>
 uint16_t getBitsFrom(const char *value, RoundingMode roundingMode, const char *typeName) {
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf());
 #else
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
@@ -106,7 +106,7 @@ uint16_t getBitsFrom(const char *value, RoundingMode roundingMode, const char *t
 
 template <>
 uint16_t getBitsFrom(int64_t value, RoundingMode roundingMode, const char *typeName) {
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf());
 #else
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
@@ -166,7 +166,7 @@ float16_t::operator float() const {
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so
     // just pick any.
-#if LLVM_VERSION >= 40 
+#if LLVM_VERSION >= 40 && CAUGHTUP 
     convertedValue.convert(llvm::APFloat::IEEEsingle(), llvm::APFloat::rmNearestTiesToEven, &losesInfo);
 #else
     convertedValue.convert(llvm::APFloat::IEEEsingle, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
@@ -180,7 +180,7 @@ float16_t::operator double() const {
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so
     // just pick any.
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
     convertedValue.convert(llvm::APFloat::IEEEdouble(), llvm::APFloat::rmNearestTiesToEven, &losesInfo);
 #else
     convertedValue.convert(llvm::APFloat::IEEEdouble, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
@@ -190,7 +190,7 @@ float16_t::operator double() const {
 }
 
 float16_t float16_t::make_zero(bool positive) {
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
     llvm::APFloat zero = llvm::APFloat::getZero(llvm::APFloat::IEEEhalf(), !positive);
 #else
     llvm::APFloat zero = llvm::APFloat::getZero(llvm::APFloat::IEEEhalf, !positive);
@@ -199,7 +199,7 @@ float16_t float16_t::make_zero(bool positive) {
 }
 
 float16_t float16_t::make_infinity(bool positive) {
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
     llvm::APFloat inf = llvm::APFloat::getInf(llvm::APFloat::IEEEhalf(), !positive);
 #else
     llvm::APFloat inf = llvm::APFloat::getInf(llvm::APFloat::IEEEhalf, !positive);
@@ -208,7 +208,7 @@ float16_t float16_t::make_infinity(bool positive) {
 }
 
 float16_t float16_t::make_nan() {
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
     llvm::APFloat nan = llvm::APFloat::getNaN(llvm::APFloat::IEEEhalf());
 #else
     llvm::APFloat nan = llvm::APFloat::getNaN(llvm::APFloat::IEEEhalf);

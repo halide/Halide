@@ -27,7 +27,7 @@
 #include <llvm/Linker/Linker.h>
 #include "llvm/Support/ErrorHandling.h"
 #include <llvm/Support/FileSystem.h>
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #else
