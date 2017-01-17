@@ -28,11 +28,9 @@ class StripIdentities : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Call *op) {
-        if (op->is_intrinsic(Call::trace_expr)) {
-            expr = mutate(op->args[4]);
-        } else if (op->is_intrinsic(Call::return_second) ||
-                   op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
+        if (op->is_intrinsic(Call::return_second) ||
+            op->is_intrinsic(Call::likely) ||
+            op->is_intrinsic(Call::likely_if_innermost)) {
             expr = mutate(op->args.back());
         } else {
             IRMutator::visit(op);

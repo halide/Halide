@@ -15,6 +15,33 @@ using std::vector;
 using std::map;
 using std::string;
 
+struct TraceEventBuilder {
+    string func;
+    vector<Expr> value;
+    vector<Expr> coordinates;
+    Type type;
+    enum halide_trace_event_code_t event;
+    Expr parent_id, value_index, dimensions;
+
+    Expr build() {
+        Expr values = Call::make(type_of<void *>(), Call::make_struct,
+                                 value, Call::Intrinsic);
+        Expr coords = Call::make(type_of<int32_t *>(), Call::make_struct,
+                                 coordinates, Call::Intrinsic);
+        Expr idx = value_index;
+        if (!idx.defined()) {
+            idx = 0;
+        }
+
+        vector<Expr> args = {Expr(func),
+                             values, coords,
+                             (int)type.code(), (int)type.bits(), (int)type.lanes(),
+                             (int)event,
+                             parent_id, idx, (int)coordinates.size()};
+        return Call::make(Int(32), Call::trace, args, Call::Extern);
+    }
+};
+
 class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
@@ -88,16 +115,22 @@ private:
         }
 
         if (trace_it) {
-            // Wrap the load in a call to trace_load
-            vector<Expr> args;
-            args.push_back(op->name);
-            args.push_back(halide_trace_load);
-            args.push_back(trace_parent);
-            args.push_back(op->value_index);
-            args.push_back(op);
-            args.insert(args.end(), op->args.begin(), op->args.end());
+            string value_var_name = unique_name('t');
+            Expr value_var = Variable::make(op->type, value_var_name);
 
-            expr = Call::make(op->type, Call::trace_expr, args, Call::Intrinsic);
+            TraceEventBuilder builder;
+            builder.func = op->name;
+            builder.value = {value_var};
+            builder.coordinates = op->args;
+            builder.type = op->type;
+            builder.event = halide_trace_load;
+            builder.parent_id = trace_parent;
+            builder.value_index = op->value_index;
+            Expr trace = builder.build();
+
+            expr = Let::make(value_var_name, op,
+                             Call::make(op->type, Call::return_second,
+                                        {trace, value_var}, Call::PureIntrinsic));
         }
 
     }
@@ -118,15 +151,24 @@ private:
             const vector<Expr> &values = op->values;
             vector<Expr> traces(op->values.size());
 
+            TraceEventBuilder builder;
+            builder.func = f.name();
+            builder.coordinates = op->args;
+            builder.event = halide_trace_store;
+            builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
             for (size_t i = 0; i < values.size(); i++) {
-                vector<Expr> args;
-                args.push_back(f.name());
-                args.push_back(halide_trace_store);
-                args.push_back(Variable::make(Int(32), op->name + ".trace_id"));
-                args.push_back((int)i);
-                args.push_back(values[i]);
-                args.insert(args.end(), op->args.begin(), op->args.end());
-                traces[i] = Call::make(values[i].type(), Call::trace_expr, args, Call::Intrinsic);
+                Type t = values[i].type();
+                string value_var_name = unique_name('t');
+                Expr value_var = Variable::make(t, value_var_name);
+
+                builder.type = t;
+                builder.value_index = (int)i;
+                builder.value = {value_var};
+                Expr trace = builder.build();
+
+                traces[i] = Let::make(value_var_name, values[i],
+                                      Call::make(t, Call::return_second,
+                                                 {trace, value_var}, Call::PureIntrinsic));
             }
 
             stmt = Provide::make(op->name, traces, op->args);
@@ -142,26 +184,22 @@ private:
         if (iter == env.end()) return;
         Function f = iter->second;
         if (f.is_tracing_realizations() || global_level > 0) {
-
             // Throw a tracing call before and after the realize body
-            vector<Expr> args;
-            args.push_back(op->name);
-            args.push_back(halide_trace_begin_realization); // event type for begin realization
-            args.push_back(Variable::make(Int(32), "pipeline.trace_id")); // pipeline id
-            args.push_back(0); // value index
-            args.push_back(0); // value
+            TraceEventBuilder builder;
+            builder.func = op->name;
+            builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
+            builder.event = halide_trace_begin_realization;
 
             for (size_t i = 0; i < op->bounds.size(); i++) {
-                args.push_back(op->bounds[i].min);
-                args.push_back(op->bounds[i].extent);
+                builder.coordinates.push_back(op->bounds[i].min);
+                builder.coordinates.push_back(op->bounds[i].extent);
             }
 
             // Begin realization returns a unique token to pass to further trace calls affecting this buffer.
-
-            Expr call_before = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-            args[1] = halide_trace_end_realization;
-            args[2] = Variable::make(Int(32), op->name + ".trace_id");
-            Expr call_after = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+            Expr call_before = builder.build();
+            builder.event = halide_trace_end_realization;
+            builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
+            Expr call_after = builder.build();
             Stmt new_body = op->body;
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
@@ -172,7 +210,6 @@ private:
             new_body = LetStmt::make(op->name + ".trace_id", 0, new_body);
             stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
         }
-
 
     }
 
@@ -185,12 +222,9 @@ private:
         Function f = iter->second;
         if (f.is_tracing_realizations() || global_level > 0) {
             // Throw a tracing call around each pipeline event
-            vector<Expr> args;
-            args.push_back(op->name);
-            args.push_back(0);
-            args.push_back(Variable::make(Int(32), op->name + ".trace_id"));
-            args.push_back(0); // value index
-            args.push_back(0); // value
+            TraceEventBuilder builder;
+            builder.func = op->name;
+            builder.parent_id = Variable::make(Int(32), op->name + ".trace_id");
 
             // Use the size of the pure step
             const vector<string> f_args = f.args();
@@ -198,24 +232,23 @@ private:
                 Expr min = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".min");
                 Expr max = Variable::make(Int(32), f.name() + ".s0." + f_args[i] + ".max");
                 Expr extent = (max + 1) - min;
-                args.push_back(min);
-                args.push_back(extent);
+                builder.coordinates.push_back(min);
+                builder.coordinates.push_back(extent);
             }
 
-            Expr call;
-            if (op->is_producer) {
-                args[1] = halide_trace_produce;
-                call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-            } else {
-                args[1] = halide_trace_end_consume;
-                call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-                Stmt new_body = Block::make(op->body, Evaluate::make(call));
+            builder.event = (op->is_producer ?
+                             halide_trace_end_produce :
+                             halide_trace_end_consume);
+            Expr call = builder.build();
+            Stmt new_body = Block::make(op->body, Evaluate::make(call));
 
-                stmt = ProducerConsumer::make(op->name, op->is_producer, new_body);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, new_body);
 
-                args[1] = halide_trace_consume;
-                call = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
-            }
+            builder.event = (op->is_producer ?
+                             halide_trace_produce :
+                             halide_trace_consume);
+            call = builder.build();
+
             stmt = LetStmt::make(f.name() + ".trace_id", call, stmt);
         }
     }
@@ -266,14 +299,16 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
 
     if (!s.same_as(original)) {
         // Add pipeline start and end events
-        vector<Expr> args = {pipeline_name,
-                             halide_trace_begin_pipeline,
-                             0, 0, 0};
-        Expr pipeline_start = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+        TraceEventBuilder builder;
+        builder.func = pipeline_name;
+        builder.event = halide_trace_begin_pipeline;
+        builder.parent_id = 0;
 
-        args[1] = halide_trace_end_pipeline;
-        args[2] = Variable::make(Int(32), "pipeline.trace_id");
-        Expr pipeline_end = Call::make(Int(32), Call::trace, args, Call::Intrinsic);
+        Expr pipeline_start = builder.build();
+
+        builder.event = halide_trace_end_pipeline;
+        builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
+        Expr pipeline_end = builder.build();
 
         s = Block::make(s, Evaluate::make(pipeline_end));
         s = LetStmt::make("pipeline.trace_id", pipeline_start, s);

@@ -290,6 +290,9 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 
     EXPORT static Stmt make(std::string name, bool is_producer, Stmt body);
 
+    EXPORT static Stmt make_produce(std::string name, Stmt body);
+    EXPORT static Stmt make_consume(std::string name, Stmt body);
+
     static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
 };
 
@@ -474,8 +477,6 @@ struct Call : public ExprNode<Call> {
         address_of,
         return_second,
         if_then_else,
-        trace,
-        trace_expr,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
@@ -511,7 +512,8 @@ struct Call : public ExprNode<Call> {
         buffer_get_host,
         buffer_set_host_dirty,
         buffer_set_dev_dirty,
-        buffer_init;
+        buffer_init,
+        trace;
 
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference

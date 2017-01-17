@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int count = 0;
-int my_trace(void *user_context, const halide_trace_event *ev) {
+int my_trace(void *user_context, const halide_trace_event_t *ev) {
     if (ev->event == halide_trace_load) {
         count++;
     }

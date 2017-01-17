@@ -30,8 +30,6 @@ int main(int argc, char **argv) {
     for (const std::string &t : targets) {
         Target target(t);
         if (!target.supported()) continue;
-        f.compile_to_file("test_object_" + t, std::vector<Argument>(), "", target);
-        f.compile_to_static_library("test_lib_" + t, std::vector<Argument>(), "", target);
 
         std::string object_name = "test_object_" + t;
         std::string lib_name = "test_lib_" + t;
@@ -42,7 +40,15 @@ int main(int argc, char **argv) {
             object_name += ".o";
             lib_name += ".a";
         }
-        assert(Internal::file_exists(object_name) && "Output file not created.");
+
+        Internal::ensure_no_file_exists(object_name);
+        Internal::ensure_no_file_exists(lib_name);
+
+        f.compile_to_file("test_object_" + t, std::vector<Argument>(), "", target);
+        f.compile_to_static_library("test_lib_" + t, std::vector<Argument>(), "", target);
+
+        Internal::assert_file_exists(object_name);
+        Internal::assert_file_exists(lib_name);
     }
 
     printf("Success!\n");
