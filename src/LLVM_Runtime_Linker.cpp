@@ -12,7 +12,7 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
 
-#if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40 && CAUGHTUP
     auto ret_val = llvm::expectedToErrorOr(
         llvm::parseBitcodeFile(bitcode_buffer, *context));
 #else
