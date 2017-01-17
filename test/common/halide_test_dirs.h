@@ -31,7 +31,7 @@ inline std::string get_test_tmp_dir(const char *subdir = "halide_test") {
     internal_assert(ret != 0);
     std::string dir = std::string(tmp_path) + subdir;
     BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
-    if (!result || GetLastError() != ERROR_ALREADY_EXISTS) {
+    if (!result && GetLastError() != ERROR_ALREADY_EXISTS) {
         assert(!"Could not create temp dir.");
         return "Z:\\UnlikelyPath\\";
     }
