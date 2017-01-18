@@ -222,8 +222,6 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
-$(info libpng version is $(shell libpng-config --version))
-
 LIBJPEG_LIBS = -ljpeg
 LIBJPEG_CXX_FLAGS ?=
 
