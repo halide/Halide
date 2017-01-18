@@ -15,11 +15,6 @@ namespace Internal {
 
 namespace {
 
-Expr slice_vector(Expr vec, Expr start, Expr stride, int lanes) {
-    return Call::make(vec.type().with_lanes(lanes), Call::slice_vector,
-                      { vec, start, stride, lanes }, Call::PureIntrinsic);
-}
-
 // This mutator attempts to rewrite unaligned or strided loads to
 // sequences of aligned loads by loading aligned vectors that cover
 // the original unaligned load, and then slicing or shuffling the
@@ -124,7 +119,7 @@ private:
             Expr dense = make_load(op, dense_index);
 
             // Shuffle the dense load.
-            expr = slice_vector(dense, shift, stride, lanes);
+            expr = Shuffle::make_slice(dense, shift, stride, lanes);
             return;
         }
 
@@ -136,7 +131,7 @@ private:
             Expr native_load = make_load(op, Ramp::make(ramp->base, 1, native_lanes));
 
             // Slice the native load.
-            expr = slice_vector(native_load, 0, 1, lanes);
+            expr = Shuffle::make_slice(native_load, 0, 1, lanes);
             return;
         }
 
@@ -149,7 +144,7 @@ private:
                 Expr slice_base = simplify(ramp->base + i);
                 slices.push_back(make_load(op, Ramp::make(slice_base, 1, slice_lanes)));
             }
-            expr = Call::make(op->type, Call::concat_vectors, slices, Call::PureIntrinsic);
+            expr = Shuffle::make_concat(slices);
             return;
         }
 
@@ -160,7 +155,7 @@ private:
             Expr aligned_base = simplify(ramp->base - aligned_offset);
             Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes*2));
 
-            expr = slice_vector(aligned_load, aligned_offset, 1, lanes);
+            expr = Shuffle::make_slice(aligned_load, aligned_offset, 1, lanes);
             return;
         }
 

@@ -1481,6 +1481,10 @@ void CodeGen_C::visit(const Evaluate *op) {
     stream << "(void)" << id << ";\n";
 }
 
+void CodeGen_C::visit(const Shuffle *op) {
+    internal_error << "Cannot emit vector code to C\n";
+}
+
 void CodeGen_C::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);

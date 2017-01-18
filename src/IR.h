@@ -460,9 +460,6 @@ struct Call : public ExprNode<Call> {
     // declaration.
     typedef const char* const ConstString;
     EXPORT static ConstString debug_to_file,
-        shuffle_vector,
-        interleave_vectors,
-        concat_vectors,
         reinterpret,
         bitwise_and,
         bitwise_not,
@@ -497,7 +494,6 @@ struct Call : public ExprNode<Call> {
         register_destructor,
         div_round_to_zero,
         mod_round_to_zero,
-        slice_vector,
         call_cached_indirect_function,
         prefetch,
         prefetch_2d,
@@ -642,6 +638,52 @@ struct For : public StmtNode<For> {
     }
 
     static const IRNodeType _type_info = IRNodeType::For;
+};
+
+/** Construct a new vector by taking elements from another sequence of
+ * vectors. */
+struct Shuffle : public ExprNode<Shuffle> {
+    std::vector<Expr> vectors;
+
+    /** Indices indicating which vector element to place into the
+     * result. The elements are numbered by their position in the
+     * concatenation of the vector argumentss. */
+    std::vector<int> indices;
+
+    EXPORT static Expr make(const std::vector<Expr> &vectors,
+                            const std::vector<int> &indices);
+
+    /** Convenience constructor for making a shuffle representing an
+     * interleaving of vectors of the same length. */
+    EXPORT static Expr make_interleave(const std::vector<Expr> &vectors);
+
+    /** Convenience constructor for making a shuffle representing a
+     * concatenation of the vectors. */
+    EXPORT static Expr make_concat(const std::vector<Expr> &vectors);
+
+    /** Convenience constructor for making a shuffle representing a
+     * contiguous subset of a vector. */
+    EXPORT static Expr make_slice(Expr vector, int begin, int stride, int size);
+
+    /** Check if this shuffle is an interleaving of the vector
+     * arguments. */
+    EXPORT bool is_interleave() const;
+
+    /** Check if this shuffle is a concatenation of the vector
+     * arguments. */
+    EXPORT bool is_concat() const;
+
+    /** Check if this shuffle is a contiguous strict subset of the
+     * vector arguments, and if so, the offset and stride of the
+     * slice. */
+    ///@{
+    EXPORT bool is_slice() const;
+    int slice_begin() const { return indices[0]; }
+    int slice_stride() const { return indices.size() >= 2 ? indices[1] - indices[0] : 1; }
+    ///@}
+
+
+    static const IRNodeType _type_info = IRNodeType::Shuffle;
 };
 
 }

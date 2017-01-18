@@ -550,6 +550,28 @@ private:
         stream << close_div();
     }
 
+    void visit(const Shuffle *op) {
+        stream << open_span("Shuffle");
+        if (op->is_interleave()) {
+            print_list(symbol("interleave_vectors("), op->vectors, ")");
+        } else if (op->is_concat()) {
+            print_list(symbol("concat_vectors("), op->vectors, ")");
+        } else if (op->is_slice()) {
+            std::vector<Expr> args = op->vectors;
+            args.push_back(op->slice_begin());
+            args.push_back(op->slice_stride());
+            args.push_back(static_cast<int>(op->indices.size()));
+            print_list(symbol("slice_vectors("), args, ")");
+        } else {
+            std::vector<Expr> args = op->vectors;
+            for (int i : op->indices) {
+                args.push_back(i);
+            }
+            print_list(symbol("shuffle("), args, ")");
+        }
+        stream << close_span();
+    }
+
 public:
     void print(Expr ir) {
         ir.accept(this);

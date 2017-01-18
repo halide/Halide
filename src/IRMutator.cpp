@@ -317,6 +317,24 @@ void IRMutator::visit(const Evaluate *op) {
     }
 }
 
+void IRMutator::visit(const Shuffle *op) {
+    vector<Expr > new_vectors(op->vectors.size());
+    bool changed = false;
+
+    for (size_t i = 0; i < op->vectors.size(); i++) {
+        Expr old_vector = op->vectors[i];
+        Expr new_vector = mutate(old_vector);
+        if (!new_vector.same_as(old_vector)) changed = true;
+        new_vectors[i] = new_vector;
+    }
+
+    if (!changed) {
+        expr = op;
+    } else {
+        expr = Shuffle::make(new_vectors, op->indices);
+    }
+}
+
 
 Stmt IRGraphMutator::mutate(Stmt s) {
     auto iter = stmt_replacements.find(s);

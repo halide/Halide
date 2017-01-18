@@ -13,8 +13,8 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::interleave_vectors)) {
+    void visit(const Shuffle *op) {
+        if (op->is_interleave()) {
             result++;
         }
         IRVisitor::visit(op);
