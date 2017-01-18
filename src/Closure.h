@@ -32,6 +32,7 @@ protected:
     void visit(const Store *op);
     void visit(const Allocate *op);
     void visit(const Variable *op);
+    void visit(const Call *op);
 
 public:
     /** Information about a buffer reference from a closure. */
