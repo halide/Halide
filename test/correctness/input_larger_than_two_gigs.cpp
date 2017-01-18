@@ -19,9 +19,8 @@ int main(int argc, char **argv) {
                                   {0, 256, 0}};
     Halide::Buffer<uint8_t> buf(c, 3, shape);
 
-    Buffer<uint8_t> param_buf(buf);
     ImageParam input(UInt(8), 3);
-    input.set(param_buf);
+    input.set(buf);
 
     Var x;
     Func grand_total;

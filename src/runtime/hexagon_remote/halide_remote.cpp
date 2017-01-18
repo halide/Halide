@@ -81,6 +81,14 @@ void halide_free(void *user_context, void *ptr) {
 }
 
 void *halide_get_symbol(const char *name) {
+    // We need to try both RTLD_SELF and RTLD_DEFAULT. Sometimes,
+    // RTLD_SELF finds a symbol when RTLD_DEFAULT does not. This is
+    // surprising, I *think* RLTD_SELF should search a subset of the
+    // symbols searched by RTLD_DEFAULT...
+    void *def = dlsym(RTLD_SELF, name);
+    if (def) {
+        return def;
+    }
     return dlsym(RTLD_DEFAULT, name);
 }
 
@@ -262,7 +270,7 @@ int halide_hexagon_remote_power_hvx_on_mode(int mode) {
             busbwUsagePercentage   = 50;
             break;
         case halide_hvx_power_turbo:
-        default: 
+        default:
             mipsPerThread          = max_mips;
             bwBytePerSec           = max_bus_bw * 4;
             busbwUsagePercentage   = 100;

@@ -104,15 +104,15 @@ void IRPrinter::test() {
     expr_source << (x + 3) * (y / 2 + 17);
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
-    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1,  Parameter());
+    Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1,  Parameter(), const_true());
     Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
     vector<Expr> args(1); args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
-    Stmt store2 = Store::make("out", call + 1, x, Parameter());
+    Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true());
     Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized , DeviceAPI::Host, store2);
 
-    Stmt producer = ProducerConsumer::make("buf", true, for_loop);
-    Stmt consumer = ProducerConsumer::make("buf", false, for_loop2);
+    Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
+    Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
     Stmt pipeline = Block::make(producer, consumer);
 
     Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
@@ -218,6 +218,14 @@ void IRPrinter::print(Stmt ir) {
     ir.accept(this);
 }
 
+void IRPrinter::print_list(const std::vector<Expr> &exprs) {
+    for (size_t i = 0; i < exprs.size(); i++) {
+        print(exprs[i]);
+        if (i < exprs.size() - 1) {
+            stream << ", ";
+        }
+    }
+}
 
 void IRPrinter::do_indent() {
     for (int i = 0; i < indent; i++) stream << ' ';
@@ -435,6 +443,10 @@ void IRPrinter::visit(const Load *op) {
     stream << op->name << "[";
     print(op->index);
     stream << "]";
+    if (!is_one(op->predicate)) {
+        stream << " if ";
+        print(op->predicate);
+    }
 }
 
 void IRPrinter::visit(const Ramp *op) {
@@ -454,16 +466,13 @@ void IRPrinter::visit(const Broadcast *op) {
 void IRPrinter::visit(const Call *op) {
     // TODO: Print indication of C vs C++?
     stream << op->name << "(";
-    if (op->is_intrinsic(Call::reinterpret) || op->is_intrinsic(Call::make_struct)) {
-        // For reinterpret casts, you really need the type too
+    if (op->is_intrinsic(Call::reinterpret) ||
+        op->is_intrinsic(Call::make_struct)) {
+        // For calls that define a type that isn't just a function of
+        // the types of the args, we also print the type.
         stream << op->type << ", ";
     }
-    for (size_t i = 0; i < op->args.size(); i++) {
-        print(op->args[i]);
-        if (i < op->args.size() - 1) {
-            stream << ", ";
-        }
-    }
+    print_list(op->args);
     stream << ")";
 }
 
@@ -531,26 +540,22 @@ void IRPrinter::visit(const Store *op) {
     print(op->index);
     stream << "] = ";
     print(op->value);
+    if (!is_one(op->predicate)) {
+        stream << " if ";
+        print(op->predicate);
+    }
     stream << '\n';
 }
 
 void IRPrinter::visit(const Provide *op) {
     do_indent();
     stream << op->name << "(";
-    for (size_t i = 0; i < op->args.size(); i++) {
-        print(op->args[i]);
-        if (i < op->args.size() - 1) stream << ", ";
-    }
+    print_list(op->args);
     stream << ") = ";
     if (op->values.size() > 1) {
         stream << "{";
     }
-    for (size_t i = 0; i < op->values.size(); i++) {
-        if (i > 0) {
-            stream << ", ";
-        }
-        print(op->values[i]);
-    }
+    print_list(op->values);
     if (op->values.size() > 1) {
         stream << "}";
     }
@@ -652,6 +657,34 @@ void IRPrinter::visit(const Evaluate *op) {
     do_indent();
     print(op->value);
     stream << "\n";
+}
+
+void IRPrinter::visit(const Shuffle *op) {
+    if (op->is_interleave()) {
+        stream << "interleave_vectors(";
+        print_list(op->vectors);
+        stream << ")";
+    } else if (op->is_concat()) {
+        stream << "concat_vectors(";
+        print_list(op->vectors);
+        stream << ")";
+    } else if (op->is_slice()) {
+        stream << "slice_vectors(";
+        print_list(op->vectors);
+        stream << ", " << op->slice_begin() << ", " << op->slice_stride() << ", " << op->indices.size();
+        stream << ")";
+    } else {
+        stream << "shuffle(";
+        print_list(op->vectors);
+        stream << ", ";
+        for (size_t i = 0; i < op->indices.size(); i++) {
+            print(op->indices[i]);
+            if (i < op->indices.size() - 1) {
+                stream << ", ";
+            }
+        }
+        stream << ")";
+    }
 }
 
 }}

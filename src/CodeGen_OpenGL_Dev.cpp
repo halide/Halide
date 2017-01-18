@@ -62,6 +62,11 @@ Type map_type(const Type &type) {
     return result;
 }
 
+char get_lane_suffix(int i) {
+    internal_assert(i >= 0 && i < 4);
+    return "rgba"[i];
+}
+
 // Most GLSL builtins are only defined for float arguments, so we may have to
 // introduce type casts around the arguments and the entire function call.
 Expr call_builtin(const Type &result_type, const string &func,
@@ -282,6 +287,29 @@ void CodeGen_GLSLBase::visit(const GE *op) {
     }
 }
 
+void CodeGen_GLSLBase::visit(const Shuffle *op) {
+    // The halide Shuffle represents the llvm intrinisc
+    // shufflevector, however, for GLSL its use is limited to swizzling
+    // up to a four channel vec type.
+
+    internal_assert(op->vectors.size() == 1);
+
+    int shuffle_lanes = op->type.lanes();
+    internal_assert(shuffle_lanes <= 4);
+
+    string expr = print_expr(op->vectors[0]);
+
+    // Create a swizzle expression for the shuffle
+    string swizzle;
+    for (int i = 0; i != shuffle_lanes; ++i) {
+        int channel = op->indices[i];
+        internal_assert(channel < 4) << "Shuffle of invalid channel";
+        swizzle += get_lane_suffix(channel);
+    }
+
+    print_assignment(op->type, expr + "." + swizzle);
+}
+
 // Identifiers containing double underscores '__' are reserved in GLSL, so we
 // have to use a different name mangling scheme than in the C code generator.
 string CodeGen_GLSLBase::print_name(const string &name) {
@@ -471,11 +499,6 @@ string CodeGen_GLSL::get_vector_suffix(Expr e) {
     }
 }
 
-char CodeGen_GLSL::get_lane_suffix(int i) {
-    internal_assert(i >= 0 && i < 4);
-    return "rgba"[i];
-}
-
 vector<string> CodeGen_GLSL::print_lanes(Expr e) {
     int l = e.type().lanes();
     internal_assert(e.type().is_vector());
@@ -499,6 +522,7 @@ vector<string> CodeGen_GLSL::print_lanes(Expr e) {
 }
 
 void CodeGen_GLSL::visit(const Load *op) {
+    user_assert(is_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
     if (scalar_vars.contains(op->name)) {
         internal_assert(is_zero(op->index));
         id = print_name(op->name);
@@ -523,6 +547,7 @@ void CodeGen_GLSL::visit(const Load *op) {
 }
 
 void CodeGen_GLSL::visit(const Store *op) {
+    user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
     if (scalar_vars.contains(op->name)) {
         internal_assert(is_zero(op->index));
         string val = print_expr(op->value);
@@ -667,69 +692,6 @@ void CodeGen_GLSL::visit(const Call *op) {
         // Output the tagged expression.
         print_expr(op->args[1]);
         return;
-
-    } else if (op->is_intrinsic(Call::shuffle_vector)) {
-        // The halide intrinisc shuffle_vector represents the llvm intrinisc
-        // shufflevector, however, for GLSL its use is limited to swizzling
-        // up to a four channel vec type.
-
-        int shuffle_lanes = op->type.lanes();
-        internal_assert(shuffle_lanes <= 4);
-
-        string expr = print_expr(op->args[0]);
-
-        // If all of the shuffle channel expressions are simple integer
-        // immediates, then we can easily replace them with a swizzle
-        // operator. This is a common case that occurs when a scalar
-        // shuffle vector expression is vectorized.
-        bool all_int = true;
-        for (int i = 0; i != shuffle_lanes && all_int; ++i) {
-            all_int = all_int && (op->args[1 + i].as<IntImm>() != nullptr);
-        }
-
-        // Check if the shuffle maps to a canonical type like .r or .rgb
-        if (all_int) {
-
-            // Create a swizzle expression for the shuffle
-            string swizzle;
-            for (int i = 0; i != shuffle_lanes && all_int; ++i) {
-                int channel = op->args[1 + i].as<IntImm>()->value;
-                internal_assert(channel < 4) << "Shuffle of invalid channel";
-                swizzle += get_lane_suffix(channel);
-            }
-
-            rhs << expr << "." << swizzle;
-
-        } else {
-            // Otherwise, create a result type variable and copy each channel to
-            // it individually.
-
-            // Check to see if the result is a scalar, i.e. we are
-            // extracting a single channel from a vector
-            if (op->type.is_scalar()) {
-                internal_assert(shuffle_lanes == 1) << "Invalid shuffle lanes for scalar result";
-
-                // In this case, no vector suffix is necessary on the LHS
-                rhs << expr << get_vector_suffix(op->args[1]);
-
-            } else {
-
-                string v = unique_name('_');
-                do_indent();
-                stream << print_type(op->type) << " " << v << ";\n";
-
-                // Otherwise, output a vector suffix for the assignment.
-                for (int i = 0; i != shuffle_lanes; ++i) {
-                    do_indent();
-                    stream << v << get_vector_suffix(i) << " = "
-                           << expr << get_vector_suffix(op->args[1 + i])
-                           << ";\n";
-                }
-
-                id = v;
-                return;
-            }
-        }
     } else if (op->is_intrinsic(Call::lerp)) {
         // Implement lerp using GLSL's mix() function, which always uses
         // floating point arithmetic.

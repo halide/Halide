@@ -1,8 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
-#ifndef _MSC_VER
-#include <unistd.h>
-#endif
+
+#include "test/common/halide_test_dirs.h"
 
 using namespace Halide;
 
@@ -18,13 +17,14 @@ int main(int argc, char **argv) {
     g.compute_root();
     h.compute_root();
 
-    const char *result_file = "compile_to_bitcode.bc";
+    std::string result_file = Internal::get_test_tmp_dir() + "compile_to_bitcode.bc";
+
+    Internal::ensure_no_file_exists(result_file);
+
     std::vector<Argument> empty_args;
     j.compile_to_bitcode(result_file, empty_args);
 
-    #ifndef _MSC_VER
-    assert(access("compile_to_bitcode.bc", F_OK) == 0 && "Output file not created.");
-    #endif
+    Internal::assert_file_exists(result_file);
 
     printf("Success!\n");
     return 0;

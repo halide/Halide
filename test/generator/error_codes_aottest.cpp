@@ -55,6 +55,19 @@ int main(int argc, char **argv) {
     check(result, correct);
     in.dim = shape;
 
+    // buffer extent negative, but in a way that doesn't trigger oob checks
+    {
+        halide_dimension_t bad_shape[] = {{0, 64, 1},
+                                          {0, -64, 64}};
+        halide_buffer_t i = in, o = out;
+        i.dim = bad_shape;
+        o.dim = bad_shape;
+
+        result = error_codes(&i, 0, &o);
+        correct = halide_error_code_buffer_extents_negative;
+        check(result, correct);
+    }
+
     // Input buffer larger than 2GB
     halide_dimension_t huge[] = {{0, 10000000, 1},
                                  {0, 10000000, 64}};
