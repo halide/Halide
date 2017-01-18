@@ -2,8 +2,6 @@
 set -e
 set -o pipefail
 
-cat /usr/include/libpng12/png.h
-
 # Note this script assumes that the current working directory
 # is the root of the repository
 if [ ! -f ./.travis.yml ]; then
