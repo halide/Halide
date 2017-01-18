@@ -734,7 +734,7 @@ void Pipeline::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, in
     contents->jit_handlers.custom_do_task = cust_do_task;
 }
 
-void Pipeline::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
+void Pipeline::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->jit_handlers.custom_trace = trace_fn;
 }

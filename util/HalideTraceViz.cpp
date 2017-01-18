@@ -20,6 +20,7 @@ typedef int64_t ssize_t;
 #include <string.h>
 
 #include "inconsolata.h"
+#include "HalideRuntime.h"
 
 namespace {
 
@@ -33,67 +34,53 @@ using std::array;
 const int packet_header_size = 48;
 
 // A struct representing a single Halide tracing packet.
-struct Packet {
-    uint32_t id, parent;
-    uint8_t event, type, bits, width, value_idx, num_int_args;
-    char name[packet_header_size - 14];
-    uint8_t payload[4096 - packet_header_size]; // Not all of this will be used, but this is the max possible packet size.
+struct Packet : public halide_trace_packet_t {
+    // Not all of this will be used, but this
+    // is the max possible packet size we
+    // consider here.
+    uint8_t payload[4096];
 
-    size_t value_bytes() const {
-        size_t bytes_per_elem = 1;
-        while (bytes_per_elem*8 < bits) bytes_per_elem <<= 1;
-        return bytes_per_elem * width;
-    }
-
-    size_t int_args_bytes() const {
-        return sizeof(int) * num_int_args;
-    }
-
-    size_t payload_bytes() const {
-        return value_bytes() + int_args_bytes();
-    }
-
-    int get_int_arg(int idx) const {
-        return ((const int *)(payload + value_bytes()))[idx];
+    int get_coord(int idx) const {
+        return coordinates()[idx];
     }
 
     template<typename T>
     T get_value_as(int idx) const {
-        switch (type) {
-        case 0: // int
-            switch (bits) {
+        switch (type.code) {
+        case halide_type_int:
+            switch (type.bits) {
             case 8:
-                return (T)(((const int8_t *)payload)[idx]);
+                return (T)(((const int8_t *)value())[idx]);
             case 16:
-                return (T)(((const int16_t *)payload)[idx]);
+                return (T)(((const int16_t *)value())[idx]);
             case 32:
-                return (T)(((const int32_t *)payload)[idx]);
+                return (T)(((const int32_t *)value())[idx]);
             case 64:
-                return (T)(((const int64_t *)payload)[idx]);
+                return (T)(((const int64_t *)value())[idx]);
             default:
                 bad_type_error();
             }
             break;
-        case 1: // uint
-            switch (bits) {
+        case halide_type_uint:
+            switch (type.bits) {
             case 8:
-                return (T)(((const uint8_t *)payload)[idx]);
+                return (T)(((const uint8_t *)value())[idx]);
             case 16:
-                return (T)(((const uint16_t *)payload)[idx]);
+                return (T)(((const uint16_t *)value())[idx]);
             case 32:
-                return (T)(((const uint32_t *)payload)[idx]);
+                return (T)(((const uint32_t *)value())[idx]);
             case 64:
-                return (T)(((const uint64_t *)payload)[idx]);
+                return (T)(((const uint64_t *)value())[idx]);
             default:
                 bad_type_error();
             }
             break;
-        case 2: // float
-            switch (bits) {
+        case halide_type_float:
+            switch (type.bits) {
             case 32:
-                return (T)(((const float *)payload)[idx]);
+                return (T)(((const float *)value())[idx]);
             case 64:
-                return (T)(((const double *)payload)[idx]);
+                return (T)(((const double *)value())[idx]);
             default:
                 bad_type_error();
             }
@@ -106,13 +93,20 @@ struct Packet {
 
     // Grab a packet from stdin. Returns false when stdin closes.
     bool read_from_stdin() {
-        if (!read_stdin(this, packet_header_size)) {
+        uint32_t header_size = (uint32_t)sizeof(halide_trace_packet_t);
+        if (!read_stdin(this, header_size)) {
             return false;
         }
-        if (!read_stdin(payload, payload_bytes())) {
-            fprintf(stderr, "Unexpected EOF mid-packet");
+        uint32_t payload_size = size - header_size;
+        if (payload_size > (uint32_t)sizeof(payload)) {
+            fprintf(stderr, "Payload larger than %d bytes in trace stream (%d)\n", (int)sizeof(payload), (int)payload_size);
+            abort();
+            return false;
         }
-        name[sizeof(name)-1] = 0;
+        if (!read_stdin(payload, payload_size)) {
+            fprintf(stderr, "Unexpected EOF mid-packet");
+            return false;
+        }
         return true;
     }
 
@@ -139,7 +133,7 @@ private:
     }
 
     void bad_type_error() const {
-        fprintf(stderr, "Can't visualize packet with type: %d bits: %d\n", type, bits);
+        fprintf(stderr, "Can't visualize packet with type: %d bits: %d\n", type.code, type.bits);
     }
 };
 
@@ -209,18 +203,18 @@ struct FuncInfo {
 
         void observe_load(const Packet &p) {
             observe_load_or_store(p);
-            loads += p.width;
+            loads += p.type.lanes;
         }
 
         void observe_store(const Packet &p) {
             observe_load_or_store(p);
-            stores += p.width;
+            stores += p.type.lanes;
         }
 
         void observe_load_or_store(const Packet &p) {
-            for (int i = 0; i < std::min(16, p.num_int_args / p.width); i++) {
-                for (int lane = 0; lane < p.width; lane++) {
-                    int coord = p.get_int_arg(i*p.width + lane);
+            for (int i = 0; i < std::min(16, p.dimensions / p.type.lanes); i++) {
+                for (int lane = 0; lane < p.type.lanes; lane++) {
+                    int coord = p.get_coord(i*p.type.lanes + lane);
                     if (loads + stores == 0 && lane == 0) {
                         min_coord[i] = coord;
                         max_coord[i] = coord + 1;
@@ -231,7 +225,7 @@ struct FuncInfo {
                 }
             }
 
-            for (int i = 0; i < p.width; i++) {
+            for (int i = 0; i < p.type.lanes; i++) {
                 double value = p.get_value_as<double>(i);
                 if (stores + loads == 0) {
                     min_value = value;
@@ -382,8 +376,6 @@ void usage() {
 }
 
 int run(int argc, char **argv) {
-    static_assert(sizeof(Packet) == 4096, "");
-
     // State that determines how different funcs get drawn
     int frame_width = 1920, frame_height = 1080;
     int decay_factor = 2;
@@ -489,7 +481,7 @@ int run(int argc, char **argv) {
 
     struct PipelineInfo {
         string name;
-        uint32_t id;
+        int32_t id;
     };
 
     map<uint32_t, PipelineInfo> pipeline_info;
@@ -545,24 +537,24 @@ int run(int argc, char **argv) {
         packet_clock++;
 
         // It's a pipeline begin/end event
-        if (p.event == 8) {
-            pipeline_info[p.id] = {p.name, p.id};
+        if (p.event == halide_trace_begin_pipeline) {
+            pipeline_info[p.id] = {p.func(), p.id};
             continue;
-        } else if (p.event == 9) {
-            pipeline_info.erase(p.id);
+        } else if (p.event == halide_trace_end_pipeline) {
+            pipeline_info.erase(p.parent_id);
             continue;
         }
 
-        PipelineInfo pipeline = pipeline_info[p.parent];
+        PipelineInfo pipeline = pipeline_info[p.parent_id];
 
-        string qualified_name = pipeline.name + ":" + p.name;
+        string qualified_name = pipeline.name + ":" + p.func();
 
         if (func_info.find(qualified_name) == func_info.end()) {
-            if (func_info.find(p.name) != func_info.end()) {
-                func_info[qualified_name] = func_info[p.name];
-                func_info.erase(p.name);
+            if (func_info.find(p.func()) != func_info.end()) {
+                func_info[qualified_name] = func_info[p.func()];
+                func_info.erase(p.func());
             } else {
-                fprintf(stderr, "Warning: ignoring func %s\n", qualified_name.c_str());
+                fprintf(stderr, "Warning: ignoring func %s event %d    \n", qualified_name.c_str(), p.event);
             }
         }
 
@@ -579,8 +571,8 @@ int run(int argc, char **argv) {
         }
 
         switch (p.event) {
-        case 0: // load
-        case 1: // store
+        case halide_trace_load:
+        case halide_trace_store:
         {
             int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
 
@@ -598,7 +590,7 @@ int run(int argc, char **argv) {
             if (p.event == 1) {
                 // Stores take time proportional to the number of
                 // items stored times the cost of the func.
-                halide_clock += fi.config.cost * (p.value_bytes() / (p.bits / 8));
+                halide_clock += fi.config.cost * p.type.lanes;
 
                 fi.stats.observe_store(p);
             } else {
@@ -608,14 +600,14 @@ int run(int argc, char **argv) {
             // Check the tracing packet contained enough information
             // given the number of dimensions the user claims this
             // Func has.
-            assert(p.num_int_args >= p.width * fi.config.dims);
-            if (p.num_int_args >= p.width * fi.config.dims) {
-                for (int lane = 0; lane < p.width; lane++) {
+            assert(p.dimensions >= p.type.lanes * fi.config.dims);
+            if (p.dimensions >= p.type.lanes * fi.config.dims) {
+                for (int lane = 0; lane < p.type.lanes; lane++) {
                     // Compute the screen-space x, y coord to draw this.
                     int x = fi.config.x;
                     int y = fi.config.y;
                     for (int d = 0; d < fi.config.dims; d++) {
-                        int a = p.get_int_arg(d * p.width + lane);
+                        int a = p.get_coord(d * p.type.lanes + lane);
                         x += fi.config.zoom * fi.config.x_stride[d] * a;
                         y += fi.config.zoom * fi.config.y_stride[d] * a;
                     }
@@ -650,7 +642,7 @@ int run(int argc, char **argv) {
                             image_color = (int_value * 0x00010101) | 0xff000000;
                         } else {
                             // Color
-                            uint32_t channel = p.get_int_arg(fi.config.color_dim * p.width + lane);
+                            uint32_t channel = p.get_coord(fi.config.color_dim * p.type.lanes + lane);
                             uint32_t mask = ~(255 << (channel * 8));
                             image_color &= mask;
                             image_color |= int_value << (channel * 8);
@@ -674,18 +666,18 @@ int run(int argc, char **argv) {
             }
             break;
         }
-        case 2: // begin realization
+        case halide_trace_begin_realization:
             fi.stats.num_realizations++;
             pipeline_info[p.id] = pipeline;
             break;
-        case 3: // end realization
+        case halide_trace_end_realization:
             if (fi.config.blank_on_end_realization) {
-                assert(p.num_int_args >= 2 * fi.config.dims);
+                assert(p.dimensions >= 2 * fi.config.dims);
                 int x_min = fi.config.x, y_min = fi.config.y;
                 int x_extent = 0, y_extent = 0;
                 for (int d = 0; d < fi.config.dims; d++) {
-                    int m = p.get_int_arg(d * 2 + 0);
-                    int e = p.get_int_arg(d * 2 + 1);
+                    int m = p.get_coord(d * 2 + 0);
+                    int e = p.get_coord(d * 2 + 1);
                     x_min += fi.config.zoom * fi.config.x_stride[d] * m;
                     y_min += fi.config.zoom * fi.config.y_stride[d] * m;
                     x_extent += fi.config.zoom * fi.config.x_stride[d] * e;
@@ -699,18 +691,23 @@ int run(int argc, char **argv) {
                     }
                 }
             }
-            pipeline_info.erase(p.parent);
+            pipeline_info.erase(p.parent_id);
             break;
-        case 4: // produce
+        case halide_trace_produce:
             pipeline_info[p.id] = pipeline;
             fi.stats.num_productions++;
             break;
-        case 5: // update
+        case halide_trace_end_produce:
+            pipeline_info.erase(p.parent_id);
             break;
-        case 6: // consume
+        case halide_trace_consume:
+            pipeline_info[p.id] = pipeline;
             break;
-        case 7: // end consume
-            pipeline_info.erase(p.parent);
+        case halide_trace_end_consume:
+            pipeline_info.erase(p.parent_id);
+            break;
+        case halide_trace_begin_pipeline:
+        case halide_trace_end_pipeline:
             break;
         default:
             fprintf(stderr, "Unknown tracing event code: %d\n", p.event);

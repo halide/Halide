@@ -19,7 +19,7 @@ using std::string;
 stack<string> stack_trace;
 
 
-int my_trace(void *user_context, const halide_trace_event *e) {
+int my_trace(void *user_context, const halide_trace_event_t *e) {
     const string event_types[] = {"Load ",
                                   "Store ",
                                   "Begin realization ",

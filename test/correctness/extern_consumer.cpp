@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 #ifdef _WIN32
@@ -47,7 +49,9 @@ bool check_result() {
         "64\n"
         "81\n";
 
-    FILE *f = fopen("halide_test_extern_consumer.txt", "r");
+    std::string path = Internal::get_test_tmp_dir() + "halide_test_extern_consumer.txt";
+    Internal::assert_file_exists(path);
+    FILE *f = fopen(path.c_str(), "r");
     char result[1024];
     size_t bytes_read = fread(&result[0], 1, 1023, f);
     result[bytes_read] = 0;
@@ -84,7 +88,10 @@ int main(int argc, char **argv) {
     sink.compile_jit();
 
     // Dump the first 10 squares to a file
-    filename.set("halide_test_extern_consumer.txt");
+    std::string path = Internal::get_test_tmp_dir() + "halide_test_extern_consumer.txt";
+    Internal::ensure_no_file_exists(path);
+
+    filename.set(path.c_str());
     min.set(0);
     extent.set(10);
     sink.realize();

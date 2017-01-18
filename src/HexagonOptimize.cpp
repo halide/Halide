@@ -666,8 +666,7 @@ private:
                 // so duplicate each lane until we're wide enough.
                 Expr e = op->args[0];
                 while (src_type.bits() < dst_type.bits()) {
-                    e = Call::make(src_type.with_lanes(src_type.lanes()*2),
-                                   Call::interleave_vectors, {e, e}, Call::PureIntrinsic);
+                    e = Shuffle::make_interleave({e, e});
                     src_type = src_type.with_bits(src_type.bits()*2);
                     e = reinterpret(src_type, e);
                 }
@@ -1031,13 +1030,6 @@ class EliminateInterleaves : public IRMutator {
             return;
         }
 
-        if (op->is_intrinsic(Call::concat_vectors)) {
-            // The loads we care about for storage deinterleaving are
-            // concat_vectors calls.
-            visit_concat_vectors(op);
-            return;
-        }
-
         vector<Expr> args(op->args);
 
         // mutate all the args.
@@ -1152,13 +1144,18 @@ class EliminateInterleaves : public IRMutator {
     }
 
     void visit(const Store *op) {
+        Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
 
         if (buffers.contains(op->name)) {
             // When inspecting the stores to a buffer, update the state.
             BufferState &state = buffers.ref(op->name);
-            if (yields_removable_interleave(value)) {
+            if (!is_one(predicate)) {
+                // TODO(psuriana): This store is predicated. Mark the buffer as
+                // not interleaved for now.
+                state = BufferState::NotInterleaved;
+            } else if (yields_removable_interleave(value)) {
                 // The value yields a removable interleave. If we aren't tracking
                 // this buffer, mark it as interleaved.
                 if (state == BufferState::Unknown) {
@@ -1178,35 +1175,36 @@ class EliminateInterleaves : public IRMutator {
         if (deinterleave_buffers.contains(op->name)) {
             // We're deinterleaving this buffer, remove the interleave
             // from the store.
+            internal_assert(is_one(predicate)) << "The store shouldn't have been predicated.\n";
             value = remove_interleave(value);
         }
 
-        if (value.same_as(op->value) && index.same_as(op->index)) {
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 
     // We need to be able to find loads of multiples of pairs from a
     // buffer, concatenated into one vector.
-    static const std::string *is_double_vector_load(const Call *op) {
-        if (!op->is_intrinsic(Call::concat_vectors)) {
+    static const std::string *is_double_vector_load(const Shuffle *op) {
+        if (!op->is_concat()) {
             return nullptr;
         }
 
-        if (op->args.size() % 2 != 0) {
+        if (op->vectors.size() % 2 != 0) {
             return nullptr;
         }
 
-        Expr first = op->args.front();
+        Expr first = op->vectors.front();
         const Load *example = first.as<Load>();
         if (!example) {
             return nullptr;
         }
 
-        for (size_t i = 1; i < op->args.size(); i++) {
-            const Load *load_i = op->args[i].as<Load>();
+        for (size_t i = 1; i < op->vectors.size(); i++) {
+            const Load *load_i = op->vectors[i].as<Load>();
             if (!load_i || load_i->name != example->name) {
                 return nullptr;
             }
@@ -1214,23 +1212,24 @@ class EliminateInterleaves : public IRMutator {
         return &example->name;
     }
 
-    void visit_concat_vectors(const Call *op) {
-        expr = op;
+    void visit(const Shuffle *op) {
+        if (op->is_concat()) {
+            expr = op;
+            const std::string *load_from = is_double_vector_load(op);
+            if (load_from) {
+                if (buffers.contains(*load_from)) {
+                    // We don't want to actually do anything to the buffer
+                    // state here. We know we can interleave the load if
+                    // necessary, but we don't want to cause it to be
+                    // interleaved unless it is a useful improvement,
+                    // which is only true if any of the stores are
+                    // actually interleaved (and don't just yield an
+                    // interleave).
+                }
 
-        const std::string *load_from = is_double_vector_load(op);
-        if (load_from) {
-            if (buffers.contains(*load_from)) {
-                // We don't want to actually do anything to the buffer
-                // state here. We know we can interleave the load if
-                // necessary, but we don't want to cause it to be
-                // interleaved unless it is a useful improvement,
-                // which is only true if any of the stores are
-                // actually interleaved (and don't just yield an
-                // interleave).
-            }
-
-            if (deinterleave_buffers.contains(*load_from)) {
-                expr = native_interleave(expr);
+                if (deinterleave_buffers.contains(*load_from)) {
+                    expr = native_interleave(expr);
+                }
             }
         } else {
             IRMutator::visit(op);
@@ -1363,6 +1362,11 @@ class OptimizeShuffles : public IRMutator {
             IRMutator::visit(op);
             return;
         }
+        if (!is_one(op->predicate)) {
+            // TODO(psuriana): We shouldn't mess with predicated load for now.
+            IRMutator::visit(op);
+            return;
+        }
         if (!op->type.is_vector() || op->index.as<Ramp>()) {
             // Don't handle scalar or simple vector loads.
             IRMutator::visit(op);
@@ -1398,7 +1402,7 @@ class OptimizeShuffles : public IRMutator {
                     // returns a native vector size to account for this.
                     Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                           Ramp::make(base, 1, const_extent),
-                                          op->image, op->param);
+                                          op->image, op->param, const_true(const_extent));
 
                     // We know the size of the LUT is not more than 256, so we
                     // can safely cast the index to 8 bit, which
@@ -1411,7 +1415,7 @@ class OptimizeShuffles : public IRMutator {
             }
         }
         if (!index.same_as(op->index)) {
-            expr = Load::make(op->type, op->name, index, op->image, op->param);
+            expr = Load::make(op->type, op->name, index, op->image, op->param, op->predicate);
         } else {
             expr = op;
         }

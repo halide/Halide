@@ -229,13 +229,17 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param) {
+Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param, Expr predicate) {
+    internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
+    internal_assert(type.lanes() == predicate.type().lanes())
+        << "Vector lanes of Load must match vector lanes of predicate\n";
 
     Load *node = new Load;
     node->type = type;
     node->name = name;
+    node->predicate = predicate;
     node->index = index;
     node->image = image;
     node->param = param;
@@ -313,6 +317,14 @@ Stmt ProducerConsumer::make(std::string name, bool is_producer, Stmt body) {
     return node;
 }
 
+Stmt ProducerConsumer::make_produce(std::string name, Stmt body) {
+    return ProducerConsumer::make(name, true, body);
+}
+
+Stmt ProducerConsumer::make_consume(std::string name, Stmt body) {
+    return ProducerConsumer::make(name, false, body);
+}
+
 Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
     internal_assert(extent.defined()) << "For of undefined\n";
@@ -330,12 +342,17 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Device
     return node;
 }
 
-Stmt Store::make(std::string name, Expr value, Expr index, Parameter param) {
+Stmt Store::make(std::string name, Expr value, Expr index, Parameter param, Expr predicate) {
+    internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
+    internal_assert(value.type().lanes() == index.type().lanes()) << "Vector lanes of Store must match vector lanes of index\n";
+    internal_assert(value.type().lanes() == predicate.type().lanes())
+        << "Vector lanes of Store must match vector lanes of predicate\n";
 
     Store *node = new Store;
     node->name = name;
+    node->predicate = predicate;
     node->value = value;
     node->index = index;
     node->param = param;
@@ -542,6 +559,144 @@ Expr Variable::make(Type type, std::string name, Buffer<> image, Parameter param
     return node;
 }
 
+Expr Shuffle::make(const std::vector<Expr> &vectors,
+                   const std::vector<int> &indices) {
+    internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
+    internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
+    Type element_ty = vectors.front().type().element_of();
+    int input_lanes = 0;
+    for (Expr i : vectors) {
+        internal_assert(i.type().element_of() == element_ty) << "Shuffle of vectors of mismatched types.\n";
+        input_lanes += i.type().lanes();
+    }
+    for (int i : indices) {
+        internal_assert(0 <= i && i < input_lanes) << "Shuffle vector index out of range: " << i << "\n";
+    }
+
+    Shuffle *node = new Shuffle;
+    node->type = element_ty.with_lanes((int)indices.size());
+    node->vectors = vectors;
+    node->indices = indices;
+    return node;
+}
+
+Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
+    internal_assert(!vectors.empty()) << "Interleave of zero vectors.\n";
+
+    if (vectors.size() == 1) {
+        return vectors.front();
+    }
+
+    int lanes = vectors.front().type().lanes();
+
+    for (Expr i : vectors) {
+        internal_assert(i.type().lanes() == lanes)
+            << "Interleave of vectors with different sizes.\n";
+    }
+
+    std::vector<int> indices;
+    for (int i = 0; i < lanes; i++) {
+        for (int j = 0; j < (int)vectors.size(); j++) {
+            indices.push_back(j * lanes + i);
+        }
+    }
+
+    return make(vectors, indices);
+}
+
+Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
+    internal_assert(!vectors.empty()) << "Concat of zero vectors.\n";
+
+    if (vectors.size() == 1) {
+        return vectors.front();
+    }
+
+    std::vector<int> indices;
+    int lane = 0;
+    for (int i = 0; i < (int)vectors.size(); i++) {
+        for (int j = 0; j < vectors[i].type().lanes(); j++) {
+            indices.push_back(lane++);
+        }
+    }
+
+    return make(vectors, indices);
+}
+
+Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
+    if (begin == 0 && size == vector.type().lanes() && stride == 1) {
+        return vector;
+    }
+
+    std::vector<int> indices;
+    for (int i = 0; i < size; i++) {
+        indices.push_back(begin + i * stride);
+    }
+
+    return make({vector}, indices);
+}
+
+bool Shuffle::is_interleave() const {
+    int lanes = vectors.front().type().lanes();
+    for (Expr i : vectors) {
+        if (i.type().lanes() != lanes) {
+            return false;
+        }
+    }
+
+    // Require that we are a complete interleaving.
+    if (lanes * vectors.size() != indices.size()) {
+        return false;
+    }
+
+    for (int i = 0; i < (int)vectors.size(); i++) {
+        for (int j = 0; j < lanes; j++) {
+            if (indices[j * (int)vectors.size() + i] != i * lanes + j) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+namespace {
+
+// Helper function to determine if a sequence of indices is a
+// contiguous ramp.
+bool is_ramp(const std::vector<int> &indices, int stride = 1) {
+    for (size_t i = 0; i + 1 < indices.size(); i++) {
+        if (indices[i + 1] != indices[i] + stride) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+bool Shuffle::is_concat() const {
+    size_t input_lanes = 0;
+    for (Expr i : vectors ) {
+        input_lanes += i.type().lanes();
+    }
+
+    // A concat is a ramp where the output has the same number of
+    // lanes as the input.
+    return indices.size() == input_lanes && is_ramp(indices);
+}
+
+bool Shuffle::is_slice() const {
+    size_t input_lanes = 0;
+    for (Expr i : vectors ) {
+        input_lanes += i.type().lanes();
+    }
+
+    // A slice is a ramp where the output does not contain all of the
+    // lanes of the input.
+    return indices.size() < input_lanes && is_ramp(indices, slice_stride());
+}
+
+
 template<> void ExprNode<IntImm>::accept(IRVisitor *v) const { v->visit((const IntImm *)this); }
 template<> void ExprNode<UIntImm>::accept(IRVisitor *v) const { v->visit((const UIntImm *)this); }
 template<> void ExprNode<FloatImm>::accept(IRVisitor *v) const { v->visit((const FloatImm *)this); }
@@ -569,6 +724,7 @@ template<> void ExprNode<Load>::accept(IRVisitor *v) const { v->visit((const Loa
 template<> void ExprNode<Ramp>::accept(IRVisitor *v) const { v->visit((const Ramp *)this); }
 template<> void ExprNode<Broadcast>::accept(IRVisitor *v) const { v->visit((const Broadcast *)this); }
 template<> void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Call *)this); }
+template<> void ExprNode<Shuffle>::accept(IRVisitor *v) const { v->visit((const Shuffle *)this); }
 template<> void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
 template<> void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
 template<> void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
@@ -584,9 +740,6 @@ template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((con
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
-Call::ConstString Call::shuffle_vector = "shuffle_vector";
-Call::ConstString Call::interleave_vectors = "interleave_vectors";
-Call::ConstString Call::concat_vectors = "concat_vectors";
 Call::ConstString Call::reinterpret = "reinterpret";
 Call::ConstString Call::bitwise_and = "bitwise_and";
 Call::ConstString Call::bitwise_not = "bitwise_not";
@@ -603,8 +756,6 @@ Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
 Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
 Call::ConstString Call::undef = "undef";
 Call::ConstString Call::address_of = "address_of";
-Call::ConstString Call::trace = "trace";
-Call::ConstString Call::trace_expr = "trace_expr";
 Call::ConstString Call::return_second = "return_second";
 Call::ConstString Call::if_then_else = "if_then_else";
 Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
@@ -622,13 +773,10 @@ Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
 Call::ConstString Call::register_destructor = "register_destructor";
 Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
-Call::ConstString Call::slice_vector = "slice_vector";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
 Call::ConstString Call::prefetch = "prefetch";
 Call::ConstString Call::prefetch_2d = "prefetch_2d";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
-Call::ConstString Call::predicated_store = "predicated_store";
-Call::ConstString Call::predicated_load = "predicated_load";
 Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
@@ -642,6 +790,7 @@ Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
 Call::ConstString Call::buffer_set_device_dirty = "_halide_buffer_set_device_dirty";
 Call::ConstString Call::buffer_init = "_halide_buffer_init";
 Call::ConstString Call::buffer_init_from_buffer = "_halide_buffer_init_from_buffer";
+Call::ConstString Call::trace = "halide_trace_helper";
 
 }
 }

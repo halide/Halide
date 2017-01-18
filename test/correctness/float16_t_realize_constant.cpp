@@ -26,12 +26,10 @@ int main() {
     Buffer<float16_t> simple = f.realize(10, 3);
 
     // Read result back
-    for (int y = 0; y < 3; y++) {
-        for (int x = 0; x < 10; x++) {
-            h_assert(simple(x, y) == float16_t(0.75), "Invalid value read back");
-            h_assert(simple(x, y).to_bits() == 0x3a00, "Bit pattern incorrect");
-        }
-    }
+    simple.for_each_value([&](float16_t f) {
+        h_assert(f == float16_t(0.75), "Invalid value read back");
+        h_assert(f.to_bits() == 0x3a00, "Bit pattern incorrect");
+    });
 
     printf("Success!\n");
     return 0;

@@ -16,21 +16,9 @@ extern "C" DLLEXPORT int translate(halide_buffer_t *in, int dx, int dy, halide_b
         in->dim[0].extent = out->dim[0].extent;
         in->dim[1].extent = out->dim[1].extent;
     } else {
-        assert(in->type == halide_type_of<uint8_t>());
-        assert(out->type == halide_type_of<uint8_t>());
-        for (int y = out->dim[1].min; y < out->dim[1].min + out->dim[1].extent; y++) {
-            for (int x = out->dim[0].min; x < out->dim[0].min + out->dim[0].extent; x++) {
-                int in_x = x + dx;
-                int in_y = y + dy;
-                uint8_t *in_ptr = (in->host +
-                                   (in_x - in->dim[0].min)*in->dim[0].stride +
-                                   (in_y - in->dim[1].min)*in->dim[1].stride);
-                uint8_t *out_ptr = (out->host +
-                                    (x - out->dim[0].min)*out->dim[0].stride +
-                                    (y - out->dim[1].min)*out->dim[1].stride);
-                *out_ptr = *in_ptr;
-            }
-        }
+        Halide::Runtime::Buffer<uint8_t> out_buf(*out);
+        out_buf.translate(dx, dy);
+        out_buf.copy_from(Halide::Runtime::Buffer<uint8_t>(*in));
     }
 
     return 0;

@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 bool error_occurred = false;
@@ -63,12 +65,18 @@ int main(int argc, char **argv) {
             .set_bounds(0, image1.dim(1).extent());
     error_occurred = false;
     h.realize(image1);
+
+    std::string assembly_file = Internal::get_test_tmp_dir() + "h.s";
+    Internal::ensure_no_file_exists(assembly_file);
+
     // Also check it compiles ok without an inferred argument list
-    h.compile_to_assembly("h.s", {image1}, "h");
+    h.compile_to_assembly(assembly_file, {image1}, "h");
     if (error_occurred) {
         printf("Error incorrectly raised when constraining output buffer\n");
         return -1;
     }
+
+    Internal::assert_file_exists(assembly_file);
 
     printf("Success!\n");
     return 0;
