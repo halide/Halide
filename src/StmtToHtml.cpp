@@ -261,6 +261,10 @@ private:
         stream << close_span();
         print(op->index);
         stream << matched("]");
+        if (!is_one(op->predicate)) {
+            stream << " " << keyword("if") << " ";
+            print(op->predicate);
+        }
         stream << close_span();
     }
     void visit(const Ramp *op) {
@@ -383,6 +387,10 @@ private:
         stream << " " << span("Operator Assign Matched", "=") << " ";
         stream << open_span("StoreValue");
         print(op->value);
+        if (!is_one(op->predicate)) {
+            stream << " " << keyword("if") << " ";
+            print(op->predicate);
+        }
         stream << close_span();
         stream << close_div();
     }

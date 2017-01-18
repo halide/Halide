@@ -182,7 +182,7 @@ class KeyInfo {
 #if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(UInt(8), key_name, index, Buffer<>(), Parameter())},
+                               {Load::make(UInt(8), key_name, index, Buffer<>(), Parameter(), const_true())},
                                Call::PureIntrinsic);
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
@@ -235,14 +235,16 @@ public:
         Expr top_level_name_size = (int32_t)top_level_name.size();
         writes.push_back(Store::make(key_name,
                                      Cast::make(Int(32), top_level_name_size),
-                                     (index / Int(32).bytes()), Parameter()));
+                                     (index / Int(32).bytes()), Parameter(),
+                                     const_true()));
         index += 4;
         writes.push_back(call_copy_memory(key_name, top_level_name, index));
         // Align to four byte boundary again.
         index += top_level_name_size;
         size_t alignment = 4 + top_level_name.size();
         while (alignment % 4) {
-            writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index, Parameter()));
+            writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index,
+                                         Parameter(), const_true()));
             index = index + 1;
             alignment++;
         }
@@ -266,7 +268,7 @@ public:
         writes.push_back(Store::make(key_name,
                                      StringImm::make(std::to_string(top_level_name.size()) + ":" + top_level_name +
                                                      std::to_string(function_name.size()) + ":" + function_name),
-                                     (index / Handle().bytes()), Parameter()));
+                                     (index / Handle().bytes()), Parameter(), const_true()));
         size_t alignment = Handle().bytes();
         index += Handle().bytes();
 
@@ -274,7 +276,8 @@ public:
         static std::atomic<int> memoize_instance {0};
         writes.push_back(Store::make(key_name,
                                      memoize_instance++,
-                                     (index / Int(32).bytes()), Parameter()));
+                                     (index / Int(32).bytes()),
+                                     Parameter(), const_true()));
         alignment += 4;
         index += 4;
 #endif
@@ -282,7 +285,8 @@ public:
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
             while (alignment % needed_alignment) {
-                writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index, Parameter()));
+                writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0),
+                                             index, Parameter(), const_true()));
                 index = index + 1;
                 alignment++;
             }
@@ -291,7 +295,8 @@ public:
         for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
             writes.push_back(Store::make(key_name,
                                          i.second.value_expr,
-                                         (index / i.second.size_expr), Parameter()));
+                                         (index / i.second.size_expr),
+                                         Parameter(), const_true()));
             index += i.second.size_expr;
         }
         Stmt blocks = Block::make(writes);
@@ -307,7 +312,7 @@ public:
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter())},
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true())},
                                   Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -330,7 +335,7 @@ public:
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter())},
+                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true())},
                                   Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -529,7 +534,7 @@ private:
             call->name == Call::buffer_init) {
             internal_assert(call->args.size() >= 2)
                 << "RewriteMemoizedAllocations: _halide_buffer_init call with fewer than two args.\n";
-            
+
             // Grab the host pointer argument
             const Call *arg1 = call->args[1].as<Call>();
             if (arg1 != nullptr && arg1->is_intrinsic(Call::address_of)) {

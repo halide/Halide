@@ -172,7 +172,7 @@ private:
             expr = op;
         } else {
             Type t = op->type.with_lanes(new_lanes);
-            expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
+            expr = Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate));
         }
     }
 
@@ -280,24 +280,6 @@ private:
                 args.push_back(i*lane_stride + starting_lane);
             }
             expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
-        } else if (op->is_intrinsic(Call::predicated_load) ||
-                   op->is_intrinsic(Call::predicated_store)) {
-
-            const Call *addr = op->args[0].as<Call>();
-            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
-                << "The second argument to predicated store/load must be call to address_of\n";
-            internal_assert(addr->args.size() == 1) << "address_of should only take 1 argument";
-
-            std::vector<Expr> args(op->args.size());
-            args[0] = Call::make(Handle().with_lanes(new_lanes), addr->name, {mutate(addr->args[0])},
-                                 addr->call_type, addr->func, addr->value_index, addr->image, addr->param);
-            for (size_t i = 1; i < args.size(); i++) {
-                args[i] = mutate(op->args[i]);
-            }
-
-            expr = Call::make(t, op->name, args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
-
         } else {
 
             // Vector calls are always parallel across the lanes, so we
@@ -520,10 +502,17 @@ class Interleaver : public IRMutator {
 
         should_deinterleave = false;
         Expr idx = mutate(op->index);
-        expr = Load::make(op->type, op->name, idx, op->image, op->param);
         if (should_deinterleave) {
-            expr = deinterleave_expr(expr);
+            idx = deinterleave_expr(idx);
         }
+
+        should_deinterleave = false;
+        Expr predicate = mutate(op->predicate);
+        if (should_deinterleave) {
+            predicate = deinterleave_expr(predicate);
+        }
+
+        expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
@@ -545,7 +534,13 @@ class Interleaver : public IRMutator {
             value = deinterleave_expr(value);
         }
 
-        stmt = Store::make(op->name, value, idx, op->param);
+        should_deinterleave = false;
+        Expr predicate = mutate(op->predicate);
+        if (should_deinterleave) {
+            predicate = deinterleave_expr(predicate);
+        }
+
+        stmt = Store::make(op->name, value, idx, op->param, predicate);
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
@@ -602,6 +597,7 @@ class Interleaver : public IRMutator {
             Type t = store->value.type();
             Expr base;
             std::vector<Expr> args(stores.size());
+            std::vector<Expr> predicates(stores.size());
 
             int min_offset = 0;
             std::vector<int> offsets(stores.size());
@@ -635,6 +631,8 @@ class Interleaver : public IRMutator {
                     // TODO: Could we consider mutating the RHS so that we can handle more complex Expr's than just loads?
                     const Load *load = stores[i].as<Store>()->value.as<Load>();
                     if (!load) goto fail;
+                    // TODO(psuriana): Predicated load is not currently handled.
+                    if (!is_one(load->predicate)) goto fail;
 
                     const Ramp *ramp = load->index.as<Ramp>();
                     if (!ramp) goto fail;
@@ -670,10 +668,14 @@ class Interleaver : public IRMutator {
                 if (args[j].defined()) goto fail;
 
                 if (stride == 1) {
-                    args[j] = Load::make(t, load_name, stores[i].as<Store>()->index, load_image, load_param);
+                    // Convert multiple dense vector stores of strided vector loads
+                    // into one dense vector store of interleaving dense vector loads.
+                    args[j] = Load::make(t, load_name, stores[i].as<Store>()->index,
+                                         load_image, load_param, const_true(t.lanes()));
                 } else {
                     args[j] = stores[i].as<Store>()->value;
                 }
+                predicates[j] = stores[i].as<Store>()->predicate;
             }
 
             // One of the stores should have had the minimum offset.
@@ -683,7 +685,8 @@ class Interleaver : public IRMutator {
             t = t.with_lanes(lanes*stores.size());
             Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
             Expr value = Call::make(t, Call::interleave_vectors, args, Call::PureIntrinsic);
-            Stmt new_store = Store::make(store->name, value, index, store->param);
+            Expr predicate = Call::make(t, Call::interleave_vectors, predicates, Call::PureIntrinsic);
+            Stmt new_store = Store::make(store->name, value, index, store->param, predicate);
 
             // Continue recursively into the stuff that
             // collect_strided_stores didn't collect.
@@ -740,9 +743,9 @@ void deinterleave_vector_test() {
     check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
-    check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter()),
-          Load::make(ramp_a.type(), "buf", ramp_a, Buffer<>(), Parameter()),
-          Load::make(ramp_b.type(), "buf", ramp_b, Buffer<>(), Parameter()));
+    check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter(), const_true(ramp.type().lanes())),
+          Load::make(ramp_a.type(), "buf", ramp_a, Buffer<>(), Parameter(), const_true(ramp_a.type().lanes())),
+          Load::make(ramp_b.type(), "buf", ramp_b, Buffer<>(), Parameter(), const_true(ramp_b.type().lanes())));
 
     std::cout << "deinterleave_vector test passed" << std::endl;
 }

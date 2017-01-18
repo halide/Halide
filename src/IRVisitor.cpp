@@ -111,6 +111,7 @@ void IRVisitor::visit(const Select *op) {
 }
 
 void IRVisitor::visit(const Load *op) {
+    op->predicate.accept(this);
     op->index.accept(this);
 }
 
@@ -168,6 +169,7 @@ void IRVisitor::visit(const For *op) {
 }
 
 void IRVisitor::visit(const Store *op) {
+    op->predicate.accept(this);
     op->value.accept(this);
     op->index.accept(this);
 }
@@ -348,6 +350,7 @@ void IRGraphVisitor::visit(const Select *op) {
 }
 
 void IRGraphVisitor::visit(const Load *op) {
+    include(op->predicate);
     include(op->index);
 }
 
@@ -392,6 +395,7 @@ void IRGraphVisitor::visit(const For *op) {
 }
 
 void IRGraphVisitor::visit(const Store *op) {
+    include(op->predicate);
     include(op->value);
     include(op->index);
 }

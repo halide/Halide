@@ -39,8 +39,9 @@ private:
 
     // Rewrite a load to have a new index, updating the type if necessary.
     Expr make_load(const Load *load, Expr index) {
+        internal_assert(is_one(load->predicate)) << "Load should not be predicated.\n";
         return mutate(Load::make(load->type.with_lanes(index.type().lanes()), load->name,
-                                 index, load->image, load->param));
+                                 index, load->image, load->param, const_true(index.type().lanes())));
     }
 
     void visit(const Call *op) {
@@ -53,6 +54,12 @@ private:
     }
 
     void visit(const Load *op) {
+        if (!is_one(op->predicate)) {
+            // TODO(psuriana): Do nothing to predicated loads for now.
+            IRMutator::visit(op);
+            return;
+        }
+
         if (!op->type.is_vector()) {
             // Nothing to do for scalar loads.
             IRMutator::visit(op);

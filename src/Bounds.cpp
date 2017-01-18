@@ -546,7 +546,8 @@ private:
         if (interval.is_single_point()) {
             // If the index is const we can return the load of that index
             Expr load_min =
-                Load::make(op->type.element_of(), op->name, interval.min, op->image, op->param);
+                Load::make(op->type.element_of(), op->name, interval.min,
+                           op->image, op->param, op->predicate);
             interval = Interval::single_point(load_min);
         } else {
             // Otherwise use the bounds of the type
@@ -1498,7 +1499,8 @@ void bounds_test() {
     check(scope, x*y, select(y < 0, y*10, 0), select(y < 0, 0, y*10));
     check(scope, x/(x+y), Interval::neg_inf, Interval::pos_inf);
     check(scope, 11/(x+1), 1, 11);
-    check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter()), make_const(Int(8), -128), make_const(Int(8), 127));
+    check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()),
+                 make_const(Int(8), -128), make_const(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
 
@@ -1539,8 +1541,8 @@ void bounds_test() {
           cast<uint8_t>(clamp(cast<uint16_t>(x/y), cast<uint16_t>(0), cast<uint16_t>(128))),
           make_const(UInt(8), 0), make_const(UInt(8), 128));
 
-    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter()));
-    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter()));
+    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()));
+    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           make_const(UInt(16), 0), make_const(UInt(16), 255*2));
 
