@@ -1929,7 +1929,6 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
     if (!module) {
         // Construct a new ModuleState and add it to the global list
         module = (ModuleState *)malloc(sizeof(ModuleState));
-        module->kernel = NULL;
         module->num_kernels = 0;
         module->max_kernels = max_kernel_increment;
         module->kernel = (KernelInfo**)malloc(sizeof(KernelInfo*) *
@@ -1964,7 +1963,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             KernelInfo** new_kernels = (KernelInfo**)malloc(
                 sizeof(KernelInfo*) * (module->max_kernels + max_kernel_increment));
 
-            if (!module->kernel) {
+            if (!new_kernels) {
                 error(user_context) << "Unable to allocate memory for more kernels";
             }
 
@@ -1978,8 +1977,7 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             module->max_kernels += max_kernel_increment;
         }
 
-        KernelInfo *kernel = module->kernel[module->num_kernels];
-        kernel = create_kernel(user_context, this_kernel, len);
+        KernelInfo *kernel = create_kernel(user_context, this_kernel, len);
 
         if (!kernel) {
             error(user_context) << "Invalid kernel: " << this_kernel;

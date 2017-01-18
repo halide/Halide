@@ -2181,7 +2181,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
 Func &Func::shader(Var x, Var y, Var c, DeviceAPI device_api) {
     invalidate_cache();
 
-    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_blocks(x, y, device_api);
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).shader(x, y, c, device_api);
 
     // Ensure the channel dimension is bounded
     bool constant_bounds = false;
