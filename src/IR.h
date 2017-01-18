@@ -501,7 +501,8 @@ struct Call : public ExprNode<Call> {
         indeterminate_expression,
         bool_to_mask,
         cast_mask,
-        select_mask;
+        select_mask,
+        extract_mask_element;
 
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
@@ -665,6 +666,10 @@ struct Shuffle : public ExprNode<Shuffle> {
      * contiguous subset of a vector. */
     EXPORT static Expr make_slice(Expr vector, int begin, int stride, int size);
 
+    /** Convenience constructor for making a shuffle representing
+     * extracting a single element. */
+    EXPORT static Expr make_extract_element(Expr vector, int i);
+
     /** Check if this shuffle is an interleaving of the vector
      * arguments. */
     EXPORT bool is_interleave() const;
@@ -682,6 +687,9 @@ struct Shuffle : public ExprNode<Shuffle> {
     int slice_stride() const { return indices.size() >= 2 ? indices[1] - indices[0] : 1; }
     ///@}
 
+    /** Check if this shuffle is extracting a scalar from the vector
+     * arguments. */
+    EXPORT bool is_extract_element() const;
 
     static const IRNodeType _type_info = IRNodeType::Shuffle;
 };
