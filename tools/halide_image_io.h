@@ -11,12 +11,13 @@
 #include <string>
 #include <vector>
 
-#ifndef HALIDE_NOPNG
-#define PNG_DEBUG 0
+#ifndef HALIDE_NO_PNG
 #include "png.h"
 #endif
 
+#ifndef HALIDE_NO_JPEG
 #include "jpeglib.h"
+#endif
 
 namespace Halide {
 namespace Tools {
@@ -118,7 +119,7 @@ struct FileOpener {
     FILE * const f;
 };
 
-#ifndef HALIDE_NOPNG
+#ifndef HALIDE_NO_PNG
 struct PngRowPointers {
     PngRowPointers(int height, int rowbytes) : p(new png_bytep[height]), height(height) {
         if (p != nullptr) {
@@ -138,16 +139,16 @@ struct PngRowPointers {
     png_bytep* const p;
     int const height;
 };
-#endif // HALIDE_NOPNG
+#endif // HALIDE_NO_PNG
 
 }  // namespace Internal
 
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_png(const std::string &filename, ImageType *im) {
-#ifdef HALIDE_NOPNG
+#ifdef HALIDE_NO_PNG
     return false;
-#else // HALIDE_NOPNG
+#else // HALIDE_NO_PNG
     png_byte header[8];
     png_structp png_ptr;
     png_infop info_ptr;
@@ -232,15 +233,15 @@ bool load_png(const std::string &filename, ImageType *im) {
 
     im->set_host_dirty();
     return true;
-#endif // HALIDE_NOPNG
+#endif // HALIDE_NO_PNG
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_png(ImageType &im, const std::string &filename) {
-#ifdef HALIDE_NOPNG
+#ifdef HALIDE_NO_PNG
     return false;
-#else // HALIDE_NOPNG
+#else // HALIDE_NO_PNG
     png_structp png_ptr;
     png_infop info_ptr;
     png_byte color_type;
@@ -332,7 +333,7 @@ bool save_png(ImageType &im, const std::string &filename) {
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
     return true;
-#endif // HALIDE_NOPNG
+#endif // HALIDE_NO_PNG
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
@@ -585,6 +586,9 @@ bool save_ppm(ImageType &im, const std::string &filename) {
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_jpg(ImageType &im, const std::string &filename) {
+#ifdef HALIDE_NO_JPEG
+    return false;
+#else
     im.copy_to_host();
 
     int channels = 1;
@@ -653,10 +657,14 @@ bool save_jpg(ImageType &im, const std::string &filename) {
     jpeg_destroy_compress(&cinfo);
 
     return true;
+#endif
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_jpg(const std::string &filename, ImageType *im) {
+#ifdef HALIDE_NO_JPEG
+    return false;
+#else
     struct jpeg_decompress_struct cinfo;
     struct jpeg_error_mgr jerr;
 
@@ -701,6 +709,7 @@ bool load_jpg(const std::string &filename, ImageType *im) {
     jpeg_destroy_decompress(&cinfo);
 
     return true;
+#endif
 }
 
 
