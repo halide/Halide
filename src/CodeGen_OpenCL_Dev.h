@@ -73,6 +73,7 @@ protected:
         void visit(const Allocate *op);
         void visit(const Free *op);
         void visit(const AssertStmt *op);
+        void visit(const Shuffle *op);
     };
 
     std::ostringstream src_stream;

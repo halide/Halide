@@ -215,12 +215,11 @@ private:
             } else {
                 // Uh-oh, we don't know how to deinterleave this vector expression
                 // Make llvm do it
-                std::vector<Expr> args;
-                args.push_back(op);
+                std::vector<int> indices;
                 for (int i = 0; i < new_lanes; i++) {
-                    args.push_back(starting_lane + lane_stride * i);
+                    indices.push_back(starting_lane + lane_stride * i);
                 }
-                expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
+                expr = Shuffle::make({op}, indices);
             }
         }
     }
@@ -240,46 +239,14 @@ private:
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             expr = op;
-        } else if (op->is_intrinsic(Call::interleave_vectors)) {
-            internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
-            if ((int)op->args.size() == lane_stride) {
-                expr = op->args[starting_lane];
-            } else if ((int)op->args.size() % lane_stride == 0) {
-                // Pick up every lane-stride arg.
-                std::vector<Expr> new_args(op->args.size() / lane_stride);
-                for (size_t i = 0; i < new_args.size(); i++) {
-                    new_args[i] = op->args[i*lane_stride + starting_lane];
-                }
-                expr = Call::make(t, Call::interleave_vectors, new_args, Call::PureIntrinsic);
-            } else {
-                // Interleave some vectors then deinterleave by some other factor...
-                // Brute force!
-                std::vector<Expr> args;
-                args.push_back(op);
-                for (int i = 0; i < new_lanes; i++) {
-                    args.push_back(i*lane_stride + starting_lane);
-                }
-                expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
-            }
-        } else if (op->is_intrinsic(Call::shuffle_vector)) {
-            // Extract every nth numeric arg to the shuffle.
-            std::vector<Expr> args;
-            args.push_back(op->args[0]);
-            for (int i = 0; i < new_lanes; i++) {
-                int idx = i * lane_stride + starting_lane + 1;
-                internal_assert(idx >= 0 && idx < int(op->args.size()));
-                args.push_back(op->args[idx]);
-            }
-            expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
         } else if (op->is_intrinsic(Call::glsl_texture_load)) {
             // glsl_texture_load returns a <uint x 4> result. Deinterleave by
             // wrapping the call in a shuffle_vector
-            std::vector<Expr> args;
-            args.push_back(op);
+            std::vector<int> indices;
             for (int i = 0; i < new_lanes; i++) {
-                args.push_back(i*lane_stride + starting_lane);
+                indices.push_back(i*lane_stride + starting_lane);
             }
-            expr = Call::make(t, Call::shuffle_vector, args, Call::PureIntrinsic);
+            expr = Shuffle::make({op}, indices);
         } else {
 
             // Vector calls are always parallel across the lanes, so we
@@ -316,6 +283,38 @@ private:
             expr = Let::make(op->name, op->value, expr);
         } else {
             IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Shuffle *op) {
+        if (op->is_interleave()) {
+            internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
+            if ((int)op->vectors.size() == lane_stride) {
+                expr = op->vectors[starting_lane];
+            } else if ((int)op->vectors.size() % lane_stride == 0) {
+                // Pick up every lane-stride vector.
+                std::vector<Expr> new_vectors(op->vectors.size() / lane_stride);
+                for (size_t i = 0; i < new_vectors.size(); i++) {
+                    new_vectors[i] = op->vectors[i*lane_stride + starting_lane];
+                }
+                expr = Shuffle::make_interleave(new_vectors);
+            } else {
+                // Interleave some vectors then deinterleave by some other factor...
+                // Brute force!
+                std::vector<int> indices;
+                for (int i = 0; i < new_lanes; i++) {
+                    indices.push_back(i*lane_stride + starting_lane);
+                }
+                expr = Shuffle::make({op}, indices);
+            }
+        } else {
+            // Extract every nth numeric arg to the shuffle.
+            std::vector<int> indices;
+            for (int i = 0; i < new_lanes; i++) {
+                int idx = i * lane_stride + starting_lane;
+                indices.push_back(op->indices[idx]);
+            }
+            expr = Shuffle::make({op}, indices);
         }
     }
 };
@@ -389,14 +388,12 @@ class Interleaver : public IRMutator {
         } else if (num_lanes == 2) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
-            return Call::make(e.type(), Call::interleave_vectors,
-                              {a, b}, Call::PureIntrinsic);
+            return Shuffle::make_interleave({a, b});
         } else if (num_lanes == 3) {
             Expr a = extract_mod3_lanes(e, 0, vector_lets);
             Expr b = extract_mod3_lanes(e, 1, vector_lets);
             Expr c = extract_mod3_lanes(e, 2, vector_lets);
-            return Call::make(e.type(), Call::interleave_vectors,
-                              {a, b, c}, Call::PureIntrinsic);
+            return Shuffle::make_interleave({a, b, c});
         } else if (num_lanes == 4) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
@@ -404,8 +401,7 @@ class Interleaver : public IRMutator {
             Expr ab = extract_odd_lanes(a, vector_lets);
             Expr ba = extract_even_lanes(b, vector_lets);
             Expr bb = extract_odd_lanes(b, vector_lets);
-            return Call::make(e.type(), Call::interleave_vectors,
-                              {aa, ba, ab, bb}, Call::PureIntrinsic);
+            return Shuffle::make_interleave({aa, ba, ab, bb});
         } else {
             // Give up and don't do anything clever for >4
             return e;
@@ -700,8 +696,8 @@ class Interleaver : public IRMutator {
             // Generate a single interleaving store.
             t = t.with_lanes(lanes*stores.size());
             Expr index = Ramp::make(base, make_one(base.type()), t.lanes());
-            Expr value = Call::make(t, Call::interleave_vectors, args, Call::PureIntrinsic);
-            Expr predicate = Call::make(t, Call::interleave_vectors, predicates, Call::PureIntrinsic);
+            Expr value = Shuffle::make_interleave(args);
+            Expr predicate = Shuffle::make_interleave(predicates);
             Stmt new_store = Store::make(store->name, value, index, store->param, predicate);
 
             // Continue recursively into the stuff that

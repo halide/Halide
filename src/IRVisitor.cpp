@@ -225,6 +225,12 @@ void IRVisitor::visit(const Evaluate *op) {
     op->value.accept(this);
 }
 
+void IRVisitor::visit(const Shuffle *op) {
+    for (Expr i : op->vectors) {
+        i.accept(this);
+    }
+}
+
 void IRGraphVisitor::include(const Expr &e) {
     if (visited.count(e.get())) {
         return;
@@ -447,6 +453,12 @@ void IRGraphVisitor::visit(const IfThenElse *op) {
 
 void IRGraphVisitor::visit(const Evaluate *op) {
     include(op->value);
+}
+
+void IRGraphVisitor::visit(const Shuffle *op) {
+    for (Expr i : op->vectors) {
+        include(i);
+    }
 }
 
 }

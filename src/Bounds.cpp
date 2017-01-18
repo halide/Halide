@@ -730,6 +730,15 @@ private:
         }
     }
 
+    void visit(const Shuffle *op) {
+        Interval result = Interval::nothing();
+        for (Expr i : op->vectors) {
+            i.accept(this);
+            result.include(interval);
+        }
+        interval = result;
+    }
+
     void visit(const LetStmt *) {
         internal_error << "Bounds of statement\n";
     }
