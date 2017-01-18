@@ -12,6 +12,7 @@
 #include <vector>
 
 #ifndef HALIDE_NOPNG
+#define PNG_DEBUG 0
 #include "png.h"
 #endif
 
