@@ -228,6 +228,12 @@ add_custom_command(OUTPUT "${INITMOD_PREFIX}declarations.cpp"
   COMMENT "HalideRuntime.h -> ${INITMOD_PREFIX}declarations.cpp")
 list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}declarations.cpp")
 
+add_custom_command(OUTPUT "${INITMOD_PREFIX}inlined_c.cpp"
+  DEPENDS "${NATIVE_RUNTIME_DIR}buffer_t.cpp"
+  COMMAND binary2cpp "initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
+  COMMENT "buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp")
+list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
+
 set(HEADER_FILES
   AddImageChecks.h
   AddParameterChecks.h
