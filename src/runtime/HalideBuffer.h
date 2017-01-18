@@ -16,14 +16,6 @@
 
 #include "HalideRuntime.h"
 
-// Certain methods of Buffer *must* be inlined for reasonable
-// performance in debug builds.
-#ifdef _MSC_VER
-#define ALWAYS_INLINE __forceinline
-#else
-#define ALWAYS_INLINE __attribute__((always_inline))
-#endif
-
 #ifndef EXPORT
 #if defined(_WIN32) && defined(Halide_SHARED)
 #ifdef Halide_EXPORTS
