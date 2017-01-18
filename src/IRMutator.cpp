@@ -91,11 +91,12 @@ void IRMutator::visit(const Select *op)  {
 }
 
 void IRMutator::visit(const Load *op) {
+    Expr predicate = mutate(op->predicate);
     Expr index = mutate(op->index);
-    if (index.same_as(op->index)) {
+    if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
         expr = op;
     } else {
-        expr = Load::make(op->type, op->name, index, op->image, op->param);
+        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
     }
 }
 
@@ -192,12 +193,13 @@ void IRMutator::visit(const For *op) {
 }
 
 void IRMutator::visit(const Store *op) {
+    Expr predicate = mutate(op->predicate);
     Expr value = mutate(op->value);
     Expr index = mutate(op->index);
-    if (value.same_as(op->value) && index.same_as(op->index)) {
+    if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
     } else {
-        stmt = Store::make(op->name, value, index, op->param);
+        stmt = Store::make(op->name, value, index, op->param, predicate);
     }
 }
 

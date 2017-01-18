@@ -499,6 +499,7 @@ vector<string> CodeGen_GLSL::print_lanes(Expr e) {
 }
 
 void CodeGen_GLSL::visit(const Load *op) {
+    user_assert(is_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
     if (scalar_vars.contains(op->name)) {
         internal_assert(is_zero(op->index));
         id = print_name(op->name);
@@ -523,6 +524,7 @@ void CodeGen_GLSL::visit(const Load *op) {
 }
 
 void CodeGen_GLSL::visit(const Store *op) {
+    user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
     if (scalar_vars.contains(op->name)) {
         internal_assert(is_zero(op->index));
         string val = print_expr(op->value);

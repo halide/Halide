@@ -121,6 +121,7 @@ private:
     }
 
     void visit(const Store *op) {
+        Expr predicate = mutate(op->predicate);
         Expr value = op->value;
         if (op->value.type().is_bool()) {
             Type ty = UInt(8, op->value.type().lanes());
@@ -131,10 +132,10 @@ private:
         value = mutate(value);
         Expr index = mutate(op->index);
 
-        if (value.same_as(op->value) && index.same_as(op->index)) {
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 

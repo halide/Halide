@@ -3785,15 +3785,22 @@ private:
     }
 
     void visit(const Load *op) {
-        // Load of a broadcast should be broadcast of the load
+        Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
-        if (const Broadcast *b = index.as<Broadcast>()) {
-            Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
-            expr = Broadcast::make(load, b->lanes);
-        } else if (index.same_as(op->index)) {
+
+        const Broadcast *b_index = index.as<Broadcast>();
+        const Broadcast *b_pred = predicate.as<Broadcast>();
+        if (is_zero(predicate)) {
+            // Predicate is always false
+            expr = undef(op->type);
+        } else if (b_index && b_pred) {
+            // Load of a broadcast should be broadcast of the load
+            Expr load = Load::make(op->type.element_of(), op->name, b_index->value, op->image, op->param, b_pred->value);
+            expr = Broadcast::make(load, b_index->lanes);
+        } else if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
             expr = op;
         } else {
-            expr = Load::make(op->type, op->name, index, op->image, op->param);
+            expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
         }
     }
 
@@ -3946,11 +3953,29 @@ private:
             }
             int terms = (int)new_args.size();
 
+            // Try to collapse an interleave of broadcast into a single broadcast.
+            const Broadcast *b1 = new_args[0].as<Broadcast>();
+            if (b1) {
+                bool can_collapse = true;
+                for (size_t i = 1; i < new_args.size() && can_collapse; i++) {
+                    if (const Broadcast *b2 = new_args[i].as<Broadcast>()) {
+                        Expr check = mutate(b1->value - b2->value);
+                        can_collapse &= is_zero(check);
+                    } else {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    expr = Broadcast::make(b1->value, b1->lanes * terms);
+                    return;
+                }
+            }
+
             // Try to collapse an interleave of ramps into a single ramp.
             const Ramp *r = new_args[0].as<Ramp>();
             if (r) {
                 bool can_collapse = true;
-                for (size_t i = 1; i < new_args.size(); i++) {
+                for (size_t i = 1; i < new_args.size() && can_collapse; i++) {
                     // If we collapse these terms into a single ramp,
                     // the new stride is going to be the old stride
                     // divided by the number of terms, so the
@@ -3975,11 +4000,15 @@ private:
             // Try to collapse an interleave of strided loads of ramps
             // from the same buffer into a single load of a ramp.
             if (const Load *first_load = new_args[0].as<Load>()) {
+                vector<Expr> load_predicates;
                 vector<Expr> load_indices;
+                bool always_true = true;
                 for (Expr e : new_args) {
                     const Load *load = e.as<Load>();
                     if (load && load->name == first_load->name) {
+                        load_predicates.push_back(load->predicate);
                         load_indices.push_back(load->index);
+                        always_true = always_true && is_one(load->predicate);
                     }
                 }
 
@@ -3987,10 +4016,18 @@ private:
                     Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
                     Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::PureIntrinsic);
                     interleaved_index = mutate(interleaved_index);
+                    Expr interleaved_predicate;
+                    if (always_true) {
+                        interleaved_predicate = const_true(t.lanes());
+                    } else {
+                        interleaved_predicate = Call::make(t, Call::interleave_vectors, load_predicates, Call::PureIntrinsic);
+                        interleaved_predicate = mutate(interleaved_predicate);
+                    }
                     if (interleaved_index.as<Ramp>()) {
                         t = first_load->type;
                         t = t.with_lanes(t.lanes() * terms);
-                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image, first_load->param);
+                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image,
+                                          first_load->param, interleaved_predicate);
                         return;
                     }
                 }
@@ -4012,51 +4049,6 @@ private:
                 expr = mutate(b->value);
             } else {
                 internal_error << "Unreachable";
-            }
-        } else if (op->is_intrinsic(Call::predicated_store)) {
-            IRMutator::visit(op);
-            const Call *store = expr.as<Call>();
-
-            Expr pred = store->args[1];
-            internal_assert(pred.defined());
-            if (is_zero(pred)) {
-                // Predicate of a predicated store is always false
-                expr = make_zero(op->type);
-                return;
-            }
-
-            internal_assert(store->args.size() == 3) << "predicated_store takes three arguments: {store addr, predicate, value}\n";
-            const Call *addr = store->args[0].as<Call>();
-            internal_assert(addr && (addr->is_intrinsic(Call::address_of)))
-                << "The first argument to predicated_store must be call to address_of of the store\n";
-            const Broadcast *broadcast = addr->args[0].as<Broadcast>();
-            const Load *load = broadcast ? broadcast->value.as<Load>() : addr->args[0].as<Load>();
-            internal_assert(load) << "The sole argument to address_of must be a load or broadcast of load\n";
-
-            const Call *val = store->args[2].as<Call>();
-            if (val && val->is_intrinsic(Call::predicated_load)) {
-                const Call *load_addr = val->args[0].as<Call>();
-                internal_assert(load_addr);
-                const Broadcast *b = load_addr->args[0].as<Broadcast>();
-                const Load *l = b ? b->value.as<Load>() : load_addr->args[0].as<Load>();
-                Expr store_index = broadcast ? Broadcast::make(load->index, broadcast->lanes) : load->index;
-                Expr val_index = b ? Broadcast::make(l->index, b->lanes) : l->index;
-                if (l && (l->name == load->name) && equal(val_index, store_index)) {
-                    // foo[ramp(x, 0, 1)] = foo[ramp(x, 0, 1)] is a no-op
-                    expr = make_zero(op->type);
-                }
-            }
-
-        } else if (op->is_intrinsic(Call::predicated_load)) {
-            IRMutator::visit(op);
-            const Call *call = expr.as<Call>();
-
-            Expr pred = call->args[1];
-            internal_assert(pred.defined());
-            if (is_zero(pred)) {
-                // Predicate of a predicated load is always false. Replace
-                // with undef
-                expr = undef(call->type);
             }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
@@ -4532,18 +4524,26 @@ private:
     }
 
     void visit(const Store *op) {
+        Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
 
         const Load *load = value.as<Load>();
+        const Broadcast *scalar_pred = predicate.as<Broadcast>();
 
-        if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
+        if (is_zero(predicate)) {
+            // Predicate is always false
+            stmt = Evaluate::make(0);
+        } else if (scalar_pred && !is_one(scalar_pred->value)) {
+            stmt = IfThenElse::make(scalar_pred->value,
+                                    Store::make(op->name, value, index, op->param, const_true(value.type().lanes())));
+        } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
             // foo[x] = foo[x] or foo[x] = undef is a no-op
             stmt = Evaluate::make(0);
-        } else if (value.same_as(op->value) && index.same_as(op->index)) {
+        } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 
@@ -5978,9 +5978,9 @@ void simplify_test() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8));
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -5988,7 +5988,7 @@ void simplify_test() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
         e = interleave_vectors({load1, load3});
         check(e, e);
 
@@ -6014,18 +6014,9 @@ void simplify_test() {
     {
         Expr pred = ramp(x*y + x*z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
-
-        Expr load = Load::make(index.type(), "f", index, Buffer<>(), Parameter());
-        Expr src = Call::make(Handle().with_lanes(8), Call::address_of, {load}, Call::Intrinsic);
-        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
-
-        Expr dest = Call::make(Handle().with_lanes(8), Call::address_of,
-                               {Load::make(index.type(), "f", index, Buffer<>(), Parameter())},
-                               Call::Intrinsic);
-        Stmt stmt = Evaluate::make(Call::make(value.type(), Call::predicated_store,
-                                         {dest, pred, value},
-                                         Call::Intrinsic));
-        check(stmt, Evaluate::make(make_zero(value.type())));
+        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()));
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred);
+        check(stmt, Evaluate::make(0));
     }
 
     std::cout << "Simplify test passed" << std::endl;

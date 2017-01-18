@@ -299,6 +299,7 @@ void IRComparer::visit(const Select *op) {
 void IRComparer::visit(const Load *op) {
     const Load *e = expr.as<Load>();
     compare_names(op->name, e->name);
+    compare_expr(e->predicate, op->predicate);
     compare_expr(e->index, op->index);
 }
 
@@ -369,6 +370,7 @@ void IRComparer::visit(const Store *op) {
 
     compare_names(s->name, op->name);
 
+    compare_expr(s->predicate, op->predicate);
     compare_expr(s->value, op->value);
     compare_expr(s->index, op->index);
 }

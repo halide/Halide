@@ -66,10 +66,11 @@ class MarkClampedRampsAsLikely : public IRMutator {
         Expr index = mutate(op->index);
         in_index = old_in_index;
         Expr value = mutate(op->value);
-        if (index.same_as(op->index) && value.same_as(op->value)) {
+        Expr predicate = mutate(op->predicate);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index) && value.same_as(op->value)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 

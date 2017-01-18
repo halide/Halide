@@ -229,13 +229,17 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param) {
+Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param, Expr predicate) {
+    internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
+    internal_assert(type.lanes() == predicate.type().lanes())
+        << "Vector lanes of Load must match vector lanes of predicate\n";
 
     Load *node = new Load;
     node->type = type;
     node->name = name;
+    node->predicate = predicate;
     node->index = index;
     node->image = image;
     node->param = param;
@@ -338,12 +342,17 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Device
     return node;
 }
 
-Stmt Store::make(std::string name, Expr value, Expr index, Parameter param) {
+Stmt Store::make(std::string name, Expr value, Expr index, Parameter param, Expr predicate) {
+    internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
+    internal_assert(value.type().lanes() == index.type().lanes()) << "Vector lanes of Store must match vector lanes of index\n";
+    internal_assert(value.type().lanes() == predicate.type().lanes())
+        << "Vector lanes of Store must match vector lanes of predicate\n";
 
     Store *node = new Store;
     node->name = name;
+    node->predicate = predicate;
     node->value = value;
     node->index = index;
     node->param = param;
@@ -633,8 +642,6 @@ Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_fu
 Call::ConstString Call::prefetch = "prefetch";
 Call::ConstString Call::prefetch_2d = "prefetch_2d";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
-Call::ConstString Call::predicated_store = "predicated_store";
-Call::ConstString Call::predicated_load = "predicated_load";
 Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
