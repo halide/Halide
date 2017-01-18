@@ -28,6 +28,11 @@ target_link_libraries(wavelet PRIVATE ${PNG_LIBRARIES})
 target_include_directories(wavelet PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" ${PNG_INCLUDE_DIRS})
 target_compile_definitions(wavelet PRIVATE ${PNG_DEFINITIONS})
 
+find_package(JPEG)
+target_link_libraries(wavelet PRIVATE ${JPEG_LIBRARIES})
+target_include_directories(wavelet PRIVATE "${CMAKE_CURRENT_BINARY_DIR}" ${JPEG_INCLUDE_DIRS})
+target_compile_definitions(wavelet PRIVATE ${JPEG_DEFINITIONS})
+
 # GENS := *_generator.cpp
 file(GLOB GENS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/*_generator.cpp")
 
@@ -48,5 +53,3 @@ foreach(GEN_SRC ${GENS})
     halide_add_aot_library_dependency(wavelet "${GEN_NAME}")
 
 endforeach()
-
-
