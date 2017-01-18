@@ -1,10 +1,13 @@
 #include "Halide.h"
 #include <stdio.h>
+ 
+#include "test/common/halide_test_dirs.h"
 
 using namespace Halide;
-
+  
 void testCompileToOutput(Func j) {
-    const char *fn_object = "compile_to_native.o";
+    std::string fn_object = Internal::get_test_tmp_dir() + "compile_to_native.o";
+    printf("fn_object is %s\n",fn_object.c_str());
 
     Internal::ensure_no_file_exists(fn_object);
 
@@ -15,8 +18,8 @@ void testCompileToOutput(Func j) {
 }
 
 void testCompileToOutputAndAssembly(Func j) {
-    const char *fn_object = "compile_to_native1.o";
-    const char *fn_assembly = "compile_to_assembly1.s";
+    std::string fn_object = Internal::get_test_tmp_dir() + "compile_to_native1.o";
+    std::string fn_assembly = Internal::get_test_tmp_dir() + "compile_to_assembly1.s";
 
     Internal::ensure_no_file_exists(fn_object);
     Internal::ensure_no_file_exists(fn_assembly);

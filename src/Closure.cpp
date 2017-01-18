@@ -39,6 +39,7 @@ void Closure::visit(const For *op) {
 }
 
 void Closure::visit(const Load *op) {
+    op->predicate.accept(this);
     op->index.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
@@ -57,6 +58,7 @@ void Closure::visit(const Load *op) {
 }
 
 void Closure::visit(const Store *op) {
+    op->predicate.accept(this);
     op->index.accept(this);
     op->value.accept(this);
     if (!ignore.contains(op->name)) {

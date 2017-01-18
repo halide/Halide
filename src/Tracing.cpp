@@ -88,7 +88,7 @@ private:
                     inner = Call::make(c->type, c->name, new_args, c->call_type,
                                        c->func, c->value_index, c->image, c->param);
                 } else {
-                    Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param);
+                    Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param, l->predicate);
                 }
                 expr = Call::make(op->type, Call::address_of, {inner}, Call::Intrinsic);
                 return;

@@ -24,11 +24,16 @@ public:
 protected:
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::predicated_store)) {
-            store_count++;
-        } else if (op->is_intrinsic(Call::predicated_load)) {
+    void visit(const Load *op) {
+        if (!is_one(op->predicate)) {
             load_count++;
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) {
+        if (!is_one(op->predicate)) {
+            store_count++;
         }
         IRVisitor::visit(op);
     }
@@ -123,8 +128,7 @@ int vectorized_dense_load_with_stride_minus_one_test() {
 
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        //TODO(psuriana): the hexagon test for this one is broken
-        //f.hexagon().vectorize(x, 16);
+        f.hexagon().vectorize(x, 32);
     } else if (target.arch == Target::X86) {
         f.vectorize(x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
@@ -162,8 +166,7 @@ int multiple_vectorized_predicate_test() {
 
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        //TODO(psuriana): the hexagon test for this one is broken
-        //f.update(0).hexagon().vectorize(r.x, 32);
+        f.update(0).hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));

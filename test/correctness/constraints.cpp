@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 bool error_occurred = false;
@@ -64,7 +66,7 @@ int main(int argc, char **argv) {
     error_occurred = false;
     h.realize(image1);
 
-    const char *assembly_file = "h.s";
+    std::string assembly_file = Internal::get_test_tmp_dir() + "h.s";
     Internal::ensure_no_file_exists(assembly_file);
 
     // Also check it compiles ok without an inferred argument list
