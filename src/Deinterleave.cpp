@@ -502,17 +502,33 @@ class Interleaver : public IRMutator {
 
         should_deinterleave = false;
         Expr idx = mutate(op->index);
-        if (should_deinterleave) {
-            idx = deinterleave_expr(idx);
-        }
+        bool should_deinterleave_idx = should_deinterleave;
 
         should_deinterleave = false;
         Expr predicate = mutate(op->predicate);
-        if (should_deinterleave) {
-            predicate = deinterleave_expr(predicate);
-        }
+        bool should_deinterleave_predicate = should_deinterleave;
 
-        expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+        if (should_deinterleave_idx && (should_deinterleave_predicate || is_one(predicate))) {
+            // If we want to deinterleave both the index and predicate
+            // (or the predicate is one), then deinterleave the
+            // resulting load.
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+            expr = deinterleave_expr(expr);
+        } else if (should_deinterleave_idx) {
+            // If we only want to deinterleave the index and not the
+            // predicate, deinterleave the index prior to the load.
+            idx = deinterleave_expr(idx);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+        } else if (should_deinterleave_predicate) {
+            // Similarly, deinterleave the predicate prior to the load
+            // if we don't want to deinterleave the index.
+            predicate = deinterleave_expr(predicate);
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+        } else if (!idx.same_as(op->index) || !predicate.same_as(op->index)) {
+            expr = Load::make(op->type, op->name, idx, op->image, op->param, predicate);
+        } else {
+            expr = op;
+        }
 
         should_deinterleave = old_should_deinterleave;
         num_lanes = old_num_lanes;
