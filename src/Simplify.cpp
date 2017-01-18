@@ -4193,7 +4193,7 @@ private:
                     op->vectors[0].as<Broadcast>())) {
             // Extracting a single lane of a ramp or broadcast
             if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-                expr = mutate(r->base + op->vectors[1]*r->stride);
+                expr = mutate(r->base + op->indices[0]*r->stride);
             } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
                 expr = mutate(b->value);
             } else {
