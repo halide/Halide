@@ -58,11 +58,6 @@ bool should_extract(Expr e) {
         return !is_const(a->stride);
     }
 
-    if (const Call *a = e.as<Call>()) {
-        if (a->is_intrinsic(Call::address_of)) {
-            return false;
-        }
-    }
     return true;
 }
 
@@ -82,12 +77,11 @@ public:
     map<Expr, int, ExprCompare> shallow_numbering;
 
     Scope<int> let_substitutions;
-    bool protect_loads_in_scope;
     int number;
 
     IRCompareCache cache;
 
-    GVN() : protect_loads_in_scope(false), number(0), cache(8) {}
+    GVN() : number(0), cache(8) {}
 
     Stmt mutate(Stmt s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
@@ -142,14 +136,12 @@ public:
         }
 
         // Add it to the numbering.
-        if (!(e.as<Load>() && protect_loads_in_scope)) {
-            Entry entry = {e, 0};
-            number = (int)entries.size();
-            numbering[with_cache(e)] = number;
-            shallow_numbering[e] = number;
-            entries.push_back(entry);
-            internal_assert(e.type() == old_e.type());
-        }
+        Entry entry = {e, 0};
+        number = (int)entries.size();
+        numbering[with_cache(e)] = number;
+        shallow_numbering[e] = number;
+        entries.push_back(entry);
+        internal_assert(e.type() == old_e.type());
         return e;
     }
 
@@ -172,24 +164,41 @@ public:
         expr = body;
     }
 
-    void visit(const Call *call) {
-        bool old_protect_loads_in_scope = protect_loads_in_scope;
-        if (call->is_intrinsic(Call::address_of)) {
-            // We shouldn't lift a load out of an address_of node
-            protect_loads_in_scope = true;
+    void visit(const Load *op) {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
         }
-        IRMutator::visit(call);
-        protect_loads_in_scope = old_protect_loads_in_scope;
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        }
     }
 
+    void visit(const Store *op) {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
+        }
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index, op->param, predicate);
+        }
+    }
 };
 
 /** Fill in the use counts in a global value numbering. */
 class ComputeUseCounts : public IRGraphVisitor {
     GVN &gvn;
-    bool protect_loads_in_scope;
 public:
-    ComputeUseCounts(GVN &g) : gvn(g), protect_loads_in_scope(false) {}
+    ComputeUseCounts(GVN &g) : gvn(g) {}
 
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
@@ -200,14 +209,6 @@ public:
         // the children.
         debug(4) << "Include: " << e << "; should extract: " << should_extract(e) << "\n";
         if (!should_extract(e)) {
-            e.accept(this);
-            return;
-        }
-
-        // If we're not supposed to lift out load node (i.e. we're inside an
-        // address_of call node), just use the generic visitor to visit the
-        // load index.
-        if ((e.as<Load>() != nullptr) && protect_loads_in_scope) {
             e.accept(this);
             return;
         }
@@ -224,17 +225,6 @@ public:
             visited.insert(e.get());
             e.accept(this);
         }
-    }
-
-
-    void visit(const Call *call) {
-        bool old_protect_loads_in_scope = protect_loads_in_scope;
-        if (call->is_intrinsic(Call::address_of)) {
-            // We shouldn't lift load out of an address_of node.
-            protect_loads_in_scope = true;
-        }
-        IRGraphVisitor::visit(call);
-        protect_loads_in_scope = old_protect_loads_in_scope;
     }
 };
 
