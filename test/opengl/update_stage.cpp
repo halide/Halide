@@ -1,9 +1,5 @@
-// test case provided by Lee Yuguang
-
-
 #include "Halide.h"
 #include <stdio.h>
-#include <chrono>
 
 using namespace Halide;
 
@@ -47,8 +43,6 @@ int main() {
     // Generate the result.
     Buffer<uint8_t> result = f.realize(width, height, res_channels, target);
 
-    result.copy_to_host();
-
     //Check the result.
     for (int c = 0; c < result.channels(); c++) {
         for (int y = 0; y < result.height(); y++) {
@@ -64,8 +58,6 @@ int main() {
     }
 
     Buffer<uint8_t> result2 = g.realize(width, height, res_channels, target);
-
-    result2.copy_to_host();
 
     //Check the result.
     for (int c = 0; c < result2.channels(); c++) {
