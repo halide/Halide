@@ -16,6 +16,46 @@
 namespace Halide {
 namespace Internal {
 
+std::string get_env(const char *name) {
+#ifdef _MSC_VER
+    char buf[MAX_PATH];
+    size_t read = 0;
+    getenv_s(&read, buf, name);
+    if (read) {
+        return std::string(buf);
+    }
+#else
+    char *buf = getenv(name);
+    if (buf) {
+        return std::string(buf);
+    }
+#endif
+    return "";
+}
+
+// Return absolute path to the current directory. Return empty string if
+// an error occurs. (Does not assert.) 
+inline std::string get_current_directory() {
+#ifdef _WIN32
+    std::string dir;
+    char p[MAX_PATH];
+    DWORD ret = GetCurrentDirectoryA(MAX_PATH, p);
+    if (p != 0) {
+        dir = p;
+    }
+    return dir;
+};
+#else
+    std::string dir;
+    char *p = getcwd(nullptr, 0);
+    if (p) {
+        dir = p;
+        free(p);
+    }
+    return dir;
+#endif
+}
+
 /** Return the path to a directory that can be safely written to
  * when running tests; the contents directory may or may not outlast
  * the lifetime of test itself (ie, the files may be cleaned up after test
@@ -24,43 +64,30 @@ namespace Internal {
  * is not guaranteed that this directory will be empty. If the path cannot
  * be created, the function will assert-fail and return an invalid path.
  */
-inline std::string get_test_tmp_dir(const char *subdir = "halide_test") {
+inline std::string get_test_tmp_dir() {
+    // If TEST_TMPDIR is specified, we assume it is a valid absolute path
+    std::string dir = get_env("TEST_TMPDIR");
+    if (dir.empty()) {
+        // If not specified, use current dir.
+        dir = get_current_directory();
+    }
+    bool is_absolute = dir.size() >= 1 && dir[0] == '/';
+    char sep = '/';
 #ifdef _WIN32
-    char tmp_path[MAX_PATH];
-    DWORD ret = GetTempPathA(MAX_PATH, tmp_path);
-    assert(ret != 0);
-    std::string dir = std::string(tmp_path) + subdir;
-    BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
-    if (!result && GetLastError() != ERROR_ALREADY_EXISTS) {
-        assert(!"Could not create temp dir.");
-        return "Z:\\UnlikelyPath\\";
+    // Allow for C:\whatever on Windows
+    if (dir.size() >= 3 && dir[1] == '\\' && dir[2] == ':') {
+        is_absolute = true;
+        sep = '\\';
     }
-    if (dir[dir.size()-1] != '\\') {
-        dir += "\\";
-    }
-    return dir;
-#else
-    std::string dir = std::string("/tmp/") + subdir;
-    struct stat a;
-    if (::stat(dir.c_str(), &a) == 0) {
-        if (!S_ISDIR(a.st_mode)) {
-            assert(!"Could not create temp dir (a file of that name exists)");
-            return "/unlikely_path/";
-        }
-        // Just assume the permissions are OK.
-    } else {
-        // We need executable permissions for this folder.
-        if (mkdir(dir.c_str(), 0777) != 0) {
-            assert(!"Could not create temp dir (error occurred)");
-            return "/unlikely_path/";
-        }
-    }
-
-    if (dir[dir.size()-1] != '/') {
-        dir += "/";
-    }
-    return dir;
 #endif
+    if (!is_absolute) {
+        assert(!"get_test_tmp_dir() is not an absolute path");
+        return "/unlikely_path/";
+    }
+    if (dir[dir.size() - 1] != sep) {
+        dir += sep;
+    }
+    return dir;
 }
 
 }  // namespace Halide
