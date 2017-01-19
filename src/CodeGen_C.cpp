@@ -368,7 +368,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         stream << type_to_c_type(op->type, true) << " " << name << "(";
         if (function_takes_user_context(name)) {
             stream << "void *";
-            if (op->args.size()) {
+            if (!op->args.empty()) {
                 stream << ", ";
             }
         }
@@ -1065,7 +1065,7 @@ void CodeGen_C::visit(const Call *op) {
         string size = print_expr(op->args[2]);
         rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
     } else if (op->is_intrinsic(Call::make_struct)) {
-        if (op->args.size() == 0) {
+        if (op->args.empty()) {
             rhs << "NULL";
         } else {
             // Emit a line something like:
@@ -1481,6 +1481,10 @@ void CodeGen_C::visit(const Evaluate *op) {
     stream << "(void)" << id << ";\n";
 }
 
+void CodeGen_C::visit(const Shuffle *op) {
+    internal_error << "Cannot emit vector code to C\n";
+}
+
 void CodeGen_C::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
@@ -1491,7 +1495,7 @@ void CodeGen_C::test() {
     Param<float> alpha("alpha");
     Param<int> beta("beta");
     Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
-    Stmt s = Store::make("buf", e, x, Parameter());
+    Stmt s = Store::make("buf", e, x, Parameter(), const_true());
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
     s = Allocate::make("tmp.stack", Int(32), {127}, const_true(), s);

@@ -10,7 +10,7 @@ using namespace Halide::Runtime;
 
 const int W = 80, H = 80;
 
-int my_halide_trace(void *user_context, const halide_trace_event *ev) {
+int my_halide_trace(void *user_context, const halide_trace_event_t *ev) {
     if (ev->event == halide_trace_begin_realization) {
         assert(ev->dimensions == 6);
         int min_x = ev->coordinates[0], width = ev->coordinates[1];

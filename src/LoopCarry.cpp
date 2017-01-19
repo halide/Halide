@@ -279,10 +279,12 @@ class LoopCarryOverLoop : public IRMutator {
         }
 
         // For each load, move the load index forwards by one loop iteration
-        vector<Expr> indices, next_indices;
+        vector<Expr> indices, next_indices, predicates, next_predicates;
         for (const vector<const Load *> &v: loads) {
             indices.push_back(v[0]->index);
             next_indices.push_back(step_forwards(v[0]->index, linear));
+            predicates.push_back(v[0]->predicate);
+            next_predicates.push_back(step_forwards(v[0]->predicate, linear));
         }
 
         // Find loads done on this loop iteration that will be
@@ -294,7 +296,9 @@ class LoopCarryOverLoop : public IRMutator {
                 if (i == j) continue;
                 if (loads[i][0]->name == loads[j][0]->name &&
                     next_indices[j].defined() &&
-                    graph_equal(indices[i], next_indices[j])) {
+                    graph_equal(indices[i], next_indices[j]) &&
+                    next_predicates[j].defined() &&
+                    graph_equal(predicates[i], next_predicates[j])) {
                     chains.push_back({j, i});
                     debug(3) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
@@ -385,20 +389,23 @@ class LoopCarryOverLoop : public IRMutator {
             for (size_t i = 0; i < c.size(); i++) {
                 const Load *orig_load = loads[c[i]][0];
                 Expr scratch_idx = scratch_index(i, orig_load->type);
-                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx, Buffer<>(), Parameter());
+                Expr load_from_scratch = Load::make(orig_load->type, scratch, scratch_idx,
+                                                    Buffer<>(), Parameter(), const_true(orig_load->type.lanes()));
                 for (const Load *l : loads[c[i]]) {
                     core = graph_substitute(l, load_from_scratch, core);
                 }
 
                 if (i == c.size() - 1) {
-                    Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx, Parameter());
+                    Stmt store_to_scratch = Store::make(scratch, orig_load, scratch_idx,
+                                                        Parameter(), const_true(orig_load->type.lanes()));
                     not_first_iteration_scratch_stores.push_back(store_to_scratch);
                 } else {
                     initial_scratch_values.push_back(orig_load);
                 }
                 if (i > 0) {
                     Stmt shuffle = Store::make(scratch, load_from_scratch,
-                                               scratch_index(i-1, orig_load->type), Parameter());
+                                               scratch_index(i-1, orig_load->type),
+                                               Parameter(), const_true(orig_load->type.lanes()));
                     scratch_shuffles.push_back(shuffle);
                 }
 
@@ -425,7 +432,9 @@ class LoopCarryOverLoop : public IRMutator {
             vector<Stmt> initial_scratch_stores;
             for (size_t i = 0; i < c.size() - 1; i++) {
                 Expr scratch_idx = scratch_index(i, initial_scratch_values[i].type());
-                Stmt store_to_scratch = Store::make(scratch, initial_scratch_values[i], scratch_idx, Parameter());
+                Stmt store_to_scratch = Store::make(scratch, initial_scratch_values[i],
+                                                    scratch_idx, Parameter(),
+                                                    const_true(scratch_idx.type().lanes()));
                 initial_scratch_stores.push_back(store_to_scratch);
             }
 

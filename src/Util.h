@@ -196,11 +196,24 @@ EXPORT std::string file_make_temp(const std::string &prefix, const std::string &
  */
 EXPORT std::string dir_make_temp();
 
-/** Wrapper for access(). Asserts upon error. */
+/** Wrapper for access(). Quietly ignores errors. */
 EXPORT bool file_exists(const std::string &name);
+
+/** assert-fail if the file doesn't exist. useful primarily for testing purposes. */
+EXPORT void assert_file_exists(const std::string &name);
+
+/** assert-fail if the file DOES exist. useful primarily for testing purposes. */
+EXPORT void assert_no_file_exists(const std::string &name);
 
 /** Wrapper for unlink(). Asserts upon error. */
 EXPORT void file_unlink(const std::string &name);
+
+/** Wrapper for unlink(). Quietly ignores errors. */
+EXPORT void file_unlink(const std::string &name);
+
+/** Ensure that no file with this path exists. If such a file
+ * exists and cannot be removed, assert-fail. */
+EXPORT void ensure_no_file_exists(const std::string &name);
 
 /** Wrapper for rmdir(). Asserts upon error. */
 EXPORT void dir_rmdir(const std::string &name);

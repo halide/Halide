@@ -220,6 +220,10 @@ bool is_zero(Expr e) {
     if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0.0;
     if (const Cast *c = e.as<Cast>()) return is_zero(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_zero(b->value);
+    if (const Call *c = e.as<Call>()) {
+        return (c->is_intrinsic(Call::bool_to_mask) || c->is_intrinsic(Call::cast_mask)) &&
+               is_zero(c->args[0]);
+    }
     return false;
 }
 
@@ -229,10 +233,15 @@ bool is_one(Expr e) {
     if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 1.0;
     if (const Cast *c = e.as<Cast>()) return is_one(c->value);
     if (const Broadcast *b = e.as<Broadcast>()) return is_one(b->value);
+    if (const Call *c = e.as<Call>()) {
+        return (c->is_intrinsic(Call::bool_to_mask) || c->is_intrinsic(Call::cast_mask)) &&
+               is_one(c->args[0]);
+    }
     return false;
 }
 
 bool is_two(Expr e) {
+    if (e.type().bits() < 2) return false;
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 2;
     if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 2;
     if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 2.0;
@@ -369,7 +378,7 @@ void check_representable(Type dst, int64_t x) {
 
 void match_types(Expr &a, Expr &b) {
     if (a.type() == b.type()) return;
-    
+
     user_assert(!a.type().is_handle() && !b.type().is_handle())
         << "Can't do arithmetic on opaque pointer types: "
         << a << ", " << b << "\n";
@@ -658,9 +667,9 @@ Expr BufferBuilder::build() const {
         args[10] = const_false();
     }
 
-    return Call::make(type_of<struct buffer_t *>(), Call::buffer_init, args, Call::Extern);   
+    return Call::make(type_of<struct buffer_t *>(), Call::buffer_init, args, Call::Extern);
 }
-    
+
 } // namespace Internal
 
 Expr fast_log(Expr x) {

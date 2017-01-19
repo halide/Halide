@@ -13,7 +13,7 @@ public:
 };
 
 int trace_min, trace_extent;
-int my_trace(void *user_context, const halide_trace_event *e) {
+int my_trace(void *user_context, const halide_trace_event_t *e) {
     if (e->event == 2) {
         trace_min = e->coordinates[0];
         trace_extent = e->coordinates[1];
