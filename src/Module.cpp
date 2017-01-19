@@ -35,8 +35,21 @@ public:
                                      const std::string &suffix,
                                      const Target &target,
                                      bool in_front = false) {
-        const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
-        std::string name = dir_path + "/" + split_string(base_path_name, "/").back() + suffix + ext;
+        const char* ext = (target.os == Target::Windows && !target.has_feature(Target::MinGW)) ? ".obj" : ".o";
+        size_t slash_idx = base_path_name.rfind('/');
+        size_t backslash_idx = base_path_name.rfind('\\');
+        if (slash_idx == std::string::npos) {
+            slash_idx = 0;
+        } else {
+            slash_idx++;
+        }
+        if (backslash_idx == std::string::npos) {
+            backslash_idx = 0;
+        } else {
+            backslash_idx++;
+        }
+        std::string base_name = base_path_name.substr(std::max(slash_idx, backslash_idx));
+        std::string name = dir_path + "/" + base_name + suffix + ext;
         debug(1) << "add_temp_object_file: " << name << "\n";
         if (in_front) {
             dir_files.insert(dir_files.begin(), name);
