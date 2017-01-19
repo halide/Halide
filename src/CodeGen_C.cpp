@@ -368,7 +368,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         stream << type_to_c_type(op->type, true) << " " << name << "(";
         if (function_takes_user_context(name)) {
             stream << "void *";
-            if (op->args.size()) {
+            if (!op->args.empty()) {
                 stream << ", ";
             }
         }
@@ -1065,7 +1065,7 @@ void CodeGen_C::visit(const Call *op) {
         string size = print_expr(op->args[2]);
         rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
     } else if (op->is_intrinsic(Call::make_struct)) {
-        if (op->args.size() == 0) {
+        if (op->args.empty()) {
             rhs << "NULL";
         } else {
             // Emit a line something like:
