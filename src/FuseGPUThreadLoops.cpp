@@ -354,13 +354,16 @@ class ExtractSharedAllocations : public IRMutator {
 
     void visit(const Load *op) {
         if (shared.count(op->name)) {
+            Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
-                expr = Load::make(op->type, shared_mem_name + "_" + op->name, index, op->image, op->param);
+                expr = Load::make(op->type, shared_mem_name + "_" + op->name,
+                                  index, op->image, op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                expr = Load::make(op->type, shared_mem_name, base + index, op->image, op->param);
+                expr = Load::make(op->type, shared_mem_name, base + index,
+                                  op->image, op->param, predicate);
             }
 
         } else {
@@ -371,13 +374,15 @@ class ExtractSharedAllocations : public IRMutator {
     void visit(const Store *op) {
         if (shared.count(op->name)) {
             shared[op->name].max = barrier_stage;
+            Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
-                stmt = Store::make(shared_mem_name + "_" + op->name, value, index, op->param);
+                stmt = Store::make(shared_mem_name + "_" + op->name, value, index,
+                                   op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                stmt = Store::make(shared_mem_name, value, base + index, op->param);
+                stmt = Store::make(shared_mem_name, value, base + index, op->param, predicate);
             }
         } else {
             IRMutator::visit(op);

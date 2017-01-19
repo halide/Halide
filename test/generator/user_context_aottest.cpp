@@ -20,7 +20,7 @@ void my_halide_error(void *context, const char *msg) {
     assert(context == context_pointer);
 }
 
-int32_t my_halide_trace(void *context, const halide_trace_event *e) {
+int32_t my_halide_trace(void *context, const halide_trace_event_t *e) {
     called_trace = true;
     assert(context == context_pointer);
     return 0;

@@ -6,7 +6,7 @@ using namespace Halide;
 bool vector_store = false, scalar_store = false;
 
 // A trace that checks for vector and scalar stores
-int my_trace(void *user_context, const halide_trace_event *ev) {
+int my_trace(void *user_context, const halide_trace_event_t *ev) {
 
     if (ev->event == halide_trace_store) {
         if (ev->type.lanes > 1) {

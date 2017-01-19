@@ -4,7 +4,7 @@ using namespace Halide;
 
 int num_vector_stores = 0;
 int num_scalar_stores = 0;
-int my_trace(void *user_context, const halide_trace_event *e) {
+int my_trace(void *user_context, const halide_trace_event_t *e) {
     if (e->event == halide_trace_store) {
         if (e->type.lanes > 1) {
             num_vector_stores++;

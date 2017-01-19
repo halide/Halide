@@ -4,7 +4,7 @@ using namespace Halide;
 
 int num_stores = 0;
 
-int my_trace(void *user_context, const halide_trace_event *e) {
+int my_trace(void *user_context, const halide_trace_event_t *e) {
     if (e->event == halide_trace_store) {
         num_stores++;
     }
