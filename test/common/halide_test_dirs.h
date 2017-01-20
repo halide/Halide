@@ -46,7 +46,6 @@ inline std::string get_current_directory() {
         dir = p;
     }
     return dir;
-};
 #else
     std::string dir;
     char *p = getcwd(nullptr, 0);
