@@ -1549,7 +1549,8 @@ public:
      * because it does not need to track the coordinates. */
     template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
     void for_each_value(Fn &&f, Args... other_buffers) {
-        for_each_value_task_dim<N> t[dimensions()+1];
+        for_each_value_task_dim<N> *t =
+            (for_each_value_task_dim<N> *)__builtin_alloca((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
         for (int i = 0; i <= dimensions(); i++) {
             for (int j = 0; j < N; j++) {
                 t[i].stride[j] = 0;
@@ -1714,7 +1715,7 @@ struct for_each_element_helpers {
     template<typename Fn2>
     static auto for_each_element(int, const halide_buffer_t &buf, Fn2 &&f)
         -> decltype(f((const int *)0)) {
-        int pos[buf.dimensions];
+        int *pos = (int *)__builtin_alloca(buf.dimensions * sizeof(int));
         for_each_element_array(buf.dimensions - 1, std::forward<Fn2>(f), buf, pos);
     }
 
