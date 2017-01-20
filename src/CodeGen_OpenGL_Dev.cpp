@@ -94,7 +94,10 @@ CodeGen_OpenGL_Dev::~CodeGen_OpenGL_Dev() {
 void CodeGen_OpenGL_Dev::add_kernel(Stmt s, const string &name,
                                     const vector<DeviceArgument> &args) {
     cur_kernel_name = name;
-    kernel_id[name] = kernel_id.size();
+    // workaround for gcc: kernel_id[name] may be evaluated before
+    // kernel_id.size() if we do it all in one statement
+    const auto id = kernel_id.size();
+    kernel_id[name] = id;
     glc->add_kernel(s, name, args);
 }
 
