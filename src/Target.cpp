@@ -180,7 +180,7 @@ string get_env(const char *name) {
 #ifdef _MSC_VER
     char buf[128];
     size_t read = 0;
-    getenv_s(&read, buf, name);
+    if (getenv_s(&read, buf, name) != 0) read = 0;
     if (read) {
         return string(buf);
     } else {
