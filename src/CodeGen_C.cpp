@@ -20,8 +20,15 @@ using std::vector;
 using std::ostringstream;
 using std::map;
 
-extern "C" unsigned char halide_internal_initmod_declarations[];
 extern "C" unsigned char halide_internal_initmod_inlined_c[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntime_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeCuda_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeHexagonHost_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeMetal_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
 
 namespace {
 
@@ -105,22 +112,43 @@ const string globals =
 
 }
 
-CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind), extern_c_open(false) {
+CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
+    IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false) {
+
     if (is_header()) {
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
-               << "#define HALIDE_" << print_name(guard) << '\n';
-    }
-
-    if (!is_header()) {
+               << "#define HALIDE_" << print_name(guard) << '\n'
+               << "#include <stdint.h>\n"
+               << "\n"
+               << "// Forward declarations of the types used in the interface\n"
+               << "// to the Halide pipeline.\n"
+               << "//\n";
+        if (target.has_feature(Target::NoRuntime)) {
+            stream << "// For the definitions of these structs, include HalideRuntime.h\n";
+        } else {
+            stream << "// Definitions for these structs are below.\n";
+        }
+        stream << "\n"
+               << "// Halide's representation of a multi-dimensional array.\n"
+               << "// Halide::Runtime::Buffer is a more user-friendly wrapper\n"
+               << "// around this. Its declaration is in HalideBuffer.h"
+               << "struct halide_buffer_t;\n"
+               << "\n"
+               << "// Metadata describing the arguments to the generated function.\n"
+               << "// Used to construct calls to the _argv version of the function.\n"
+               << "struct halide_filter_metadata_t;\n"
+               << "\n"
+               << "// The legacy buffer type. Do not use in new code.\n"
+               << "struct buffer_t;\n"
+               << "\n";
+    } else {
+        // Include declarations of everything generated C source might want
         stream
             << headers
-            << globals;
-    }
-    stream << halide_internal_initmod_declarations << '\n';
-
-    if (!is_header()) {
-        stream << halide_internal_initmod_inlined_c << '\n';
+            << globals
+            << halide_internal_runtime_header_HalideRuntime_h << '\n'
+            << halide_internal_initmod_inlined_c << '\n';
     }
 
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
@@ -131,9 +159,58 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
 }
 
 CodeGen_C::~CodeGen_C() {
-    switch_to_c_or_c_plus_plus(COrCPlusPlus::Default);
+    switch_to_c_or_c_plus_plus(NameMangling::Default);
 
     if (is_header()) {
+        if (!target.has_feature(Target::NoRuntime)) {
+            stream << "\n"
+                   << "// The generated object file that goes with this header\n"
+                   << "// includes a full copy of the Halide runtime so that it\n"
+                   << "// can be used standalone. Declarations for the functions\n"
+                   << "// in the Halide runtime are below.\n";
+            if (target.os == Target::Windows) {
+                stream
+                    << "//\n"
+                    << "// The inclusion of this runtime means that it is not legal\n"
+                    << "// to link multiple Halide-generated object files together.\n"
+                    << "// This problem is Windows-specific. On other platforms, we\n"
+                    << "// use weak linkage.\n";
+            } else {
+                stream
+                    << "//\n"
+                    << "// The runtime is defined using weak linkage, so it is legal\n"
+                    << "// to link multiple Halide-generated object files together,\n"
+                    << "// or to clobber any of these functions with your own\n"
+                    << "// definition.\n";
+            }
+            stream << "//\n"
+                   << "// To generate an object file without a full copy of the\n"
+                   << "// runtime, use the -no_runtime target flag. To generate a\n"
+                   << "// standalone Halide runtime to use with such object files\n"
+                   << "// use the -r flag with any Halide generator binary, e.g.:\n"
+                   << "// $ ./my_generator -r halide_runtime -o . target=host\n"
+                   << "\n"
+                   << halide_internal_runtime_header_HalideRuntime_h << '\n';
+            if (target.has_feature(Target::CUDA)) {
+                stream << halide_internal_runtime_header_HalideRuntimeCuda_h << '\n';
+            }
+            if (target.has_feature(Target::HVX_128) ||
+                target.has_feature(Target::HVX_64)) {
+                stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h << '\n';
+            }
+            if (target.has_feature(Target::Metal)) {
+                stream << halide_internal_runtime_header_HalideRuntimeMetal_h << '\n';
+            }
+            if (target.has_feature(Target::OpenCL)) {
+                stream << halide_internal_runtime_header_HalideRuntimeOpenCL_h << '\n';
+            }
+            if (target.has_feature(Target::OpenGLCompute)) {
+                stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << '\n';
+            }
+            if (target.has_feature(Target::OpenGL)) {
+                stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << '\n';
+            }
+        }
         stream << "#endif\n";
     }
 }
@@ -219,13 +296,13 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 }
 }
 
-void CodeGen_C::switch_to_c_or_c_plus_plus(COrCPlusPlus mode) {
-    if (extern_c_open && mode != COrCPlusPlus::C) {
+void CodeGen_C::switch_to_c_or_c_plus_plus(NameMangling mode) {
+    if (extern_c_open && mode != NameMangling::C) {
         stream << "\n#ifdef __cplusplus\n";
         stream << "}  // extern \"C\"\n";
         stream << "#endif\n";
         extern_c_open = false;
-    } else if (!extern_c_open && mode == COrCPlusPlus::C) {
+    } else if (!extern_c_open && mode == NameMangling::C) {
         stream << "#ifdef __cplusplus\n";
         stream << "extern \"C\" {\n";
         stream << "#endif\n";
@@ -341,7 +418,7 @@ public:
         : emitted(emitted) {
         // Make sure we don't catch calls that are already in the global declarations
         const char *strs[] = {globals.c_str(),
-                              (const char *)halide_internal_initmod_declarations,
+                              (const char *)halide_internal_runtime_header_HalideRuntime_h,
                               (const char *)halide_internal_initmod_inlined_c};
         for (const char *str : strs) {
             size_t j = 0;
@@ -391,21 +468,19 @@ public:
 
 void CodeGen_C::compile(const Module &input) {
     for (const auto &b : input.buffers()) {
-        compile(b, input.target());
+        compile(b);
     }
     for (const auto &f : input.functions()) {
-        compile(f, input.target());
+        compile(f);
     }
 }
 
-void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
+void CodeGen_C::compile(const LoweredFunc &f) {
     // Don't put non-external function declarations in headers.
-    if (is_header() && f.linkage != LoweredFunc::External) {
+    if (is_header() && f.linkage == LoweredFunc::Internal) {
         return;
     }
 
-    internal_assert(emitted.count(f.name) == 0)
-        << "Function '" << f.name << "'  has already been emitted.\n";
     emitted.insert(f.name);
 
     const std::vector<LoweredArgument> &args = f.args;
@@ -452,17 +527,23 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
         f.body.accept(&e);
 
         if (e.has_c_plus_plus_declarations()) {
-            switch_to_c_or_c_plus_plus(COrCPlusPlus::CPlusPlus);
+            switch_to_c_or_c_plus_plus(NameMangling::CPlusPlus);
             e.emit_c_plus_plus_declarations(stream);
         }
 
         if (e.has_c_declarations()) {
-            switch_to_c_or_c_plus_plus(COrCPlusPlus::C);
+            switch_to_c_or_c_plus_plus(NameMangling::C);
             e.emit_c_declarations(stream);
         }
     }
 
-    switch_to_c_or_c_plus_plus(is_c_plus_plus_interface() ? COrCPlusPlus::Default : COrCPlusPlus::C);
+    NameMangling name_mangling = f.name_mangling;
+    if (name_mangling == NameMangling::Default) {
+        name_mangling = (target.has_feature(Target::CPlusPlusMangling) ?
+                         NameMangling::CPlusPlus : NameMangling::C);
+    }
+
+    switch_to_c_or_c_plus_plus(name_mangling);
     stream << "\n";
 
     std::vector<std::string> namespaces;
@@ -482,14 +563,14 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
     }
 
     // Emit the function prototype
-    if (f.linkage != LoweredFunc::External) {
+    if (f.linkage == LoweredFunc::Internal) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
     stream << "int " << simple_name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            stream << "halide_buffer_t *"
+            stream << "struct halide_buffer_t *"
                    << print_name(args[i].name)
                    << "_buffer";
         } else {
@@ -530,87 +611,11 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
         }
     }
 
-    if (is_header()) {
-        // If this is a header and we are here, we know this is an externally visible Func, so
-        // declare the argv function.
+    if (is_header() && f.linkage == LoweredFunc::ExternalPlusMetadata) {
+        // Emit the argv version
         stream << "int " << simple_name << "_argv(void **args) HALIDE_FUNCTION_ATTRS;\n";
 
-        // Define a stub to accept and upgrade old buffer_t's. We
-        // generate signatures that accept const void * for
-        // user_context, but our runtime all accepts void *.
-        string ucon = have_user_context ? "const_cast<void *>(__user_context)" : "NULL";
-        stream
-            << "\n// A shim to support use of the old buffer_t struct. This is deprecated and will be removed at some point.\n";
-
-        switch_to_c_or_c_plus_plus(COrCPlusPlus::CPlusPlus);
-
-        stream << "HALIDE_ATTRIBUTE_DEPRECATED(\"buffer_t is deprecated. Use halide_buffer_t.\")\n"
-               << "inline int " << simple_name << "(";
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer()) {
-                stream << "buffer_t *"
-                       << print_name(args[i].name)
-                       << "_buffer";
-            } else {
-                stream << print_type(args[i].type)
-                       << " "
-                       << print_name(args[i].name);
-            }
-            if (i < args.size()-1) stream << ", ";
-        }
-        stream << ") HALIDE_FUNCTION_ATTRS {\n"
-               << "    int err = 0;\n";
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer()) {
-                string name = print_name(args[i].name);
-                int dims = (int)args[i].dimensions;
-                stream << "    halide_dimension_t " << name << "_upgraded_shape[" << dims << "];\n"
-                       << "    halide_buffer_t " << name << "_upgraded = {0};\n"
-                       << "    " << name << "_upgraded.dimensions = " << dims << ";\n"
-                       << "    " << name << "_upgraded.dim = " << name << "_upgraded_shape;\n"
-                       << "    " << name << "_upgraded.type = halide_type_of<" << print_type(args[i].type) << ">();\n"
-                       << "    err = halide_upgrade_buffer_t("
-                           << ucon << ", "
-                           << "\"" << args[i].name << "\", "
-                           << name << "_buffer, "
-                           << "&" << name << "_upgraded);\n"
-                       << "    if (err) return err;\n";
-            }
-        }
-        stream << "    err = " << f.name << "(";
-        for (size_t i = 0; i < args.size(); i++) {
-            print_name(args[i].name);
-            if (args[i].is_buffer()) {
-                stream << "&" << print_name(args[i].name) << "_upgraded";
-            } else {
-                stream << print_name(args[i].name);
-            }
-            if (i < args.size()-1) stream << ", ";
-        }
-        stream << ");\n";
-        if (!target.has_feature(Target::NoBoundsQuery)) {
-            stream << "    if (err) return err;\n";
-            // Copy back any bounds inference results.
-            for (size_t i = 0; i < args.size(); i++) {
-                if (args[i].is_buffer()) {
-                    string name = print_name(args[i].name);
-                    stream << "    if (" << name << "_buffer->host == NULL && " << name << "_buffer->dev == 0) {\n"
-                           << "        err = halide_downgrade_buffer_t(" << ucon << ", "
-                           << "\"" << args[i].name << "\", "
-                           << "&" << name << "_upgraded, "
-                           << name << "_buffer);\n"
-                           << "        if (err) return err;\n"
-                           << "    }\n";
-                }
-            }
-        }
-        stream << "    return err;\n"
-               << "}\n";
-
-        switch_to_c_or_c_plus_plus(is_c_plus_plus_interface() ? COrCPlusPlus::Default : COrCPlusPlus::C);
-
         // And also the metadata.
-        stream << "// Result is never null and points to constant static data\n";
         stream << "const struct halide_filter_metadata_t *" << simple_name << "_metadata() HALIDE_FUNCTION_ATTRS;\n";
     }
 
@@ -630,7 +635,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const Target &target) {
     }
 }
 
-void CodeGen_C::compile(const Buffer<> &buffer, const Target &target) {
+void CodeGen_C::compile(const Buffer<> &buffer) {
     // Don't define buffers in headers.
     if (is_header()) {
         return;
@@ -1525,7 +1530,7 @@ void CodeGen_C::test() {
 
     ostringstream source;
     {
-        CodeGen_C cg(source, CodeGen_C::CImplementation);
+        CodeGen_C cg(source, Target("host"), CodeGen_C::CImplementation);
         cg.compile(m);
     }
 
@@ -1533,7 +1538,7 @@ void CodeGen_C::test() {
     string correct_source =
         headers +
         globals +
-        string((const char *)halide_internal_initmod_declarations) + '\n' +
+        string((const char *)halide_internal_runtime_header_HalideRuntime_h) + '\n' +
         string((const char *)halide_internal_initmod_inlined_c) + '\n' +
         "#ifndef HALIDE_FUNCTION_ATTRS\n"
         "#define HALIDE_FUNCTION_ATTRS\n"
@@ -1543,7 +1548,7 @@ void CodeGen_C::test() {
         "extern \"C\" {\n"
         "#endif\n"
         "\n"
-        "int test1(halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {\n"
+        "int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {\n"
         " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         " (void)_buf;\n"
         " uint8_t * _buf_host = _buf_buffer->host;\n"
@@ -1614,7 +1619,7 @@ void CodeGen_C::test() {
         "#ifdef __cplusplus\n"
         "}  // extern \"C\"\n"
         "#endif\n";
-;
+
     if (src != correct_source) {
         int diff = 0;
         while (src[diff] == correct_source[diff]) diff++;
@@ -1628,8 +1633,6 @@ void CodeGen_C::test() {
             << "Difference starts at:\n"
             << "Correct: " << correct_source.substr(diff, diff_end - diff) << "\n"
             << "Actual: " << src.substr(diff, diff_end - diff) << "\n";
-
-
     }
 
 

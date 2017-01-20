@@ -14,20 +14,21 @@ using std::vector;
 using std::pair;
 
 namespace {
+
+// Make a call and return the result upwards immediately if it's
+// non-zero. Assumes that inner or outer code will throw an
+// appropriate error.
+Stmt make_checked_call(Expr call) {
+    internal_assert(call.type() == Int(32));
+    string result_var_name = unique_name('t');
+    Expr result_var = Variable::make(Int(32), result_var_name);
+    Stmt s = AssertStmt::make(result_var == 0, result_var);
+    s = LetStmt::make(result_var_name, call, s);
+    return s;
+}
+
 class WrapExternStages : public IRMutator {
     using IRMutator::visit;
-
-    // Make a call and return the result upwards immediately if it's
-    // non-zero. Assumes that inner or outer code will throw an
-    // appropriate error.
-    Stmt make_checked_call(Expr call) {
-        internal_assert(call.type() == Int(32));
-        string result_var_name = unique_name('t');
-        Expr result_var = Variable::make(Int(32), result_var_name);
-        Stmt s = AssertStmt::make(result_var == 0, result_var);
-        s = LetStmt::make(result_var_name, call, s);
-        return s;
-    }
 
     string make_wrapper(const Call *op) {
         string wrapper_name = "halide_private_wrapper_" + op->name;
@@ -66,8 +67,6 @@ class WrapExternStages : public IRMutator {
         vector<Stmt> upgrades, downgrades;
         vector<pair<string, Expr>> old_buffers;
         vector<Expr> call_args;
-        vector<Expr> old_buffer_struct_elems(sizeof(buffer_t) / sizeof(uint64_t),
-                                             make_zero(UInt(64)));
         for (Argument a : args) {
             if (a.kind == Argument::InputBuffer ||
                 a.kind == Argument::OutputBuffer) {
@@ -76,9 +75,8 @@ class WrapExternStages : public IRMutator {
                 // Allocate some stack space for the old buffer
                 string old_buffer_name = a.name + ".old_buffer_t";
                 Expr old_buffer_var = Variable::make(type_of<struct buffer_t *>(), old_buffer_name);
-                Expr old_buffer = Call::make(type_of<uint64_t *>(), Call::make_struct,
-                                             old_buffer_struct_elems, Call::Intrinsic);
-                old_buffer = reinterpret<struct buffer_t *>(old_buffer);
+                Expr old_buffer = Call::make(type_of<struct buffer_t *>(), Call::alloca,
+                                             {(int)sizeof(buffer_t)}, Call::Intrinsic);
                 old_buffers.emplace_back(old_buffer_name, old_buffer);
 
                 // Make the call that downgrades the new
@@ -107,8 +105,8 @@ class WrapExternStages : public IRMutator {
 
         while (!old_buffers.empty()) {
             auto p = old_buffers.back();
-            old_buffers.pop_back();
             body = LetStmt::make(p.first, p.second, body);
+            old_buffers.pop_back();
         }
 
         // Add the wrapper to the module
@@ -147,7 +145,7 @@ public:
 };
 }
 
-void wrap_extern_stages(Module m) {
+void wrap_legacy_extern_stages(Module m) {
     WrapExternStages wrap(m);
     // We'll be appending new functions to the module as we traverse
     // its functions, so we have to iterate with some care.
@@ -156,6 +154,80 @@ void wrap_extern_stages(Module m) {
         m.functions()[i].body = wrap.mutate(m.functions()[i].body);
         debug(2) << "Body after wrapping extern calls:\n" << m.functions()[i].body << "\n\n";
     }
+}
+
+void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
+    // Build the arguments to the wrapper function
+    vector<LoweredArgument> args;
+    vector<Stmt> upgrades, downgrades;
+    vector<Expr> call_args;
+    vector<pair<string, Expr>> new_buffers;
+    for (LoweredArgument arg : fn.args) {
+        if (arg.kind == Argument::InputScalar) {
+            args.push_back(arg);
+            call_args.push_back(Variable::make(arg.type, arg.name));
+        } else {
+            // Buffer arguments become opaque pointers
+            args.emplace_back(arg.name, Argument::InputScalar, type_of<buffer_t *>(), 0);
+
+            string new_buffer_name = arg.name + ".upgraded";
+            Expr new_buffer_var = Variable::make(type_of<struct halide_buffer_t *>(), new_buffer_name);
+
+            Expr old_buffer_var = Variable::make(type_of<struct buffer_t *>(), arg.name);
+
+            // We can't get these fields from the old buffer
+            BufferBuilder builder;
+            builder.type = arg.type;
+            builder.dimensions = arg.dimensions;
+            Expr new_buffer = builder.build();
+
+            new_buffers.emplace_back(new_buffer_name, new_buffer);
+
+            // Make the call that downgrades the new
+            // buffer into the old buffer struct.
+            Expr downgrade_call = Call::make(Int(32), "halide_downgrade_buffer_t",
+                                             {arg.name, new_buffer_var, old_buffer_var},
+                                             Call::Extern);
+            downgrades.push_back(make_checked_call(downgrade_call));
+
+            // Make the call to upgrade old buffer
+            // fields into the original new
+            // buffer. Important for bounds queries.
+            Expr upgrade_call = Call::make(Int(32), "halide_upgrade_buffer_t",
+                                           {arg.name, old_buffer_var, new_buffer_var},
+                                           Call::Extern);
+            upgrades.push_back(make_checked_call(upgrade_call));
+
+            call_args.push_back(new_buffer_var);
+        }
+    }
+
+    Call::CallType call_type = Call::Extern;
+    if (fn.name_mangling == NameMangling::CPlusPlus ||
+        (fn.name_mangling == NameMangling::Default &&
+         module.target().has_feature(Target::CPlusPlusMangling))) {
+        call_type = Call::ExternCPlusPlus;
+    }
+    Expr inner_call = Call::make(Int(32), fn.name, call_args, call_type);
+    Stmt body = make_checked_call(inner_call);
+    body = Block::make({Block::make(upgrades), body, Block::make(downgrades)});
+
+    while (!new_buffers.empty()) {
+        auto p = new_buffers.back();
+        body = LetStmt::make(p.first, p.second, body);
+        new_buffers.pop_back();
+    }
+
+    string name = fn.name;
+    if (!module.target().has_feature(Target::CPlusPlusMangling)) {
+        // We can't overload the same name, so add a suffix.
+        name += "_old_buffer_t";
+    }
+
+    // Add the wrapper to the module.
+    debug(2) << "Added legacy wrapper for " << fn.name << ":\n" << body << "\n\n";
+    LoweredFunc wrapper(name, args, body, LoweredFunc::External, NameMangling::Default);
+    module.append(wrapper);
 }
 
 }

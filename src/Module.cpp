@@ -96,11 +96,19 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
     delete f;
 }
 
-LoweredFunc::LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
-    : name(name), args(args), body(body), linkage(linkage) {}
+LoweredFunc::LoweredFunc(const std::string &name,
+                         const std::vector<LoweredArgument> &args,
+                         Stmt body,
+                         LinkageType linkage,
+                         NameMangling name_mangling)
+    : name(name), args(args), body(body), linkage(linkage), name_mangling(name_mangling) {}
 
-LoweredFunc::LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
-    : name(name), body(body), linkage(linkage) {
+LoweredFunc::LoweredFunc(const std::string &name,
+                         const std::vector<Argument> &args,
+                         Stmt body,
+                         LinkageType linkage,
+                         NameMangling name_mangling)
+    : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
         this->args.push_back(i);
     }
@@ -223,6 +231,7 @@ void Module::compile(const Outputs &output_files) const {
         debug(1) << "Module.compile(): c_header_name " << output_files.c_header_name << "\n";
         std::ofstream file(output_files.c_header_name);
         Internal::CodeGen_C cg(file,
+                               target(),
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
                                output_files.c_header_name);
@@ -232,6 +241,7 @@ void Module::compile(const Outputs &output_files) const {
         debug(1) << "Module.compile(): c_source_name " << output_files.c_source_name << "\n";
         std::ofstream file(output_files.c_source_name);
         Internal::CodeGen_C cg(file,
+                               target(),
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
@@ -350,7 +360,12 @@ void compile_multitarget(const std::string &fn_name,
 
         if (target == base_target) {
             can_use = IntImm::make(Int(32), 1);
-            base_target_args = module.functions().back().args;
+            for (const LoweredFunc &fn : module.functions()) {
+                if (fn.name == sub_fn_name) {
+                    base_target_args = fn.args;
+                    break;
+                }
+            }
         }
 
         wrapper_args.push_back(can_use != 0);
@@ -392,7 +407,7 @@ void compile_multitarget(const std::string &fn_name,
     }
 
     Module wrapper_module(fn_name, wrapper_target);
-    wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
+    wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
     wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
 
     if (!output_files.c_header_name.empty()) {

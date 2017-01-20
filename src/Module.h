@@ -33,6 +33,13 @@ struct LoweredArgument : public Argument {
                     Expr _max = Expr()) : Argument(_name, _kind, _type, _dimensions, _def, _min, _max) {}
 };
 
+/** An enum to make calling convention changes clearer. */
+enum class NameMangling {
+    Default,   ///< Whatever compiler is being used / whatever is specified in the Target
+    C,         ///< No name mangling
+    CPlusPlus, ///< C++ name mangling
+};
+
 /** Definition of a lowered function. This object provides a concrete
  * mapping between parameters used in the function body and their
  * declarations in the argument list. */
@@ -48,14 +55,27 @@ struct LoweredFunc {
     /** Type of linkage a function can have. */
     enum LinkageType {
         External, ///< Visible externally.
+        ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
         Internal, ///< Not visible externally, similar to 'static' linkage in C.
     };
 
     /** The linkage of this function. */
     LinkageType linkage;
 
-    LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage);
-    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage);
+    /** The name-mangling choice for the function. Defaults to using
+     * the Target. */
+    NameMangling name_mangling;
+
+    LoweredFunc(const std::string &name,
+                const std::vector<LoweredArgument> &args,
+                Stmt body,
+                LinkageType linkage,
+                NameMangling mangling = NameMangling::Default);
+    LoweredFunc(const std::string &name,
+                const std::vector<Argument> &args,
+                Stmt body,
+                LinkageType linkage,
+                NameMangling mangling = NameMangling::Default);
 };
 
 }
