@@ -42,7 +42,7 @@ inline std::string get_current_directory() {
     std::string dir;
     char p[MAX_PATH];
     DWORD ret = GetCurrentDirectoryA(MAX_PATH, p);
-    if (p != 0) {
+    if (ret != 0) {
         dir = p;
     }
     return dir;
