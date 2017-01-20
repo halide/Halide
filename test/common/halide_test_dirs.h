@@ -16,11 +16,13 @@
 namespace Halide {
 namespace Internal {
 
-std::string get_env(const char *name) {
+namespace Test {
+
+inline std::string get_env_variable(const char *name) {
 #ifdef _MSC_VER
     char buf[MAX_PATH];
     size_t read = 0;
-    getenv_s(&read, buf, name);
+    if (getenv_s(&read, buf, name) != 0) read = 0;
     if (read) {
         return std::string(buf);
     }
@@ -56,6 +58,8 @@ inline std::string get_current_directory() {
 #endif
 }
 
+}  // namespace Test
+
 /** Return the path to a directory that can be safely written to
  * when running tests; the contents directory may or may not outlast
  * the lifetime of test itself (ie, the files may be cleaned up after test
@@ -66,10 +70,10 @@ inline std::string get_current_directory() {
  */
 inline std::string get_test_tmp_dir() {
     // If TEST_TMPDIR is specified, we assume it is a valid absolute path
-    std::string dir = get_env("TEST_TMPDIR");
+    std::string dir = Test::get_env_variable("TEST_TMPDIR");
     if (dir.empty()) {
         // If not specified, use current dir.
-        dir = get_current_directory();
+        dir = Test::get_current_directory();
     }
     bool is_absolute = dir.size() >= 1 && dir[0] == '/';
     char sep = '/';
