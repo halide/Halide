@@ -1152,7 +1152,7 @@ public:
         } else {
             // We still fit in the class
         }
-        buf.dim[dims] = {0, 0, 0};
+        buf.dim[dims] = {0, 1, 0};
         if (dims == 0) {
             buf.dim[dims].stride = 1;
         } else {
