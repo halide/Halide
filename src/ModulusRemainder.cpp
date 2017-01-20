@@ -389,8 +389,11 @@ void ComputeModulusRemainder::visit(const Let *op) {
     remainder = val.remainder;
 }
 
-void ComputeModulusRemainder::visit(const Shuffle *) {
-    internal_assert(false) << "modulus_remainder of vector\n";
+void ComputeModulusRemainder::visit(const Shuffle *op) {
+    // It's possible that scalar expressions are extracting a lane of a vector - don't fail in this case, but stop
+    internal_assert(op->indices.size() == 1) << "modulus_remainder of vector\n";
+    modulus = 1;
+    remainder = 0;
 }
 
 void ComputeModulusRemainder::visit(const LetStmt *) {
