@@ -184,7 +184,8 @@ class InjectHexagonRpc : public IRMutator {
                 }
                 args.push_back(arg);
             }
-            device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::External));
+            // We'll call in using the argv version.
+            device_code.append(LoweredFunc(hex_name, args, body, LoweredFunc::ExternalPlusMetadata));
 
             // Generate a call to hexagon_device_run.
             std::vector<Expr> arg_sizes;
@@ -193,8 +194,11 @@ class InjectHexagonRpc : public IRMutator {
 
             for (const auto& i : c.buffers) {
                 // The Hexagon runtime expects buffer args to be
-                // passed as just the device and host field.
-                Expr device = Variable::make(UInt(64), i.first + ".device");
+                // passed as just the device and host
+                // field. CodeGen_Hexagon knows how to unpack buffers
+                // passed this way. The device field is unused and may
+                // not exist as a symbol.
+                Expr device = make_const(UInt(64), 0);
                 Expr host = Variable::make(Handle(), i.first + ".host");
                 Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
                 arg_ptrs.push_back(pseudo_buffer);
