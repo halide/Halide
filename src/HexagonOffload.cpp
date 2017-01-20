@@ -280,7 +280,7 @@ public:
         llvm::raw_svector_ostream object_stream(object);
         compile_llvm_module_to_object(*llvm_module, object_stream);
 
-        if (debug::debug_level >= 2) {
+        if (debug::debug_level() >= 2) {
             debug(2) << "Hexagon device code assembly: " << "\n";
             llvm::SmallString<4096> assembly;
             llvm::raw_svector_ostream assembly_stream(assembly);
