@@ -15,11 +15,15 @@ WEAK int halide_upgrade_buffer_t(void *user_context, const char *name,
         new_buf->dim[i].extent = old_buf->extent[i];
         new_buf->dim[i].stride = old_buf->stride[i];
     }
+    new_buf->flags = 0;
+    new_buf->device = 0;
+    new_buf->device_interface = NULL;
     return 0;
 }
 
 WEAK int halide_downgrade_buffer_t(void *user_context, const char *name,
                                    const halide_buffer_t *new_buf, buffer_t *old_buf) {
+    memset(old_buf, 0, sizeof(buffer_t));
     if (new_buf->device) {
         return halide_error_failed_to_downgrade_buffer_t(user_context, name,
                                                          "buffer has a device allocation");

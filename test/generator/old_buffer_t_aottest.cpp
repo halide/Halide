@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     out.stride[1] = 60;
 
     // Check bounds inference works
-    int err = old_buffer_t(&in1, &in2, scalar_param, &out);
+    int err = old_buffer_t_old_buffer_t(&in1, &in2, scalar_param, &out);
     if (err != 0) {
         printf("Pipeline returned non-zero exit status in bounds query mode: %d\n", err);
     }
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
     memset(in2.host, 2, in2.extent[0] * in2.extent[1] * in2.elem_size);
 
     // Run the pipeline for real
-    err = old_buffer_t(&in1, &in2, scalar_param, &out);
+    err = old_buffer_t_old_buffer_t(&in1, &in2, scalar_param, &out);
     if (err != 0) {
         printf("Pipeline returned non-zero exit status: %d\n", err);
     }

@@ -148,8 +148,11 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
     return llvm::GlobalValue::ExternalLinkage;
 
     switch (t) {
-    case LoweredFunc::External: return llvm::GlobalValue::ExternalLinkage;
-    default: return llvm::GlobalValue::PrivateLinkage;
+    case LoweredFunc::ExternalPlusMetadata:
+    case LoweredFunc::External:
+        return llvm::GlobalValue::ExternalLinkage;
+    default:
+        return llvm::GlobalValue::PrivateLinkage;
     }
 }
 
@@ -443,8 +446,11 @@ struct MangledNames {
     string metadata_name;
 };
 
-MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType linkage,
-                               const std::vector<LoweredArgument> &args, const Target &target) {
+MangledNames get_mangled_names(const std::string &name,
+                               LoweredFunc::LinkageType linkage,
+                               NameMangling mangling,
+                               const std::vector<LoweredArgument> &args,
+                               const Target &target) {
     std::vector<std::string> namespaces;
     MangledNames names;
     names.simple_name = extract_namespaces(name, namespaces);
@@ -452,9 +458,10 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
 
-    if (linkage == LoweredFunc::External &&
-        target.has_feature(Target::CPlusPlusMangling) &&
-        !target.has_feature(Target::JIT)) { // TODO: make this work with JIT or remove mangling flag in JIT target setup
+    if (linkage != LoweredFunc::Internal &&
+        ((mangling == NameMangling::Default &&
+          target.has_feature(Target::CPlusPlusMangling)) ||
+         mangling == NameMangling::CPlusPlus)) {
         std::vector<ExternFuncArgument> mangle_args;
         for (const auto &arg : args) {
             if (arg.kind == Argument::InputScalar) {
@@ -475,7 +482,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
 }
 
 MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
-    return get_mangled_names(f.name, f.linkage, f.args, target);
+    return get_mangled_names(f.name, f.linkage, f.name_mangling, f.args, target);
 }
 
 }  // namespace
@@ -529,7 +536,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LoweredFunc::External) {
+        if (f.linkage == LoweredFunc::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
 
@@ -575,7 +582,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     } else {
         user_assert(function->isDeclaration())
             << "Another function with the name " << extern_name
-            << " already exists in the same module";
+            << " already exists in the same module\n";
         if (func_t != function->getFunctionType()) {
             std::cerr << "Desired function type for " << extern_name << ":\n";
             func_t->dump();
@@ -648,7 +655,8 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
 
     // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
     // happen for every output buffer if the function succeeds.
-    if (f.linkage == LoweredFunc::External && target.has_feature(Target::MSAN)) {
+    if (f.linkage != LoweredFunc::Internal &&
+        target.has_feature(Target::MSAN)) {
         llvm::Function *annotate_buffer_fn = module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
         internal_assert(annotate_buffer_fn) << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
         annotate_buffer_fn->setDoesNotAlias(0);
@@ -2670,8 +2678,13 @@ void CodeGen_LLVM::visit(const Call *op) {
             string extern_sub_fn_name = sub_fn_name;
             llvm::Function *sub_fn = module->getFunction(sub_fn_name);
             if (!sub_fn) {
-                extern_sub_fn_name = get_mangled_names(sub_fn_name, LoweredFunc::External, current_function_args, get_target()).extern_name;
-                debug(1) << "Did not find function " << sub_fn_name << ", assuming extern \"C\" " << extern_sub_fn_name << "\n";
+                extern_sub_fn_name = get_mangled_names(sub_fn_name,
+                                                       LoweredFunc::External,
+                                                       NameMangling::Default,
+                                                       current_function_args,
+                                                       get_target()).extern_name;
+                debug(1) << "Did not find function " << sub_fn_name
+                         << ", assuming extern \"C\" " << extern_sub_fn_name << "\n";
                 vector<llvm::Type *> arg_types;
                 for (const auto &arg : function->args()) {
                      arg_types.push_back(arg.getType());

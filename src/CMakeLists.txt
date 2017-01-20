@@ -112,6 +112,7 @@ set (RUNTIME_LL
   x86_avx
   x86_sse41
 )
+
 set (RUNTIME_BC
   compute_20
   compute_30
@@ -222,17 +223,32 @@ foreach (i ${RUNTIME_BC} )
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 
-add_custom_command(OUTPUT "${INITMOD_PREFIX}declarations.cpp"
-  DEPENDS "${NATIVE_RUNTIME_DIR}HalideRuntime.h"
-  COMMAND binary2cpp "initmod_declarations" < "${NATIVE_RUNTIME_DIR}HalideRuntime.h" > "${INITMOD_PREFIX}declarations.cpp"
-  COMMENT "HalideRuntime.h -> ${INITMOD_PREFIX}declarations.cpp")
-list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}declarations.cpp")
-
 add_custom_command(OUTPUT "${INITMOD_PREFIX}inlined_c.cpp"
   DEPENDS "${NATIVE_RUNTIME_DIR}buffer_t.cpp"
   COMMAND binary2cpp "initmod_inlined_c" < "${NATIVE_RUNTIME_DIR}buffer_t.cpp" > "${INITMOD_PREFIX}inlined_c.cpp"
   COMMENT "buffer_t.cpp -> ${INITMOD_PREFIX}inlined_c.cpp")
 list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}inlined_c.cpp")
+
+set(RUNTIME_HEADER_FILES
+  HalideRuntime.h
+  HalideRuntimeCuda.h
+  HalideRuntimeHexagonHost.h
+  HalideRuntimeOpenCL.h
+  HalideRuntimeMetal.h
+  HalideRuntimeOpenGL.h
+  HalideRuntimeOpenGLCompute.h
+  HalideRuntimeQurt.h
+  HalideBuffer.h
+)
+
+foreach (i ${RUNTIME_HEADER_FILES})
+  string(REPLACE "." "_" SYM_NAME "${i}")
+  add_custom_command(OUTPUT "${INITMOD_PREFIX}${SYM_NAME}.cpp"
+    DEPENDS "${NATIVE_RUNTIME_DIR}${i}"
+    COMMAND binary2cpp "runtime_header_${SYM_NAME}" < "${NATIVE_RUNTIME_DIR}${i}" > "${INITMOD_PREFIX}${SYM_NAME}.cpp"
+    COMMENT "${i} -> ${INITMOD_PREFIX}${SYM_NAME}.cpp")
+  list(APPEND INITIAL_MODULES "${INITMOD_PREFIX}${SYM_NAME}.cpp")
+endforeach()
 
 set(HEADER_FILES
   AddImageChecks.h
@@ -375,16 +391,9 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
   DEPENDS build_halide_h ${HEADER_FILES})
 
-configure_file(runtime/HalideRuntime.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeCuda.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeHexagonHost.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeOpenCL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeMetal.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeOpenGL.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeOpenGLCompute.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideRuntimeQurt.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-configure_file(runtime/HalideBuffer.h "${CMAKE_BINARY_DIR}/include" COPYONLY)
-
+foreach (i ${RUNTIME_HEADER_FILES})
+  configure_file(runtime/${i} "${CMAKE_BINARY_DIR}/include" COPYONLY)
+endforeach()
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AddImageChecks.cpp

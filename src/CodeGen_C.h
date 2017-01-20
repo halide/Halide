@@ -32,7 +32,9 @@ public:
 
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
-    CodeGen_C(std::ostream &dest, OutputKind output_kind = CImplementation,
+    CodeGen_C(std::ostream &dest,
+              Target target,
+              OutputKind output_kind = CImplementation,
               const std::string &include_guard = "");
     ~CodeGen_C();
 
@@ -42,14 +44,18 @@ public:
     EXPORT static void test();
 
 protected:
+
     /** Emit a declaration. */
     // @{
-    virtual void compile(const LoweredFunc &func, const Target &target);
-    virtual void compile(const Buffer<> &buffer, const Target &target);
+    virtual void compile(const LoweredFunc &func);
+    virtual void compile(const Buffer<> &buffer);
     // @}
 
     /** An ID for the most recently generated ssa variable */
     std::string id;
+
+    /** The target being generated for. */
+    Target target;
 
     /** Controls whether this instance is generating declarations or
      * definitions and whether the interface us extern "C" or C++. */
@@ -127,17 +133,10 @@ protected:
     /** True if there is a void * __user_context parameter in the arguments. */
     bool have_user_context;
 
-    /** An enum to make calling convention changes clearer. */
-    enum class COrCPlusPlus {
-        Default,   ///< Whatever compiler is being used
-        C,         ///< extern "C" is forced if C++
-        CPlusPlus, ///< Operationally same as "default" but shows in code which things are expected to be mangled.
-    };
-
     /** Track current calling convention scope. */
     bool extern_c_open;
 
-    void switch_to_c_or_c_plus_plus(COrCPlusPlus mode);
+    void switch_to_c_or_c_plus_plus(NameMangling mode);
 
     using IRPrinter::visit;
 
