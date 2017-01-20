@@ -2470,7 +2470,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 args[i] = codegen(op->args[i]);
                 types[i] = args[i]->getType();
-                all_same_type &= op->args[i].type() == op->args[0].type();
+                all_same_type &= (types[i] == types[0]);
             }
 
             // Use either a single scalar, a fixed-size array, or a
