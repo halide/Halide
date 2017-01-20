@@ -78,7 +78,7 @@ inline std::string get_test_tmp_dir() {
     char sep = '/';
 #ifdef _WIN32
     // Allow for C:\whatever on Windows
-    if (dir.size() >= 3 && dir[1] == '\\' && dir[2] == ':') {
+    if (dir.size() >= 3 && dir[1] == ':' && dir[2] == '\\') {
         is_absolute = true;
         sep = '\\';
     }
