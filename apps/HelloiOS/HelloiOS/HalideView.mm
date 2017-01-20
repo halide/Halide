@@ -155,14 +155,12 @@ static const HalideFuncs kHalideMetal = {
 - (void)updateLogWith: (double) elapsedTime using_metal: (bool) using_metal
 {
 #if HAS_METAL_SDK
-    const char* mode = using_metal ? "(Metal; Double-tap for CPU)" : "(CPU; Double-tap for Metal)";
+    NSString *mode = using_metal ? @"(Metal; Double-tap for CPU)" : @"(CPU; Double-tap for Metal)";
 #else
-    const char* mode = "(CPU; Metal not available)";
+    NSString *mode = @"(CPU; Metal not available)";
 #endif
-    char log_text[2048];
-    snprintf(log_text, sizeof(log_text),
-         "Halide routine takes %0.3f ms %s\n", elapsedTime * 1000, mode);
-    [self.outputLog setText: [NSString stringWithUTF8String:log_text]];
+    [self.outputLog setText: [NSString stringWithFormat:@"Halide routine takes %0.3f ms %@", 
+                              elapsedTime * 1000, mode]];
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
@@ -206,6 +204,19 @@ static const HalideFuncs kHalideMetal = {
 #else
     const bool output_bgra = false;
 #endif
+
+    // A note on timing: based on our experimentation, this is indeed effective for 
+    // timing Metal launches, not just CPU kernels. Other GPU API implementations 
+    // may return way before actually completing kernel execution, but Metal 
+    // (at least in this context) doesn't seem to, making this basic timing approach 
+    // fairly effective.
+    // 
+    // However, there seems to be a large minimum latency to return from the Metal launches, 
+    // which can make this an underestimate of the potential GPU throughput; for example, 
+    // running the update and render steps 10 times per frame (instead of once) 
+    // converges to a steady state per-frame cost which is often much less than 
+    // the single iteration cost.
+
     double t_before = CACurrentMediaTime();
     halide_funcs.update((__bridge void *)self, buf1, tx, ty, iteration, buf2);
     halide_funcs.render((__bridge void *)self, buf2, output_bgra, pixel_buf);
@@ -306,7 +317,6 @@ static const HalideFuncs kHalideMetal = {
         for (;;) {
             [self renderOneFrame: halide_funcs using_metal: false];
 
-            pixel_buf.copy_to_host();
             const int bytesPerRow = pixel_buf.dim(1).stride() * pixel_buf.type().bits / 8;
             CGImageRef image_ref =
                 CGImageCreate(image_width, image_height, 
