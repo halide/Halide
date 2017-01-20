@@ -51,7 +51,7 @@ public:
     debug(int verbosity) : logging(verbosity <= debug_level()) {}
 
     template<typename T>
-    debug &operator<<(T x) {
+    debug &operator<<(const T &x) {
         if (logging) {
             std::cerr << x;
         }
