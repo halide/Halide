@@ -1,11 +1,3 @@
-//
-//  HalideView.h
-//  Halide test
-//
-//  Created by Andrew Adams on 7/23/14.
-//  Copyright (c) 2014 Andrew Adams. All rights reserved.
-//
-
 #include <TargetConditionals.h>
 
 #if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_8_0 && !(TARGET_IPHONE_SIMULATOR || TARGET_OS_SIMULATOR)

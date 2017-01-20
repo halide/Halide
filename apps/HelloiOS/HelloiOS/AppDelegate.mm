@@ -1,11 +1,3 @@
-//
-//  AppDelegate.m
-//  Halide test
-//
-//  Created by Andrew Adams on 6/27/14.
-//  Copyright (c) 2014 Andrew Adams. All rights reserved.
-//
-
 #import "AppDelegate.h"
 #import "HalideView.h"
 #import "HalideViewController.h"
