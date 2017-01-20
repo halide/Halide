@@ -12,6 +12,7 @@
 #include "IROperator.h"
 #include "Outputs.h"
 #include "StmtToHtml.h"
+#include "WrapExternStages.h"
 
 using Halide::Internal::debug;
 
@@ -408,6 +409,10 @@ void compile_multitarget(const std::string &fn_name,
 
     Module wrapper_module(fn_name, wrapper_target);
     wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
+
+    // Add a wrapper to accept old buffer_ts
+    add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
+
     wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
 
     if (!output_files.c_header_name.empty()) {
