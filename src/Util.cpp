@@ -46,7 +46,7 @@ std::string get_env_variable(char const *env_var_name, size_t &read) {
 
     #ifdef _MSC_VER
     char lvl[32];
-    getenv_s(&read, lvl, env_var_name);
+    if (getenv_s(&read, lvl, env_var_name) != 0) read = 0;
     #else
     char *lvl = getenv(env_var_name);
     read = (lvl)?1:0;
