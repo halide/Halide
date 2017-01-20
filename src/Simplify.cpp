@@ -5616,8 +5616,8 @@ void check_boolean() {
     // was being simplified incorrectly, but *only* if var was of type Bool.
     Stmt then_clause = AssertStmt::make(b2, Expr(22));
     Stmt else_clause = AssertStmt::make(b2, Expr(33));
-    check(IfThenElse::make(b1 == true, then_clause, else_clause),
-          IfThenElse::make(b1 == true, then_clause, else_clause));
+    check(IfThenElse::make(b1 == b2, then_clause, else_clause),
+          IfThenElse::make(b1 == b2, then_clause, else_clause));
 
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
