@@ -1,7 +1,3 @@
-//
-//  HalideViewController.h
-//
-
 #ifndef HelloiOS_HalideViewController_h
 #define HelloiOS_HalideViewController_h
 

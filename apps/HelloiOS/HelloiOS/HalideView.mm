@@ -1,12 +1,3 @@
-//
-//  HalideView.m
-//  Halide test
-//
-//  Created by Andrew Adams on 7/23/14.
-//  Copyright (c) 2014 Andrew Adams. All rights reserved.
-//
-
-
 #import "HalideView.h"
 
 #include "HalideBuffer.h"
