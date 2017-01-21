@@ -1,3 +1,11 @@
+#ifdef _MSC_VER
+#include <stdio.h>
+int main(int argc, char **argv) {
+    printf("Skipping test on Windows\n");
+    return 0;
+}
+#else
+
 #include "Halide.h"
 #include "halide_image_io.h"
 #include "test/common/halide_test_dirs.h"
@@ -74,3 +82,5 @@ int main(int argc, char **argv) {
         return 0;
     }
 }
+
+#endif
