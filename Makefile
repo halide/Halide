@@ -151,7 +151,7 @@ TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz
 # gcc 4.8 fires a bogus warning on old versions of png.h
 CXX_VERSION = $(shell $(CXX) --version | head -n1)
 $(info $(CXX_VERSION))
-ifneq (,$(findstring GCC,$(CXX_VERSION)))
+ifneq (,$(findstring g++,$(CXX_VERSION)))
 ifneq (,$(findstring 4.8,$(CXX_VERSION)))
 TEST_CXX_FLAGS += -Wno-literal-suffix
 endif
