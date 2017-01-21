@@ -230,8 +230,12 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
-LIBJPEG_LIBS = -ljpeg
-LIBJPEG_CXX_FLAGS ?=
+LIBJPEG_LIBS ?= -ljpeg
+
+# There's no libjpeg-config, unfortunately. We should look for
+# jpeglib.h one directory level up from png.h
+LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
+LIBJPEG_CXX_FLAGS ?= $(LIBPNG_INCLUDE_DIRS:=/..)
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
