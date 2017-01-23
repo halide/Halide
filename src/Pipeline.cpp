@@ -688,10 +688,8 @@ void *Pipeline::compile_jit(const Target &target_arg) {
                          make_externs_jit_module(target_arg, lowered_externs));
 
     // Dump bitcode to a file if the environment variable
-    // HL_GENBITCODE is non-zero.
-    size_t gen;
-    get_env_variable("HL_GENBITCODE", gen);
-    if (gen) {
+    // HL_GENBITCODE is defined to a nonzero value.
+    if (atoi(get_env_variable("HL_GENBITCODE").c_str())) {
         string program_name = running_program_name();
         if (program_name.empty()) {
             program_name = "unknown" + unique_name('_').substr(1);
