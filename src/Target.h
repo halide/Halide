@@ -71,6 +71,8 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        HVX_dlbuf = halide_target_feature_hvx_dlbuf,
+        HVX_dlopen = halide_target_feature_hvx_dlopen,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,

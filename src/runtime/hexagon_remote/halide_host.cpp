@@ -240,9 +240,9 @@ void halide_hexagon_host_free(void *ptr) {
 
 // This is a shim for calling v2 from v1.
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr,
-                                          const char* name, int nameLen) {
+                                          const char* name, int nameLen, int usedl) {
     handle_t sym = 0;
-    int result = halide_hexagon_remote_get_symbol_v2(module_ptr, name, nameLen, &sym);
+    int result = halide_hexagon_remote_get_symbol_v2(module_ptr, name, nameLen, usedl, &sym);
     return result == 0 ? sym : 0;
 }
 

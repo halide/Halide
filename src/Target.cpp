@@ -269,6 +269,8 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},
+    {"hvx_dlbuf", Target::HVX_dlbuf},
+    {"hvx_dlopen", Target::HVX_dlopen},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
@@ -521,7 +523,8 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
     case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128) ||
-                                        has_feature(Target::HVX_v62);
+                                        has_feature(Target::HVX_v62) || has_feature(Target::HVX_dlbuf) ||
+                                        has_feature(Target::HVX_dlopen);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }
