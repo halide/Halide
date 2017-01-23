@@ -123,15 +123,12 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     void *lib = NULL;
     elf_t *elib = NULL;
     if (use_dlopenbuf) {
-        log_printf("dlopenbuf started\n");
         lib = dlopenbuf( "libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
             log_printf("dlopenbuf failed");
             return -1;
         }
-        log_printf("dlopenbuf succeeded (%d)\n", lib);
     } else if (use_dlopen) {
-        log_printf("dlopen started\n");
         const char *filename = (const char *)code;
         //lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
         lib = sim_halide_load_library(filename);
