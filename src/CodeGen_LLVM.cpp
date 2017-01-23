@@ -338,8 +338,7 @@ void CodeGen_LLVM::initialize_llvm() {
 
         // You can hack in command-line args to llvm with the
         // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
-        size_t defined = 0;
-        std::string args = get_env_variable("HL_LLVM_ARGS", defined);
+        std::string args = get_env_variable("HL_LLVM_ARGS");
         if (!args.empty()) {
             vector<std::string> arg_vec = split_string(args, " ");
             vector<const char *> c_arg_vec;
