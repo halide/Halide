@@ -15,7 +15,7 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
+WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
     while (c.extent[d] == 1 && d) d--;
 
     if (d == 0) {
