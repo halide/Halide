@@ -52,13 +52,8 @@ struct debug {
     debug(int v) : verbosity(v) {
         if (!initialized) {
             // Read the debug level from the environment
-            size_t read;
-            std::string lvl = get_env_variable("HL_DEBUG_CODEGEN", read);
-            if (read) {
-                debug_level = atoi(lvl.c_str());
-            } else {
-                debug_level = 0;
-            }
+            std::string lvl = get_env_variable("HL_DEBUG_CODEGEN");
+            debug_level = lvl.empty() ? 0 : atoi(lvl.c_str());
             initialized = true;
         }
     }
