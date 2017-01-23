@@ -235,7 +235,6 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 // This function should be deleted once the hexagon tools impliment the dlopenbuf api.
 __attribute__((weak))
  void* dlopenbuf(const char*filename, const char* data, int size, int perms) {
-    log_printf("dlopenbuf started %s\n", filename);
     FILE *f = fopen(filename, "w+");
     if (!f) {
         log_printf("Failed to open shared object file %s\n", filename);
@@ -265,7 +264,6 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     elf_t *elib = NULL;
     if (use_dlopenbuf) {
         dllib_init();
-        halide_print(NULL, "dlopenbuf started\n");
         lib = dlopenbuf( "libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
             halide_print(NULL, "dlopenbuf failed");
@@ -273,7 +271,6 @@ int initialize_kernels(const unsigned char *code, int codeLen,
         }
     } else if (use_dlopen) {
         dllib_init();
-        halide_print(NULL, "dlopen started\n");
         const char *filename = (const char *) code;
         //lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
         lib = halide_load_library(filename);
