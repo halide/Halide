@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
-#include <stdlib.h>
+
+#include "./testing.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -70,19 +71,9 @@ bool perform_test(const char *label, const Target target, Func f, int expected_n
     // Check for correct result values
     out.copy_to_host();
 
-    for (int c=0; c != out.extent(2); ++c) {
-        for (int y=0; y != out.extent(1); ++y) {
-            for (int x=0; x != out.extent(0); ++x) {
-                const float expected = expected_val(x, y, c);
-                const float result = out(x, y, c);
-                if (fabs(result - expected) > tol) {
-                    fprintf(stderr, "%s: Incorrect value: %f != %f at %d,%d,%d.\n",
-                            label, result, expected, x, y, c);
-                    return false;
-                }
-            }
-        }
-    }
+    if (!Testing::check_result<float>(out, expected_val, tol))
+	return false;
+
     fprintf(stderr, "%s Passed!\n", label);
     return true;
 }
