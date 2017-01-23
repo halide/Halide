@@ -390,7 +390,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     ostream.flush();
     #endif
 
-    if (debug::debug_level >= 2) {
+    if (debug::debug_level() >= 2) {
         module->dump();
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
