@@ -44,26 +44,21 @@ EXPORT std::ostream &operator << (std::ostream &, const LoweredFunc &);
  * HL_DEBUG_CODEGEN
  */
 
-struct debug {
-    EXPORT static int debug_level;
-    EXPORT static bool initialized;
-    int verbosity;
+class debug {
+    const bool logging;
 
-    debug(int v) : verbosity(v) {
-        if (!initialized) {
-            // Read the debug level from the environment
-            std::string lvl = get_env_variable("HL_DEBUG_CODEGEN");
-            debug_level = lvl.empty() ? 0 : atoi(lvl.c_str());
-            initialized = true;
-        }
-    }
+public:
+    debug(int verbosity) : logging(verbosity <= debug_level()) {}
 
     template<typename T>
-    debug &operator<<(T x) {
-        if (verbosity > debug_level) return *this;
-        std::cerr << x;
+    debug &operator<<(T&& x) {
+        if (logging) {
+            std::cerr << std::forward<T>(x);
+        }
         return *this;
     }
+
+    EXPORT static int debug_level();
 };
 
 }

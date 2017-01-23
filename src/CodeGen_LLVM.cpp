@@ -930,7 +930,7 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
-    if (debug::debug_level >= 3) {
+    if (debug::debug_level() >= 3) {
         module->dump();
     }
 
@@ -985,7 +985,7 @@ void CodeGen_LLVM::optimize_module() {
     module_pass_manager.run(*module);
 
     debug(3) << "After LLVM optimizations:\n";
-    if (debug::debug_level >= 2) {
+    if (debug::debug_level() >= 2) {
         module->dump();
     }
 }
@@ -1008,7 +1008,7 @@ llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const 
             std::ostringstream err;
             err << "Symbol not found: " << name << "\n";
 
-            if (debug::debug_level > 0) {
+            if (debug::debug_level() > 0) {
                 err << "The following names are in scope:\n"
                     << symbol_table << "\n";
             }
