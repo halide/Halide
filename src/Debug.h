@@ -51,9 +51,9 @@ public:
     debug(int verbosity) : logging(verbosity <= debug_level()) {}
 
     template<typename T>
-    debug &operator<<(const T &x) {
+    debug &operator<<(T&& x) {
         if (logging) {
-            std::cerr << x;
+            std::cerr << std::forward<T>(x);
         }
         return *this;
     }
