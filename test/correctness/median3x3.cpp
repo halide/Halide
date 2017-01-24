@@ -55,7 +55,7 @@ int main(int arch, char **argv) {
         Var xi("xi"), yi("yi");
         median3x3.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        median3x3.hexagon().vectorize(x, 64);
+        median3x3.hexagon().vectorize(x, 64).parallel(y);
     } else {
         median3x3.vectorize(x, target.natural_vector_size<uint8_t>());
     }
