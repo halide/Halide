@@ -83,7 +83,7 @@ class InjectHexagonRpc : public IRMutator {
     // We need to know if the kernel launch occurs inside a loop, so
     // as to only generate calls to power_hvx_on/off if there is a
     // single kernel launch.
-    bool kernel_in_loop = false;
+    int run_count = 0;
     bool in_loop = false;
 
     // Alignment info for Int(32) variables in scope, so we don't lose
@@ -237,7 +237,31 @@ class InjectHexagonRpc : public IRMutator {
 
         stmt = call_extern_and_assert("halide_hexagon_run", params);
 
-        kernel_in_loop = kernel_in_loop || in_loop;
+        // If we're inside a loop, we need to assume that we can run
+        // more than one kernel. 2 is more than 1, so it's good
+        // enough.
+        run_count += in_loop ? 2 : 1;
+    }
+
+    void visit(const IfThenElse *op) {
+        Expr condition = mutate(op->condition);
+        int old_run_count = run_count;
+        Stmt then_case = mutate(op->then_case);
+        int if_run_count = run_count;
+
+        run_count = old_run_count;
+        Stmt else_case = mutate(op->else_case);
+        int then_run_count = run_count;
+
+        run_count = std::max(if_run_count, then_run_count);
+
+        if (!condition.same_as(op->condition) ||
+            !then_case.same_as(op->then_case) ||
+            !else_case.same_as(op->else_case)) {
+            stmt = IfThenElse::make(condition, then_case, else_case);
+        } else {
+            stmt = op;
+        }
     }
 
     void visit(const Let *op) {
@@ -280,7 +304,7 @@ public:
         // however, if this pipeline performs more than one Hexagon
         // RPC call, we can reduce overhead of individual invocations
         // by powering on HVX once for the duration of this pipeline.
-        if (device_code.functions().size() > 1 || kernel_in_loop) {
+        if (run_count > 1) {
             s = power_hvx_on(s);
         }
 
