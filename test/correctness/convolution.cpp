@@ -14,6 +14,8 @@ public:
         }
         IRVisitor::visit(op);
     }
+
+    using IRVisitor::visit;
 };
 
 class ExpectPowerHvxOn : public IRMutator {
@@ -37,6 +39,8 @@ public:
 
         return s;
     }
+
+    using IRMutator::mutate;
 };
 
 int main(int argc, char **argv) {
