@@ -440,12 +440,11 @@ Stmt build_produce(Function f, const Target &target) {
         }
 
         // Make the extern call
-        Expr e = Call::make(Int(32), extern_name, extern_call_args,
-                            f.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus
-                                                                 : Call::Extern);
+        Expr e = f.make_call_to_extern_definition(extern_call_args, target);
+
+        // Check if it succeeded
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
-        // Check if it succeeded
         Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
                                 {extern_name, result}, Call::Extern);
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
