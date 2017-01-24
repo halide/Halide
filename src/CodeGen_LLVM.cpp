@@ -2608,10 +2608,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         // It is assumed/required that all of the sub-functions have arguments
         // (and return values) that are identical to those of this->function.
         //
-        // Note that it's fine to use this with only a single condition+function
-        // pair: it will collapse to a single unconditional branch to the 
-        // underlying function.
-        internal_assert(op->args.size() >= 2);
+        // Note that we require >= 4 arguments: fewer would imply
+        // only one condition+function pair, which is pointless to use
+        // (the function should always be called directly).
+        //
+        internal_assert(op->args.size() >= 4);
         internal_assert(!(op->args.size() & 1));
 
         // Gather information we need about each function.
