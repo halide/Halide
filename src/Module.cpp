@@ -201,7 +201,7 @@ void Module::compile(const Outputs &output_files) const {
             {
                 std::string object_name = temp_dir.add_temp_object_file(output_files.static_library_name, "", target());
                 debug(1) << "Module.compile(): temporary object_name " << object_name << "\n";
-                    auto out = make_raw_fd_ostream(object_name);
+                auto out = make_raw_fd_ostream(object_name);
                 compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();  // create_static_library() is happier if we do this
             }
