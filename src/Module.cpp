@@ -339,6 +339,11 @@ void compile_multitarget(const std::string &fn_name,
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
+        if (!sub_out.c_source_name.empty()) {
+            user_assert(targets.size() == 1) << "Cannot request c_source_name for multiple targets.\n";
+            // C source output always is emitted unadorned.
+            sub_out.c_source_name = output_files.c_source_name;
+        }
         module.compile(sub_out);
 
         static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
