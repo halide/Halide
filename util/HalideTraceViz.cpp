@@ -30,9 +30,6 @@ using std::string;
 using std::queue;
 using std::array;
 
-// The first 48 bytes of a tracing packet are metadata
-const int packet_header_size = 48;
-
 // A struct representing a single Halide tracing packet.
 struct Packet : public halide_trace_packet_t {
     // Not all of this will be used, but this
