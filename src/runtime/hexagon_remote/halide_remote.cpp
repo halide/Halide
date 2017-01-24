@@ -22,10 +22,6 @@ const int stack_size = 1024 * 1024;
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 
-void *sim_halide_load_library(const char *name) {
-    return dlopen(name, RTLD_LOCAL|RTLD_LAZY);
-}
-
 extern "C" {
 
 // This is a basic implementation of the Halide runtime for Hexagon.
@@ -119,7 +115,6 @@ PipelineContext run_context(stack_alignment, stack_size);
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              int use_dlopen, int use_dlopenbuf,
                                              handle_t *module_ptr) {
-    log_printf("halide_hexagon_remote_initialize_kernels ->\n");
     void *lib = NULL;
     elf_t *elib = NULL;
     if (use_dlopenbuf) {
@@ -131,7 +126,7 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     } else if (use_dlopen) {
         const char *filename = (const char *)code;
         //lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
-        lib = sim_halide_load_library(filename);
+        lib = halide_load_library(filename);
         if (!lib) {
             log_printf("dlopen .so failed");
             return -1;

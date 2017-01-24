@@ -100,12 +100,12 @@ extern int halide_hexagon_initialize_kernels(void *user_context,
                                              uint32_t use_dlopen,
                                              uint32_t use_dlopenbuf);
 extern int halide_hexagon_run_eobj(void *user_context,
-                              void *module_ptr,
-                              const char *name,
-                              halide_hexagon_handle_t *function,
-                              uint64_t arg_sizes[],
-                              void *args[],
-                              int arg_flags[]);
+                                   void *module_ptr,
+                                   const char *name,
+                                   halide_hexagon_handle_t *function,
+                                   uint64_t arg_sizes[],
+                                   void *args[],
+                                   int arg_flags[]);
 extern int halide_hexagon_run(void *user_context,
                               void *module_ptr,
                               const char *name,
