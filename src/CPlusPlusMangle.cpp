@@ -19,6 +19,7 @@ namespace Halide {
 namespace Internal {
 
 namespace {
+
 // Used in both Windows and Itanium manglers to track pieces of a type name
 // in both their final form in the output and their canonical substituted form.
 struct MangledNamePart {
@@ -29,6 +30,13 @@ struct MangledNamePart {
     MangledNamePart(const std::string &mangled) : full_name(mangled), with_substitutions(mangled) { }
     MangledNamePart(const char *mangled) : full_name(mangled), with_substitutions(mangled) { }
 };
+
+Type non_null_void_star_type() {
+    static halide_handle_cplusplus_type t(halide_handle_cplusplus_type(
+        halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"),
+        { }, { }, { halide_handle_cplusplus_type::Pointer }));
+    return Handle(1, &t);
+}
 
 }
 
@@ -256,12 +264,8 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
         return "";
     } else if (type.is_handle()) {
-        if (type.handle_type == nullptr) {
-            // TODO: make this depend on other code?
-            return (target.bits == 64) ? "PEAX" : "PAX";
-        } else {
-            return mangle_inner_name(type, target, prev_decls);
-        }
+        return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
+                                 target, prev_decls);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
     return "";
@@ -561,17 +565,8 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
         return "";
     } else if (type.is_handle()) {
-        if (type.handle_type == nullptr) {
-            // TODO: synthesize a type info for "void *" and make this depend on other code?
-            std::string void_substitution;
-            if (prevs.check_and_enter("Pv", void_substitution)) {
-                return void_substitution;
-            } else {
-                return "Pv";
-            }
-        } else {
-            return mangle_inner_name(type, target, prevs);
-        }
+        return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
+                                 target, prevs);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
     return "";
