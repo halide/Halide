@@ -244,16 +244,18 @@ class InjectHexagonRpc : public IRMutator {
     }
 
     void visit(const IfThenElse *op) {
+        // To keep track of the run count through if then else, take
+        // the max of the runs between the two branches.
         Expr condition = mutate(op->condition);
         int old_run_count = run_count;
         Stmt then_case = mutate(op->then_case);
-        int if_run_count = run_count;
+        int then_run_count = run_count;
 
         run_count = old_run_count;
         Stmt else_case = mutate(op->else_case);
-        int then_run_count = run_count;
+        int else_run_count = run_count;
 
-        run_count = std::max(if_run_count, then_run_count);
+        run_count = std::max(then_run_count, else_run_count);
 
         if (!condition.same_as(op->condition) ||
             !then_case.same_as(op->then_case) ||
