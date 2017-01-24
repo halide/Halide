@@ -806,7 +806,7 @@ Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
                                               const Target &target) const {
     internal_assert(has_extern_definition());
 
-    Call::CallType call_type;
+    Call::CallType call_type = Call::Extern;
     switch (contents->extern_mangling) {
     case NameMangling::Default:
         call_type = (target.has_feature(Target::CPlusPlusMangling) ?
