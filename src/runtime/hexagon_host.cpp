@@ -213,8 +213,7 @@ WEAK bool halide_is_hexagon_available(void *user_context) {
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                            const uint8_t *code, uint64_t code_size,
                                            uint32_t use_dlopen,
-                                           uint32_t use_dlopenbuf
-) {
+                                           uint32_t use_dlopenbuf) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
