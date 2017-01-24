@@ -129,7 +129,7 @@ template<> struct halide_c_type_to_name<float> { static const bool known_type = 
 template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
 template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
 
-// You can make arbitrary user-defined types be "Known" by adding your own specialization of 
+// You can make arbitrary user-defined types be "Known" by adding your own specialization of
 // halide_c_type_to_name in your code; this is useful for making Param<> arguments for Generators
 // type safe. e.g.,
 //
@@ -137,12 +137,12 @@ template<> struct halide_c_type_to_name<struct buffer_t> { static const bool kno
 //
 //    ...
 //
-//    template<> 
-//    struct halide_c_type_to_name<struct MyFunStruct> { 
-//      static const bool known_type = true; 
-//      static halide_cplusplus_type_name name() { 
-//        return { halide_cplusplus_type_name::Struct,  "MyFunStruct"}; 
-//      } 
+//    template<>
+//    struct halide_c_type_to_name<struct MyFunStruct> {
+//      static const bool known_type = true;
+//      static halide_cplusplus_type_name name() {
+//        return { halide_cplusplus_type_name::Struct,  "MyFunStruct"};
+//      }
 //    };
 //
 //    ...
@@ -157,16 +157,16 @@ template<> struct halide_c_type_to_name<struct buffer_t> { static const bool kno
 // (preserving const-ness and volatile-ness).
 template<typename T, bool KnownType>
 struct halide_internal_handle_traits {
-    static const halide_handle_cplusplus_type *type_info(bool is_ptr, 
-            halide_handle_cplusplus_type::ReferenceType ref_type) { 
+    static const halide_handle_cplusplus_type *type_info(bool is_ptr,
+            halide_handle_cplusplus_type::ReferenceType ref_type) {
         static_assert(!KnownType, "Only unknown types handled here");
         internal_assert(is_ptr) << "Unknown types must be pointers";
         internal_assert(ref_type == halide_handle_cplusplus_type::NotReference) << "Unknown types must not be references";
         static const halide_handle_cplusplus_type the_info{
             {halide_cplusplus_type_name::Simple, "void"},
-            {}, 
             {},
-            { 
+            {},
+            {
                 (uint8_t)(halide_handle_cplusplus_type::Pointer |
                     (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
                     (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
@@ -182,10 +182,10 @@ template<typename T>
 struct halide_internal_handle_traits<T, true> {
     static const halide_handle_cplusplus_type *type_info(bool is_ptr, halide_handle_cplusplus_type::ReferenceType ref_type) {
         static const halide_handle_cplusplus_type the_info{
-            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(), 
-            {}, 
+            halide_c_type_to_name<typename std::remove_cv<T>::type>::name(),
             {},
-            { 
+            {},
+            {
                 (uint8_t)((is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
                     (std::is_const<T>::value ? halide_handle_cplusplus_type::Const : 0) |
                     (std::is_volatile<T>::value ? halide_handle_cplusplus_type::Volatile : 0))
@@ -278,7 +278,7 @@ struct Type {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    Type(halide_type_code_t code, uint8_t bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
+    Type(halide_type_code_t code, int bits, int lanes, const halide_handle_cplusplus_type *handle_type = nullptr)
         : type(code, (uint8_t)bits, (uint16_t)lanes), handle_type(handle_type) {
     }
 
@@ -306,18 +306,20 @@ struct Type {
 
     /** Return Type with same number of bits and lanes, but new_code for a type code. */
     Type with_code(halide_type_code_t new_code) const {
-        return Type(new_code, bits(), lanes());
+        return Type(new_code, bits(), lanes(),
+                    (new_code == code()) ? handle_type : nullptr);
     }
 
     /** Return Type with same type code and lanes, but new_bits for the number of bits. */
-    Type with_bits(uint8_t new_bits) const {
-        return Type(code(), new_bits, lanes());
+    Type with_bits(int new_bits) const {
+        return Type(code(), new_bits, lanes(),
+                    (new_bits == bits()) ? handle_type : nullptr);
     }
 
     /** Return Type with same type code and number of bits,
      * but new_lanes for the number of vector lanes. */
-    Type with_lanes(uint16_t new_lanes) const {
-        return Type(code(), bits(), new_lanes);
+    Type with_lanes(int new_lanes) const {
+        return Type(code(), bits(), new_lanes, handle_type);
     }
 
     /** Type to be printed when declaring handles of this type. */
@@ -363,7 +365,7 @@ struct Type {
 
     /** Produce the scalar type (that of a single element) of this vector type */
     Type element_of() const {
-        return Type(code(), bits(), 1);
+        return with_lanes(1);
     }
 
     /** Can this type represent all values of another type? */
@@ -418,7 +420,7 @@ inline Type Handle(int lanes = 1, const halide_handle_cplusplus_type *handle_typ
 }
 
 /** Construct the halide equivalent of a C type */
-template<typename T> 
+template<typename T>
 inline Type type_of() {
     return Type(halide_type_of<T>(), halide_handle_traits<T>::type_info());
 }

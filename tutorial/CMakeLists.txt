@@ -1,9 +1,4 @@
 include_directories("${CMAKE_BINARY_DIR}/tools")
-macro(use_libpng TARGET)
-  target_compile_definitions(${TARGET} PRIVATE ${PNG_DEFINITIONS})
-  target_include_directories(${TARGET} PRIVATE ${PNG_INCLUDE_DIRS})
-  target_link_libraries(${TARGET} PRIVATE ${PNG_LIBRARIES})
-endmacro()
 
 # Detect if we need supress -Wunused-but-set-variable warning.  This warning
 # might be emitted by gcc for the tutorials as they don't always use a result
@@ -42,21 +37,21 @@ add_tutorial(lesson_06_realizing_over_shifted_domains.cpp)
 add_tutorial(lesson_11_cross_compilation.cpp)
 add_tutorial(lesson_13_tuples.cpp)
 add_tutorial(lesson_14_types.cpp)
-if (PNG_FOUND)
+if (PNG_FOUND AND JPEG_FOUND)
   add_tutorial(lesson_02_input_image.cpp)
-  use_libpng(lesson_02_input_image)
+  use_image_io(lesson_02_input_image)
   add_tutorial(lesson_07_multi_stage_pipelines.cpp)
-  use_libpng(lesson_07_multi_stage_pipelines)
+  use_image_io(lesson_07_multi_stage_pipelines)
   add_tutorial(lesson_08_scheduling_2.cpp)
-  use_libpng(lesson_08_scheduling_2)
+  use_image_io(lesson_08_scheduling_2)
   use_openmp(lesson_08_scheduling_2)
   add_tutorial(lesson_09_update_definitions.cpp)
-  use_libpng(lesson_09_update_definitions)
+  use_image_io(lesson_09_update_definitions)
   use_openmp(lesson_09_update_definitions)
   add_tutorial(lesson_12_using_the_gpu.cpp)
-  use_libpng(lesson_12_using_the_gpu)
+  use_image_io(lesson_12_using_the_gpu)
 else()
-  message(WARNING "Not building all tutorials due to missing libpng")
+  message(WARNING "Not building all tutorials due to missing libpng or libjpeg")
 endif()
 
 option(BUILD_AOT_TUTORIAL "Build the ahead-of-time compilation tutorial" ON)
@@ -80,10 +75,16 @@ if (BUILD_AOT_TUTORIAL)
   # the generator (lesson_10_aot_compilation_generate)
   add_executable(lesson_10_aot_compilation_run
                  lesson_10_aot_compilation_run.cpp)
-  add_dependencies(lesson_10_aot_compilation_run 
+  add_dependencies(lesson_10_aot_compilation_run
                    exec_lesson_10_aot_compilation_generate)
   target_link_libraries(lesson_10_aot_compilation_run PRIVATE "${FILTER_DIR}/${FILTER_LIB}")
   target_include_directories(lesson_10_aot_compilation_run PRIVATE "${FILTER_DIR}")
+  # Needed to find HalideBuffer.h
+  target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_BINARY_DIR}/include")
+  # HalideBuffer.h requires C++11
+  if (NOT MSVC)
+    target_compile_options(lesson_10_aot_compilation_run PUBLIC "-std=c++11")
+  endif()
 
   if (NOT WIN32)
     target_link_libraries(lesson_10_aot_compilation_run PRIVATE dl pthread)

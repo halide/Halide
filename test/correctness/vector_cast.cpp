@@ -68,7 +68,8 @@ bool test(int vec_width, const Target &target) {
     f(x, y) = cast<B>(input(x, y));
 
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, 64);
+        Var xo, xi;
+        f.gpu_tile(x, xo, xi, 64);
     } else {
         if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             // TODO: Non-native vector widths hang the compiler here.

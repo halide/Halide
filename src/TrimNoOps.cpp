@@ -28,11 +28,9 @@ class StripIdentities : public IRMutator {
     using IRMutator::visit;
 
     void visit(const Call *op) {
-        if (op->is_intrinsic(Call::trace_expr)) {
-            expr = mutate(op->args[4]);
-        } else if (op->is_intrinsic(Call::return_second) ||
-                   op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
+        if (op->is_intrinsic(Call::return_second) ||
+            op->is_intrinsic(Call::likely) ||
+            op->is_intrinsic(Call::likely_if_innermost)) {
             expr = mutate(op->args.back());
         } else {
             IRMutator::visit(op);
@@ -81,7 +79,7 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const Store *op) {
-        if (op->value.type().is_handle()) {
+        if (op->value.type().is_handle() || is_zero(op->predicate)) {
             condition = const_false();
         } else {
             if (is_zero(condition)) {
@@ -98,7 +96,8 @@ class IsNoOp : public IRVisitor {
                 return;
             }
 
-            Expr equivalent_load = Load::make(op->value.type(), op->name, op->index, BufferPtr(), Parameter());
+            Expr equivalent_load = Load::make(op->value.type(), op->name, op->index,
+                                              Buffer<>(), Parameter(), op->predicate);
             Expr is_no_op = equivalent_load == op->value;
             is_no_op = StripIdentities().mutate(is_no_op);
             // We need to call CSE since sometimes we have "let" stmt on the RHS
@@ -149,13 +148,12 @@ class IsNoOp : public IRVisitor {
     void visit(const Call *op) {
         // Certain intrinsics that may appear in loops have side-effects. Most notably: image_store.
         if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::rewrite_buffer ||
-             op->name == Call::image_store ||
+            (op->name == Call::image_store ||
              op->name == Call::copy_memory)) {
             condition = const_false();
-        } else {
-            IRVisitor::visit(op);
+            return;
         }
+        IRVisitor::visit(op);
     }
 
     template<typename LetOrLetStmt>

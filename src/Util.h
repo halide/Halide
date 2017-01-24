@@ -52,7 +52,7 @@ namespace Internal {
 /** An aggressive form of reinterpret cast used for correct type-punning. */
 template<typename DstType, typename SrcType>
 DstType reinterpret_bits(const SrcType &src) {
-    assert(sizeof(SrcType) == sizeof(DstType));
+    static_assert(sizeof(SrcType) == sizeof(DstType), "Types must be same size");
     DstType dst;
     memcpy(&dst, &src, sizeof(SrcType));
     return dst;
@@ -64,10 +64,10 @@ DstType reinterpret_bits(const SrcType &src) {
 EXPORT std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
 
 /** Get value of an environment variable. Returns its value
- * is defined in the environment. Input: env_var_name. Output: var_defined.
- * Sets to true var_defined if the environment var is defined; false otherwise.
+ * is defined in the environment. If the var is not defined, an empty string
+ * is returned.
  */
-EXPORT std::string get_env_variable(char const *env_var_name, size_t &var_defined);
+EXPORT std::string get_env_variable(char const *env_var_name);
 
 /** Get the name of the currently running executable. Platform-specific.
  * If program name cannot be retrieved, function returns an empty string. */
@@ -156,6 +156,12 @@ struct meta_and : std::true_type {};
 template<typename T1, typename... Args>
 struct meta_and<T1, Args...> : std::integral_constant<bool, T1::value && meta_and<Args...>::value> {};
 
+template<typename... T>
+struct meta_or : std::false_type {};
+
+template<typename T1, typename... Args>
+struct meta_or<T1, Args...> : std::integral_constant<bool, T1::value || meta_or<Args...>::value> {};
+
 template<typename To, typename... Args>
 struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
@@ -182,19 +188,32 @@ struct FileStat {
  */
 EXPORT std::string file_make_temp(const std::string &prefix, const std::string &suffix);
 
-/** Create a unique directory in an arbitrary (but writable) directory; this is 
- * typically somewhere inside /tmp, but the specific location is not guaranteed. 
+/** Create a unique directory in an arbitrary (but writable) directory; this is
+ * typically somewhere inside /tmp, but the specific location is not guaranteed.
  * The directory will be empty (i.e., this will never return /tmp itself,
- * but rather a new directory inside /tmp). The caller is responsible for removing the 
+ * but rather a new directory inside /tmp). The caller is responsible for removing the
  * directory after use.
  */
 EXPORT std::string dir_make_temp();
 
-/** Wrapper for access(). Asserts upon error. */
+/** Wrapper for access(). Quietly ignores errors. */
 EXPORT bool file_exists(const std::string &name);
+
+/** assert-fail if the file doesn't exist. useful primarily for testing purposes. */
+EXPORT void assert_file_exists(const std::string &name);
+
+/** assert-fail if the file DOES exist. useful primarily for testing purposes. */
+EXPORT void assert_no_file_exists(const std::string &name);
 
 /** Wrapper for unlink(). Asserts upon error. */
 EXPORT void file_unlink(const std::string &name);
+
+/** Wrapper for unlink(). Quietly ignores errors. */
+EXPORT void file_unlink(const std::string &name);
+
+/** Ensure that no file with this path exists. If such a file
+ * exists and cannot be removed, assert-fail. */
+EXPORT void ensure_no_file_exists(const std::string &name);
 
 /** Wrapper for rmdir(). Asserts upon error. */
 EXPORT void dir_rmdir(const std::string &name);

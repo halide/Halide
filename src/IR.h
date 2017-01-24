@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "BufferPtr.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Expr.h"
@@ -17,6 +16,7 @@
 #include "Parameter.h"
 #include "Type.h"
 #include "Util.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 namespace Internal {
@@ -190,22 +190,23 @@ struct Select : public ExprNode<Select> {
     static const IRNodeType _type_info = IRNodeType::Select;
 };
 
-/** Load a value from a named buffer. The buffer is treated as an
- * array of the 'type' of this Load node. That is, the buffer has
+/** Load a value from a named buffer if predicate is true. The buffer is treated
+ * as an array of the 'type' of this Load node. That is, the buffer has
  * no inherent type. */
 struct Load : public ExprNode<Load> {
     std::string name;
 
-    Expr index;
+    Expr predicate, index;
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
-    BufferPtr image;
+    Buffer<> image;
 
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, std::string name, Expr index, BufferPtr image, Parameter param);
+    EXPORT static Expr make(Type type, std::string name, Expr index, Buffer<> image,
+                            Parameter param, Expr predicate);
 
     static const IRNodeType _type_info = IRNodeType::Load;
 };
@@ -290,19 +291,23 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 
     EXPORT static Stmt make(std::string name, bool is_producer, Stmt body);
 
+    EXPORT static Stmt make_produce(std::string name, Stmt body);
+    EXPORT static Stmt make_consume(std::string name, Stmt body);
+
     static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
 };
 
-/** Store a 'value' to the buffer called 'name' at a given
- * 'index'. The buffer is interpreted as an array of the same type as
+/** Store a 'value' to the buffer called 'name' at a given 'index' if 'predicate'
+ * is true. The buffer is interpreted as an array of the same type as
  * 'value'. */
 struct Store : public StmtNode<Store> {
     std::string name;
-    Expr value, index;
+    Expr predicate, value, index;
     // If it's a store to an output buffer, then this parameter points to it.
     Parameter param;
 
-    EXPORT static Stmt make(std::string name, Expr value, Expr index, Parameter param);
+    EXPORT static Stmt make(std::string name, Expr value, Expr index,
+                            Parameter param, Expr predicate);
 
     static const IRNodeType _type_info = IRNodeType::Store;
 };
@@ -455,9 +460,6 @@ struct Call : public ExprNode<Call> {
     // declaration.
     typedef const char* const ConstString;
     EXPORT static ConstString debug_to_file,
-        shuffle_vector,
-        interleave_vectors,
-        concat_vectors,
         reinterpret,
         bitwise_and,
         bitwise_not,
@@ -470,23 +472,13 @@ struct Call : public ExprNode<Call> {
         rewrite_buffer,
         random,
         lerp,
-        create_buffer_t,
-        copy_buffer_t,
-        extract_buffer_min,
-        extract_buffer_max,
-        extract_buffer_host,
-        set_host_dirty,
-        set_dev_dirty,
         popcount,
         count_leading_zeros,
         count_trailing_zeros,
         undef,
-        null_handle,
         address_of,
         return_second,
         if_then_else,
-        trace,
-        trace_expr,
         glsl_texture_load,
         glsl_texture_store,
         glsl_varying,
@@ -495,13 +487,13 @@ struct Call : public ExprNode<Call> {
         make_struct,
         stringify,
         memoize_expr,
+        alloca,
         copy_memory,
         likely,
         likely_if_innermost,
         register_destructor,
         div_round_to_zero,
         mod_round_to_zero,
-        slice_vector,
         call_cached_indirect_function,
         prefetch,
         prefetch_2d,
@@ -510,6 +502,18 @@ struct Call : public ExprNode<Call> {
         bool_to_mask,
         cast_mask,
         select_mask;
+
+    // We also declare some symbolic names for some of the runtime
+    // functions that we want to construct Call nodes to here to avoid
+    // magic string constants and the potential risk of typos.
+    EXPORT static ConstString
+        buffer_get_min,
+        buffer_get_max,
+        buffer_get_host,
+        buffer_set_host_dirty,
+        buffer_set_dev_dirty,
+        buffer_init,
+        trace;
 
     // If it's a call to another halide function, this call node holds
     // onto a pointer to that function for the purposes of reference
@@ -523,7 +527,7 @@ struct Call : public ExprNode<Call> {
 
     // If it's a call to an image, this call nodes hold a
     // pointer to that image's buffer
-    BufferPtr image;
+    Buffer<> image;
 
     // If it's a call to an image parameter, this call node holds a
     // pointer to that
@@ -531,26 +535,19 @@ struct Call : public ExprNode<Call> {
 
     EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                             IntrusivePtr<FunctionContents> func = nullptr, int value_index = 0,
-                            BufferPtr image = BufferPtr(), Parameter param = Parameter());
+                            Buffer<> image = Buffer<>(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
-    static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
-        internal_assert(idx >= 0 &&
-                        idx < func.outputs())
-            << "Value index out of range in call to halide function\n";
-        internal_assert(func.has_pure_definition() || func.has_extern_definition())
-            << "Call to undefined halide function\n";
-        return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, BufferPtr(), Parameter());
-    }
+    EXPORT static Expr make(Function func, const std::vector<Expr> &args, int idx = 0);
 
     /** Convenience constructor for loads from concrete images */
-    static Expr make(BufferPtr image, const std::vector<Expr> &args) {
+    static Expr make(Buffer<> image, const std::vector<Expr> &args) {
         return make(image.type(), image.name(), args, Image, nullptr, 0, image, Parameter());
     }
 
     /** Convenience constructor for loads from images parameters */
     static Expr make(Parameter param, const std::vector<Expr> &args) {
-        return make(param.type(), param.name(), args, Image, nullptr, 0, BufferPtr(), param);
+        return make(param.type(), param.name(), args, Image, nullptr, 0, Buffer<>(), param);
     }
 
     /** Check if a call node is pure within a pipeline, meaning that
@@ -586,28 +583,29 @@ struct Variable : public ExprNode<Variable> {
     Parameter param;
 
     /** References to properties of literal image parameters. */
-    BufferPtr image;
+    Buffer<> image;
 
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
     static Expr make(Type type, std::string name) {
-        return make(type, name, BufferPtr(), Parameter(), ReductionDomain());
+        return make(type, name, Buffer<>(), Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, BufferPtr(), param, ReductionDomain());
+        return make(type, name, Buffer<>(), param, ReductionDomain());
     }
 
-    static Expr make(Type type, std::string name, BufferPtr image) {
+    static Expr make(Type type, std::string name, Buffer<> image) {
         return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, BufferPtr(), Parameter(), reduction_domain);
+        return make(type, name, Buffer<>(), Parameter(), reduction_domain);
     }
 
-    EXPORT static Expr make(Type type, std::string name, BufferPtr image, Parameter param, ReductionDomain reduction_domain);
+    EXPORT static Expr make(Type type, std::string name, Buffer<> image,
+                            Parameter param, ReductionDomain reduction_domain);
 
     static const IRNodeType _type_info = IRNodeType::Variable;
 };
@@ -633,7 +631,59 @@ struct For : public StmtNode<For> {
 
     EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
 
+    bool is_parallel() const {
+        return (for_type == ForType::Parallel ||
+                for_type == ForType::GPUBlock ||
+                for_type == ForType::GPUThread);
+    }
+
     static const IRNodeType _type_info = IRNodeType::For;
+};
+
+/** Construct a new vector by taking elements from another sequence of
+ * vectors. */
+struct Shuffle : public ExprNode<Shuffle> {
+    std::vector<Expr> vectors;
+
+    /** Indices indicating which vector element to place into the
+     * result. The elements are numbered by their position in the
+     * concatenation of the vector argumentss. */
+    std::vector<int> indices;
+
+    EXPORT static Expr make(const std::vector<Expr> &vectors,
+                            const std::vector<int> &indices);
+
+    /** Convenience constructor for making a shuffle representing an
+     * interleaving of vectors of the same length. */
+    EXPORT static Expr make_interleave(const std::vector<Expr> &vectors);
+
+    /** Convenience constructor for making a shuffle representing a
+     * concatenation of the vectors. */
+    EXPORT static Expr make_concat(const std::vector<Expr> &vectors);
+
+    /** Convenience constructor for making a shuffle representing a
+     * contiguous subset of a vector. */
+    EXPORT static Expr make_slice(Expr vector, int begin, int stride, int size);
+
+    /** Check if this shuffle is an interleaving of the vector
+     * arguments. */
+    EXPORT bool is_interleave() const;
+
+    /** Check if this shuffle is a concatenation of the vector
+     * arguments. */
+    EXPORT bool is_concat() const;
+
+    /** Check if this shuffle is a contiguous strict subset of the
+     * vector arguments, and if so, the offset and stride of the
+     * slice. */
+    ///@{
+    EXPORT bool is_slice() const;
+    int slice_begin() const { return indices[0]; }
+    int slice_stride() const { return indices.size() >= 2 ? indices[1] - indices[0] : 1; }
+    ///@}
+
+
+    static const IRNodeType _type_info = IRNodeType::Shuffle;
 };
 
 }

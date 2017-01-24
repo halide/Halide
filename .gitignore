@@ -2,7 +2,6 @@
 /apps/*/bin
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
-/apps/HelloAndroid/jni/halide.h
 bazel-bin
 bazel-genfiles
 bazel-Halide
@@ -53,6 +52,10 @@ src/test_*.s
 *.dSYM
 .*.swp
 Doxyfile
+tools/objc/BUILD
+tools/objc/*.mobileprovision
+*.xcworkspacedata
+
 
 *.txt.user*
 .idea
@@ -73,15 +76,7 @@ apps/*/passes.txt
 apps/*/*.ll
 apps/*/*.sass
 apps/*/filter
-apps/seam_carving/seam_carving.h
-apps/snake/halide_snake
-apps/HelloAndroid*/bin
-apps/HelloAndroid*/gen
-apps/HelloAndroid*/obj
-apps/HelloAndroid*/libs
 apps/HelloAndroidGL/jni/halide_gl_filter.h
-apps/HelloAndroid*/local.properties
-apps/HelloAndroid*/proguard-project.txt
 
 # tutorial intermediates
 tutorial/lesson_10_halide.h

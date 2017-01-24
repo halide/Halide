@@ -828,7 +828,7 @@ ComplexFunc fft2d_r2c(Func r,
 
     // Schedule the final DFT transpose and unzipping updates.
     dft.vectorize(n0, target.natural_vector_size<float>())
-        .unroll(n0, std::min(N0 / target.natural_vector_size<float>(), 4));
+        .unroll(n0, gcd(N0 / target.natural_vector_size<float>(), 4));
 
     // The Nyquist bin at n0z = N0/2 looks like a race condition because it
     // simplifies to an expression similar to the DC bin. However, we include it
@@ -998,7 +998,7 @@ Func fft2d_c2r(ComplexFunc c,
     // logic.
     unzipped
         .vectorize(n0, zip_width)
-        .unroll(n0, std::min(N0 / zip_width, 4));
+        .unroll(n0, gcd(N0 / zip_width, 4));
 
     return unzipped;
 }

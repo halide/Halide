@@ -31,31 +31,9 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, string 
 
         map<string, Expr>::iterator iter = dim_extent_alignment.find(split.old_var);
 
-        if (is_update) {
-            user_assert(split.tail != TailStrategy::ShiftInwards)
-                << "When splitting Var " << split.old_var
-                << " ShiftInwards is not a legal tail strategy for update definitions, as"
-                << " it may change the meaning of the algorithm\n";
-        }
-
-        if (split.exact) {
-            user_assert(split.tail == TailStrategy::Auto ||
-                        split.tail == TailStrategy::GuardWithIf)
-                << "When splitting Var " << split.old_var
-                << " the tail strategy must be GuardWithIf or Auto. "
-                << "Anything else may change the meaning of the algorithm\n";
-        }
-
         TailStrategy tail = split.tail;
-        if (tail == TailStrategy::Auto) {
-            if (split.exact) {
-                tail = TailStrategy::GuardWithIf;
-            } else if (is_update) {
-                tail = TailStrategy::RoundUp;
-            } else {
-                tail = TailStrategy::ShiftInwards;
-            }
-        }
+        internal_assert(tail != TailStrategy::Auto)
+            << "An explicit tail strategy should exist at this point\n";
 
         if ((iter != dim_extent_alignment.end()) &&
             is_zero(simplify(iter->second % split.factor))) {

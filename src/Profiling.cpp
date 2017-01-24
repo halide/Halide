@@ -216,7 +216,7 @@ private:
         // threads outside the loop, and increment it inside the
         // body.
         bool update_active_threads = (op->device_api == DeviceAPI::Hexagon ||
-                                      op->for_type == ForType::Parallel);
+                                      op->is_parallel());
 
         Expr state = Variable::make(Handle(), "profiler_state");
         Stmt incr_active_threads =
@@ -268,7 +268,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     int num_funcs = (int)(profiling.indices.size());
 
-    Expr func_names_buf = Load::make(Handle(), "profiling_func_names", 0, BufferPtr(), Parameter());
+    Expr func_names_buf = Load::make(Handle(), "profiling_func_names", 0, Buffer<>(), Parameter(), const_true());
     func_names_buf = Call::make(Handle(), Call::address_of, {func_names_buf}, Call::Intrinsic);
 
     Expr start_profiler = Call::make(Int(32), "halide_profiler_pipeline_start",
@@ -285,7 +285,7 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
 
     bool no_stack_alloc = profiling.func_stack_peak.empty();
     if (!no_stack_alloc) {
-        Expr func_stack_peak_buf = Load::make(Handle(), "profiling_func_stack_peak_buf", 0, BufferPtr(), Parameter());
+        Expr func_stack_peak_buf = Load::make(Handle(), "profiling_func_stack_peak_buf", 0, Buffer<>(), Parameter(), const_true());
         func_stack_peak_buf = Call::make(Handle(), Call::address_of, {func_stack_peak_buf}, Call::Intrinsic);
 
         Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
@@ -315,14 +315,14 @@ Stmt inject_profiling(Stmt s, string pipeline_name) {
         for (int i = num_funcs-1; i >= 0; --i) {
             s = Block::make(Store::make("profiling_func_stack_peak_buf",
                                         make_const(UInt(64), profiling.func_stack_peak[i]),
-                                        i, Parameter()), s);
+                                        i, Parameter(), const_true()), s);
         }
         s = Block::make(s, Free::make("profiling_func_stack_peak_buf"));
         s = Allocate::make("profiling_func_stack_peak_buf", UInt(64), {num_funcs}, const_true(), s);
     }
 
     for (std::pair<string, int> p : profiling.indices) {
-        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter()), s);
+        s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true()), s);
     }
 
     s = Block::make(s, Free::make("profiling_func_names"));

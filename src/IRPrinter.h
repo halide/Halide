@@ -62,6 +62,10 @@ public:
     /** emit a statement on the output stream */
     EXPORT void print(Stmt);
 
+    /** emit a comma delimited list of exprs, without any leading or
+     * trailing punctuation. */
+    EXPORT void print_list(const std::vector<Expr> &exprs);
+
     EXPORT static void test();
 
 protected:
@@ -115,6 +119,7 @@ protected:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
+    void visit(const Shuffle *);
 };
 }
 }

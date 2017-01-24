@@ -39,10 +39,11 @@ void Closure::visit(const For *op) {
 }
 
 void Closure::visit(const Load *op) {
+    op->predicate.accept(this);
     op->index.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
-        BufferRef & ref = buffers[op->name];
+        Buffer & ref = buffers[op->name];
         ref.type = op->type.element_of(); // TODO: Validate type is the same as existing refs?
         ref.read = true;
 
@@ -57,11 +58,12 @@ void Closure::visit(const Load *op) {
 }
 
 void Closure::visit(const Store *op) {
+    op->predicate.accept(this);
     op->index.accept(this);
     op->value.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
-        BufferRef & ref = buffers[op->name];
+        Buffer & ref = buffers[op->name];
         ref.type = op->value.type().element_of(); // TODO: Validate type is the same as existing refs?
         // TODO: do we need to set ref.dimensions?
         ref.write = true;
@@ -97,7 +99,7 @@ vector<string> Closure::names() const {
         debug(2) << "vars:  " << i.first << "\n";
         res.push_back(i.first);
     }
-    for (const pair<string, BufferRef> &i : buffers) {
+    for (const pair<string, Buffer> &i : buffers) {
         debug(2) << "buffers: " << i.first << "\n";
         res.push_back(i.first + ".host");
         res.push_back(i.first + ".buffer");

@@ -13,8 +13,8 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::interleave_vectors)) {
+    void visit(const Shuffle *op) {
+        if (op->is_interleave()) {
             result++;
         }
         IRVisitor::visit(op);
@@ -140,10 +140,12 @@ int main(int argc, char **argv) {
 
         interleaved
             .output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 3)
-            .set_stride(1, 1)
-            .set_extent(1, 3);
+            .dim(0)
+                .set_stride(3)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(3);
 
         Buffer<float> buff3(3, 16);
         buff3.transpose(0, 1);
@@ -186,10 +188,12 @@ int main(int argc, char **argv) {
             .vectorize(x, 4);
 
         output4.output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 4)
-            .set_stride(1, 1)
-            .set_extent(1, 4);
+            .dim(0)
+                .set_stride(4)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(4);
 
         check_interleave_count(output4, 1);
 
@@ -224,10 +228,12 @@ int main(int argc, char **argv) {
             .vectorize(x, 4);
 
         output5.output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 5)
-            .set_stride(1, 1)
-            .set_extent(1, 5);
+            .dim(0)
+                .set_stride(5)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(5);
 
 
         check_interleave_count(output5, 1);
@@ -361,14 +367,24 @@ int main(int argc, char **argv) {
             .vectorize(y);
 
         trans1.output_buffer()
-            .set_min(0,0).set_min(1,0)
-            .set_stride(0,1).set_stride(1,8)
-            .set_extent(0,8).set_extent(1,8);
+            .dim(0)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(8)
+            .dim(1)
+                .set_min(0)
+                .set_stride(8)
+                .set_extent(8);
 
         trans2.output_buffer()
-            .set_min(0,0).set_min(1,0)
-            .set_stride(0,1).set_stride(1,8)
-            .set_extent(0,8).set_extent(1,8);
+            .dim(0)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(8)
+            .dim(1)
+                .set_min(0)
+                .set_stride(8)
+                .set_extent(8);
 
         Buffer<uint16_t> result6(8, 8);
         Buffer<uint16_t> result7(8, 8);

@@ -130,7 +130,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 WEAK int halide_host_cpu_count();
 
 WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf,
-                                       const struct halide_device_interface *device_interface);
+                                       const struct halide_device_interface_t *device_interface);
 WEAK int halide_device_and_host_free(void *user_context, struct buffer_t *buf);
 
 struct halide_filter_metadata_t;
@@ -150,6 +150,13 @@ WEAK void halide_cond_init(struct halide_cond *cond);
 WEAK void halide_cond_destroy(struct halide_cond *cond);
 WEAK void halide_cond_broadcast(struct halide_cond *cond);
 WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex);
+
+WEAK int halide_trace_helper(void *user_context,
+                             const char *func,
+                             void *value, int *coords,
+                             int type_code, int type_bits, int type_lanes,
+                             int code,
+                             int parent_id, int value_index, int dimensions);
 
 }  // extern "C"
 

@@ -273,9 +273,9 @@ void CodeGen_Hexagon::init_module() {
 
         // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
         // To differentiate those from the widening ones, we encode the return type in the name here.
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubh), i16v2, "add_vh.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubh), u16v2, "add_vuh.vub.vub", {u8v1, u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhw), i32v2, "add_vw.vh.vh", {i16v1, i16v1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhw), i32v2, "add_vw.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhw), u32v2, "add_vuw.vuh.vuh", {u16v1, u16v1} },
 
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubb),     i8v1,  "sub.vb.vb",     {i8v1,  i8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubh),     i16v1, "sub.vh.vh",     {i16v1, i16v1} },
@@ -286,9 +286,9 @@ void CodeGen_Hexagon::init_module() {
 
         // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
         // To differentiate those from the widening ones, we encode the return type in the name here.
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), i16v2, "sub_vh.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), u16v2, "sub_vuh.vub.vub", {u8v1, u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhw), i32v2, "sub_vw.vh.vh", {i16v1, i16v1} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), i32v2, "sub_vw.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), u32v2, "sub_vuw.vuh.vuh", {u16v1, u16v1} },
 
 
         // Adds/subtract of unsigned values with saturation.
@@ -375,6 +375,11 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyuh_acc),   u32v2, "add_mpy.vuw.vuh.uh",   {u32v2, u16v1, u16}, HvxIntrinsic::BroadcastScalarsToWords },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybus_acc),  i16v2, "add_mpy.vh.vub.b",     {i16v2, u8v1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhsat_acc), i32v2, "satw_add_mpy.vw.vh.h", {i32v2, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+
+        // Multiply keep high half, with multiplication by 2.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhvsrs), i16v1, "trunc_satw_mpy2_rnd.vh.vh", {i16v1, i16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhss), i16v1, "trunc_satw_mpy2.vh.h", {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhsrs), i16v1, "trunc_satw_mpy2_rnd.vh.h", {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
 
         // Select/conditionals. Conditions are always signed integer
         // vectors (so widening sign extends).
@@ -1314,6 +1319,81 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
+    // We need to scalarize the predicated store since masked load on
+    // hexagon is not handled by the LLVM
+
+    // If any of the predicate lane is true, then just do normal load; otherwise,
+    // if none of the predicate lanes is true, just load undef. It is okay to do
+    // normal load if any of the predicate lane is true since Hexagon allocates
+    // one additional vector past the end of the actual allocation.
+    debug(4) << "Predicated vector load on hexagon\n\t" << Expr(op) << "\n";
+    Value *vpred = codegen(op->predicate);
+    Constant *lane = ConstantInt::get(i32_t, 0);
+    Value *any_true = builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane));
+    for (int i = 1; i < op->predicate.type().lanes(); i++) {
+        lane = ConstantInt::get(i32_t, i);
+        any_true = builder->CreateOr(any_true, builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane)));
+    }
+
+    BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+    BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+    BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+    builder->CreateCondBr(any_true, true_bb, false_bb);
+
+    builder->SetInsertPoint(true_bb);
+    Value *true_value = codegen(Load::make(op->type, op->name, op->index, op->image,
+                                           op->param, const_true(op->type.lanes())));
+    builder->CreateBr(after_bb);
+    BasicBlock *true_pred = builder->GetInsertBlock();
+
+    builder->SetInsertPoint(false_bb);
+    Value *false_value = UndefValue::get(llvm_type_of(op->type));
+    builder->CreateBr(after_bb);
+    BasicBlock *false_pred = builder->GetInsertBlock();
+
+    builder->SetInsertPoint(after_bb);
+    PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+    phi->addIncoming(true_value, true_pred);
+    phi->addIncoming(false_value, false_pred);
+
+    value = phi;
+}
+
+void CodeGen_Hexagon::codegen_predicated_vector_store(const Store *op) {
+    // We need to scalarize the predicated store since masked store/load on
+    // hexagon is not handled by the LLVM
+    debug(4) << "Scalarize predicated vector store on hexagon\n\t" << Stmt(op) << "\n";
+    Type value_type = op->value.type().element_of();
+    Value *vpred = codegen(op->predicate);
+    Value *vval = codegen(op->value);
+    Value *vindex = codegen(op->index);
+    for (int i = 0; i < op->index.type().lanes(); i++) {
+        Constant *lane = ConstantInt::get(i32_t, i);
+        Value *p = builder->CreateExtractElement(vpred, lane);
+        if (p->getType() != i1_t) {
+            p = builder->CreateIsNotNull(p);
+        }
+
+        Value *v = builder->CreateExtractElement(vval, lane);
+        Value *idx = builder->CreateExtractElement(vindex, lane);
+        internal_assert(p && v && idx);
+
+        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+        builder->CreateCondBr(p, true_bb, after_bb);
+
+        builder->SetInsertPoint(true_bb);
+
+        // Scalar
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, idx);
+        builder->CreateAlignedStore(v, ptr, value_type.bytes());
+
+        builder->CreateBr(after_bb);
+        builder->SetInsertPoint(after_bb);
+    }
+}
+
 void CodeGen_Hexagon::visit(const Call *op) {
     internal_assert(op->call_type == Call::Extern ||
                     op->call_type == Call::Intrinsic ||
@@ -1385,22 +1465,23 @@ void CodeGen_Hexagon::visit(const Call *op) {
                                 type_suffix(op->args[1], op->args[2], false),
                                 op->args);
             return;
-        } else if (op->is_intrinsic(Call::bool_to_mask)) {
-            internal_assert(op->args.size() == 1);
-            if (op->args[0].type().is_vector()) {
-                // The argument is already a mask of the right width.
-                op->args[0].accept(this);
-            } else {
-                // The argument is a scalar bool. Converting it to
-                // all-ones or all-zeros is sufficient for HVX masks
-                // (mux just looks at the LSB of each byte).
-                Expr equiv = -Cast::make(op->type, op->args[0]);
-                equiv.accept(this);
-            }
-            return;
         } else if (op->is_intrinsic(Call::cast_mask)) {
             internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
+    }
+    if (op->is_intrinsic(Call::bool_to_mask)) {
+        internal_assert(op->args.size() == 1);
+        if (op->args[0].type().is_vector()) {
+            // The argument is already a mask of the right width.
+            op->args[0].accept(this);
+        } else {
+            // The argument is a scalar bool. Converting it to
+            // all-ones or all-zeros is sufficient for HVX masks
+            // (mux just looks at the LSB of each byte).
+            Expr equiv = -Cast::make(op->type, op->args[0]);
+            equiv.accept(this);
+        }
+        return;
     }
 
     if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {

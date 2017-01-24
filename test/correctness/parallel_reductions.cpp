@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
         sum_rows.update().parallel(j);
         sum_cols.compute_root().vectorize(j, 4);
         sum_cols.update();
-        out.output_buffer().set_bounds(0, 0, 256);
+        out.output_buffer().dim(0).set_bounds(0, 256);
 
         Buffer<int> result = out.realize(256);
 

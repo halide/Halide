@@ -72,14 +72,13 @@ enum class TailStrategy {
  * in this loop nest. A LoopLevel identifies such a site. */
 class LoopLevel {
     // Note: func_ is nullptr for inline or root.
-    Internal::IntrusivePtr<Internal::FunctionContents> function_contents;
+    std::string func_name;
     // TODO: these two fields should really be VarOrRVar,
     // but cyclical include dependencies make this challenging.
     std::string var_name;
     bool is_rvar;
 
-    EXPORT LoopLevel(Internal::IntrusivePtr<Internal::FunctionContents> f, const std::string &var_name, bool is_rvar);
-    EXPORT std::string func_name() const;
+    EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar);
 
 public:
     /** Identify the loop nest corresponding to some dimension of some function */
@@ -91,10 +90,10 @@ public:
     /** Construct an empty LoopLevel, which is interpreted as
      * 'inline'. This is a special LoopLevel value that implies
      * that a function should be inlined away */
-    LoopLevel() : function_contents(nullptr), var_name(""), is_rvar(false) {}
+    LoopLevel() : func_name(""), var_name(""), is_rvar(false) {}
 
-    /** Return the Func. Asserts if the LoopLevel is_root() or is_inline(). */
-    EXPORT Func func() const;
+    /** Return the Func name. Asserts if the LoopLevel is_root() or is_inline(). */
+    EXPORT std::string func() const;
 
     /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline(). */
     EXPORT VarOrRVar var() const;
@@ -172,6 +171,11 @@ struct Dim {
 
     bool is_pure() const {return (dim_type == PureVar) || (dim_type == PureRVar);}
     bool is_rvar() const {return (dim_type == PureRVar) || (dim_type == ImpureRVar);}
+    bool is_parallel() const {
+        return (for_type == ForType::Parallel ||
+                for_type == ForType::GPUBlock ||
+                for_type == ForType::GPUThread);
+    }
 };
 
 struct Bound {
@@ -192,8 +196,6 @@ struct Prefetch {
     std::string var;
     Expr offset;
 };
-
-class ReductionDomain;
 
 struct FunctionContents;
 

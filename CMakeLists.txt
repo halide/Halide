@@ -2,23 +2,23 @@
 project(Halide)
 cmake_minimum_required(VERSION 2.8.12)
 
+find_package(LLVM REQUIRED CONFIG)
+
+# Notify the user what paths and LLVM version we are using
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-set(LLVM_BIN "llvm3.7/bin/Debug/"
-  CACHE PATH "Path to LLVM bin directory")
-set(LLVM_LIB "llvm3.7/lib/Debug/"
-  CACHE PATH "Path to LLVM lib directory")
-set(LLVM_INCLUDE "llvm3.7/include/"
-  CACHE PATH "Path to LLVM include directory")
-set(LLVM_VERSION "37" CACHE STRING "First two digits of LLVM version (omitting '.')")
+set(LLVM_VERSION "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}")
 
-file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
-file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
-file(TO_NATIVE_PATH "${LLVM_BIN}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
+file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
+file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
+file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 
 # Check LLVM
 function(check_dir VARNAME PATH)
@@ -39,20 +39,6 @@ function(check_tool_exists NAME PATH)
   message(STATUS "Using ${NAME} at ${TOOL_PATH}")
 endfunction()
 
-# Notify the user what paths and LLVM version we are using
-message(STATUS "LLVM_BIN:${LLVM_BIN}")
-message(STATUS "LLVM_LIB:${LLVM_LIB}")
-message(STATUS "LLVM_INCLUDE:${LLVM_INCLUDE}")
-message(STATUS "LLVM_VERSION:${LLVM_VERSION}")
-
-# Check path to LLVM directories exist
-check_dir(LLVM_BIN "${LLVM_BIN}")
-check_dir(LLVM_LIB "${LLVM_LIB}")
-# Include might be a list of directories if LLVM was built out of source
-foreach( include_dir ${LLVM_INCLUDE})
-  check_dir(LLVM_INCLUDE "${include_dir}")
-endforeach()
-
 # Check LLVM tools exist
 check_tool_exists(llvm-as "${LLVM_AS}")
 check_tool_exists(llvm-nm "${LLVM_NM}")
@@ -66,27 +52,51 @@ if (LLVM_VERSION LESS 37)
   message(FATAL_ERROR "LLVM version must be 3.7 or newer")
 endif()
 
-option(TARGET_X86 "Include x86 target" ON)
-option(TARGET_ARM "Include ARM target" ON)
-option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ON)
-# Hexagon requires LLVM 3.9 or later.
-if (NOT(LLVM_VERSION LESS 39))
-  option(TARGET_HEXAGON "Include Hexagon target" ON)
-else()
-  option(TARGET_HEXAGON "Include Hexagon target" OFF)
-endif()
+function(check_llvm_target TARGET HAS_TARGET)
+  set(${HAS_TARGET} OFF PARENT_SCOPE)
+  set(_llvm_required_version ${LLVM_VERSION})
+  if (ARGV2)
+    set(_llvm_required_version ${ARGV2})
+  endif()
+  if (NOT LLVM_VERSION LESS _llvm_required_version)
+    list(FIND LLVM_TARGETS_TO_BUILD ${TARGET} _found_target)
+    if (_found_target GREATER -1)
+      set(${HAS_TARGET} ON PARENT_SCOPE)
+    else()
+      set(${HAS_TARGET} OFF PARENT_SCOPE)
+    endif()
+  endif()
+endfunction()
+
+check_llvm_target(X86 WITH_X86)
+check_llvm_target(ARM WITH_ARM)
+check_llvm_target(AArch64 WITH_AARCH64)
+check_llvm_target(Hexagon WITH_HEXAGON 39)
+check_llvm_target(Mips WITH_MIPS)
+check_llvm_target(PowerPC WITH_POWERPC)
+check_llvm_target(NVPTX WITH_NVPTX)
+
+option(TARGET_NATIVE_CLIENT "Include Native Client" OFF)
+option(TARGET_X86 "Include x86 target" ${WITH_X86})
+option(TARGET_ARM "Include ARM target" ${WITH_ARM})
+option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ${WITH_AARCH64})
+option(TARGET_HEXAGON "Include Hexagon target" ${WITH_HEXAGON})
 option(TARGET_METAL "Include Metal target" ON)
-option(TARGET_MIPS "Include MIPS target" ON)
-option(TARGET_POWERPC "Include POWERPC target" ON)
-option(TARGET_PTX "Include PTX target" ON)
+option(TARGET_MIPS "Include MIPS target" ${WITH_MIPS})
+option(TARGET_POWERPC "Include POWERPC target" ${WITH_POWERPC})
+option(TARGET_PTX "Include PTX target" ${WITH_NVPTX})
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
-option(HALIDE_ENABLE_RTTI "Build with RTTI enabled" OFF)
 
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
+  if (MSVC)
+  else()
+    target_compile_options("${name}" PUBLIC "-std=c++11") # Halide clients need C++11
+    target_compile_options("${name}" PUBLIC "-fno-rtti")
+  endif()
   target_link_libraries("${name}" PRIVATE Halide)
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
@@ -134,6 +144,18 @@ if (OPENMP_FOUND)
   message(STATUS "Found OpenMP")
 endif()
 
+# Look for libpng and libjpeg. Some apps and tutorials depend on it
+find_package(PNG)
+find_package(JPEG)
+function(use_image_io TARGET)
+  target_compile_definitions(${TARGET} PRIVATE ${PNG_DEFINITIONS})
+  target_include_directories(${TARGET} PRIVATE ${PNG_INCLUDE_DIRS})
+  target_link_libraries(${TARGET} PRIVATE ${PNG_LIBRARIES})
+  target_compile_definitions(${TARGET} PRIVATE ${JPEG_DEFINITIONS})
+  target_include_directories(${TARGET} PRIVATE ${JPEG_INCLUDE_DIRS})
+  target_link_libraries(${TARGET} PRIVATE ${JPEG_LIBRARIES})
+endfunction()
+
 # -----------------------------------------------------------------------------
 # Option to enable/disable assertions
 # -----------------------------------------------------------------------------
@@ -155,16 +177,6 @@ foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
   endforeach()
 endforeach()
 
-option(WITH_ASSERTIONS "Build with assertions enabled" ON)
-if (WITH_ASSERTIONS)
-  # NDEBUG was already removed.
-  message(STATUS "Building with asserts")
-else()
-  # Note this definition doesn't appear in the cache variables.
-  add_definitions(-DNDEBUG)
-  message(STATUS "Building without asserts")
-endif()
-
 add_subdirectory(src)
 add_subdirectory(tools)
 option(WITH_TESTS "Build tests" ON)
@@ -175,8 +187,6 @@ else()
   message(STATUS "Building tests disabled")
 endif()
 
-# Look for libpng. Some apps and tutorials depend on it
-find_package(PNG)
 option(WITH_APPS "Build apps" ON)
 if (WITH_APPS)
   if (NOT WIN32)

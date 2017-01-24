@@ -4,7 +4,7 @@
 #include "HalideBuffer.h"
 #include "stubtest.h"
 
-using Halide::Buffer;
+using Halide::Runtime::Buffer;
 
 const int kSize = 32;
 
@@ -44,17 +44,42 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const 
 }
 
 int main(int argc, char **argv) {
-    Buffer<float> in0 = make_image<float>(0);
-    Buffer<float> in1 = make_image<float>(1);
-    Buffer<float> f0(kSize, kSize, 3), f1(kSize, kSize, 3);
-    Buffer<int16_t> g0(kSize, kSize), g1(kSize, kSize);
+    Buffer<uint8_t> buffer_input = make_image<uint8_t>(0);
+    Buffer<float> simple_input = make_image<float>(0);
+    Buffer<float> array_input0 = make_image<float>(0);
+    Buffer<float> array_input1 = make_image<float>(1);
+    Buffer<float> typed_buffer_output(kSize, kSize, 3);
+    Buffer<float> untyped_buffer_output(kSize, kSize, 3);
+    Buffer<float> simple_output(kSize, kSize, 3);
+    Buffer<float> tuple_output0(kSize, kSize, 3), tuple_output1(kSize, kSize, 3);
+    Buffer<int16_t> array_output0(kSize, kSize), array_output1(kSize, kSize);
+    Buffer<uint8_t> static_compiled_buffer_output(kSize, kSize, 3);
 
-    stubtest(in0, in1, 1.25f, 33, 66, f0, f1, g0, g1);
+    stubtest(
+        buffer_input,
+        buffer_input,
+        simple_input, 
+        array_input0, array_input1, 
+        1.25f, 
+        33, 
+        66, 
+        simple_output, 
+        tuple_output0, tuple_output1, 
+        array_output0, array_output1,
+        typed_buffer_output,
+        untyped_buffer_output,
+        static_compiled_buffer_output
+    );
 
-    verify(in0, 1.25f, 0, f0);
-    verify(in0, 1.25f, 33, f1);
-    verify(in0, 1.0f, 33, g0);
-    verify(in1, 1.0f, 66, g1);
+    verify(buffer_input, 1.f, 0, typed_buffer_output);
+    verify(buffer_input, 1.f, 0, untyped_buffer_output);
+    verify(simple_input, 1.f, 0, simple_output);
+    verify(array_input0, 1.f, 0, simple_output);
+    verify(array_input0, 1.25f, 0, tuple_output0);
+    verify(array_input0, 1.25f, 33, tuple_output1);
+    verify(array_input0, 1.0f, 33, array_output0);
+    verify(array_input1, 1.0f, 66, array_output1);
+    verify(buffer_input, 1.0f, 42, static_compiled_buffer_output);
 
     printf("Success!\n");
     return 0;

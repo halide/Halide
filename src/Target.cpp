@@ -137,7 +137,7 @@ Target calculate_host_target() {
         const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
         const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
-            initial_features.push_back(Target::AVX2);            
+            initial_features.push_back(Target::AVX2);
         }
         if ((info2[1] & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
@@ -176,25 +176,6 @@ Target get_host_target() {
 }
 
 namespace {
-string get_env(const char *name) {
-#ifdef _MSC_VER
-    char buf[128];
-    size_t read = 0;
-    getenv_s(&read, buf, name);
-    if (read) {
-        return string(buf);
-    } else {
-        return "";
-    }
-#else
-    char *buf = getenv(name);
-    if (buf) {
-        return string(buf);
-    } else {
-        return "";
-    }
-#endif
-}
 
 const std::map<std::string, Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
@@ -290,7 +271,7 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
 } // End anonymous namespace
 
 Target get_target_from_environment() {
-    string target = get_env("HL_TARGET");
+    string target = Internal::get_env_variable("HL_TARGET");
     if (target.empty()) {
         return get_host_target();
     } else {
@@ -301,7 +282,7 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
-    string target = get_env("HL_JIT_TARGET");
+    string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
         return host;
     } else {

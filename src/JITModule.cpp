@@ -13,6 +13,8 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Debug.h"
 #include "LLVM_Output.h"
+#include "CodeGen_LLVM.h"
+#include "Pipeline.h"
 
 
 #ifdef _MSC_VER
@@ -251,6 +253,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
+    // Ensure that LLVM is initialized
+    CodeGen_LLVM::initialize_llvm();
+
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
@@ -272,11 +277,14 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(memory_manager));
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    engine_builder.setMCPU(mcpu);
+    if (!mcpu.empty()) {
+        engine_builder.setMCPU(mcpu);
+    }
     std::vector<string> mattrs_array = {mattrs};
     engine_builder.setMAttrs(mattrs_array);
 
     TargetMachine *tm = engine_builder.selectTarget();
+    internal_assert(tm) << error_string << "\n";
     #if LLVM_VERSION == 37
     DataLayout target_data_layout(*(tm->getDataLayout()));
     #else
@@ -407,9 +415,9 @@ void JITModule::add_symbol_for_export(const std::string &name, const Symbol &ext
     jit_module->exports[name] = extern_symbol;
 }
 
-void JITModule::add_extern_for_export(const std::string &name, const ExternSignature &signature, void *address) {
+void JITModule::add_extern_for_export(const std::string &name, const ExternCFunction &extern_c_function) {
     Symbol symbol;
-    symbol.address = address;
+    symbol.address = extern_c_function.address();
 
     // Struct types are uniqued on the context, but the lookup API is only available
     // on the Module, not the Context.
@@ -421,18 +429,19 @@ void JITModule::add_extern_for_export(const std::string &name, const ExternSigna
     llvm::Type *buffer_t_star = llvm::PointerType::get(buffer_t, 0);
 
     llvm::Type *ret_type;
-    if (signature.is_void_return) {
+    auto signature = extern_c_function.signature();
+    if (signature.is_void_return()) {
         ret_type = llvm::Type::getVoidTy(jit_module->context);
     } else {
-        ret_type = llvm_type_of(&jit_module->context, signature.ret_type);
+        ret_type = llvm_type_of(&jit_module->context, signature.ret_type());
     }
 
     std::vector<llvm::Type *> llvm_arg_types;
-    for (const ScalarOrBufferT &scalar_or_buffer_t : signature.arg_types) {
-        if (scalar_or_buffer_t.is_buffer) {
+    for (const Type &t : signature.arg_types()) {
+        if (t == type_of<struct buffer_t *>()) {
             llvm_arg_types.push_back(buffer_t_star);
         } else {
-            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, scalar_or_buffer_t.scalar_type));
+            llvm_arg_types.push_back(llvm_type_of(&jit_module->context, t));
         }
     }
 
@@ -480,6 +489,15 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     }
     if (addins.custom_trace) {
         base.custom_trace = addins.custom_trace;
+    }
+    if (addins.custom_get_symbol) {
+        base.custom_get_symbol = addins.custom_get_symbol;
+    }
+    if (addins.custom_load_library) {
+        base.custom_load_library = addins.custom_load_library;
+    }
+    if (addins.custom_get_library_symbol) {
+        base.custom_get_library_symbol = addins.custom_get_library_symbol;
     }
 }
 
@@ -539,7 +557,7 @@ void error_handler_handler(void *context, const char *msg) {
     }
 }
 
-int32_t trace_handler(void *context, const halide_trace_event *e) {
+int32_t trace_handler(void *context, const halide_trace_event_t *e) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
         return (*jit_user_context->handlers.custom_trace)(context, e);
@@ -548,9 +566,21 @@ int32_t trace_handler(void *context, const halide_trace_event *e) {
     }
 }
 
+void *get_symbol_handler(const char *name) {
+    return (*active_handlers.custom_get_symbol)(name);
+}
+
+void *load_library_handler(const char *name) {
+    return (*active_handlers.custom_load_library)(name);
+}
+
+void *get_library_symbol_handler(void *lib, const char *name) {
+    return (*active_handlers.custom_get_library_symbol)(lib, name);
+}
+
 template <typename function_t>
-function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const char *hook_name, function_t hook) {
-    std::map<std::string, JITModule::Symbol>::const_iterator iter = exports.find(hook_name);
+function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
+    auto iter = exports.find(hook_name);
     internal_assert(iter != exports.end());
     function_t (*hook_setter)(function_t) =
         reinterpret_bits<function_t (*)(function_t)>(iter->second.address);
@@ -658,7 +688,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         // This function is protected by a mutex so this is thread safe.
         std::unique_ptr<llvm::Module> module(get_initial_module_for_target(one_gpu,
             &runtime.jit_module->context, true, runtime_kind != MainShared));
-        clone_target_options(*for_module, *module);
+        if (for_module) {
+            clone_target_options(*for_module, *module);
+        }
         module->setModuleIdentifier(module_name);
 
         std::set<std::string> halide_exports_unique;
@@ -677,31 +709,40 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         if (runtime_kind == MainShared) {
             runtime_internal_handlers.custom_print =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_print", print_handler);
+                hook_function(runtime.exports(), "halide_set_custom_print", print_handler);
 
             runtime_internal_handlers.custom_malloc =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_malloc", malloc_handler);
+                hook_function(runtime.exports(), "halide_set_custom_malloc", malloc_handler);
 
             runtime_internal_handlers.custom_free =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_free", free_handler);
+                hook_function(runtime.exports(), "halide_set_custom_free", free_handler);
 
             runtime_internal_handlers.custom_do_task =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_task", do_task_handler);
+                hook_function(runtime.exports(), "halide_set_custom_do_task", do_task_handler);
 
             runtime_internal_handlers.custom_do_par_for =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+                hook_function(runtime.exports(), "halide_set_custom_do_par_for", do_par_for_handler);
 
             runtime_internal_handlers.custom_error =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_error_handler", error_handler_handler);
+                hook_function(runtime.exports(), "halide_set_error_handler", error_handler_handler);
 
             runtime_internal_handlers.custom_trace =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_trace", trace_handler);
+                hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
+
+            runtime_internal_handlers.custom_get_symbol =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_symbol", get_symbol_handler);
+
+            runtime_internal_handlers.custom_load_library =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_load_library", load_library_handler);
+
+            runtime_internal_handlers.custom_get_library_symbol =
+                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
 
             if (default_cache_size != 0) {
-                shared_runtimes(MainShared).memoization_cache_set_size(default_cache_size);
+                runtime.memoization_cache_set_size(default_cache_size);
             }
 
             runtime.jit_module->name = "MainShared";
@@ -728,9 +769,9 @@ JITModule &make_module(llvm::Module *for_module, Target target,
  * determined from the target and the retrieved. If one does not exist
  * yet, it is made on the fly from the compiled in bitcode of the
  * runtime modules. As with all JITModules, the shared runtime is ref
- * counted, but a globabl keeps one ref alive until shutdown or when
+ * counted, but a global keeps one ref alive until shutdown or when
  * JITSharedRuntime::release_all is called. If
- * JITSharedRuntime::release_all is called, the global state is rest
+ * JITSharedRuntime::release_all is called, the global state is reset
  * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Target &target, bool create) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
@@ -738,40 +779,47 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     std::vector<JITModule> result;
 
     JITModule m = make_module(for_module, target, MainShared, result, create);
-    if (m.compiled())
+    if (m.compiled()) {
         result.push_back(m);
+    }
 
     // Add all requested GPU modules, each only depending on the main shared runtime.
     std::vector<JITModule> gpu_modules;
     if (target.has_feature(Target::OpenCL)) {
         JITModule m = make_module(for_module, target, OpenCL, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::Metal)) {
         JITModule m = make_module(for_module, target, Metal, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::CUDA)) {
         JITModule m = make_module(for_module, target, CUDA, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::OpenGL)) {
         JITModule m = make_module(for_module, target, OpenGL, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         JITModule m = make_module(for_module, target, OpenGLCompute, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         JITModule m = make_module(for_module, target, Hexagon, result, create);
-        if (m.compiled())
+        if (m.compiled()) {
             result.push_back(m);
+        }
     }
 
     return result;
@@ -781,7 +829,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
 // caller provided user context work with JIT. (At present, this
 // cascaded handler calls cannot work with the right context as
 // JITModule needs its context to be passed in case the called handler
-// calls another callback wich is not overriden by the caller.)
+// calls another callback which is not overriden by the caller.)
 void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
                                              void *user_context, const JITHandlers &handlers) {
     jit_user_context.handlers = active_handlers;

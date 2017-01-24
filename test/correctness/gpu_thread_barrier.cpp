@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
 
     {
         Func f;
-        Var x, y, z;
+        Var x, y;
 
         // Construct a Func with lots of potential race conditions, and
         // then run it in thread blocks on the gpu.
@@ -70,8 +70,9 @@ int main(int argc, char **argv) {
         Func g;
         g(x, y) = f(0, 0)+ f(9, 7);
 
-        g.gpu_tile(x, y, 16, 8);
-        f.compute_at(g, Var::gpu_blocks());
+        Var xi, yi;
+        g.gpu_tile(x, y, xi, yi, 16, 8);
+        f.compute_at(g, x);
 
         for (int i = 0; i < passes; i++) {
             f.update(i*4 + 0).gpu_threads(y);
@@ -99,7 +100,7 @@ int main(int argc, char **argv) {
         // added.
 
         Func f;
-        Var x, y, z;
+        Var x, y;
         f(x, y) = undef<int>();
         f(x, y) += x + 100 * y;
         // This next line is dubious, because it entirely masks the
@@ -113,8 +114,9 @@ int main(int argc, char **argv) {
         Func g;
         g(x, y) = f(0, 0) + f(7, 7);
 
-        g.gpu_tile(x, y, 8, 8);
-        f.compute_at(g, Var::gpu_blocks());
+        Var xi, yi;
+        g.gpu_tile(x, y, xi, yi, 8, 8);
+        f.compute_at(g, x);
 
         f.gpu_threads(x, y);
         f.update(0).gpu_threads(x, y);

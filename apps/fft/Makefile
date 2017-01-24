@@ -49,7 +49,10 @@ $(BIN)/fft_inverse_c2c.a: $(BIN)/fft_generator_exec
 
 $(BIN)/fft_aot_test: fft_aot_test.cpp $(BIN)/fft_forward_r2c.a $(BIN)/fft_inverse_c2r.a $(BIN)/fft_forward_c2c.a $(BIN)/fft_inverse_c2c.a
 	@-mkdir -p $(BIN)
-	$(CXX) -I$(BIN) $^ -o $@ $(LDFLAGS)
+	$(CXX) -I$(BIN) -I$(HALIDE_BIN_PATH)/include/ -std=c++11 $^ -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf $(BIN)
+
+fft_aot_test: $(BIN)/fft_aot_test
+	$(BIN)/fft_aot_test

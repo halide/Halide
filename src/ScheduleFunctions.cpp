@@ -328,7 +328,7 @@ Stmt build_produce(Function f, const Target &target) {
                     buffers_contents_to_annotate.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
-                BufferPtr b = arg.buffer;
+                Buffer<> b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
                 string buf_name = b.name() + ".buffer";
@@ -380,8 +380,6 @@ Stmt build_produce(Function f, const Target &target) {
             const vector<string> f_args = f.args();
             for (int j = 0; j < f.outputs(); j++) {
 
-                vector<Expr> buffer_args(2);
-
                 vector<Expr> top_left;
                 for (int k = 0; k < f.dimensions(); k++) {
                     string var = stage_name + f_args[k];
@@ -390,20 +388,21 @@ Stmt build_produce(Function f, const Target &target) {
                 Expr host_ptr = Call::make(f, top_left, j);
                 host_ptr = Call::make(Handle(), Call::address_of, {host_ptr}, Call::Intrinsic);
 
-                buffer_args[0] = host_ptr;
-                buffer_args[1] = make_zero(f.output_types()[j]);
-                for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f_args[k];
+                BufferBuilder builder;
+                builder.host = host_ptr;
+                builder.type = f.output_types()[j];
+                builder.dimensions = f.dimensions();
+                int k = 0;
+                for (const string arg : f.args()) {
+                    string var = stage_name + arg;
                     Expr min = Variable::make(Int(32), var + ".min");
                     Expr max = Variable::make(Int(32), var + ".max");
-                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k));
-                    buffer_args.push_back(min);
-                    buffer_args.push_back(max - min + 1);
-                    buffer_args.push_back(stride);
+                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k++));
+                    builder.mins.push_back(min);
+                    builder.extents.push_back(max - min + 1);
+                    builder.strides.push_back(stride);
                 }
-
-                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                                  buffer_args, Call::Intrinsic);
+                Expr output_buffer_t = builder.build();
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
                 extern_call_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
@@ -441,12 +440,11 @@ Stmt build_produce(Function f, const Target &target) {
         }
 
         // Make the extern call
-        Expr e = Call::make(Int(32), extern_name, extern_call_args,
-                            f.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus
-                                                                 : Call::Extern);
+        Expr e = f.make_call_to_extern_definition(extern_call_args, target);
+
+        // Check if it succeeded
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
-        // Check if it succeeded
         Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
                                 {extern_name, result}, Call::Extern);
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
@@ -579,7 +577,7 @@ private:
 
     string producing;
 
-    Stmt build_pipeline(Stmt s) {
+    Stmt build_pipeline(Stmt consumer) {
         pair<Stmt, Stmt> realization = build_production(func, target);
 
         Stmt producer;
@@ -591,10 +589,20 @@ private:
             internal_assert(realization.second.defined());
             producer = realization.second;
         }
-        producer = ProducerConsumer::make(func.name(), true, producer);
-        Stmt consumer = ProducerConsumer::make(func.name(), false, s);
+        producer = ProducerConsumer::make_produce(func.name(), producer);
 
-        return Block::make(producer, consumer);
+        // Outputs don't have consume nodes
+        if (!is_output) {
+            consumer = ProducerConsumer::make_consume(func.name(), consumer);
+        }
+
+        if (is_no_op(consumer)) {
+            // For the very first output to be scheduled, the consumer
+            // Stmt will be a no-op. No point in preserving it.
+            return producer;
+        } else {
+            return Block::make(producer, consumer);
+        }
     }
 
     Stmt build_realize(Stmt s) {
@@ -758,7 +766,7 @@ private:
             internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
             loop_level = LoopLevel(it->second, Var(var));
         }
-        Site s = {f->for_type == ForType::Parallel ||
+        Site s = {f->is_parallel() ||
                   f->for_type == ForType::Vectorized,
                   loop_level};
         sites.push_back(s);
@@ -820,7 +828,7 @@ string schedule_to_source(Function f,
                 if (store_var_name == Var::outermost().name()) {
                     store_var_name = "Var::outermost()";
                 }
-                ss << ".store_at(" << store_at.func().name() << ", " << store_var_name << ")";
+                ss << ".store_at(" << store_at.func() << ", " << store_var_name << ")";
             }
         }
         if (compute_at.is_root()) {
@@ -830,7 +838,7 @@ string schedule_to_source(Function f,
             if (compute_var_name == Var::outermost().name()) {
                 compute_var_name = "Var::outermost()";
             }
-            ss << ".compute_at(" << compute_at.func().name() << ", " << compute_var_name << ")";
+            ss << ".compute_at(" << compute_at.func() << ", " << compute_var_name << ")";
         }
     }
     ss << ";";

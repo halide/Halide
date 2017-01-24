@@ -9,7 +9,6 @@
 #include <functional>
 
 #include "Argument.h"
-#include "BufferPtr.h"
 #include "IR.h"
 #include "ModulusRemainder.h"
 #include "Outputs.h"
@@ -81,13 +80,13 @@ public:
 
     /** The declarations contained in this module. */
     // @{
-    EXPORT const std::vector<Internal::BufferPtr> &buffers() const;
+    EXPORT const std::vector<Buffer<>> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
     // @}
 
     /** Add a declaration to this module. */
     // @{
-    EXPORT void append(const Internal::BufferPtr &buffer);
+    EXPORT void append(const Buffer<> &buffer);
     EXPORT void append(const Internal::LoweredFunc &function);
     // @}
 

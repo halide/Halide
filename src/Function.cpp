@@ -45,13 +45,13 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
-    bool extern_is_c_plus_plus;
+    NameMangling extern_mangling;
 
     bool trace_loads, trace_stores, trace_realizations;
 
     bool frozen;
 
-    FunctionContents() : extern_is_c_plus_plus(false), trace_loads(false),
+    FunctionContents() : extern_mangling(NameMangling::Default), trace_loads(false),
                          trace_stores(false), trace_realizations(false),
                          frozen(false) {}
 
@@ -304,7 +304,7 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->output_types = src->output_types;
     dst->debug_file = src->debug_file;
     dst->extern_function_name = src->extern_function_name;
-    dst->extern_is_c_plus_plus = src->extern_is_c_plus_plus;
+    dst->extern_mangling = src->extern_mangling;
     dst->trace_loads = src->trace_loads;
     dst->trace_stores = src->trace_stores;
     dst->trace_realizations = src->trace_realizations;
@@ -677,7 +677,7 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &args,
                              const std::vector<Type> &types,
                              int dimensionality,
-                             bool is_c_plus_plus) {
+                             NameMangling mangling) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -690,7 +690,7 @@ void Function::define_extern(const std::string &function_name,
     contents->extern_function_name = function_name;
     contents->extern_arguments = args;
     contents->output_types = types;
-    contents->extern_is_c_plus_plus = is_c_plus_plus;
+    contents->extern_mangling = mangling;
 
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
@@ -798,8 +798,29 @@ bool Function::has_extern_definition() const {
     return !contents->extern_function_name.empty();
 }
 
-bool Function::extern_definition_is_c_plus_plus() const {
-    return contents->extern_is_c_plus_plus;
+NameMangling Function::extern_definition_name_mangling() const {
+    return contents->extern_mangling;
+}
+
+Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
+                                              const Target &target) const {
+    internal_assert(has_extern_definition());
+
+    Call::CallType call_type = Call::Extern;
+    switch (contents->extern_mangling) {
+    case NameMangling::Default:
+        call_type = (target.has_feature(Target::CPlusPlusMangling) ?
+                     Call::ExternCPlusPlus :
+                     Call::Extern);
+        break;
+    case NameMangling::CPlusPlus:
+        call_type = Call::ExternCPlusPlus;
+        break;
+    case NameMangling::C:
+        call_type = Call::Extern;
+        break;
+    }
+    return Call::make(Int(32), contents->extern_function_name, args, call_type);
 }
 
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {

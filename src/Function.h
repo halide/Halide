@@ -11,6 +11,7 @@
 #include "Schedule.h"
 #include "Reduction.h"
 #include "Definition.h"
+#include "Buffer.h"
 
 #include <map>
 
@@ -26,17 +27,14 @@ struct ExternFuncArgument {
     enum ArgType {UndefinedArg = 0, FuncArg, BufferArg, ExprArg, ImageParamArg};
     ArgType arg_type;
     Internal::IntrusivePtr<Internal::FunctionContents> func;
-    Internal::BufferPtr buffer;
+    Buffer<> buffer;
     Expr expr;
     Internal::Parameter image_param;
 
     ExternFuncArgument(Internal::IntrusivePtr<Internal::FunctionContents> f): arg_type(FuncArg), func(f) {}
 
-    ExternFuncArgument(Internal::BufferPtr b): arg_type(BufferArg), buffer(b) {}
-
-    template<typename T, int D>
-    ExternFuncArgument(const Buffer<T, D> &im) : arg_type(BufferArg), buffer(im) {}
-
+    template<typename T>
+    ExternFuncArgument(Buffer<T> b): arg_type(BufferArg), buffer(b) {}
     ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
     ExternFuncArgument(int e): arg_type(ExprArg), expr(e) {}
     ExternFuncArgument(float e): arg_type(ExprArg), expr(e) {}
@@ -52,6 +50,13 @@ struct ExternFuncArgument {
     bool is_buffer() const {return arg_type == BufferArg;}
     bool is_image_param() const {return arg_type == ImageParamArg;}
     bool defined() const {return arg_type != UndefinedArg;}
+};
+
+/** An enum to specify calling convention for extern stages. */
+enum class NameMangling {
+    Default,   ///< Match whatever is specified in the Target
+    C,         ///< No name mangling
+    CPlusPlus, ///< C++ name mangling
 };
 
 namespace Internal {
@@ -121,50 +126,50 @@ public:
      * of this function. */
     EXPORT void accept(IRVisitor *visitor) const;
 
-    /** Get the name of the function */
+    /** Get the name of the function. */
     EXPORT const std::string &name() const;
 
     /** Get a mutable handle to the init definition. */
     EXPORT Definition &definition();
 
-    /** Get the init definition */
+    /** Get the init definition. */
     EXPORT const Definition &definition() const;
 
-    /** Get the pure arguments */
+    /** Get the pure arguments. */
     EXPORT const std::vector<std::string> args() const;
 
-    /** Get the dimensionality */
+    /** Get the dimensionality. */
     EXPORT int dimensions() const;
 
-    /** Get the number of outputs */
+    /** Get the number of outputs. */
     int outputs() const {
         return (int)output_types().size();
     }
 
-    /** Get the types of the outputs */
+    /** Get the types of the outputs. */
     EXPORT const std::vector<Type> &output_types() const;
 
-    /** Get the right-hand-side of the pure definition */
+    /** Get the right-hand-side of the pure definition. */
     EXPORT const std::vector<Expr> &values() const;
 
-    /** Does this function have a pure definition */
+    /** Does this function have a pure definition? */
     EXPORT bool has_pure_definition() const;
 
-    /** Does this function *only* have a pure definition */
+    /** Does this function *only* have a pure definition? */
     bool is_pure() const {
         return (has_pure_definition() &&
                 !has_update_definition() &&
                 !has_extern_definition());
     }
 
-    /** Is it legal to inline this function */
+    /** Is it legal to inline this function? */
     EXPORT bool can_be_inlined() const;
 
     /** Get a handle to the schedule for the purpose of modifying
-     * it */
+     * it. */
     EXPORT Schedule &schedule();
 
-    /** Get a const handle to the schedule for inspecting it */
+    /** Get a const handle to the schedule for inspecting it. */
     EXPORT const Schedule &schedule() const;
 
     /** Get a handle on the output buffer used for setting constraints
@@ -172,7 +177,7 @@ public:
     EXPORT const std::vector<Parameter> &output_buffers() const;
 
     /** Get a mutable handle to the schedule for the update
-     * stage */
+     * stage. */
     EXPORT Schedule &update_schedule(int idx = 0);
 
     /** Get a mutable handle to this function's update definition at
@@ -186,38 +191,43 @@ public:
     /** Get a const reference to this function's update definitions. */
     EXPORT const std::vector<Definition> &updates() const;
 
-    /** Does this function have an update definition */
+    /** Does this function have an update definition? */
     EXPORT bool has_update_definition() const;
 
-    /** Check if the function has an extern definition */
+    /** Check if the function has an extern definition. */
     EXPORT bool has_extern_definition() const;
 
-    /** Check if the function has an extern definition */
-    EXPORT bool extern_definition_is_c_plus_plus() const;
+    /** Get the name mangling specified for the extern definition. */
+    EXPORT NameMangling extern_definition_name_mangling() const;
 
-    /** Add an external definition of this Func */
+    /** Make a call node to the extern definition. An error if the
+     * function has no extern definition. */
+    EXPORT Expr make_call_to_extern_definition(const std::vector<Expr> &args,
+                                               const Target &t) const;
+
+    /** Add an external definition of this Func. */
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
                               int dimensionality,
-                              bool is_c_plus_plus);
+                              NameMangling mangling);
 
-    /** Retrive the arguments of the extern definition */
+    /** Retrive the arguments of the extern definition. */
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;
 
     /** Get the name of the extern function called for an extern
      * definition. */
     EXPORT const std::string &extern_function_name() const;
 
-    /** Equality of identity */
+    /** Test for equality of identity. */
     bool same_as(const Function &other) const {
         return contents.same_as(other.contents);
     }
 
-    /** Get a const handle to the debug filename */
+    /** Get a const handle to the debug filename. */
     EXPORT const std::string &debug_file() const;
 
-    /** Get a handle to the debug filename */
+    /** Get a handle to the debug filename. */
     EXPORT std::string &debug_file();
 
     /** Use an an extern argument to another function. */

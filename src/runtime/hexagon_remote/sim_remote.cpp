@@ -144,6 +144,7 @@ void *halide_get_symbol(const char *name) {
         {"abort", (char *)(&abort)},
         {"memcpy", (char *)(&memcpy)},
         {"memmove", (char *)(&memmove)},
+        {"memset", (char *)(&memset)},
         {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
         {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
         {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},

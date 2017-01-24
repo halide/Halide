@@ -12,7 +12,7 @@ using namespace Halide;
 
 // Use an extern stage to do a sort
 extern "C" DLLEXPORT int sort_buffer(buffer_t *in, buffer_t *out) {
-    if (!in->host) {
+    if (!in->host || !out->host) {
         in->min[0] = out->min[0];
         in->extent[0] = out->extent[0];
     } else {

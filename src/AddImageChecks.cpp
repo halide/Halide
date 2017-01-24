@@ -16,7 +16,7 @@ using std::pair;
 class FindBuffers : public IRGraphVisitor {
 public:
     struct Result {
-        BufferPtr image;
+        Buffer<> image;
         Parameter param;
         Type type;
         int dimensions;
@@ -146,7 +146,7 @@ Stmt add_image_checks(Stmt s,
 
     for (pair<const string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
-        BufferPtr &image = buf.second.image;
+        Buffer<> &image = buf.second.image;
         Parameter &param = buf.second.param;
         Type type = buf.second.type;
         int dimensions = buf.second.dimensions;
@@ -201,10 +201,10 @@ Stmt add_image_checks(Stmt s,
                 Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
-                    Expr min = Call::make(Int(32), Call::extract_buffer_min,
-                                          {query_buf, j}, Call::Intrinsic);
-                    Expr max = Call::make(Int(32), Call::extract_buffer_max,
-                                          {query_buf, j}, Call::Intrinsic);
+                    Expr min = Call::make(Int(32), Call::buffer_get_min,
+                                          {query_buf, j}, Call::Extern);
+                    Expr max = Call::make(Int(32), Call::buffer_get_max,
+                                          {query_buf, j}, Call::Extern);
                     query_box.push_back(Interval(min, max));
                 }
                 merge_boxes(touched, query_box);
@@ -213,7 +213,10 @@ Stmt add_image_checks(Stmt s,
 
         // An expression returning whether or not we're in inference mode
         ReductionDomain rdom;
-        Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null", image, param, rdom);
+        Expr host_ptr = Variable::make(Handle(), name + ".host", image, param, rdom);
+        Expr dev = Variable::make(UInt(64), name + ".dev", image, param, rdom);
+        Expr inference_mode = (host_ptr == make_zero(host_ptr.type()) &&
+                               dev == make_zero(dev.type()));
 
         maybe_return_condition = maybe_return_condition || inference_mode;
 
@@ -311,9 +314,9 @@ Stmt add_image_checks(Stmt s,
             // is used in the schedule to combine multiple extents,
             // but it is here for extra safety. On targets with the
             // LargeBuffers feature, the maximum size is 2^63 - 1.
-            Expr max_size = make_const(Int(64), t.maximum_buffer_size());
-            Expr max_extent = make_const(Int(64), 0x7fffffff);
-            Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
+            Expr max_size = make_const(UInt(64), t.maximum_buffer_size());
+            Expr max_extent = make_const(UInt(64), 0x7fffffff);
+            Expr actual_size = abs(cast<int64_t>(actual_extent) * actual_stride);
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);
             Stmt check = AssertStmt::make(actual_size <= max_size, allocation_size_error);
@@ -324,6 +327,7 @@ Stmt add_image_checks(Stmt s,
                 if (j == 0) {
                     lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
                 } else {
+                    max_size = cast<int64_t>(max_size);
                     Expr last_dim = Variable::make(Int(64), name + ".total_extent." + std::to_string(j-1));
                     Expr this_dim = actual_extent * last_dim;
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
@@ -333,20 +337,28 @@ Stmt add_image_checks(Stmt s,
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
                     dims_no_overflow_asserts.push_back(check);
                 }
+
+                // It is never legal to have a negative buffer extent.
+                Expr negative_extent_condition = actual_extent >= 0;
+                Expr negative_extent_error = Call::make(Int(32), "halide_error_buffer_extents_negative",
+                                                        {error_name, j, actual_extent}, Call::Extern);
+                asserts_required.push_back(AssertStmt::make(negative_extent_condition, negative_extent_error));
             }
         }
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
-        Expr buffer_name_expr = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
-        vector<Expr> args = {buffer_name_expr, Expr(type.bits() / 8)};
+        BufferBuilder builder;
+        builder.buffer_memory = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
+        builder.type = type;
+        builder.dimensions = dimensions;
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
-            args.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
-            args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
-            args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
+            builder.mins.push_back(Variable::make(Int(32), name + ".min." + dim + ".proposed"));
+            builder.extents.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
+            builder.strides.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
         }
-        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, nullptr, 0, image, param);
-        Stmt rewrite = Evaluate::make(call);
+        Stmt rewrite = Evaluate::make(builder.build());
+
         rewrite = IfThenElse::make(inference_mode, rewrite);
         buffer_rewrites.push_back(rewrite);
 

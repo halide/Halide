@@ -65,7 +65,7 @@ WEAK void load_libopencl(void *user_context) {
     #include "cl_functions.h"
 }
 
-extern WEAK halide_device_interface opencl_device_interface;
+extern WEAK halide_device_interface_t opencl_device_interface;
 
 WEAK const char *get_opencl_error_name(cl_int err);
 WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_queue *q);
@@ -183,7 +183,7 @@ public:
     cl_int error;
 
     // Constructor sets 'error' if any occurs.
-    ClContext(void *user_context) : user_context(user_context),
+    INLINE ClContext(void *user_context) : user_context(user_context),
                                     context(NULL),
                                     cmd_queue(NULL),
                                     error(CL_SUCCESS) {
@@ -199,7 +199,7 @@ public:
         halide_assert(user_context, context != NULL && cmd_queue != NULL);
     }
 
-    ~ClContext() {
+    INLINE ~ClContext() {
         halide_release_cl_context(user_context);
     }
 };
@@ -1118,7 +1118,7 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, struct buffer_t *buf
     return (uintptr_t)mem;
 }
 
-WEAK const struct halide_device_interface *halide_opencl_device_interface() {
+WEAK const struct halide_device_interface_t *halide_opencl_device_interface() {
     return &opencl_device_interface;
 }
 
@@ -1185,7 +1185,7 @@ WEAK const char *get_opencl_error_name(cl_int err) {
     }
 }
 
-WEAK halide_device_interface opencl_device_interface = {
+WEAK halide_device_interface_t opencl_device_interface = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_opencl_device_malloc,

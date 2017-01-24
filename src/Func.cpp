@@ -163,8 +163,8 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
                          int dimensionality,
-                         bool is_c_plus_plus) {
-    func.define_extern(function_name, args, types, dimensionality, is_c_plus_plus);
+                         NameMangling mangling) {
+    func.define_extern(function_name, args, types, dimensionality, mangling);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
@@ -282,7 +282,9 @@ void Stage::set_dim_type(VarOrRVar var, ForType t) {
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
-            if (!dims[i].is_pure() && var.is_rvar && (t == ForType::Vectorized || t == ForType::Parallel)) {
+            if (!dims[i].is_pure() && var.is_rvar &&
+                (t == ForType::Vectorized || t == ForType::Parallel ||
+                 t == ForType::GPUBlock || t == ForType::GPUThread)) {
                 user_assert(definition.schedule().allow_race_conditions())
                     << "In schedule for " << stage_name
                     << ", marking var " << var.name()
@@ -935,6 +937,69 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
                    << dump_argument_list();
     }
 
+    if (tail == TailStrategy::Auto) {
+        // Select a tail strategy
+        if (exact) {
+            tail = TailStrategy::GuardWithIf;
+        } else if (!definition.is_init()) {
+            tail = TailStrategy::RoundUp;
+        } else {
+            // We should employ ShiftInwards when we can to prevent
+            // overcompute and adding constraints to the bounds of
+            // inputs and outputs. However, if we're already covered
+            // by an earlier ShiftInwards split, there's no point - it
+            // just complicates the IR and confuses bounds inference. An example of this is:
+            //
+            // f.vectorize(x, 8).unroll(x, 4);
+            //
+            // The vectorize-induced split is ShiftInwards. There's no
+            // point also applying ShiftInwards to the unroll-induced
+            // split.
+            //
+            // Note that we'll still partition the outermost loop to
+            // avoid the overhead of the min we placed in the inner
+            // loop with the vectorize, because that's how loop
+            // partitioning works. The steady-state will be just as
+            // efficient as:
+            //
+            // f.split(x, x, xi, 32).vectorize(xi, 8).unroll(xi);
+            //
+            // It's only the tail/epilogue that changes.
+
+            std::set<string> descends_from_shiftinwards_outer;
+            for (const Split &s : definition.schedule().splits()) {
+                if (s.is_split() && s.tail == TailStrategy::ShiftInwards) {
+                    descends_from_shiftinwards_outer.insert(s.outer);
+                } else if (s.is_split() && descends_from_shiftinwards_outer.count(s.old_var)) {
+                    descends_from_shiftinwards_outer.insert(s.inner);
+                    descends_from_shiftinwards_outer.insert(s.outer);
+                } else if ((s.is_rename() || s.is_purify()) &&
+                           descends_from_shiftinwards_outer.count(s.old_var)) {
+                    descends_from_shiftinwards_outer.insert(s.outer);
+                }
+            }
+            if (descends_from_shiftinwards_outer.count(old_name)) {
+                tail = TailStrategy::RoundUp;
+            } else {
+                tail = TailStrategy::ShiftInwards;
+            }
+        }
+    }
+
+    if (!definition.is_init()) {
+        user_assert(tail != TailStrategy::ShiftInwards)
+            << "When splitting Var " << old_name
+            << " ShiftInwards is not a legal tail strategy for update definitions, as"
+            << " it may change the meaning of the algorithm\n";
+    }
+
+    if (exact) {
+        user_assert(tail == TailStrategy::GuardWithIf)
+            << "When splitting Var " << old_name
+            << " the tail strategy must be GuardWithIf or Auto. "
+            << "Anything else may change the meaning of the algorithm\n";
+    }
+
     // Add the split to the splits list
     Split split = {old_name, outer_name, inner_name, factor, exact, tail, Split::SplitVar};
     definition.schedule().splits().push_back(split);
@@ -1018,7 +1083,7 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
     }
 
     // Add the fuse to the splits list
-    Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::Auto, Split::FuseVars};
+    Split split = {fused_name, outer_name, inner_name, Expr(), true, TailStrategy::RoundUp, Split::FuseVars};
     definition.schedule().splits().push_back(split);
     return *this;
 }
@@ -1096,7 +1161,7 @@ Stage &Stage::purify(VarOrRVar old_var, VarOrRVar new_var) {
             << dump_argument_list();
     }
 
-    Split split = {old_name, new_name, "", 1, false, TailStrategy::Auto, Split::PurifyRVar};
+    Split split = {old_name, new_name, "", 1, false, TailStrategy::RoundUp, Split::PurifyRVar};
     definition.schedule().splits().push_back(split);
     return *this;
 }
@@ -1279,7 +1344,7 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
     }
 
     if (!found) {
-        Split split = {old_name, new_name, "", 1, old_var.is_rvar, TailStrategy::Auto, Split::RenameVar};
+        Split split = {old_name, new_name, "", 1, old_var.is_rvar, TailStrategy::RoundUp, Split::RenameVar};
         definition.schedule().splits().push_back(split);
     }
 
@@ -1428,18 +1493,15 @@ Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
 
 Stage &Stage::gpu_threads(VarOrRVar tx, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
-    parallel(tx);
-    rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
+    set_dim_type(tx, ForType::GPUThread);
     return *this;
 }
 
 Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
-    parallel(tx);
-    parallel(ty);
-    rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__thread_id_y", ty.is_rvar));
+    set_dim_type(tx, ForType::GPUThread);
+    set_dim_type(ty, ForType::GPUThread);
     return *this;
 }
 
@@ -1447,49 +1509,41 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI de
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
     set_dim_device_api(tz, device_api);
-    parallel(tx);
-    parallel(ty);
-    parallel(tz);
-    rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__thread_id_y", ty.is_rvar));
-    rename(tz, VarOrRVar("__thread_id_z", tz.is_rvar));
+    set_dim_type(tx, ForType::GPUThread);
+    set_dim_type(ty, ForType::GPUThread);
+    set_dim_type(tz, ForType::GPUThread);
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, DeviceAPI device_api) {
-    set_dim_device_api(tx, device_api);
-    parallel(tx);
-    rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
+Stage &Stage::gpu_blocks(VarOrRVar bx, DeviceAPI device_api) {
+    set_dim_device_api(bx, device_api);
+    set_dim_type(bx, ForType::GPUBlock);
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, DeviceAPI device_api) {
-    set_dim_device_api(tx, device_api);
-    set_dim_device_api(ty, device_api);
-    parallel(tx);
-    parallel(ty);
-    rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__block_id_y", ty.is_rvar));
+Stage &Stage::gpu_blocks(VarOrRVar bx, VarOrRVar by, DeviceAPI device_api) {
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(by, device_api);
+    set_dim_type(bx, ForType::GPUBlock);
+    set_dim_type(by, ForType::GPUBlock);
     return *this;
 }
 
-Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
-    set_dim_device_api(tx, device_api);
-    set_dim_device_api(ty, device_api);
-    set_dim_device_api(tz, device_api);
-    parallel(tx);
-    parallel(ty);
-    parallel(tz);
-    rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__block_id_y", ty.is_rvar));
-    rename(tz, VarOrRVar("__block_id_z", tz.is_rvar));
+Stage &Stage::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, DeviceAPI device_api) {
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(by, device_api);
+    set_dim_device_api(bz, device_api);
+    set_dim_type(bx, ForType::GPUBlock);
+    set_dim_type(by, ForType::GPUBlock);
+    set_dim_type(bz, ForType::GPUBlock);
     return *this;
 }
 
 Stage &Stage::gpu_single_thread(DeviceAPI device_api) {
-    split(Var::outermost(), Var::outermost(), Var::gpu_blocks(), 1);
-    set_dim_device_api(Var::gpu_blocks(), device_api);
-    parallel(Var::gpu_blocks());
+    Var block;
+    split(Var::outermost(), Var::outermost(), block, 1);
+    set_dim_device_api(block, device_api);
+    set_dim_type(block, ForType::GPUBlock);
     return *this;
 }
 
@@ -1508,48 +1562,77 @@ Stage &Stage::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
-    VarOrRVar bx("__block_id_x", x.is_rvar),
-        tx("__thread_id_x", x.is_rvar);
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
+                       TailStrategy tail, DeviceAPI device_api) {
     split(x, bx, tx, x_size, tail);
     set_dim_device_api(bx, device_api);
     set_dim_device_api(tx, device_api);
-    parallel(bx);
-    parallel(tx);
+    set_dim_type(bx, ForType::GPUBlock);
+    set_dim_type(tx, ForType::GPUThread);
+    return *this;
+}
+
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+                       TailStrategy tail, DeviceAPI device_api) {
+    split(x, bx, tx, x_size, tail);
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(tx, device_api);
+    set_dim_type(bx, ForType::GPUBlock);
+    set_dim_type(tx, ForType::GPUThread);
+    return *this;
+}
+
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
+                       TailStrategy tail, DeviceAPI device_api) {
+    split(x, x, tx, x_size, tail);
+    set_dim_device_api(x, device_api);
+    set_dim_device_api(tx, device_api);
+    set_dim_type(x, ForType::GPUBlock);
+    set_dim_type(tx, ForType::GPUThread);
     return *this;
 }
 
 
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
+                       VarOrRVar bx, VarOrRVar by,
+                       VarOrRVar tx, VarOrRVar ty,
                        Expr x_size, Expr y_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
-    VarOrRVar bx("__block_id_x", x.is_rvar),
-        by("__block_id_y", y.is_rvar),
-        tx("__thread_id_x", x.is_rvar),
-        ty("__thread_id_y", y.is_rvar);
     tile(x, y, bx, by, tx, ty, x_size, y_size, tail);
     set_dim_device_api(bx, device_api);
     set_dim_device_api(by, device_api);
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
-    parallel(bx);
-    parallel(by);
-    parallel(tx);
-    parallel(ty);
+    set_dim_type(bx, ForType::GPUBlock);
+    set_dim_type(by, ForType::GPUBlock);
+    set_dim_type(tx, ForType::GPUThread);
+    set_dim_type(ty, ForType::GPUThread);
     return *this;
 }
 
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
+                       VarOrRVar tx, Var ty,
+                       Expr x_size, Expr y_size,
+                       TailStrategy tail,
+                       DeviceAPI device_api) {
+    return gpu_tile(x, y, x, y, tx, ty, x_size, y_size, tail, device_api);
+}
+
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
+                       VarOrRVar tx, RVar ty,
+                       Expr x_size, Expr y_size,
+                       TailStrategy tail,
+                       DeviceAPI device_api) {
+    return gpu_tile(x, y, x, y, tx, ty, x_size, y_size, tail, device_api);
+}
+
 Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                       VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                       VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
                        Expr x_size, Expr y_size, Expr z_size,
                        TailStrategy tail,
                        DeviceAPI device_api) {
-    VarOrRVar bx("__block_id_x", x.is_rvar),
-        by("__block_id_y", y.is_rvar),
-        bz("__block_id_z", z.is_rvar),
-        tx("__thread_id_x", x.is_rvar),
-        ty("__thread_id_y", y.is_rvar),
-        tz("__thread_id_z", z.is_rvar);
     split(x, bx, tx, x_size, tail);
     split(y, by, ty, y_size, tail);
     split(z, bz, tz, z_size, tail);
@@ -1567,13 +1650,58 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     set_dim_device_api(tx, device_api);
     set_dim_device_api(ty, device_api);
     set_dim_device_api(tz, device_api);
-    parallel(bx);
-    parallel(by);
-    parallel(bz);
-    parallel(tx);
-    parallel(ty);
-    parallel(tz);
+
+    set_dim_type(bx, ForType::GPUBlock);
+    set_dim_type(by, ForType::GPUBlock);
+    set_dim_type(bz, ForType::GPUBlock);
+    set_dim_type(tx, ForType::GPUThread);
+    set_dim_type(ty, ForType::GPUThread);
+    set_dim_type(tz, ForType::GPUThread);
     return *this;
+}
+
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                       VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                       Expr x_size, Expr y_size, Expr z_size,
+                       TailStrategy tail,
+                       DeviceAPI device_api) {
+    return gpu_tile(x, y, z, x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
+}
+
+Stage &Stage::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
+    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
+        tx("__deprecated_thread_id_x", x.is_rvar);
+    split(x, bx, tx, x_size, tail);
+    set_dim_device_api(bx, device_api);
+    set_dim_device_api(tx, device_api);
+    set_dim_type(bx, ForType::GPUBlock);
+    set_dim_type(tx, ForType::GPUThread);
+    return *this;
+}
+
+
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
+                       Expr x_size, Expr y_size,
+                       TailStrategy tail,
+                       DeviceAPI device_api) {
+    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
+        by("__deprecated_block_id_y", y.is_rvar),
+        tx("__deprecated_thread_id_x", x.is_rvar),
+        ty("__deprecated_thread_id_y", y.is_rvar);
+    return gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, tail, device_api);
+}
+
+Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                       Expr x_size, Expr y_size, Expr z_size,
+                       TailStrategy tail,
+                       DeviceAPI device_api) {
+    VarOrRVar bx("__deprecated_block_id_x", x.is_rvar),
+        by("__deprecated_block_id_y", y.is_rvar),
+        bz("__deprecated_block_id_z", z.is_rvar),
+        tx("__deprecated_thread_id_x", x.is_rvar),
+        ty("__deprecated_thread_id_y", y.is_rvar),
+        tz("__deprecated_thread_id_z", z.is_rvar);
+    return gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
 }
 
 Stage &Stage::hexagon(VarOrRVar x) {
@@ -1917,6 +2045,81 @@ Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, DeviceAP
 Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu(bx, by, bz, tx, ty, tz, device_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, int x_size, TailStrategy tail, DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_tile(x, bx, tx, x_size, tail, device_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, int x_size, TailStrategy tail, DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_tile(x, bx, tx, x_size, tail, device_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar tx, int x_size, TailStrategy tail, DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_tile(x, tx, x_size, tail, device_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
+                     VarOrRVar bx, VarOrRVar by,
+                     VarOrRVar tx, VarOrRVar ty,
+                     int x_size, int y_size,
+                     TailStrategy tail,
+                     DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims())
+        .gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, tail, device_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
+                     VarOrRVar tx, Var ty,
+                     int x_size, int y_size,
+                     TailStrategy tail,
+                     DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims())
+        .gpu_tile(x, y, tx, ty, x_size, y_size, tail, device_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
+                     VarOrRVar tx, RVar ty,
+                     int x_size, int y_size,
+                     TailStrategy tail,
+                     DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims())
+        .gpu_tile(x, y, tx, ty, x_size, y_size, tail, device_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                     VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                     VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                     int x_size, int y_size, int z_size,
+                     TailStrategy tail,
+                     DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims())
+        .gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                     VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                     int x_size, int y_size, int z_size,
+                     TailStrategy tail,
+                     DeviceAPI device_api) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims())
+        .gpu_tile(x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
     return *this;
 }
 
@@ -2674,7 +2877,7 @@ void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, u
     pipeline().set_custom_do_task(cust_do_task);
 }
 
-void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
+void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
     pipeline().set_custom_trace(trace_fn);
 }
 

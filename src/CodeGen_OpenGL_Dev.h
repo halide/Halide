@@ -74,6 +74,8 @@ protected:
     void visit(const GT *);
     void visit(const GE *);
 
+    void visit(const Shuffle *);
+
 private:
     std::map<std::string, std::string> builtin;
 };
@@ -116,7 +118,6 @@ protected:
 
 private:
     std::string get_vector_suffix(Expr e);
-    char get_lane_suffix(int i);
 
     std::vector<std::string> print_lanes(Expr expr);
 

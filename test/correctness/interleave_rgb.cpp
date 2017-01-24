@@ -16,10 +16,13 @@ bool test_interleave() {
     Target target = get_jit_target_from_environment();
     input.compute_root();
     interleaved.reorder(c, x, y).bound(c, 0, 3);
-    interleaved.output_buffer().set_stride(0, 3).set_stride(2, 1).set_extent(2, 3);
+    interleaved.output_buffer()
+        .dim(0).set_stride(3)
+        .dim(2).set_stride(1).set_extent(3);
 
     if (target.has_gpu_feature()) {
-        interleaved.gpu_tile(x, y, 16, 16);
+        Var xi("xi"), yi("yi");
+        interleaved.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         interleaved.hexagon().vectorize(x, 128 / sizeof(T)).unroll(c);
     } else {

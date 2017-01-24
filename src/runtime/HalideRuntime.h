@@ -19,6 +19,12 @@ template<typename T> struct halide_handle_traits;
 extern "C" {
 #endif
 
+#ifdef _MSC_VER
+#define ALWAYS_INLINE __forceinline
+#else
+#define ALWAYS_INLINE __attribute__((always_inline))
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -185,7 +191,9 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 
 /** Halide calls these functions to interact with the underlying
  * system runtime functions. To replace in AOT code on platforms that
- * support weak linking, define these functions yourself.
+ * support weak linking, define these functions yourself, or use
+ * the halide_set_custom_load_library() and halide_set_custom_get_library_symbol()
+ * functions. In JIT-compiled code, use JITSharedRuntime::set_default_handlers().
  *
  * halide_load_library and halide_get_library_symbol are equivalent to
  * dlopen and dlsym. halide_get_symbol(sym) is equivalent to
@@ -195,6 +203,12 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 extern void *halide_get_symbol(const char *name);
 extern void *halide_load_library(const char *name);
 extern void *halide_get_library_symbol(void *lib, const char *name);
+typedef void *(*halide_get_symbol_t)(const char *name);
+typedef void *(*halide_load_library_t)(const char *name);
+typedef void *(*halide_get_library_symbol_t)(void *lib, const char *name);
+extern halide_get_symbol_t halide_set_custom_get_symbol(halide_get_symbol_t user_get_symbol);
+extern halide_load_library_t halide_set_custom_load_library(halide_load_library_t user_load_library);
+extern halide_get_library_symbol_t halide_set_custom_get_library_symbol(halide_get_library_symbol_t user_get_library_symbol);
 //@}
 
 /** Called when debug_to_file is used inside %Halide code.  See
@@ -256,75 +270,110 @@ struct halide_type_t {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+    ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Compare two types for equality. */
-    bool operator==(const halide_type_t &other) const {
+    ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
         return (code == other.code &&
                 bits == other.bits &&
                 lanes == other.lanes);
     }
 
-    bool operator!=(const halide_type_t &other) const {
+    ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    size_t bytes() const { return (bits + 7) / 8; }
+    ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
 #endif
 };
 
-enum halide_trace_event_code {halide_trace_load = 0,
-                              halide_trace_store = 1,
-                              halide_trace_begin_realization = 2,
-                              halide_trace_end_realization = 3,
-                              halide_trace_produce = 4,
-                              halide_trace_consume = 5,
-                              halide_trace_end_consume = 6,
-                              halide_trace_begin_pipeline = 7,
-                              halide_trace_end_pipeline = 8};
+enum halide_trace_event_code_t {halide_trace_load = 0,
+                                halide_trace_store = 1,
+                                halide_trace_begin_realization = 2,
+                                halide_trace_end_realization = 3,
+                                halide_trace_produce = 4,
+                                halide_trace_end_produce = 5,
+                                halide_trace_consume = 6,
+                                halide_trace_end_consume = 7,
+                                halide_trace_begin_pipeline = 8,
+                                halide_trace_end_pipeline = 9};
 
-#pragma pack(push, 1)
-struct halide_trace_event {
+struct halide_trace_event_t {
+    /** The name of the Func or Pipeline that this event refers to */
     const char *func;
-    enum halide_trace_event_code event;
-    int32_t parent_id;
-    halide_type_t type;
-    int32_t value_index;
+
+    /** If the event type is a load or a store, this points to the
+     * value being loaded or stored. Use the type field to safely cast
+     * this to a concrete pointer type and retrieve it. For other
+     * events this is null. */
     void *value;
-    int32_t dimensions;
+
+    /** For loads and stores, an array which contains the location
+     * being accessed. For vector loads or stores it is an array of
+     * vectors of coordinates (the vector dimension is innermost).
+     *
+     * For realization or production-related events, this will contain
+     * the mins and extents of the region being accessed, in the order
+     * min0, extent0, min1, extent1, ...
+     *
+     * For pipeline-related events, this will be null.
+     */
     int32_t *coordinates;
+
+    /** If the event type is a load or a store, this is the type of
+     * the data. Otherwise, the value is meaningless. */
+    struct halide_type_t type;
+
+    /** The type of event */
+    enum halide_trace_event_code_t event;
+
+    /* The ID of the parent event (see below for an explanation of
+     * event ancestry). */
+    int32_t parent_id;
+
+    /** If this was a load or store of a Tuple-valued Func, this is
+     * which tuple element was accessed. */
+    int32_t value_index;
+
+    /** The length of the coordinates array */
+    int32_t dimensions;
+
+#ifdef __cplusplus
+    // If we don't explicitly mark the default ctor as inline,
+    // certain build configurations can fail (notably iOS)
+    ALWAYS_INLINE halide_trace_event_t() {}
+#endif
 };
-#pragma pack(pop)
 
 /** Called when Funcs are marked as trace_load, trace_store, or
  * trace_realization. See Func::set_custom_trace. The default
- * implementation either prints events via halide_printf, or if
+ * implementation either prints events via halide_print, or if
  * HL_TRACE_FILE is defined, dumps the trace to that file in a
- * yet-to-be-documented binary format (see src/runtime/tracing.cpp to
- * reverse engineer the format). If the trace is going to be large,
- * you may want to make the file a named pipe, and then read from that
- * pipe into gzip.
+ * sequence of trace packets. The header for a trace packet is defined
+ * below. If the trace is going to be large, you may want to make the
+ * file a named pipe, and then read from that pipe into gzip.
  *
  * halide_trace returns a unique ID which will be passed to future
  * events that "belong" to the earlier event as the parent id. The
  * ownership hierarchy looks like:
  *
- * begin_realization
- *    produce
- *      store
- *      update
- *      load/store
- *      consume
- *      load
- *      end_consume
- *    end_realization
+ * begin_pipeline
+ * +--begin_realization
+ * |  +--produce
+ * |  |  +--load/store
+ * |  |  +--end_produce
+ * |  +--consume
+ * |  |  +--load
+ * |  |  +--end_consume
+ * |  +--end_realization
+ * +--end_pipeline
  *
  * Threading means that ownership cannot be inferred from the ordering
  * of events. There can be many active realizations of a given
@@ -333,10 +382,58 @@ struct halide_trace_event {
  * meaningful.
  */
 // @}
-extern int32_t halide_trace(void *user_context, const struct halide_trace_event *event);
-typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_event *);
+extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
+typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_event_t *);
 extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
+
+/** The header of a packet in a binary trace. All fields are 32-bit. */
+struct halide_trace_packet_t {
+    /** The total size of this packet in bytes. Always a multiple of
+     * four. Equivalently, the number of bytes until the next
+     * packet. */
+    uint32_t size;
+
+    /** The id of this packet (for the purpose of parent_id). */
+    int32_t id;
+
+    /** The remaining fields are equivalent to those in halide_trace_event_t */
+    // @{
+    struct halide_type_t type;
+    enum halide_trace_event_code_t event;
+    int32_t parent_id;
+    int32_t value_index;
+    int32_t dimensions;
+    // @}
+
+    #ifdef __cplusplus
+    // If we don't explicitly mark the default ctor as inline,
+    // certain build configurations can fail (notably iOS)
+    ALWAYS_INLINE halide_trace_packet_t() {}
+
+    /** Get the coordinates array, assuming this packet is laid out in
+     * memory as it was written. The coordinates array comes
+     * immediately after the packet header. */
+    ALWAYS_INLINE const int *coordinates() const {
+        return (const int *)(this + 1);
+    }
+
+    /** Get the value, assuming this packet is laid out in memory as
+     * it was written. The packet comes immediately after the coordinates
+     * array. */
+    ALWAYS_INLINE const void *value() const {
+        return (const void *)(coordinates() + dimensions);
+    }
+
+    /** Get the func name, assuming this packet is laid out in memory
+     * as it was written. It comes after the value. */
+    ALWAYS_INLINE const char *func() const {
+        return (const char *)value() + type.lanes * type.bytes();
+    }
+    #endif
+};
+
+
 
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
@@ -362,12 +459,12 @@ extern int halide_shutdown_trace();
 /** All Halide GPU or device backend implementations much provide an interface
  * to be used with halide_device_malloc, etc.
  */
-struct halide_device_interface;
+struct halide_device_interface_t;
 
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_device_release(void *user_context, const struct halide_device_interface *device_interface);
+extern void halide_device_release(void *user_context, const struct halide_device_interface_t *device_interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
@@ -380,14 +477,14 @@ extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
 extern int halide_copy_to_device(void *user_context, struct buffer_t *buf,
-                                 const struct halide_device_interface *device_interface);
+                                 const struct halide_device_interface_t *device_interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 
 /** Allocate device memory to back a buffer_t. */
-extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface *device_interface);
+extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const struct halide_device_interface_t *device_interface);
 
 /** Free device memory. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
@@ -397,7 +494,7 @@ extern int halide_device_free(void *user_context, struct buffer_t *buf);
  * mechanism on different platforms. */
 typedef int (*halide_device_free_t)(void *, struct buffer_t *);
 #ifdef _MSC_VER
-extern const __declspec(selectany) void *halide_dummy_device_free = nullptr;
+extern const __declspec(selectany) void *halide_dummy_device_free = NULL;
 extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 // The following pragma tells the windows linker to make
 // halide_device_free_weak the same symbol as halide_dummy_device_free
@@ -409,7 +506,7 @@ extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 #endif
 inline halide_device_free_t halide_get_device_free_fn() {
     if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
-        return nullptr;
+        return NULL;
     } else {
         return &halide_weak_device_free;
     }
@@ -652,6 +749,12 @@ enum halide_error_code_t {
      * too small to store all the values of a producer needed by the
      * consumer. */
     halide_error_code_fold_factor_too_small = -26,
+
+    /** User-specified require() expression was not satisfied. */
+    halide_error_code_requirement_failed = -27,
+
+    /** At least one of the buffer's extents are negative. */
+    halide_error_code_buffer_extents_negative = -28,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -680,6 +783,7 @@ extern int halide_error_access_out_of_bounds(void *user_context, const char *fun
                                              int min_valid, int max_valid);
 extern int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name,
                                                     uint64_t allocation_size, uint64_t max_size);
+extern int halide_error_buffer_extents_negative(void *user_context, const char *buffer_name, int dimension, int extent);
 extern int halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name,
                                                  int64_t actual_size, int64_t max_size);
 extern int halide_error_constraints_make_required_region_smaller(void *user_context, const char *buffer_name,
@@ -709,6 +813,7 @@ extern int halide_error_bad_fold(void *user_context, const char *func_name, cons
                                  const char *loop_name);
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);
+extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
 
 // @}
 
@@ -768,7 +873,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
     halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
     halide_target_feature_avx512 = 38, ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
-    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER. 
+    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
     halide_target_feature_end = 42 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
@@ -809,6 +914,19 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  *     }
  */
 extern int halide_default_can_use_target_features(uint64_t features);
+
+
+#ifndef HALIDE_ATTRIBUTE_DEPRECATED
+#ifdef HALIDE_ALLOW_DEPRECATED
+#define HALIDE_ATTRIBUTE_DEPRECATED(x)
+#else
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
+#else
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
+#endif
+#endif
+#endif
 
 
 #ifndef BUFFER_T_DEFINED
@@ -920,7 +1038,7 @@ struct halide_filter_argument_t {
     const char *name;       // name of the argument; will never be null or empty.
     int32_t kind;           // actually halide_argument_kind_t
     int32_t dimensions;     // always zero for scalar arguments
-    halide_type_t type;
+    struct halide_type_t type;
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
     // there is no def/min/max specified for this argument.)

@@ -776,7 +776,7 @@ void IRFilter::visit(const Select *op)  {
 }
 
 void IRFilter::visit(const Load *op) {
-    mutate_operator(this, op, op->index, &stmt);
+    mutate_operator(this, op, op->predicate, op->index, &stmt);
 }
 
 void IRFilter::visit(const Ramp *op) {
@@ -826,7 +826,7 @@ void IRFilter::visit(const For *op) {
 }
 
 void IRFilter::visit(const Store *op) {
-    mutate_operator(this, op, op->value, op->index, &stmt);
+    mutate_operator(this, op, op->predicate, op->value, op->index, &stmt);
 }
 
 void IRFilter::visit(const Provide *op) {
@@ -927,7 +927,8 @@ public:
             Expr offset_expression = Variable::make(Int(32), "gpu.vertex_offset") +
                                      attribute_order[attribute_name];
 
-            stmt = Store::make(vertex_buffer_name, op->args[1], offset_expression, Parameter());
+            stmt = Store::make(vertex_buffer_name, op->args[1], offset_expression,
+                               Parameter(), const_true(op->args[1].type().lanes()));
         } else {
             IRFilter::visit(op);
         }
@@ -1026,12 +1027,14 @@ public:
                 // order
                 mutated_body = make_block(Store::make(vertex_buffer_name,
                                                       coord1,
-                                                      gpu_varying_offset + 1, Parameter()),
+                                                      gpu_varying_offset + 1,
+                                                      Parameter(), const_true()),
                                            mutated_body);
 
                 mutated_body = make_block(Store::make(vertex_buffer_name,
                                                        coord0,
-                                                       gpu_varying_offset + 0, Parameter()),
+                                                       gpu_varying_offset + 0,
+                                                       Parameter(), const_true()),
                                            mutated_body);
 
                 // TODO: The value 2 in this expression must be changed to reflect

@@ -4,76 +4,47 @@
 
 #include "HalideRuntime.h"
 #include "HalideRuntimeOpenGL.h"
+#include "HalideBuffer.h"
+
+using Halide::Runtime::Buffer;
 
 #include "halide_blur_glsl.h"
 #include "halide_ycc_glsl.h"
 
-
-class Image {
-public:
-    enum Layout {
-        Interleaved, Planar
-    };
-
-    buffer_t buf;
-
-    Image(int w, int h, int c, int elem_size, Layout layout = Interleaved) {
-        memset(&buf, 0, sizeof(buffer_t));
-        buf.extent[0] = w;
-        buf.extent[1] = h;
-        buf.extent[2] = c;
-        buf.elem_size = elem_size;
-
-        if (layout == Interleaved) {
-            buf.stride[0] = buf.extent[2];
-            buf.stride[1] = buf.extent[0] * buf.stride[0];
-            buf.stride[2] = 1;
-        } else {
-            buf.stride[0] = 1;
-            buf.stride[1] = buf.extent[0] * buf.stride[0];
-            buf.stride[2] = buf.extent[1] * buf.stride[1];
-        }
-        size_t size = w * h * c * elem_size;
-        buf.host = (uint8_t*)malloc(size);
-        memset(buf.host, 0, size);
-        buf.host_dirty = true;
-    }
-    ~Image() {
-        free(buf.host);
-    }
-};
-
 void test_blur() {
     const int W = 12, H = 32, C = 3;
-    Image input(W, H, C, sizeof(uint8_t), Image::Planar);
-    Image output(W, H, C, sizeof(uint8_t), Image::Planar);
+    Buffer<uint8_t> input(W, H, C);
+    Buffer<uint8_t> output(W, H, C);
 
     fprintf(stderr, "test_blur\n");
-    halide_blur_glsl(&input.buf, &output.buf);
+    halide_blur_glsl(input, output);
     fprintf(stderr, "test_blur complete\n");
 }
 
 void test_ycc() {
     const int W = 12, H = 32, C = 3;
-    Image input(W, H, C, sizeof(uint8_t), Image::Planar);
-    Image output(W, H, C, sizeof(uint8_t), Image::Planar);
+    Buffer<uint8_t> input(W, H, C);
+    Buffer<uint8_t> output(W, H, C);
 
     fprintf(stderr, "test_ycc\n");
-    halide_ycc_glsl(&input.buf, &output.buf);
+    halide_ycc_glsl(input, output);
     fprintf(stderr, "Ycc complete\n");
 }
 
 void test_device_sync() {
     const int W = 12, H = 32, C = 3;
-    Image temp(W, H, C, sizeof(uint8_t), Image::Planar);
+    Buffer<uint8_t> temp(W, H, C);
 
-    int result = halide_device_malloc(nullptr, &temp.buf, halide_opengl_device_interface());
+    temp.set_host_dirty();
+    int result = temp.copy_to_device(halide_opengl_device_interface());
     if (result != 0) {
         fprintf(stderr, "halide_device_malloc failed with return %d.\n", result);
+        abort();
     } else {
-        result = halide_device_sync(nullptr, &temp.buf);
+        result = temp.device_sync();
         if (result != 0) {
             fprintf(stderr, "halide_device_sync failed with return %d.\n", result);
+            abort();
         } else {
             fprintf(stderr, "Test device sync complete.\n");
         }

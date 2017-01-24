@@ -4,6 +4,8 @@
 #include <string.h>
 #include <cstdlib>
 
+#include "HalideBuffer.h"
+
 #include "fft_forward_r2c.h"
 #include "fft_inverse_c2r.h"
 #include "fft_forward_c2c.h"
@@ -15,41 +17,33 @@ const float kPi = 3.14159265358979310000f;
 const int32_t kSize = 16;
 }
 
-// Make a buffer_t for real input to the FFT.
-buffer_t real_buffer(float *storage, int32_t y_size = kSize) {
-    buffer_t buf = {0};
+using Halide::Runtime::Buffer;
 
-    buf.host = (uint8_t *)storage;
-    buf.extent[0] = kSize;
-    buf.stride[0] = 1;
-    buf.extent[1] = y_size;
-    buf.stride[1] = kSize;
-    buf.elem_size = sizeof(float);
-
-    return buf;
+Buffer<float, 3> real_buffer(int32_t y_size = kSize) {
+    return Buffer<float, 3>::make_interleaved(kSize, y_size, 1);
 }
 
-// Make a buffer_t for complex input to the FFT.
-buffer_t complex_buffer(float *storage, int32_t y_size = kSize) {
-    buffer_t buf = {0};
+Buffer<float, 3> complex_buffer(int32_t y_size = kSize) {
+    return Buffer<float, 3>::make_interleaved(kSize, y_size, 2);
+}
 
-    buf.host = (uint8_t *)storage;
-    buf.extent[0] = 2;
-    buf.stride[0] = 1;
-    buf.extent[1] = kSize;
-    buf.stride[1] = 2;
-    buf.extent[2] = y_size;
-    buf.stride[2] = kSize * 2;
-    buf.elem_size = sizeof(float);
+float &re(Buffer<float, 3> &b, int x, int y) {
+    return b(x, y, 0);
+}
 
-    return buf;
+float &im(Buffer<float, 3> &b, int x, int y) {
+    return b(x, y, 1);
+}
+
+float re(const Buffer<float, 3> &b, int x, int y) {
+    return b(x, y, 0);
+}
+
+float im(const Buffer<float, 3> &b, int x, int y) {
+    return b(x, y, 1);
 }
 
 int main(int argc, char **argv) {
-    // Full size, complex, buffers. Not all of which will be used for some cases.
-    float input[kSize * kSize * 2] = {0};
-    float output[kSize * kSize * 2] = {0};
-
     std::cout << std::fixed << std::setprecision(2);
 
     // Forward real to complex test.
@@ -64,17 +58,17 @@ int main(int argc, char **argv) {
             }
         }
 
+        auto in = real_buffer();
         for (int j = 0; j < kSize; j++) {
             for (int i = 0; i < kSize; i++) {
-                input[i + j * kSize] = signal_1d[i] + signal_1d[j];
+                in(i, j) = signal_1d[i] + signal_1d[j];
             }
         }
 
-        buffer_t in = real_buffer(input);
-        buffer_t out = complex_buffer(output, kSize / 2 + 1);
+        auto out = complex_buffer(kSize / 2 + 1);
 
         int halide_result;
-        halide_result = fft_forward_r2c(&in, &out);
+        halide_result = fft_forward_r2c(in, out);
         if (halide_result != 0) {
             std::cerr << "fft_forward_r2c failed returning " << halide_result << std::endl;
             exit(1);
@@ -82,8 +76,8 @@ int main(int argc, char **argv) {
 
         for (size_t i = 1; i < 5; i++) {
             // Check horizontal bins
-            float real = output[i * 2];
-            float imaginary = output[i * 2 + 1];
+            float real = re(out, i, 0);
+            float imaginary = im(out, i, 0);
             float magnitude = sqrt(real * real + imaginary * imaginary);
             if (fabs(magnitude - .5f) > .001) {
                 std::cerr << "fft_forward_r2c bad magnitude for horizontal bin " << i << ":" << magnitude << std::endl;
@@ -95,8 +89,8 @@ int main(int argc, char **argv) {
                 exit(1);
             }
             // Check vertical bins
-            real = output[i * 2 * kSize];
-            imaginary = output[i * 2 * kSize + 1];
+            real = re(out, 0, i);
+            imaginary = im(out, 0, i);
             magnitude = sqrt(real * real + imaginary * imaginary);
             if (fabs(magnitude - .5f) > .001) {
                 std::cerr << "fft_forward_r2c bad magnitude for vertical bin " << i << ":" << magnitude << std::endl;
@@ -107,18 +101,18 @@ int main(int argc, char **argv) {
                 std::cerr << "fft_forward_r2c bad phase angle for vertical bin " << i << ": " << phase_angle << std::endl;
                 exit(1);
             }
-        }           
+        }
 
         // Check all other components are close to zero.
-        for (size_t j = 0; j < kSize; j++) {
+        for (size_t j = 0; j < kSize / 2 + 1; j++) {
             for (size_t i = 0; i < kSize; i++) {
                 // The first four non-DC bins in x and y have non-zero
                 // values. The horizontal ones are mirrored into the
                 // negative frequency components as well.
                 if (!((j == 0 && ((i > 0 && i < 5) || (i > kSize - 5))) ||
                       (i == 0 && j > 0 && j < 5))) {
-                    float real = output[(j * kSize + i) * 2];
-                    float imaginary = output[(j * kSize + i) * 2 + 1];
+                    float real = re(out, i, j);
+                    float imaginary = im(out, i, j);
                     if (fabs(real) > .001) {
                         std::cerr << "fft_forward_r2c real component at (" << i << ", " << j << ") is non-zero: " << real << std::endl;
                         exit(1);
@@ -136,24 +130,24 @@ int main(int argc, char **argv) {
     {
         std::cout << "Inverse complex to real test." << std::endl;
 
-        memset(input, 0, sizeof(input));
+        auto in = complex_buffer();
+        in.fill(0);
 
         // There are four components that get summed to form the magnitude, which we want to be 1.
         // The components are each of the positive and negative frequencies and each of the
         // real and complex components. The +/- frequencies sum algebraically and the complex
         // components contribute to the magnitude as the sides of triangle like any 2D vector.
         float term_magnitude = 1.0f / (2.0f * sqrt(2.0f));
-        input[2] = term_magnitude;
-        input[3] = term_magnitude;
+        re(in, 1, 0) = term_magnitude;
+        im(in, 1, 0) = term_magnitude;
         // Negative frequencies count backward from end, no DC term
-        input[(kSize - 1) * 2] = term_magnitude;
-        input[(kSize - 1) * 2 + 1] = -term_magnitude; // complex conjugate
+        re(in, kSize - 1, 0) = term_magnitude;
+        im(in, kSize - 1, 0) = -term_magnitude; // complex conjugate
 
-        buffer_t in = complex_buffer(input);
-        buffer_t out = real_buffer(output);
+        auto out = real_buffer();
 
         int halide_result;
-        halide_result = fft_inverse_c2r(&in, &out);
+        halide_result = fft_inverse_c2r(in, out);
         if (halide_result != 0) {
             std::cerr << "fft_inverse_c2r failed returning " << halide_result << std::endl;
             exit(1);
@@ -161,7 +155,7 @@ int main(int argc, char **argv) {
 
         for (size_t j = 0; j < kSize; j++) {
             for (size_t i = 0; i < kSize; i++) {
-                float sample = output[j * kSize + i];
+                float sample = out(i, j);
                 float expected = cos(2 * kPi * (i / 16.0f + .125f));
                 if (fabs(sample - expected) > .001) {
                     std::cerr << "fft_inverse_c2r mismatch at (" << i << ", " << j << ") " << sample << " vs. " << expected << std::endl;
@@ -174,6 +168,8 @@ int main(int argc, char **argv) {
     // Forward complex to complex test.
     {
         std::cout << "Forward complex to complex test." << std::endl;
+
+        auto in = complex_buffer();
 
         float signal_1d_real[kSize];
         float signal_1d_complex[kSize];
@@ -188,16 +184,15 @@ int main(int argc, char **argv) {
 
         for (int j = 0; j < kSize; j++) {
             for (int i = 0; i < kSize; i++) {
-                input[(i + j * kSize) * 2] = signal_1d_real[i] + signal_1d_real[j];
-                input[(i + j * kSize) * 2 + 1] = signal_1d_complex[i] + signal_1d_complex[j];
+                re(in, i, j) = signal_1d_real[i] + signal_1d_real[j];
+                im(in, i, j) = signal_1d_complex[i] + signal_1d_complex[j];
             }
         }
 
-        buffer_t in = complex_buffer(input);
-        buffer_t out = complex_buffer(output);
+        auto out = complex_buffer();
 
         int halide_result;
-        halide_result = fft_forward_c2c(&in, &out);
+        halide_result = fft_forward_c2c(in, out);
         if (halide_result != 0) {
             std::cerr << "fft_forward_c2c failed returning " << halide_result << std::endl;
             exit(1);
@@ -205,8 +200,8 @@ int main(int argc, char **argv) {
 
         for (size_t i = 1; i < 5; i++) {
             // Check horizontal bins
-            float real = output[i * 2];
-            float imaginary = output[i * 2 + 1];
+            float real = re(out, i, 0);
+            float imaginary = im(out, i, 0);
             float magnitude = sqrt(real * real + imaginary * imaginary);
             if (fabs(magnitude - 1.0f) > .001) {
                 std::cerr << "fft_forward_c2c bad magnitude for horizontal bin " << i << ":" << magnitude << std::endl;
@@ -218,8 +213,8 @@ int main(int argc, char **argv) {
                 exit(1);
             }
             // Check vertical bins
-            real = output[i * 2 * kSize];
-            imaginary = output[i * 2 * kSize + 1];
+            real = re(out, 0, i);
+            imaginary = im(out, 0, i);
             magnitude = sqrt(real * real + imaginary * imaginary);
             if (fabs(magnitude - 1.0f) > .001) {
                 std::cerr << "fft_forward_c2c bad magnitude for vertical bin " << i << ":" << magnitude << std::endl;
@@ -230,7 +225,7 @@ int main(int argc, char **argv) {
                 std::cerr << "fft_forward_c2c bad phase angle for vertical bin " << i << ": " << phase_angle << std::endl;
                 exit(1);
             }
-        }           
+        }
 
         // Check all other components are close to zero.
         for (size_t j = 0; j < kSize; j++) {
@@ -241,8 +236,8 @@ int main(int argc, char **argv) {
                 // interference of the real and complex parts.
               if (!((j == 0 && (i > 0 && i < 5)) ||
                     (i == 0 && j > 0 && j < 5))) {
-                    float real = output[(j * kSize + i) * 2];
-                    float imaginary = output[(j * kSize + i) * 2 + 1];
+                    float real = re(out, i, j);
+                    float imaginary = im(out, i, j);
                     if (fabs(real) > .001) {
                         std::cerr << "fft_forward_c2c real component at (" << i << ", " << j << ") is non-zero: " << real << std::endl;
                         exit(1);
@@ -260,18 +255,18 @@ int main(int argc, char **argv) {
     {
         std::cout << "Inverse complex to complex test." << std::endl;
 
-        memset(input, 0, sizeof(input));
+        auto in = complex_buffer();
+        in.fill(0);
 
-        input[2] = .5f;
-        input[3] = .5f;
-        input[(kSize - 1) * 2] = .5f;
-        input[(kSize - 1) * 2 + 1] = .5f; // Not conjugate. Result will not be real
+        re(in, 1, 0) = .5f;
+        im(in, 1, 0) = .5f;
+        re(in, kSize - 1, 0) = .5f;
+        im(in, kSize - 1, 0) = .5f; // Not conjugate. Result will not be real
 
-        buffer_t in = complex_buffer(input);
-        buffer_t out = complex_buffer(output);
+        auto out = complex_buffer();
 
         int halide_result;
-        halide_result = fft_inverse_c2c(&in, &out);
+        halide_result = fft_inverse_c2c(in, out);
         if (halide_result != 0) {
             std::cerr << "fft_inverse_c2c failed returning " << halide_result << std::endl;
             exit(1);
@@ -279,8 +274,8 @@ int main(int argc, char **argv) {
 
         for (size_t j = 0; j < kSize; j++) {
             for (size_t i = 0; i < kSize; i++) {
-                float real_sample = output[(j * kSize + i) * 2];
-                float imaginary_sample = output[(j * kSize + i) * 2 + 1];
+                float real_sample = re(out, i, j);
+                float imaginary_sample = im(out, i, j);
                 float real_expected = 1 / sqrt(2) * (cos(2 * kPi * (i / 16.0f + .125)) + cos(2 * kPi * (i * (kSize - 1) / 16.0f + .125)));
                 float imaginary_expected = 1 / sqrt(2) * (sin(2 * kPi * (i / 16.0f + .125)) +  sin(2 * kPi * (i * (kSize - 1) / 16.0f + .125)));
 

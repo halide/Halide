@@ -401,15 +401,14 @@ int histogram_rfactor_test(bool compile_module) {
             reference_hist[uint8_t(in(x, y))] += 1;
         }
     }
-    // Wrap the image in a buffer, so that we know its name.
-    BufferPtr in_buf(in);
+
 
     Func hist("hist"), g("g");
     Var x("x");
 
     RDom r(in);
     hist(x) = 0;
-    hist(clamp(cast<int>(in_buf(r.x, r.y)), 0, 255)) += 1;
+    hist(clamp(cast<int>(in(r.x, r.y)), 0, 255)) += 1;
     hist.compute_root();
 
     Var u("u");
@@ -428,7 +427,7 @@ int histogram_rfactor_test(bool compile_module) {
         CallGraphs expected = {
             {g.name(), {hist.name()}},
             {hist.name(), {intm.name(), hist.name()}},
-            {intm.name(), {in_buf.name(), intm.name()}},
+            {intm.name(), {in.name(), intm.name()}},
 
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -783,7 +782,7 @@ int subtraction_rfactor_test() {
     return 0;
 }
 
-int allocation_bound_test_trace(void *user_context, const halide_trace_event *e) {
+int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *e) {
     // The schedule implies that f will be stored from 0 to 1
     if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] != 2) {

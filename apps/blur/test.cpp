@@ -6,7 +6,7 @@
 #include "benchmark.h"
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 //#define cimg_display 0
 //#include "CImg.h"
@@ -171,20 +171,22 @@ Buffer<uint16_t> blur_fast2(const Buffer<uint16_t> &in) {
     return out;
 }
 
-extern "C" {
 #include "halide_blur.h"
-}
 
 Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
     Buffer<uint16_t> out(in.width()-8, in.height()-2);
 
     // Call it once to initialize the halide runtime stuff
     halide_blur(in, out);
+    // Copy-out result if it's device buffer and dirty.
+    out.copy_to_host();
 
     t = benchmark(10, 1, [&]() {
         // Compute the same region of the output as blur_fast (i.e., we're
         // still being sloppy with boundary conditions)
         halide_blur(in, out);
+        // Sync device execution if any.
+        out.device_sync();
     });
 
     return out;

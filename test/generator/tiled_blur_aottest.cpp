@@ -6,11 +6,11 @@
 
 #include "tiled_blur.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int W = 80, H = 80;
 
-int my_halide_trace(void *user_context, const halide_trace_event *ev) {
+int my_halide_trace(void *user_context, const halide_trace_event_t *ev) {
     if (ev->event == halide_trace_begin_realization) {
         assert(ev->dimensions == 6);
         int min_x = ev->coordinates[0], width = ev->coordinates[1];
@@ -29,19 +29,35 @@ int my_halide_trace(void *user_context, const halide_trace_event *ev) {
     return 0;
 }
 
-int main(int argc, char **argv) {
-    halide_set_custom_trace(&my_halide_trace);
+Buffer<> buffer_factory_planar(halide_type_t t, int w, int h, int c) {
+    return Buffer<>(t, w, h, c);
+}
 
-    Buffer<float> input(W, H);
+Buffer<> buffer_factory_interleaved(halide_type_t t, int w, int h, int c) {
+    return Buffer<>::make_interleaved(t, w, h, c);
+}
+
+void test(Buffer<> (*factory)(halide_type_t, int w, int h, int c)) {
+    Buffer<int> input = factory(halide_type_of<int>(), W, H, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
-            input(x, y) = (float)(x * y);
+            input(x, y) = (int)(x * y);
         }
     }
-    Buffer<float> output(W, H);
+    Buffer<float> output = factory(halide_type_of<float>(), W, H, 3);
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
     tiled_blur(input, output);
+}
+
+int main(int argc, char **argv) {
+    halide_set_custom_trace(&my_halide_trace);
+
+    printf("Testing planar buffer...\n");
+    test(buffer_factory_planar);
+
+    printf("Testing interleaved buffer...\n");
+    test(buffer_factory_interleaved);
 
     printf("Success!\n");
     return 0;

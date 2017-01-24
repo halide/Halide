@@ -28,8 +28,8 @@ class DependsOnBoundsInference : public IRVisitor {
     }
 
     void visit(const Call *op) {
-        if (op->is_intrinsic(Call::extract_buffer_min) ||
-            op->is_intrinsic(Call::extract_buffer_max)) {
+        if (op->name == Call::buffer_get_min ||
+            op->name == Call::buffer_get_max) {
             result = true;
         } else {
             IRVisitor::visit(op);
@@ -343,16 +343,15 @@ public:
                     string inner_query_name = func.name() + ".o0.bounds_query";
                     Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
-                        Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    {outer_query, i}, Call::PureIntrinsic);
-                        Expr outer_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    {outer_query, i}, Call::PureIntrinsic);
+                        Expr outer_min = Call::make(Int(32), Call::buffer_get_min,
+                                                    {outer_query, i}, Call::Extern);
+                        Expr outer_max = Call::make(Int(32), Call::buffer_get_max,
+                                                    {outer_query, i}, Call::Extern);
 
-                        Expr inner_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                    {inner_query, i}, Call::PureIntrinsic);
-                        Expr inner_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                    {inner_query, i}, Call::PureIntrinsic);
-                        Expr inner_extent = inner_max - inner_min + 1;
+                        Expr inner_min = Call::make(Int(32), Call::buffer_get_min,
+                                                    {inner_query, i}, Call::Extern);
+                        Expr inner_max = Call::make(Int(32), Call::buffer_get_max,
+                                                    {inner_query, i}, Call::Extern);
 
                         // Push 'inner' inside of 'outer'
                         Expr shift = Min::make(0, outer_max - inner_max);
@@ -382,10 +381,10 @@ public:
                     string inner_query_name = func.name() + ".o0.bounds_query";
                     Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
-                        Expr new_min = Call::make(Int(32), Call::extract_buffer_min,
-                                                  {inner_query, i}, Call::PureIntrinsic);
-                        Expr new_max = Call::make(Int(32), Call::extract_buffer_max,
-                                                  {inner_query, i}, Call::PureIntrinsic);
+                        Expr new_min = Call::make(Int(32), Call::buffer_get_min,
+                                                  {inner_query, i}, Call::Extern);
+                        Expr new_max = Call::make(Int(32), Call::buffer_get_max,
+                                                  {inner_query, i}, Call::Extern);
 
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".max", new_max, s);
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
@@ -485,7 +484,7 @@ public:
             // extern function call.  We need a query buffer_t per
             // producer and a query buffer_t for the output
 
-            Expr null_handle = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::PureIntrinsic);
+            Expr null_handle = make_zero(Handle());
 
             vector<Expr> buffers_to_annotate;
             for (size_t j = 0; j < args.size(); j++) {
@@ -495,28 +494,35 @@ public:
                     Function input(args[j].func);
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + std::to_string(k) + ".bounds_query." + func.name();
-                        Expr buf = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                              {null_handle, make_zero(input.output_types()[k])},
-                                              Call::Intrinsic);
+
+                        BufferBuilder builder;
+                        builder.type = input.output_types()[k];
+                        builder.dimensions = input.dimensions();
+                        Expr buf = builder.build();
+
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), name));
                         buffers_to_annotate.push_back(bounds_inference_args.back());
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
-                    BufferPtr b = args[j].buffer;
+                    Buffer<> b = args[j].buffer;
                     string name = args[j].is_image_param() ? p.name() : b.name();
 
                     Expr in_buf = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
-                    Expr query_buf = Call::make(type_of<struct buffer_t *>(), Call::copy_buffer_t, {in_buf}, Call::Intrinsic);
+
+                    Expr query_buf = Call::make(type_of<struct buffer_t *>(), Call::alloca,
+                                                {(int)sizeof(buffer_t)}, Call::Intrinsic);
+                    query_buf = Call::make(type_of<struct buffer_t *>(), Call::copy_memory,
+                                           {query_buf, in_buf, (int)sizeof(buffer_t)}, Call::Intrinsic);
                     lets.push_back(make_pair(query_name, query_buf));
                     Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
-                    // we create a copy with copy_buffer_t (not msan-aware), so we need to annotate it as initialized.
+                    // we create a copy with copy_memory (not msan-aware), so we need to annotate it as initialized.
                     buffers_to_annotate.push_back(bounds_inference_args.back());
                 } else {
                     internal_error << "Bad ExternFuncArgument type";
@@ -526,20 +532,18 @@ public:
             // Make the buffer_ts representing the output. They all
             // use the same size, but have differing types.
             for (int j = 0; j < func.outputs(); j++) {
-                vector<Expr> output_buffer_t_args(2);
-                output_buffer_t_args[0] = null_handle;
-                output_buffer_t_args[1] = make_zero(func.output_types()[j]);
+                BufferBuilder builder;
+                builder.type = func.output_types()[j];
+                builder.dimensions = func.dimensions();
                 for (const string arg : func.args()) {
                     string prefix = func.name() + ".s" + std::to_string(stage) + "." + arg;
                     Expr min = Variable::make(Int(32), prefix + ".min");
                     Expr max = Variable::make(Int(32), prefix + ".max");
-                    output_buffer_t_args.push_back(min);
-                    output_buffer_t_args.push_back(max + 1 - min);
-                    output_buffer_t_args.push_back(0); // stride
+                    builder.mins.push_back(min);
+                    builder.extents.push_back(max + 1 - min);
+                    builder.strides.push_back(0);
                 }
-
-                Expr output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::create_buffer_t,
-                                                  output_buffer_t_args, Call::Intrinsic);
+                Expr output_buffer_t = builder.build();
 
                 string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
                 bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
@@ -566,8 +570,8 @@ public:
             }
 
             // Make the extern call
-            Expr e = Call::make(Int(32), extern_name, bounds_inference_args,
-                                func.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus : Call::Extern);
+            Expr e = func.make_call_to_extern_definition(bounds_inference_args, target);
+
             // Check if it succeeded
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
@@ -726,10 +730,10 @@ public:
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name);
-                            Expr min = Call::make(Int(32), Call::extract_buffer_min,
-                                                  {buf, d}, Call::PureIntrinsic);
-                            Expr max = Call::make(Int(32), Call::extract_buffer_max,
-                                                  {buf, d}, Call::PureIntrinsic);
+                            Expr min = Call::make(Int(32), Call::buffer_get_min,
+                                                  {buf, d}, Call::Extern);
+                            Expr max = Call::make(Int(32), Call::buffer_get_max,
+                                                  {buf, d}, Call::Extern);
                             b[d] = Interval(min, max);
                         }
                         merge_boxes(boxes[f.name()], b);

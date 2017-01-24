@@ -14,6 +14,7 @@ class UnifyDuplicateLets : public IRMutator {
 
     map<Expr, string, IRDeepCompare> scope;
     map<string, string> rewrites;
+    string producing;
 
 public:
     using IRMutator::mutate;
@@ -45,20 +46,38 @@ protected:
     }
 
     // Can't unify lets where the RHS might be not be pure
-    bool contains_calls;
+    bool is_impure;
     void visit(const Call *op) {
-        contains_calls = true;
-        expr = op;
+        is_impure |= !op->is_pure();
+        IRMutator::visit(op);
+    }
+
+    void visit(const Load *op) {
+        is_impure |= ((op->name == producing) ||
+                      starts_with(op->name + ".", producing));
+        IRMutator::visit(op);
+    }
+
+    void visit(const ProducerConsumer *op) {
+        if (op->is_producer) {
+            string old_producing = producing;
+            producing = op->name;
+            IRMutator::visit(op);
+            producing = old_producing;
+        } else {
+            IRMutator::visit(op);
+        }
     }
 
     void visit(const LetStmt *op) {
-        contains_calls = false;
+        is_impure = false;
         Expr value = mutate(op->value);
         Stmt body = op->body;
 
         bool should_pop = false;
+        bool should_erase = false;
 
-        if (!contains_calls) {
+        if (!is_impure) {
             map<Expr, string, IRDeepCompare>::iterator iter = scope.find(value);
             if (iter == scope.end()) {
                 scope[value] = op->name;
@@ -66,6 +85,7 @@ protected:
             } else {
                 value = Variable::make(value.type(), iter->second);
                 rewrites[op->name] = iter->second;
+                should_erase = true;
             }
         }
 
@@ -73,7 +93,8 @@ protected:
 
         if (should_pop) {
             scope.erase(value);
-        } else if (!contains_calls) {
+        }
+        if (should_erase) {
             rewrites.erase(op->name);
         }
 

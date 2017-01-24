@@ -9,7 +9,7 @@ bool run_tracer = false;
 int niters_expected = 0;
 int niters = 0;
 
-int intermediate_bound_depend_on_output_trace(void *user_context, const halide_trace_event *e) {
+int intermediate_bound_depend_on_output_trace(void *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -32,7 +32,7 @@ int intermediate_bound_depend_on_output_trace(void *user_context, const halide_t
     return 0;
 }
 
-int func_call_bound_trace(void *user_context, const halide_trace_event *e) {
+int func_call_bound_trace(void *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -53,7 +53,7 @@ int func_call_bound_trace(void *user_context, const halide_trace_event *e) {
     return 0;
 }
 
-int box_bound_trace(void *user_context, const halide_trace_event *e) {
+int box_bound_trace(void *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -652,7 +652,8 @@ int init_on_gpu_update_on_cpu_test(int index) {
     r.where(!(r.x != 10));
     f(r.x, r.y) += 3;
 
-    f.gpu_tile(x, y, 4, 4);
+    Var xi("xi"), yi("yi");
+    f.gpu_tile(x, y, xi, yi, 4, 4);
 
     Buffer<int> im = f.realize(200, 200);
     for (int y = 0; y < im.height(); y++) {
@@ -683,7 +684,8 @@ int init_on_cpu_update_on_gpu_test(int index) {
     r.where(r.x < r.y);
     f(r.x, r.y) += 3;
 
-    f.update(0).gpu_tile(r.x, r.y, 4, 4);
+    RVar rxi("rxi"), ryi("ryi");
+    f.update(0).gpu_tile(r.x, r.y, r.x, r.y, rxi, ryi, 4, 4);
 
     Buffer<int> im = f.realize(200, 200);
     for (int y = 0; y < im.height(); y++) {
@@ -721,10 +723,12 @@ int gpu_intermediate_computed_if_param_test(int index) {
     r2.where(p <= 3);
     f(r2.x, r2.y) += h(r2.x, r2.y) + g(r2.x, r2.y);
 
-    f.update(0).specialize(p >= 2).gpu_tile(r1.x, r1.y, 4, 4);
+    RVar r1xi("r1xi"), r1yi("r1yi");
+    f.update(0).specialize(p >= 2).gpu_tile(r1.x, r1.y, r1xi, r1yi, 4, 4);
     g.compute_root();
     h.compute_root();
-    h.gpu_tile(x, y, 8, 8);
+    Var xi("xi"), yi("yi");
+    h.gpu_tile(x, y, xi, yi, 8, 8);
 
     {
         printf("....Set p to 5, expect g to be computed\n");

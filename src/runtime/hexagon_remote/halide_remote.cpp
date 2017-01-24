@@ -1,5 +1,6 @@
 #include "bin/src/halide_hexagon_remote.h"
 #include <HalideRuntime.h>
+#include <HalideRuntimeHexagonHost.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -80,6 +81,14 @@ void halide_free(void *user_context, void *ptr) {
 }
 
 void *halide_get_symbol(const char *name) {
+    // We need to try both RTLD_SELF and RTLD_DEFAULT. Sometimes,
+    // RTLD_SELF finds a symbol when RTLD_DEFAULT does not. This is
+    // surprising, I *think* RLTD_SELF should search a subset of the
+    // symbols searched by RTLD_DEFAULT...
+    void *def = dlsym(RTLD_SELF, name);
+    if (def) {
+        return def;
+    }
     return dlsym(RTLD_DEFAULT, name);
 }
 
@@ -147,42 +156,22 @@ handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name,
 
 volatile int power_ref_count = 0;
 
-int halide_hexagon_remote_power_hvx_on() {
+int halide_hexagon_remote_power_hvx_on_perf(
+    int set_mips,
+    unsigned int mipsPerThread,
+    unsigned int mipsTotal,
+    int set_bus_bw,
+    unsigned int bwMegabytesPerSec,
+    unsigned int busbwUsagePercentage,
+    int set_latency,
+    int latency)
+{
     if (power_ref_count == 0) {
-        HAP_power_response_t power_info;
-
-        power_info.type = HAP_power_get_max_mips;
-        int retval = HAP_power_get(NULL, &power_info);
-        if (0 != retval) {
-            log_printf("HAP_power_get(HAP_power_get_max_mips) failed (%d)\n", retval);
-            return -1;
-        }
-        unsigned int max_mips = power_info.max_mips;
-
-        power_info.type = HAP_power_get_max_bus_bw;
-        retval = HAP_power_get(NULL, &power_info);
-        if (0 != retval) {
-            log_printf("HAP_power_get(HAP_power_get_max_bus_bw) failed (%d)\n", retval);
-            return -1;
-        }
-        uint64 max_bus_bw = power_info.max_bus_bw;
-
-        // The above API under-reports the max bus bw. If we use it as
-        // reported, performance is bad. Experimentally, this only
-        // needs to be ~10, but since it's wrong, we might as well
-        // have a safety factor...
-        max_bus_bw *= 1000;
-
-        // Since max_bus_bw is bad, might as well make sure max_mips
-        // isn't bad too.
-        max_mips *= 1000;
-
-
         HAP_power_request_t request;
 
         request.type = HAP_power_set_apptype;
         request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
-        retval = HAP_power_set(NULL, &request);
+        int retval = HAP_power_set(NULL, &request);
         if (0 != retval) {
             log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
             return -1;
@@ -197,14 +186,14 @@ int halide_hexagon_remote_power_hvx_on() {
         }
 
         request.type = HAP_power_set_mips_bw;
-        request.mips_bw.set_mips = TRUE;
-        request.mips_bw.mipsPerThread = max_mips;
-        request.mips_bw.mipsTotal = max_mips;
-        request.mips_bw.set_bus_bw = TRUE;
-        request.mips_bw.bwBytePerSec = max_bus_bw;
-        request.mips_bw.busbwUsagePercentage = 100;
-        request.mips_bw.set_latency = TRUE;
-        request.mips_bw.latency = 1;
+        request.mips_bw.set_mips        = set_mips;
+        request.mips_bw.mipsPerThread   = mipsPerThread;
+        request.mips_bw.mipsTotal       = mipsTotal;
+        request.mips_bw.set_bus_bw      = set_bus_bw;
+        request.mips_bw.bwBytePerSec    = ((uint64_t) bwMegabytesPerSec) << 20;
+        request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
+        request.mips_bw.set_latency     = set_latency;
+        request.mips_bw.latency         = latency;
         retval = HAP_power_set(NULL, &request);
         if (0 != retval) {
             log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
@@ -213,6 +202,97 @@ int halide_hexagon_remote_power_hvx_on() {
     }
     power_ref_count++;
     return 0;
+}
+
+int halide_hexagon_remote_power_hvx_on_mode(int mode) {
+    int set_mips = 0;
+    unsigned int mipsPerThread = 0;
+    unsigned int mipsTotal = 0;
+    int set_bus_bw = 0;
+    uint64_t bwBytePerSec = 0;
+    unsigned int bwMegabytesPerSec = 0;
+    unsigned int busbwUsagePercentage = 0;
+    int set_latency = 0;
+    int latency = 0;
+
+    HAP_power_response_t power_info;
+    unsigned int max_mips = 0;
+    uint64 max_bus_bw = 0;
+
+    power_info.type = HAP_power_get_max_mips;
+    int retval = HAP_power_get(NULL, &power_info);
+    if (0 != retval) {
+        log_printf("HAP_power_get(HAP_power_get_max_mips) failed (%d)\n", retval);
+        return -1;
+    }
+    max_mips = power_info.max_mips;
+
+    // Make sure max_mips is at least sanity_mips
+    const unsigned int sanity_mips = 500;
+    if (max_mips < sanity_mips) {
+        max_mips = sanity_mips;
+    }
+
+    power_info.type = HAP_power_get_max_bus_bw;
+    retval = HAP_power_get(NULL, &power_info);
+    if (0 != retval) {
+        log_printf("HAP_power_get(HAP_power_get_max_bus_bw) failed (%d)\n", retval);
+        return -1;
+    }
+    max_bus_bw = power_info.max_bus_bw;
+
+    // The above API under-reports the max bus bw. If we use it as
+    // reported, performance is bad. Experimentally, this only
+    // needs to be ~10x.
+    // Make sure max_bus_bw is at least sanity_bw
+    const uint64 sanity_bw = 1000000000ULL;
+    if (max_bus_bw < sanity_bw) {
+        if (max_bus_bw == 0) {
+            max_bus_bw = sanity_bw;
+        }
+        while (max_bus_bw < sanity_bw) {
+            max_bus_bw <<= 3;  // Increase value while preserving bits
+        }
+    }
+
+    set_mips    = TRUE;
+    set_bus_bw  = TRUE;
+    set_latency = TRUE;
+    switch (mode) {
+        case halide_hvx_power_low:
+            mipsPerThread          = max_mips / 4;
+            bwBytePerSec           = max_bus_bw / 2;
+            busbwUsagePercentage   = 25;
+            break;
+        case halide_hvx_power_nominal:
+            mipsPerThread          = (3 * max_mips) / 8;
+            bwBytePerSec           = max_bus_bw;
+            busbwUsagePercentage   = 50;
+            break;
+        case halide_hvx_power_turbo:
+        default:
+            mipsPerThread          = max_mips;
+            bwBytePerSec           = max_bus_bw * 4;
+            busbwUsagePercentage   = 100;
+            break;
+    }
+    mipsTotal = mipsPerThread * 2;
+    latency = 1;
+
+    bwMegabytesPerSec = bwBytePerSec >> 20;
+    return halide_hexagon_remote_power_hvx_on_perf(
+                                    set_mips,
+                                    mipsPerThread,
+                                    mipsTotal,
+                                    set_bus_bw,
+                                    bwMegabytesPerSec,
+                                    busbwUsagePercentage,
+                                    set_latency,
+                                    latency);
+}
+
+int halide_hexagon_remote_power_hvx_on() {
+    return halide_hexagon_remote_power_hvx_on_mode(halide_hvx_power_turbo);
 }
 
 int halide_hexagon_remote_power_hvx_off() {
@@ -229,14 +309,14 @@ int halide_hexagon_remote_power_hvx_off() {
         }
 
         request.type = HAP_power_set_mips_bw;
-        request.mips_bw.set_mips = TRUE;
-        request.mips_bw.mipsPerThread = 0;
-        request.mips_bw.mipsTotal = 0;
-        request.mips_bw.set_bus_bw = TRUE;
-        request.mips_bw.bwBytePerSec = 0;
+        request.mips_bw.set_mips        = TRUE;
+        request.mips_bw.mipsPerThread   = 0;
+        request.mips_bw.mipsTotal       = 0;
+        request.mips_bw.set_bus_bw      = TRUE;
+        request.mips_bw.bwBytePerSec    = 0;
         request.mips_bw.busbwUsagePercentage = 0;
-        request.mips_bw.set_latency = TRUE;
-        request.mips_bw.latency = -1;
+        request.mips_bw.set_latency     = TRUE;
+        request.mips_bw.latency         = -1;
         retval = HAP_power_set(NULL, &request);
         if (0 != retval) {
             log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);

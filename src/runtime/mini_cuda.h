@@ -22,6 +22,21 @@ typedef struct CUfunc_st *CUfunction;                     /**< CUDA function */
 typedef struct CUstream_st *CUstream;                     /**< CUDA stream */
 typedef struct CUevent_st *CUevent;                       /**< CUDA event */
 typedef struct CUarray_st* CUarray;
+
+typedef enum CUjit_option_enum {
+    CU_JIT_MAX_REGISTERS = 0,
+    CU_JIT_THREADS_PER_BLOCK = 1,
+    CU_JIT_WALL_TIME = 2,
+    CU_JIT_INFO_LOG_BUFFER = 3,
+    CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES = 4,
+    CU_JIT_ERROR_LOG_BUFFER = 5,
+    CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES = 6,
+    CU_JIT_OPTIMIZATION_LEVEL = 7,
+    CU_JIT_TARGET_FROM_CUCONTEXT = 8,
+    CU_JIT_TARGET = 9,
+    CU_JIT_FALLBACK_STRATEGY = 10
+} CUjit_option;
+
 typedef enum {
     CUDA_SUCCESS                              = 0,
     CUDA_ERROR_INVALID_VALUE                  = 1,

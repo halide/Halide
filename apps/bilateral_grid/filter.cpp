@@ -8,7 +8,8 @@
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 
-using namespace Halide;
+using namespace Halide::Tools;
+using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
 
@@ -21,7 +22,7 @@ int main(int argc, char **argv) {
     float r_sigma = atof(argv[3]);
     int timing_iterations = atoi(argv[4]);
 
-    Buffer<float> input = Tools::load_image(argv[1]);
+    Buffer<float> input = load_image(argv[1]);
     Buffer<float> output(input.width(), input.height(), 1);
 
     bilateral_grid(input, r_sigma, output);
@@ -33,7 +34,7 @@ int main(int argc, char **argv) {
     });
     printf("Time: %gms\n", min_t * 1e3);
 
-    Tools::save_image(output, argv[2]);
+    save_image(output, argv[2]);
 
     return 0;
 }

@@ -28,7 +28,7 @@ using namespace Halide::Tools;
 #include "clock.h"
 
 // Define some Vars to use.
-Var x, y, c, i;
+Var x, y, c, i, ii, xo, yo, xi, yi;
 
 // We're going to want to schedule a pipeline in several ways, so we
 // define the pipeline in a class so that we can recreate it several
@@ -130,9 +130,9 @@ public:
         // This is a very common scheduling pattern on the GPU, so
         // there's a shorthand for it:
 
-        // lut.gpu_tile(i, 16);
+        // lut.gpu_tile(i, block, thread, 16);
 
-        // Func::gpu_tile method is similar to Func::tile, except that
+        // Func::gpu_tile behaves the same as Func::tile, except that
         // it also specifies that the tile coordinates correspond to
         // GPU blocks, and the coordinates within each tile correspond
         // to GPU threads.
@@ -144,7 +144,7 @@ public:
               .unroll(c);
 
         // Compute curved in 2D 8x8 tiles using the GPU.
-        curved.gpu_tile(x, y, 8, 8);
+        curved.gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
 
         // This is equivalent to:
         // curved.tile(x, y, xo, yo, xi, yi, 8, 8)
@@ -153,11 +153,10 @@ public:
 
         // We'll leave sharpen as inlined into curved.
 
-        // Compute the padded input as needed per GPU block, storing the
-        // intermediate result in shared memory. Var::gpu_blocks, and
-        // Var::gpu_threads exist to help you schedule producers within
-        // GPU threads and blocks.
-        padded.compute_at(curved, Var::gpu_blocks());
+        // Compute the padded input as needed per GPU block, storing
+        // the intermediate result in shared memory. In the schedule
+        // above xo corresponds to GPU blocks.
+        padded.compute_at(curved, xo);
 
         // Use the GPU threads for the x and y coordinates of the
         // padded input.
@@ -207,7 +206,7 @@ public:
         curved.realize(output);
 
         // Now take the best of 3 runs for timing.
-        double best_time;
+        double best_time = 0.0;
         for (int i = 0; i < 3; i++) {
 
             double t1 = current_time();

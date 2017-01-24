@@ -167,7 +167,24 @@ EXPORT Expr raise_to_integer_power(Expr a, int64_t b);
  * return an empty vector. */
 EXPORT void split_into_ands(Expr cond, std::vector<Expr> &result);
 
-}
+/** A builder to help create Exprs representing buffer_t structs
+ * (e.g. foo.buffer) via calls to halide_buffer_init. Fill out the
+ * fields and then call build. The resulting Expr will be a call to
+ * halide_buffer_init with the struct members as arguments. If the
+ * buffer_memory field is undefined, it uses a call to alloca to make
+ * some stack memory for the buffer. Other unitialized fields will
+ * take on a value of zero in the constructed buffer. */
+struct BufferBuilder {
+    Expr buffer_memory;
+    Expr host, dev;
+    Type type;
+    int dimensions = 0;
+    std::vector<Expr> mins, extents, strides;
+    Expr host_dirty, dev_dirty;
+    EXPORT Expr build() const;
+};
+
+} // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */
 template<typename T>
@@ -1815,6 +1832,38 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
     std::vector<Expr> collected_args = {a};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(condition, collected_args);
+}
+
+// @}
+
+/** Create an Expr that that guarantees a precondition.
+ * If 'condition' is true, the return value is equal to the first Expr.
+ * If 'condition' is false, halide_error() is called, and the return value
+ * is arbitrary. Any additional arguments after the first Expr are stringified
+ * and passed as a user-facing message to halide_error(), similar to print().
+ *
+ * Note that this essentially *always* inserts a runtime check into the
+ * generated code (except when the condition can be proven at compile time);
+ * as such, it should be avoided inside inner loops, except for debugging
+ * or testing purposes.
+ *
+ * However, using this to make assertions about (say) input values
+ * can be useful, both in terms of correctness and (potentially) in terms
+ * of code generation, e.g.
+ \code
+ Param<int> p;
+ Expr y = require(p > 0, p);
+ \endcode
+ * will allow the optimizer to assume positive, nonzero values for y.
+ */
+// @{
+EXPORT Expr require(Expr condition, const std::vector<Expr> &values);
+
+template<typename ...Args>
+inline NO_INLINE Expr require(Expr condition, Expr value, Args&&... args) {
+    std::vector<Expr> collected_args = {value};
+    Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
+    return require(condition, collected_args);
 }
 
 // @}

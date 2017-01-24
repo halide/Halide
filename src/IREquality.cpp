@@ -88,6 +88,7 @@ private:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
+    void visit(const Shuffle *);
 };
 
 template<typename T>
@@ -199,6 +200,7 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     compare_scalar(a.code(), b.code());
     compare_scalar(a.bits(), b.bits());
     compare_scalar(a.lanes(), b.lanes());
+    compare_scalar((uintptr_t)a.handle_type, (uintptr_t)b.handle_type);
 
     return result;
 }
@@ -298,6 +300,7 @@ void IRComparer::visit(const Select *op) {
 void IRComparer::visit(const Load *op) {
     const Load *e = expr.as<Load>();
     compare_names(op->name, e->name);
+    compare_expr(e->predicate, op->predicate);
     compare_expr(e->index, op->index);
 }
 
@@ -368,6 +371,7 @@ void IRComparer::visit(const Store *op) {
 
     compare_names(s->name, op->name);
 
+    compare_expr(s->predicate, op->predicate);
     compare_expr(s->value, op->value);
     compare_expr(s->index, op->index);
 }
@@ -433,6 +437,17 @@ void IRComparer::visit(const Evaluate *op) {
     const Evaluate *s = stmt.as<Evaluate>();
 
     compare_expr(s->value, op->value);
+}
+
+void IRComparer::visit(const Shuffle *op) {
+    const Shuffle *e = expr.as<Shuffle>();
+
+    compare_expr_vector(e->vectors, op->vectors);
+
+    compare_scalar(e->indices.size(), op->indices.size());
+    for (size_t i = 0; (i < e->indices.size()) && result == Equal; i++) {
+        compare_scalar(e->indices[i], op->indices[i]);
+    }
 }
 
 } // namespace

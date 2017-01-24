@@ -20,7 +20,7 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
     for (const pair<string, Type> &i : closure.vars) {
         res.push_back(llvm_type_of(&context, i.second));
     }
-    for (const pair<string, Closure::BufferRef> &i : closure.buffers) {
+    for (const pair<string, Closure::Buffer> &i : closure.buffers) {
         res.push_back(llvm_type_of(&context, i.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
@@ -135,6 +135,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_device_release",
         "halide_start_clock",
         "halide_trace",
+        "halide_trace_helper",
         "halide_memoization_cache_lookup",
         "halide_memoization_cache_store",
         "halide_memoization_cache_release",
@@ -149,8 +150,9 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
-        "halide_hexagon_host_get_symbol",
         "halide_hexagon_power_hvx_on",
+        "halide_hexagon_power_hvx_on_mode",
+        "halide_hexagon_power_hvx_on_perf",
         "halide_hexagon_power_hvx_off",
         "halide_hexagon_power_hvx_off_as_destructor",
         "halide_qurt_hvx_lock",
@@ -174,7 +176,7 @@ bool function_takes_user_context(const std::string &name) {
     return starts_with(name, "halide_error_");
 }
 
-bool can_allocation_fit_on_stack(int32_t size) {
+bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
     return (size <= 1024 * 16);
 }
@@ -301,8 +303,9 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     llvm::LLVMContext &context = to.getContext();
 
     bool use_soft_float_abi = false;
-    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi))
+    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi)) {
         to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
+    }
 
     std::string mcpu;
     if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {

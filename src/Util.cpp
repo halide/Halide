@@ -38,26 +38,22 @@ using std::vector;
 using std::ostringstream;
 using std::map;
 
-std::string get_env_variable(char const *env_var_name, size_t &read) {
+std::string get_env_variable(char const *env_var_name) {
     if (!env_var_name) {
         return "";
     }
-    read = 0;
 
     #ifdef _MSC_VER
-    char lvl[32];
-    getenv_s(&read, lvl, env_var_name);
+    char lvl[128];
+    size_t read = 0;
+    if (getenv_s(&read, lvl, env_var_name) != 0) read = 0;
+    if (read) return std::string(lvl);
     #else
     char *lvl = getenv(env_var_name);
-    read = (lvl)?1:0;
+    if (lvl) return std::string(lvl);
     #endif
 
-    if (read) {
-        return std::string(lvl);
-    }
-    else {
-        return "";
-    }
+    return "";
 }
 
 string running_program_name() {
@@ -236,12 +232,27 @@ bool file_exists(const std::string &name) {
     #endif
 }
 
+void assert_file_exists(const std::string &name) {
+    internal_assert(file_exists(name)) << "File not found: " << name;
+}
+
+void assert_no_file_exists(const std::string &name) {
+    internal_assert(!file_exists(name)) << "File (wrongly) found: " << name;
+}
+
 void file_unlink(const std::string &name) {
     #ifdef _MSC_VER
     _unlink(name.c_str());
     #else
     ::unlink(name.c_str());
     #endif
+}
+
+void ensure_no_file_exists(const std::string &name) {
+    if (file_exists(name)) {
+        file_unlink(name);
+    }
+    assert_no_file_exists(name);
 }
 
 void dir_rmdir(const std::string &name) {

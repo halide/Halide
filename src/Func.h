@@ -216,13 +216,61 @@ public:
     EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                       VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
                       DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    // TODO(psuriana): For now we need to expand "tx" into Var and RVar versions
+    // due to conflict with the deprecated interfaces since Var can be implicitly
+    // converted into either VarOrRVar or Expr. Merge this later once we remove
+    // the deprecated interfaces.
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar bx, VarOrRVar by,
+                           VarOrRVar tx, VarOrRVar ty,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar tx, Var ty,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
+                           VarOrRVar tx, RVar ty,
+                           Expr x_size, Expr y_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                           VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                           Expr x_size, Expr y_size, Expr z_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                           Expr x_size, Expr y_size, Expr z_size,
+                           TailStrategy tail = TailStrategy::Auto,
+                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    // Will be deprecated.
     EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
+    // Will be deprecated.
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
+    // Will be deprecated.
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            Expr x_size, Expr y_size, Expr z_size,
                            TailStrategy tail = TailStrategy::Auto,
@@ -472,8 +520,8 @@ public:
     EXPORT explicit Func(Internal::Function f);
 
     /** Construct a new Func to wrap a Buffer. */
-    template<typename T, int D>
-    NO_INLINE explicit Func(const Buffer<T, D> &im) : Func() {
+    template<typename T>
+    NO_INLINE explicit Func(Buffer<T> &im) : Func() {
         (*this)(_) = im(_);
     }
 
@@ -522,16 +570,7 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    // @{
     EXPORT void realize(Realization dst, const Target &target = Target());
-
-    template<typename T, int D>
-    NO_INLINE void realize(Buffer<T, D> &dst, const Target &target = Target()) {
-        Realization r(dst);
-        realize(r, target);
-        dst = r[0];
-    }
-    // @}
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
@@ -541,17 +580,6 @@ public:
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(Realization dst);
-
-    template<typename T, int D>
-    NO_INLINE void infer_input_bounds(Buffer<T, D> &im) {
-        // It's possible for bounds inference to also manipulate
-        // output buffers if their host pointer is null, so we must
-        // take Buffers by reference and communicate the bounds query
-        // result by modifying the argument.
-        Realization r(im);
-        infer_input_bounds(r);
-        im = r[0];
-    }
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
@@ -767,7 +795,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
-    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *));
+    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
 
     /** Set the function called to print messages from the runtime.
      * If you are compiling statically, you can also just define your
@@ -893,14 +921,15 @@ public:
                               const std::vector<ExternFuncArgument> &params,
                               Type t,
                               int dimensionality,
-                              bool is_c_plus_plus = false) {
-        define_extern(function_name, params, std::vector<Type>{t}, dimensionality, is_c_plus_plus);
+                              NameMangling mangling = NameMangling::Default) {
+        define_extern(function_name, params, std::vector<Type>{t}, dimensionality, mangling);
     }
 
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
                               const std::vector<Type> &types,
-                              int dimensionality, bool is_c_plus_plus = false);
+                              int dimensionality,
+                              NameMangling mangling = NameMangling::Default);
     // @}
 
     /** Get the types of the outputs of this Func. */
@@ -1428,6 +1457,47 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, int x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, int x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar tx, int x_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar bx, VarOrRVar by,
+                          VarOrRVar tx, VarOrRVar ty,
+                          int x_size, int y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar tx, Var ty,
+                          int x_size, int y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
+                          VarOrRVar tx, RVar ty,
+                          int x_size, int y_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                          VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                          VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                          int x_size, int y_size, int z_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                          VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
+                          int x_size, int y_size, int z_size,
+                          TailStrategy tail = TailStrategy::Auto,
+                          DeviceAPI device_api = DeviceAPI::Default_GPU);
+
+    // Will be deprecated.
     EXPORT Func &gpu_tile(VarOrRVar x, int x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);

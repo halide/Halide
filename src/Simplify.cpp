@@ -32,6 +32,9 @@ using std::make_pair;
 using std::ostringstream;
 using std::vector;
 
+#define LOG_EXPR_MUTATIONS 0
+#define LOG_STMT_MUTATIONS 0
+
 namespace {
 
 // Things that we can constant fold: Immediates and broadcasts of immediates.
@@ -133,6 +136,42 @@ bool propagate_indeterminate_expression(Expr e0, Expr e1, Expr e2, Type t, Expr 
            propagate_indeterminate_expression(e2, t, expr);
 }
 
+class ExprIsPure : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        if (!op->image.defined() && !op->param.defined()) {
+            // It's a load from an internal buffer, which could
+            // mutate.
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    bool result = true;
+};
+
+/** Test if an expression's value could be different at different
+ * points in the code. */
+bool expr_is_pure(Expr e) {
+    ExprIsPure pure;
+    e.accept(&pure);
+    return pure.result;
+}
+
+#if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
+static int debug_indent = 0;
+#endif
+
 }
 
 class Simplify : public IRMutator {
@@ -152,17 +191,13 @@ public:
 
     }
 
-    // Uncomment to debug all Expr mutations.
-    /*
+#if LOG_EXPR_MUTATIONS
     Expr mutate(Expr e) {
-        static int indent = 0;
-        std::string spaces;
-        for (int i = 0; i < indent; i++) spaces += ' ';
-
-        debug(1) << spaces << "Simplifying " << e << "\n";
-        indent++;
+        const std::string spaces(debug_indent, ' ');
+        debug(1) << spaces << "Simplifying Expr: " << e << "\n";
+        debug_indent++;
         Expr new_e = IRMutator::mutate(e);
-        indent--;
+        debug_indent--;
         if (!new_e.same_as(e)) {
             debug(1)
                 << spaces << "Before: " << e << "\n"
@@ -170,8 +205,25 @@ public:
         }
         return new_e;
     }
+#endif
+
+#if LOG_STMT_MUTATIONS
+    Stmt mutate(Stmt s) {
+        const std::string spaces(debug_indent, ' ');
+        debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
+        debug_indent++;
+        Stmt new_s = IRMutator::mutate(s);
+        debug_indent--;
+        if (!new_s.same_as(s)) {
+            debug(1)
+                << spaces << "Before: " << s << "\n"
+                << spaces << "After:  " << new_s << "\n";
+        }
+        return new_s;
+    }
+#endif
     using IRMutator::mutate;
-    */
+
 
 private:
     bool simplify_lets;
@@ -533,6 +585,9 @@ private:
         const Call *call_a = a.as<Call>();
         const Call *call_b = b.as<Call>();
 
+        const Shuffle *shuffle_a = a.as<Shuffle>();
+        const Shuffle *shuffle_b = b.as<Shuffle>();
+
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
@@ -602,9 +657,9 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
-        } else if (call_a && call_b &&
-                   call_a->is_intrinsic(Call::slice_vector) &&
-                   call_b->is_intrinsic(Call::slice_vector)) {
+        } else if (shuffle_a && shuffle_b &&
+                   shuffle_a->is_slice() &&
+                   shuffle_b->is_slice()) {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = hoist_slice_vector<Add>(op);
             } else {
@@ -1382,6 +1437,8 @@ private:
 
         const Call *call_a = a.as<Call>();
         const Call *call_b = b.as<Call>();
+        const Shuffle *shuffle_a = a.as<Shuffle>();
+        const Shuffle *shuffle_b = b.as<Shuffle>();
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
@@ -1418,9 +1475,9 @@ private:
         } else if (call_b &&
                    call_b->is_intrinsic(Call::signed_integer_overflow)) {
             expr = b;
-        } else if (call_a && call_b &&
-                   call_a->is_intrinsic(Call::slice_vector) &&
-                   call_b->is_intrinsic(Call::slice_vector)) {
+        } else if (shuffle_a && shuffle_b &&
+                   shuffle_a->is_slice() &&
+                   shuffle_b->is_slice()) {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = hoist_slice_vector<Mul>(op);
             } else {
@@ -2065,6 +2122,8 @@ private:
         const Max *max_b = b.as<Max>();
         const Call *call_a = a.as<Call>();
         const Call *call_b = b.as<Call>();
+        const Shuffle *shuffle_a = a.as<Shuffle>();
+        const Shuffle *shuffle_b = b.as<Shuffle>();
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
         const Broadcast *broadcast_a_b = min_a ? min_a->b.as<Broadcast>() : nullptr;
@@ -2387,9 +2446,9 @@ private:
                    equal(call_b->args[0], a)) {
             // min(a, likely(a)) -> likely(a)
             expr = b;
-        } else if (call_a && call_b &&
-                   call_a->is_intrinsic(Call::slice_vector) &&
-                   call_b->is_intrinsic(Call::slice_vector)) {
+        } else if (shuffle_a && shuffle_b &&
+                   shuffle_a->is_slice() &&
+                   shuffle_b->is_slice()) {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = hoist_slice_vector<Min>(op);
             } else {
@@ -2453,6 +2512,8 @@ private:
         const Min *min_b = b.as<Min>();
         const Call *call_a = a.as<Call>();
         const Call *call_b = b.as<Call>();
+        const Shuffle *shuffle_a = a.as<Shuffle>();
+        const Shuffle *shuffle_b = b.as<Shuffle>();
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
         const Broadcast *broadcast_a_b = max_a ? max_a->b.as<Broadcast>() : nullptr;
@@ -2747,9 +2808,9 @@ private:
                    equal(call_b->args[0], a)) {
             // max(a, likely(a)) -> likely(a)
             expr = b;
-        } else if (call_a && call_b &&
-                   call_a->is_intrinsic(Call::slice_vector) &&
-                   call_b->is_intrinsic(Call::slice_vector)) {
+        } else if (shuffle_a && shuffle_b &&
+                   shuffle_a->is_slice() &&
+                   shuffle_b->is_slice()) {
             if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = hoist_slice_vector<Max>(op);
             } else {
@@ -2757,8 +2818,8 @@ private:
             }
         } else if (no_overflow(op->type) &&
                    sub_a &&
-                   is_const(sub_a->a) &&
-                   is_const(b)) {
+                   is_simple_const(sub_a->a) &&
+                   is_simple_const(b)) {
             // max(8 - x, 3) -> 8 - min(x, 5)
             expr = mutate(sub_a->a - min(sub_a->b, sub_a->a - b));
         } else if (select_a &&
@@ -3716,7 +3777,7 @@ private:
                         then_case = substitute(var->name, eq->b, then_case);
                     }
                     if (!and_chain && eq->b.type().is_bool()) {
-                        else_case = substitute(var->name, !eq->b, then_case);
+                        else_case = substitute(var->name, !eq->b, else_case); 
                     }
                 } else if (var) {
                     if (!or_chain) {
@@ -3753,15 +3814,22 @@ private:
     }
 
     void visit(const Load *op) {
-        // Load of a broadcast should be broadcast of the load
+        Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
-        if (const Broadcast *b = index.as<Broadcast>()) {
-            Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
-            expr = Broadcast::make(load, b->lanes);
-        } else if (index.same_as(op->index)) {
+
+        const Broadcast *b_index = index.as<Broadcast>();
+        const Broadcast *b_pred = predicate.as<Broadcast>();
+        if (is_zero(predicate)) {
+            // Predicate is always false
+            expr = undef(op->type);
+        } else if (b_index && b_pred) {
+            // Load of a broadcast should be broadcast of the load
+            Expr load = Load::make(op->type.element_of(), op->name, b_index->value, op->image, op->param, b_pred->value);
+            expr = Broadcast::make(load, b_index->lanes);
+        } else if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
             expr = op;
         } else {
-            expr = Load::make(op->type, op->name, index, op->image, op->param);
+            expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
         }
     }
 
@@ -3900,86 +3968,6 @@ private:
                 expr = op;
             } else {
                 expr = Call::make(op->type, op->name, {arg}, op->call_type);
-            }
-        } else if (op->is_intrinsic(Call::interleave_vectors)) {
-            // Mutate the args
-            vector<Expr> new_args;
-            bool changed = false;
-            for (Expr arg : op->args) {
-                Expr new_arg = mutate(arg);
-                if (!arg.same_as(new_arg)) {
-                    changed = true;
-                }
-                new_args.push_back(new_arg);
-            }
-            int terms = (int)new_args.size();
-
-            // Try to collapse an interleave of ramps into a single ramp.
-            const Ramp *r = new_args[0].as<Ramp>();
-            if (r) {
-                bool can_collapse = true;
-                for (size_t i = 1; i < new_args.size(); i++) {
-                    // If we collapse these terms into a single ramp,
-                    // the new stride is going to be the old stride
-                    // divided by the number of terms, so the
-                    // difference between two adjacent terms in the
-                    // interleave needs to be a broadcast of the new
-                    // stride.
-                    Expr diff = mutate(new_args[i] - new_args[i-1]);
-                    const Broadcast *b = diff.as<Broadcast>();
-                    if (b) {
-                        Expr check = mutate(b->value * terms - r->stride);
-                        can_collapse &= is_zero(check);
-                    } else {
-                        can_collapse = false;
-                    }
-                }
-                if (can_collapse) {
-                    expr = Ramp::make(r->base, mutate(r->stride / terms), r->lanes * terms);
-                    return;
-                }
-            }
-
-            // Try to collapse an interleave of strided loads of ramps
-            // from the same buffer into a single load of a ramp.
-            if (const Load *first_load = new_args[0].as<Load>()) {
-                vector<Expr> load_indices;
-                for (Expr e : new_args) {
-                    const Load *load = e.as<Load>();
-                    if (load && load->name == first_load->name) {
-                        load_indices.push_back(load->index);
-                    }
-                }
-
-                if ((int)load_indices.size() == terms) {
-                    Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
-                    Expr interleaved_index = Call::make(t, Call::interleave_vectors, load_indices, Call::PureIntrinsic);
-                    interleaved_index = mutate(interleaved_index);
-                    if (interleaved_index.as<Ramp>()) {
-                        t = first_load->type;
-                        t = t.with_lanes(t.lanes() * terms);
-                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image, first_load->param);
-                        return;
-                    }
-                }
-            }
-
-            if (!changed) {
-                expr = op;
-            } else {
-                expr = Call::make(op->type, op->name, new_args, op->call_type);
-            }
-        } else if (op->is_intrinsic(Call::shuffle_vector) &&
-                   op->args.size() == 2 &&
-                   (op->args[0].as<Ramp>() ||
-                    op->args[0].as<Broadcast>())) {
-            // Extracting a single lane of a ramp or broadcast
-            if (const Ramp *r = op->args[0].as<Ramp>()) {
-                expr = mutate(r->base + op->args[1]*r->stride);
-            } else if (const Broadcast *b = op->args[0].as<Broadcast>()) {
-                expr = mutate(b->value);
-            } else {
-                internal_error << "Unreachable";
             }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
@@ -4120,41 +4108,146 @@ private:
             IRMutator::visit(op);
         }
     }
+
+    void visit(const Shuffle *op) {
+        if (op->is_interleave()) {
+            // Mutate the vectors
+            vector<Expr> new_vectors;
+            bool changed = false;
+            for (Expr vector : op->vectors) {
+                Expr new_vector = mutate(vector);
+                if (!vector.same_as(new_vector)) {
+                    changed = true;
+                }
+                new_vectors.push_back(new_vector);
+            }
+            int terms = (int)new_vectors.size();
+
+            // Try to collapse an interleave of broadcast into a single broadcast.
+            const Broadcast *b1 = new_vectors[0].as<Broadcast>();
+            if (b1) {
+                bool can_collapse = true;
+                for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
+                    if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
+                        Expr check = mutate(b1->value - b2->value);
+                        can_collapse &= is_zero(check);
+                    } else {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    expr = Broadcast::make(b1->value, b1->lanes * terms);
+                    return;
+                }
+            }
+
+            // Try to collapse an interleave of ramps into a single ramp.
+            const Ramp *r = new_vectors[0].as<Ramp>();
+            if (r) {
+                bool can_collapse = true;
+                for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
+                    // If we collapse these terms into a single ramp,
+                    // the new stride is going to be the old stride
+                    // divided by the number of terms, so the
+                    // difference between two adjacent terms in the
+                    // interleave needs to be a broadcast of the new
+                    // stride.
+                    Expr diff = mutate(new_vectors[i] - new_vectors[i-1]);
+                    const Broadcast *b = diff.as<Broadcast>();
+                    if (b) {
+                        Expr check = mutate(b->value * terms - r->stride);
+                        can_collapse &= is_zero(check);
+                    } else {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    expr = Ramp::make(r->base, mutate(r->stride / terms), r->lanes * terms);
+                    return;
+                }
+            }
+
+            // Try to collapse an interleave of strided loads of ramps
+            // from the same buffer into a single load of a ramp.
+            if (const Load *first_load = new_vectors[0].as<Load>()) {
+                vector<Expr> load_predicates;
+                vector<Expr> load_indices;
+                bool always_true = true;
+                for (Expr e : new_vectors) {
+                    const Load *load = e.as<Load>();
+                    if (load && load->name == first_load->name) {
+                        load_predicates.push_back(load->predicate);
+                        load_indices.push_back(load->index);
+                        always_true = always_true && is_one(load->predicate);
+                    }
+                }
+
+                if ((int)load_indices.size() == terms) {
+                    Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
+                    Expr interleaved_index = Shuffle::make_interleave(load_indices);
+                    interleaved_index = mutate(interleaved_index);
+                    Expr interleaved_predicate;
+                    if (always_true) {
+                        interleaved_predicate = const_true(t.lanes());
+                    } else {
+                        interleaved_predicate = Shuffle::make_interleave(load_predicates);
+                        interleaved_predicate = mutate(interleaved_predicate);
+                    }
+                    if (interleaved_index.as<Ramp>()) {
+                        t = first_load->type;
+                        t = t.with_lanes(t.lanes() * terms);
+                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image,
+                                          first_load->param, interleaved_predicate);
+                        return;
+                    }
+                }
+            }
+
+            if (!changed) {
+                expr = op;
+            } else {
+                expr = Shuffle::make_interleave(new_vectors);
+            }
+        } else if (op->indices.size() == 1 &&
+                   (op->vectors[0].as<Ramp>() ||
+                    op->vectors[0].as<Broadcast>())) {
+            // Extracting a single lane of a ramp or broadcast
+            if (const Ramp *r = op->vectors[0].as<Ramp>()) {
+                expr = mutate(r->base + op->indices[0]*r->stride);
+            } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
+                expr = mutate(b->value);
+            } else {
+                internal_error << "Unreachable";
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     template <typename T>
     Expr hoist_slice_vector(Expr e) {
         const T *op = e.as<T>();
         internal_assert(op);
-        debug(4) << "Trying to hoist slice vector " << (Expr) op << "\n";
 
-        const Call *call_a = op->a.template as<Call>();
-        const Call *call_b = op->b.template as<Call>();
+        const Shuffle *shuffle_a = op->a.template as<Shuffle>();
+        const Shuffle *shuffle_b = op->b.template as<Shuffle>();
 
-        internal_assert(call_a && call_b &&
-                        call_a->is_intrinsic(Call::slice_vector) &&
-                        call_b->is_intrinsic(Call::slice_vector));
+        internal_assert(shuffle_a && shuffle_b &&
+                        shuffle_a->is_slice() &&
+                        shuffle_b->is_slice());
 
-        if (!equal(call_a->args[1], call_b->args[1]) ||
-            !equal(call_a->args[2], call_b->args[2])) {
-            debug(4) << " ...unable to hoist - slice vector arguments don't match\n";
+        if (shuffle_a->indices != shuffle_b->indices) {
             return e;
         }
 
-        const Call *concat_a = call_a->args[0].as<Call>();
-        const Call *concat_b = call_b->args[0].as<Call>();
-        if (!concat_a || !concat_b) {
-            debug(4) << " ...unable to hoist - both operands are not concat_vectors\n";
-            return e;
-        }
-
-        const std::vector<Expr> &slices_a = concat_a->args;
-        const std::vector<Expr> &slices_b = concat_b->args;
+        const std::vector<Expr> &slices_a = shuffle_a->vectors;
+        const std::vector<Expr> &slices_b = shuffle_b->vectors;
         if (slices_a.size() != slices_b.size()) {
             return e;
         }
 
         for (size_t i = 0; i < slices_a.size(); i++) {
             if (slices_a[i].type() != slices_b[i].type()) {
-                debug(4) << " ...unable to hoist - type mismatch\n";
                 return e;
             }
         }
@@ -4164,14 +4257,7 @@ private:
             new_slices.push_back(T::make(slices_a[i], slices_b[i]));
         }
 
-        Expr start_lane = call_a->args[1];
-        Expr result_lanes = call_a->args[3];
-        Expr concat_v = Call::make(concat_a->type, Call::concat_vectors, new_slices, Call::PureIntrinsic);
-        Expr ret_expr = Call::make(op->type, Call::slice_vector,
-                                   {concat_v, start_lane, call_a->args[2], result_lanes},
-                                   Call::PureIntrinsic);
-        debug(4) << "Hoisting slice_vector: " << ret_expr << "\n";
-        return ret_expr;
+        return Shuffle::make(new_slices, shuffle_a->indices);
     }
 
     template<typename T, typename Body>
@@ -4204,7 +4290,7 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
-            const Call *call = new_value.as<Call>();
+            const Shuffle *shuffle = new_value.as<Shuffle>();
             const Variable *var_b = nullptr;
             const Variable *var_a = nullptr;
             if (add) {
@@ -4213,10 +4299,9 @@ private:
                 var_b = sub->b.as<Variable>();
             } else if (mul) {
                 var_b = mul->b.as<Variable>();
-            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
-                       (call->args.size() == 2)) {
-                var_a = call->args[0].as<Variable>();
-                var_b = call->args[1].as<Variable>();
+            } else if (shuffle && shuffle->is_concat() && shuffle->vectors.size() == 2) {
+                var_a = shuffle->vectors[0].as<Variable>();
+                var_b = shuffle->vectors[1].as<Variable>();
             }
 
             if (is_const(new_value)) {
@@ -4264,20 +4349,20 @@ private:
                 new_value = cast->value;
                 new_var = Variable::make(new_value.type(), new_name);
                 replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
-            } else if (call && call->is_intrinsic(Call::slice_vector)) {
-                new_value = call->args[0];
+            } else if (shuffle && shuffle->is_slice()) {
+                // Replacing new_value below might free the shuffle
+                // indices vector, so save them now.
+                std::vector<int> slice_indices = shuffle->indices;
+                new_value = Shuffle::make_concat(shuffle->vectors);
                 new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, Call::make(call->type, Call::slice_vector,
-                                                              {new_var, call->args[1], call->args[2], call->args[3]},
-                                                              Call::PureIntrinsic), replacement);
-            } else if (call && call->is_intrinsic(Call::concat_vectors) &&
+                replacement = substitute(new_name, Shuffle::make({new_var}, slice_indices), replacement);
+            } else if (shuffle && shuffle->is_concat() &&
                        ((var_a && !var_b) || (!var_a && var_b))) {
-                new_var = Variable::make(var_a ? call->args[1].type() : call->args[0].type(), new_name);
-                Expr op_a = var_a ? call->args[0] : new_var;
-                Expr op_b = var_a ? new_var : call->args[1];
-                replacement = substitute(new_name, Call::make(call->type, Call::concat_vectors,
-                                                              {op_a, op_b}, Call::PureIntrinsic), replacement);
-                new_value = var_a ? call->args[1] : call->args[0];
+                new_var = Variable::make(var_a ? shuffle->vectors[1].type() : shuffle->vectors[0].type(), new_name);
+                Expr op_a = var_a ? shuffle->vectors[0] : new_var;
+                Expr op_b = var_a ? new_var : shuffle->vectors[1];
+                replacement = substitute(new_name, Shuffle::make_concat({op_a, op_b}), replacement);
+                new_value = var_a ? shuffle->vectors[1] : shuffle->vectors[0];
             } else {
                 break;
             }
@@ -4455,18 +4540,26 @@ private:
     }
 
     void visit(const Store *op) {
+        Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
 
         const Load *load = value.as<Load>();
+        const Broadcast *scalar_pred = predicate.as<Broadcast>();
 
-        if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
+        if (is_zero(predicate)) {
+            // Predicate is always false
+            stmt = Evaluate::make(0);
+        } else if (scalar_pred && !is_one(scalar_pred->value)) {
+            stmt = IfThenElse::make(scalar_pred->value,
+                                    Store::make(op->name, value, index, op->param, const_true(value.type().lanes())));
+        } else if (is_undef(value) || (load && load->name == op->name && equal(load->index, index))) {
             // foo[x] = foo[x] or foo[x] = undef is a no-op
             stmt = Evaluate::make(0);
-        } else if (value.same_as(op->value) && index.same_as(op->index)) {
+        } else if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 
@@ -4536,7 +4629,8 @@ private:
             stmt = first;
         } else if (let_first &&
                    let_rest &&
-                   equal(let_first->value, let_rest->value)) {
+                   equal(let_first->value, let_rest->value) &&
+                   expr_is_pure(let_first->value)) {
 
             // Do both first and rest start with the same let statement (occurs when unrolling).
             Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
@@ -4551,7 +4645,8 @@ private:
             stmt = LetStmt::make(var_name, let_first->value, new_block);
         } else if (if_first &&
                    if_rest &&
-                   equal(if_first->condition, if_rest->condition)) {
+                   equal(if_first->condition, if_rest->condition) &&
+                   expr_is_pure(if_first->condition)) {
             // Two ifs with matching conditions
             Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
             Stmt else_case;
@@ -4567,6 +4662,8 @@ private:
         } else if (if_first &&
                    if_rest &&
                    !if_rest->else_case.defined() &&
+                   expr_is_pure(if_first->condition) &&
+                   expr_is_pure(if_rest->condition) &&
                    is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
             // Two ifs where the second condition is tighter than
             // the first condition.  The second if can be nested
@@ -4654,8 +4751,7 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
 
 // Helper functions to use in the tests below
 Expr interleave_vectors(vector<Expr> e) {
-    Type t = e[0].type().with_lanes(e[0].type().lanes() * e.size());
-    return Call::make(t, Call::interleave_vectors, e, Call::PureIntrinsic);
+    return Shuffle::make_interleave(e);
 }
 
 Expr ramp(Expr base, Expr stride, int w) {
@@ -5515,6 +5611,14 @@ void check_boolean() {
                            Evaluate::make(x+foo_simple+1),
                            Evaluate::make(x+19)));
 
+    // The construct
+    //     if (var == expr) then a else b;
+    // was being simplified incorrectly, but *only* if var was of type Bool.
+    Stmt then_clause = AssertStmt::make(b2, Expr(22));
+    Stmt else_clause = AssertStmt::make(b2, Expr(33));
+    check(IfThenElse::make(b1 == b2, then_clause, else_clause),
+          IfThenElse::make(b1 == b2, then_clause, else_clause));
+
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
@@ -5897,9 +6001,9 @@ void simplify_test() {
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
-        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), BufferPtr(), Parameter());
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), BufferPtr(), Parameter());
-        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), BufferPtr(), Parameter());
+        Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8));
         check(interleave_vectors({load1, load2}), load12);
 
         // They don't collapse in the other order
@@ -5907,7 +6011,7 @@ void simplify_test() {
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), BufferPtr(), Parameter());
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
         e = interleave_vectors({load1, load3});
         check(e, e);
 
@@ -5928,6 +6032,14 @@ void simplify_test() {
         Expr e = Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2));
         Expr expected = Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2));
         check(e, expected);
+    }
+
+    {
+        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
+        Expr index = ramp(x + y, 1, 8);
+        Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()));
+        Stmt stmt = Store::make("f", value, index, Parameter(), pred);
+        check(stmt, Evaluate::make(0));
     }
 
     std::cout << "Simplify test passed" << std::endl;

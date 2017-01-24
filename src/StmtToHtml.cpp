@@ -261,6 +261,10 @@ private:
         stream << close_span();
         print(op->index);
         stream << matched("]");
+        if (!is_one(op->predicate)) {
+            stream << " " << keyword("if") << " ";
+            print(op->predicate);
+        }
         stream << close_span();
     }
     void visit(const Ramp *op) {
@@ -279,31 +283,6 @@ private:
     }
     void visit(const Call *op) {
         stream << open_span("Call");
-        if (op->is_intrinsic(Call::extract_buffer_host)) {
-            stream << open_span("Matched");
-            print(op->args[0]);
-            stream << ".host";
-            stream << close_span();
-            return;
-        } else if (op->is_intrinsic(Call::extract_buffer_min)) {
-            stream << open_span("Matched");
-            print(op->args[0]);
-            stream << ".min[";
-            stream << close_span();
-            print(op->args[1]);
-            stream << matched("]");
-            stream << close_span();
-            return;
-        } else if (op->is_intrinsic(Call::extract_buffer_max)) {
-            stream << open_span("Matched");
-            print(op->args[0]);
-            stream << ".max[";
-            stream << close_span();
-            print(op->args[1]);
-            stream << matched("]");
-            stream << close_span();
-            return;
-        }
         print_list(symbol(op->name) + "(", op->args, ")");
         stream << close_span();
     }
@@ -377,6 +356,10 @@ private:
             stream << keyword("vectorized");
         } else if (op->for_type == ForType::Unrolled) {
             stream << keyword("unrolled");
+        } else if (op->for_type == ForType::GPUBlock) {
+            stream << keyword("gpu_block");
+        } else if (op->for_type == ForType::GPUThread) {
+            stream << keyword("gpu_thread");
         } else {
             internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
         }
@@ -404,6 +387,10 @@ private:
         stream << " " << span("Operator Assign Matched", "=") << " ";
         stream << open_span("StoreValue");
         print(op->value);
+        if (!is_one(op->predicate)) {
+            stream << " " << keyword("if") << " ";
+            print(op->predicate);
+        }
         stream << close_span();
         stream << close_div();
     }
@@ -563,6 +550,28 @@ private:
         stream << close_div();
     }
 
+    void visit(const Shuffle *op) {
+        stream << open_span("Shuffle");
+        if (op->is_interleave()) {
+            print_list(symbol("interleave_vectors("), op->vectors, ")");
+        } else if (op->is_concat()) {
+            print_list(symbol("concat_vectors("), op->vectors, ")");
+        } else if (op->is_slice()) {
+            std::vector<Expr> args = op->vectors;
+            args.push_back(op->slice_begin());
+            args.push_back(op->slice_stride());
+            args.push_back(static_cast<int>(op->indices.size()));
+            print_list(symbol("slice_vectors("), args, ")");
+        } else {
+            std::vector<Expr> args = op->vectors;
+            for (int i : op->indices) {
+                args.push_back(i);
+            }
+            print_list(symbol("shuffle("), args, ")");
+        }
+        stream << close_span();
+    }
+
 public:
     void print(Expr ir) {
         ir.accept(this);
@@ -600,8 +609,8 @@ public:
         scope.pop(op.name);
     }
 
-    void print(const BufferPtr &op) {
-        stream << open_div("BufferPtr");
+    void print(const Buffer<> &op) {
+        stream << open_div("Buffer<>");
         stream << keyword("buffer ") << var(op.name());
         stream << close_div();
     }
