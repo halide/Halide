@@ -198,7 +198,7 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
 }
 
 CodeGen_C::~CodeGen_C() {
-    switch_to_c_or_c_plus_plus(COrCPlusPlus::Default);
+    switch_to_c_or_c_plus_plus(NameMangling::Default);
 
     if (is_header()) {
         stream << "#endif\n";
@@ -286,13 +286,13 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 }
 }
 
-void CodeGen_C::switch_to_c_or_c_plus_plus(COrCPlusPlus mode) {
-    if (extern_c_open && mode != COrCPlusPlus::C) {
+void CodeGen_C::switch_to_c_or_c_plus_plus(NameMangling mode) {
+    if (extern_c_open && mode != NameMangling::C) {
         stream << "\n#ifdef __cplusplus\n";
         stream << "}  // extern \"C\"\n";
         stream << "#endif\n";
         extern_c_open = false;
-    } else if (!extern_c_open && mode == COrCPlusPlus::C) {
+    } else if (!extern_c_open && mode == NameMangling::C) {
         stream << "#ifdef __cplusplus\n";
         stream << "extern \"C\" {\n";
         stream << "#endif\n";
@@ -508,17 +508,17 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         f.body.accept(&e);
 
         if (e.has_c_plus_plus_declarations()) {
-            switch_to_c_or_c_plus_plus(COrCPlusPlus::CPlusPlus);
+            switch_to_c_or_c_plus_plus(NameMangling::CPlusPlus);
             e.emit_c_plus_plus_declarations(stream);
         }
 
         if (e.has_c_declarations()) {
-            switch_to_c_or_c_plus_plus(COrCPlusPlus::C);
+            switch_to_c_or_c_plus_plus(NameMangling::C);
             e.emit_c_declarations(stream);
         }
     }
 
-    switch_to_c_or_c_plus_plus(is_c_plus_plus_interface() ? COrCPlusPlus::Default : COrCPlusPlus::C);
+    switch_to_c_or_c_plus_plus(is_c_plus_plus_interface() ? NameMangling::Default : NameMangling::C);
     stream << "\n";
 
     std::vector<std::string> namespaces;

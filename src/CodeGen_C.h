@@ -127,17 +127,10 @@ protected:
     /** True if there is a void * __user_context parameter in the arguments. */
     bool have_user_context;
 
-    /** An enum to make calling convention changes clearer. */
-    enum class COrCPlusPlus {
-        Default,   ///< Whatever compiler is being used
-        C,         ///< extern "C" is forced if C++
-        CPlusPlus, ///< Operationally same as "default" but shows in code which things are expected to be mangled.
-    };
-
     /** Track current calling convention scope. */
     bool extern_c_open;
 
-    void switch_to_c_or_c_plus_plus(COrCPlusPlus mode);
+    void switch_to_c_or_c_plus_plus(NameMangling mode);
 
     using IRPrinter::visit;
 
