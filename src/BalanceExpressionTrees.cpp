@@ -141,16 +141,14 @@ public:
         }
     }
 
+    void visit(const Shuffle *op) {
+        IRVisitor::visit(op);
+        vector<int> heights = height(op->vectors);
+        m[op] = *std::max_element(heights.begin(), heights.end());
+    }
+
     void visit(const Call *op) {
         if (op->type.is_vector()) {
-            // ht(slice_vector(concat_vectors(x, ..)) = ht(concat_vectors(x, ...))
-            if (op->is_intrinsic(Call::slice_vector)) {
-                const Call *concat_v = op->args[0].as<Call>();
-                if (concat_v && concat_v->is_intrinsic(Call::concat_vectors)) {
-                    int ht = height(op->args[0]);
-                    m[op] = ht;
-                }
-            }
             IRVisitor::visit(op);
             vector<int> heights = height(op->args);
             m[op] = *std::max_element(heights.begin(), heights.end());
