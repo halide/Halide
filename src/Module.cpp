@@ -291,13 +291,6 @@ void compile_multitarget(const std::string &fn_name,
     // JIT makes no sense.
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
-    // If only one target, don't bother with the runtime feature detection wrapping.
-    if (targets.size() == 1) {
-        debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
-        module_producer(fn_name, base_target).compile(output_files);
-        return;
-    }
-
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;

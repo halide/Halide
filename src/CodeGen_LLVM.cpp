@@ -2597,7 +2597,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         //
         // The final condition (cond_N) must evaluate to a constant TRUE
         // value (so that the final function will be selected if all others
-        // fail); failure to do so will cause unpredictable results.
+        // fail); failure to do so will fail at compile time.
         //
         // There is currently no way to clear the cached function pointer.
         //
@@ -2608,11 +2608,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         // It is assumed/required that all of the sub-functions have arguments
         // (and return values) that are identical to those of this->function.
         //
-        // Note that we require >= 4 arguments: fewer would imply
-        // only one condition+function pair, which is pointless to use
-        // (the function should always be called directly).
-        //
-        internal_assert(op->args.size() >= 4);
+        // Note that it's fine to use this with only a single condition+function
+        // pair: it will collapse to a single unconditional branch to the 
+        // underlying function.
+        internal_assert(op->args.size() >= 2);
         internal_assert(!(op->args.size() & 1));
 
         // Gather information we need about each function.
@@ -2648,6 +2647,10 @@ void CodeGen_LLVM::visit(const Call *op) {
                                                 /*initializer*/ nullptr, extern_sub_fn_name);
             }
             auto cond = op->args[i];
+            if (i == op->args.size() - 2) {
+                // Final condition must be constant TRUE.
+                internal_assert(is_one(simplify(cond))) << "Expected constant TRUE but saw " << cond << "\n";
+            }
             sub_fns.push_back({sub_fn, sub_fn_ptr, cond});
         }
 
