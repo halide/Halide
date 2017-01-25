@@ -6,7 +6,7 @@ CXXFLAGS += -g -Wall
 
 $(BIN)/interpolate: interpolate.cpp
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) interpolate.cpp $(LIB_HALIDE) -o $@ $(PNGFLAGS) $(LDFLAGS) $(LLVM_SHARED_LIBS)
+	$(CXX) $(CXXFLAGS) interpolate.cpp $(LIB_HALIDE) -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS) $(LLVM_SHARED_LIBS)
 
 $(BIN)/out.png: $(BIN)/interpolate
 	@-mkdir -p $(BIN)
