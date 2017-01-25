@@ -94,12 +94,15 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 /** These are forward declared here to allow clients to override the
  *  Halide Hexagon runtime. Do not call them. */
 // @{
+extern int halide_hexagon_initialize_kernels_v2(void *user_context,
+                                                void **module_ptr,
+                                                const uint8_t *code, uint64_t code_size,
+                                                uint32_t use_dlopen,
+                                                uint32_t use_dlopenbuf);
 extern int halide_hexagon_initialize_kernels(void *user_context,
                                              void **module_ptr,
-                                             const uint8_t *code, uint64_t code_size,
-                                             uint32_t use_dlopen,
-                                             uint32_t use_dlopenbuf);
-extern int halide_hexagon_run_eobj(void *user_context,
+                                             const uint8_t *code, uint64_t code_size);
+extern int halide_hexagon_run_dl(void *user_context,
                                    void *module_ptr,
                                    const char *name,
                                    halide_hexagon_handle_t *function,

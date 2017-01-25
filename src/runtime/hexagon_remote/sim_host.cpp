@@ -306,7 +306,7 @@ public:
 
 extern "C" {
 
-int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
+int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
                                              int use_dlopen, int use_dlopenbuf,
                                              handle_t *module_ptr) {
     int ret = init_sim();
@@ -325,7 +325,12 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     return ret;
 }
 
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen, int usedl) {
+int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
+                                             handle_t *module_ptr) {
+   return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, false, module_ptr);
+}
+
+handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr, const char* name, int nameLen, int usedl) {
     assert(sim);
 
     // Copy the pointer arguments to the simulator.

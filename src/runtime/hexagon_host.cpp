@@ -116,9 +116,9 @@ WEAK int init_hexagon_runtime(void *user_context) {
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Get the symbols we need from the library.
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels_v2", remote_initialize_kernels);
     if (!remote_initialize_kernels) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_dl", remote_get_symbol);
     if (!remote_get_symbol) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
@@ -210,10 +210,10 @@ WEAK bool halide_is_hexagon_available(void *user_context) {
     return result == 0;
 }
 
-WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
-                                           const uint8_t *code, uint64_t code_size,
-                                           uint32_t use_dlopen,
-                                           uint32_t use_dlopenbuf) {
+WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_ptr,
+                                              const uint8_t *code, uint64_t code_size,
+                                              uint32_t use_dlopen,
+                                              uint32_t use_dlopenbuf) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
@@ -294,6 +294,11 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     #endif
 
     return result != 0 ? -1 : 0;
+}
+
+WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
+                                           const uint8_t *code, uint64_t code_size) {
+    return halide_hexagon_initialize_kernels_v2(user_context, state_ptr, code, code_size, false, false);
 }
 
 namespace {
@@ -428,17 +433,17 @@ WEAK int halide_hexagon_run(void *user_context,
                             uint64_t arg_sizes[],
                             void *args[],
                             int arg_flags[]) {
-    return halide_hexagon_run_internal(true, user_context, state_ptr, name, function, arg_sizes, args, arg_flags);
+    return halide_hexagon_run_internal(false, user_context, state_ptr, name, function, arg_sizes, args, arg_flags);
 }
 
-WEAK int halide_hexagon_run_eobj(void *user_context,
+WEAK int halide_hexagon_run_dl(void *user_context,
                             void *state_ptr,
                             const char *name,
                             halide_hexagon_handle_t* function,
                             uint64_t arg_sizes[],
                             void *args[],
                             int arg_flags[]) {
-    return halide_hexagon_run_internal(false, user_context, state_ptr, name, function, arg_sizes, args, arg_flags);
+    return halide_hexagon_run_internal(true, user_context, state_ptr, name, function, arg_sizes, args, arg_flags);
 }
 
 WEAK int halide_hexagon_device_release(void *user_context) {
