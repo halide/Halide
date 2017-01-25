@@ -21,7 +21,7 @@ endif
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
 $(BIN)/test: $(BIN)/halide_blur.a test.cpp
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) $(OPENMP_FLAGS) -msse2 -Wall -O2 -I$(BIN) test.cpp $(BIN)/halide_blur.a -o $@ $(LDFLAGS) $(PNGFLAGS)
+	$(CXX) $(CXXFLAGS) $(OPENMP_FLAGS) -msse2 -Wall -O2 -I$(BIN) test.cpp $(BIN)/halide_blur.a -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS)
 
 clean:
 	rm -rf $(BIN)
