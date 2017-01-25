@@ -585,6 +585,7 @@ protected:
     virtual void visit(const Or *op) { visit_binary_op(op); }
 
     virtual void visit(const Select *op)  {
+        Expr mutated_condition = mutate(op->condition);
         Expr mutated_true_value = mutate(op->true_value);
         Expr mutated_false_value = mutate(op->false_value);
 
@@ -601,7 +602,29 @@ protected:
             }
         }
 
-        expr = Select::make(op->condition, mutated_true_value, mutated_false_value);
+        expr = Select::make(mutated_condition, mutated_true_value, mutated_false_value);
+    }
+
+    virtual void visit(const Ramp *op) {
+        Expr mutated_base = mutate(op->base);
+        Expr mutated_stride = mutate(op->stride);
+
+        // If either base or stride is a float, then make sure both are float
+        bool base_float = mutated_base.type().is_float();
+        bool stride_float = mutated_stride.type().is_float();
+        if (!base_float && stride_float) {
+            mutated_base = Cast::make(float_type(op->base), mutated_base);
+        }
+        else if (base_float && !stride_float) {
+            mutated_stride = Cast::make(float_type(op->stride), mutated_stride);
+        }
+
+        if (mutated_base.same_as(op->base) && mutated_stride.same_as(op->stride)) {
+            expr = op;
+        }
+        else {
+            expr = Ramp::make(mutated_base, mutated_stride, op->lanes);
+        }
     }
 
     virtual void visit(const Let *op) {
