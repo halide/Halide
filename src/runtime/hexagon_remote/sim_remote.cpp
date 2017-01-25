@@ -255,9 +255,9 @@ static void dllib_init() {
     dlinit(3, const_cast<char**>(builtin));
 }
 
-int initialize_kernels(const unsigned char *code, int codeLen,
-                       bool use_dlopen, bool use_dlopenbuf,
-                       handle_t *module_ptr) {
+int initialize_kernels_v2(const unsigned char *code, int codeLen,
+                          bool use_dlopen, bool use_dlopenbuf,
+                          handle_t *module_ptr) {
 
     // Keep this false, even for dlbuf usage, as we do not yet have api for dlopenbuf from standalone.
     void *lib = NULL;
@@ -329,6 +329,12 @@ int initialize_kernels(const unsigned char *code, int codeLen,
         *module_ptr = reinterpret_cast<handle_t>(elib);
 
     return 0;
+}
+
+int initialize_kernels(const unsigned char *code, int codeLen,
+                       bool use_dlopen, bool use_dlopenbuf,
+                       handle_t *module_ptr) {
+    return initialize_kernels_v2(code, codeLen, false, false, module_ptr);
 }
 
 handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, int usedl) {
@@ -434,7 +440,7 @@ int main(int argc, const char **argv) {
             set_rpc_return(0);
             break;
         case Message::InitKernels:
-            set_rpc_return(initialize_kernels(
+            set_rpc_return(initialize_kernels_v2(
                 reinterpret_cast<unsigned char*>(RPC_ARG(0)),
                 RPC_ARG(1),
                 RPC_ARG(2),

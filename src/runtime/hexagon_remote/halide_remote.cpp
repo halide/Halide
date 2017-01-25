@@ -112,7 +112,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 PipelineContext run_context(stack_alignment, stack_size);
 
-int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
+int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
                                              int use_dlopen, int use_dlopenbuf,
                                              handle_t *module_ptr) {
     void *lib = NULL;
@@ -183,11 +183,14 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
     return 0;
 }
 
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen, int usedl) {
-    if (usedl)
-        return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
-    else
-        return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
+                                             int use_dlopen, int use_dlopenbuf,
+                                             handle_t *module_ptr) {
+    return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, false, module_ptr);
+}
+
+handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
+    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
 }
 
 volatile int power_ref_count = 0;
@@ -362,13 +365,22 @@ int halide_hexagon_remote_power_hvx_off() {
     return 0;
 }
 
-int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, int nameLen, int usedl,
-                                        handle_t *sym_ptr) {
+int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int usedl, handle_t *sym_ptr) {
     if (usedl)
-        *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+       *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
     else
-        *sym_ptr = reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+        *sym_ptr= reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
     return *sym_ptr != 0 ? 0 : -1;
+}
+
+int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, int nameLen, handle_t *sym_ptr) {
+    return halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, false, sym_ptr);
+}
+
+handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr, const char* name, int nameLen, bool usedl) {
+    handle_t sym_ptr = NULL;
+    int result = halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, usedl, &sym_ptr);
+    return result == 0 ? sym_ptr : NULL;
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,

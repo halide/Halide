@@ -225,9 +225,9 @@ class InjectHexagonRpc : public IRMutator {
             bool use_dlopen = device_code.target().has_feature(Target::HVX_dlopen);
             bool use_dlbuf = device_code.target().has_feature(Target::HVX_dlbuf);
             if (use_dlopen || use_dlbuf) {
-              stmt = call_extern_and_assert("halide_hexagon_run", params);
+              stmt = call_extern_and_assert("halide_hexagon_run_dl", params);
             } else {
-              stmt = call_extern_and_assert("halide_hexagon_run_eobj", params);
+              stmt = call_extern_and_assert("halide_hexagon_run", params);
             }
 
         } else {
@@ -341,7 +341,7 @@ public:
             // Wrap the statement in calls to halide_initialize_kernels.
             size_t code_size = object.size();
             Expr code_ptr = buffer_ptr(&object[0], code_size, "hexagon_code");
-            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels_v2",
                                                        {module_state_ptr(), code_ptr,
                                                        Expr((uint64_t) code_size),
                                                        Expr((uint32_t) use_dlopen),
@@ -365,7 +365,7 @@ public:
             size_t code_size = object.size();
             Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&object[0]), code_size, "hexagon_code");
 
-            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels_v2",
                                                        {module_state_ptr(), code_ptr, Expr((uint64_t) code_size),
                                                        Expr((uint32_t) use_dlopen),
                                                        Expr((uint32_t) use_dlopenbuf)});
