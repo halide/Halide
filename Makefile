@@ -931,7 +931,8 @@ $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
-	semityped_input_buffer.dim=3 \
+	type_only_input_buffer.dim=3 \
+	dim_only_input_buffer.type=uint8 \
 	untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3 \
 	output.type=float32,float32 output.dim=3 \
 	input_not_nod.type=uint8 input_not_nod.dim=3 \
