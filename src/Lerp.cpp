@@ -22,6 +22,9 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
     if (zero_val.type().is_int()) {
         computation_type = UInt(zero_val.type().bits(), zero_val.type().lanes());
+        // We must take care to do the addition and subtraction of the
+        // bias while in the unsigned computation type, where overflow
+        // is well-defined.
         bias_value = cast(computation_type, result_type.min());
     }
 
