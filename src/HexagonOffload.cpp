@@ -356,9 +356,6 @@ public:
             } else {
                 hex_command += " -fpic -G 0 -mlong-calls -O3 -Wno-override-module -shared ";
             }
-            if (device_code.target().has_feature(Target::HVX_v62)) {
-                hex_command += " -mv62";
-            }
             if (device_code.target().has_feature(Target::HVX_128)) {
                 hex_command += " -mhvx-double";
             } else {
