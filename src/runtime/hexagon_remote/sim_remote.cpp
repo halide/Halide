@@ -233,8 +233,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(void *, const char *));
 
 // This function should be deleted once the hexagon tools impliment the dlopenbuf api.
-__attribute__((weak))
- void* dlopenbuf(const char*filename, const char* data, int size, int perms) {
+void* dlopenbuf(const char*filename, const char* data, int size, int perms) {
     FILE *f = fopen(filename, "w+");
     if (!f) {
         log_printf("Failed to open shared object file %s\n", filename);
@@ -256,13 +255,13 @@ static void dllib_init() {
 }
 
 int initialize_kernels_v2(const unsigned char *code, int codeLen,
-                          bool use_dlopenbuf,
+                          bool use_shared_object,
                           handle_t *module_ptr) {
 
     // Keep this false, even for dlbuf usage, as we do not yet have api for dlopenbuf from standalone.
     void *lib = NULL;
     elf_t *elib = NULL;
-    if (use_dlopenbuf) {
+    if (use_shared_object) {
         dllib_init();
         lib = dlopenbuf( "libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
@@ -281,15 +280,17 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
     // the implementations that need to do so here, and pass poiners
     // to them in here.
     set_runtime_t set_runtime;
-    if (use_dlopenbuf)
+    if (use_shared_object) {
         set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
-    else
+    } else {
         set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
+    }
     if (!set_runtime) {
-        if (use_dlopenbuf)
+        if (use_shared_object) {
             dlclose(lib);
-        else
+        } else {
             obj_dlclose(elib);
+        }
         halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
@@ -304,32 +305,34 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        if (use_dlopenbuf)
+        if (use_shared_object) {
             dlclose(lib);
-        else
+        } else {
             obj_dlclose(elib);
+        }
         halide_print(NULL, "set_runtime failed\n");
         return result;
     }
-    if (use_dlopenbuf)
+    if (use_shared_object) {
         *module_ptr = reinterpret_cast<handle_t>(lib);
-    else
+    } else {
         *module_ptr = reinterpret_cast<handle_t>(elib);
-
+    }
     return 0;
 }
 
 int initialize_kernels(const unsigned char *code, int codeLen,
-                       bool use_dlopenbuf,
+                       bool use_shared_object,
                        handle_t *module_ptr) {
     return initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
 
-handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, int usedl) {
-    if (usedl)
+handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, int use_shared_object) {
+    if (use_shared_object) {
         return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
-    else
+    } else {
         return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+    }
 }
 
 int run(handle_t module_ptr, handle_t function,
