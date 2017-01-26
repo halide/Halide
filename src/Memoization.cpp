@@ -46,7 +46,7 @@ public:
         }
 
         if (call->is_intrinsic(Call::memoize_expr)) {
-            internal_assert(call->args.size() > 0);
+            internal_assert(!call->args.empty());
             if (call->args.size() == 1) {
                 record(call->args[0]);
             } else {
@@ -538,7 +538,7 @@ private:
             // Grab the host pointer argument
             const Call *arg2 = call->args[2].as<Call>();
             if (arg2 != nullptr && arg2->is_intrinsic(Call::address_of)) {
-                internal_assert(arg2->args.size() > 0) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
+                internal_assert(!aarg2->args.empty()) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
                 const Load *load = arg2->args[0].as<Load>();
                 if (load != nullptr) {
                     const IntImm *index = load->index.as<IntImm>();

@@ -250,11 +250,13 @@ int Parameter::host_alignment() const {
 }
 void Parameter::set_min_value(Expr e) {
     check_is_scalar();
-    user_assert(e.type() == contents->type)
-        << "Can't set parameter " << name()
-        << " of type " << contents->type
-        << " to have min value " << e
-        << " of type " << e.type() << "\n";
+    if (e.defined()) {
+        user_assert(e.type() == contents->type)
+            << "Can't set parameter " << name()
+            << " of type " << contents->type
+            << " to have min value " << e
+            << " of type " << e.type() << "\n";
+    }
     contents->min_value = e;
 }
 
@@ -265,11 +267,13 @@ Expr Parameter::get_min_value() const {
 
 void Parameter::set_max_value(Expr e) {
     check_is_scalar();
-    user_assert(e.type() == contents->type)
-        << "Can't set parameter " << name()
-        << " of type " << contents->type
-        << " to have max value " << e
-        << " of type " << e.type() << "\n";
+    if (e.defined()) {
+        user_assert(e.type() == contents->type)
+            << "Can't set parameter " << name()
+            << " of type " << contents->type
+            << " to have max value " << e
+            << " of type " << e.type() << "\n";
+    }
     contents->max_value = e;
 }
 

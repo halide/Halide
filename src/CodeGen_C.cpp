@@ -159,7 +159,7 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
 }
 
 CodeGen_C::~CodeGen_C() {
-    switch_to_c_or_c_plus_plus(NameMangling::Default);
+    set_name_mangling_mode(NameMangling::Default);
 
     if (is_header()) {
         if (!target.has_feature(Target::NoRuntime)) {
@@ -296,7 +296,7 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 }
 }
 
-void CodeGen_C::switch_to_c_or_c_plus_plus(NameMangling mode) {
+void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
     if (extern_c_open && mode != NameMangling::C) {
         stream << "\n#ifdef __cplusplus\n";
         stream << "}  // extern \"C\"\n";
@@ -384,7 +384,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         stream << type_to_c_type(op->type, true) << " " << name << "(";
         if (function_takes_user_context(name)) {
             stream << "void *";
-            if (op->args.size()) {
+            if (!op->args.empty()) {
                 stream << ", ";
             }
         }
@@ -527,12 +527,12 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         f.body.accept(&e);
 
         if (e.has_c_plus_plus_declarations()) {
-            switch_to_c_or_c_plus_plus(NameMangling::CPlusPlus);
+            set_name_mangling_mode(NameMangling::CPlusPlus);
             e.emit_c_plus_plus_declarations(stream);
         }
 
         if (e.has_c_declarations()) {
-            switch_to_c_or_c_plus_plus(NameMangling::C);
+            set_name_mangling_mode(NameMangling::C);
             e.emit_c_declarations(stream);
         }
     }
@@ -543,7 +543,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                          NameMangling::CPlusPlus : NameMangling::C);
     }
 
-    switch_to_c_or_c_plus_plus(name_mangling);
+    set_name_mangling_mode(name_mangling);
     stream << "\n";
 
     std::vector<std::string> namespaces;
@@ -1085,7 +1085,7 @@ void CodeGen_C::visit(const Call *op) {
         string size = print_expr(op->args[2]);
         rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
     } else if (op->is_intrinsic(Call::make_struct)) {
-        if (op->args.size() == 0) {
+        if (op->args.empty()) {
             rhs << "NULL";
         } else {
             // Emit a line something like:

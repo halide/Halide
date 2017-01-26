@@ -32,6 +32,9 @@ using std::make_pair;
 using std::ostringstream;
 using std::vector;
 
+#define LOG_EXPR_MUTATIONS 0
+#define LOG_STMT_MUTATIONS 0
+
 namespace {
 
 // Things that we can constant fold: Immediates and broadcasts of immediates.
@@ -165,6 +168,10 @@ bool expr_is_pure(Expr e) {
     return pure.result;
 }
 
+#if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
+static int debug_indent = 0;
+#endif
+
 }
 
 class Simplify : public IRMutator {
@@ -184,17 +191,13 @@ public:
 
     }
 
-    // Uncomment to debug all Expr mutations.
-    /*
+#if LOG_EXPR_MUTATIONS
     Expr mutate(Expr e) {
-        static int indent = 0;
-        std::string spaces;
-        for (int i = 0; i < indent; i++) spaces += ' ';
-
-        debug(1) << spaces << "Simplifying " << e << "\n";
-        indent++;
+        const std::string spaces(debug_indent, ' ');
+        debug(1) << spaces << "Simplifying Expr: " << e << "\n";
+        debug_indent++;
         Expr new_e = IRMutator::mutate(e);
-        indent--;
+        debug_indent--;
         if (!new_e.same_as(e)) {
             debug(1)
                 << spaces << "Before: " << e << "\n"
@@ -202,8 +205,25 @@ public:
         }
         return new_e;
     }
+#endif
+
+#if LOG_STMT_MUTATIONS
+    Stmt mutate(Stmt s) {
+        const std::string spaces(debug_indent, ' ');
+        debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
+        debug_indent++;
+        Stmt new_s = IRMutator::mutate(s);
+        debug_indent--;
+        if (!new_s.same_as(s)) {
+            debug(1)
+                << spaces << "Before: " << s << "\n"
+                << spaces << "After:  " << new_s << "\n";
+        }
+        return new_s;
+    }
+#endif
     using IRMutator::mutate;
-    */
+
 
 private:
     bool simplify_lets;
@@ -3757,7 +3777,7 @@ private:
                         then_case = substitute(var->name, eq->b, then_case);
                     }
                     if (!and_chain && eq->b.type().is_bool()) {
-                        else_case = substitute(var->name, !eq->b, then_case);
+                        else_case = substitute(var->name, !eq->b, else_case); 
                     }
                 } else if (var) {
                     if (!or_chain) {
@@ -4193,7 +4213,7 @@ private:
                     op->vectors[0].as<Broadcast>())) {
             // Extracting a single lane of a ramp or broadcast
             if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-                expr = mutate(r->base + op->vectors[1]*r->stride);
+                expr = mutate(r->base + op->indices[0]*r->stride);
             } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
                 expr = mutate(b->value);
             } else {
@@ -5590,6 +5610,14 @@ void check_boolean() {
           IfThenElse::make(foo_simple != 17,
                            Evaluate::make(x+foo_simple+1),
                            Evaluate::make(x+19)));
+
+    // The construct
+    //     if (var == expr) then a else b;
+    // was being simplified incorrectly, but *only* if var was of type Bool.
+    Stmt then_clause = AssertStmt::make(b2, Expr(22));
+    Stmt else_clause = AssertStmt::make(b2, Expr(33));
+    check(IfThenElse::make(b1 == b2, then_clause, else_clause),
+          IfThenElse::make(b1 == b2, then_clause, else_clause));
 
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));

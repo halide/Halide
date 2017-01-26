@@ -19,6 +19,7 @@ namespace Halide {
 namespace Internal {
 
 namespace {
+
 // Used in both Windows and Itanium manglers to track pieces of a type name
 // in both their final form in the output and their canonical substituted form.
 struct MangledNamePart {
@@ -29,6 +30,13 @@ struct MangledNamePart {
     MangledNamePart(const std::string &mangled) : full_name(mangled), with_substitutions(mangled) { }
     MangledNamePart(const char *mangled) : full_name(mangled), with_substitutions(mangled) { }
 };
+
+Type non_null_void_star_type() {
+    static halide_handle_cplusplus_type t(halide_handle_cplusplus_type(
+        halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"),
+        { }, { }, { halide_handle_cplusplus_type::Pointer }));
+    return Handle(1, &t);
+}
 
 }
 
@@ -256,11 +264,8 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
         return "";
     } else if (type.is_handle()) {
-        if (type.handle_type == nullptr) {
-            return "PX"; // TODO: make this depend on other code?
-        } else {
-          return mangle_inner_name(type, target, prev_decls);
-        }
+        return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
+                                 target, prev_decls);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
     return "";
@@ -364,7 +369,7 @@ struct PrevPrefixes {
     std::map<std::string, int32_t> prev_seen;
 
     bool check_and_enter(const std::string &prefix, std::string &substitute) {
-       auto place = prev_seen.insert(std::make_pair(prefix, prev_seen.size()));
+        auto place = prev_seen.insert(std::make_pair(prefix, prev_seen.size()));
         if (place.first->second == 0) {
             substitute = "S_";
         } else {
@@ -560,11 +565,8 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
         return "";
     } else if (type.is_handle()) {
-        if (type.handle_type == nullptr) {
-            return "Pv"; // TODO: make this depend on other code?
-        } else {
-            return mangle_inner_name(type, target, prevs);
-        }
+        return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
+                                 target, prevs);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
     return "";
@@ -770,6 +772,18 @@ MangleResult all_mods_win64[] = {
   { "\001?test_function@@YAHPEBUs@@AEAPEBU1@$$QEAPEBU1@@Z", "test_function(s const restrict*, s const restrict*&, s const restrict*&&)" },
   { "\001?test_function@@YAHPECUs@@AEAPECU1@$$QEAPECU1@@Z", "test_function(s volatile restrict*, s volatile restrict*&, s volatile restrict*&&)" },
   { "\001?test_function@@YAHPEDUs@@AEAPEDU1@$$QEAPEDU1@@Z", "test_function(s const volatile restrict*, s const volatile restrict*&, s const volatile restrict*&&)" },
+};
+
+MangleResult two_void_stars_itanium[] = {
+  { "_Z13test_functionPvS_", "test_function(void *, void *)" },
+};
+
+MangleResult two_void_stars_win64[] = {
+  { "\001?test_function@@YAHPEAX0@Z", "test_function(void *, void *)" },
+};
+
+MangleResult two_void_stars_win32[] = {
+  { "\001?test_function@@YAHPAX0@Z", "test_function(void *, void *)" },
 };
 
 void check_result(const MangleResult *expecteds, size_t &expected_index,
@@ -1001,6 +1015,21 @@ void cplusplus_mangle_test() {
                 check_result(expecteds, expecteds_index, target,
                          cplusplus_function_mangled_name("test_function", { }, Int(32), args, target));
             }
+        }
+    }
+
+    {
+        // Test two void * arguments to ensure substititon handles void * correctly.
+        // (This is a special case as "void *" is represented using nullptr for the type info.)
+        for (const auto &target : targets) {
+            size_t expecteds_index = 0;
+            std::vector<ExternFuncArgument> args;
+            args.push_back(make_zero(Handle(1, nullptr)));
+            args.push_back(make_zero(Handle(1, nullptr)));
+
+            MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? two_void_stars_win64 : two_void_stars_win32) : two_void_stars_itanium;
+            check_result(expecteds, expecteds_index, target,
+                         cplusplus_function_mangled_name("test_function", { }, Int(32), args, target));
         }
     }
 }

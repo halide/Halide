@@ -120,14 +120,14 @@ public:
     }
 
     void set_min_value(Expr min) {
-        if (min.type() != type_of<T>()) {
+        if (min.defined() && min.type() != type_of<T>()) {
             min = Internal::Cast::make(type_of<T>(), min);
         }
         param.set_min_value(min);
     }
 
     void set_max_value(Expr max) {
-        if (max.type() != type_of<T>()) {
+        if (max.defined() && max.type() != type_of<T>()) {
             max = Internal::Cast::make(type_of<T>(), max);
         }
         param.set_max_value(max);
