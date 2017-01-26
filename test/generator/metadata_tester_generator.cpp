@@ -9,7 +9,8 @@ class MetadataTester : public Halide::Generator<MetadataTester> {
 public:
     Input<Func> input{ "input", Int(16), 2 };  // must be overridden to {UInt(8), 3}
     Input<Buffer<uint8_t>> typed_input_buffer{ "typed_input_buffer", 3 };
-    Input<Buffer<>> semityped_input_buffer{ "semityped_input_buffer", UInt(8) };  // must be overridden to dim=3
+    Input<Buffer<>> type_only_input_buffer{ "type_only_input_buffer", UInt(8) };  // must be overridden to dim=3
+    Input<Buffer<>> dim_only_input_buffer{ "dim_only_input_buffer", 3 };  // must be overridden to type=UInt(8)
     Input<Buffer<>> untyped_input_buffer{ "untyped_input_buffer" };  // must be overridden to {UInt(8), 3}
     Input<bool> b{ "b", true };
     Input<int8_t> i8{ "i8", 8, -8, 127 }; 
@@ -40,7 +41,9 @@ public:
 
     Output<Func> output{ "output", {Int(16), UInt(8)}, 2 };  // must be overridden to {{Float(32), Float(32)}, 3}
     Output<Buffer<float>> typed_output_buffer{ "typed_output_buffer", 3 };
-    Output<Buffer<>> untyped_output_buffer{ "untyped_output_buffer" };  // untyped outputs can have type and dimensions inferred
+    Output<Buffer<float>> type_only_output_buffer{ "type_only_output_buffer" };  // untyped outputs can have type and/or dimensions inferred
+    Output<Buffer<>> dim_only_output_buffer{ "dim_only_output_buffer", 3 };  // untyped outputs can have type and/or dimensions inferred
+    Output<Buffer<>> untyped_output_buffer{ "untyped_output_buffer" };  // untyped outputs can have type and/or dimensions inferred
     Output<float> output_scalar{ "output_scalar" };
     Output<Func[]> array_outputs{ "array_outputs", Float(32), 3 };  // must be overridden to size=2
     Output<Func[2]> array_outputs2{ "array_outputs2", Float(32), 3 };
@@ -62,6 +65,8 @@ public:
 
         output(x, y, c) = Tuple(f1(x, y, c), f2(x, y, c));
         typed_output_buffer(x, y, c) = f1(x, y, c);
+        type_only_output_buffer(x, y, c) = f1(x, y, c);
+        dim_only_output_buffer(x, y, c) = f1(x, y, c);
         untyped_output_buffer(x, y, c) = f2(x, y, c);
         output_scalar() = 1234.25f;
         for (size_t i = 0; i < array_outputs.size(); ++i) {
