@@ -536,9 +536,10 @@ private:
                 << "RewriteMemoizedAllocations: _halide_buffer_init call with fewer than two args.\n";
 
             // Grab the host pointer argument
+            // FIXME: Mutating the buffer_init call in this way is gross.
             const Call *arg2 = call->args[2].as<Call>();
             if (arg2 != nullptr && arg2->is_intrinsic(Call::address_of)) {
-                internal_assert(!aarg2->args.empty()) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
+                internal_assert(!arg2->args.empty()) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
                 const Load *load = arg2->args[0].as<Load>();
                 if (load != nullptr) {
                     const IntImm *index = load->index.as<IntImm>();

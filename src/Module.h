@@ -33,13 +33,6 @@ struct LoweredArgument : public Argument {
                     Expr _max = Expr()) : Argument(_name, _kind, _type, _dimensions, _def, _min, _max) {}
 };
 
-/** An enum to make calling convention changes clearer. */
-enum class NameMangling {
-    Default,   ///< Whatever compiler is being used / whatever is specified in the Target
-    C,         ///< No name mangling
-    CPlusPlus, ///< C++ name mangling
-};
-
 /** Definition of a lowered function. This object provides a concrete
  * mapping between parameters used in the function body and their
  * declarations in the argument list. */
