@@ -2597,7 +2597,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         //
         // The final condition (cond_N) must evaluate to a constant TRUE
         // value (so that the final function will be selected if all others
-        // fail); failure to do so will fail at compile time.
+        // fail); failure to do so will cause unpredictable results.
         //
         // There is currently no way to clear the cached function pointer.
         //
@@ -2648,10 +2648,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                                                 /*initializer*/ nullptr, extern_sub_fn_name);
             }
             auto cond = op->args[i];
-            if (i == op->args.size() - 2) {
-                // Final condition must be constant TRUE.
-                internal_assert(is_one(simplify(cond))) << "Expected constant TRUE but saw " << cond << "\n";
-            }
             sub_fns.push_back({sub_fn, sub_fn_ptr, cond});
         }
 
