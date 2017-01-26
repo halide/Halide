@@ -25,7 +25,7 @@ struct _remote_buffer__seq_octet {
 };
 
 typedef int (*remote_initialize_kernels_fn)(const unsigned char* codeptr, int codesize,
-                                            int use_dlopenbuf, halide_hexagon_handle_t*);
+                                            int use_shared_object, halide_hexagon_handle_t*);
 typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int, int);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
@@ -167,8 +167,6 @@ using namespace Halide::Runtime::Internal::Hexagon;
 
 extern "C" {
 
-namespace {
-
 #define O_TRUNC 00001000
 #define O_CREAT 00000100
 #define O_EXCL  00000200
@@ -203,7 +201,6 @@ WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t siz
     return 0;
 }
 
-}  // namespace
 
 WEAK bool halide_is_hexagon_available(void *user_context) {
     int result = init_hexagon_runtime(user_context);
@@ -212,7 +209,7 @@ WEAK bool halide_is_hexagon_available(void *user_context) {
 
 WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_ptr,
                                               const uint8_t *code, uint64_t code_size,
-                                              uint32_t use_dlopenbuf) {
+                                              uint32_t use_shared_object) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
@@ -220,7 +217,7 @@ WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_p
                         << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
                         << ", code_size: " << (int)code_size
-                        << ", use_dlopenbuf: " << use_dlopenbuf << ")\n";
+                        << ", use_shared_object: " << use_shared_object << ")\n";
     halide_assert(user_context, state_ptr != NULL);
 
     #ifdef DEBUG_RUNTIME
@@ -249,13 +246,7 @@ WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_p
     // Create the module itself if necessary.
     if (!(*state)->module) {
         halide_hexagon_handle_t module = 0;
-        if (use_dlopenbuf) {
-            debug(user_context) << "    dlbuf halide_remote_initialize_kernels -> \n";
-            result = remote_initialize_kernels(code, code_size, use_dlopenbuf, &module);
-        } else {
-            debug(user_context) << "    halide_remote_initialize_kernels -> \n";
-            result = remote_initialize_kernels(code, code_size, use_dlopenbuf, &module);
-        }
+        result = remote_initialize_kernels(code, code_size, use_shared_object, &module);
         poll_log(user_context);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
@@ -315,7 +306,7 @@ WEAK int map_arguments(void *user_context, int arg_count,
 
 }  // namespace
 
-WEAK int halide_hexagon_run_internal(bool use_dl, void *user_context,
+WEAK int halide_hexagon_run_internal(bool use_shared_object, void *user_context,
                             void *state_ptr,
                             const char *name,
                             halide_hexagon_handle_t* function,
@@ -329,7 +320,7 @@ WEAK int halide_hexagon_run_internal(bool use_dl, void *user_context,
 
     halide_hexagon_handle_t module = state_ptr ? ((module_state *)state_ptr)->module : 0;
     debug(user_context) << "Hexagon: halide_hexagon_run ("
-                        << "use_dl: " << use_dl << ", "
+                        << "use_shared_object: " << use_shared_object << ", "
                         << "user_context: " << user_context << ", "
                         << "state_ptr: " << state_ptr << " (" << module << "), "
                         << "name: " << name << ", "
@@ -337,8 +328,8 @@ WEAK int halide_hexagon_run_internal(bool use_dl, void *user_context,
 
     // If we haven't gotten the symbol for this function, do so now.
     if (*function == 0) {
-        debug(user_context) << "    halide_hexagon_remote_get_symbol" << (use_dl ? "_dl " : "_eobj ") << name << " -> ";
-        *function = remote_get_symbol(module, name, strlen(name) + 1, use_dl);
+        debug(user_context) << "    halide_hexagon_remote_get_symbol" << name << " -> ";
+        *function = remote_get_symbol(module, name, strlen(name) + 1, use_shared_object);
         poll_log(user_context);
         debug(user_context) << "        " << *function << "\n";
         if (*function == 0) {

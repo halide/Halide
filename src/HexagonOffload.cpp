@@ -235,8 +235,8 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
-        bool use_dlopenbuf = device_code.target().has_feature(Target::HVX_dlopenbuf);
-        if (use_dlopenbuf) {
+        bool use_shared_object = device_code.target().has_feature(Target::HVX_dlopenbuf);
+        if (use_shared_object) {
             stmt = call_extern_and_assert("halide_hexagon_run_dl", params);
         } else {
             stmt = call_extern_and_assert("halide_hexagon_run", params);
@@ -322,9 +322,9 @@ public:
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
         // Determine relocation mode. if both are false, its object relocation.
-        bool use_dlopenbuf = device_code.target().has_feature(Target::HVX_dlopenbuf);
+        bool use_shared_object = device_code.target().has_feature(Target::HVX_dlopenbuf);
 
-        if (use_dlopenbuf) {
+        if (use_shared_object) {
             // Dump the llvm module to a temp file as .ll
             TemporaryFile tmp_bitcode("hex", ".ll");
             TemporaryFile tmp_shared_object("hex", ".so");
@@ -379,7 +379,7 @@ public:
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels_v2",
                                                        {module_state_ptr(), code_ptr,
                                                        Expr((uint64_t) code_size),
-                                                       Expr((uint32_t) use_dlopenbuf)});
+                                                       Expr((uint32_t) use_shared_object)});
             s = Block::make(init_kernels, s);
 
         } else {
@@ -401,7 +401,7 @@ public:
 
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels_v2",
                                                        {module_state_ptr(), code_ptr, Expr((uint64_t) code_size),
-                                                       Expr((uint32_t) use_dlopenbuf)});
+                                                       Expr((uint32_t) use_shared_object)});
             s = Block::make(init_kernels, s);
         }
         return s;

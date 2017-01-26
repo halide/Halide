@@ -307,7 +307,7 @@ public:
 extern "C" {
 
 int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
-                                             int use_dlopenbuf,
+                                             int use_shared_object,
                                              handle_t *module_ptr) {
     int ret = init_sim();
     if (ret != 0) return -1;
@@ -316,7 +316,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_dlopenbuf, remote_module_ptr.data});
+    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_shared_object, remote_module_ptr.data});
     if (ret != 0) return ret;
 
     // Get the module ptr.
@@ -330,14 +330,14 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
    return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
 
-handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr, const char* name, int nameLen, int usedl) {
+handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr, const char* name, int nameLen, int use_shared_object) {
     assert(sim);
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_name(name, nameLen);
 
     // Run the init kernels command.
-    handle_t ret = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, usedl});
+    handle_t ret = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_shared_object});
 
     return ret;
 }

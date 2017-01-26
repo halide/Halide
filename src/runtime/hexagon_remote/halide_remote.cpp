@@ -113,11 +113,11 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 PipelineContext run_context(stack_alignment, stack_size);
 
 int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
-                                             int use_dlopenbuf,
+                                             int use_shared_object,
                                              handle_t *module_ptr) {
     void *lib = NULL;
     elf_t *elib = NULL;
-    if (use_dlopenbuf) {
+    if (use_shared_object) {
         lib = dlopenbuf( "libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
             log_printf("dlopenbuf failed");
@@ -135,16 +135,17 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     // the implementations that need to do so here, and pass poiners
     // to them in here.
     set_runtime_t set_runtime;
-    if (use_dlopenbuf)
+    if (use_shared_object) {
         set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
-    else
+    } else {
         set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
+    }
     if (!set_runtime) {
-        if (use_dlopenbuf)
+        if (use_shared_object) {
             dlclose(lib);
-        else
+        } else {
             obj_dlclose(elib);
-
+        }
         log_printf("halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
@@ -159,23 +160,24 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        if (use_dlopenbuf)
+        if (use_shared_object) {
             dlclose(lib);
-        else
+        } else {
             obj_dlclose(elib);
+        }
         log_printf("set_runtime failed (%d)\n", result);
         return result;
     }
-    if (use_dlopenbuf)
+    if (use_shared_object) {
         *module_ptr = reinterpret_cast<handle_t>(lib);
-    else
+    } else {
         *module_ptr = reinterpret_cast<handle_t>(elib);
-
+    }
     return 0;
 }
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
-                                             int use_dlopenbuf,
+                                             int use_shared_object,
                                              handle_t *module_ptr) {
     return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
@@ -356,11 +358,12 @@ int halide_hexagon_remote_power_hvx_off() {
     return 0;
 }
 
-int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int usedl, handle_t *sym_ptr) {
-    if (usedl)
+int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
+    if (use_shared_object) {
        *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
-    else
+    } else {
         *sym_ptr= reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+    }
     return *sym_ptr != 0 ? 0 : -1;
 }
 
@@ -368,9 +371,9 @@ int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, i
     return halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, false, sym_ptr);
 }
 
-handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr, const char* name, int nameLen, bool usedl) {
+handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr, const char* name, int nameLen, bool use_shared_object) {
     handle_t sym_ptr = NULL;
-    int result = halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, usedl, &sym_ptr);
+    int result = halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, use_shared_object, &sym_ptr);
     return result == 0 ? sym_ptr : NULL;
 }
 
