@@ -15,7 +15,7 @@ public:
         f(x, y) = in1(x-1, y-1) + in1(x+1, y+3) + in2(x, y) + scalar_param;
         f.compute_root();
         g.define_extern("extern_stage", {in2, f}, Int(32), 2,
-                        NameMangling::CPlusPlus,
+                        NameMangling::Default,
                         true /* uses old buffer_t */);
         return g;
     }
