@@ -149,7 +149,8 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(buffer_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
 
 // You can make arbitrary user-defined types be "Known" using the
-// macro above. This is useful for making Param<> arguments for
+// macro above. The macro must be invoked outside of any namespaces,
+// at global scope. This is useful for making Param<> arguments for
 // Generators type safe. e.g.,
 //
 //    struct MyFunStruct { ... };
