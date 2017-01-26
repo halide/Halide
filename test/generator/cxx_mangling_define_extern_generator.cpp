@@ -12,16 +12,17 @@ public:
     Param<std::string *> string_ptr{"string_ptr", 0};
     Param<std::string const *> const_string_ptr{"const_string_ptr", 0};
 
-    Func build() {
+    Pipeline build() {
         assert(get_target().has_feature(Target::CPlusPlusMangling));
         Var x("x");
 
         Func g("g");
         g(x) = input(x) + 42;
 
-        Func f("f");
+        Func f1("f1"), f2("f2"), f3("f3");
 
         std::vector<ExternFuncArgument> args;
+        args.push_back(Halide::user_context_value());
         args.push_back(g);
         args.push_back(cast<int8_t>(1));
         args.push_back(cast<uint8_t>(2));
@@ -40,12 +41,16 @@ public:
         args.push_back(const_void_ptr);
         args.push_back(string_ptr);
         args.push_back(const_string_ptr);
-        f.define_extern("HalideTest::cxx_mangling",
-                        args, Float(64), 1, true);
+        f1.define_extern("HalideTest::cxx_mangling_1",
+                         args, Float(64), 1, NameMangling::Default);
+        f2.define_extern("HalideTest::cxx_mangling_2",
+                         args, Float(64), 1, NameMangling::CPlusPlus);
+        f3.define_extern("cxx_mangling_3",
+                         args, Float(64), 1, NameMangling::C);
 
         g.compute_root();
 
-        return f;
+        return Pipeline({f1, f2, f3});
     }
 };
 

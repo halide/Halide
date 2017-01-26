@@ -186,31 +186,28 @@ void Module::compile(const Outputs &output_files) const {
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
-        if (!output_files.object_name.empty() || !output_files.static_library_name.empty()) {
-            // We must always generate the object files here, either because they are
-            // needed directly, or as temporary inputs to create a static library.
-            // If they are just temporary inputs, we delete them when we're done,
-            // to minimize the cruft left laying around in build products directory.
-            std::unique_ptr<TemporaryObjectFileDir> temp_dir;
-
-            std::string object_name = output_files.object_name;
-            if (object_name.empty()) {
-                temp_dir = std::unique_ptr<TemporaryObjectFileDir>(new TemporaryObjectFileDir());
-                object_name = temp_dir->add_temp_object_file(output_files.static_library_name, "", target());
-            }
-
+        if (!output_files.object_name.empty()) {
+            debug(1) << "Module.compile(): object_name " << output_files.object_name << "\n";
+            auto out = make_raw_fd_ostream(output_files.object_name);
+            compile_llvm_module_to_object(*llvm_module, *out);
+        }
+        if (!output_files.static_library_name.empty()) {
+            // To simplify the code, we always create a temporary object output
+            // here, even if output_files.object_name was also set: in practice,
+            // no real-world code ever sets both object_name and static_library_name
+            // at the same time, so there is no meaningful performance advantage 
+            // to be had.
+            TemporaryObjectFileDir temp_dir;
             {
-                debug(1) << "Module.compile(): object_name " << object_name << "\n";
+                std::string object_name = temp_dir.add_temp_object_file(output_files.static_library_name, "", target());
+                debug(1) << "Module.compile(): temporary object_name " << object_name << "\n";
                 auto out = make_raw_fd_ostream(object_name);
                 compile_llvm_module_to_object(*llvm_module, *out);
-                out->flush();
+                out->flush();  // create_static_library() is happier if we do this
             }
-
-            if (!output_files.static_library_name.empty()) {
-                debug(1) << "Module.compile(): static_library_name " << output_files.static_library_name << "\n";
-                Target base_target(target().os, target().arch, target().bits);
-                create_static_library({object_name}, base_target, output_files.static_library_name);
-            }
+            debug(1) << "Module.compile(): static_library_name " << output_files.static_library_name << "\n";
+            Target base_target(target().os, target().arch, target().bits);
+            create_static_library(temp_dir.files(), base_target, output_files.static_library_name);
         }
         if (!output_files.assembly_name.empty()) {
             debug(1) << "Module.compile(): assembly_name " << output_files.assembly_name << "\n";
@@ -342,9 +339,8 @@ void compile_multitarget(const std::string &fn_name,
 
         Module module = module_producer(sub_fn_name, sub_fn_target);
         Outputs sub_out = add_suffixes(output_files, suffix);
-        if (sub_out.object_name.empty()) {
-            sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
-        }
+        internal_assert(sub_out.object_name.empty());
+        sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
         module.compile(sub_out);
 
         static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
