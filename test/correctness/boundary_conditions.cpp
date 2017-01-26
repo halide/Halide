@@ -382,7 +382,6 @@ int main(int argc, char **argv) {
 
     bool success = true;
     for (auto &f : futures) {
-        f.wait();
         success &= f.get();
     }
 
