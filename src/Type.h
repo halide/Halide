@@ -118,32 +118,45 @@ struct halide_c_type_to_name {
   static const bool known_type = false;
 };
 
-template<> struct halide_c_type_to_name<bool> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple, "bool"}; } };
-template<> struct halide_c_type_to_name<int8_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int8_t"}; } };
-template<> struct halide_c_type_to_name<uint8_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint8_t"}; } };
-template<> struct halide_c_type_to_name<int16_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int16_t"}; } };
-template<> struct halide_c_type_to_name<uint16_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint16_t"}; } };
-template<> struct halide_c_type_to_name<int32_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "int32_t"}; } };
-template<> struct halide_c_type_to_name<uint32_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "uint32_t"}; } };
-template<> struct halide_c_type_to_name<float> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "float"}; } };
-template<> struct halide_c_type_to_name<double> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Simple,  "double"}; } };
-template<> struct halide_c_type_to_name<struct buffer_t> { static const bool known_type = true; static halide_cplusplus_type_name name() { return { halide_cplusplus_type_name::Struct,  "buffer_t"}; } };
+#define HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(T) \
+    template<> struct halide_c_type_to_name<T> {                        \
+        static const bool known_type = true;                            \
+        static halide_cplusplus_type_name name() {                      \
+            return { halide_cplusplus_type_name::Simple, #T};           \
+        }                                                               \
+    }
 
-// You can make arbitrary user-defined types be "Known" by adding your own specialization of
-// halide_c_type_to_name in your code; this is useful for making Param<> arguments for Generators
-// type safe. e.g.,
+#define HALIDE_DECLARE_EXTERN_STRUCT_TYPE(T) \
+    template<> struct halide_c_type_to_name<struct T> {                 \
+        static const bool known_type = true;                            \
+        static halide_cplusplus_type_name name() {                      \
+            return { halide_cplusplus_type_name::Struct, #T};           \
+        }                                                               \
+    }
+
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(bool);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int8_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint8_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int16_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint16_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int32_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint32_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int64_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint64_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(float);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(double);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(buffer_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
+
+// You can make arbitrary user-defined types be "Known" using the
+// macro above. This is useful for making Param<> arguments for
+// Generators type safe. e.g.,
 //
 //    struct MyFunStruct { ... };
 //
 //    ...
 //
-//    template<>
-//    struct halide_c_type_to_name<struct MyFunStruct> {
-//      static const bool known_type = true;
-//      static halide_cplusplus_type_name name() {
-//        return { halide_cplusplus_type_name::Struct,  "MyFunStruct"};
-//      }
-//    };
+//    HALIDE_DECLARE_EXTERN_STRUCT_TYPE(MyFunStruct);
 //
 //    ...
 //
@@ -151,6 +164,7 @@ template<> struct halide_c_type_to_name<struct buffer_t> { static const bool kno
 //       Param<const MyFunStruct *> my_struct_ptr;
 //       ...
 //    };
+
 
 // Default case (should be only Unknown types, since we specialize for Known types below).
 // We require that all unknown types be pointers, and translate them all to void*
