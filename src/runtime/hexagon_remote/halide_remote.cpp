@@ -113,7 +113,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 PipelineContext run_context(stack_alignment, stack_size);
 
 int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
-                                             int use_dlopen, int use_dlopenbuf,
+                                             int use_dlopenbuf,
                                              handle_t *module_ptr) {
     void *lib = NULL;
     elf_t *elib = NULL;
@@ -123,15 +123,6 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
             log_printf("dlopenbuf failed");
             return -1;
         }
-    } else if (use_dlopen) {
-        const char *filename = (const char *)code;
-        //lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
-        lib = halide_load_library(filename);
-        if (!lib) {
-            log_printf("dlopen .so failed");
-            return -1;
-        }
-
     } else {
         elib = obj_dlopen_mem(code, codeLen);
         if (!elib) {
@@ -144,12 +135,12 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     // the implementations that need to do so here, and pass poiners
     // to them in here.
     set_runtime_t set_runtime;
-    if (use_dlopenbuf || use_dlopen)
+    if (use_dlopenbuf)
         set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
     else
         set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
     if (!set_runtime) {
-        if (use_dlopenbuf || use_dlopen)
+        if (use_dlopenbuf)
             dlclose(lib);
         else
             obj_dlclose(elib);
@@ -168,14 +159,14 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        if (use_dlopenbuf || use_dlopen)
+        if (use_dlopenbuf)
             dlclose(lib);
         else
             obj_dlclose(elib);
         log_printf("set_runtime failed (%d)\n", result);
         return result;
     }
-    if (use_dlopenbuf || use_dlopen)
+    if (use_dlopenbuf)
         *module_ptr = reinterpret_cast<handle_t>(lib);
     else
         *module_ptr = reinterpret_cast<handle_t>(elib);
@@ -184,9 +175,9 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
 }
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
-                                             int use_dlopen, int use_dlopenbuf,
+                                             int use_dlopenbuf,
                                              handle_t *module_ptr) {
-    return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, false, module_ptr);
+    return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
 
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {

@@ -422,12 +422,12 @@ static const Type types[2];
 static const SequenceType sequenceTypes[1] = {{&(types[1]),0x0,0x4,0x4,0x0}};
 static const Type types[2] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x1},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8)}};
 static const Parameter parameters[8] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)0}}, 2,0x4,0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(sequenceTypes[0]),0}}, 25,SLIM_IFPTR32(0x4,0x8),3,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0}};
-static const Parameter* const parameterArrays[25] = {(&(parameters[1])),(&(parameters[3])),(&(parameters[3])),(&(parameters[1])),(&(parameters[3])),(&(parameters[3])),(&(parameters[1])),(&(parameters[1])),(&(parameters[3])),(&(parameters[3])),(&(parameters[4])),(&(parameters[5])),(&(parameters[4])),(&(parameters[3])),(&(parameters[0])),(&(parameters[1])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[1])),(&(parameters[2])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7]))};
-static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0xc,0x4,5,4,(&(parameterArrays[17])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0xc,0x4,5,4,(&(parameterArrays[13])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[8])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[2])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[23])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[21])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x20,0x0,8,8,(&(parameterArrays[0])),0x4,0x0}};
+static const Parameter* const parameterArrays[21] = {(&(parameters[1])),(&(parameters[3])),(&(parameters[3])),(&(parameters[1])),(&(parameters[3])),(&(parameters[3])),(&(parameters[1])),(&(parameters[1])),(&(parameters[3])),(&(parameters[3])),(&(parameters[4])),(&(parameters[5])),(&(parameters[4])),(&(parameters[3])),(&(parameters[0])),(&(parameters[1])),(&(parameters[2])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7]))};
+static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[14])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0xc,0x4,5,4,(&(parameterArrays[13])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[8])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x8,0x0,2,2,(&(parameterArrays[2])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[19])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[17])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x20,0x0,8,8,(&(parameterArrays[0])),0x4,0x0}};
 static const Method* const methodArrays[10] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8])};
-static const char strings[376] = "initialize_kernels_v2\0busbwUsagePercentage\0poll_profiler_state\0bwMegabytesPerSec\0power_hvx_on_perf\0power_hvx_on_mode\0release_kernels\0output_buffers\0mipsPerThread\0input_scalars\0input_buffers\0power_hvx_off\0get_symbol_v3\0use_dlopenbuf\0power_hvx_on\0set_latency\0set_bus_bw\0module_ptr\0use_dlopen\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0sym_ptr\0symbol\0usedl\0func\0name\0code\0run\0";
-static const uint16_t methodStrings[38] = {81,310,148,290,257,63,22,245,249,372,268,344,176,133,162,204,268,362,351,336,0,367,279,218,268,43,357,328,319,324,300,117,268,305,99,112,190,232};
-static const uint16_t methodStringsArrays[10] = {20,15,37,36,9,31,28,25,34,0};
+static const char strings[365] = "initialize_kernels_v2\0busbwUsagePercentage\0poll_profiler_state\0bwMegabytesPerSec\0power_hvx_on_perf\0power_hvx_on_mode\0release_kernels\0output_buffers\0mipsPerThread\0input_scalars\0input_buffers\0power_hvx_off\0get_symbol_v3\0use_dlopenbuf\0power_hvx_on\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0sym_ptr\0symbol\0usedl\0func\0name\0code\0run\0";
+static const uint16_t methodStrings[37] = {81,299,148,279,257,63,22,245,249,361,268,333,176,133,162,204,268,351,340,325,0,356,218,268,43,346,317,308,313,289,117,268,294,99,112,190,232};
+static const uint16_t methodStringsArrays[10] = {20,15,36,35,9,30,27,24,33,0};
 __QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {10,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HALIDE_HEXAGON_REMOTE_SLIM_H
 #ifdef __cplusplus
@@ -700,13 +700,12 @@ static __inline int _skel_method_7(int (*_pfn)(uint32_t, char*, uint32_t, uint32
    _CATCH(_nErr) {}
    return _nErr;
 }
-static __inline int _skel_method_8(int (*_pfn)(char*, uint32_t, uint32_t, uint32_t, uint32_t*), uint32_t _sc, remote_arg* _pra) {
+static __inline int _skel_method_8(int (*_pfn)(char*, uint32_t, uint32_t, uint32_t*), uint32_t _sc, remote_arg* _pra) {
    remote_arg* _praEnd;
    char* _in0[1];
    uint32_t _in0Len[1];
    uint32_t _in1[1];
-   uint32_t _in2[1];
-   uint32_t _rout3[1];
+   uint32_t _rout2[1];
    uint32_t* _primIn;
    int _numIn[1];
    uint32_t* _primROut;
@@ -715,7 +714,7 @@ static __inline int _skel_method_8(int (*_pfn)(char*, uint32_t, uint32_t, uint32
    _praEnd = ((_pra + REMOTE_SCALARS_INBUFS(_sc)) + REMOTE_SCALARS_OUTBUFS(_sc) + REMOTE_SCALARS_INHANDLES(_sc) + REMOTE_SCALARS_OUTHANDLES(_sc));
    _ASSERT(_nErr, (_pra + ((2 + 1) + (0 + 0))) <= _praEnd);
    _numIn[0] = (REMOTE_SCALARS_INBUFS(_sc) - 1);
-   _ASSERT(_nErr, _pra[0].buf.nLen >= 12);
+   _ASSERT(_nErr, _pra[0].buf.nLen >= 8);
    _primIn = _pra[0].buf.pv;
    _ASSERT(_nErr, _pra[(_numIn[0] + 1)].buf.nLen >= 4);
    _primROut = _pra[(_numIn[0] + 1)].buf.pv;
@@ -724,9 +723,8 @@ static __inline int _skel_method_8(int (*_pfn)(char*, uint32_t, uint32_t, uint32
    _ASSERT(_nErr, (int)((_praIn[0].buf.nLen / 1)) >= (int)(_in0Len[0]));
    _in0[0] = _praIn[0].buf.pv;
    _COPY(_in1, 0, _primIn, 4, 4);
-   _COPY(_in2, 0, _primIn, 8, 4);
-   _TRY(_nErr, _pfn(*_in0, *_in0Len, *_in1, *_in2, _rout3));
-   _COPY(_primROut, 0, _rout3, 0, 4);
+   _TRY(_nErr, _pfn(*_in0, *_in0Len, *_in1, _rout2));
+   _COPY(_primROut, 0, _rout2, 0, 4);
    _CATCH(_nErr) {}
    return _nErr;
 }

@@ -256,7 +256,7 @@ static void dllib_init() {
 }
 
 int initialize_kernels_v2(const unsigned char *code, int codeLen,
-                          bool use_dlopen, bool use_dlopenbuf,
+                          bool use_dlopenbuf,
                           handle_t *module_ptr) {
 
     // Keep this false, even for dlbuf usage, as we do not yet have api for dlopenbuf from standalone.
@@ -267,18 +267,6 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
         lib = dlopenbuf( "libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
             halide_print(NULL, "dlopenbuf failed");
-            return -1;
-        }
-    } else if (use_dlopen) {
-        dllib_init();
-        const char *filename = (const char *) code;
-        //lib = dlopen(filename, RTLD_LOCAL | RTLD_LAZY);
-        lib = halide_load_library(filename);
-        if (!lib) {
-            halide_print(NULL, dlerror());
-            halide_print(NULL, "\ndlopen failed\n");
-            halide_print(NULL, filename);
-            halide_print(NULL, "\n");
             return -1;
         }
     } else {
@@ -293,12 +281,12 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
     // the implementations that need to do so here, and pass poiners
     // to them in here.
     set_runtime_t set_runtime;
-    if (use_dlopenbuf || use_dlopen)
+    if (use_dlopenbuf)
         set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
     else
         set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
     if (!set_runtime) {
-        if (use_dlopenbuf || use_dlopen)
+        if (use_dlopenbuf)
             dlclose(lib);
         else
             obj_dlclose(elib);
@@ -316,14 +304,14 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        if (use_dlopenbuf || use_dlopen)
+        if (use_dlopenbuf)
             dlclose(lib);
         else
             obj_dlclose(elib);
         halide_print(NULL, "set_runtime failed\n");
         return result;
     }
-    if (use_dlopenbuf || use_dlopen)
+    if (use_dlopenbuf)
         *module_ptr = reinterpret_cast<handle_t>(lib);
     else
         *module_ptr = reinterpret_cast<handle_t>(elib);
@@ -332,9 +320,9 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
 }
 
 int initialize_kernels(const unsigned char *code, int codeLen,
-                       bool use_dlopen, bool use_dlopenbuf,
+                       bool use_dlopenbuf,
                        handle_t *module_ptr) {
-    return initialize_kernels_v2(code, codeLen, false, false, module_ptr);
+    return initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
 
 handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, int usedl) {
@@ -444,8 +432,7 @@ int main(int argc, const char **argv) {
                 reinterpret_cast<unsigned char*>(RPC_ARG(0)),
                 RPC_ARG(1),
                 RPC_ARG(2),
-                RPC_ARG(3),
-                reinterpret_cast<handle_t*>(RPC_ARG(4))));
+                reinterpret_cast<handle_t*>(RPC_ARG(3))));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
