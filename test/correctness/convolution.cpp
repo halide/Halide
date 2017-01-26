@@ -39,8 +39,6 @@ public:
 
         return s;
     }
-
-    using IRMutator::mutate;
 };
 
 int main(int argc, char **argv) {
