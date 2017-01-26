@@ -636,7 +636,6 @@ int main(int argc, char **argv) {
 
     bool ok = true;
     for (auto &f : futures) {
-        f.wait();
         ok &= f.get();
     }
 
