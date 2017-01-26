@@ -921,17 +921,17 @@ public:
                               const std::vector<ExternFuncArgument> &params,
                               Type t,
                               int dimensionality,
-                              bool is_c_plus_plus = false,
-                              bool use_old_buffer_t = false) {
-        define_extern(function_name, params, std::vector<Type>{t}, dimensionality, is_c_plus_plus, use_old_buffer_t);
+                              NameMangling mangling = NameMangling::Default,
+                              bool uses_old_buffer_t = false) {
+        define_extern(function_name, params, std::vector<Type>{t}, dimensionality, mangling, uses_old_buffer_t);
     }
 
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
                               const std::vector<Type> &types,
                               int dimensionality,
-                              bool is_c_plus_plus = false,
-                              bool use_old_buffer_t = false);
+                              NameMangling mangling = NameMangling::Default,
+                              bool uses_old_buffer_t = false) {
     // @}
 
     /** Get the types of the outputs of this Func. */

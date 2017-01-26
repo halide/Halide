@@ -183,7 +183,7 @@ public:
     cl_int error;
 
     // Constructor sets 'error' if any occurs.
-    ClContext(void *user_context) : user_context(user_context),
+    INLINE ClContext(void *user_context) : user_context(user_context),
                                     context(NULL),
                                     cmd_queue(NULL),
                                     error(CL_SUCCESS) {
@@ -199,7 +199,7 @@ public:
         halide_assert(user_context, context != NULL && cmd_queue != NULL);
     }
 
-    ~ClContext() {
+    INLINE ~ClContext() {
         halide_release_cl_context(user_context);
     }
 };

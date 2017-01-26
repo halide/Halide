@@ -342,8 +342,7 @@ void CodeGen_LLVM::initialize_llvm() {
 
         // You can hack in command-line args to llvm with the
         // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
-        size_t defined = 0;
-        std::string args = get_env_variable("HL_LLVM_ARGS", defined);
+        std::string args = get_env_variable("HL_LLVM_ARGS");
         if (!args.empty()) {
             vector<std::string> arg_vec = split_string(args, " ");
             vector<const char *> c_arg_vec;
@@ -962,7 +961,7 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
-    if (debug::debug_level >= 3) {
+    if (debug::debug_level() >= 3) {
         module->dump();
     }
 
@@ -1017,7 +1016,7 @@ void CodeGen_LLVM::optimize_module() {
     module_pass_manager.run(*module);
 
     debug(3) << "After LLVM optimizations:\n";
-    if (debug::debug_level >= 2) {
+    if (debug::debug_level() >= 2) {
         module->dump();
     }
 }
@@ -1040,7 +1039,7 @@ llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const 
             std::ostringstream err;
             err << "Symbol not found: " << name << "\n";
 
-            if (debug::debug_level > 0) {
+            if (debug::debug_level() > 0) {
                 err << "The following names are in scope:\n"
                     << symbol_table << "\n";
             }
@@ -2470,7 +2469,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 args[i] = codegen(op->args[i]);
                 types[i] = args[i]->getType();
-                all_same_type &= (types[i] == types[0]);
+                all_same_type &= (types[0] == types[i]);
             }
 
             // Use either a single scalar, a fixed-size array, or a

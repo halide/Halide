@@ -8,8 +8,5 @@ halide_add_aot_library(local_laplacian
 # Final executable
 add_executable(ll_process process.cpp)
 halide_add_aot_library_dependency(ll_process local_laplacian)
-target_link_libraries(ll_process PRIVATE ${PNG_LIBRARIES})
-target_include_directories(ll_process PRIVATE "${PNG_INCLUDE_DIRS}")
-target_compile_definitions(ll_process PRIVATE ${PNG_DEFINITIONS})
+use_image_io(ll_process)
 target_compile_options(ll_process PRIVATE "-std=c++11")
-

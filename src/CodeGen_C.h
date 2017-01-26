@@ -136,7 +136,7 @@ protected:
     /** Track current calling convention scope. */
     bool extern_c_open;
 
-    void switch_to_c_or_c_plus_plus(NameMangling mode);
+    void set_name_mangling_mode(NameMangling mode);
 
     using IRPrinter::visit;
 

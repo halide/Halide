@@ -19,6 +19,12 @@ template<typename T> struct halide_handle_traits;
 extern "C" {
 #endif
 
+#ifdef _MSC_VER
+#define ALWAYS_INLINE __forceinline
+#else
+#define ALWAYS_INLINE __attribute__((always_inline))
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -264,27 +270,27 @@ struct halide_type_t {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+    ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Compare two types for equality. */
-    bool operator==(const halide_type_t &other) const {
+    ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
         return (code == other.code &&
                 bits == other.bits &&
                 lanes == other.lanes);
     }
 
-    bool operator!=(const halide_type_t &other) const {
+    ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    int bytes() const { return (bits + 7) / 8; }
+    ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
 #endif
 };
 
@@ -338,6 +344,12 @@ struct halide_trace_event_t {
 
     /** The length of the coordinates array */
     int32_t dimensions;
+
+#ifdef __cplusplus
+    // If we don't explicitly mark the default ctor as inline,
+    // certain build configurations can fail (notably iOS)
+    ALWAYS_INLINE halide_trace_event_t() {}
+#endif
 };
 
 /** Called when Funcs are marked as trace_load, trace_store, or
@@ -395,23 +407,27 @@ struct halide_trace_packet_t {
     // @}
 
     #ifdef __cplusplus
+    // If we don't explicitly mark the default ctor as inline,
+    // certain build configurations can fail (notably iOS)
+    ALWAYS_INLINE halide_trace_packet_t() {}
+
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
      * immediately after the packet header. */
-    const int *coordinates() const {
+    ALWAYS_INLINE const int *coordinates() const {
         return (const int *)(this + 1);
     }
 
     /** Get the value, assuming this packet is laid out in memory as
      * it was written. The packet comes immediately after the coordinates
      * array. */
-    const void *value() const {
+    ALWAYS_INLINE const void *value() const {
         return (const void *)(coordinates() + dimensions);
     }
 
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
-    const char *func() const {
+    ALWAYS_INLINE const char *func() const {
         return (const char *)value() + type.lanes * type.bytes();
     }
     #endif

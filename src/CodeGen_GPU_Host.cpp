@@ -198,7 +198,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
 
         Value *user_context = get_user_context();
         debug(2) << "CodeGen_CPU_Host compile_func user_context:";
-        if (debug::debug_level >= 2) {
+        if (debug::debug_level() >= 2) {
             user_context->dump();
         }
         Value *kernel_size = ConstantInt::get(i32_t, kernel_src.size());

@@ -35,10 +35,10 @@ HL_MODULES = \
 	$(BIN)/runtime_$(HL_TARGET).a
 
 $(BIN)/wavelet.a: wavelet.cpp $(HL_MODULES)
-	@$(CXX) $(CXXFLAGS) $(LIBPNG_CXX_FLAGS) -I$(BIN) -c $< -o $@
+	@$(CXX) $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -c $< -o $@
 
 $(BIN)/wavelet: $(BIN)/wavelet.a
-	@$(CXX) $(CXXFLAGS) $^ $(HL_MODULES) $(PNGFLAGS) $(LDFLAGS) -o $@
+	@$(CXX) $(CXXFLAGS) $^ $(HL_MODULES) $(IMAGE_IO_LIBS) $(LDFLAGS) -o $@
 
 test: $(BIN)/wavelet
 	@echo Testing wavelet...

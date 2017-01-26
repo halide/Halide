@@ -285,10 +285,11 @@ public:
     /** Get a pointer to the underlying Runtime::Buffer */
     // @{
     Runtime::Buffer<T> *get() {
-        return &contents->buf.as<T>();
+        // It's already type-checked, so no need to use as<T>.
+        return (Runtime::Buffer<T> *)(&contents->buf);
     }
     const Runtime::Buffer<T> *get() const {
-        return &contents->buf.as<T>();
+        return (const Runtime::Buffer<T> *)(&contents->buf);
     }
     // @}
 

@@ -14,7 +14,7 @@ $(BIN)/local_laplacian.a: $(BIN)/local_laplacian_exec
 
 $(BIN)/process: process.cpp $(BIN)/local_laplacian.a
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 $(BIN)/out.png: $(BIN)/process
 	@-mkdir -p $(BIN)
@@ -27,7 +27,7 @@ $(BIN)/viz/local_laplacian.a: $(BIN)/local_laplacian_exec
 
 $(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
 	@-mkdir -p $(BIN)/viz
-	$(CXX) $(CXXFLAGS) -I$(BIN)/viz -Wall -O3 $^ -o $@ $(LDFLAGS) $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/viz -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz

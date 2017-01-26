@@ -1273,8 +1273,7 @@ public:
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, std::vector<Type>{ T::static_halide_type() }, d) {
-        static_assert(T::has_static_halide_type(), "Must pass a Type argument for a Buffer with a static type of void");
+        : Super(name, IOKind::Buffer, T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, d) {
     }
 
 
@@ -1688,7 +1687,7 @@ protected:
         if (T::has_static_halide_type()) {
             user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
         } else {
-            user_assert(t.size() == 1) << "Output<Buffer<>> requires exactly one Type\n";
+            user_assert(t.size() <= 1) << "Output<Buffer<>>(" << name << ") requires at most one Type, but has " << t.size() << "\n";
         }
     }
 
@@ -1948,6 +1947,7 @@ protected:
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
     using Var = Halide::Var;
+    using NameMangling = Halide::NameMangling;
     template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;

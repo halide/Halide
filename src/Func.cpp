@@ -163,9 +163,10 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
                          int dimensionality,
-                         bool is_c_plus_plus,
+                         NameMangling mangling,
                          bool use_old_buffer_t) {
-    func.define_extern(function_name, args, types, dimensionality, is_c_plus_plus, use_old_buffer_t);
+    func.define_extern(function_name, args, types, dimensionality,
+mangling, uses_old_buffer_t);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
