@@ -22,6 +22,18 @@ int32_t extract_value_ns(const int32_t *arg) {
 
 }
 
+
+namespace my_namespace {
+class my_class {int foo;};
+namespace my_subnamespace {
+struct my_struct {int foo;};
+}
+}
+union my_union {
+    float a;
+    int b;
+};
+
 int main(int argc, char **argv) {
     Buffer<uint8_t> input(100);
 
@@ -49,10 +61,15 @@ int main(int argc, char **argv) {
     auto f = HalideTest::cxx_mangling_gpu;
     printf("HalideTest::cxx_mangling is at: %p\n", (void*) f);
 
+    my_namespace::my_class mc;
+    my_namespace::my_subnamespace::my_struct ms;
+    my_union mu;
+
     int r = HalideTest::cxx_mangling(input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
-                                    -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
-                                    int_ptr, const_int_ptr, void_ptr, const_void_ptr,
-                                    string_ptr, const_string_ptr, result);
+                                     -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
+                                     int_ptr, const_int_ptr, void_ptr, const_void_ptr,
+                                     string_ptr, const_string_ptr,
+                                     &mc, &ms, &mu, result);
     if (r != 0) {
         fprintf(stderr, "Failure!\n");
         exit(1);
