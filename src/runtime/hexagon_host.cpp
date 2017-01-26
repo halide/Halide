@@ -25,7 +25,7 @@ struct _remote_buffer__seq_octet {
 };
 
 typedef int (*remote_initialize_kernels_fn)(const unsigned char* codeptr, int codesize,
-                                            int use_dlopen, int use_dlopenbuf, halide_hexagon_handle_t*);
+                                            int use_dlopenbuf, halide_hexagon_handle_t*);
 typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int, int);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
@@ -212,7 +212,6 @@ WEAK bool halide_is_hexagon_available(void *user_context) {
 
 WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_ptr,
                                               const uint8_t *code, uint64_t code_size,
-                                              uint32_t use_dlopen,
                                               uint32_t use_dlopenbuf) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
@@ -221,7 +220,6 @@ WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_p
                         << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
                         << ", code_size: " << (int)code_size
-                        << ", use_dlopen: " << use_dlopen
                         << ", use_dlopenbuf: " << use_dlopenbuf << ")\n";
     halide_assert(user_context, state_ptr != NULL);
 
@@ -253,27 +251,10 @@ WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_p
         halide_hexagon_handle_t module = 0;
         if (use_dlopenbuf) {
             debug(user_context) << "    dlbuf halide_remote_initialize_kernels -> \n";
-            result = remote_initialize_kernels(code, code_size, use_dlopen, use_dlopenbuf, &module);
-        } else if (use_dlopen) {
-            char filename[260];
-            result = write_shared_object(user_context, code, code_size, filename, sizeof(filename));
-            if (result != 0) {
-                return result;
-            }
-            debug(user_context) << "    dlopen halide_remote_initialize_kernels -> \n";
-            result = remote_initialize_kernels((uint8_t*)filename, strlen(filename) + 1, use_dlopen, use_dlopenbuf, &module);
-            debug(user_context) << " After remote_initialize_kernels \n";
-            // Unfortunately, dlopen on the Hexagon side doesn't keep the
-            // shared object alive in the file system. To work around
-            // this, we open the shared object, then remove the file. The
-            // file will still exist until our process exits, at which
-            // time the file handle will be closed, and then the file will
-            // be removed from the file system.
-            open(filename, O_RDONLY, 0);
-            remove(filename);
+            result = remote_initialize_kernels(code, code_size, use_dlopenbuf, &module);
         } else {
             debug(user_context) << "    halide_remote_initialize_kernels -> \n";
-            result = remote_initialize_kernels(code, code_size, use_dlopen, use_dlopenbuf, &module);
+            result = remote_initialize_kernels(code, code_size, use_dlopenbuf, &module);
         }
         poll_log(user_context);
         if (result == 0) {
@@ -298,7 +279,7 @@ WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_p
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                            const uint8_t *code, uint64_t code_size) {
-    return halide_hexagon_initialize_kernels_v2(user_context, state_ptr, code, code_size, false, false);
+    return halide_hexagon_initialize_kernels_v2(user_context, state_ptr, code, code_size, false);
 }
 
 namespace {

@@ -103,8 +103,7 @@ set (RUNTIME_LL
   hvx_64
   hvx_128
   hvx_v62
-  hvx_dlbuf
-  hvx_dlopen
+  hvx_dlopenbuf
   mips
   posix_math
   powerpc
