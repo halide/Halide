@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include <stdio.h>
+#include <future>
 
 using namespace Halide;
 
@@ -95,10 +96,10 @@ bool test(int vec_width, const Target &target) {
 
             bool ok = ((B)(input(x, y)) == output(x, y));
             if (!ok) {
-                printf("%s x %d -> %s x %d failed\n",
+                fprintf(stderr, "%s x %d -> %s x %d failed\n",
                        string_of_type<A>(), vec_width,
                        string_of_type<B>(), vec_width);
-                printf("At %d %d, %f -> %f instead of %f\n",
+                fprintf(stderr, "At %d %d, %f -> %f instead of %f\n",
                        x, y,
                        (double)(input(x, y)),
                        (double)(output(x, y)),
@@ -112,17 +113,15 @@ bool test(int vec_width, const Target &target) {
 }
 
 template<typename A>
-bool test_all(int vec_width, const Target &target) {
-    bool ok = true;
-    ok = ok && test<A, float>(vec_width, target);
-    ok = ok && test<A, double>(vec_width, target);
-    ok = ok && test<A, uint8_t>(vec_width, target);
-    ok = ok && test<A, int8_t>(vec_width, target);
-    ok = ok && test<A, uint16_t>(vec_width, target);
-    ok = ok && test<A, int16_t>(vec_width, target);
-    ok = ok && test<A, uint32_t>(vec_width, target);
-    ok = ok && test<A, int32_t>(vec_width, target);
-    return ok;
+void test_all(int vec_width, const Target &target, std::vector<std::future<bool>> &futures) {
+    futures.push_back(std::async(test<A, float>, vec_width, target));
+    futures.push_back(std::async(test<A, double>, vec_width, target));
+    futures.push_back(std::async(test<A, uint8_t>, vec_width, target));
+    futures.push_back(std::async(test<A, int8_t>, vec_width, target));
+    futures.push_back(std::async(test<A, uint16_t>, vec_width, target));
+    futures.push_back(std::async(test<A, int16_t>, vec_width, target));
+    futures.push_back(std::async(test<A, uint32_t>, vec_width, target));
+    futures.push_back(std::async(test<A, int32_t>, vec_width, target));
 }
 
 
@@ -139,19 +138,24 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
 
-    bool ok = true;
-
     // We only test power-of-two vector widths for now
+    std::vector<std::future<bool>> futures;
     for (int vec_width = 1; vec_width <= 64; vec_width*=2) {
         printf("Testing vector width %d\n", vec_width);
-        ok = ok && test_all<float>(vec_width, target);
-        ok = ok && test_all<double>(vec_width, target);
-        ok = ok && test_all<uint8_t>(vec_width, target);
-        ok = ok && test_all<int8_t>(vec_width, target);
-        ok = ok && test_all<uint16_t>(vec_width, target);
-        ok = ok && test_all<int16_t>(vec_width, target);
-        ok = ok && test_all<uint32_t>(vec_width, target);
-        ok = ok && test_all<int32_t>(vec_width, target);
+        test_all<float>(vec_width, target, futures);
+        test_all<double>(vec_width, target, futures);
+        test_all<uint8_t>(vec_width, target, futures);
+        test_all<int8_t>(vec_width, target, futures);
+        test_all<uint16_t>(vec_width, target, futures);
+        test_all<int16_t>(vec_width, target, futures);
+        test_all<uint32_t>(vec_width, target, futures);
+        test_all<int32_t>(vec_width, target, futures);
+    }
+
+    bool ok = true;
+    for (auto &f : futures) {
+        f.wait();
+        ok &= f.get();
     }
 
     if (!ok) return -1;
