@@ -26,13 +26,13 @@ int main() {
     Buffer<uint8_t> out(10, 10, 3);
     cpu.realize(out, target);
 
-    if (!(Testing::check_result<uint8_t>(out, [&](int x, int y, int c) {
+    if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) {
             switch (c) {
                 case 0: return 10*x+y;
                 case 1: return 127;
                 case 2: return 12;
                 default: return -1;
-            }})))
+            }}))
         return 1;
 
     printf("Success!\n");
