@@ -14,7 +14,7 @@ Halide::Expr extract_value_ns(Halide::Expr arg) {
 }
 
 namespace my_namespace {
-class my_class {int foo;};
+class my_class {public: int foo;};
 namespace my_subnamespace {
 struct my_struct {int foo;};
 }

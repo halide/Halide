@@ -26,7 +26,7 @@ int32_t extract_value_ns(const int32_t *arg) {
 
 
 namespace my_namespace {
-class my_class {int foo;};
+class my_class {public: int foo;};
 namespace my_subnamespace {
 struct my_struct {int foo;};
 }
