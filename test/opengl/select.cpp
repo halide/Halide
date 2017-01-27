@@ -6,6 +6,8 @@ using namespace Halide;
 
 int test_per_channel_select() {
 
+    printf("Testing select of channel.\n");
+
     // This test must be run with an OpenGL target.
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
@@ -53,6 +55,8 @@ int test_per_channel_select() {
 
 int test_flag_scalar_select() {
 
+    printf("Testing select of scalar value with flag.\n");
+
     // This test must be run with an OpenGL target.
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
@@ -97,6 +101,8 @@ int test_flag_scalar_select() {
 }
 
 int test_flag_pixel_select() {
+
+    printf("Testing select of pixel value with flag.\n");
 
     // This test must be run with an OpenGL target.
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
@@ -150,7 +156,77 @@ int test_flag_pixel_select() {
     return 0;
 }
 
+int test_nested_select() {
 
+    printf("Testing nested select.\n");
+
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
+    // Define the algorithm.
+    Var x("x"), y("y"), c("c");
+    Func f("f");
+    Expr temp = cast<uint8_t>(select(x == 0, 1, 2));
+    f(x, y, c) = select(y == 0, temp, 255 - temp);
+
+    // Schedule f to run on the GPU.
+    const int channels = 3;
+    f.bound(c, 0, channels).glsl(x, y, c);
+
+    // Generate the result.
+    const int width = 10, height = 10;
+    Buffer<uint8_t> out = f.realize(width, height, channels, target);
+
+    // Check the result.
+    int errors = 0;
+    out.for_each_element([&](int x, int y, int c) {
+        uint8_t temp = x == 0 ? 1 : 2;
+        uint8_t expected = y == 0 ? temp : 255 - temp;
+        uint8_t actual = out(x, y, c);
+        if (expected != actual && ++errors == 1) {
+            fprintf(stderr, "out(%d, %d, %d) = %d instead of %d\n",
+                    x, y, c, actual, expected);
+        }
+    });
+
+    return errors;
+}
+
+int test_nested_select_varying() {
+
+    printf("Testing nested select with varying condition.\n");
+
+    // This test must be run with an OpenGL target.
+    const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
+    // Define the algorithm.
+    Var x("x"), y("y"), c("c");
+    Func f("f");
+    Expr temp = cast<uint8_t>(select(x - c > 0, 1, 2));
+    f(x, y, c) = select(y == 0, temp, 255 - temp);
+
+    // Schedule f to run on the GPU.
+    const int channels = 3;
+    f.bound(c, 0, channels).glsl(x, y, c);
+
+    // Generate the result.
+    const int width = 10, height = 10;
+    Buffer<uint8_t> out = f.realize(width, height, channels, target);
+
+    // Check the result.
+    int errors = 0;
+    out.for_each_element([&](int x, int y, int c) {
+        uint8_t temp = x - c > 0 ? 1 : 2;
+        uint8_t expected = y == 0 ? temp : 255 - temp;
+        uint8_t actual = out(x, y, c);
+        if (expected != actual && ++errors == 1) {
+            fprintf(stderr, "out(%d, %d, %d) = %d instead of %d\n",
+                    x, y, c, actual, expected);
+        }
+    });
+
+    return errors;
+}
 
 int main() {
 
@@ -159,6 +235,8 @@ int main() {
     err |= test_per_channel_select();
     err |= test_flag_scalar_select();
     err |= test_flag_pixel_select();
+    err |= test_nested_select();
+    err |= test_nested_select_varying();
 
     if (err) {
         printf("FAILED\n");
