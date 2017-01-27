@@ -45,13 +45,13 @@ int test_lut1d() {
 
     out0.copy_to_host();
 
-    if (!(Testing::check_result<float>(out0, [](int x, int y, int c) {
+    if (!Testing::check_result<float>(out0, [](int x, int y, int c) {
 	    switch (c) {
                 case 0: return (float)(1 + x);
                 case 1: return (float)(8 - x);
                 case 2: return (x > 3) ? 8.0f : 1.0f;
 		default: return -1.0f;
-	    }})))
+	    }}))
 	return 1;
 
     return 0;

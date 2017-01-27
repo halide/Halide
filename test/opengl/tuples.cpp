@@ -31,7 +31,7 @@ int main() {
     h.realize(out, target);
     out.copy_to_host();
 
-    if (!(Testing::check_result<uint8_t>(out, [&](int x, int y, int c) { return input(x, y, c) / 2; })))
+    if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) { return input(x, y, c) / 2; }))
 	return 1;
 
     printf("Success!\n");
