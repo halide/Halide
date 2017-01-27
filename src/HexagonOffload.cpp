@@ -235,7 +235,7 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
-        bool use_shared_object = device_code.target().has_feature(Target::HVX_dlopenbuf);
+        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
         if (use_shared_object) {
             stmt = call_extern_and_assert("halide_hexagon_run_dl", params);
         } else {
@@ -322,7 +322,7 @@ public:
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
         // Determine relocation mode. if both are false, its object relocation.
-        bool use_shared_object = device_code.target().has_feature(Target::HVX_dlopenbuf);
+        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
 
         if (use_shared_object) {
             // Dump the llvm module to a temp file as .ll
@@ -426,7 +426,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
         Target::HVX_64,
         Target::HVX_128,
         Target::HVX_v62,
-        Target::HVX_dlopenbuf
+        Target::HVX_shared_object
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {
