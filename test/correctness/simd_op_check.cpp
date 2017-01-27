@@ -8,6 +8,14 @@
 
 #include "test/common/halide_test_dirs.h"
 
+// Really, MSVC? *Really?*
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
+
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 
