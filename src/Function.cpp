@@ -710,6 +710,12 @@ void Function::define_extern(const std::string &function_name,
         StorageDim sd = {arg};
         contents->init_def.schedule().storage_dims().push_back(sd);
     }
+
+    // Then the dummy outermost dim
+    {
+        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        contents->init_def.schedule().dims().push_back(d);
+    }
 }
 
 void Function::accept(IRVisitor *visitor) const {
