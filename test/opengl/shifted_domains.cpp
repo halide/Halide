@@ -27,7 +27,7 @@ int shifted_domains() {
     gradient.realize(result, target);
     result.copy_to_host();
 
-    if (Testing::check_result<float>(result, [](int x, int y) { return float(x+y); }))
+    if (!Testing::check_result<float>(result, [](int x, int y) { return float(x+y); }, 5e-5))
 	errors++;
 
     Buffer<float> shifted(5, 7, 1);
@@ -38,7 +38,7 @@ int shifted_domains() {
     gradient.realize(shifted, target);
     shifted.copy_to_host();
 
-    if (Testing::check_result<float>(shifted, [](int x, int y) { return float(x+y); }))
+    if (!Testing::check_result<float>(shifted, [](int x, int y) { return float(x+y); }, 5e-5))
 	errors++;
 
     // Test with a negative min
@@ -49,7 +49,7 @@ int shifted_domains() {
     gradient.realize(shifted, target);
     shifted.copy_to_host();
 
-    if (Testing::check_result<float>(shifted, [](int x, int y) { return float(x+y); }))
+    if (!Testing::check_result<float>(shifted, [](int x, int y) { return float(x+y); }, 5e-5))
 	errors++;
 
     return errors;
@@ -57,9 +57,10 @@ int shifted_domains() {
 
 int main() {
 
-    if (shifted_domains() == 0) {
-        printf("PASSED\n");
+    if (shifted_domains() != 0) {
+        return 1;
     }
 
+    printf("Success\n");
     return 0;
 }
