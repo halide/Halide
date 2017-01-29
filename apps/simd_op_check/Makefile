@@ -1,4 +1,7 @@
 CXX-host ?= c++
+
+BIN ?= bin
+
 # Use the build/tools/make-standalone-toolchain.sh script inside the
 # android ndk to make a standalone toolchain to use for this app.
 CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
@@ -17,29 +20,24 @@ LDFLAGS-hexagon-32-qurt-hvx_128 ?= -L../../tools/sim_qurt -lsim_qurt
 
 
 all: \
-	driver-host \
-	driver-arm-64-android \
-	driver-arm-32-android \
-	driver-hexagon-32-qurt-hvx_64 \
-	driver-hexagon-32-qurt-hvx_128 \
+	$(BIN)/driver-host \
+	$(BIN)/driver-arm-64-android \
+	$(BIN)/driver-arm-32-android \
+	$(BIN)/driver-hexagon-32-qurt-hvx_64 \
+	$(BIN)/driver-hexagon-32-qurt-hvx_128 \
 
-%/filters.h:
-	mkdir -p $*
+$(BIN)/%/filters.h:
+	mkdir -p $(BIN)/$*
 	make -C ../../ bin/correctness_simd_op_check
-	cd $* && HL_TARGET=$* LD_LIBRARY_PATH=../../../bin ../../../bin/correctness_simd_op_check
-	cat $*/test_*.h > $*/filter_headers.h
-	echo "filter filters[] = {" > $*/filters.h
-	cd $*; for f in test_*.h; do n=$${f/.h/}; echo '{"'$${n}'", &'$${n}'},'; done >> filters.h
-	echo '{NULL, NULL}};' >> $*/filters.h
+	cd $(BIN)/$* && HL_TARGET=$* LD_LIBRARY_PATH=../../../../bin ../../../../bin/correctness_simd_op_check
+	cat $(BIN)/$*/test_*.h > $(BIN)/$*/filter_headers.h
+	echo "filter filters[] = {" > $(BIN)/$*/filters.h
+	cd $(BIN)/$*; for f in test_*.h; do n=$${f/.h/}; echo '{"'$${n}'", &'$${n}'},'; done >> filters.h
+	echo '{NULL, NULL}};' >> $(BIN)/$*/filters.h
 
-driver-%: driver.cpp %/filters.h
-	$(CXX-$*) $(CXXFLAGS-$*) -I ../../include -O3 -I $* driver.cpp $*/test_*.o $*/simd_op_check_runtime.o -o driver-$* $(LDFLAGS-$*)
+$(BIN)/driver-%: driver.cpp $(BIN)/%/filters.h
+	@-mkdir -p $(BIN)/$*
+	$(CXX-$*) $(CXXFLAGS-$*) -I ../../include -O3 -I $(BIN)/$* driver.cpp $(BIN)/$*/test_*.o $(BIN)/$*/simd_op_check_runtime.o -o $@ $(LDFLAGS-$*)
 
 clean:
-	rm -rf filters.h filter_headers.h
-	rm -rf driver-*
-	rm -rf arm-32-android arm-64-android host
-	rm -rf hexagon-32-qurt-hvx_64 hexagon-32-qurt-hvx_128
-	find . -iname "test_*.h" -type f -exec rm {} +
-	find . -iname "check_*.s" -type f -exec rm {} +
-	find . -iname "test_*.o" -type f -exec rm {} +
+	rm -rf $(BIN)

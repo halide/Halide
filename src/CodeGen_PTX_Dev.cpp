@@ -355,11 +355,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     b.SLPVectorize = true;
 
     #if LLVM_VERSION > 40
-    b.addExtension(
-        PassManagerBuilder::EP_EarlyAsPossible,
-        [&](const PassManagerBuilder &, legacy::PassManagerBase &pm) {
-            target_machine->addEarlyAsPossiblePasses(pm);
-        });
+    target_machine->adjustPassManager(b);
     #endif
 
     b.populateFunctionPassManager(function_pass_manager);
