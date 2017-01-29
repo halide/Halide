@@ -118,7 +118,7 @@ WEAK int init_hexagon_runtime(void *user_context) {
     // Get the symbols we need from the library.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels_v2", remote_initialize_kernels);
     if (!remote_initialize_kernels) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_dl", remote_get_symbol);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_shared_object", remote_get_symbol);
     if (!remote_get_symbol) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;

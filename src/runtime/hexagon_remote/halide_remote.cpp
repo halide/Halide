@@ -177,6 +177,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     }
     return 0;
 }
+
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
     return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
 }
@@ -353,7 +354,7 @@ int halide_hexagon_remote_power_hvx_off() {
     return 0;
 }
 
-int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
+int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
     if (use_shared_object) {
        *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
     } else {
@@ -362,13 +363,9 @@ int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, i
     return *sym_ptr != 0 ? 0 : -1;
 }
 
-int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, int nameLen, handle_t *sym_ptr) {
-    return halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, false, sym_ptr);
-}
-
-handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr, const char* name, int nameLen, bool use_shared_object) {
+handle_t halide_hexagon_remote_get_symbol_shared_object(handle_t module_ptr, const char* name, int nameLen, bool use_shared_object) {
     handle_t sym_ptr = NULL;
-    int result = halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, use_shared_object, &sym_ptr);
+    int result = halide_hexagon_remote_get_symbol_v2(module_ptr, name, nameLen, use_shared_object, &sym_ptr);
     return result == 0 ? sym_ptr : NULL;
 }
 
