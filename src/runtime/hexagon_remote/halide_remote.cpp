@@ -112,6 +112,8 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
 
 PipelineContext run_context(stack_alignment, stack_size);
 
+__attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
+
 int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
                                              int use_shared_object,
                                              handle_t *module_ptr) {
