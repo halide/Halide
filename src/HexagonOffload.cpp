@@ -223,11 +223,13 @@ class InjectHexagonRpc : public IRMutator {
             arg_flags.push_back(0x0);
         }
 
+        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
         // The argument list is terminated with an argument of size 0.
         arg_sizes.push_back(Expr((uint64_t) 0));
 
         std::string pipeline_name = hex_name + "_argv";
         std::vector<Expr> params;
+        params.push_back(use_shared_object);
         params.push_back(module_state());
         params.push_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
@@ -235,12 +237,7 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(Call::make(type_of<void**>(), Call::make_struct, arg_ptrs, Call::Intrinsic));
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
-        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
-        if (use_shared_object) {
-            stmt = call_extern_and_assert("halide_hexagon_run_dl", params);
-        } else {
-            stmt = call_extern_and_assert("halide_hexagon_run", params);
-        }
+        stmt = call_extern_and_assert("halide_hexagon_run", params);
 
         // If we're inside a loop, we need to assume that we can run
         // more than one kernel. 2 is more than 1, so it's good
