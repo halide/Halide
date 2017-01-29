@@ -207,12 +207,12 @@ WEAK bool halide_is_hexagon_available(void *user_context) {
     return result == 0;
 }
 
-WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_ptr,
+WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                               const uint8_t *code, uint64_t code_size,
                                               uint32_t use_shared_object) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
-    debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
+    debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels baked? (user_context: " << user_context
                         << ", state_ptr: " << state_ptr
                         << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
@@ -267,12 +267,6 @@ WEAK int halide_hexagon_initialize_kernels_v2(void *user_context, void **state_p
 
     return result != 0 ? -1 : 0;
 }
-
-WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
-                                           const uint8_t *code, uint64_t code_size) {
-    return halide_hexagon_initialize_kernels_v2(user_context, state_ptr, code, code_size, false);
-}
-
 namespace {
 
 // Prepare an array of remote_buffer arguments, mapping buffers if

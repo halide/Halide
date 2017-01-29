@@ -253,11 +253,9 @@ handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr,
     return result == 0 ? sym : 0;
 }
 
-
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
    return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
-
 
 }  // extern "C"
