@@ -306,13 +306,14 @@ WEAK int map_arguments(void *user_context, int arg_count,
 
 }  // namespace
 
-WEAK int halide_hexagon_run_internal(bool use_shared_object, void *user_context,
-                            void *state_ptr,
-                            const char *name,
-                            halide_hexagon_handle_t* function,
-                            uint64_t arg_sizes[],
-                            void *args[],
-                            int arg_flags[]) {
+WEAK int halide_hexagon_run(void *user_context,
+                               uint32_t use_shared_object,
+                               void *state_ptr,
+                               const char *name,
+                               halide_hexagon_handle_t* function,
+                               uint64_t arg_sizes[],
+                               void *args[],
+                               int arg_flags[]) {
     halide_assert(user_context, state_ptr != NULL);
     halide_assert(user_context, function != NULL);
     int result = init_hexagon_runtime(user_context);
@@ -396,26 +397,6 @@ WEAK int halide_hexagon_run_internal(bool use_shared_object, void *user_context,
     #endif
 
     return result != 0 ? -1 : 0;
-}
-
-WEAK int halide_hexagon_run(void *user_context,
-                            void *state_ptr,
-                            const char *name,
-                            halide_hexagon_handle_t* function,
-                            uint64_t arg_sizes[],
-                            void *args[],
-                            int arg_flags[]) {
-    return halide_hexagon_run_internal(false, user_context, state_ptr, name, function, arg_sizes, args, arg_flags);
-}
-
-WEAK int halide_hexagon_run_dl(void *user_context,
-                            void *state_ptr,
-                            const char *name,
-                            halide_hexagon_handle_t* function,
-                            uint64_t arg_sizes[],
-                            void *args[],
-                            int arg_flags[]) {
-    return halide_hexagon_run_internal(true, user_context, state_ptr, name, function, arg_sizes, args, arg_flags);
 }
 
 WEAK int halide_hexagon_device_release(void *user_context) {

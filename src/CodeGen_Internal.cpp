@@ -149,7 +149,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_msan_annotate_memory_is_initialized",
         "halide_hexagon_initialize_kernels_v2",
         "halide_hexagon_run",
-        "halide_hexagon_run_dl",
         "halide_hexagon_device_release",
         "halide_hexagon_power_hvx_on",
         "halide_hexagon_power_hvx_on_mode",
