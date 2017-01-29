@@ -324,7 +324,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
 
     return ret;
 }
-handle_t halide_hexagon_remote_get_symbol_dl(handle_t module_ptr, const char* name, int nameLen, int use_shared_object) {
+handle_t halide_hexagon_remote_get_symbol_shared_object(handle_t module_ptr, const char* name, int nameLen, int use_shared_object) {
     assert(sim);
 
     // Copy the pointer arguments to the simulator.
