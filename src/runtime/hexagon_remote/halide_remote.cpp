@@ -115,8 +115,8 @@ PipelineContext run_context(stack_alignment, stack_size);
 __attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
 
 int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
-                                             int use_shared_object,
-                                             handle_t *module_ptr) {
+                                                int use_shared_object,
+                                                handle_t *module_ptr) {
     void *lib = NULL;
     elf_t *elib = NULL;
     if (use_shared_object) {
@@ -177,13 +177,6 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     }
     return 0;
 }
-
-int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
-                                             int use_shared_object,
-                                             handle_t *module_ptr) {
-    return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, module_ptr);
-}
-
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
     return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
 }

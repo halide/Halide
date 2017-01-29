@@ -373,7 +373,7 @@ public:
             // Wrap the statement in calls to halide_initialize_kernels.
             size_t code_size = object.size();
             Expr code_ptr = buffer_ptr(&object[0], code_size, "hexagon_code");
-            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels_v2",
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
                                                        {module_state_ptr(), code_ptr,
                                                        Expr((uint64_t) code_size),
                                                        Expr((uint32_t) use_shared_object)});
@@ -396,8 +396,9 @@ public:
             size_t code_size = object.size();
             Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&object[0]), code_size, "hexagon_code");
 
-            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels_v2",
-                                                       {module_state_ptr(), code_ptr, Expr((uint64_t) code_size),
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+                                                       {module_state_ptr(), code_ptr,
+                                                       Expr((uint64_t) code_size),
                                                        Expr((uint32_t) use_shared_object)});
             s = Block::make(init_kernels, s);
         }
