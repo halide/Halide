@@ -1963,6 +1963,7 @@ struct Test {
     }
 
     bool test_all() {
+        // Queue up a bunch of tasks representing each test to run.
         if (target.arch == Target::X86) {
             check_sse_all();
         } else if (target.arch == Target::ARM) {
@@ -1973,6 +1974,8 @@ struct Test {
             check_altivec_all();
         }
 
+        // Use a small thread pool to run the tests. Just statically
+        // partition the work between the threads.
         bool success = true;
         std::vector<std::thread> threads;
         for (size_t i = 0; i < num_threads; i++) {
