@@ -157,6 +157,16 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
+Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
+    for (const auto &f : functions()) {
+        if (f.name == name) {
+            return f;
+        }
+    }
+    user_error << "get_function_by_name: function " << name << " not found.\n";
+    return Internal::LoweredFunc("", std::vector<Argument>{}, {}, LoweredFunc::External);
+}
+
 void Module::append(const Buffer<> &buffer) {
     contents->buffers.push_back(buffer);
 }
@@ -359,7 +369,7 @@ void compile_multitarget(const std::string &fn_name,
         Module sub_module = module_producer(sub_fn_name, sub_fn_target);
         // Re-assign every time -- should be the same across all targets anyway,
         // but base_target is always the last one we encounter.
-        base_target_args = sub_module.functions().back().args;
+        base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
 
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());

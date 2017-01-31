@@ -680,12 +680,12 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // We need to infer the arguments again, because compiling (GPU
     // and offload targets) might have added new buffers we need to
     // embed.
-    infer_arguments(module.functions().back().body);
+    auto f = module.get_function_by_name(name);
+    infer_arguments(f.body);
 
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     // Compile to jit module
-    JITModule jit_module(module, module.functions().back(),
-                         make_externs_jit_module(target_arg, lowered_externs));
+    JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
 
     // Dump bitcode to a file if the environment variable
     // HL_GENBITCODE is defined to a nonzero value.
