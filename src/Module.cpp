@@ -395,33 +395,11 @@ void compile_multitarget(const std::string &fn_name,
             m.compile(o);
         }, std::move(sub_module), std::move(sub_out)));
 
-<<<<<<< HEAD
-        static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
-        uint64_t feature_bits = 0;
-        for (int i = 0; i < Target::FeatureEnd; ++i) {
-            if (target.has_feature(static_cast<Target::Feature>(i))) {
-                feature_bits |= static_cast<uint64_t>(1) << i;
-            }
-        }
-
-        Expr can_use = Call::make(Int(32), "halide_can_use_target_features", {UIntImm::make(UInt(64), feature_bits)}, Call::Extern);
-
-        if (target == base_target) {
-            can_use = IntImm::make(Int(32), 1);
-            for (const LoweredFunc &fn : module.functions()) {
-                if (fn.name == sub_fn_name) {
-                    base_target_args = fn.args;
-                    break;
-                }
-            }
-        }
-=======
         Expr can_use = (target == base_target) ?
                         IntImm::make(Int(32), 1) :
                         Call::make(Int(32), "halide_can_use_target_features",
                                    {UIntImm::make(UInt(64), target_feature_mask(target))},
                                    Call::Extern);
->>>>>>> master
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
@@ -460,15 +438,6 @@ void compile_multitarget(const std::string &fn_name,
             .with_feature(Target::NoBoundsQuery)
             .without_feature(Target::NoAsserts);
 
-<<<<<<< HEAD
-    Module wrapper_module(fn_name, wrapper_target);
-    wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
-
-    // Add a wrapper to accept old buffer_ts
-    add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
-
-    wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
-=======
         // If the base target specified the Matlab target, we want the Matlab target
         // on the wrapper instead.
         if (base_target.has_feature(Target::Matlab)) {
@@ -477,6 +446,10 @@ void compile_multitarget(const std::string &fn_name,
 
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
+
+        // Add a wrapper to accept old buffer_ts
+        add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
+
         Outputs wrapper_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true));
         futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
@@ -484,7 +457,6 @@ void compile_multitarget(const std::string &fn_name,
             m.compile(o);
         }, std::move(wrapper_module), std::move(wrapper_out)));
     }
->>>>>>> master
 
     if (!output_files.c_header_name.empty()) {
         Module header_module(fn_name, base_target);
