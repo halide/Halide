@@ -2,6 +2,7 @@
 
 #include <array>
 #include <fstream>
+#include <future>
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
@@ -90,6 +91,17 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
     return out;
 }
 
+uint64_t target_feature_mask(const Target &target) {
+    static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
+    uint64_t feature_mask = 0;
+    for (int i = 0; i < Target::FeatureEnd; ++i) {
+        if (target.has_feature(static_cast<Target::Feature>(i))) {
+            feature_mask |= static_cast<uint64_t>(1) << i;
+        }
+    }
+    return feature_mask;
+}
+
 }  // namespace
 
 struct ModuleContents {
@@ -154,8 +166,18 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
+
 std::vector<Internal::LoweredFunc> &Module::functions() {
     return contents->functions;
+
+Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
+    for (const auto &f : functions()) {
+        if (f.name == name) {
+            return f;
+        }
+    }
+    user_error << "get_function_by_name: function " << name << " not found.\n";
+    return Internal::LoweredFunc("", std::vector<Argument>{}, {}, LoweredFunc::External);
 }
 
 void Module::append(const Buffer<> &buffer) {
@@ -208,7 +230,7 @@ void Module::compile(const Outputs &output_files) const {
             // To simplify the code, we always create a temporary object output
             // here, even if output_files.object_name was also set: in practice,
             // no real-world code ever sets both object_name and static_library_name
-            // at the same time, so there is no meaningful performance advantage 
+            // at the same time, so there is no meaningful performance advantage
             // to be had.
             TemporaryObjectFileDir temp_dir;
             {
@@ -304,11 +326,17 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
     // If only one target, don't bother with the runtime feature detection wrapping.
+    const bool needs_wrapper = (targets.size() > 1);
     if (targets.size() == 1) {
         debug(1) << "compile_multitarget: single target is " << base_target.to_string() << "\n";
         module_producer(fn_name, base_target).compile(output_files);
         return;
     }
+
+    std::vector<std::future<void>> futures;
+    // If we are running with HL_DEBUG_CODEGEN=1, choose a policy that enforces
+    // sequential execution, so that debug output won't be utterly incomprehensible
+    std::launch policy = debug::debug_level() > 0 ? std::launch::deferred : std::launch::async;
 
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
@@ -344,20 +372,29 @@ void compile_multitarget(const std::string &fn_name,
           suffix = it->second;
         }
         suffix = "_" + suffix;
-        std::string sub_fn_name = fn_name + suffix;
+        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
         // Matlab should be added to the wrapper pipeline below, instead of each sub-pipeline.
-        Target sub_fn_target = target
-            .with_feature(Target::NoRuntime)
-            .without_feature(Target::Matlab);
+        Target sub_fn_target = target.with_feature(Target::NoRuntime);
+        if (needs_wrapper) {
+            sub_fn_target = sub_fn_target.without_feature(Target::Matlab);
+        }
 
-        Module module = module_producer(sub_fn_name, sub_fn_target);
+        Module sub_module = module_producer(sub_fn_name, sub_fn_target);
+        // Re-assign every time -- should be the same across all targets anyway,
+        // but base_target is always the last one we encounter.
+        base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
+
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
-        module.compile(sub_out);
+        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+            debug(1) << "compile_multitarget: compile_sub_target " << o.object_name << "\n";
+            m.compile(o);
+        }, std::move(sub_module), std::move(sub_out)));
 
+<<<<<<< HEAD
         static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
         uint64_t feature_bits = 0;
         for (int i = 0; i < Target::FeatureEnd; ++i) {
@@ -377,6 +414,13 @@ void compile_multitarget(const std::string &fn_name,
                 }
             }
         }
+=======
+        Expr can_use = (target == base_target) ?
+                        IntImm::make(Int(32), 1) :
+                        Call::make(Int(32), "halide_can_use_target_features",
+                                   {UIntImm::make(UInt(64), target_feature_mask(target))},
+                                   Call::Extern);
+>>>>>>> master
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
@@ -385,37 +429,37 @@ void compile_multitarget(const std::string &fn_name,
     // If we haven't specified "no runtime", build a runtime with the base target
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
-        const Target runtime_target = base_target.without_feature(Target::NoRuntime);
-        compile_standalone_runtime(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target)),
-            runtime_target);
+        Target runtime_target = base_target.without_feature(Target::NoRuntime);
+        Outputs runtime_out = Outputs().object(
+            temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
+        futures.emplace_back(std::async(policy, [](Target t, Outputs o) {
+            debug(1) << "compile_multitarget: compile_standalone_runtime " << o.static_library_name << "\n";
+            compile_standalone_runtime(o, t);
+        }, std::move(runtime_target), std::move(runtime_out)));
     }
 
-    Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
-    std::string private_result_name = unique_name(fn_name + "_result");
-    Expr private_result_var = Variable::make(Int(32), private_result_name);
-    Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
-    wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
+    if (needs_wrapper) {
+        Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
+        std::string private_result_name = unique_name(fn_name + "_result");
+        Expr private_result_var = Variable::make(Int(32), private_result_name);
+        Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
+        wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
 
-    // Always build with NoRuntime: that's handled as a separate module.
-    //
-    // Always build with NoBoundsQuery: underlying code will implement that (or not).
-    //
-    // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
-    // only way to propagate a nonzero result code to our caller. (Note that this
-    // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
-    // arguments; this is regrettable but fairly minor in terms of both code size and speed,
-    // at least for real-world code.)
-    Target wrapper_target = base_target
-        .with_feature(Target::NoRuntime)
-        .with_feature(Target::NoBoundsQuery)
-        .without_feature(Target::NoAsserts);
+        // Always build with NoRuntime: that's handled as a separate module.
+        //
+        // Always build with NoBoundsQuery: underlying code will implement that (or not).
+        //
+        // Always build *without* NoAsserts (ie, with Asserts enabled): that's the
+        // only way to propagate a nonzero result code to our caller. (Note that this
+        // does mean we get redundant check-for-null tests in the wrapper code for buffer_t*
+        // arguments; this is regrettable but fairly minor in terms of both code size and speed,
+        // at least for real-world code.)
+        Target wrapper_target = base_target
+            .with_feature(Target::NoRuntime)
+            .with_feature(Target::NoBoundsQuery)
+            .without_feature(Target::NoAsserts);
 
-    // If the base target specified the Matlab target, we want the Matlab target
-    // on the wrapper instead.
-    if (base_target.has_feature(Target::Matlab)) {
-        wrapper_target = wrapper_target.with_feature(Target::Matlab);
-    }
-
+<<<<<<< HEAD
     Module wrapper_module(fn_name, wrapper_target);
     wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
 
@@ -423,11 +467,39 @@ void compile_multitarget(const std::string &fn_name,
     add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
 
     wrapper_module.compile(Outputs().object(temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true)));
+=======
+        // If the base target specified the Matlab target, we want the Matlab target
+        // on the wrapper instead.
+        if (base_target.has_feature(Target::Matlab)) {
+            wrapper_target = wrapper_target.with_feature(Target::Matlab);
+        }
+
+        Module wrapper_module(fn_name, wrapper_target);
+        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
+        Outputs wrapper_out = Outputs().object(
+            temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true));
+        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+            debug(1) << "compile_multitarget: wrapper " << o.object_name << "\n";
+            m.compile(o);
+        }, std::move(wrapper_module), std::move(wrapper_out)));
+    }
+>>>>>>> master
 
     if (!output_files.c_header_name.empty()) {
-        debug(1) << "compile_multitarget: c_header_name " << output_files.c_header_name << "\n";
-        wrapper_module.compile(Outputs().c_header(output_files.c_header_name));
+        Module header_module(fn_name, base_target);
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::External));
+        Outputs header_out = Outputs().c_header(output_files.c_header_name);
+        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+            debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";
+            m.compile(o);
+        }, std::move(header_module), std::move(header_out)));
     }
+
+    // Must wait for everything to finish before we create the static library
+    for (auto &f : futures) {
+        f.wait();
+    }
+
     if (!output_files.static_library_name.empty()) {
         debug(1) << "compile_multitarget: static_library_name " << output_files.static_library_name << "\n";
         create_static_library(temp_dir.files(), base_target, output_files.static_library_name);
