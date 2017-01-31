@@ -169,6 +169,7 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
 
 std::vector<Internal::LoweredFunc> &Module::functions() {
     return contents->functions;
+}
 
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
