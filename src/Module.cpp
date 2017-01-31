@@ -145,6 +145,16 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
+Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
+    for (const auto &f : functions()) {
+        if (f.name == name) {
+            return f;
+        }
+    }
+    user_error << "get_function_by_name: function " << name << " not found.\n";
+    return Internal::LoweredFunc("", std::vector<Argument>{}, {}, LoweredFunc::External);
+}
+
 void Module::append(const Buffer<> &buffer) {
     contents->buffers.push_back(buffer);
 }
@@ -355,7 +365,7 @@ void compile_multitarget(const std::string &fn_name,
 
         if (target == base_target) {
             can_use = IntImm::make(Int(32), 1);
-            base_target_args = module.functions().back().args;
+            base_target_args = module.get_function_by_name(sub_fn_name).args;
         }
 
         wrapper_args.push_back(can_use != 0);
