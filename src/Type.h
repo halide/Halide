@@ -146,6 +146,7 @@ HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint64_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(float);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(double);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(buffer_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
 
 // You can make arbitrary user-defined types be "Known" using the
 // macro above. This is useful for making Param<> arguments for

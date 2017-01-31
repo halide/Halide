@@ -18,8 +18,11 @@ void testCompileToOutput(Func j) {
     Internal::ensure_no_file_exists(expected_h);
 
     std::vector<Target> targets = {
-        Target("host-profile-debug"),
-        Target("host-profile"),
+        Target("x86-64-osx-profile-debug-avx2-avx-sse41"),
+        Target("x86-64-osx-profile-debug-avx-sse41"),
+        Target("x86-64-osx-profile-debug-sse41"),
+        Target("x86-64-osx-profile-debug"),
+        Target("x86-64-osx-profile"),
     };
     j.compile_to_multitarget_static_library(fn_object, j.infer_arguments(), targets);
 
