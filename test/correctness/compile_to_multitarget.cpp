@@ -19,7 +19,7 @@ void testCompileToOutput(Func j) {
 
     std::vector<Target> targets = {
         Target("host-profile-debug"),
-        Target("host-profile"),       
+        Target("host-profile"),
     };
     j.compile_to_multitarget_static_library(fn_object, j.infer_arguments(), targets);
 
