@@ -33,6 +33,15 @@ struct TestResult {
     string error_msg;
 };
 
+struct Task {
+    string op;
+    string name;
+    int vector_width;
+    Expr expr;
+};
+
+size_t num_threads = 8;
+
 struct Test {
     bool use_avx2{false};
     bool use_avx512{false};
@@ -48,7 +57,7 @@ struct Test {
 
     string filter{"*"};
     string output_directory{Internal::get_test_tmp_dir()};
-    vector<std::future<TestResult>> futures;
+    vector<Task> tasks;
 
     Target target;
 
@@ -252,17 +261,14 @@ struct Test {
             if (!isalnum(name[i])) name[i] = '_';
         }
 
-        name += "_" + std::to_string(futures.size());
+        name += "_" + std::to_string(tasks.size());
 
         // Bail out after generating the unique_name, so that names are
         // unique across different processes and don't depend on filter
         // settings.
         if (!wildcard_match(filter, op)) return;
 
-        static const auto lambda = [this](const string &op, const string &name, int vector_width, Expr e){
-            return check_one(op, name, vector_width, e); 
-        };
-        futures.emplace_back(std::async(lambda, op, name, vector_width, e));
+        tasks.emplace_back(Task {op, name, vector_width, e});
     }
 
     void check_sse_all() {
@@ -1968,17 +1974,25 @@ struct Test {
         }
 
         bool success = true;
-        for (auto &f : futures) {
-            const TestResult &r = f.get();
-            std::cout << r.op << "\n";
-            if (!r.error_msg.empty()) {
-                std::cerr << r.error_msg;
-                success = false;
-
-            }
+        std::vector<std::thread> threads;
+        for (size_t i = 0; i < num_threads; i++) {
+            threads.emplace_back([this, i, &success]{
+                for (size_t t = i; t < tasks.size(); t += num_threads) {
+                    Task &task = tasks[t];
+                    TestResult result = check_one(task.op, task.name, task.vector_width, task.expr);
+                    std::cout << result.op << "\n";
+                    if (!result.error_msg.empty()) {
+                        std::cerr << result.error_msg;
+                        success = false;
+                    }
+                }
+            });
         }
-        return success;
+        for (auto &t : threads) {
+            t.join();
+        }
 
+        return success;
     }
 };
 
@@ -1987,6 +2001,7 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         test.filter = argv[1];
+        num_threads = 1;
     }
 
     if (argc > 2) {
