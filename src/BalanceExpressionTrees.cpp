@@ -16,8 +16,9 @@ class ExprHeights : public IRVisitor {
     using IRVisitor::visit;
     std::map<Expr, int, IRDeepCompare> m;
     Scope<int> var_heights;
+    int get_var_height(const std::string &name) { return var_heights.get(name); }
+
 public:
-    // ExprHeights(Scope<int> var_heights) : var_heights(var_heights) {}
     void clear() { m.clear(); }
     void push(const std::string &name, int ht) {
         var_heights.push(name, ht);
@@ -26,7 +27,6 @@ public:
         var_heights.pop(name);
     }
     void push(Expr e) {
-        internal_assert(e.type().is_vector()) << "We are interested in the heights of only vector types\n";
         auto it = m.find(e);
         internal_assert(it == m.end())
             << "Trying to push an expr that already exists in ExprHeights. Use the update method to update\n";
@@ -35,7 +35,6 @@ public:
         return;
     }
     void push(Expr e, int h) {
-        internal_assert(e.type().is_vector()) << "We are interested in the heights of only vector types\n";
         m[e] = h;
         return;
     }
@@ -52,8 +51,11 @@ public:
     int height(Expr e) {
         const Variable *var = e.as<Variable>();
         if (var) {
-            internal_assert(var_heights.contains(var->name)) << "Height of variable " << var->name << " not found in scope\n";
-            return var_heights.get(var->name);
+            if (!var_heights.contains(var->name)) {
+                return 0;
+            } else {
+                return get_var_height(var->name);
+            }
         }
         auto it = m.find(e);
         if (it != m.end()) {
@@ -66,30 +68,24 @@ public:
     vector<int> height(const vector<Expr> &exprs) {
         vector<int> heights;
         for (Expr e: exprs) {
-            if (e.type().is_vector()) {
-                heights.push_back(height(e));
-            }
+            heights.push_back(height(e));
         }
         return heights;
     }
-    void set_containing_scope(const Scope<int> *s) {
-        var_heights.set_containing_scope(s);
+    void set_containing_scope(const Scope<int> &s) {
+        var_heights.set_containing_scope(&s);
     }
-    Scope<int> *get_var_heights() {
-        return &var_heights;
+    Scope<int> &get_var_heights() {
+        return var_heights;
     }
     template<typename T>
     void visit_binary(const T *op) {
-        if (op->type.is_vector()) {
-            IRVisitor::visit(op);
-            m[op] = std::max(height(op->a), height(op->b)) + 1;
-        }
+        IRVisitor::visit(op);
+        m[op] = std::max(height(op->a), height(op->b)) + 1;
     }
     template<typename T>
     void visit_leaf(const T *op) {
-        if (op->type.is_vector()) {
-            m[op] = 0;
-        }
+        m[op] = 0;
     }
     void visit(const Add *op) { visit_binary<Add>(op); }
     void visit(const Sub *op) { visit_binary<Sub>(op); }
@@ -116,29 +112,22 @@ public:
 
     template <typename T>
     void visit_let(const T *op) {
-        if (op->value.type().is_vector()) {
-            Expr value = op->value;
-            // First calculate the height of value.
-            value.accept(this);
-            int ht = height(value);
-            m[value] = ht;
-            var_heights.push(op->name, ht);
-            op->body.accept(this);
-            var_heights.pop(op->name);
-        }
+        Expr value = op->value;
+        // First calculate the height of value.
+        value.accept(this);
+        int ht = height(value);
+        m[value] = ht;
+        var_heights.push(op->name, ht);
+        op->body.accept(this);
+        var_heights.pop(op->name);
     }
 
     void visit(const Let *op) { visit_let<Let>(op); }
     void visit(const LetStmt *op) { visit_let<LetStmt>(op); }
 
     void visit(const Cast *op) {
-        if (op->type.is_vector()) {
-            IRVisitor::visit(op);
-            // A number of HVX operations fold widening and narrowing
-            // into themselves. e.g. widening adds. So count the cast
-            // as adding no height.
-            m[op] = height(op->value);
-        }
+        IRVisitor::visit(op);
+        m[op] = height(op->value);
     }
 
     void visit(const Shuffle *op) {
@@ -148,11 +137,9 @@ public:
     }
 
     void visit(const Call *op) {
-        if (op->type.is_vector()) {
-            IRVisitor::visit(op);
-            vector<int> heights = height(op->args);
-            m[op] = *std::max_element(heights.begin(), heights.end());
-        }
+        IRVisitor::visit(op);
+        vector<int> heights = height(op->args);
+        m[op] = *std::max_element(heights.begin(), heights.end());
     }
 
 };
@@ -160,7 +147,7 @@ public:
 class FindRoots : public IRVisitor {
     using IRVisitor::visit;
 
-    bool is_associative_or_cummutative(Expr a) {
+    bool is_associative_or_commutative(Expr a) {
         const Add *add = a.as<Add>();
         const Mul *mul = a.as<Mul>();
         const And *and_ = a.as<And>();
@@ -189,19 +176,17 @@ class FindRoots : public IRVisitor {
      */
     template<typename T>
     void visit_binary(const T *op) {
-        if (op->type.is_vector()) {
-            const T *a = op->a.template as<T>();
-            const T *b = op->b.template as<T>();
+        const T *a = op->a.template as<T>();
+        const T *b = op->b.template as<T>();
 
-            if (!a && is_associative_or_cummutative(op->a)) {
-                weighted_roots[op->a] = -1;
-            }
-            if (!b && is_associative_or_cummutative(op->b)) {
-                weighted_roots[op->b] = -1;
-            }
-            if (is_associative_or_cummutative((Expr) op)) {
-                IRVisitor::visit(op);
-            }
+        if (!a && is_associative_or_commutative(op->a)) {
+            weighted_roots[op->a] = -1;
+        }
+        if (!b && is_associative_or_commutative(op->b)) {
+            weighted_roots[op->b] = -1;
+        }
+        if (is_associative_or_commutative((Expr) op)) {
+            IRVisitor::visit(op);
         }
     }
     void visit(const Add *op) { visit_binary<Add>(op); }
@@ -211,14 +196,10 @@ public:
 };
 
 inline WeightedRoots find_roots(const Add *op) {
-    if (op->type.is_vector()) {
-        FindRoots f;
-        op->accept(&f);
-        f.weighted_roots[(Expr) op] = -1;
-        return f.weighted_roots;
-    } else {
-        return {};
-    }
+    FindRoots f;
+    op->accept(&f);
+    f.weighted_roots[(Expr) op] = -1;
+    return f.weighted_roots;
 }
 
 void dump_roots(WeightedRoots &w) {
@@ -236,8 +217,8 @@ struct WeightedLeaf {
     Expr e;
     int weight;
     WeightedLeaf(Expr e, int weight) : e(e), weight(weight) {}
-    static bool Compare(const WeightedLeaf &lhs, const WeightedLeaf &rhs) {
-        return lhs.weight > rhs.weight;
+    bool operator<(const WeightedLeaf &other) const {
+        return other.weight < weight;
     }
 };
 
@@ -247,14 +228,14 @@ public:
     void push(Expr e, int wt) {
         if (!q.empty()) {
             q.push_back(WeightedLeaf(e, wt));
-            std::push_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+            std::push_heap(q.begin(), q.end());
         } else {
             q.push_back(WeightedLeaf(e, wt));
-            std::make_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+            std::make_heap(q.begin(), q.end());
         }
     }
     WeightedLeaf pop() {
-        std::pop_heap(q.begin(), q.end(), WeightedLeaf::Compare);
+        std::pop_heap(q.begin(), q.end());
         WeightedLeaf least_wt_leaf =  q.back();
         q.pop_back();
         return least_wt_leaf;
@@ -282,34 +263,27 @@ struct GetTreeWeight : public IRVisitor {
 
     template <typename T>
     void visit_leaf(const T *op) {
-        if (op->type.is_vector()) {
-            weight += 1;
-        }
+        weight += 1;
     }
 
     void visit(const Cast *op) {
-        if (op->type.is_vector()) {
-            // If the value to be cast is a simple
-            // constant (immediate integer value) then
-            // the cost is 0, else, the cost is 1 plus
-            // the cost of the tree rooted at op->value
-            if (!is_simple_const(op->value)) {
-                IRVisitor::visit(op);
-                weight += 1;
-            }
+        // If the value to be cast is a simple
+        // constant (immediate integer value) then
+        // the cost is 0, else, the cost is 1 plus
+        // the cost of the tree rooted at op->value
+        if (!is_simple_const(op->value)) {
+            IRVisitor::visit(op);
+            weight += 1;
         }
     }
 
     template<typename T>
     void visit_binary(const T *op) {
-        if (op->type.is_vector()) {
-            IRVisitor::visit(op);
-            weight += 1;
-        }
+        IRVisitor::visit(op);
+        weight += 1;
     }
     // Constants have 0 weight.
     // So, no visitors for IntImm, UIntImm, FloatImm, StringImm
-    // Although, we shouldn't be seeing some of these.
     void visit(const Load *op) { visit_leaf<Load>(op); }
     void visit(const Add *op) { visit_binary<Add>(op); }
     void visit(const Sub *op) { visit_binary<Sub>(op); }
@@ -328,12 +302,10 @@ struct GetTreeWeight : public IRVisitor {
     void visit(const Or *op) { visit_binary<Or>(op); }
 
     void visit(const Broadcast *op) {
-        if (op->type.is_vector()) {
-            if (!is_simple_const(op->value)) {
+        if (!is_simple_const(op->value)) {
                 IRVisitor::visit(op);
                 weight += 1;
             }
-        }
     }
 
     GetTreeWeight() : weight(0) {}
@@ -399,7 +371,7 @@ class BalanceTree : public IRMutator {
             it = weighted_roots.find(e);
             if (it != weighted_roots.end()) {
                 debug(4) <<  ".. is a root..balancing\n";
-                // Check if already visited before calling balance tree.
+                // Check if already visited before calling balance tree?
                 Expr leaf = BalanceTree(weighted_roots, heights.get_var_heights()).mutate(e);
                 debug(4) << ".. balanced to produce ->" << leaf << "\n";
                 if (!leaf.same_as(e)) {
@@ -434,7 +406,6 @@ class BalanceTree : public IRMutator {
             int combined_weight = l1.weight + l2.weight + 1;
             Expr e = T::make(l1.e, l2.e);
             leaves.push(e, combined_weight);
-              // return balanced tree.
         }
 
         internal_assert(leaves.size() == 1)
@@ -452,7 +423,7 @@ class BalanceTree : public IRMutator {
     WeightedRoots weighted_roots;
     ExprHeights heights;
 public:
-    BalanceTree(WeightedRoots weighted_roots, const Scope<int> *var_heights) : weighted_roots(weighted_roots) { 
+    BalanceTree(WeightedRoots weighted_roots, const Scope<int> &var_heights) : weighted_roots(weighted_roots) { 
         heights.clear();
         heights.set_containing_scope(var_heights);
     }
@@ -465,41 +436,38 @@ class BalanceExpressionTrees : public IRMutator {
     void visit(const Add *op) {
         // We traverse the tree top to bottom and stop at the first vector add
         // and start looking for roots from there.
-        if (op->type.is_vector()) {
-            debug(4) << "Highest Add is << " << (Expr) op << "\n";
+        debug(4) << "Highest Add is << " << (Expr) op << "\n";
 
-            // 1. Find Roots.
-            weighted_roots = find_roots(op);
-            if (weighted_roots.empty()) {
-                expr = op;
-                return;
-            }
-
-            debug(4) << "Found " << weighted_roots.size() << " roots\n";
-
-            // 2. Balance the tree
-            Expr e = BalanceTree(weighted_roots, h.get_var_heights()).mutate((Expr) op);
-
-            if (e.same_as(op)) {
-                expr = op;
-            } else {
-                debug(4) << "Balanced tree ->\n\t" << e << "\n";
-                expr = e;
-            }
-        } else {
+        // 1. Find Roots.
+        weighted_roots = find_roots(op);
+        if (weighted_roots.empty()) {
             expr = op;
+            return;
+        }
+
+        debug(4) << "Found " << weighted_roots.size() << " roots\n";
+
+        // 2. Balance the tree
+        Expr e = BalanceTree(weighted_roots, h.get_var_heights()).mutate((Expr) op);
+
+        if (e.same_as(op)) {
+            expr = op;
+        } else {
+            debug(4) << "Balanced tree ->\n\t" << e << "\n";
+            expr = e;
         }
     }
     template<typename NodeType, typename LetType>
     void visit_let(NodeType &result, const LetType *op) {
         NodeType body = op->body;
-        if (op->value.type().is_vector()) {
-            op->value.accept(&h);
-            int ht = h.height(op->value);
-            h.push(op->name, ht);
-            body = mutate(op->body);
-            h.pop(op->name);
-        }
+
+        op->value.accept(&h);
+        int ht = h.height(op->value);
+
+        h.push(op->name, ht);
+        body = mutate(op->body);
+        h.pop(op->name);
+
         result = LetType::make(op->name, op->value, body);
     }
     void visit(const Let *op) { visit_let(expr, op); }
