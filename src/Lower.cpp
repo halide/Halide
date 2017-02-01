@@ -54,6 +54,7 @@
 #include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
+#include "UnpackBuffers.h"
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
@@ -193,6 +194,10 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
+
+    debug(1) << "Unpacking buffer arguments...\n";
+    s = unpack_buffers(s);
+    debug(2) << "Lowering after unpacking buffer arguments...\n";
 
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";

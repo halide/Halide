@@ -513,7 +513,8 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
         << "Value index out of range in call to halide function\n";
     internal_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Call to undefined halide function\n";
-    return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer<>(), Parameter());
+    return make(func.output_types()[(size_t)idx], func.name(), args, Halide,
+                func.get_contents(), idx, Buffer<>(), Parameter());
 }
 
 Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
@@ -783,10 +784,18 @@ Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
+Call::ConstString Call::buffer_get_extent = "_halide_buffer_get_extent";
+Call::ConstString Call::buffer_get_stride = "_halide_buffer_get_stride";
 Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
+Call::ConstString Call::buffer_get_dev = "_halide_buffer_get_dev";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
+Call::ConstString Call::buffer_get_host_dirty = "_halide_buffer_get_host_dirty";
 Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
+Call::ConstString Call::buffer_get_dev_dirty = "_halide_buffer_get_dev_dirty";
+Call::ConstString Call::buffer_get_elem_size = "_halide_buffer_get_elem_size";
+Call::ConstString Call::buffer_is_not_null = "_halide_buffer_is_not_null";
+Call::ConstString Call::buffer_is_bounds_query = "_halide_buffer_is_bounds_query";
 Call::ConstString Call::buffer_init = "_halide_buffer_init";
 Call::ConstString Call::trace = "halide_trace_helper";
 

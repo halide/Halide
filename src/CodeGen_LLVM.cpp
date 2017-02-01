@@ -568,9 +568,13 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     {
         size_t i = 0;
         for (auto &arg : function->args()) {
-            sym_push(args[i].name, &arg);
             if (args[i].is_buffer()) {
-                push_buffer(args[i].name, &arg);
+                // Track this buffer name so that loads and stores from it
+                // don't try to be too aligned.
+                external_buffer.insert(name);
+                sym_push(args[i].name + ".buffer", &arg);
+            } else {
+                sym_push(args[i].name, &arg);
             }
 
             if (args[i].alignment.modulus != 0) {
@@ -587,11 +591,11 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
 
     // Remove the arguments from the symbol table
     for (size_t i = 0; i < args.size(); i++) {
-        sym_pop(args[i].name);
         if (args[i].is_buffer()) {
-            pop_buffer(args[i].name);
+            sym_pop(args[i].name + ".buffer");
+        } else {
+            sym_pop(args[i].name);
         }
-
         if (args[i].alignment.modulus != 0) {
             alignment_info.pop(args[i].name);
         }
@@ -773,7 +777,6 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     // Finally, dump it in the symbol table
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
     Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(buffer_t_type, global, zero);
-    sym_push(buf.name(), global_ptr);
     sym_push(buf.name() + ".buffer", global_ptr);
 }
 
@@ -1010,64 +1013,6 @@ llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const 
 
 bool CodeGen_LLVM::sym_exists(const string &name) const {
     return symbol_table.contains(name);
-}
-
-// Take an llvm Value representing a pointer to a buffer_t,
-// and populate the symbol table with its constituent parts
-void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
-    // Make sure the buffer object itself is not null
-    create_assertion(builder->CreateIsNotNull(buffer),
-                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                {name}, Call::Extern));
-
-    Value *host_ptr = buffer_host(buffer);
-    Value *dev_ptr = buffer_dev(buffer);
-
-    // Instead track this buffer name so that loads and stores from it
-    // don't try to be too aligned.
-    external_buffer.insert(name);
-
-    // Push the buffer pointer as well, for backends that care.
-    sym_push(name + ".buffer", buffer);
-
-    sym_push(name + ".host", host_ptr);
-    sym_push(name + ".dev", dev_ptr);
-    sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
-    sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
-    sym_push(name + ".extent.0", buffer_extent(buffer, 0));
-    sym_push(name + ".extent.1", buffer_extent(buffer, 1));
-    sym_push(name + ".extent.2", buffer_extent(buffer, 2));
-    sym_push(name + ".extent.3", buffer_extent(buffer, 3));
-    sym_push(name + ".stride.0", buffer_stride(buffer, 0));
-    sym_push(name + ".stride.1", buffer_stride(buffer, 1));
-    sym_push(name + ".stride.2", buffer_stride(buffer, 2));
-    sym_push(name + ".stride.3", buffer_stride(buffer, 3));
-    sym_push(name + ".min.0", buffer_min(buffer, 0));
-    sym_push(name + ".min.1", buffer_min(buffer, 1));
-    sym_push(name + ".min.2", buffer_min(buffer, 2));
-    sym_push(name + ".min.3", buffer_min(buffer, 3));
-    sym_push(name + ".elem_size", buffer_elem_size(buffer));
-}
-
-void CodeGen_LLVM::pop_buffer(const string &name) {
-    sym_pop(name + ".buffer");
-    sym_pop(name + ".host");
-    sym_pop(name + ".dev");
-    sym_pop(name + ".host_dirty");
-    sym_pop(name + ".dev_dirty");
-    sym_pop(name + ".extent.0");
-    sym_pop(name + ".extent.1");
-    sym_pop(name + ".extent.2");
-    sym_pop(name + ".extent.3");
-    sym_pop(name + ".stride.0");
-    sym_pop(name + ".stride.1");
-    sym_pop(name + ".stride.2");
-    sym_pop(name + ".stride.3");
-    sym_pop(name + ".min.0");
-    sym_pop(name + ".min.1");
-    sym_pop(name + ".min.2");
-    sym_pop(name + ".min.3");
-    sym_pop(name + ".elem_size");
 }
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields

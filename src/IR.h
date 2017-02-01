@@ -508,10 +508,18 @@ struct Call : public ExprNode<Call> {
     // magic string constants and the potential risk of typos.
     EXPORT static ConstString
         buffer_get_min,
+        buffer_get_extent,
+        buffer_get_stride,
         buffer_get_max,
         buffer_get_host,
+        buffer_get_dev,
         buffer_set_host_dirty,
+        buffer_get_host_dirty,
         buffer_set_dev_dirty,
+        buffer_get_dev_dirty,
+        buffer_get_elem_size,
+        buffer_is_not_null,
+        buffer_is_bounds_query,
         buffer_init,
         trace;
 

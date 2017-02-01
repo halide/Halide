@@ -564,16 +564,15 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // function. This works because the public function does not
     // attempt to directly access any of the fields of the buffer.
 
-    Stmt private_body;
+    Stmt body;
 
     const Module &old_module = contents->module;
     if (!old_module.functions().empty() &&
         old_module.target() == target) {
-        internal_assert(old_module.functions().size() == 2);
-        // We can avoid relowering and just reuse the private body
-        // from the old module. We expect two functions in the old
-        // module: the private one then the public one.
-        private_body = old_module.functions().front().body;
+        internal_assert(old_module.functions().size() == 1);
+        // We can avoid relowering and just reuse the body from the
+        // old module.
+        body = old_module.functions().front().body;
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
@@ -581,51 +580,27 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
             custom_passes.push_back(p.pass);
         }
 
-        private_body = lower(contents->outputs, fn_name, target, custom_passes);
+        body = lower(contents->outputs, fn_name, target, custom_passes);
     }
 
     std::vector<std::string> namespaces;
     std::string simple_new_fn_name = extract_namespaces(new_fn_name, namespaces);
-    string private_name = "__" + simple_new_fn_name;
 
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = build_public_args(args, target);
 
-    vector<Buffer<>> global_images = validate_arguments(public_args, private_body);
+    vector<Buffer<>> global_images = validate_arguments(public_args, body);
 
-    // Create a module with all the global images in it.
+    // Create a module.
     Module module(simple_new_fn_name, target);
 
-    // Add all the global images to the module, and add the global
-    // images used to the private argument list.
-    vector<Argument> private_args = public_args;
+    // Add all the global images to the module.
     for (Buffer<> buf : global_images) {
         module.append(buf);
-        private_args.push_back(Argument(buf.name(),
-                                        Argument::InputBuffer,
-                                        buf.type(), buf.dimensions()));
     }
 
-    module.append(LoweredFunc(private_name, private_args,
-                              private_body, LoweredFunc::Internal));
-
-    // Generate a call to the private function, adding an arguments
-    // for the global images.
-    vector<Expr> private_params;
-    for (Argument arg : private_args) {
-        if (arg.is_buffer()) {
-            private_params.push_back(Variable::make(type_of<void*>(), arg.name + ".buffer"));
-        } else {
-            private_params.push_back(Variable::make(arg.type, arg.name));
-        }
-    }
-    string private_result_name = unique_name(private_name + "_result");
-    Expr private_result_var = Variable::make(Int(32), private_result_name);
-    Expr call_private = Call::make(Int(32), private_name, private_params, Call::Extern);
-    Stmt public_body = AssertStmt::make(private_result_var == 0, private_result_var);
-    public_body = LetStmt::make(private_result_name, call_private, public_body);
-
-    module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
+    // Add the lowered Func to the module.
+    module.append(LoweredFunc(new_fn_name, public_args, body, LoweredFunc::External));
 
     contents->module = module;
 
