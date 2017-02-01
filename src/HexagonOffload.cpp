@@ -363,6 +363,16 @@ public:
             int result = system(hex_command.c_str());
             internal_assert(result == 0) << "hexagon-clang failed\n";
 
+            // Check for a signing callout
+            const char *callout_env = getenv("HL_HEXAGON_CALLOUT");
+            if (callout_env && callout_env[0]) {
+               string callout_command;
+               callout_command = callout_env;
+               callout_command += " " + tmp_shared_object.pathname();
+               int result = system(callout_command.c_str());
+               internal_assert(result == 0) << "hexagon-callout failed\n";
+            }
+
             // Read the compiled object back in and put it in a buffer in the module
             std::ifstream so(tmp_shared_object.pathname(), std::ios::binary | std::ios::ate);
             internal_assert(so.good()) << "failed to open temporary shared object.";
