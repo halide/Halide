@@ -212,7 +212,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                                               uint32_t use_shared_object) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
-    debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels baked? (user_context: " << user_context
+    debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
                         << ", state_ptr: " << state_ptr
                         << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
