@@ -285,7 +285,6 @@ int main(int argc, char **argv) {
         Param<int> start, size;
         RDom r(start, size);
 
-
         f(x) = x;
         f(r) = 10 - r;
 
@@ -441,6 +440,28 @@ int main(int argc, char **argv) {
             printf("Expected 2 IfThenElse stmts. Found %d.\n", if_then_else_count);
             return -1;
         }
+    }
+
+    {
+        // Check specialization on a more complex expression used in a select.
+        ImageParam im(Int(32), 2);
+        Param<int> p;
+        Expr test = (p > 73) || (p*p + p + 1 == 0);
+
+        Func f;
+        Var x;
+        f(x) = select(test, im(x, 0), im(0, x));
+        f.specialize(test);
+
+        Buffer<int> input1(10, 1);
+        Buffer<int> input2(1, 10);
+        im.set(input1);
+        p.set(100);
+        f.realize(10);
+
+        im.set(input2);
+        p.set(-100);
+        f.realize(10);
     }
 
     printf("Success!\n");

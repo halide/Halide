@@ -28,6 +28,17 @@ void substitute_value_in_var(const string &var, Expr value, vector<Definition> &
     }
 }
 
+void substitute_value_in_expr(Expr e, Expr value, vector<Definition> &definitions) {
+    for (Definition &def : definitions) {
+        for (auto &def_arg : def.args()) {
+            def_arg = simplify(substitute(e, value, def_arg));
+        }
+        for (auto &def_val : def.values()) {
+            def_val = simplify(substitute(e, value, def_val));
+        }
+    }
+}
+
 vector<Definition> propagate_specialization_in_definition(Definition &def) {
     vector<Definition> result;
 
@@ -56,6 +67,10 @@ vector<Definition> propagate_specialization_in_definition(Definition &def) {
 
             // Else case
             substitute_value_in_var(var->name, const_false(), result);
+        } else {
+            // Just substitute the whole expression in
+            substitute_value_in_expr(c, const_true(), s_result);
+            substitute_value_in_expr(c, const_false(), result);
         }
 
         result.insert(result.end(), s_result.begin(), s_result.end());
