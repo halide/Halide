@@ -262,8 +262,17 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
     void *lib = NULL;
     elf_t *elib = NULL;
     if (use_shared_object) {
+
+        // Create a unique file name
+        char *newf = tmpnam(NULL);
+        char filename[260];
+        strcpy(filename, newf);
+        strcat(filename, "_halide_hexagon_kernels");
+        strcat(filename, ".so");
+
+        // Open the library
         dllib_init();
-        lib = dlopenbuf( "libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
+        lib = dlopenbuf( filename, (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
             halide_print(NULL, "dlopenbuf failed");
             return -1;
