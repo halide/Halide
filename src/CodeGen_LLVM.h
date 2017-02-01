@@ -224,12 +224,6 @@ protected:
     /** Codegen a vector Expr by codegenning each lane and combining. */
     void scalarize(Expr);
 
-    /** Take an llvm Value representing a pointer to a buffer_t,
-     * and populate the symbol table with its constituent parts.
-     */
-    void push_buffer(const std::string &name, llvm::Value *buffer);
-    void pop_buffer(const std::string &name);
-
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
     enum DestructorType {Always, OnError, OnSuccess};

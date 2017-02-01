@@ -11,6 +11,7 @@ using std::vector;
 using std::string;
 using std::map;
 using std::pair;
+using std::make_pair;
 
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
@@ -45,8 +46,7 @@ public:
     }
 
     void visit(const Variable *op) {
-        if (ends_with(op->name, ".buffer") &&
-            op->param.defined() &&
+        if (op->param.defined() &&
             op->param.is_buffer() &&
             buffers.find(op->param.name()) == buffers.end()) {
             Result r;
@@ -211,13 +211,13 @@ Stmt add_image_checks(Stmt s,
             }
         }
 
-        // An expression returning whether or not we're in inference mode
         ReductionDomain rdom;
-        Expr host_ptr = Variable::make(Handle(), name + ".host", image, param, rdom);
-        Expr dev = Variable::make(UInt(64), name + ".dev", image, param, rdom);
-        Expr inference_mode = (host_ptr == make_zero(host_ptr.type()) &&
-                               dev == make_zero(dev.type()));
 
+        // An expression returning whether or not we're in inference mode
+        Expr handle = Variable::make(type_of<buffer_t *>(), name + ".buffer",
+                                     image, param, rdom);
+        Expr inference_mode = Call::make(Bool(), Call::buffer_is_bounds_query,
+                                         {handle}, Call::Extern);
         maybe_return_condition = maybe_return_condition || inference_mode;
 
         // Come up with a name to refer to this buffer in the error messages
@@ -244,7 +244,6 @@ Stmt add_image_checks(Stmt s,
         // Check that the region passed in (after applying constraints) is within the region used
         debug(3) << "In image " << name << " region touched is:\n";
 
-
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);
             string actual_min_name = name + ".min." + dim;
@@ -253,14 +252,15 @@ Stmt add_image_checks(Stmt s,
             Expr actual_min = Variable::make(Int(32), actual_min_name, image, param, rdom);
             Expr actual_extent = Variable::make(Int(32), actual_extent_name, image, param, rdom);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name, image, param, rdom);
-            if (!touched[j].is_bounded()) {
+
+            if (!touched.empty() && !touched[j].is_bounded()) {
                 user_error << "Buffer " << name
                            << " may be accessed in an unbounded way in dimension "
                            << j << "\n";
             }
 
-            Expr min_required = touched[j].min;
-            Expr extent_required = touched[j].max + 1 - touched[j].min;
+            Expr min_required = touched.empty() ? actual_min : touched[j].min;
+            Expr extent_required = touched.empty() ? actual_extent : (touched[j].max + 1 - touched[j].min);
 
             if (touched.maybe_unused()) {
                 min_required = select(touched.used, min_required, actual_min);
@@ -270,26 +270,27 @@ Stmt add_image_checks(Stmt s,
             string min_required_name = name + ".min." + dim + ".required";
             string extent_required_name = name + ".extent." + dim + ".required";
 
-            Expr min_required_var = Variable::make(Int(32), min_required_name);
-            Expr extent_required_var = Variable::make(Int(32), extent_required_name);
+                Expr min_required_var = Variable::make(Int(32), min_required_name);
+                Expr extent_required_var = Variable::make(Int(32), extent_required_name);
 
-            lets_required.push_back(make_pair(extent_required_name, extent_required));
-            lets_required.push_back(make_pair(min_required_name, min_required));
+                lets_required.push_back(make_pair(extent_required_name, extent_required));
+                lets_required.push_back(make_pair(min_required_name, min_required));
 
-            Expr actual_max = actual_min + actual_extent - 1;
-            Expr max_required = min_required_var + extent_required_var - 1;
+                Expr actual_max = actual_min + actual_extent - 1;
+                Expr max_required = min_required_var + extent_required_var - 1;
 
-            if (touched.maybe_unused()) {
-                max_required = select(touched.used, max_required, actual_max);
-            }
+                if (touched.maybe_unused()) {
+                    max_required = select(touched.used, max_required, actual_max);
+                }
 
-            Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
+                Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
-            Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
-                                        {error_name, j, min_required_var, max_required, actual_min, actual_max},
-                                        Call::Extern);
+                Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
+                                            {error_name, j, min_required_var, max_required, actual_min, actual_max},
+                                            Call::Extern);
 
-            asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
+                asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
+
 
             // Come up with a required stride to use in bounds
             // inference mode. We don't assert it. It's just used to
@@ -363,7 +364,7 @@ Stmt add_image_checks(Stmt s,
         buffer_rewrites.push_back(rewrite);
 
         // Build the constraints tests and proposed sizes.
-        vector<pair<string, Expr>> constraints;
+        vector<pair<Expr, Expr>> constraints;
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
             string min_name = name + ".min." + dim;
@@ -428,7 +429,7 @@ Stmt add_image_checks(Stmt s,
             if (stride_constrained.defined()) {
                 // Come up with a suggested stride by passing the
                 // required region through this constraint.
-                constraints.push_back(make_pair(stride_name, stride_constrained));
+                constraints.push_back(make_pair(stride_orig, stride_constrained));
                 stride_constrained = substitute(replace_with_required, stride_constrained);
                 lets_proposed.push_back(make_pair(stride_name + ".proposed", stride_constrained));
             } else {
@@ -436,7 +437,7 @@ Stmt add_image_checks(Stmt s,
             }
 
             if (min_constrained.defined()) {
-                constraints.push_back(make_pair(min_name, min_constrained));
+                constraints.push_back(make_pair(min_orig, min_constrained));
                 min_constrained = substitute(replace_with_required, min_constrained);
                 lets_proposed.push_back(make_pair(min_name + ".proposed", min_constrained));
             } else {
@@ -444,7 +445,7 @@ Stmt add_image_checks(Stmt s,
             }
 
             if (extent_constrained.defined()) {
-                constraints.push_back(make_pair(extent_name, extent_constrained));
+                constraints.push_back(make_pair(extent_orig, extent_constrained));
                 extent_constrained = substitute(replace_with_required, extent_constrained);
                 lets_proposed.push_back(make_pair(extent_name + ".proposed", extent_constrained));
             } else {
@@ -473,20 +474,20 @@ Stmt add_image_checks(Stmt s,
 
         // Assert all the conditions, and set the new values
         for (size_t i = 0; i < constraints.size(); i++) {
-            Expr var = Variable::make(Int(32), constraints[i].first);
-            Expr constrained_var = Variable::make(Int(32), constraints[i].first + ".constrained");
+            Expr var = constraints[i].first;
+            const string &name = var.as<Variable>()->name;
+            Expr constrained_var = Variable::make(Int(32), name + ".constrained");
 
-            const string &var_str = constraints[i].first;
             std::ostringstream ss;
             ss << constraints[i].second;
             string constrained_var_str = ss.str();
 
-            replace_with_constrained[var_str] = constrained_var;
+            replace_with_constrained[name] = constrained_var;
 
-            lets_constrained.push_back(make_pair(var_str + ".constrained", constraints[i].second));
+            lets_constrained.push_back(make_pair(name + ".constrained", constraints[i].second));
 
             Expr error = Call::make(Int(32), "halide_error_constraint_violated",
-                                    {var_str, var, constrained_var_str, constrained_var},
+                                    {name, var, constrained_var_str, constrained_var},
                                     Call::Extern);
 
             // Check the var passed in equals the constrained version (when not in inference mode)

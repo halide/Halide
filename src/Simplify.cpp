@@ -237,6 +237,31 @@ private:
     Scope<pair<int64_t, int64_t>> bounds_info;
     Scope<ModulusRemainder> alignment_info;
 
+    // If we encounter a reference to a buffer (a Load, Store, Call,
+    // or Provide), there's an implicit dependence on associated
+    // symbols
+    void found_buffer_reference(const string &name, size_t dimensions = 0) {
+        for (size_t i = 0; i < dimensions; i++) {
+            string stride = name + ".stride." + std::to_string(i);
+            if (var_info.contains(stride)) {
+                var_info.ref(stride).old_uses++;
+            }
+
+            string min = name + ".min." + std::to_string(i);
+            if (var_info.contains(min)) {
+                var_info.ref(min).old_uses++;
+            }
+        }
+
+        string host = name + ".host";
+        string dev = name + ".dev";
+        if (var_info.contains(host)) {
+            var_info.ref(host).old_uses++;
+        }
+        if (var_info.contains(dev)) {
+            var_info.ref(dev).old_uses++;
+        }
+    }
 
     using IRMutator::visit;
 
@@ -3778,7 +3803,7 @@ private:
                         then_case = substitute(var->name, eq->b, then_case);
                     }
                     if (!and_chain && eq->b.type().is_bool()) {
-                        else_case = substitute(var->name, !eq->b, else_case); 
+                        else_case = substitute(var->name, !eq->b, else_case);
                     }
                 } else if (var) {
                     if (!or_chain) {
@@ -3815,6 +3840,8 @@ private:
     }
 
     void visit(const Load *op) {
+        found_buffer_reference(op->name);
+
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
@@ -3832,29 +3859,23 @@ private:
         } else {
             expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
         }
+
+
+        // Loads implicitly depend on the .host and .dev symbols of the buffer referenced
+        string host = op->name + ".host";
+        string dev = op->name + ".dev";
+        if (var_info.contains(host)) {
+            var_info.ref(host).old_uses++;
+        }
+        if (var_info.contains(dev)) {
+            var_info.ref(dev).old_uses++;
+        }
     }
 
     void visit(const Call *op) {
-        // Calls implicitly depend on mins and strides of the buffer referenced
+        // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                {
-                    ostringstream oss;
-                    oss << op->name << ".stride." << i;
-                    string stride = oss.str();
-                    if (var_info.contains(stride)) {
-                        var_info.ref(stride).old_uses++;
-                    }
-                }
-                {
-                    ostringstream oss;
-                    oss << op->name << ".min." << i;
-                    string min = oss.str();
-                    if (var_info.contains(min)) {
-                        var_info.ref(min).old_uses++;
-                    }
-                }
-            }
+            found_buffer_reference(op->name, op->args.size());
         }
 
         if (op->is_intrinsic(Call::shift_left) ||
@@ -4517,30 +4538,13 @@ private:
     }
 
     void visit(const Provide *op) {
-        // Provides implicitly depend on mins and strides of the buffer referenced
-        for (size_t i = 0; i < op->args.size(); i++) {
-            {
-                ostringstream oss;
-                oss << op->name << ".stride." << i;
-                string stride = oss.str();
-                if (var_info.contains(stride)) {
-                    var_info.ref(stride).old_uses++;
-                }
-            }
-            {
-                ostringstream oss;
-                oss << op->name << ".min." << i;
-                string min = oss.str();
-                if (var_info.contains(min)) {
-                    var_info.ref(min).old_uses++;
-                }
-            }
-        }
-
+        found_buffer_reference(op->name, op->args.size());
         IRMutator::visit(op);
     }
 
     void visit(const Store *op) {
+        found_buffer_reference(op->name);
+
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
