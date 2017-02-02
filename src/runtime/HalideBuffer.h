@@ -664,8 +664,24 @@ public:
 
     /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
+    // @{
+
+    // The overload with one argument is 'explicit', so that
+    // (say) int is not implicitly convertable to Buffer<int>
+    explicit Buffer(int first) : ty(static_halide_type()) {
+        static_assert(!T_is_void,
+                      "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
+        initialize_shape(0, first);
+        buf.elem_size = ty.bytes();
+        dims = 1;
+        if (!any_zero(first)) {
+            check_overflow();
+            allocate();
+        }
+    }
+
     template<typename ...Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = typename std::enable_if<AllInts<Args...>::value && (sizeof...(Args)>0)>::type>
     Buffer(int first, Args... rest) : ty(static_halide_type()) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
@@ -680,6 +696,7 @@ public:
             allocate();
         }
     }
+    // @}
 
     /** Allocate a new image of unknown type using a vector of ints as the size. */
     Buffer(halide_type_t t, const std::vector<int> &sizes) : ty(t) {
