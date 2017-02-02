@@ -685,6 +685,7 @@ GeneratorStub::GeneratorStub(const GeneratorContext *context,
     user_assert(context != nullptr) << "Context may not be null";
     internal_assert(generator->value_tracker == nullptr);
     generator->value_tracker = context->get_value_tracker();
+    generator->externs_map = context->get_externs_map();
     generator->target.set(context->get_target());
     generator->set_inputs(inputs);
     generator->call_generate();
@@ -1036,6 +1037,14 @@ GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
 
 GeneratorBase::~GeneratorBase() { 
     ObjectInstanceRegistry::unregister_instance(this); 
+}
+
+std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::get_externs_map() const {
+    // Lazily create the ExternsMap.
+    if (externs_map == nullptr) {
+        externs_map = std::make_shared<ExternsMap>();
+    }
+    return externs_map;
 }
 
 void GeneratorBase::build_params(bool force) {
