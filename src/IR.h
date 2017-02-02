@@ -514,6 +514,7 @@ struct Call : public ExprNode<Call> {
         buffer_get_shape,
         buffer_set_host_dirty,
         buffer_set_device_dirty,
+        buffer_is_bounds_query,
         buffer_init,
         buffer_init_from_buffer,
         trace;
