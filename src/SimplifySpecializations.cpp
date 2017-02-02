@@ -46,7 +46,6 @@ public:
                 // fact implies !e
                 return const_false();
             }
-            debug(0) << "ELEPHANT: " << fact << ", " << e << ": " << simplify(!fact || e) << ", " << simplify(!fact || !e) << "\n";
         }
         return IRMutator::mutate(e);
     }
