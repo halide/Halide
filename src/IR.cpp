@@ -785,6 +785,7 @@ Call::ConstString Call::select_mask = "select_mask";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
 Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
+Call::ConstString Call::buffer_get_device = "_halide_buffer_get_device";
 Call::ConstString Call::buffer_get_shape = "_halide_buffer_get_shape";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
 Call::ConstString Call::buffer_set_device_dirty = "_halide_buffer_set_device_dirty";

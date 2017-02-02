@@ -245,13 +245,14 @@ WEAK int map_arguments(void *user_context, int arg_count,
     for (int i = 0; i < arg_count; i++) {
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
+        debug(user_context) << i << "\n";
         if (arg_flags[i] != 0) {
             // This is a buffer, map it and put the mapped buffer into
             // the result.
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-
             uint64_t device_handle = *((uint64_t *)args[i]);
             ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device_handle);
+            debug(user_context) << i << ", " << device_handle << "\n";
             mapped_arg.data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
             mapped_arg.dataLen = ion_handle->size;
         } else {
@@ -259,6 +260,7 @@ WEAK int map_arguments(void *user_context, int arg_count,
             mapped_arg.data = (uint8_t*)args[i];
             mapped_arg.dataLen = arg_sizes[i];
         }
+        debug(user_context) << i << "\n";
     }
     return mapped_count;
 }
@@ -411,22 +413,11 @@ WEAK int halide_hexagon_device_malloc(void *user_context, halide_buffer_t *buf) 
     // buffer to be legal to access.
     size += 128;
 
-    halide_assert(user_context,
-                  buf->dim[0].stride >= 0 && buf->dim[1].stride >= 0 &&
-                  buf->dim[2].stride >= 0 && buf->dim[3].stride >= 0);
+    for (int i = 0; i < buf->dimensions; i++) {
+        halide_assert(user_context, buf->dim[i].stride >= 0);
+    }
 
-    debug(user_context) << "    allocating buffer of " << (uint64_t)size << " bytes, "
-                        << "extents: "
-                        << buf->dim[0].extent << "x"
-                        << buf->dim[1].extent << "x"
-                        << buf->dim[2].extent << "x"
-                        << buf->dim[3].extent << " "
-                        << "strides: "
-                        << buf->dim[0].stride << "x"
-                        << buf->dim[1].stride << "x"
-                        << buf->dim[2].stride << "x"
-                        << buf->dim[3].stride << " "
-                        << "(" << (int)buf->type.bytes() << " bytes per element)\n";
+    debug(user_context) << "    allocating buffer of " << (uint64_t)size << " bytes\n";
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
