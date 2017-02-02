@@ -52,6 +52,11 @@ halide_dimension_t *_halide_buffer_get_shape(halide_buffer_t *buf) {
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
+bool _halide_buffer_is_bounds_query(halide_buffer_t *buf) {
+    return buf->host == NULL && buf->device == 0;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
 halide_buffer_t *_halide_buffer_init(halide_buffer_t *dst,
                                      halide_dimension_t *dst_shape,
                                      void *host,

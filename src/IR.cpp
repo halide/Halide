@@ -789,6 +789,7 @@ Call::ConstString Call::buffer_get_device = "_halide_buffer_get_device";
 Call::ConstString Call::buffer_get_shape = "_halide_buffer_get_shape";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
 Call::ConstString Call::buffer_set_device_dirty = "_halide_buffer_set_device_dirty";
+Call::ConstString Call::buffer_is_bounds_query = "_halide_buffer_is_bounds_query";
 Call::ConstString Call::buffer_init = "_halide_buffer_init";
 Call::ConstString Call::buffer_init_from_buffer = "_halide_buffer_init_from_buffer";
 Call::ConstString Call::trace = "halide_trace_helper";

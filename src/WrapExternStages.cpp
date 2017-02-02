@@ -190,7 +190,12 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
             Expr downgrade_call = Call::make(Int(32), "halide_downgrade_buffer_t",
                                              {arg.name, new_buffer_var, old_buffer_var},
                                              Call::Extern);
-            downgrades.push_back(make_checked_call(downgrade_call));
+            Stmt downgrade = make_checked_call(downgrade_call);
+            // Only do the downgrade in bounds query mode
+            Expr bounds_query = Call::make(Bool(), Call::buffer_is_bounds_query,
+                                           {new_buffer_var}, Call::Extern);
+            downgrade = IfThenElse::make(bounds_query, downgrade);
+            downgrades.push_back(downgrade);
 
             // Make the call to upgrade old buffer
             // fields into the original new
