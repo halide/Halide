@@ -666,7 +666,7 @@ public:
      * buffer suitable for bounds query calls. */
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    Buffer(int first, Args... rest) : ty(static_halide_type()) {
+    explicit Buffer(int first, Args... rest) : ty(static_halide_type()) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
         static_assert(sizeof...(rest) < D,
