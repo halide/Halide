@@ -1897,6 +1897,11 @@ class GeneratorContext {
 public:
     virtual ~GeneratorContext() {};
     virtual Target get_target() const = 0;
+
+    // TODO: naming, exact contents of map
+    using ExternsMap = std::map<std::string, std::vector<uint8_t>>;
+    virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
+
 protected:
     friend class Internal::GeneratorStub;
     virtual std::shared_ptr<Internal::ValueTracker> get_value_tracker() const = 0;
@@ -1920,12 +1925,17 @@ class JITGeneratorContext : public GeneratorContext {
 public:
     explicit JITGeneratorContext(const Target &t)
         : target(t)
+        , externs_map(std::make_shared<ExternsMap>())
         , value_tracker(std::make_shared<Internal::ValueTracker>()) {}
     Target get_target() const override { return target; }
+    // Note that JITGeneratorContext is always "top-level", so it will never take
+    // an ExternsMap from a parent (since it has no parents).
+    std::shared_ptr<ExternsMap> get_externs_map() const override { return externs_map; }
 protected:
     std::shared_ptr<Internal::ValueTracker> get_value_tracker() const override { return value_tracker; }
 private:
     const Target target;
+    const std::shared_ptr<ExternsMap> externs_map;
     const std::shared_ptr<Internal::ValueTracker> value_tracker;
 };
 
@@ -2012,6 +2022,8 @@ public:
     EXPORT Module build_module(const std::string &function_name = "",
                                const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
 
+    std::shared_ptr<ExternsMap> get_externs_map() const override;
+
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
 
@@ -2052,6 +2064,7 @@ private:
     std::vector<Internal::GeneratorOutputBase *> filter_outputs;
     std::vector<Internal::GeneratorParamBase *> generator_params;
     std::shared_ptr<Internal::ValueTracker> value_tracker;
+    mutable std::shared_ptr<ExternsMap> externs_map;
     bool params_built{false};
     bool generator_params_set{false};
     bool schedule_params_set{false};
