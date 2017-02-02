@@ -571,9 +571,9 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
             << " already exists in the same module\n";
         if (func_t != function->getFunctionType()) {
             std::cerr << "Desired function type for " << extern_name << ":\n";
-            func_t->dump();
+            func_t->print(dbgs(), true);
             std::cerr << "Declared function type of " << extern_name << ":\n";
-            function->getFunctionType()->dump();
+            function->getFunctionType()->print(dbgs(), true);
             user_error << "Cannot create a function with a declaration of mismatched type.\n";
         }
     }
