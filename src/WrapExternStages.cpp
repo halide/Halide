@@ -31,7 +31,7 @@ class WrapExternStages : public IRMutator {
     using IRMutator::visit;
 
     string make_wrapper(const Call *op) {
-        string wrapper_name = "halide_private_wrapper_" + op->name;
+        string wrapper_name = replace_all(prefix + op->name, ":", "_");
         if (done.count(op->name)) {
             return wrapper_name;
         }
@@ -111,7 +111,7 @@ class WrapExternStages : public IRMutator {
 
         // Add the wrapper to the module
         debug(2) << "Wrapped extern call to " << op->name << ":\n" << body << "\n\n";
-        LoweredFunc wrapper(wrapper_name, args, body, LoweredFunc::Internal);
+        LoweredFunc wrapper(wrapper_name, args, body, LoweredFunc::Internal, NameMangling::C);
         module.append(wrapper);
 
         // Return the name
@@ -129,7 +129,7 @@ class WrapExternStages : public IRMutator {
                 for (Expr e : op->args) {
                     new_args.push_back(mutate(e));
                 }
-                expr = Call::make(op->type, make_wrapper(op), new_args, op->call_type, op->func);
+                expr = Call::make(op->type, make_wrapper(op), new_args, Call::Extern, op->func);
             } else {
                 IRMutator::visit(op);
             }
@@ -142,6 +142,7 @@ class WrapExternStages : public IRMutator {
     Module module;
 public:
     WrapExternStages(Module m) : module(m) {}
+    string prefix;
 };
 }
 
@@ -151,6 +152,7 @@ void wrap_legacy_extern_stages(Module m) {
     // its functions, so we have to iterate with some care.
     size_t num_functions = m.functions().size();
     for (size_t i = 0; i < num_functions; i++) {
+        wrap.prefix = "_halide_wrapper_" + m.functions()[i].name + "_";
         m.functions()[i].body = wrap.mutate(m.functions()[i].body);
         debug(2) << "Body after wrapping extern calls:\n" << m.functions()[i].body << "\n\n";
     }
