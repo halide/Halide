@@ -20,6 +20,11 @@ uint8_t *_halide_buffer_get_host(const halide_buffer_t *buf) {
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
+uint64_t _halide_buffer_get_device(const halide_buffer_t *buf) {
+    return buf->device;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
 int _halide_buffer_get_min(const halide_buffer_t *buf, int d) {
     return buf->dim[d].min;
 }
