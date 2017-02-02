@@ -475,12 +475,20 @@ int main(int argc, char **argv) {
         f(x) = select(p > 50, im(x, 0), im(0, x));
         f.specialize(test);
 
+
+        // (p > 73) implies (p > 50), so if the condition h olds (as
+        // it does when p is 100), we only access the first row of the
+        // input.
         Buffer<int> input1(10, 1);
-        Buffer<int> input2(1, 10);
         im.set(input1);
         p.set(100);
         f.realize(10);
 
+        // (p <= 73) doesn't tell us anything about (p > 50), so when
+        // the condition doesn't hold, we can make no useful
+        // simplifications. The select remains, so both sides of it
+        // are evaluated, so the image is loaded over the full square.
+        Buffer<int> input2(10, 10);
         im.set(input2);
         p.set(-100);
         f.realize(10);
