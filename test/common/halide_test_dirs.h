@@ -6,7 +6,9 @@
 
 #include <string.h>
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #else
 #include <stdio.h>
@@ -37,7 +39,7 @@ inline std::string get_env_variable(const char *name) {
 }
 
 // Return absolute path to the current directory. Return empty string if
-// an error occurs. (Does not assert.) 
+// an error occurs. (Does not assert.)
 inline std::string get_current_directory() {
 #ifdef _WIN32
     std::string dir;
