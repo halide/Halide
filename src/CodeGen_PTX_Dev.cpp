@@ -387,7 +387,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #endif
 
     if (debug::debug_level() >= 2) {
-        module->dump();
+        module->print(dbgs(), nullptr, false, true);
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
@@ -410,7 +410,7 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_PTX_Dev::dump() {
-    module->dump();
+    module->print(dbgs(), nullptr, false, true);
 }
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
