@@ -464,6 +464,28 @@ int main(int argc, char **argv) {
         f.realize(10);
     }
 
+    {
+        // Check specialization of an implied condition
+        ImageParam im(Int(32), 2);
+        Param<int> p;
+        Expr test = (p > 73);
+
+        Func f;
+        Var x;
+        f(x) = select(p > 50, im(x, 0), im(0, x));
+        f.specialize(test);
+
+        Buffer<int> input1(10, 1);
+        Buffer<int> input2(1, 10);
+        im.set(input1);
+        p.set(100);
+        f.realize(10);
+
+        im.set(input2);
+        p.set(-100);
+        f.realize(10);
+    }
+
     printf("Success!\n");
     return 0;
 
