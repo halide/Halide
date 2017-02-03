@@ -770,10 +770,15 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
         ConstantInt::get(i16_t, buf.type().lanes())
     };
 
-    size_t shape_size = buf.dimensions() * sizeof(halide_dimension_t);
-    vector<char> shape_blob((char *)buf.raw_buffer()->dim, (char *)buf.raw_buffer()->dim + shape_size);
-    Constant *shape = create_binary_blob(shape_blob, buf.name() + ".shape");
-    shape = ConstantExpr::getPointerCast(shape, dimension_t_type->getPointerTo());
+    Constant *shape = nullptr;
+    if (buf.dimensions()) {
+        size_t shape_size = buf.dimensions() * sizeof(halide_dimension_t);
+        vector<char> shape_blob((char *)buf.raw_buffer()->dim, (char *)buf.raw_buffer()->dim + shape_size);
+        shape = create_binary_blob(shape_blob, buf.name() + ".shape");
+        shape = ConstantExpr::getPointerCast(shape, dimension_t_type->getPointerTo());
+    } else {
+        shape = ConstantPointerNull::get(dimension_t_type->getPointerTo());
+    }
 
     // For now, we assume buffers that aren't scalar are constant,
     // while scalars can be mutated. This accommodates all our existing
@@ -2976,6 +2981,7 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
 }
 
 Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const string &name, bool constant) {
+    internal_assert(!data.empty());
     llvm::Type *type = ArrayType::get(i8_t, data.size());
     GlobalVariable *global = new GlobalVariable(*module, type,
                                                 constant, GlobalValue::PrivateLinkage,
