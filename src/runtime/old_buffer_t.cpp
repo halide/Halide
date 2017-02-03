@@ -1,5 +1,6 @@
 #include "runtime_internal.h"
 #include "HalideRuntime.h"
+#include "printer.h"
 
 namespace {
 struct old_dev_wrapper {
@@ -12,6 +13,15 @@ extern "C" {
 
 WEAK int halide_upgrade_buffer_t(void *user_context, const char *name,
                                  const buffer_t *old_buf, halide_buffer_t *new_buf) {
+    if ((old_buf->host || old_buf->dev) &&
+        (old_buf->elem_size != new_buf->type.bytes())) {
+        // Unless we're doing a bounds query, we expect the elem_size to match the type.
+        char err[256];
+        stringstream sstr(user_context);
+        sstr << "buffer has incorrect elem_size (" << old_buf->elem_size << ") "
+             << "for expected type (" << new_buf->type << ")";
+        return halide_error_failed_to_upgrade_buffer_t(user_context, name, sstr.str());
+    }
     new_buf->host = old_buf->host;
     if (old_buf->dev) {
         old_dev_wrapper *wrapper = (old_dev_wrapper *)(old_buf->dev);
