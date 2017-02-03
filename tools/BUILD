@@ -1,13 +1,13 @@
 cc_library(
     name = "halide_image_info",
-    srcs = ["halide_image_info.h"],
+    hdrs = ["halide_image_info.h"],
     includes = ["."],
     visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "halide_image_io",
-    srcs = ["halide_image_io.h"],
+    hdrs = ["halide_image_io.h"],
     includes = ["."],
     visibility = ["//visibility:public"],
     deps = ["@png_archive//:png"],
@@ -15,7 +15,7 @@ cc_library(
 
 cc_library(
     name = "halide_malloc_trace",
-    srcs = ["halide_malloc_trace.h"],
+    hdrs = ["halide_malloc_trace.h"],
     includes = ["."],
     visibility = ["//visibility:public"],
 )
