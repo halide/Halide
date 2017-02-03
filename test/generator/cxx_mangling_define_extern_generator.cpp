@@ -22,6 +22,7 @@ public:
         Func f1("f1"), f2("f2"), f3("f3");
 
         std::vector<ExternFuncArgument> args;
+        args.push_back(Halide::user_context_value());
         args.push_back(g);
         args.push_back(cast<int8_t>(1));
         args.push_back(cast<uint8_t>(2));

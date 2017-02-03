@@ -80,8 +80,14 @@ class InjectHexagonRpc : public IRMutator {
 
     Module device_code;
 
-    /** Alignment info for Int(32) variables in scope, so we don't
-     * lose the information when creating Hexagon kernels. */
+    // We need to know if the kernel launch occurs inside a loop, so
+    // as to only generate calls to power_hvx_on/off if there is a
+    // single kernel launch.
+    int run_count = 0;
+    bool in_loop = false;
+
+    // Alignment info for Int(32) variables in scope, so we don't lose
+    // the information when creating Hexagon kernels.
     Scope<ModulusRemainder> alignment_info;
 
     Expr state_var(const std::string& name, Type type) {
@@ -120,7 +126,10 @@ class InjectHexagonRpc : public IRMutator {
 
     void visit(const For *loop) {
         if (loop->device_api != DeviceAPI::Hexagon) {
+            bool old_in_loop = false;
+            in_loop = true;
             IRMutator::visit(loop);
+            in_loop = old_in_loop;
             return;
         }
 
@@ -128,8 +137,8 @@ class InjectHexagonRpc : public IRMutator {
         // loops with the same name, so we need to make them unique.
         std::string hex_name = unique_name("hex_" + loop->name);
 
-        // After moving this to Hexagon, it doesn't need to be
-        // marked Hexagon anymore.
+        // After moving this to Hexagon, it doesn't need to be marked
+        // Hexagon anymore.
         Stmt body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
                               DeviceAPI::None, loop->body);
         body = remove_trivial_for_loops(body);
@@ -227,6 +236,34 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
         stmt = call_extern_and_assert("halide_hexagon_run", params);
+
+        // If we're inside a loop, we need to assume that we can run
+        // more than one kernel. 2 is more than 1, so it's good
+        // enough.
+        run_count += in_loop ? 2 : 1;
+    }
+
+    void visit(const IfThenElse *op) {
+        // To keep track of the run count through if then else, take
+        // the max of the runs between the two branches.
+        Expr condition = mutate(op->condition);
+        int old_run_count = run_count;
+        Stmt then_case = mutate(op->then_case);
+        int then_run_count = run_count;
+
+        run_count = old_run_count;
+        Stmt else_case = mutate(op->else_case);
+        int else_run_count = run_count;
+
+        run_count = std::max(then_run_count, else_run_count);
+
+        if (!condition.same_as(op->condition) ||
+            !then_case.same_as(op->then_case) ||
+            !else_case.same_as(op->else_case)) {
+            stmt = IfThenElse::make(condition, then_case, else_case);
+        } else {
+            stmt = op;
+        }
     }
 
     void visit(const Let *op) {
@@ -265,10 +302,13 @@ public:
         }
 
         // If we got here, it means the pipeline runs at least one
-        // Hexagon kernel. To reduce overhead of individual
-        // sub-pipelines running on Hexagon, we can power on HVX once
-        // for the duration of this pipeline.
-        s = power_hvx_on(s);
+        // Hexagon kernel. Each kernel calls power_hvx_on itself;
+        // however, if this pipeline performs more than one Hexagon
+        // RPC call, we can reduce overhead of individual invocations
+        // by powering on HVX once for the duration of this pipeline.
+        if (run_count > 1) {
+            s = power_hvx_on(s);
+        }
 
         // Compile the device code
         debug(1) << "Hexagon device code module: " << device_code << "\n";

@@ -446,7 +446,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const AssertStmt *op) {
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
     if (op->is_interleave()) {
         int op_lanes = op->type.lanes();
-        internal_assert(op->vectors.size() > 0);
+        internal_assert(!op->vectors.empty());
         int arg_lanes = op->vectors[0].type().lanes();
         if (op->vectors.size() == 1) {
             // 1 argument, just do a simple assignment

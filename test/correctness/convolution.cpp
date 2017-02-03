@@ -2,6 +2,44 @@
 #include "Halide.h"
 
 using namespace Halide;
+using namespace Halide::Internal;
+
+class FindPowerHvxOn : public IRVisitor {
+public:
+    bool found = false;
+
+    void visit(const Call *op) {
+        if (op->name == "halide_hexagon_power_hvx_on") {
+            found = true;
+        }
+        IRVisitor::visit(op);
+    }
+
+    using IRVisitor::visit;
+};
+
+class ExpectPowerHvxOn : public IRMutator {
+    bool expected;
+
+public:
+    ExpectPowerHvxOn(bool expected) : expected(expected) {}
+    using IRMutator::mutate;
+
+    Stmt mutate(Stmt s) {
+        FindPowerHvxOn v;
+        s.accept(&v);
+
+        if (v.found && !expected) {
+            printf("Found halide_hexagon_power_hvx_on call when it was not expected.\n");
+            exit(-1);
+        } else if (!v.found && expected) {
+            printf("Did not find halide_hexagon_power_hvx_on call when it was expected.\n");
+            exit(-1);
+        }
+
+        return s;
+    }
+};
 
 int main(int argc, char **argv) {
 
@@ -78,22 +116,21 @@ int main(int argc, char **argv) {
 
         // Summation is done as a sequential loop within each gpu thread
         blur2.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.has_feature(Target::HVX_64)) {
+    } else if (target.has_feature(Target::HVX_64) || target.has_feature(Target::HVX_128)) {
+        int hvx_vector_width = target.has_feature(Target::HVX_128) ? 64 : 32;
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
         blur1.hexagon().tile(x, y, xi, yi, 6, 6);
         // TODO: Add parallel to the schedule.
-        blur1.update().hexagon().tile(x, y, xi, yi, 32, 4).vectorize(xi);
+        blur1.update().hexagon().tile(x, y, xi, yi, hvx_vector_width, 4).vectorize(xi);
 
         // TODO: Add parallel to the schedule.
-        blur2.hexagon().vectorize(x, 32);
-    } else if (target.has_feature(Target::HVX_128)) {
-        Var xi("xi"), yi("yi");
+        blur2.hexagon().vectorize(x, hvx_vector_width);
 
-        blur1.hexagon().tile(x, y, xi, yi, 6, 6);
-        blur1.update().hexagon().tile(x, y, xi, yi, 64, 4).vectorize(xi);
-
-        blur2.hexagon().vectorize(x, 64);
+        // blur1 has two hexagon kernels, so it should have a halide_hexagon_power_hvx_on call.
+        // blur2 has one hexagon kernel, so it should not.
+        blur1.add_custom_lowering_pass(new ExpectPowerHvxOn(true));
+        blur2.add_custom_lowering_pass(new ExpectPowerHvxOn(false));
     } else {
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
