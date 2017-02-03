@@ -45,6 +45,7 @@ int main(int argc, char **argv) {
     out.extent[1] = 40;
     out.stride[0] = 1;
     out.stride[1] = 60;
+    out.elem_size = 4;
 
     // Check bounds inference works
     int err = old_buffer_t_old_buffer_t(&in1, &in2, scalar_param, &out);
