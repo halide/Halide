@@ -615,12 +615,14 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
     // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
     // happen for every output buffer if the function succeeds.
     if (f.linkage == LoweredFunc::External && target.has_feature(Target::MSAN)) {
-        llvm::Function *annotate_buffer_fn = module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
-        internal_assert(annotate_buffer_fn) << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
+        llvm::Function *annotate_buffer_fn =
+            module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
+        internal_assert(annotate_buffer_fn)
+            << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
         annotate_buffer_fn->setDoesNotAlias(0);
         for (const auto &arg : f.args) {
             if (arg.kind == Argument::OutputBuffer) {
-                register_destructor(annotate_buffer_fn, sym_get(arg.name), OnSuccess);
+                register_destructor(annotate_buffer_fn, sym_get(arg.name + ".buffer"), OnSuccess);
             }
         }
     }
@@ -1015,6 +1017,9 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
     return symbol_table.contains(name);
 }
 
+
+#if 0
+
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
 Value *CodeGen_LLVM::buffer_host(Value *buffer) {
     return builder->CreateLoad(buffer_host_ptr(buffer));
@@ -1128,6 +1133,8 @@ Value *CodeGen_LLVM::buffer_elem_size_ptr(Value *buffer) {
         5,
         "buf_elem_size");
 }
+
+#endif
 
 Value *CodeGen_LLVM::codegen(Expr e) {
     internal_assert(e.defined());
@@ -1546,7 +1553,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Ex
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
     // Find the base address from the symbol table
-    Value *base_address = symbol_table.get(buffer + ".host");
+    Value *base_address = symbol_table.get(buffer);
     llvm::Type *base_address_type = base_address->getType();
     unsigned address_space = base_address_type->getPointerAddressSpace();
 

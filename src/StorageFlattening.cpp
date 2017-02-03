@@ -154,9 +154,7 @@ private:
         // Create a buffer_t object for this allocation.
         if (dims <= 4) {
             BufferBuilder builder;
-            Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter(),
-                                         const_true(op->types[0].lanes()));
-            builder.host = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
+            builder.host = Variable::make(Handle(), op->name);
             builder.type = op->types[0];
             builder.dimensions = dims;
             for (int i = 0; i < dims; i++) {

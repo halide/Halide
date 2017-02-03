@@ -238,8 +238,8 @@ private:
     Scope<ModulusRemainder> alignment_info;
 
     // If we encounter a reference to a buffer (a Load, Store, Call,
-    // or Provide), there's an implicit dependence on associated
-    // symbols
+    // or Provide), there's an implicit dependence on some associated
+    // symbols.
     void found_buffer_reference(const string &name, size_t dimensions = 0) {
         for (size_t i = 0; i < dimensions; i++) {
             string stride = name + ".stride." + std::to_string(i);
@@ -253,13 +253,8 @@ private:
             }
         }
 
-        string host = name + ".host";
-        string dev = name + ".dev";
-        if (var_info.contains(host)) {
-            var_info.ref(host).old_uses++;
-        }
-        if (var_info.contains(dev)) {
-            var_info.ref(dev).old_uses++;
+        if (var_info.contains(name)) {
+            var_info.ref(name).old_uses++;
         }
     }
 
@@ -3858,17 +3853,6 @@ private:
             expr = op;
         } else {
             expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
-        }
-
-
-        // Loads implicitly depend on the .host and .dev symbols of the buffer referenced
-        string host = op->name + ".host";
-        string dev = op->name + ".dev";
-        if (var_info.contains(host)) {
-            var_info.ref(host).old_uses++;
-        }
-        if (var_info.contains(dev)) {
-            var_info.ref(dev).old_uses++;
         }
     }
 
