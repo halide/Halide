@@ -11,6 +11,8 @@ cc_library(
     includes = ["."],
     visibility = ["//visibility:public"],
     deps = ["@png_archive//:png"],
+    # TODO: add jpeg support
+    defines=["HALIDE_NO_JPEG=1"],
 )
 
 cc_library(

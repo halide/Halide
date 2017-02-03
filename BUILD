@@ -1,14 +1,13 @@
 # TODO apps/HelloAndroidCamera2
 # TODO apps/HelloAndroidGL
-# TODO apps/HelloAppleMetal
 # TODO apps/HelloHexagon
 # TODO apps/HelloMatlab
-# TODO apps/HelloiOS
 # TODO apps/linear_algebra
 # TODO apps/opengl_demo
 # TODO apps/openglcompute
 # TODO apps/simd_op_check
 # TODO apps/templates -- should probably be upgraded to Bazel-only?
+# TODO @jpeglib
 
 package(
     default_visibility = ["//visibility:private"],
