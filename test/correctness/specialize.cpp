@@ -453,15 +453,31 @@ int main(int argc, char **argv) {
         f(x) = select(test, im(x, 0), im(0, x));
         f.specialize(test);
 
-        Buffer<int> input1(10, 1);
-        Buffer<int> input2(1, 10);
-        im.set(input1);
-        p.set(100);
-        f.realize(10);
+        // Selects evaluate both sides, so evaluating ten values of
+        // this Func (ignoring the specialization) requires a 10x10
+        // box of the input (The union of a 10x1 box and a 1x10
+        // box). The specialization means that instead of depending on
+        // the union, we either depend on a wide or a tall box,
+        // depending on the param.
 
-        im.set(input2);
+        p.set(100);
+        f.infer_input_bounds(10);
+        int w = im.get().width();
+        int h = im.get().height();
+        if (w != 10 || h != 1) {
+            printf("Incorrect inferred size: %d %d\n", w, h);
+            return -1;
+        }
+        im.reset();
+
         p.set(-100);
-        f.realize(10);
+        f.infer_input_bounds(10);
+        w = im.get().width();
+        h = im.get().height();
+        if (w != 1 || h != 10) {
+            printf("Incorrect inferred size: %d %d\n", w, h);
+            return -1;
+        }
     }
 
     {
@@ -475,23 +491,32 @@ int main(int argc, char **argv) {
         f(x) = select(p > 50, im(x, 0), im(0, x));
         f.specialize(test);
 
-
-        // (p > 73) implies (p > 50), so if the condition h olds (as
-        // it does when p is 100), we only access the first row of the
-        // input.
-        Buffer<int> input1(10, 1);
-        im.set(input1);
+        // (p > 73) implies (p > 50), so if the condition holds (as it
+        // does when p is 100), we only access the first row of the
+        // input, and bounds inference should recognize this.
         p.set(100);
-        f.realize(10);
+        f.infer_input_bounds(10);
+        int w = im.get().width();
+        int h = im.get().height();
+        if (w != 10 || h != 1) {
+            printf("Incorrect inferred size: %d %d\n", w, h);
+            return -1;
+        }
+        im.reset();
 
         // (p <= 73) doesn't tell us anything about (p > 50), so when
         // the condition doesn't hold, we can make no useful
         // simplifications. The select remains, so both sides of it
-        // are evaluated, so the image is loaded over the full square.
-        Buffer<int> input2(10, 10);
-        im.set(input2);
+        // are evaluated, so the image must be loaded over the full
+        // square.
         p.set(-100);
-        f.realize(10);
+        f.infer_input_bounds(10);
+        w = im.get().width();
+        h = im.get().height();
+        if (w != 10 || h != 10) {
+            printf("Incorrect inferred size: %d %d\n", w, h);
+            return -1;
+        }
     }
 
     printf("Success!\n");
