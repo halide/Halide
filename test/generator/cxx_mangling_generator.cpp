@@ -13,6 +13,21 @@ Halide::Expr extract_value_ns(Halide::Expr arg) {
                                         Halide::Internal::Call::ExternCPlusPlus);
 }
 
+namespace my_namespace {
+class my_class {public: int foo;};
+namespace my_subnamespace {
+struct my_struct {int foo;};
+}
+}
+union my_union {
+    float a;
+    int b;
+};
+
+HALIDE_DECLARE_EXTERN_CLASS_TYPE(my_namespace::my_class);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(my_namespace::my_subnamespace::my_struct);
+HALIDE_DECLARE_EXTERN_UNION_TYPE(my_union);
+
 class CPlusPlusNameManglingGenerator : public Halide::Generator<CPlusPlusNameManglingGenerator> {
 public:
     // Use all the parameter types to make sure mangling works for each of them.
@@ -39,6 +54,11 @@ public:
     // should be preserved).
     Param<std::string *> string_ptr{"string_ptr", 0};
     Param<std::string const *> const_string_ptr{"const_string_ptr", 0};
+
+    // Test some manually-registered types. These won't be void *.
+    Param<const my_namespace::my_class *> const_my_class_ptr{"const_my_class_ptr", 0};
+    Param<const my_namespace::my_subnamespace::my_struct *> const_my_struct_ptr{"const_my_struct_ptr", 0};
+    Param<const my_union *> const_my_union_ptr{"const_my_union_ptr", 0};
 
     Func build() {
         assert(get_target().has_feature(Target::CPlusPlusMangling));

@@ -29,9 +29,6 @@ endfunction(test_plain_c_includes)
 
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp")
-  if (WIN32)
-    LIST(REMOVE_ITEM TESTS "simd_op_check.cpp") # Relies on shell stuff that doesn't work on windows
-  endif()
   set(TEST_NAMES "")
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
@@ -302,7 +299,8 @@ if (WITH_TEST_GENERATORS)
   # Tests that require additional dependencies, args, etc
   set(MDTEST_GEN_ARGS
       input.type=uint8 input.dim=3
-      semityped_input_buffer.dim=3
+      type_only_input_buffer.dim=3
+      dim_only_input_buffer.type=uint8
       untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3
       output.type=float32,float32 output.dim=3
       input_not_nod.type=uint8 input_not_nod.dim=3

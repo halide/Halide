@@ -34,19 +34,6 @@
 
 #endif
 
-// We must make halide_filter_metadata_t a "Known" type for name-mangling to work
-// properly on Windows: the return type isn't part of the name-mangling scheme
-// on *nix, but is for MSVC. Note also that this specialization must be in the
-// same (global) namespace as the others.
-template<>
-struct halide_c_type_to_name<struct halide_filter_metadata_t> {
-    static const bool known_type = true;
-    static halide_cplusplus_type_name name() {
-        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"};
-    }
-};
-
-
 namespace Halide {
 
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context) {
@@ -931,7 +918,11 @@ void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
     if (debug::debug_level() >= 3) {
+        #if LLVM_VERSION >= 50
+        module->print(dbgs(), nullptr, false, true);
+        #else
         module->dump();
+        #endif
     }
 
     // We override PassManager::add so that we have an opportunity to
@@ -986,7 +977,11 @@ void CodeGen_LLVM::optimize_module() {
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
+        #if LLVM_VERSION >= 50
+        module->print(dbgs(), nullptr, false, true);
+        #else
         module->dump();
+        #endif
     }
 }
 

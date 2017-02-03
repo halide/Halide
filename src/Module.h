@@ -84,6 +84,10 @@ public:
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
     // @}
 
+    /** Return the function with the given name. If no such function
+    * exists in this module, assert. */
+    EXPORT Internal::LoweredFunc get_function_by_name(const std::string &name) const;
+
     /** Add a declaration to this module. */
     // @{
     EXPORT void append(const Buffer<> &buffer);
