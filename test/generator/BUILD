@@ -112,7 +112,8 @@ halide_library(
 _METADATA_TESTER_GENERATOR_ARGS = " ".join([
     "input.type=uint8",
     "input.dim=3",
-    "semityped_input_buffer.dim=3",
+    "type_only_input_buffer.dim=3",
+    "dim_only_input_buffer.type=uint8",
     "untyped_input_buffer.type=uint8",
     "untyped_input_buffer.dim=3",
     "output.type=float32,float32",
