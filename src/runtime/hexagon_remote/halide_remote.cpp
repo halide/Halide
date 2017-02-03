@@ -156,7 +156,38 @@ handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name,
 
 volatile int power_ref_count = 0;
 
-int halide_hexagon_remote_power_hvx_on_perf(
+int halide_hexagon_remote_power_hvx_on() {
+    if (power_ref_count == 0) {
+        HAP_power_request_t request;
+        request.type = HAP_power_set_HVX;
+        request.hvx.power_up = TRUE;
+        int result = HAP_power_set(NULL, &request);
+        if (0 != result) {
+            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", result);
+            return -1;
+        }
+    }
+    power_ref_count++;
+
+    return 0;
+}
+
+int halide_hexagon_remote_power_hvx_off() {
+    power_ref_count--;
+    if (power_ref_count == 0) {
+        HAP_power_request_t request;
+        request.type = HAP_power_set_HVX;
+        request.hvx.power_up = FALSE;
+        int result = HAP_power_set(NULL, &request);
+        if (0 != result) {
+            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", result);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int halide_hexagon_remote_set_performance(
     int set_mips,
     unsigned int mipsPerThread,
     unsigned int mipsTotal,
@@ -164,47 +195,36 @@ int halide_hexagon_remote_power_hvx_on_perf(
     unsigned int bwMegabytesPerSec,
     unsigned int busbwUsagePercentage,
     int set_latency,
-    int latency)
-{
-    if (power_ref_count == 0) {
-        HAP_power_request_t request;
+    int latency) {
 
-        request.type = HAP_power_set_apptype;
-        request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
-        int retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
-            return -1;
-        }
+    HAP_power_request_t request;
 
-        request.type = HAP_power_set_HVX;
-        request.hvx.power_up = TRUE;
-        retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", retval);
-            return -1;
-        }
-
-        request.type = HAP_power_set_mips_bw;
-        request.mips_bw.set_mips        = set_mips;
-        request.mips_bw.mipsPerThread   = mipsPerThread;
-        request.mips_bw.mipsTotal       = mipsTotal;
-        request.mips_bw.set_bus_bw      = set_bus_bw;
-        request.mips_bw.bwBytePerSec    = ((uint64_t) bwMegabytesPerSec) << 20;
-        request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
-        request.mips_bw.set_latency     = set_latency;
-        request.mips_bw.latency         = latency;
-        retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
-            return -1;
-        }
+    request.type = HAP_power_set_apptype;
+    request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
+    int retval = HAP_power_set(NULL, &request);
+    if (0 != retval) {
+        log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
+        return -1;
     }
-    power_ref_count++;
+
+    request.type = HAP_power_set_mips_bw;
+    request.mips_bw.set_mips        = set_mips;
+    request.mips_bw.mipsPerThread   = mipsPerThread;
+    request.mips_bw.mipsTotal       = mipsTotal;
+    request.mips_bw.set_bus_bw      = set_bus_bw;
+    request.mips_bw.bwBytePerSec    = ((uint64_t) bwMegabytesPerSec) << 20;
+    request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
+    request.mips_bw.set_latency     = set_latency;
+    request.mips_bw.latency         = latency;
+    retval = HAP_power_set(NULL, &request);
+    if (0 != retval) {
+        log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
+        return -1;
+    }
     return 0;
 }
 
-int halide_hexagon_remote_power_hvx_on_mode(int mode) {
+int halide_hexagon_remote_set_performance_mode(int mode) {
     int set_mips = 0;
     unsigned int mipsPerThread = 0;
     unsigned int mipsTotal = 0;
@@ -280,50 +300,14 @@ int halide_hexagon_remote_power_hvx_on_mode(int mode) {
     latency = 1;
 
     bwMegabytesPerSec = bwBytePerSec >> 20;
-    return halide_hexagon_remote_power_hvx_on_perf(
-                                    set_mips,
-                                    mipsPerThread,
-                                    mipsTotal,
-                                    set_bus_bw,
-                                    bwMegabytesPerSec,
-                                    busbwUsagePercentage,
-                                    set_latency,
-                                    latency);
-}
-
-int halide_hexagon_remote_power_hvx_on() {
-    return halide_hexagon_remote_power_hvx_on_mode(halide_hvx_power_turbo);
-}
-
-int halide_hexagon_remote_power_hvx_off() {
-    power_ref_count--;
-    if (power_ref_count == 0) {
-        HAP_power_request_t request;
-
-        request.type = HAP_power_set_HVX;
-        request.hvx.power_up = FALSE;
-        int retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", retval);
-            return -1;
-        }
-
-        request.type = HAP_power_set_mips_bw;
-        request.mips_bw.set_mips        = TRUE;
-        request.mips_bw.mipsPerThread   = 0;
-        request.mips_bw.mipsTotal       = 0;
-        request.mips_bw.set_bus_bw      = TRUE;
-        request.mips_bw.bwBytePerSec    = 0;
-        request.mips_bw.busbwUsagePercentage = 0;
-        request.mips_bw.set_latency     = TRUE;
-        request.mips_bw.latency         = -1;
-        retval = HAP_power_set(NULL, &request);
-        if (0 != retval) {
-            log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
-            return -1;
-        }
-    }
-    return 0;
+    return halide_hexagon_remote_set_performance(set_mips,
+                                                 mipsPerThread,
+                                                 mipsTotal,
+                                                 set_bus_bw,
+                                                 bwMegabytesPerSec,
+                                                 busbwUsagePercentage,
+                                                 set_latency,
+                                                 latency);
 }
 
 int halide_hexagon_remote_get_symbol_v2(handle_t module_ptr, const char* name, int nameLen,
@@ -400,6 +384,40 @@ halide_profiler_state *halide_profiler_get_state() {
     return &hvx_profiler_state;
 }
 
+// Some shims for old APIs. These shims are here in the runtime
+// because they would be two RPC calls outside the runtime.
+int halide_hexagon_remote_power_hvx_on_perf(
+    int set_mips,
+    unsigned int mipsPerThread,
+    unsigned int mipsTotal,
+    int set_bus_bw,
+    unsigned int bwMegabytesPerSec,
+    unsigned int busbwUsagePercentage,
+    int set_latency,
+    int latency) {
 
+    int result = halide_hexagon_remote_set_performance(set_mips,
+                                                       mipsPerThread,
+                                                       mipsTotal,
+                                                       set_bus_bw,
+                                                       bwMegabytesPerSec,
+                                                       busbwUsagePercentage,
+                                                       set_latency,
+                                                       latency);
+    if (result != 0) {
+        return result;
+    }
+
+    return halide_hexagon_remote_power_hvx_on();
+}
+
+int halide_hexagon_remote_power_hvx_on_mode(int mode) {
+    int result = halide_hexagon_remote_set_performance_mode(mode);
+    if (result != 0) {
+        return result;
+    }
+
+    return halide_hexagon_remote_power_hvx_on();
+}
 
 }  // extern "C"
