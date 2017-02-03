@@ -4,4 +4,7 @@ cc_binary(
         "HalideTraceViz.cpp",
         "inconsolata.h",
     ],
+    deps = [
+        "@halide//:runtime",
+    ],
 )
