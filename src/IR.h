@@ -190,9 +190,11 @@ struct Select : public ExprNode<Select> {
     static const IRNodeType _type_info = IRNodeType::Select;
 };
 
-/** Load a value from a named buffer if predicate is true. The buffer is treated
- * as an array of the 'type' of this Load node. That is, the buffer has
- * no inherent type. */
+/** Load a value from a named symbol if predicate is true. The buffer
+ * is treated as an array of the 'type' of this Load node. That is,
+ * the buffer has no inherent type. The name may be the name of an
+ * enclosing allocation, an input or output buffer, or any other
+ * symbol of type Handle(). */
 struct Load : public ExprNode<Load> {
     std::string name;
 
@@ -297,9 +299,11 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
 };
 
-/** Store a 'value' to the buffer called 'name' at a given 'index' if 'predicate'
- * is true. The buffer is interpreted as an array of the same type as
- * 'value'. */
+/** Store a 'value' to the buffer called 'name' at a given 'index' if
+ * 'predicate' is true. The buffer is interpreted as an array of the
+ * same type as 'value'. The name may be the name of an enclosing
+ * allocation, an input or output buffer, or any other symbol of type
+ * Handle(). */
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr predicate, value, index;
@@ -330,7 +334,9 @@ struct Provide : public StmtNode<Provide> {
  * size. The buffer lives for at most the duration of the body
  * statement, within which it is freed. It is an error for an allocate
  * node not to contain a free node of the same buffer. Allocation only
- * occurs if the condition evaluates to true. */
+ * occurs if the condition evaluates to true. Within the body of the
+ * allocation, defines a symbol with the given name and the type
+ * Handle(). */
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;

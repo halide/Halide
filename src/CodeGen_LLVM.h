@@ -268,6 +268,7 @@ protected:
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);
 
+    #if 0
     /** Given an llvm value representing a pointer to a buffer_t, extract various subfields.
      * The *_ptr variants return a pointer to the struct element, while the basic variants
      * load the actual value. */
@@ -289,6 +290,7 @@ protected:
     llvm::Value *buffer_stride_ptr(llvm::Value *, int);
     llvm::Value *buffer_elem_size_ptr(llvm::Value *);
     // @}
+    #endif
 
     /** Generate a pointer into a named buffer at a given index, of a
      * given type. The index counts according to the scalar type of

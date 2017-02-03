@@ -494,7 +494,7 @@ Stmt add_image_checks(Stmt s,
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
         }
         if (param.defined() && param.host_alignment() != param.type().bytes()) {
-            string host_name = name + ".host";
+            string host_name = name;
             int alignment_required = param.host_alignment();
             Expr host_ptr = Variable::make(Handle(), host_name);
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);

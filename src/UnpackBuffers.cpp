@@ -47,16 +47,13 @@ class FindBufferSymbols : public IRVisitor {
     }
 
     void visit(const Load *op) {
-        visit_param(op->name + ".host", op->param);
-        visit_param(op->name + ".dev", op->param);
-        visit_buffer(op->name + ".host", op->image);
-        visit_buffer(op->name + ".dev", op->image);
+        visit_param(op->name, op->param);
+        visit_buffer(op->name, op->image);
         IRVisitor::visit(op);
     }
 
     void visit(const Store *op) {
-        visit_param(op->name + ".host", op->param);
-        visit_param(op->name + ".dev", op->param);
+        visit_param(op->name, op->param);
         IRVisitor::visit(op);
     }
 
@@ -78,7 +75,7 @@ Stmt unpack_buffers(Stmt s) {
         const BufferInfo &info = p.second;
         vector<Expr> args = {info.handle};
 
-        string host_var = name + ".host";
+        string host_var = name;
         Expr host_val = Call::make(type_of<void *>(), Call::buffer_get_host, args, Call::Extern);
         lets.push_back({host_var, host_val});
 

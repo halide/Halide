@@ -43,7 +43,7 @@ void Closure::visit(const Load *op) {
     op->index.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding buffer " << op->name << " to closure\n";
-        Buffer & ref = buffers[op->name];
+        Buffer &ref = buffers[op->name];
         ref.type = op->type.element_of(); // TODO: Validate type is the same as existing refs?
         ref.read = true;
 
@@ -91,20 +91,6 @@ void Closure::visit(const Variable *op) {
         debug(3) << "Adding " << op->name << " to closure\n";
         vars[op->name] = op->type;
     }
-}
-
-vector<string> Closure::names() const {
-    vector<string> res;
-    for (const pair<string, Type> &i : vars) {
-        debug(2) << "vars:  " << i.first << "\n";
-        res.push_back(i.first);
-    }
-    for (const pair<string, Buffer> &i : buffers) {
-        debug(2) << "buffers: " << i.first << "\n";
-        res.push_back(i.first + ".host");
-        res.push_back(i.first + ".buffer");
-    }
-    return res;
 }
 
 }
