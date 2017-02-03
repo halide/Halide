@@ -3357,7 +3357,7 @@ private:
                    const_int(lt_a->b, &ia) &&
                    const_int(lt_b->a, &ib) &&
                    ib + 1 >= ia) {
-            // (a < ia && ib < a) where there are no integers x s.t. ib < x < ia
+            // (a < ia && ib < a) where there is no integer a s.t. ib < a < ia
             expr = const_false(op->type.lanes());
         } else if (lt_a &&
                    lt_b &&
@@ -3365,7 +3365,7 @@ private:
                    const_int(lt_b->b, &ia) &&
                    const_int(lt_a->a, &ib) &&
                    ib + 1 >= ia) {
-            // (ib < a && a < ia) where there are no integers x s.t. ib < x < ia
+            // (ib < a && a < ia) where there is no integer a s.t. ib < a < ia
             expr = const_false(op->type.lanes());
 
         } else if (le_a &&
@@ -3374,7 +3374,7 @@ private:
                    const_int(le_a->b, &ia) &&
                    const_int(lt_b->a, &ib) &&
                    ib >= ia) {
-            // (a <= ia && ib < a) where there are no integers x s.t. ib < x <= ia
+            // (a <= ia && ib < a) where there is no integer a s.t. ib < a <= ia
             expr = const_false(op->type.lanes());
         } else if (le_a &&
                    lt_b &&
@@ -3382,7 +3382,7 @@ private:
                    const_int(lt_b->b, &ia) &&
                    const_int(le_a->a, &ib) &&
                    ib >= ia) {
-            // (ib <= a && a < ia) where there are no integers x s.t. ib < x <= ia
+            // (ib <= a && a < ia) where there is no integer a s.t. ib < a <= ia
             expr = const_false(op->type.lanes());
 
         } else if (lt_a &&
@@ -3391,7 +3391,7 @@ private:
                    const_int(lt_a->b, &ia) &&
                    const_int(le_b->a, &ib) &&
                    ib >= ia) {
-            // (a < ia && ib <= a) where there are no integers x s.t. ib <= x < ia
+            // (a < ia && ib <= a) where there is no integer a s.t. ib <= a < ia
             expr = const_false(op->type.lanes());
         } else if (lt_a &&
                    le_b &&
@@ -3399,7 +3399,7 @@ private:
                    const_int(le_b->b, &ia) &&
                    const_int(lt_a->a, &ib) &&
                    ib >= ia) {
-            // (ib < a && a <= ia) where there are no integers x s.t. ib <= x < ia
+            // (ib < a && a <= ia) where there is no integer a s.t. ib <= a < ia
             expr = const_false(op->type.lanes());
 
         } else if (le_a &&
@@ -3408,7 +3408,7 @@ private:
                    const_int(le_a->b, &ia) &&
                    const_int(le_b->a, &ib) &&
                    ib > ia) {
-            // (a <= ia && ib <= a) where there are no integers x s.t. ib <= x <= ia
+            // (a <= ia && ib <= a) where there is no integer a s.t. ib <= a <= ia
             expr = const_false(op->type.lanes());
         } else if (le_a &&
                    le_b &&
@@ -3416,7 +3416,7 @@ private:
                    const_int(le_b->b, &ia) &&
                    const_int(le_a->a, &ib) &&
                    ib > ia) {
-            // (ib <= a && a <= ia) where there are no integers x s.t. ib <= x <= ia
+            // (ib <= a && a <= ia) where there is no integer a s.t. ib <= a <= ia
             expr = const_false(op->type.lanes());
 
         } else if (eq_a &&
