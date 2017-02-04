@@ -55,14 +55,14 @@ extern int halide_hexagon_power_hvx_off(void *user_context);
 extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
 // @}
 
-/** Power mode for halide_hexagon_power_hvx_on_mode */
+/** Power modes for Hexagon. */
 typedef enum halide_hvx_power_mode_t {
     halide_hvx_power_low     = 0,
     halide_hvx_power_nominal = 1,
     halide_hvx_power_turbo   = 2
 } halide_hvx_power_mode_t;
 
-/**
+/** More detailed power settings to control Hexagon.
  * @param set_mips - Set to TRUE to requst MIPS
  * @param mipsPerThread - mips requested per thread, to establish a minimal clock frequency per HW thread
  * @param mipsTotal - Total mips requested, to establish total number of MIPS required across all HW threads
