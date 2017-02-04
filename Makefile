@@ -837,11 +837,6 @@ $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalid
 $(BIN_DIR)/correctness_plain_c_includes: $(ROOT_DIR)/test/correctness/plain_c_includes.c $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) -x c -Wall -Werror -I$(ROOT_DIR) $(OPTIMIZE) $< -I$(ROOT_DIR)/src/runtime -o $@
 
-# -fvar-tracking-assignments makes simd_op_check build very slow.
-$(BIN_DIR)/correctness_simd_op_check: $(ROOT_DIR)/test/correctness/simd_op_check.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
-	$(CXX) $(TEST_CXX_FLAGS) -fno-var-tracking-assignments -I$(ROOT_DIR) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
-
-
 ifeq ($(UNAME), Darwin)
 WEAK_BUFFER_LINKAGE_FLAGS=-Wl,-U,_halide_weak_device_free
 else
