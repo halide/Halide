@@ -24,8 +24,13 @@ struct _remote_buffer__seq_octet {
    int dataLen;
 };
 
-typedef int (*remote_initialize_kernels_fn)(const unsigned char* codeptr, int codesize,
-                                            int use_shared_object, halide_hexagon_handle_t*);
+typedef int (*remote_initialize_kernels_v2_fn)(const unsigned char* codeptr,
+                                               int codesize,
+                                               int use_shared_object,
+                                               halide_hexagon_handle_t*);
+typedef int (*remote_initialize_kernels_fn)(const unsigned char* codeptr,
+                                            int codesize,
+                                            halide_hexagon_handle_t*);
 typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int, int);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
@@ -41,6 +46,7 @@ typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
 typedef void (*host_free_fn)(void *);
 
+WEAK remote_initialize_kernels_v2_fn remote_initialize_kernels_v2 = NULL;
 WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
 WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
@@ -102,7 +108,8 @@ __attribute__((always_inline)) void get_symbol(void *user_context, void *host_li
 
 // Load the hexagon remote runtime.
 WEAK int init_hexagon_runtime(void *user_context) {
-    if (remote_initialize_kernels && remote_run && remote_release_kernels) {
+    if ((remote_initialize_kernels_v2 || remote_initialize_kernels)
+         && remote_run && remote_release_kernels) {
         // Already loaded.
         return 0;
     }
@@ -116,9 +123,11 @@ WEAK int init_hexagon_runtime(void *user_context) {
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Get the symbols we need from the library.
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels_v2", remote_initialize_kernels);
-    if (!remote_initialize_kernels) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_shared_object", remote_get_symbol);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels_v2", remote_initialize_kernels_v2, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
+    if (!remote_initialize_kernels_v2 && !remote_initialize_kernels) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_handle", remote_get_symbol, /* required */ false);
+    if (!remote_get_symbol) get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol);
     if (!remote_get_symbol) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
@@ -167,49 +176,14 @@ using namespace Halide::Runtime::Internal::Hexagon;
 
 extern "C" {
 
-#define O_TRUNC 00001000
-#define O_CREAT 00000100
-#define O_EXCL  00000200
-// This function writes the given data to a shared object file, returning the filename.
-WEAK int write_shared_object(void *user_context, const uint8_t *data, size_t size,
-                             char *filename, size_t filename_size) {
-    int result = halide_create_temp_file(user_context, "halide_kernels_", ".so", filename, filename_size);
-    if (result != 0) {
-        error(user_context) << "Unable to create temporary shared object file\n" ;
-        return result;
-    }
-    int so_fd = open(filename, O_RDWR | O_TRUNC, 00775);
-    if (so_fd == -1) {
-        error(user_context) << "Failed to open shared object file " << filename << "\n";
-        return halide_error_code_internal_error;
-    }
-    extern int chmod(const char *path, int mode);
-    int res = chmod(filename, 0775);
-    if (res == -1) {
-        error(user_context) << "Failed to chmod " << filename << "\n";
-        return halide_error_code_internal_error;
-    }
-
-    ssize_t written = write(so_fd, data, size);
-    close(so_fd);
-    if (written < (ssize_t)size) {
-        error(user_context) << "Failed to write shared object file " << filename << "\n";
-        return halide_error_code_internal_error;
-    }
-
-    debug(user_context) << "    Wrote temporary shared object '" << filename << "'\n";
-    return 0;
-}
-
-
 WEAK bool halide_is_hexagon_available(void *user_context) {
     int result = init_hexagon_runtime(user_context);
     return result == 0;
 }
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
-                                              const uint8_t *code, uint64_t code_size,
-                                              uint32_t use_shared_object) {
+                                           const uint8_t *code, uint64_t code_size,
+                                           uint32_t use_shared_object) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
@@ -246,7 +220,16 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     // Create the module itself if necessary.
     if (!(*state)->module) {
         halide_hexagon_handle_t module = 0;
-        result = remote_initialize_kernels(code, code_size, use_shared_object, &module);
+        if (remote_initialize_kernels_v2) {
+            result = remote_initialize_kernels_v2(code, code_size, use_shared_object, &module);
+        } else {
+            halide_assert(user_context, remote_initialize_kernels != NULL);
+            if (use_shared_object) {
+                error(user_context) << "Hexagon runtime does not support shared objects.\n";
+                return -1;
+            }
+            result = remote_initialize_kernels(code, code_size, &module);
+        }
         poll_log(user_context);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";

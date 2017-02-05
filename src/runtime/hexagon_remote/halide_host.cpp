@@ -245,8 +245,10 @@ handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr,
     return result == 0 ? sym : 0;
 }
 
-handle_t halide_hexagon_remote_get_symbol_shared_object(handle_t module_ptr,
-                                             const char* name, int nameLen, int use_shared_object) {
+handle_t halide_hexagon_remote_get_symbol_handle(handle_t module_ptr,
+                                                 const char* name,
+                                                 int nameLen,
+                                                 int use_shared_object) {
     handle_t sym = 0;
     int result = halide_hexagon_remote_get_symbol_v2(module_ptr, name, nameLen, use_shared_object, &sym);
     return result == 0 ? sym : 0;
