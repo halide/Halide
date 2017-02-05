@@ -1364,7 +1364,7 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
 
     } else {
         // Scalarize the load.
-        debug(0) << "Scalarize predicated vector load on hexagon\n\t" << Expr(op) << "\n";
+        debug(4) << "Scalarize predicated vector load on hexagon\n\t" << Expr(op) << "\n";
 
         // General gathers
         Type type = op->type.element_of();
@@ -1411,7 +1411,7 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
 void CodeGen_Hexagon::codegen_predicated_vector_store(const Store *op) {
     // We need to scalarize the predicated store since masked store/load on
     // hexagon is not handled by the LLVM
-    debug(0) << "Scalarize predicated vector store on hexagon\n\t" << Stmt(op) << "\n";
+    debug(4) << "Scalarize predicated vector store on hexagon\n\t" << Stmt(op) << "\n";
     Type value_type = op->value.type().element_of();
     Value *vpred = codegen(op->predicate);
     Value *vval = codegen(op->value);
