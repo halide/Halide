@@ -231,22 +231,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(const char *),
                              void *(*)(const char *),
                              void *(*)(void *, const char *));
-
-// This function should be deleted once the hexagon tools impliment the dlopenbuf api.
-void* dlopenbuf(const char*filename, const char* data, int size, int perms) {
-    FILE *f = fopen(filename, "w+");
-    if (!f) {
-        log_printf("Failed to open shared object file %s\n", filename);
-        return NULL;
-    }
-    ssize_t written = fwrite(data, 1, size, f);
-    if (written < (ssize_t)size) {
-        halide_print(NULL, "Failed to write shared object file\n");
-        return NULL;
-    }
-    fclose(f);
-    return dlopen(filename, perms);
-}
+void* dlopenbuf(const char*filename, const char* data, int size, int perms) __attribute__ ((weak));
 
 static void dllib_init() {
     // The simulator needs this call to enable dlopen to work...
@@ -272,9 +257,13 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
 
         // Open the library
         dllib_init();
+        if(&dlopenbuf == NULL) {
+            halide_print(NULL, "dlopenbuf missing\n");
+            return -1;
+        }
         lib = dlopenbuf( filename, (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
-            halide_print(NULL, "dlopenbuf failed");
+            halide_print(NULL, "dlopenbuf failed\n");
             return -1;
         }
     } else {
