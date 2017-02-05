@@ -356,7 +356,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    /*printf("Running multiple vectorized predicate test\n");
+    printf("Running multiple vectorized predicate test\n");
     if (multiple_vectorized_predicate_test() != 0) {
         return -1;
     }
@@ -389,7 +389,7 @@ int main(int argc, char **argv) {
     printf("Running vectorized predicated with pure call test\n");
     if (vectorized_predicated_predicate_with_pure_call_test() != 0) {
         return -1;
-    }*/
+    }
 
     printf("Success!\n");
     return 0;
