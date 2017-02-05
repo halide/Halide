@@ -140,8 +140,10 @@ bool is_dense_ramp(Expr x) {
     return is_one(r->stride);
 }
 
-// We can make dense ramps
-class SloppyUnpredicateLoadsStores : public IRMutator {
+// In Hexagon, we assume that we can read one vector past the end of
+// buffers. Using this assumption, this mutator replaces vector
+// predicated dense loads with scalar predicated dense loads.
+class SloppyUnpredicateLoads : public IRMutator {
     void visit(const Load *op) {
         // Don't handle loads with without predicates, scalar predicates, or non-dense ramps.
         if (is_one(op->predicate) || op->predicate.as<Broadcast>() || !is_dense_ramp(op->index)) {
@@ -165,8 +167,8 @@ class SloppyUnpredicateLoadsStores : public IRMutator {
     using IRMutator::visit;
 };
 
-Stmt sloppy_unpredicate_loads_stores(Stmt s) {
-    return SloppyUnpredicateLoadsStores().mutate(s);
+Stmt sloppy_unpredicate_loads(Stmt s) {
+    return SloppyUnpredicateLoads().mutate(s);
 }
 
 }// namespace
@@ -178,10 +180,9 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     debug(1) << "Unpredicating loads and stores...\n";
-    // Before running unpredicate_loads_stores, replace dense
-    // predicated loads and stores with a sloppy scalarized
-    // predicates.
-    body = sloppy_unpredicate_loads_stores(body);
+    // Before running unpredicate_loads_stores, replace dense vector
+    // predicated loads with a sloppy scalarized predicates.
+    body = sloppy_unpredicate_loads(body);
     body = unpredicate_loads_stores(body);
     debug(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
 

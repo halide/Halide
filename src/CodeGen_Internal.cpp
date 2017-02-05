@@ -236,6 +236,8 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
 
 namespace {
 
+// This mutator rewrites predicated loads and stores as unpredicated
+// loads/stores with explicit conditions, scalarizing if necessary.
 class UnpredicateLoadsStores : public IRMutator {
     void visit(const Load *op) {
         if (is_one(op->predicate)) {
