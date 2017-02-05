@@ -1273,8 +1273,7 @@ public:
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, std::vector<Type>{ T::static_halide_type() }, d) {
-        static_assert(T::has_static_halide_type(), "Must pass a Type argument for a Buffer with a static type of void");
+        : Super(name, IOKind::Buffer, T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, d) {
     }
 
 
@@ -1688,7 +1687,7 @@ protected:
         if (T::has_static_halide_type()) {
             user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
         } else {
-            user_assert(t.size() == 1) << "Output<Buffer<>> requires exactly one Type\n";
+            user_assert(t.size() <= 1) << "Output<Buffer<>>(" << name << ") requires at most one Type, but has " << t.size() << "\n";
         }
     }
 
@@ -1948,6 +1947,7 @@ protected:
     using Tuple = Halide::Tuple;
     using Type = Halide::Type;
     using Var = Halide::Var;
+    using NameMangling = Halide::NameMangling;
     template <typename T> static Expr cast(Expr e) { return Halide::cast<T>(e); }
     static inline Expr cast(Halide::Type t, Expr e) { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
@@ -2203,10 +2203,10 @@ private:
     template <typename T2 = T,
               typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
     void call_generate_impl() {
-        typedef typename std::result_of<decltype(&T::generate)(T)>::type GenerateRetType;
-        static_assert(std::is_void<GenerateRetType>::value, "generate() must return void");
+        T *t = (T*)this;
+        static_assert(std::is_void<decltype(t->generate())>::value, "generate() must return void");
         pre_generate();
-        ((T *)this)->generate();
+        t->generate();
         post_generate();
     }
 
@@ -2222,10 +2222,10 @@ private:
     template <typename T2 = T,
               typename std::enable_if<has_schedule_method<T2>::value>::type * = nullptr>
     void call_schedule_impl() {
-        typedef typename std::result_of<decltype(&T::schedule)(T)>::type ScheduleRetType;
-        static_assert(std::is_void<ScheduleRetType>::value, "schedule() must return void");
+        T *t = (T*)this;
+        static_assert(std::is_void<decltype(t->schedule())>::value, "schedule() must return void");
         pre_schedule();
-        ((T *)this)->schedule();
+        t->schedule();
         post_schedule();
     }
 

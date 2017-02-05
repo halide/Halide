@@ -34,19 +34,6 @@
 
 #endif
 
-// We must make halide_filter_metadata_t a "Known" type for name-mangling to work
-// properly on Windows: the return type isn't part of the name-mangling scheme
-// on *nix, but is for MSVC. Note also that this specialization must be in the
-// same (global) namespace as the others.
-template<>
-struct halide_c_type_to_name<struct halide_filter_metadata_t> {
-    static const bool known_type = true;
-    static halide_cplusplus_type_name name() {
-        return { halide_cplusplus_type_name::Struct,  "halide_filter_metadata_t"};
-    }
-};
-
-
 namespace Halide {
 
 std::unique_ptr<llvm::Module> codegen_llvm(const Module &module, llvm::LLVMContext &context) {
@@ -338,8 +325,7 @@ void CodeGen_LLVM::initialize_llvm() {
 
         // You can hack in command-line args to llvm with the
         // environment variable HL_LLVM_ARGS, e.g. HL_LLVM_ARGS="-print-after-all"
-        size_t defined = 0;
-        std::string args = get_env_variable("HL_LLVM_ARGS", defined);
+        std::string args = get_env_variable("HL_LLVM_ARGS");
         if (!args.empty()) {
             vector<std::string> arg_vec = split_string(args, " ");
             vector<const char *> c_arg_vec;
@@ -931,8 +917,12 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
 void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
-    if (debug::debug_level >= 3) {
+    if (debug::debug_level() >= 3) {
+        #if LLVM_VERSION >= 50
+        module->print(dbgs(), nullptr, false, true);
+        #else
         module->dump();
+        #endif
     }
 
     // We override PassManager::add so that we have an opportunity to
@@ -986,8 +976,12 @@ void CodeGen_LLVM::optimize_module() {
     module_pass_manager.run(*module);
 
     debug(3) << "After LLVM optimizations:\n";
-    if (debug::debug_level >= 2) {
+    if (debug::debug_level() >= 2) {
+        #if LLVM_VERSION >= 50
+        module->print(dbgs(), nullptr, false, true);
+        #else
         module->dump();
+        #endif
     }
 }
 
@@ -1009,7 +1003,7 @@ llvm::Value *CodeGen_LLVM::sym_get(const string &name, bool must_succeed) const 
             std::ostringstream err;
             err << "Symbol not found: " << name << "\n";
 
-            if (debug::debug_level > 0) {
+            if (debug::debug_level() > 0) {
                 err << "The following names are in scope:\n"
                     << symbol_table << "\n";
             }
@@ -2420,7 +2414,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 args[i] = codegen(op->args[i]);
                 types[i] = args[i]->getType();
-                all_same_type &= op->args[i].type() == op->args[0].type();
+                all_same_type &= (types[0] == types[i]);
             }
 
             // Use either a single scalar, a fixed-size array, or a
