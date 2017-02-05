@@ -2063,7 +2063,7 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
 }
 
 Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
-    debug(0) << "Vectorize predicated dense vector load:\n\t" << Expr(load) << "\n";
+    debug(4) << "Vectorize predicated dense vector load:\n\t" << Expr(load) << "\n";
 
     const Ramp *ramp = load->index.as<Ramp>();
     internal_assert(ramp && is_one(ramp->stride)) << "Should be dense vector load\n";
@@ -2133,7 +2133,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
     if (ramp && is_one(ramp->stride)) { // Dense vector load
         value = codegen_dense_vector_load(op, codegen(op->predicate));
     } else if (ramp && stride && stride->value == -1) {
-        debug(0) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
+        debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
         vector<int> indices(ramp->lanes);
         for (int i = 0; i < ramp->lanes; i++) {
             indices[i] = ramp->lanes - 1 - i;
@@ -2155,7 +2155,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
     } else { // It's not dense vector load, we need to scalarize it
         Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
                                     op->param, const_true(op->type.lanes()));
-        debug(0) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
+        debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
                                     {op->predicate, load_expr, make_zero(load_expr.type())},

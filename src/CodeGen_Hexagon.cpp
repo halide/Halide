@@ -1326,13 +1326,12 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
     // since Hexagon allocates one additional vector past the end of the actual
     // allocation. Note that this is only true for stride equal to one; if it
     // isn't, we need to scalarize the load.
-    debug(0) << "Predicated vector load on hexagon\n\t" << Expr(op) << "\n";
-
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
+    Value *vpred = codegen(op->predicate);
+
     if (ramp && stride && stride->value == 1) {
-        Value *vpred = codegen(op->predicate);
         Constant *lane = ConstantInt::get(i32_t, 0);
         Value *any_true = builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane));
         for (int i = 1; i < op->predicate.type().lanes(); i++) {
@@ -1365,21 +1364,54 @@ void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
 
     } else {
         // Scalarize the load.
-        Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
-                                    op->param, const_true(op->type.lanes()));
-        debug(0) << "Scalarize predicated vector load on hexagon\n\t" << load_expr << "\n";
-        Expr pred_load = Call::make(load_expr.type(),
-                                    Call::if_then_else,
-                                    {op->predicate, load_expr, make_zero(load_expr.type())},
-                                    Internal::Call::Intrinsic);
-        value = codegen(pred_load);
+        debug(0) << "Scalarize predicated vector load on hexagon\n\t" << Expr(op) << "\n";
+
+        // General gathers
+        Type type = op->type.element_of();
+        Value *vindex = codegen(op->index);
+        Value *vec = UndefValue::get(llvm_type_of(op->type));
+        for (int i = 0; i < op->index.type().lanes(); i++) {
+            Constant *lane = ConstantInt::get(i32_t, i);
+            Value *p = builder->CreateExtractElement(vpred, lane);
+            if (p->getType() != i1_t) {
+                p = builder->CreateIsNotNull(p);
+            }
+
+            Value *idx = builder->CreateExtractElement(vindex, lane);
+            internal_assert(p && idx);
+
+            BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+            BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+            BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+            builder->CreateCondBr(p, true_bb, false_bb);
+
+            builder->SetInsertPoint(true_bb);
+            Value *ptr = codegen_buffer_pointer(op->name, type, idx);
+            Value *true_value = builder->CreateAlignedLoad(ptr, type.bytes());
+            builder->CreateBr(after_bb);
+            BasicBlock *true_pred = builder->GetInsertBlock();
+
+            builder->SetInsertPoint(false_bb);
+            Value *false_value = UndefValue::get(llvm_type_of(type));
+            builder->CreateBr(after_bb);
+            BasicBlock *false_pred = builder->GetInsertBlock();
+
+            builder->SetInsertPoint(after_bb);
+            PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+            phi->addIncoming(true_value, true_pred);
+            phi->addIncoming(false_value, false_pred);
+
+            vec = builder->CreateInsertElement(vec, phi, ConstantInt::get(i32_t, i));
+        }
+
+        value = vec;
     }
 }
 
 void CodeGen_Hexagon::codegen_predicated_vector_store(const Store *op) {
     // We need to scalarize the predicated store since masked store/load on
     // hexagon is not handled by the LLVM
-    debug(4) << "Scalarize predicated vector store on hexagon\n\t" << Stmt(op) << "\n";
+    debug(0) << "Scalarize predicated vector store on hexagon\n\t" << Stmt(op) << "\n";
     Type value_type = op->value.type().element_of();
     Value *vpred = codegen(op->predicate);
     Value *vval = codegen(op->value);
