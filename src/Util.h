@@ -64,10 +64,10 @@ DstType reinterpret_bits(const SrcType &src) {
 EXPORT std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
 
 /** Get value of an environment variable. Returns its value
- * is defined in the environment. Input: env_var_name. Output: var_defined.
- * Sets to true var_defined if the environment var is defined; false otherwise.
+ * is defined in the environment. If the var is not defined, an empty string
+ * is returned.
  */
-EXPORT std::string get_env_variable(char const *env_var_name, size_t &var_defined);
+EXPORT std::string get_env_variable(char const *env_var_name);
 
 /** Get the name of the currently running executable. Platform-specific.
  * If program name cannot be retrieved, function returns an empty string. */
@@ -166,7 +166,7 @@ template<typename To, typename... Args>
 struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
 /** Returns base name and fills in namespaces, outermost one first in vector. */
-std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
+EXPORT std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
 
 struct FileStat {
     uint64_t file_size;

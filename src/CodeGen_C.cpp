@@ -198,7 +198,7 @@ CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guar
 }
 
 CodeGen_C::~CodeGen_C() {
-    switch_to_c_or_c_plus_plus(COrCPlusPlus::Default);
+    set_name_mangling_mode(NameMangling::Default);
 
     if (is_header()) {
         stream << "#endif\n";
@@ -231,11 +231,11 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
               type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
             oss << "void *";
         } else {
-            if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
+            if (type.handle_type->inner_name.cpp_type_type ==
+                halide_cplusplus_type_name::Struct) {
                 oss << "struct ";
-            } else if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class) {
-                oss << "class ";
             }
+
             if (!type.handle_type->namespaces.empty() ||
                 !type.handle_type->enclosing_types.empty()) {
                 oss << "::";
@@ -286,13 +286,13 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 }
 }
 
-void CodeGen_C::switch_to_c_or_c_plus_plus(COrCPlusPlus mode) {
-    if (extern_c_open && mode != COrCPlusPlus::C) {
+void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
+    if (extern_c_open && mode != NameMangling::C) {
         stream << "\n#ifdef __cplusplus\n";
         stream << "}  // extern \"C\"\n";
         stream << "#endif\n";
         extern_c_open = false;
-    } else if (!extern_c_open && mode == COrCPlusPlus::C) {
+    } else if (!extern_c_open && mode == NameMangling::C) {
         stream << "#ifdef __cplusplus\n";
         stream << "extern \"C\" {\n";
         stream << "#endif\n";
@@ -467,31 +467,23 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     const std::vector<LoweredArgument> &args = f.args;
 
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].type.handle_type != NULL) {
-            if (!args[i].type.handle_type->namespaces.empty()) {
-                if (args[i].type.handle_type->inner_name.cpp_type_type != halide_cplusplus_type_name::Simple) {
-                    for (size_t ns = 0; ns < args[i].type.handle_type->namespaces.size(); ns++ ) {
-                        for (size_t indent = 0; indent < ns; indent++) {
-                           stream << "    ";
-                        }
-                        stream << indent << "namespace " << args[i].type.handle_type->namespaces[ns] << " {\n";
-                    }
-                    for (size_t indent = 0; indent < args[i].type.handle_type->namespaces.size(); indent++) {
-                        stream << "    ";
-                    }
-                    if (args[i].type.handle_type->inner_name.cpp_type_type != halide_cplusplus_type_name::Struct) {
-                        stream << "struct " << args[i].type.handle_type->inner_name.name << ";\n";
-                    } else {
-                        stream << "class " << args[i].type.handle_type->inner_name.name << ";\n";
-                    }
-                    for (size_t ns = 0; ns < args[i].type.handle_type->namespaces.size(); ns++ ) {
-                        for (size_t indent = 0; indent < ns; indent++) {
-                           stream << "    ";
-                        }
-                        stream << indent << "}\n";
-                    }
-                }
-            }
+        auto handle_type = args[i].type.handle_type;
+        if (!handle_type) continue;
+        auto type_type = handle_type->inner_name.cpp_type_type;
+        for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
+            stream << "namespace " << handle_type->namespaces[ns] << " {\n";
+        }
+        if (type_type == halide_cplusplus_type_name::Struct) {
+            stream << "struct " << handle_type->inner_name.name << ";\n";
+        } else if (type_type == halide_cplusplus_type_name::Class) {
+            stream << "class " << handle_type->inner_name.name << ";\n";
+        } else if (type_type == halide_cplusplus_type_name::Union) {
+            stream << "union " << handle_type->inner_name.name << ";\n";
+        } else if (type_type == halide_cplusplus_type_name::Enum) {
+            internal_error << "Passing pointers to enums is unsupported\n";
+        }
+        for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
+            stream << "}\n";
         }
     }
 
@@ -508,17 +500,17 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         f.body.accept(&e);
 
         if (e.has_c_plus_plus_declarations()) {
-            switch_to_c_or_c_plus_plus(COrCPlusPlus::CPlusPlus);
+            set_name_mangling_mode(NameMangling::CPlusPlus);
             e.emit_c_plus_plus_declarations(stream);
         }
 
         if (e.has_c_declarations()) {
-            switch_to_c_or_c_plus_plus(COrCPlusPlus::C);
+            set_name_mangling_mode(NameMangling::C);
             e.emit_c_declarations(stream);
         }
     }
 
-    switch_to_c_or_c_plus_plus(is_c_plus_plus_interface() ? COrCPlusPlus::Default : COrCPlusPlus::C);
+    set_name_mangling_mode(is_c_plus_plus_interface() ? NameMangling::Default : NameMangling::C);
     stream << "\n";
 
     std::vector<std::string> namespaces;

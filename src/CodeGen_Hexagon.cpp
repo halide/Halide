@@ -1,5 +1,6 @@
 #include <iostream>
 #include <sstream>
+#include <mutex>
 
 #include "LLVM_Headers.h"
 #include "CodeGen_Hexagon.h"
@@ -52,7 +53,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
 
 std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     auto llvm_module = CodeGen_Posix::compile(module);
-    static bool options_processed = false;
 
     // TODO: This should be set on the module itself, or some other
     // safer way to pass this through to the target specific lowering
@@ -61,7 +61,8 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     // Hexagon-specific code to run prior to invoking the target
     // specific lowering in LLVM, minimizing the chances of the wrong
     // flag being set for the wrong module.
-    if (!options_processed) {
+    static std::once_flag set_options_once;
+    std::call_once(set_options_once, []() {
         cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
                                     "Halide HVX internal compiler\n");
 
@@ -72,8 +73,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
             "-hexagon-small-data-threshold=0"
         };
         cl::ParseCommandLineOptions(options.size(), options.data());
-    }
-    options_processed = true;
+    });
 
     if (module.target().features_all_of({Halide::Target::HVX_128, Halide::Target::HVX_64})) {
         user_error << "Both HVX_64 and HVX_128 set at same time\n";

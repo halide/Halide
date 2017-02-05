@@ -32,6 +32,9 @@ using std::make_pair;
 using std::ostringstream;
 using std::vector;
 
+#define LOG_EXPR_MUTATIONS 0
+#define LOG_STMT_MUTATIONS 0
+
 namespace {
 
 // Things that we can constant fold: Immediates and broadcasts of immediates.
@@ -165,6 +168,10 @@ bool expr_is_pure(Expr e) {
     return pure.result;
 }
 
+#if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
+static int debug_indent = 0;
+#endif
+
 }
 
 class Simplify : public IRMutator {
@@ -184,17 +191,13 @@ public:
 
     }
 
-    // Uncomment to debug all Expr mutations.
-    /*
+#if LOG_EXPR_MUTATIONS
     Expr mutate(Expr e) {
-        static int indent = 0;
-        std::string spaces;
-        for (int i = 0; i < indent; i++) spaces += ' ';
-
-        debug(1) << spaces << "Simplifying " << e << "\n";
-        indent++;
+        const std::string spaces(debug_indent, ' ');
+        debug(1) << spaces << "Simplifying Expr: " << e << "\n";
+        debug_indent++;
         Expr new_e = IRMutator::mutate(e);
-        indent--;
+        debug_indent--;
         if (!new_e.same_as(e)) {
             debug(1)
                 << spaces << "Before: " << e << "\n"
@@ -202,8 +205,25 @@ public:
         }
         return new_e;
     }
+#endif
+
+#if LOG_STMT_MUTATIONS
+    Stmt mutate(Stmt s) {
+        const std::string spaces(debug_indent, ' ');
+        debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
+        debug_indent++;
+        Stmt new_s = IRMutator::mutate(s);
+        debug_indent--;
+        if (!new_s.same_as(s)) {
+            debug(1)
+                << spaces << "Before: " << s << "\n"
+                << spaces << "After:  " << new_s << "\n";
+        }
+        return new_s;
+    }
+#endif
     using IRMutator::mutate;
-    */
+
 
 private:
     bool simplify_lets;
@@ -524,7 +544,8 @@ private:
             // if replacement is defined, we should substitute it in (unless
             // it's a var that has been hidden by a nested scope).
             if (info.replacement.defined()) {
-                internal_assert(info.replacement.type() == op->type);
+                internal_assert(info.replacement.type() == op->type) << "Cannot replace variable " << op->name
+                    << " of type " << op->type << " with expression of type " << info.replacement.type() << "\n";
                 expr = info.replacement;
                 info.new_uses++;
             } else {
@@ -3269,6 +3290,7 @@ private:
         const Not *not_b = b.as<Not>();
         const Variable *var_a = a.as<Variable>();
         const Variable *var_b = b.as<Variable>();
+        int64_t ia = 0, ib = 0;
 
         if (is_one(a)) {
             expr = b;
@@ -3329,6 +3351,74 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
             expr = const_false(op->type.lanes());
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->a, lt_b->b) &&
+                   const_int(lt_a->b, &ia) &&
+                   const_int(lt_b->a, &ib) &&
+                   ib + 1 >= ia) {
+            // (a < ia && ib < a) where there is no integer a s.t. ib < a < ia
+            expr = const_false(op->type.lanes());
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->b, lt_b->a) &&
+                   const_int(lt_b->b, &ia) &&
+                   const_int(lt_a->a, &ib) &&
+                   ib + 1 >= ia) {
+            // (ib < a && a < ia) where there is no integer a s.t. ib < a < ia
+            expr = const_false(op->type.lanes());
+
+        } else if (le_a &&
+                   lt_b &&
+                   equal(le_a->a, lt_b->b) &&
+                   const_int(le_a->b, &ia) &&
+                   const_int(lt_b->a, &ib) &&
+                   ib >= ia) {
+            // (a <= ia && ib < a) where there is no integer a s.t. ib < a <= ia
+            expr = const_false(op->type.lanes());
+        } else if (le_a &&
+                   lt_b &&
+                   equal(le_a->b, lt_b->a) &&
+                   const_int(lt_b->b, &ia) &&
+                   const_int(le_a->a, &ib) &&
+                   ib >= ia) {
+            // (ib <= a && a < ia) where there is no integer a s.t. ib < a <= ia
+            expr = const_false(op->type.lanes());
+
+        } else if (lt_a &&
+                   le_b &&
+                   equal(lt_a->a, le_b->b) &&
+                   const_int(lt_a->b, &ia) &&
+                   const_int(le_b->a, &ib) &&
+                   ib >= ia) {
+            // (a < ia && ib <= a) where there is no integer a s.t. ib <= a < ia
+            expr = const_false(op->type.lanes());
+        } else if (lt_a &&
+                   le_b &&
+                   equal(lt_a->b, le_b->a) &&
+                   const_int(le_b->b, &ia) &&
+                   const_int(lt_a->a, &ib) &&
+                   ib >= ia) {
+            // (ib < a && a <= ia) where there is no integer a s.t. ib <= a < ia
+            expr = const_false(op->type.lanes());
+
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->a, le_b->b) &&
+                   const_int(le_a->b, &ia) &&
+                   const_int(le_b->a, &ib) &&
+                   ib > ia) {
+            // (a <= ia && ib <= a) where there is no integer a s.t. ib <= a <= ia
+            expr = const_false(op->type.lanes());
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->b, le_b->a) &&
+                   const_int(le_b->b, &ia) &&
+                   const_int(le_a->a, &ib) &&
+                   ib > ia) {
+            // (ib <= a && a <= ia) where there is no integer a s.t. ib <= a <= ia
+            expr = const_false(op->type.lanes());
+
         } else if (eq_a &&
                    neq_b &&
                    equal(eq_a->a, neq_b->a) &&
@@ -3397,6 +3487,7 @@ private:
         const And *and_a = a.as<And>();
         const And *and_b = b.as<And>();
         string name_a, name_b, name_c;
+        int64_t ia = 0, ib = 0;
 
         if (is_one(a)) {
             expr = a;
@@ -3436,6 +3527,71 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b || b <= a
             expr = const_true(op->type.lanes());
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->a, lt_b->b) &&
+                   const_int(lt_a->b, &ia) &&
+                   const_int(lt_b->a, &ib) &&
+                   ib < ia) {
+            // (a < ia || ib < a) where ib < ia
+            expr = const_true(op->type.lanes());
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->b, lt_b->a) &&
+                   const_int(lt_b->b, &ia) &&
+                   const_int(lt_a->a, &ib) &&
+                   ib < ia) {
+            // (ib < a || a < ia) where ib < ia
+            expr = const_true(op->type.lanes());
+        } else if (le_a &&
+                   lt_b &&
+                   equal(le_a->a, lt_b->b) &&
+                   const_int(le_a->b, &ia) &&
+                   const_int(lt_b->a, &ib) &&
+                   ib <= ia) {
+            // (a <= ia || ib < a) where ib <= ia
+            expr = const_true(op->type.lanes());
+        } else if (le_a &&
+                   lt_b &&
+                   equal(le_a->b, lt_b->a) &&
+                   const_int(lt_b->b, &ia) &&
+                   const_int(le_a->a, &ib) &&
+                   ib <= ia) {
+            // (ib <= a || a < ia) where ib <= ia
+            expr = const_true(op->type.lanes());
+        } else if (lt_a &&
+                   le_b &&
+                   equal(lt_a->a, le_b->b) &&
+                   const_int(lt_a->b, &ia) &&
+                   const_int(le_b->a, &ib) &&
+                   ib <= ia) {
+            // (a < ia || ib <= a) where ib <= ia
+            expr = const_true(op->type.lanes());
+        } else if (lt_a &&
+                   le_b &&
+                   equal(lt_a->b, le_b->a) &&
+                   const_int(le_b->b, &ia) &&
+                   const_int(lt_a->a, &ib) &&
+                   ib <= ia) {
+            // (ib < a || a <= ia) where ib <= ia
+            expr = const_true(op->type.lanes());
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->a, le_b->b) &&
+                   const_int(le_a->b, &ia) &&
+                   const_int(le_b->a, &ib) &&
+                   ib <= ia + 1) {
+            // (a <= ia || ib <= a) where ib <= ia + 1
+            expr = const_true(op->type.lanes());
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->b, le_b->a) &&
+                   const_int(le_b->b, &ia) &&
+                   const_int(le_a->a, &ib) &&
+                   ib <= ia + 1) {
+            // (ib <= a || a <= ia) where ib <= ia + 1
+            expr = const_true(op->type.lanes());
+
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->lanes == broadcast_b->lanes) {
@@ -3757,7 +3913,7 @@ private:
                         then_case = substitute(var->name, eq->b, then_case);
                     }
                     if (!and_chain && eq->b.type().is_bool()) {
-                        else_case = substitute(var->name, !eq->b, then_case);
+                        else_case = substitute(var->name, !eq->b, else_case);
                     }
                 } else if (var) {
                     if (!or_chain) {
@@ -5444,6 +5600,42 @@ void check_boolean() {
     check((x == 1) || (x != 1), t);
     check((x != 1) || (x == 1), t);
 
+    check(x < 20 || x > 19, t);
+    check(x > 19 || x < 20, t);
+    check(x < 20 || x > 20, x < 20 || 20 < x);
+    check(x > 20 || x < 20, 20 < x || x < 20);
+    check(x < 20 && x > 19, f);
+    check(x > 19 && x < 20, f);
+    check(x < 20 && x > 18, x < 20 && 18 < x);
+    check(x > 18 && x < 20, 18 < x && x < 20);
+
+    check(x <= 20 || x > 19, t);
+    check(x > 19 || x <= 20, t);
+    check(x <= 18 || x > 20, x <= 18 || 20 < x);
+    check(x > 20 || x <= 18, 20 < x || x <= 18);
+    check(x <= 18 && x > 19, f);
+    check(x > 19 && x <= 18, f);
+    check(x <= 20 && x > 19, x <= 20 && 19 < x);
+    check(x > 19 && x <= 20, 19 < x && x <= 20);
+
+    check(x < 20 || x >= 19, t);
+    check(x >= 19 || x < 20, t);
+    check(x < 18 || x >= 20, x < 18 || 20 <= x);
+    check(x >= 20 || x < 18, 20 <= x || x < 18);
+    check(x < 18 && x >= 19, f);
+    check(x >= 19 && x < 18, f);
+    check(x < 20 && x >= 19, x < 20 && 19 <= x);
+    check(x >= 19 && x < 20, 19 <= x && x < 20);
+
+    check(x <= 20 || x >= 21, t);
+    check(x >= 21 || x <= 20, t);
+    check(x <= 18 || x >= 20, x <= 18 || 20 <= x);
+    check(x >= 20 || x <= 18, 20 <= x || x <= 18);
+    check(x <= 18 && x >= 19, f);
+    check(x >= 19 && x <= 18, f);
+    check(x <= 20 && x >= 20, x <= 20 && 20 <= x);
+    check(x >= 20 && x <= 20, 20 <= x && x <= 20);
+
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), (b1 == t) && b2);
     check((b1 && b2) && (b1 == t), b2 && (b1 == t));
@@ -5590,6 +5782,14 @@ void check_boolean() {
           IfThenElse::make(foo_simple != 17,
                            Evaluate::make(x+foo_simple+1),
                            Evaluate::make(x+19)));
+
+    // The construct
+    //     if (var == expr) then a else b;
+    // was being simplified incorrectly, but *only* if var was of type Bool.
+    Stmt then_clause = AssertStmt::make(b2, Expr(22));
+    Stmt else_clause = AssertStmt::make(b2, Expr(33));
+    check(IfThenElse::make(b1 == b2, then_clause, else_clause),
+          IfThenElse::make(b1 == b2, then_clause, else_clause));
 
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));

@@ -19,7 +19,7 @@ $(BIN)/Demosaic_ARM.o: fcam/Demosaic_ARM.cpp fcam/Demosaic_ARM.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
 
 $(BIN)/process: process.cpp $(BIN)/camera_pipe.a $(BIN)/Demosaic.o $(BIN)/Demosaic_ARM.o
-	$(CXX) $(CXXFLAGS) -Wall -O3 -I$(BIN) $^ -o $@ $(PNGFLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -O3 -I$(BIN) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/out.png: $(BIN)/process
 	$(BIN)/process $(IMAGES)/bayer_raw.png 3700 2.0 50 $(TIMING_ITERATIONS) $@ $(BIN)/fcam_c.png $(BIN)/fcam_arm.png

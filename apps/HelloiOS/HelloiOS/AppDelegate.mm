@@ -1,64 +1,61 @@
-//
-//  AppDelegate.m
-//  Halide test
-//
-//  Created by Andrew Adams on 6/27/14.
-//  Copyright (c) 2014 Andrew Adams. All rights reserved.
-//
-
 #import "AppDelegate.h"
 #import "HalideView.h"
 #import "HalideViewController.h"
-#include <algorithm>
-#include "HalideRuntime.h"
 
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
     self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+
     HalideViewController *halide_view_controller = [[HalideViewController alloc] init];
+
     self.window.rootViewController = halide_view_controller;
-    
+        
+    const int kBorderX = 10;
+    const int kBorderY = 40;
+
     // Add a view for image output
     int image_width, image_height;
-    HalideView *output_image = [ HalideView alloc ];
+    HalideView *output_image = [HalideView alloc];
     {
         CGRect box = self.window.frame;
-        box.origin.x += 10;
-        box.origin.y += 30;
-        box.size.width -= 20;
-        box.size.height -= 100;
+        box.origin.x += kBorderX;
+        box.origin.y += kBorderY;
+        box.size.width -= kBorderX*2;
+        box.size.height -= kBorderY*2;
         image_width = box.size.width;
         image_height = box.size.height;
-        output_image = [ output_image initWithFrame:box ];
+        output_image = [output_image initWithFrame:box];
         output_image.backgroundColor = [UIColor blackColor];
-        [ self.window addSubview: output_image ];
-        [ output_image setUserInteractionEnabled:true ];
+        [self.window addSubview: output_image];
+        [output_image setUserInteractionEnabled:true];
+#if HAS_METAL_SDK
+        output_image.use_metal = true;
+#endif
     }
     halide_view_controller.halide_view = output_image;
     
+
     // Add a view for text output
-    UITextView *output_log = [ UITextView alloc ];
-    output_image.outputLog = output_log;
-    int max_lines;
+    UITextView *output_log = [UITextView alloc];
     {
         CGRect box = self.window.frame;
-        box.origin.x += 10;
-        box.origin.y += image_height + 40;
-        box.size.width -= 20;
-        box.size.height -= image_height + 50;
-        output_log = [ output_log initWithFrame: box ];
+        box.origin.x += kBorderX;
+        box.origin.y += kBorderY + image_height;
+        box.size.width -= box.origin.x + kBorderX;
+        box.size.height -= image_height + kBorderY;
+        output_log = [output_log initWithFrame: box];
         UIFont *font = [UIFont systemFontOfSize:20];
-        [output_log setFont:font ];
-        [ self.window addSubview: output_log ];
-        max_lines = (int)(box.size.height / font.lineHeight) - 2;
+        [output_log setFont:font];
+        [self.window addSubview: output_log];
     }
+    output_image.outputLog = output_log;
     
     // Override point for customization after application launch.
     self.window.backgroundColor = [UIColor whiteColor];
     [self.window makeKeyAndVisible];
-
+    
     return YES;
 }
 

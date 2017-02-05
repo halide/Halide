@@ -295,7 +295,16 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
-          "semityped_input_buffer",
+          "type_only_input_buffer",
+          halide_argument_kind_input_buffer,
+          3,
+          halide_type_t(halide_type_uint, 8),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "dim_only_input_buffer",
           halide_argument_kind_input_buffer,
           3,
           halide_type_t(halide_type_uint, 8),
@@ -637,6 +646,24 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
           nullptr,
         },
         {
+          "type_only_output_buffer",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
+          "dim_only_output_buffer",
+          halide_argument_kind_output_buffer,
+          3,
+          halide_type_t(halide_type_float, 32),
+          nullptr,
+          nullptr,
+          nullptr,
+        },
+        {
           "untyped_output_buffer",
           halide_argument_kind_output_buffer,
           3,
@@ -736,16 +763,19 @@ int main(int argc, char **argv) {
     Buffer<float> output0(kSize, kSize, 3);
     Buffer<float> output1(kSize, kSize, 3);
     Buffer<float> typed_output_buffer(kSize, kSize, 3);
+    Buffer<float> type_only_output_buffer(kSize, kSize, 3);
+    Buffer<float> dim_only_output_buffer(kSize, kSize, 3);
     Buffer<float> untyped_output_buffer(kSize, kSize, 3);
     Buffer<float> output_scalar = Buffer<float>::make_scalar();
     Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array2[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array3[2] = {{1}, {1}};
+    Buffer<float> output_array3[2] = {Buffer<float>{1}, Buffer<float>{1}};
 
     result = metadata_tester(
         input,             // Input<Func>
         input,             // Input<Buffer<uint8_t>>
         input,             // Input<Buffer<>>(uint8)
+        input,             // Input<Buffer<>>(3)
         input,             // Input<Buffer<>>
         false,             // Input<bool>
         0,                 // Input<i8>
@@ -772,7 +802,9 @@ int main(int argc, char **argv) {
         0, 0,              // Input<int32_t[2]>
         nullptr, nullptr,  // Input<void*[]>
         output0, output1,  // Output<Tuple(Func, Func)>
-        typed_output_buffer,    // Output<Buffer<float>>
+        typed_output_buffer,    // Output<Buffer<float>>(3)
+        type_only_output_buffer,    // Output<Buffer<float>>
+        dim_only_output_buffer,    // Output<Buffer<>>(3)
         untyped_output_buffer,  // Output<Buffer<>>
         output_scalar,     // Output<float>
         output_array[0], output_array[1],   // Output<Func[]>
@@ -786,6 +818,7 @@ int main(int argc, char **argv) {
         input,             // Input<Func>
         input,             // Input<Buffer<uint8_t>>
         input,             // Input<Buffer<>>(uint8)
+        input,             // Input<Buffer<>>(3)
         input,             // Input<Buffer<>>
         false,             // Input<bool>
         0,                 // Input<i8>
@@ -812,7 +845,9 @@ int main(int argc, char **argv) {
         0, 0,              // Input<int32_t[2]>
         nullptr, nullptr,  // Input<void*[]>
         output0, output1,  // Output<Tuple(Func, Func)>
-        typed_output_buffer,    // Output<Buffer<float>>
+        typed_output_buffer,    // Output<Buffer<float>>(3)
+        type_only_output_buffer,    // Output<Buffer<float>>
+        dim_only_output_buffer,    // Output<Buffer<>>(3)
         untyped_output_buffer,  // Output<Buffer<>>
         output_scalar,     // Output<float>
         output_array[0], output_array[1],    // Output<Func[]>

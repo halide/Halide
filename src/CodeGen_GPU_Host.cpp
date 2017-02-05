@@ -197,10 +197,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         }
 
         Value *user_context = get_user_context();
-        debug(2) << "CodeGen_CPU_Host compile_func user_context:";
-        if (debug::debug_level >= 2) {
-            user_context->dump();
-        }
         Value *kernel_size = ConstantInt::get(i32_t, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
         Value *init = module->getFunction(init_kernels_name);

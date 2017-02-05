@@ -352,7 +352,7 @@ public:
                                                     {inner_query, i}, Call::Extern);
                         Expr inner_max = Call::make(Int(32), Call::buffer_get_max,
                                                     {inner_query, i}, Call::Extern);
-                        
+
                         // Push 'inner' inside of 'outer'
                         Expr shift = Min::make(0, outer_max - inner_max);
                         Expr new_min = inner_min + shift;
@@ -570,8 +570,8 @@ public:
             }
 
             // Make the extern call
-            Expr e = Call::make(Int(32), extern_name, bounds_inference_args,
-                                func.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus : Call::Extern);
+            Expr e = func.make_call_to_extern_definition(bounds_inference_args, target);
+
             // Check if it succeeded
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
