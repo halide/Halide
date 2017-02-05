@@ -1320,44 +1320,60 @@ void CodeGen_Hexagon::visit(const Cast *op) {
 }
 
 void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
-    // We need to scalarize the predicated store since masked load on
-    // hexagon is not handled by the LLVM
+    // If any of the predicate lane is true and the stride is one, then just do
+    // normal load; otherwise, if none of the predicate lanes is true, just load
+    // undef. It is okay to do normal load if any of the predicate lane is true
+    // since Hexagon allocates one additional vector past the end of the actual
+    // allocation. Note that this is only true for stride equal to one; if it
+    // isn't, we need to scalarize the load.
+    debug(0) << "Predicated vector load on hexagon\n\t" << Expr(op) << "\n";
 
-    // If any of the predicate lane is true, then just do normal load; otherwise,
-    // if none of the predicate lanes is true, just load undef. It is okay to do
-    // normal load if any of the predicate lane is true since Hexagon allocates
-    // one additional vector past the end of the actual allocation.
-    debug(4) << "Predicated vector load on hexagon\n\t" << Expr(op) << "\n";
-    Value *vpred = codegen(op->predicate);
-    Constant *lane = ConstantInt::get(i32_t, 0);
-    Value *any_true = builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane));
-    for (int i = 1; i < op->predicate.type().lanes(); i++) {
-        lane = ConstantInt::get(i32_t, i);
-        any_true = builder->CreateOr(any_true, builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane)));
+    const Ramp *ramp = op->index.as<Ramp>();
+    const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
+
+    if (ramp && stride && stride->value == 1) {
+        Value *vpred = codegen(op->predicate);
+        Constant *lane = ConstantInt::get(i32_t, 0);
+        Value *any_true = builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane));
+        for (int i = 1; i < op->predicate.type().lanes(); i++) {
+            lane = ConstantInt::get(i32_t, i);
+            any_true = builder->CreateOr(any_true, builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane)));
+        }
+
+        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+        BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+        builder->CreateCondBr(any_true, true_bb, false_bb);
+
+        builder->SetInsertPoint(true_bb);
+        Value *true_value = codegen(Load::make(op->type, op->name, op->index, op->image,
+                                               op->param, const_true(op->type.lanes())));
+        builder->CreateBr(after_bb);
+        BasicBlock *true_pred = builder->GetInsertBlock();
+
+        builder->SetInsertPoint(false_bb);
+        Value *false_value = UndefValue::get(llvm_type_of(op->type));
+        builder->CreateBr(after_bb);
+        BasicBlock *false_pred = builder->GetInsertBlock();
+
+        builder->SetInsertPoint(after_bb);
+        PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+        phi->addIncoming(true_value, true_pred);
+        phi->addIncoming(false_value, false_pred);
+
+        value = phi;
+
+    } else {
+        // Scalarize the load.
+        Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
+                                    op->param, const_true(op->type.lanes()));
+        debug(0) << "Scalarize predicated vector load on hexagon\n\t" << load_expr << "\n";
+        Expr pred_load = Call::make(load_expr.type(),
+                                    Call::if_then_else,
+                                    {op->predicate, load_expr, make_zero(load_expr.type())},
+                                    Internal::Call::Intrinsic);
+        value = codegen(pred_load);
     }
-
-    BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-    BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-    BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-    builder->CreateCondBr(any_true, true_bb, false_bb);
-
-    builder->SetInsertPoint(true_bb);
-    Value *true_value = codegen(Load::make(op->type, op->name, op->index, op->image,
-                                           op->param, const_true(op->type.lanes())));
-    builder->CreateBr(after_bb);
-    BasicBlock *true_pred = builder->GetInsertBlock();
-
-    builder->SetInsertPoint(false_bb);
-    Value *false_value = UndefValue::get(llvm_type_of(op->type));
-    builder->CreateBr(after_bb);
-    BasicBlock *false_pred = builder->GetInsertBlock();
-
-    builder->SetInsertPoint(after_bb);
-    PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-    phi->addIncoming(true_value, true_pred);
-    phi->addIncoming(false_value, false_pred);
-
-    value = phi;
 }
 
 void CodeGen_Hexagon::codegen_predicated_vector_store(const Store *op) {
