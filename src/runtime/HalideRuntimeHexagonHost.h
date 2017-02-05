@@ -99,13 +99,13 @@ extern int halide_hexagon_initialize_kernels(void *user_context,
                                              const uint8_t *code, uint64_t code_size,
                                              uint32_t use_shared_object);
 extern int halide_hexagon_run(void *user_context,
-                                 uint32_t use_shared_object,
-                                 void *module_ptr,
-                                 const char *name,
-                                 halide_hexagon_handle_t *function,
-                                 uint64_t arg_sizes[],
-                                 void *args[],
-                                 int arg_flags[]);
+                              uint32_t use_shared_object,
+                              void *module_ptr,
+                              const char *name,
+                              halide_hexagon_handle_t *function,
+                              uint64_t arg_sizes[],
+                              void *args[],
+                              int arg_flags[]);
 extern int halide_hexagon_device_release(void* user_context);
 // @}
 
