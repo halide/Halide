@@ -235,8 +235,8 @@ struct Test {
         }
 
         // Also compile the error checking Func (to be sure it compiles without error)
-        string fn_name = output_directory + "test_" + name;
-        error.compile_to_file(fn_name, arg_types, fn_name, target);
+        string fn_name = "test_" + name;
+        error.compile_to_file(output_directory + fn_name, arg_types, fn_name, target);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
