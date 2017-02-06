@@ -232,7 +232,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
 Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param, Expr predicate) {
     internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
-    internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n" << type << " " << index << " ";
+    internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
     internal_assert(type.lanes() == predicate.type().lanes())
         << "Vector lanes of Load must match vector lanes of predicate\n";
 
