@@ -552,10 +552,14 @@ private:
 
     void visit(const Shuffle *op) {
         stream << open_span("Shuffle");
-        if (op->is_interleave()) {
-            print_list(symbol("interleave_vectors("), op->vectors, ")");
-        } else if (op->is_concat()) {
+        if (op->is_concat()) {
             print_list(symbol("concat_vectors("), op->vectors, ")");
+        } else if (op->is_interleave()) {
+            print_list(symbol("interleave_vectors("), op->vectors, ")");
+        } else if (op->is_extract_element()) {
+            std::vector<Expr> args = op->vectors;
+            args.push_back(op->slice_begin());
+            print_list(symbol("extract_element("), args, ")");
         } else if (op->is_slice()) {
             std::vector<Expr> args = op->vectors;
             args.push_back(op->slice_begin());
