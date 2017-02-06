@@ -635,8 +635,18 @@ Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
     return make({vector}, indices);
 }
 
+Expr Shuffle::make_extract_element(Expr vector, int i) {
+    return make_slice(vector, i, 1, 1);
+}
+
 bool Shuffle::is_interleave() const {
     int lanes = vectors.front().type().lanes();
+
+    // Don't consider concat of scalars as an interleave.
+    if (lanes == 1) {
+        return false;
+    }
+
     for (Expr i : vectors) {
         if (i.type().lanes() != lanes) {
             return false;
@@ -694,6 +704,10 @@ bool Shuffle::is_slice() const {
     // A slice is a ramp where the output does not contain all of the
     // lanes of the input.
     return indices.size() < input_lanes && is_ramp(indices, slice_stride());
+}
+
+bool Shuffle::is_extract_element() const {
+    return indices.size() == 1;
 }
 
 
@@ -781,6 +795,7 @@ Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
+Call::ConstString Call::extract_mask_element = "extract_mask_element";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
 Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
