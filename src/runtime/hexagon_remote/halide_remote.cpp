@@ -296,7 +296,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
         mipsPerThread          = max_mips;
         bwBytePerSec           = max_bus_bw * 4;
         busbwUsagePercentage   = 100;
-        latency                = 1;
+        latency                = 10;
         break;
     }
     mipsTotal = mipsPerThread * 2;
@@ -384,42 +384,6 @@ int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
 halide_profiler_state *halide_profiler_get_state() {
     static halide_profiler_state hvx_profiler_state;
     return &hvx_profiler_state;
-}
-
-// Some shims for old APIs. These shims are here in the runtime
-// because they would be two RPC calls outside the runtime.
-int halide_hexagon_remote_power_hvx_on_perf(
-    int set_mips,
-    unsigned int mipsPerThread,
-    unsigned int mipsTotal,
-    int set_bus_bw,
-    unsigned int bwMegabytesPerSec,
-    unsigned int busbwUsagePercentage,
-    int set_latency,
-    int latency) {
-
-    int result = halide_hexagon_remote_set_performance(set_mips,
-                                                       mipsPerThread,
-                                                       mipsTotal,
-                                                       set_bus_bw,
-                                                       bwMegabytesPerSec,
-                                                       busbwUsagePercentage,
-                                                       set_latency,
-                                                       latency);
-    if (result != 0) {
-        return result;
-    }
-
-    return halide_hexagon_remote_power_hvx_on();
-}
-
-int halide_hexagon_remote_power_hvx_on_mode(int mode) {
-    int result = halide_hexagon_remote_set_performance_mode(mode);
-    if (result != 0) {
-        return result;
-    }
-
-    return halide_hexagon_remote_power_hvx_on();
 }
 
 }  // extern "C"
