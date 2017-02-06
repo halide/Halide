@@ -699,6 +699,10 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
     return 0;
 }
 
+WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */) {
+    halide_hexagon_power_hvx_off(user_context);
+}
+
 WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hvx_power_mode_t mode) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
@@ -720,17 +724,17 @@ WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hvx_powe
     return 0;
 }
 
-WEAK int halide_hexagon_set_performance_perf(void *user_context, halide_hvx_power_perf_t *perf) {
+WEAK int halide_hexagon_set_performance(void *user_context, halide_hvx_power_perf_t *perf) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
 
-    debug(user_context) << "halide_hexagon_set_performance_perf\n";
+    debug(user_context) << "halide_hexagon_set_performance\n";
     if (!remote_set_performance) {
         // This runtime doesn't support changing the performance target.
         return 0;
     }
 
-    debug(user_context) << "    remote_set_performance_perf -> ";
+    debug(user_context) << "    remote_set_performance -> ";
     result = remote_set_performance(perf->set_mips,
                                     perf->mipsPerThread,
                                     perf->mipsTotal,
@@ -742,15 +746,11 @@ WEAK int halide_hexagon_set_performance_perf(void *user_context, halide_hvx_powe
 
     debug(user_context) << "        " << result << "\n";
     if (result != 0) {
-        error(user_context) << "remote_set_performance_perf failed.\n";
+        error(user_context) << "remote_set_performance failed.\n";
         return result;
     }
 
     return 0;
-}
-
-WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */) {
-    halide_hexagon_power_hvx_off(user_context);
 }
 
 WEAK const halide_device_interface_t *halide_hexagon_device_interface() {
