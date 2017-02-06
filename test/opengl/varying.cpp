@@ -81,11 +81,12 @@ int main() {
     f0.realize(out0, target);
 
     // Check for the correct number of varying attributes
-    if (varyings.size() != 2) {
+    int failures = 0;
+    if (varyings.size() != 1) {
         fprintf(stderr,
                 "Error: wrong number of varying attributes: %d should be %d\n",
-                (int)varyings.size(), 2);
-        return 1;
+                (int)varyings.size(), 1);
+        failures++;
     }
 
     // Check for correct result values
@@ -110,12 +111,11 @@ int main() {
                 if (result != expected) {
                     fprintf(stderr, "Incorrect value: %f != %f at %d,%d,%d.\n",
                             result, expected, x, y, c);
-                    return 1;
+                    failures++;
                 }
             }
         }
     }
-    fprintf(stderr, "Passed!\n");
 
     // This is a more complicated test case where several expressions are linear
     // in all of the loop variables. This is the coordinate transformation case
@@ -152,11 +152,11 @@ int main() {
     f1.realize(out1, target);
 
     // Check for the correct number of varying attributes
-    if (varyings.size() != 4) {
+    if (varyings.size() != 2) {
         fprintf(stderr,
                 "Error: wrong number of varying attributes: %d should be %d\n",
-                (int)varyings.size(), 4);
-        return 1;
+                (int)varyings.size(), 2);
+        failures++;
     }
 
     // Check for correct result values
@@ -184,12 +184,11 @@ int main() {
                 if (fabs(result-expected) > 0.000001f) {
                     fprintf(stderr, "Incorrect value: %f != %f at %d,%d,%d.\n",
                             result, expected, x, y, c);
-                    return 1;
+                    failures++;
                 }
             }
         }
     }
-    fprintf(stderr, "Passed!\n");
 
     // The feature is supposed to find linearly varying sub-expressions as well
     // so for example, if the above expressions are wrapped in a non-linear
@@ -211,11 +210,11 @@ int main() {
     f2.realize(out2, target);
 
     // Check for the correct number of varying attributes
-    if (varyings.size() != 4) {
+    if (varyings.size() != 2) {
         fprintf(stderr,
                 "Error: wrong number of varying attributes: %d should be %d\n",
-                (int)varyings.size(), 4);
-        return 1;
+                (int)varyings.size(), 2);
+        failures++;
     }
 
     // Check for correct result values
@@ -244,12 +243,11 @@ int main() {
                 if (fabs(result-expected) > 0.000001f) {
                     fprintf(stderr, "Incorrect value: %f != %f at %d,%d,%d.\n",
                             result, expected, x, y, c);
-                    return 1;
+                    failures++;
                 }
             }
         }
     }
-    fprintf(stderr, "Passed!\n");
 
     // This case tests a large expression linearly varying in terms of a loop
     // variable
@@ -282,11 +280,11 @@ int main() {
     f3.realize(out3, target);
 
     // Check for the correct number of varying attributes
-    if (varyings.size() != 2) {
+    if (varyings.size() != 1) {
         fprintf(stderr,
                 "Error: wrong number of varying attributes: %d should be %d\n",
-                (int)varyings.size(), 2);
-        return 1;
+                (int)varyings.size(), 1);
+        failures++;
     }
 
     // Check for correct result values
@@ -315,15 +313,18 @@ int main() {
                 if (fabs(result-expected) > 0.000001f) {
                     fprintf(stderr, "Incorrect value: %f != %f at %d,%d,%d.\n",
                             result, expected, x, y, c);
-                    return 1;
+                    failures++;
                 }
             }
         }
     }
-    fprintf(stderr, "Passed!\n");
 
-    // The test will return early on error.
-    fprintf(stderr, "Success!\n");
+    if (failures > 0) {
+        fprintf(stderr, "Failed with %d failures\n", failures);
+        return 1;
+    } else {
+        fprintf(stderr, "Success!\n");
+    }
 
     // This test may abort with the message "Failed to free device buffer" due
     // to https://github.com/halide/Halide/issues/559
