@@ -181,7 +181,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     debug(1) << "Unpredicating loads and stores...\n";
     // Before running unpredicate_loads_stores, replace dense vector
-    // predicated loads with a sloppy scalarized predicates.
+    // predicated loads with sloppy scalarized predicates.
     body = sloppy_unpredicate_loads(body);
     body = unpredicate_loads_stores(body);
     debug(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
