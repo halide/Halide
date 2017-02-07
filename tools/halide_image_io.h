@@ -147,6 +147,7 @@ struct PngRowPointers {
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_png(const std::string &filename, ImageType *im) {
 #ifdef HALIDE_NO_PNG
+    check(false, "png not supported in this build\n");
     return false;
 #else // HALIDE_NO_PNG
     png_byte header[8];
@@ -240,6 +241,7 @@ bool load_png(const std::string &filename, ImageType *im) {
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_png(ImageType &im, const std::string &filename) {
 #ifdef HALIDE_NO_PNG
+    check(false, "png not supported in this build\n");
     return false;
 #else // HALIDE_NO_PNG
     png_structp png_ptr;
@@ -587,6 +589,7 @@ bool save_ppm(ImageType &im, const std::string &filename) {
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_jpg(ImageType &im, const std::string &filename) {
 #ifdef HALIDE_NO_JPEG
+    check(false, "jpg not supported in this build\n");
     return false;
 #else
     im.copy_to_host();
@@ -663,6 +666,7 @@ bool save_jpg(ImageType &im, const std::string &filename) {
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_jpg(const std::string &filename, ImageType *im) {
 #ifdef HALIDE_NO_JPEG
+    check(false, "jpg not supported in this build\n");
     return false;
 #else
     struct jpeg_decompress_struct cinfo;
