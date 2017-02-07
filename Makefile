@@ -499,6 +499,7 @@ HEADER_FILES = \
   StorageFolding.h \
   Substitute.h \
   Target.h \
+  ThreadPool.h \
   Tracing.h \
   TrimNoOps.h \
   Tuple.h \
