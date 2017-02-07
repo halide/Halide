@@ -116,9 +116,10 @@ struct ErrorReport {
     }
 
     template<typename T>
-    ErrorReport &operator<<(T x) {
-        if (condition) return *this;
-        (*msg) << x;
+    ErrorReport &operator<<(const T &x) {
+        if (!condition) {
+            (*msg) << x;
+        }
         return *this;
     }
 
