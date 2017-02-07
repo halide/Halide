@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include "filter_headers.h"
 
+#ifndef __APPLE__
+extern "C" void *memalign(size_t alignment, size_t size);
+#endif
+
 struct filter {
     const char *name;
     int (*fn)(buffer_t *, // float32
@@ -30,11 +34,19 @@ extern "C" void halide_print(void *, const char *msg) {
 template<typename T>
 buffer_t make_buffer(int w, int h) {
     T *mem = NULL;
+#ifdef __APPLE__
     // memalign() isn't present on OSX, but posix_memalign is
     int result = posix_memalign((void **)&mem, 128, w*h*sizeof(T));
     if (result != 0 || mem == NULL) {
-      exit(-1);
+        exit(-1);
     }
+#else
+    mem = (T *)memalign(128, w*h*sizeof(T));
+    if (mem == NULL) {
+        exit(-1);
+    }
+#endif
+
     buffer_t buf = {0};
     buf.host = (uint8_t *)mem;
     buf.extent[0] = w;
