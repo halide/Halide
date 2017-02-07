@@ -241,7 +241,7 @@ void halide_hexagon_host_free(void *ptr) {
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr,
                                           const char* name, int nameLen) {
     handle_t sym = 0;
-    int result = halide_hexagon_remote_get_symbol_v2(module_ptr, name, nameLen, false, &sym);
+    int result = halide_hexagon_remote_get_symbol_v4(module_ptr, name, nameLen, false, &sym);
     return result == 0 ? sym : 0;
 }
 
@@ -250,7 +250,7 @@ handle_t halide_hexagon_remote_get_symbol_v3(handle_t module_ptr,
                                              int nameLen,
                                              int use_shared_object) {
     handle_t sym = 0;
-    int result = halide_hexagon_remote_get_symbol_v2(module_ptr, name, nameLen, use_shared_object, &sym);
+    int result = halide_hexagon_remote_get_symbol_v4(module_ptr, name, nameLen, use_shared_object, &sym);
     return result == 0 ? sym : 0;
 }
 
