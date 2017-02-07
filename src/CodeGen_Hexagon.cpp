@@ -1,11 +1,14 @@
 #include <iostream>
 #include <sstream>
+#include <mutex>
 
 #include "LLVM_Headers.h"
 #include "CodeGen_Hexagon.h"
+#include "CodeGen_Internal.h"
 #include "IROperator.h"
 #include "IRMatch.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "Target.h"
 #include "Debug.h"
 #include "Util.h"
@@ -50,7 +53,6 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
 
 std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     auto llvm_module = CodeGen_Posix::compile(module);
-    static bool options_processed = false;
 
     // TODO: This should be set on the module itself, or some other
     // safer way to pass this through to the target specific lowering
@@ -59,7 +61,8 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
     // Hexagon-specific code to run prior to invoking the target
     // specific lowering in LLVM, minimizing the chances of the wrong
     // flag being set for the wrong module.
-    if (!options_processed) {
+    static std::once_flag set_options_once;
+    std::call_once(set_options_once, []() {
         cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
                                     "Halide HVX internal compiler\n");
 
@@ -70,8 +73,7 @@ std::unique_ptr<llvm::Module> CodeGen_Hexagon::compile(const Module &module) {
             "-hexagon-small-data-threshold=0"
         };
         cl::ParseCommandLineOptions(options.size(), options.data());
-    }
-    options_processed = true;
+    });
 
     if (module.target().features_all_of({Halide::Target::HVX_128, Halide::Target::HVX_64})) {
         user_error << "Both HVX_64 and HVX_128 set at same time\n";
@@ -131,13 +133,58 @@ Stmt acquire_hvx_context(Stmt stmt, const Target &target) {
     return stmt;
 }
 
-}  // namespace
+bool is_dense_ramp(Expr x) {
+    const Ramp *r = x.as<Ramp>();
+    if (!r) return false;
+
+    return is_one(r->stride);
+}
+
+// In Hexagon, we assume that we can read one vector past the end of
+// buffers. Using this assumption, this mutator replaces vector
+// predicated dense loads with scalar predicated dense loads.
+class SloppyUnpredicateLoads : public IRMutator {
+    void visit(const Load *op) {
+        // Don't handle loads with without predicates, scalar predicates, or non-dense ramps.
+        if (is_one(op->predicate) || op->predicate.as<Broadcast>() || !is_dense_ramp(op->index)) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        Expr predicate = mutate(op->predicate);
+        Expr index = mutate(op->index);
+
+        // Make the predicate into a scalar that is true if any of the lanes are true.
+        Expr condition = Shuffle::make({predicate}, {0});
+        for (int i = 1; i < op->type.lanes(); i++) {
+            condition = condition || Shuffle::make({predicate}, {i});
+        }
+        predicate = Broadcast::make(condition, predicate.type().lanes());
+
+        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
+    }
+
+    using IRMutator::visit;
+};
+
+Stmt sloppy_unpredicate_loads(Stmt s) {
+    return SloppyUnpredicateLoads().mutate(s);
+}
+
+}// namespace
 
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
                                    const string &simple_name, const string &extern_name) {
     CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
 
     Stmt body = f.body;
+
+    debug(1) << "Unpredicating loads and stores...\n";
+    // Before running unpredicate_loads_stores, replace dense vector
+    // predicated loads with sloppy scalarized predicates.
+    body = sloppy_unpredicate_loads(body);
+    body = unpredicate_loads_stores(body);
+    debug(2) << "Lowering after unpredicating loads/stores:\n" << body << "\n\n";
 
     debug(1) << "Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
@@ -1319,81 +1366,6 @@ void CodeGen_Hexagon::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_Hexagon::codegen_predicated_vector_load(const Load *op) {
-    // We need to scalarize the predicated store since masked load on
-    // hexagon is not handled by the LLVM
-
-    // If any of the predicate lane is true, then just do normal load; otherwise,
-    // if none of the predicate lanes is true, just load undef. It is okay to do
-    // normal load if any of the predicate lane is true since Hexagon allocates
-    // one additional vector past the end of the actual allocation.
-    debug(4) << "Predicated vector load on hexagon\n\t" << Expr(op) << "\n";
-    Value *vpred = codegen(op->predicate);
-    Constant *lane = ConstantInt::get(i32_t, 0);
-    Value *any_true = builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane));
-    for (int i = 1; i < op->predicate.type().lanes(); i++) {
-        lane = ConstantInt::get(i32_t, i);
-        any_true = builder->CreateOr(any_true, builder->CreateIsNotNull(builder->CreateExtractElement(vpred, lane)));
-    }
-
-    BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-    BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-    BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-    builder->CreateCondBr(any_true, true_bb, false_bb);
-
-    builder->SetInsertPoint(true_bb);
-    Value *true_value = codegen(Load::make(op->type, op->name, op->index, op->image,
-                                           op->param, const_true(op->type.lanes())));
-    builder->CreateBr(after_bb);
-    BasicBlock *true_pred = builder->GetInsertBlock();
-
-    builder->SetInsertPoint(false_bb);
-    Value *false_value = UndefValue::get(llvm_type_of(op->type));
-    builder->CreateBr(after_bb);
-    BasicBlock *false_pred = builder->GetInsertBlock();
-
-    builder->SetInsertPoint(after_bb);
-    PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
-    phi->addIncoming(true_value, true_pred);
-    phi->addIncoming(false_value, false_pred);
-
-    value = phi;
-}
-
-void CodeGen_Hexagon::codegen_predicated_vector_store(const Store *op) {
-    // We need to scalarize the predicated store since masked store/load on
-    // hexagon is not handled by the LLVM
-    debug(4) << "Scalarize predicated vector store on hexagon\n\t" << Stmt(op) << "\n";
-    Type value_type = op->value.type().element_of();
-    Value *vpred = codegen(op->predicate);
-    Value *vval = codegen(op->value);
-    Value *vindex = codegen(op->index);
-    for (int i = 0; i < op->index.type().lanes(); i++) {
-        Constant *lane = ConstantInt::get(i32_t, i);
-        Value *p = builder->CreateExtractElement(vpred, lane);
-        if (p->getType() != i1_t) {
-            p = builder->CreateIsNotNull(p);
-        }
-
-        Value *v = builder->CreateExtractElement(vval, lane);
-        Value *idx = builder->CreateExtractElement(vindex, lane);
-        internal_assert(p && v && idx);
-
-        BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-        builder->CreateCondBr(p, true_bb, after_bb);
-
-        builder->SetInsertPoint(true_bb);
-
-        // Scalar
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, idx);
-        builder->CreateAlignedStore(v, ptr, value_type.bytes());
-
-        builder->CreateBr(after_bb);
-        builder->SetInsertPoint(after_bb);
-    }
-}
-
 void CodeGen_Hexagon::visit(const Call *op) {
     internal_assert(op->call_type == Call::Extern ||
                     op->call_type == Call::Intrinsic ||
@@ -1469,6 +1441,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
             internal_error << "cast_mask should already have been handled in HexagonOptimize\n";
         }
     }
+
     if (op->is_intrinsic(Call::bool_to_mask)) {
         internal_assert(op->args.size() == 1);
         if (op->args[0].type().is_vector()) {
@@ -1481,6 +1454,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
             Expr equiv = -Cast::make(op->type, op->args[0]);
             equiv.accept(this);
         }
+        return;
+    } else if (op->is_intrinsic(Call::extract_mask_element)) {
+        internal_assert(op->args.size() == 2);
+        const int64_t *index = as_const_int(op->args[1]);
+        internal_assert(index);
+        value = codegen(Cast::make(Bool(), Shuffle::make_extract_element(op->args[0], *index)));
         return;
     }
 
