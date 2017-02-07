@@ -31,7 +31,8 @@ typedef int (*remote_initialize_kernels_v2_fn)(const unsigned char* codeptr,
 typedef int (*remote_initialize_kernels_fn)(const unsigned char* codeptr,
                                             int codesize,
                                             halide_hexagon_handle_t*);
-typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int, int);
+typedef halide_hexagon_handle_t (*remote_get_symbol_v3_fn)(halide_hexagon_handle_t, const char*, int, int);
+typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
                              remote_buffer*, int);
@@ -48,6 +49,7 @@ typedef void (*host_free_fn)(void *);
 
 WEAK remote_initialize_kernels_v2_fn remote_initialize_kernels_v2 = NULL;
 WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
+WEAK remote_get_symbol_v3_fn remote_get_symbol_v3 = NULL;
 WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
@@ -124,11 +126,11 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     // Get the symbols we need from the library.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels_v2", remote_initialize_kernels_v2, /* required */ false);
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels, /* required */ false);
     if (!remote_initialize_kernels_v2 && !remote_initialize_kernels) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_v3", remote_get_symbol, /* required */ false);
-    if (!remote_get_symbol) get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol);
-    if (!remote_get_symbol) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_v3", remote_get_symbol_v3, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol, /* required */ false);
+    if (!remote_get_symbol && !remote_get_symbol_v3) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels", remote_release_kernels);
@@ -284,13 +286,13 @@ WEAK int map_arguments(void *user_context, int arg_count,
 }  // namespace
 
 WEAK int halide_hexagon_run(void *user_context,
-                               uint32_t use_shared_object,
-                               void *state_ptr,
-                               const char *name,
-                               halide_hexagon_handle_t* function,
-                               uint64_t arg_sizes[],
-                               void *args[],
-                               int arg_flags[]) {
+                            uint32_t use_shared_object,
+                            void *state_ptr,
+                            const char *name,
+                            halide_hexagon_handle_t* function,
+                            uint64_t arg_sizes[],
+                            void *args[],
+                            int arg_flags[]) {
     halide_assert(user_context, state_ptr != NULL);
     halide_assert(user_context, function != NULL);
     int result = init_hexagon_runtime(user_context);
@@ -307,7 +309,12 @@ WEAK int halide_hexagon_run(void *user_context,
     // If we haven't gotten the symbol for this function, do so now.
     if (*function == 0) {
         debug(user_context) << "    halide_hexagon_remote_get_symbol" << name << " -> ";
-        *function = remote_get_symbol(module, name, strlen(name) + 1, use_shared_object);
+        if (remote_get_symbol_v3) {
+            *function = remote_get_symbol_v3(module, name, strlen(name) + 1, use_shared_object);
+        } else {
+            halide_assert(user_context, remote_get_symbol != NULL);
+            *function = remote_get_symbol(module, name, strlen(name) + 1);
+        }
         poll_log(user_context);
         debug(user_context) << "        " << *function << "\n";
         if (*function == 0) {
