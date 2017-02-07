@@ -1,4 +1,5 @@
 #ifndef HALIDE_THREAD_POOL_H
+#define HALIDE_THREAD_POOL_H
 
 #include <condition_variable>
 #include <future>
