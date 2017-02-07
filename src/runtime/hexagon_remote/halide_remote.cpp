@@ -354,7 +354,7 @@ int halide_hexagon_remote_power_hvx_off() {
     return 0;
 }
 
-int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
+int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
     if (use_shared_object) {
        *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
     } else {

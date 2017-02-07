@@ -324,16 +324,16 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
 
     return ret;
 }
-handle_t halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object) {
+int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t* sym) {
     assert(sim);
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_name(name, nameLen);
 
     // Run the init kernels command.
-    handle_t ret = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_shared_object});
+    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_shared_object});
 
-    return ret;
+    return *sym != 0 ? 0 : -1;
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
