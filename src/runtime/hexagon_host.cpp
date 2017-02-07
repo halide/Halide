@@ -31,7 +31,7 @@ typedef int (*remote_initialize_kernels_v2_fn)(const unsigned char* codeptr,
 typedef int (*remote_initialize_kernels_fn)(const unsigned char* codeptr,
                                             int codesize,
                                             halide_hexagon_handle_t*);
-typedef halide_hexagon_handle_t (*remote_get_symbol_v3_fn)(halide_hexagon_handle_t, const char*, int, int);
+typedef halide_hexagon_handle_t (*remote_get_symbol_v3_fn)(halide_hexagon_handle_t, const char*, int, int, halide_hexagon_handle_t*);
 typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
@@ -310,7 +310,9 @@ WEAK int halide_hexagon_run(void *user_context,
     if (*function == 0) {
         debug(user_context) << "    halide_hexagon_remote_get_symbol" << name << " -> ";
         if (remote_get_symbol_v3) {
-            *function = remote_get_symbol_v3(module, name, strlen(name) + 1, use_shared_object);
+            halide_hexagon_handle_t sym = 0;
+            int result = remote_get_symbol_v3(module, name, strlen(name) + 1, use_shared_object, &sym);
+            *function = result == 0 ? sym : 0;
         } else {
             halide_assert(user_context, remote_get_symbol != NULL);
             *function = remote_get_symbol(module, name, strlen(name) + 1);
