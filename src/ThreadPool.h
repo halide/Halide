@@ -118,7 +118,13 @@ public:
         Job job;
         // Don't use std::forward here: we never want args passed by reference,
         // since they will be accessed from an arbitrary thread.
-        job.func = [func, args...]() -> T { return func(args...); };
+        //
+        // Some versions of GCC won't allow capturing variadic arguments in a lambda;
+        //
+        //     job.func = [func, args...]() -> T { return func(args...); };  // Nope, sorry
+        //
+        // fortunately, we can use std::bind() to accomplish the same thing.
+        job.func = std::bind(func, args...);
         jobs.emplace(std::move(job));
         std::future<T> result = jobs.back().result.get_future();
 
