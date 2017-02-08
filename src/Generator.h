@@ -2304,10 +2304,18 @@ public:
         return get_first_output().realize(std::forward<Args>(args)..., get_target());
     }
 
-    template<typename Dst>
-    void realize(Dst dst) {
+    template<typename Realization>
+    void realize(Realization r) {
         check_scheduled("realize");
-        get_first_output().realize(dst, get_target());
+        get_first_output().realize(r, get_target());
+    }
+
+    // Note that the Realization here is expected to have the appropriate number-and-type
+    // of buffers to realize *all* of this Generator's Outputs (not just the first one).
+    template<typename Realization>
+    void realize_all(Realization r) {
+        check_scheduled("realize_all");
+        generator->produce_pipeline().realize(r, get_target());
     }
 
     virtual ~GeneratorStub() {}
