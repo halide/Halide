@@ -514,6 +514,8 @@ bool load_ppm(const std::string &filename, ImageType *im) {
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_ppm(ImageType &im, const std::string &filename) {
+    if (!check(im.channels() == 3, "save_ppm() requires a 3-channel image.\n")) { return false; }
+
     im.copy_to_host();
 
     unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
