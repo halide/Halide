@@ -317,6 +317,8 @@ struct select_type : std::conditional<First::value, typename First::type, typena
 template<typename First>
 struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
 
+class GeneratorBase;
+
 class GeneratorParamBase {
 public:
     EXPORT explicit GeneratorParamBase(const std::string &name);
@@ -327,6 +329,8 @@ public:
 protected:
     friend class GeneratorBase;
     friend class StubEmitter;
+
+    void check_value_valid() const;
 
     virtual void set_from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
@@ -360,6 +364,11 @@ protected:
 private:
     explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
     void operator=(const GeneratorParamBase &) = delete;
+
+    // It is only valid to examine a GeneratorParam's value after the owning
+    // Generator has had set_generator_param_values() called (even if this
+    // particular GP was left unaffected).
+    bool value_valid{false};
 };
 
 template<typename T>
@@ -367,7 +376,7 @@ class GeneratorParamImpl : public GeneratorParamBase {
 public:
     GeneratorParamImpl(const std::string &name, const T &value) : GeneratorParamBase(name), value_(value) {}
 
-    T value() const { return value_; }
+    T value() const { check_value_valid(); return value_; }
 
     operator T() const { return this->value(); }
 
@@ -928,8 +937,6 @@ public:
     template<typename T2>
     StubInputBuffer(const Buffer<T2> &b) : parameter_(parameter_from_buffer(b)) {}
 };
-
-class GeneratorBase;
 
 class StubOutputBufferBase {
 protected:
