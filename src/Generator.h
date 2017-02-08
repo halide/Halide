@@ -2258,6 +2258,17 @@ public:
 
 namespace Internal {
 
+template<typename ...Args>
+struct NoRealizations : std::false_type {};
+
+template<>
+struct NoRealizations<> : std::true_type {};
+
+template<typename T, typename ...Args>
+struct NoRealizations<T, Args...> {
+    static const bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
+};
+
 class GeneratorStub : public NamesInterface {
 public:
     // default ctor
@@ -2295,19 +2306,20 @@ public:
 
     Realization realize(std::vector<int32_t> sizes) {
         check_scheduled("realize");
-        return get_first_output().realize(sizes, get_target());
+        return generator->produce_pipeline().realize(sizes, get_target());
     }
 
-    template <typename... Args>
+    // Only enable if none of the args are Realization; otherwise we can incorrectly
+    // select this method instead of the Realization-as-outparam variant
+    template <typename... Args, typename std::enable_if<NoRealizations<Args...>::value>::type * = nullptr>
     Realization realize(Args&&... args) {
         check_scheduled("realize");
-        return get_first_output().realize(std::forward<Args>(args)..., get_target());
+        return generator->produce_pipeline().realize(std::forward<Args>(args)..., get_target());
     }
 
-    template<typename Dst>
-    void realize(Dst dst) {
+    void realize(Realization r) {
         check_scheduled("realize");
-        get_first_output().realize(dst, get_target());
+        generator->produce_pipeline().realize(r, get_target());
     }
 
     virtual ~GeneratorStub() {}
