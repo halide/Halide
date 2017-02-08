@@ -212,6 +212,8 @@ template<typename T> class Buffer;
 
 namespace Internal {
 
+EXPORT void generator_test();
+
 /**
  * ValueTracker is an internal utility class that attempts to track and flag certain
  * obvious Stub-related errors at Halide compile time: it tracks the constraints set
@@ -327,6 +329,7 @@ public:
     const std::string name;
 
 protected:
+    friend void ::Halide::Internal::generator_test();
     friend class GeneratorBase;
     friend class StubEmitter;
 
@@ -2140,8 +2143,6 @@ private:
     GeneratorRegistry(const GeneratorRegistry &) = delete;
     void operator=(const GeneratorRegistry &) = delete;
 };
-
-EXPORT void generator_test();
 
 }  // namespace Internal
 

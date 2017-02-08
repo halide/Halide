@@ -1662,6 +1662,7 @@ Target StubOutputBufferBase::get_target() const {
 
 void generator_test() {
     GeneratorParam<int> gp("gp", 1);
+    gp.value_valid = true;
 
     // Verify that RDom parameter-pack variants can convert GeneratorParam to Expr
     RDom rdom(0, gp, 0, gp);
@@ -1713,6 +1714,8 @@ void generator_test() {
     check_ratio(NAN, {0, 0});
     check_ratio(INFINITY, {1, 0});
     check_ratio(-INFINITY, {-1, 0});
+
+    std::cout << "Generator test passed" << std::endl;
 }
 
 }  // namespace Internal
