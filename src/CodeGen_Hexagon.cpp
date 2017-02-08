@@ -423,6 +423,22 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpybus_acc),  i16v2, "add_mpy.vh.vub.b",     {i16v2, u8v1,  i8}, HvxIntrinsic::BroadcastScalarsToWords },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhsat_acc), i32v2, "satw_add_mpy.vw.vh.h", {i32v2, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
 
+        // Widening scalar multiplication, with horizontal reduction.
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus), i16v1, "add_2mpy.vub.b", {u8v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb), i32v1, "add_2mpy.vh.b", {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_dv), i16v2, "add_2mpy.vub.b.dv", {u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_dv), i32v2, "add_2mpy.vh.b.dv", {i16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_acc), i16v1, "acc_add_2mpy.vh.vub.b", {i16v1, u8v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_acc), i32v1, "acc_add_2mpy.vw.vh.b", {i32v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_dv_acc), i16v2, "acc_add_2mpy.vh.vub.b.dv", {i16v2, u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_dv_acc), i32v2, "acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpybus), i32v1, "add_4mpy.vub.b", {u8v1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpyub), u32v1, "add_4mpy.vub.ub", {u8v1, u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpybus_acc), i32v1, "acc_add_4mpy.vw.vub.b", {i32v1, u8v1, i32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpyub_acc), u32v1, "acc_add_4mpy.vw.vub.ub", {u32v1, u8v1, u32} },
+
         // Multiply keep high half, with multiplication by 2.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhvsrs), i16v1, "trunc_satw_mpy2_rnd.vh.vh", {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhss), i16v1, "trunc_satw_mpy2.vh.h", {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },

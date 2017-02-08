@@ -4339,6 +4339,35 @@ private:
                 }
             }
 
+            // Try to collapse an interleave of slices of vectors from
+            // the same vector into a single vector.
+            if (const Shuffle *first_shuffle = new_vectors[0].as<Shuffle>()) {
+                if (first_shuffle->is_slice() && first_shuffle->slice_stride() == (int)new_vectors.size()) {
+                    bool can_collapse = true;
+                    for (size_t i = 0; i < new_vectors.size() && can_collapse; i++) {
+                        const Shuffle *i_shuffle = new_vectors[i].as<Shuffle>();
+                        if (!i_shuffle || !i_shuffle->is_slice() || i_shuffle->slice_begin() != (int)i) {
+                            can_collapse = false;
+                        } else if (i > 0) {
+                            if (first_shuffle->vectors.size() != i_shuffle->vectors.size()) {
+                                can_collapse = false;
+                            } else {
+                                for (size_t j = 0; j < first_shuffle->vectors.size(); j++) {
+                                    if (!first_shuffle->vectors[j].same_as(i_shuffle->vectors[j])) {
+                                        can_collapse = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (can_collapse) {
+                        expr = Shuffle::make_concat(first_shuffle->vectors);
+                        return;
+                    }
+                }
+            }
+
+
             if (!changed) {
                 expr = op;
             } else {

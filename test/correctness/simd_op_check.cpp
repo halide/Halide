@@ -1771,6 +1771,18 @@ struct Test {
         check("vmpa(v*.h,r*.b)", hvx_width/1, 2*i32(i16_1) + 3*i32(i16_2));
         check("v*.w += vmpa(v*.h,r*.b)", hvx_width/1, 2*i32(i16_1) + 3*i32(i16_2) + i32_1);
 
+        check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3);
+        check("vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3);
+        check("vdmpy(v*:*.ub,r*.b)", (hvx_width/2)*2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3);
+        check("vdmpy(v*:*.h,r*.b)", (hvx_width/4)*2, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3);
+        check("v*.h += vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3 + i16_1);
+        check("v*.w += vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3 + i32_1);
+        check("v*:*.h += vdmpy(v*:*.ub,r*.b)", (hvx_width/2)*2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3 + i16_1);
+        check("v*:*.w += vdmpy(v*:*.h,r*.b)", (hvx_width/4)*2, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3 + i32_1);
+
+        check("vrmpy(v*.ub,r*.b)", hvx_width/4, i32(i16(in_u8(4*x))*2) + i32(i16(in_u8(4*x + 1))*3) + i32(i16(in_u8(4*x + 2))*4) + i32(i16(in_u8(4*x + 3))*5));
+        check("vrmpy(v*.ub,r*.ub)", hvx_width/4, u32(u16(in_u8(4*x))*2) + u32(u16(in_u8(4*x + 1))*3) + u32(u16(in_u8(4*x + 2))*4) + u32(u16(in_u8(4*x + 3))*5));
+
         check("vmpy(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) * u16(u8_2));
         check("vmpy(v*.b,v*.b)", hvx_width/1, i16(i8_1) * i16(i8_2));
         check("vmpy(v*.uh,v*.uh)", hvx_width/2, u32(u16_1) * u32(u16_2));
