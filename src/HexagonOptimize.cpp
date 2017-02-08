@@ -275,12 +275,6 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
 class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
-    static Expr halide_hexagon_add_mpy_mpy(string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
-        Type t = v0.type();
-        Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
-        Expr call = Call::make(result_type, "halide.hexagon.add_mpy_mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
-        return native_interleave(call);
-    }
 
     void visit(const Mul *op) {
         static vector<Pattern> scalar_muls = {
@@ -340,15 +334,41 @@ private:
         IRMutator::visit(op);
     }
 
+    static Expr halide_hexagon_add_2mpy(string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
+        Type t = v0.type();
+        Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
+        Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
+        return native_interleave(call);
+    }
+
+    static Expr halide_hexagon_add_2mpy(string suffix, Expr v01, Expr c01) {
+        Type t = v01.type();
+        Type result_type = t.with_bits(t.bits()*2).with_lanes(t.lanes()/2);
+        if (c01.type().is_int()) {
+            result_type = result_type.with_code(Type::Int);
+        }
+        return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v01, c01}, Call::PureExtern);
+    }
+
+    static Expr halide_hexagon_add_4mpy(string suffix, Expr v01, Expr c01) {
+        Type t = v01.type();
+        Type result_type = t.with_bits(t.bits()*4).with_lanes(t.lanes()/4);
+        if (c01.type().is_int()) {
+            result_type = result_type.with_code(Type::Int);
+        }
+        return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
+    }
+
     void visit(const Add *op) {
-        // vmpa instructions have a lot of quirky conditions and
-        // matching operations, and would require flags used only by
-        // these instructions (a double narrowing). Instead, just
-        // handle them manually here.
-        Expr vmpa_ub_pattern = wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16);
-        Expr vmpa_h_pattern = wild_i32x*bc(wild_i32) + wild_i32x*bc(wild_i32);
         vector<Expr> matches;
-        if (expr_match(vmpa_ub_pattern, op, matches)) {
+
+        // vmpa, vdmpy, and vrmpy instructions have a lot of quirky
+        // conditions and matching operations, and would require flags
+        // used only by these instructions (a double
+        // narrowing). Instead, just handle them manually here.
+        Expr r2x_mul_b_pattern = wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16);
+        Expr r2x_mul_h_pattern = wild_i32x*bc(wild_i32) + wild_i32x*bc(wild_i32);
+        if (expr_match(r2x_mul_b_pattern, op, matches)) {
             // Narrow the operands.
             Expr v0 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[0]);
             Expr v1 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[2]);
@@ -356,14 +376,26 @@ private:
             Expr c1 = lossless_cast(Int(8), matches[3]);
 
             if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
-                v0 = mutate(v0);
-                v1 = mutate(v1);
                 c0 = mutate(c0);
                 c1 = mutate(c1);
-                expr = halide_hexagon_add_mpy_mpy(".vub.vub.b.b", v0, v1, c0, c1);
+
+                // Try interleaving v0 and v1. If they interleave
+                // cleanly, use vdmpy, otherwise use vmpa.
+                Expr v01 = simplify(Shuffle::make_interleave({v0, v1}));
+                if (v01.as<Shuffle>()) {
+                    // We didn't simplify the interleave... use vmpa.
+                    v0 = mutate(v0);
+                    v1 = mutate(v1);
+                    expr = halide_hexagon_add_2mpy(".vub.vub.b.b", v0, v1, c0, c1);
+                } else {
+                    // We did simplify the interleave, use vdmpy.
+                    v01 = mutate(v01);
+                    Expr c01 = i16((u16(c1) << 8) | u16(c0));
+                    expr = halide_hexagon_add_2mpy(".vub.b", v01, c01);
+                }
                 return;
             }
-        } else if (expr_match(vmpa_h_pattern, op, matches)) {
+        } else if (expr_match(r2x_mul_h_pattern, op, matches)) {
             // Narrow the operands.
             Expr v0 = lossless_cast(Int(16).with_lanes(op->type.lanes()), matches[0]);
             Expr v1 = lossless_cast(Int(16).with_lanes(op->type.lanes()), matches[2]);
@@ -371,12 +403,96 @@ private:
             Expr c1 = lossless_cast(Int(8), matches[3]);
 
             if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
-                v0 = mutate(v0);
-                v1 = mutate(v1);
                 c0 = mutate(c0);
                 c1 = mutate(c1);
-                expr = halide_hexagon_add_mpy_mpy(".vh.vh.b.b", v0, v1, c0, c1);
+
+                // Try interleaving v0 and v1. If they interleave
+                // cleanly, use vdmpy, otherwise use vmpa.
+                Expr v01 = simplify(Shuffle::make_interleave({v0, v1}));
+                if (v01.as<Shuffle>()) {
+                    // We didn't simplify the interleave... use vmpa.
+                    v0 = mutate(v0);
+                    v1 = mutate(v1);
+                    expr = halide_hexagon_add_2mpy(".vh.vh.b.b", v0, v1, c0, c1);
+                } else {
+                    // We did simplify the interleave, use vdmpy.
+                    v01 = mutate(v01);
+                    Expr c01 = i16((u16(c1) << 8) | u16(c0));
+                    expr = halide_hexagon_add_2mpy(".vh.b", v01, c01);
+                }
+
                 return;
+            }
+        }
+
+        Expr r4x_mul_b_pattern =
+            i32(wild_i16x*bc(wild_i16)) +
+            i32(wild_i16x*bc(wild_i16)) +
+            i32(wild_i16x*bc(wild_i16)) +
+            i32(wild_i16x*bc(wild_i16));
+        if (expr_match(r4x_mul_b_pattern, op, matches)) {
+            // Narrow the operands.
+            Expr v0 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[0]);
+            Expr v1 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[2]);
+            Expr v2 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[4]);
+            Expr v3 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[6]);
+            Expr c0 = lossless_cast(Int(8), matches[1]);
+            Expr c1 = lossless_cast(Int(8), matches[3]);
+            Expr c2 = lossless_cast(Int(8), matches[5]);
+            Expr c3 = lossless_cast(Int(8), matches[7]);
+
+            if (v0.defined() && v1.defined() && v2.defined() && v3.defined() &&
+                c0.defined() && c1.defined() && c2.defined() && c3.defined()) {
+                c0 = mutate(c0);
+                c1 = mutate(c1);
+                c2 = mutate(c2);
+                c3 = mutate(c3);
+
+                // Try interleaving v0 and v1. If they interleave
+                // cleanly, use vrmpy.
+                Expr v0123 = simplify(Shuffle::make_interleave({v0, v1, v2, v3}));
+                if (!v0123.as<Shuffle>()) {
+                    // We did simplify the interleave, use vdmpy.
+                    v0123 = mutate(v0123);
+                    Expr c0123 = i32((u32(c3) << 24) | (u32(c2) << 16) | (u32(c1) << 8) | u32(c0));
+                    expr = halide_hexagon_add_4mpy(".vub.b", v0123, c0123);
+                    return;
+                }
+            }
+        }
+        Expr r4x_mul_ub_pattern =
+            u32(wild_u16x*bc(wild_u16)) +
+            u32(wild_u16x*bc(wild_u16)) +
+            u32(wild_u16x*bc(wild_u16)) +
+            u32(wild_u16x*bc(wild_u16));
+        if (expr_match(r4x_mul_ub_pattern, op, matches)) {
+            // Narrow the operands.
+            Expr v0 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[0]);
+            Expr v1 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[2]);
+            Expr v2 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[4]);
+            Expr v3 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[6]);
+            Expr c0 = lossless_cast(UInt(8), matches[1]);
+            Expr c1 = lossless_cast(UInt(8), matches[3]);
+            Expr c2 = lossless_cast(UInt(8), matches[5]);
+            Expr c3 = lossless_cast(UInt(8), matches[7]);
+
+            if (v0.defined() && v1.defined() && v2.defined() && v3.defined() &&
+                c0.defined() && c1.defined() && c2.defined() && c3.defined()) {
+                c0 = mutate(c0);
+                c1 = mutate(c1);
+                c2 = mutate(c2);
+                c3 = mutate(c3);
+
+                // Try interleaving v0 and v1. If they interleave
+                // cleanly, use vrmpy.
+                Expr v0123 = simplify(Shuffle::make_interleave({v0, v1, v2, v3}));
+                if (!v0123.as<Shuffle>()) {
+                    // We did simplify the interleave, use vdmpy.
+                    v0123 = mutate(v0123);
+                    Expr c0123 = (u32(c3) << 24) | (u32(c2) << 16) | (u32(c1) << 8) | u32(c0);
+                    expr = halide_hexagon_add_4mpy(".vub.ub", v0123, c0123);
+                    return;
+                }
             }
         }
 
@@ -441,11 +557,16 @@ private:
         }
         IRMutator::visit(op);
 
-        // After recursively substituting patterns for the operands, we might be able to change vmpa to an accumulating vmpa.
+        // After recursively substituting patterns for the operands,
+        // we might be able to change vmpa, vdmpy, or vrmpy to an
+        // accumulating equivalent.
         static vector<Pattern> post_process_adds = {
-            // Accumulating vmpa, we generated non-accumulating vmpa above.
-            { "halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_mpy_mpy(".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_mpy_mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_mpy_mpy(".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_2mpy(".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vh.vub.b", wild_i16x + halide_hexagon_add_2mpy(".vub.b", wild_u8x, wild_i16) },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.b", wild_i32x + halide_hexagon_add_2mpy(".vh.b", wild_i16x, wild_i16) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(".vub.b", wild_u8x, wild_i32) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(".vub.ub", wild_u8x, wild_u32) },
         };
 
         if (!expr.same_as(op) && expr.as<Add>()) {
