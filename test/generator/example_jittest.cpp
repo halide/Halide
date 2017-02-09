@@ -59,7 +59,8 @@ int main(int argc, char **argv) {
         sp.vectorize = false;
         gen.schedule(sp);
 
-        Halide::Buffer<int32_t> img = gen.realize(kSize, kSize, 3);
+        Halide::Buffer<int32_t> img(kSize, kSize, 3);
+        gen.realize(img);
         verify(img, 1, 1, 3);
     }
 
