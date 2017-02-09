@@ -94,8 +94,8 @@ uint64_t target_feature_mask(const Target &target) {
     static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
     uint64_t feature_mask = 0;
     for (int i = 0; i < Target::FeatureEnd; ++i) {
-        if (target.has_feature(static_cast<Target::Feature>(i))) {
-            feature_mask |= static_cast<uint64_t>(1) << i;
+        if (target.has_feature((Target::Feature) i)) {
+            feature_mask |= ((uint64_t) 1) << i;
         }
     }
     return feature_mask;
@@ -409,11 +409,11 @@ void compile_multitarget(const std::string &fn_name,
         // Start with a bare Target, set only the features we know are common to all.
         Target runtime_target(base_target.os, base_target.arch, base_target.bits);
         // We never want NoRuntime set here.
-        runtime_features_mask &= ~(static_cast<uint64_t>(1) << Target::NoRuntime);
+        runtime_features_mask &= ~(((uint64_t)(1)) << Target::NoRuntime);
         if (runtime_features_mask) {
             for (int i = 0; i < Target::FeatureEnd; ++i) {
-                if (runtime_features_mask & (static_cast<uint64_t>(1) << i)) {
-                    runtime_target.set_feature(static_cast<Target::Feature>(i));
+                if (runtime_features_mask & (((uint64_t) 1) << i)) {
+                    runtime_target.set_feature((Target::Feature) i);
                 }
             }
         }
