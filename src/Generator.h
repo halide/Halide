@@ -1223,12 +1223,12 @@ public:
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    ValueType operator[](size_t i) const {
+    const ValueType &operator[](size_t i) const {
         return get_values<ValueType>()[i];
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    ValueType at(size_t i) const {
+    const ValueType &at(size_t i) const {
         return get_values<ValueType>().at(i);
     }
 
@@ -1647,12 +1647,12 @@ public:
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    ValueType operator[](size_t i) const {
+    const ValueType &operator[](size_t i) const {
         return get_values<ValueType>()[i];
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    ValueType at(size_t i) const {
+    const ValueType &at(size_t i) const {
         return get_values<ValueType>().at(i);
     }
 
