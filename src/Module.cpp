@@ -323,6 +323,17 @@ void compile_multitarget(const std::string &fn_name,
     // sequential execution, so that debug output won't be utterly incomprehensible
     std::launch policy = debug::debug_level() > 0 ? std::launch::deferred : std::launch::async;
 
+    // For safety, the runtime must be built only with features common to all
+    // of the targets; given an unusual ordering like
+    //
+    //     x86-64-linux,x86-64-sse41 
+    //
+    // we should still always be *correct*: this ordering would never select sse41
+    // (since x86-64-linux would be selected first due to ordering), but could
+    // crash on non-sse41 machines (if we generated a runtime with sse41 instructions
+    // included). So we'll keep track of the common features as we walk thru the targets.
+    uint64_t runtime_features_mask = (uint64_t)-1LL;
+
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
@@ -379,11 +390,14 @@ void compile_multitarget(const std::string &fn_name,
             m.compile(o);
         }, std::move(sub_module), std::move(sub_out)));
 
+        const uint64_t cur_target_mask = target_feature_mask(target);
         Expr can_use = (target == base_target) ?
                         IntImm::make(Int(32), 1) :
                         Call::make(Int(32), "halide_can_use_target_features", 
-                                   {UIntImm::make(UInt(64), target_feature_mask(target))}, 
+                                   {UIntImm::make(UInt(64), cur_target_mask)}, 
                                    Call::Extern);
+
+        runtime_features_mask &= cur_target_mask;
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
@@ -392,7 +406,17 @@ void compile_multitarget(const std::string &fn_name,
     // If we haven't specified "no runtime", build a runtime with the base target
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
-        Target runtime_target = base_target.without_feature(Target::NoRuntime);
+        // Start with a bare Target, set only the features we know are common to all.
+        Target runtime_target(base_target.os, base_target.arch, base_target.bits);
+        // We never want NoRuntime set here.
+        runtime_features_mask &= ~(static_cast<uint64_t>(1) << Target::NoRuntime);
+        if (runtime_features_mask) {
+            for (int i = 0; i < Target::FeatureEnd; ++i) {
+                if (runtime_features_mask & (static_cast<uint64_t>(1) << i)) {
+                    runtime_target.set_feature(static_cast<Target::Feature>(i));
+                }
+            }
+        }
         Outputs runtime_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
         futures.emplace_back(std::async(policy, [](Target t, Outputs o) {
