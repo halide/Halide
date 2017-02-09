@@ -10,9 +10,7 @@ cc_library(
     hdrs = ["halide_image_io.h"],
     includes = ["."],
     visibility = ["//visibility:public"],
-    deps = ["@png_archive//:png"],
-    # TODO: add jpeg support
-    defines=["HALIDE_NO_JPEG=1"],
+    deps = ["@png_archive//:png", "@jpeg_archive//:jpeg"],
 )
 
 cc_library(
