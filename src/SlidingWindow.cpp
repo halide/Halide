@@ -8,12 +8,15 @@
 #include "Simplify.h"
 #include "Monotonic.h"
 #include "Bounds.h"
+#include "IREquality.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 using std::map;
+using std::vector;
 
 namespace {
 
@@ -125,11 +128,20 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << "Region provided:\n";
 
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
-            const std::vector<string> func_args = func.args();
+            const vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func_args[i];
-                internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
+                if (!scope.contains(var + ".min") ||
+                    !scope.contains(var + ".max")) {
+                    // The lets that define these are just outside the
+                    // produce node. They should be in terms of the
+                    // var we're sliding over. If the var we're
+                    // sliding over is defined *inside* these lets,
+                    // they won't be in scope, and we've gone too var
+                    // anyway.
+                    return;
+                }
                 Expr min_req = scope.get(var + ".min");
                 Expr max_req = scope.get(var + ".max");
                 min_req = expand_expr(min_req, scope);
@@ -327,7 +339,16 @@ public:
 class SlidingWindowOnFunction : public IRMutator {
     Function func;
 
+    // A variable that linearly walks forwards over time from min to
+    // min + extent in jumps of size step.
+    struct AffineVar {
+        string name;
+        Expr var, min, extent, step;
+    };
+    vector<AffineVar> affine_vars;
 
+    Scope<int> varying;
+    
     using IRMutator::visit;
 
     void visit(const For *op) {
@@ -335,11 +356,21 @@ class SlidingWindowOnFunction : public IRMutator {
 
         Stmt new_body = op->body;
 
-        new_body = mutate(new_body);
-
         if (op->for_type == ForType::Serial ||
             op->for_type == ForType::Unrolled) {
-            new_body = SlidingWindowOnFunctionAndLoop(func, op->name, op->min).mutate(new_body);
+            AffineVar v {op->name, Variable::make(Int(32), op->name), op->min, op->extent, 1};
+            debug(0) << "New affine var: " << v.var << ", " << v.min << ", " << v.extent << ", " << v.step << "\n";
+            affine_vars.emplace_back(std::move(v));
+            varying.push(op->name, 0);
+        }
+        
+        new_body = mutate(new_body);
+        
+        if (op->for_type == ForType::Serial ||
+            op->for_type == ForType::Unrolled) {
+            new_body = try_to_slide_over_topmost_affine_var(new_body);
+            varying.pop(op->name);
+            affine_vars.pop_back();
         }
 
         if (new_body.same_as(op->body)) {
@@ -349,6 +380,88 @@ class SlidingWindowOnFunction : public IRMutator {
         }
     }
 
+    Stmt try_to_slide_over_topmost_affine_var(Stmt body) {
+        const AffineVar &v = affine_vars.back();
+        if (is_one(v.step)) {
+            SlidingWindowOnFunctionAndLoop slider(func, v.name, v.min);
+            body = slider.mutate(body);
+        }
+        return body;
+    }
+
+    bool is_constant(Expr e) {
+        return !expr_uses_vars(e, varying);
+    }
+    
+    void visit(const LetStmt *op) {
+        // We can slide over any var that linearly increases over
+        // time. This isn't just for loops. Recognize some
+        // combinations of affine vars into new affine vars that we
+        // could potentially slide over.
+        for (size_t outer = 0; outer < affine_vars.size(); outer++) {
+            const AffineVar &o = affine_vars[outer];
+
+            debug(0) << "XXX " << op->name << " = " << op->value << "\n";
+            
+            // Pattern 1: var * constant, or var * constant + constant
+            const Add *add = op->value.as<Add>();
+            const Mul *mul = add ? add->a.as<Mul>() : op->value.as<Mul>();
+            Expr base = add ? add->b : 0;
+            if (mul &&
+                is_constant(mul->b) &&
+                equal(mul->a, o.var) &&
+                is_constant(base)) {
+                AffineVar v {
+                    op->name,
+                    Variable::make(Int(32), op->name),
+                    simplify(o.min * mul->b + base),
+                    simplify(o.extent * mul->b),
+                    mul->b};
+                debug(0) << "New affine var: " << v.var << ", " << v.min << ", " << v.extent << ", " << v.step << "\n";
+                varying.push(op->name, 0);
+                affine_vars.emplace_back(std::move(v));
+                IRMutator::visit(op);
+                varying.pop(op->name);
+                affine_vars.pop_back();
+                return;
+            }
+
+            for (size_t inner = outer+1; inner < affine_vars.size(); inner++) {
+                // Pattern 2: outer + inner, where outer.step == inner.extent
+                const AffineVar &i = affine_vars[inner];
+                if (can_prove(i.extent == o.step)) {
+                    AffineVar v {
+                        op->name,
+                        Variable::make(Int(32), op->name),
+                        simplify(o.min + i.min),
+                        simplify(o.extent),
+                        i.step};
+                    debug(0) << "New affine var: " << v.var << ", " << v.min << ", " << v.extent << ", " << v.step << "\n";
+                    varying.push(op->name, 0);
+                    affine_vars.emplace_back(std::move(v));
+                    Stmt body = mutate(op->body);
+                    body = try_to_slide_over_topmost_affine_var(body);
+                    varying.pop(op->name);
+                    affine_vars.pop_back();
+                    if (body.same_as(op->body)) {
+                        stmt = op;
+                    } else {
+                        stmt = LetStmt::make(op->name, op->value, body);
+                    }
+                    return;
+                }
+            }
+        }
+
+        if (expr_uses_vars(op->value, varying)) {
+            varying.push(op->name, 0);
+            IRMutator::visit(op);
+            varying.pop(op->name);
+        } else {                    
+            IRMutator::visit(op);
+        }
+    }
+    
 public:
     SlidingWindowOnFunction(Function f) : func(f) {}
 };
@@ -397,7 +510,34 @@ public:
 
 };
 
+class PropagateConstants : public IRMutator {
+    using IRMutator::visit;
+    Scope<Expr> scope;
+
+    void visit(const Variable *op) {
+        if (scope.contains(op->name)) {
+            expr = scope.get(op->name);            
+        } else {
+            expr = op;
+        }
+    }
+    
+    void visit(const LetStmt *op) {
+        Expr val = simplify(mutate(op->value));
+        if (is_const(val)) {
+            scope.push(op->name, val);
+        }
+        Stmt body = mutate(op->body);
+        if (val.same_as(op->value) && body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, val, body);
+        }
+    }
+};
+
 Stmt sliding_window(Stmt s, const map<string, Function> &env) {
+    //s = PropagateConstants().mutate(s);
     return SlidingWindow(env).mutate(s);
 }
 
