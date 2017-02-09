@@ -106,10 +106,10 @@ struct ExprWithCompareCache {
  * comparing non-CSE'd Exprs, use graph_equal, which is safe for nasty
  * graphs of IR nodes. */
 // @{
-EXPORT bool equal(Expr a, Expr b);
-EXPORT bool equal(Stmt a, Stmt b);
-EXPORT bool graph_equal(Expr a, Expr b);
-EXPORT bool graph_equal(Stmt a, Stmt b);
+EXPORT bool equal(const Expr &a, const Expr &b);
+EXPORT bool equal(const Stmt &a, const Stmt &b);
+EXPORT bool graph_equal(const Expr &a, const Expr &b);
+EXPORT bool graph_equal(const Stmt &a, const Stmt &b);
 // @}
 
 
