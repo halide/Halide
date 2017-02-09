@@ -3377,8 +3377,14 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
             vector<Value *> args;
             for (size_t i = 0; i < arg_values.size(); i++) {
                 if (arg_values[i]->getType()->isVectorTy()) {
-                    internal_assert((int)arg_values[i]->getType()->getVectorNumElements() == arg_lanes);
-                    args.push_back(slice_vector(arg_values[i], start, intrin_lanes));
+                    int arg_i_lanes = (int)arg_values[i]->getType()->getVectorNumElements();
+                    internal_assert(arg_i_lanes >= arg_lanes);
+                    // Horizontally reducing intrinsics may have
+                    // arguments that have more lanes than the
+                    // result. Assume that the horizontally reduce
+                    // neighboring elements...
+                    int reduce = arg_i_lanes / arg_lanes;
+                    args.push_back(slice_vector(arg_values[i], start * reduce, intrin_lanes * reduce));
                 } else {
                     args.push_back(arg_values[i]);
                 }
