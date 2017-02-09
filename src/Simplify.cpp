@@ -4246,36 +4246,90 @@ private:
     }
 
     void visit(const Shuffle *op) {
-        if (op->is_interleave()) {
-            // Mutate the vectors
-            vector<Expr> new_vectors;
-            bool changed = false;
-            for (Expr vector : op->vectors) {
-                Expr new_vector = mutate(vector);
-                if (!vector.same_as(new_vector)) {
-                    changed = true;
-                }
-                new_vectors.push_back(new_vector);
+        if (op->is_extract_element() &&
+            (op->vectors[0].as<Ramp>() ||
+             op->vectors[0].as<Broadcast>())) {
+            // Extracting a single lane of a ramp or broadcast
+            if (const Ramp *r = op->vectors[0].as<Ramp>()) {
+                expr = mutate(r->base + op->indices[0]*r->stride);
+            } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
+                expr = mutate(b->value);
+            } else {
+                internal_error << "Unreachable";
             }
-            int terms = (int)new_vectors.size();
+            return;
+        }
 
-            // Try to collapse an interleave of broadcast into a single broadcast.
-            const Broadcast *b1 = new_vectors[0].as<Broadcast>();
-            if (b1) {
-                bool can_collapse = true;
-                for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
-                    if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
-                        Expr check = mutate(b1->value - b2->value);
-                        can_collapse &= is_zero(check);
-                    } else {
-                        can_collapse = false;
-                    }
+        // Mutate the vectors
+        vector<Expr> new_vectors;
+        bool changed = false;
+        for (Expr vector : op->vectors) {
+            Expr new_vector = mutate(vector);
+            if (!vector.same_as(new_vector)) {
+                changed = true;
+            }
+            new_vectors.push_back(new_vector);
+        }
+
+        // Try to convert a shuffled load into a shuffle of a load.
+        if (const Load *first_load = new_vectors[0].as<Load>()) {
+            vector<Expr> load_predicates;
+            vector<Expr> load_indices;
+            bool unpredicated = true;
+            for (Expr e : new_vectors) {
+                const Load *load = e.as<Load>();
+                if (load && load->name == first_load->name) {
+                    load_predicates.push_back(load->predicate);
+                    load_indices.push_back(load->index);
+                    unpredicated = unpredicated && is_one(load->predicate);
+                } else {
+                    break;
                 }
-                if (can_collapse) {
-                    expr = Broadcast::make(b1->value, b1->lanes * terms);
+            }
+
+            if (load_indices.size() == new_vectors.size()) {
+                Type t = load_indices[0].type().with_lanes(op->indices.size());
+                Expr shuffled_index = Shuffle::make(load_indices, op->indices);
+                shuffled_index = mutate(shuffled_index);
+                Expr shuffled_predicate;
+                if (unpredicated) {
+                    shuffled_predicate = const_true(t.lanes());
+                } else {
+                    shuffled_predicate = Shuffle::make(load_predicates, op->indices);
+                    shuffled_predicate = mutate(shuffled_predicate);
+                }
+                if (shuffled_index.as<Ramp>()) {
+                    t = first_load->type;
+                    t = t.with_lanes(op->indices.size());
+                    expr = Load::make(t, first_load->name, shuffled_index, first_load->image,
+                                      first_load->param, shuffled_predicate);
                     return;
                 }
             }
+        }
+
+        // Try to collapse a shuffle of broadcasts into a single
+        // broadcast. Note that it doesn't matter what the indices
+        // are.
+        const Broadcast *b1 = new_vectors[0].as<Broadcast>();
+        if (b1) {
+            bool can_collapse = true;
+            for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
+                if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
+                    Expr check = mutate(b1->value - b2->value);
+                    can_collapse &= is_zero(check);
+                } else {
+                    can_collapse = false;
+                }
+            }
+            if (can_collapse) {
+                expr = Broadcast::make(b1->value, op->indices.size());
+                return;
+            }
+        }
+
+        if (op->is_interleave()) {
+            int terms = (int)new_vectors.size();
 
             // Try to collapse an interleave of ramps into a single ramp.
             const Ramp *r = new_vectors[0].as<Ramp>();
@@ -4303,89 +4357,99 @@ private:
                 }
             }
 
-            // Try to collapse an interleave of strided loads of ramps
-            // from the same buffer into a single load of a ramp.
-            if (const Load *first_load = new_vectors[0].as<Load>()) {
-                vector<Expr> load_predicates;
-                vector<Expr> load_indices;
-                bool always_true = true;
-                for (Expr e : new_vectors) {
-                    const Load *load = e.as<Load>();
-                    if (load && load->name == first_load->name) {
-                        load_predicates.push_back(load->predicate);
-                        load_indices.push_back(load->index);
-                        always_true = always_true && is_one(load->predicate);
-                    }
-                }
-
-                if ((int)load_indices.size() == terms) {
-                    Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
-                    Expr interleaved_index = Shuffle::make_interleave(load_indices);
-                    interleaved_index = mutate(interleaved_index);
-                    Expr interleaved_predicate;
-                    if (always_true) {
-                        interleaved_predicate = const_true(t.lanes());
-                    } else {
-                        interleaved_predicate = Shuffle::make_interleave(load_predicates);
-                        interleaved_predicate = mutate(interleaved_predicate);
-                    }
-                    if (interleaved_index.as<Ramp>()) {
-                        t = first_load->type;
-                        t = t.with_lanes(t.lanes() * terms);
-                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image,
-                                          first_load->param, interleaved_predicate);
-                        return;
-                    }
-                }
-            }
-
             // Try to collapse an interleave of slices of vectors from
             // the same vector into a single vector.
             if (const Shuffle *first_shuffle = new_vectors[0].as<Shuffle>()) {
-                if (first_shuffle->is_slice() && first_shuffle->slice_stride() == (int)new_vectors.size()) {
+                if (first_shuffle->is_slice()) {
                     bool can_collapse = true;
                     for (size_t i = 0; i < new_vectors.size() && can_collapse; i++) {
                         const Shuffle *i_shuffle = new_vectors[i].as<Shuffle>();
-                        if (!i_shuffle || !i_shuffle->is_slice() || i_shuffle->slice_begin() != (int)i) {
+
+                        // Check that the current shuffle is a slice...
+                        if (!i_shuffle || !i_shuffle->is_slice()) {
                             can_collapse = false;
-                        } else if (i > 0) {
+                            break;
+                        }
+
+                        // ... and that it is a slice in the right place...
+                        if (i_shuffle->slice_begin() != (int)i || i_shuffle->slice_stride() != terms) {
+                            can_collapse = false;
+                            break;
+                        }
+
+                        if (i > 0) {
+                            // ... and that the vectors being sliced are the same.
                             if (first_shuffle->vectors.size() != i_shuffle->vectors.size()) {
                                 can_collapse = false;
-                            } else {
-                                for (size_t j = 0; j < first_shuffle->vectors.size(); j++) {
-                                    if (!first_shuffle->vectors[j].same_as(i_shuffle->vectors[j])) {
-                                        can_collapse = false;
-                                    }
+                                break;
+                            }
+
+                            for (size_t j = 0; j < first_shuffle->vectors.size() && can_collapse; j++) {
+                                if (!first_shuffle->vectors[j].same_as(i_shuffle->vectors[j])) {
+                                    can_collapse = false;
                                 }
                             }
                         }
                     }
+
                     if (can_collapse) {
                         expr = Shuffle::make_concat(first_shuffle->vectors);
                         return;
                     }
                 }
             }
+        } else if (op->is_concat()) {
+            // Try to collapse a concat of ramps into a single ramp.
+            const Ramp *r = new_vectors[0].as<Ramp>();
+            if (r) {
+                bool can_collapse = true;
+                for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
+                    Expr diff;
+                    if (new_vectors[i].type().lanes() == new_vectors[i-1].type().lanes()) {
+                        diff = mutate(new_vectors[i] - new_vectors[i-1]);
+                    }
 
+                    const Broadcast *b = diff.as<Broadcast>();
+                    if (b) {
+                        Expr check = mutate(b->value - r->stride * new_vectors[i-1].type().lanes());
+                        can_collapse &= is_zero(check);
+                    } else {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    expr = Ramp::make(r->base, r->stride, op->indices.size());
+                    return;
+                }
+            }
 
-            if (!changed) {
-                expr = op;
-            } else {
-                expr = Shuffle::make_interleave(new_vectors);
+            // Try to collapse a concat of scalars into a ramp.
+            if (new_vectors[0].type().is_scalar() && new_vectors[1].type().is_scalar()) {
+                bool can_collapse = true;
+                Expr stride = mutate(new_vectors[1] - new_vectors[0]);
+                for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
+                    if (!new_vectors[i].type().is_scalar()) {
+                        can_collapse = false;
+                        break;
+                    }
+
+                    Expr check = mutate(new_vectors[i] - new_vectors[i - 1] - stride);
+                    if (!is_zero(check)) {
+                        can_collapse = false;
+                    }
+                }
+
+                if (can_collapse) {
+                    expr = Ramp::make(new_vectors[0], stride, op->indices.size());
+                    return;
+                }
             }
-        } else if (op->indices.size() == 1 &&
-                   (op->vectors[0].as<Ramp>() ||
-                    op->vectors[0].as<Broadcast>())) {
-            // Extracting a single lane of a ramp or broadcast
-            if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-                expr = mutate(r->base + op->indices[0]*r->stride);
-            } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
-                expr = mutate(b->value);
-            } else {
-                internal_error << "Unreachable";
-            }
+        }
+
+        if (!changed) {
+            expr = op;
         } else {
-            IRMutator::visit(op);
+            expr = Shuffle::make(new_vectors, op->indices);
         }
     }
 
@@ -4917,6 +4981,14 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
 // Helper functions to use in the tests below
 Expr interleave_vectors(vector<Expr> e) {
     return Shuffle::make_interleave(e);
+}
+
+Expr concat_vectors(vector<Expr> e) {
+    return Shuffle::make_concat(e);
+}
+
+Expr slice(Expr e, int begin, int stride, int w) {
+    return Shuffle::make_slice(e, begin, stride, w);
 }
 
 Expr ramp(Expr base, Expr stride, int w) {
@@ -6185,6 +6257,15 @@ void simplify_test() {
     check(interleave_vectors({ramp(x, 4, 4), ramp(x+2, 4, 4)}), ramp(x, 2, 8));
     check(interleave_vectors({ramp(x-y, 2*y, 4), ramp(x, 2*y, 4)}), ramp(x-y, y, 8));
     check(interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4), ramp(x+2, 3, 4)}), ramp(x, 1, 12));
+    {
+        Expr vec = ramp(x, 1, 16);
+        check(interleave_vectors({slice(vec, 0, 2, 8), slice(vec, 1, 2, 8)}), vec);
+        check(interleave_vectors({slice(vec, 0, 4, 4), slice(vec, 1, 4, 4), slice(vec, 2, 4, 4), slice(vec, 3, 4, 4)}), vec);
+    }
+
+    // Collapse some vector concats
+    check(concat_vectors({ramp(x, 2, 4), ramp(x+8, 2, 4)}), ramp(x, 2, 8));
+    check(concat_vectors({ramp(x, 3, 2), ramp(x+6, 3, 2), ramp(x+12, 3, 2)}), ramp(x, 3, 6));
 
     // Now some ones that can't work
     {
@@ -6197,6 +6278,13 @@ void simplify_test() {
         e = interleave_vectors({ramp(x, 2, 4), ramp(y+1, 2, 4)});
         check(e, e);
         e = interleave_vectors({ramp(x, 2, 4), ramp(x+1, 3, 4)});
+        check(e, e);
+
+        e = concat_vectors({ramp(x, 1, 4), ramp(x+4, 2, 4)});
+        check(e, e);
+        e = concat_vectors({ramp(x, 1, 4), ramp(x+8, 1, 4)});
+        check(e, e);
+        e = concat_vectors({ramp(x, 1, 4), ramp(y+4, 1, 4)});
         check(e, e);
     }
 
@@ -6215,7 +6303,17 @@ void simplify_test() {
         Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
         e = interleave_vectors({load1, load3});
         check(e, e);
+    }
 
+    // Check that concatenated loads of adjacent scalars collapse into a vector load.
+    {
+        int lanes = 4;
+        std::vector<Expr> loads;
+        for (int i = 0; i < lanes; i++) {
+            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true()));
+        }
+
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes)));
     }
 
     // This expression doesn't simplify, but it did cause exponential
