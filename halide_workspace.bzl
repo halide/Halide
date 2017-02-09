@@ -24,6 +24,14 @@ def halide_workspace():
     strip_prefix = "libpng-1.2.53",
   )
 
+  native.new_http_archive(
+     name = "jpeg_archive",
+     url = "https://github.com/libjpeg-turbo/libjpeg-turbo/archive/1.5.1.tar.gz",
+     sha256 = "c15a9607892113946379ccea3ca8b85018301b200754f209453ab21674268e77",
+     build_file = "//tools:jpeg.BUILD",
+     strip_prefix = "libjpeg-turbo-1.5.1",
+  )
+
   llvm_repository()
 
   # TODO
