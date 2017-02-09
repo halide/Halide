@@ -193,7 +193,13 @@ cc_library(
         "-DCOMPILING_HALIDE",
         "-DLLVM_VERSION=" + get_llvm_version(),
         "-fPIC",
+        "-fno-exceptions",
         "-fno-rtti",
+        # unwind-tables is required on some hosts like powerpc64le-linux-gnu 
+        # because we may build everything with -fno-exceptions.  
+        # Without -funwind-tables, libHalide.so fails to propagate exceptions 
+        # and causes a test failure.
+        "-funwind-tables",
         "-fvisibility-inlines-hidden",
         "-std=c++11",
         "-Wframe-larger-than=131070",  # This applies to the code generator, not the generated code.
