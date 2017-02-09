@@ -253,6 +253,10 @@ void CodeGen_Hexagon::init_module() {
     Type u16v2 = u16v1.with_lanes(u16v1.lanes() * 2);
     Type u32v2 = u32v1.with_lanes(u32v1.lanes() * 2);
 
+    // These are used for some instructions that accept 4 scalars packed together.
+    Type i8x4 = Int(8).with_lanes(4);
+    Type u8x4 = UInt(8).with_lanes(4);
+
     // LLVM's HVX vector intrinsics don't include the type of the
     // operands, they all operate on vectors of 32 bit integers. To make
     // it easier to generate code, we define wrapper intrinsics with
@@ -432,24 +436,24 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpybusv_acc), i32v1, "acc_add_4mpy.vw.vub.vb",  {i32v1, i8v1, i8v1} },
 
         // Widening scalar multiplication, with horizontal reduction.
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus), i16v1, "add_2mpy.vub.b", {u8v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb),  i32v1, "add_2mpy.vh.b",  {i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_acc), i16v1, "acc_add_2mpy.vh.vub.b", {i16v1, u8v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_acc),  i32v1, "acc_add_2mpy.vw.vh.b",  {i32v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus), i16v1, "add_2mpy.vub.b", {u8v1, i8x4} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb),  i32v1, "add_2mpy.vh.b",  {i16v1, i8x4} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_acc), i16v1, "acc_add_2mpy.vh.vub.b", {i16v1, u8v1, i8x4} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_acc),  i32v1, "acc_add_2mpy.vw.vh.b",  {i32v1, i16v1, i8x4} },
 
         // TODO: There are also saturating versions of vdmpy.
 
         // TODO: These don't generate correctly because the vectors
         // aren't interleaved correctly.
-        //{ IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_dv), i16v2, "add_2mpy.vub.b.dv", {u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        //{ IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_dv), i32v2, "add_2mpy.vh.b.dv", {i16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        //{ IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_dv_acc), i16v2, "acc_add_2mpy.vh.vub.b.dv", {i16v2, u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords },
-        //{ IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_dv_acc), i32v2, "acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords },
+        //{ IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_dv), i16v2, "add_2mpy.vub.b.dv", {u8v2, i8x4} },
+        //{ IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_dv), i32v2, "add_2mpy.vh.b.dv", {i16v2, i8x4} },
+        //{ IPICK(is_128B, Intrinsic::hexagon_V6_vdmpybus_dv_acc), i16v2, "acc_add_2mpy.vh.vub.b.dv", {i16v2, u8v2, i8x4} },
+        //{ IPICK(is_128B, Intrinsic::hexagon_V6_vdmpyhb_dv_acc), i32v2, "acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i8x4} },
 
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpybus), i32v1, "add_4mpy.vub.b",  {u8v1, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpyub),  u32v1, "add_4mpy.vub.ub", {u8v1, u32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpybus_acc), i32v1, "acc_add_4mpy.vw.vub.b",  {i32v1, u8v1, i32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpyub_acc),  u32v1, "acc_add_4mpy.vuw.vub.ub", {u32v1, u8v1, u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpybus), i32v1, "add_4mpy.vub.b",  {u8v1, i8x4} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpyub),  u32v1, "add_4mpy.vub.ub", {u8v1, u8x4} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpybus_acc), i32v1, "acc_add_4mpy.vw.vub.b",  {i32v1, u8v1, i8x4} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vrmpyub_acc),  u32v1, "acc_add_4mpy.vuw.vub.ub", {u32v1, u8v1, u8x4} },
 
         // Multiply keep high half, with multiplication by 2.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vmpyhvsrs), i16v1, "trunc_satw_mpy2_rnd.vh.vh", {i16v1, i16v1} },
@@ -623,8 +627,10 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin, Ty
                         internal_error << "unhandled broadcast_scalar_word in define_hvx_intrinsic";
                     }
                     args[i] = builder->CreateCall(fn, { args[i] });
-                } else {
+                } else if (args[i]->getType()->isIntegerTy()) {
                     args[i] = builder->CreateIntCast(args[i], arg_ty, arg_types[i].is_int());
+                } else {
+                    args[i] = builder->CreateBitCast(args[i], arg_ty);
                 }
             }
         }
@@ -817,12 +823,14 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     int b_elements = static_cast<int>(b_ty->getVectorNumElements());
 
     llvm::Type *element_ty = a->getType()->getVectorElementType();
+    internal_assert(element_ty);
     int element_bits = element_ty->getScalarSizeInBits();
     int native_elements = native_vector_bits() / element_bits;
     llvm::Type *native_ty = llvm::VectorType::get(element_ty, native_elements);
     llvm::Type *native2_ty = llvm::VectorType::get(element_ty, native_elements*2);
 
     int result_elements = static_cast<int>(indices.size());
+    internal_assert(result_elements > 0);
     llvm::Type *result_ty = VectorType::get(element_ty, result_elements);
 
     // Try to rewrite shuffles that only access the elements of b.

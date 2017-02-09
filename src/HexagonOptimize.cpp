@@ -205,6 +205,9 @@ Expr wild_i16x = Variable::make(Type(Type::Int, 16, 0), "*");
 Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 
+Expr wild_u8x4 = Variable::make(Type(Type::UInt, 8, 4), "*");
+Expr wild_i8x4 = Variable::make(Type(Type::Int, 8, 4), "*");
+
 // Attempt to apply one of the patterns to x. If a match is
 // successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
@@ -514,30 +517,18 @@ private:
                 suffix = ".vub.b";
             }
             if (mpys.size() == 4) {
+                // TODO: It's possible that permuting the order of the
+                // multiply operands can simplify the shuffle away.
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
+                Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
-                // Only generate vrmpy if the interleave simplified
-                // away.
-                // TODO: This requires the operands to be in a
-                // particular order. It should be more robust... but
-                // this is pretty tough to do, other than simply
-                // trying all permutations.
-                if (!a0123.as<Shuffle>()) {
-                    Expr b0123 =
-                        (u32(mpys[3].second) << 24) |
-                        (u32(mpys[2].second) << 16) |
-                        (u32(mpys[1].second) << 8) |
-                        u32(mpys[0].second);
-                    if (op->type.is_int()) {
-                        b0123 = i32(b0123);
-                    }
-                    expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
-                    if (rest.defined()) {
-                        expr = Add::make(expr, rest);
-                    }
-                    expr = mutate(expr);
-                    return;
+                b0123 = simplify(b0123);
+                expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
+                if (rest.defined()) {
+                    expr = Add::make(expr, rest);
                 }
+                expr = mutate(expr);
+                return;
             }
 
             // Now try to match vector*vector vrmpy expressions.
@@ -550,24 +541,18 @@ private:
             }
             // TODO: suffix = ".vb.vb"
             if (mpys.size() == 4) {
+                // TODO: It's possible that permuting the order of the
+                // multiply operands can simplify the shuffle away.
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
                 Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
                 b0123 = simplify(b0123);
-                // Only generate vrmpy if the interleave simplified
-                // away.
-                // TODO: This requires the operands to be in a
-                // particular order. It should be more robust... but
-                // this is pretty tough to do, other than simply
-                // trying all permutations.
-                if (!a0123.as<Shuffle>() && !b0123.as<Shuffle>()) {
-                    expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
-                    if (rest.defined()) {
-                        expr = Add::make(expr, rest);
-                    }
-                    expr = mutate(expr);
-                    return;
+                expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
+                if (rest.defined()) {
+                    expr = Add::make(expr, rest);
                 }
+                expr = mutate(expr);
+                return;
             }
         }
 
@@ -599,17 +584,13 @@ private:
             if (mpys.size() == 2) {
                 Expr a01 = Shuffle::make_interleave({mpys[0].first, mpys[1].first});
                 a01 = simplify(a01);
-                // Only generate vdmpy if the interleave simplified
-                // away.
                 // TODO: This requires the operands to be in a
                 // particular order. It should be more robust... but
                 // this is pretty tough to do, other than simply
                 // trying all permutations.
                 if (!a01.as<Shuffle>()) {
-                    Expr b01 = (u16(mpys[1].second) << 8) | u16(mpys[0].second);
-                    if (op->type.is_int()) {
-                        b01 = i16(b01);
-                    }
+                    Expr b01 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[0].second, mpys[1].second});
+                    b01 = simplify(b01);
                     expr = halide_hexagon_add_2mpy(vdmpy_suffix, a01, b01);
                 } else {
                     expr = halide_hexagon_add_2mpy(vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
@@ -626,10 +607,10 @@ private:
             // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
             { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
             { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b",   wild_i32x + halide_hexagon_add_2mpy(".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_2mpy.vh.vub.b",       wild_i16x + halide_hexagon_add_2mpy(".vub.b", wild_u8x, wild_i16) },
-            { "halide.hexagon.acc_add_2mpy.vw.vh.b",        wild_i32x + halide_hexagon_add_2mpy(".vh.b", wild_i16x, wild_i16) },
-            { "halide.hexagon.acc_add_4mpy.vw.vub.b",       wild_i32x + halide_hexagon_add_4mpy(".vub.b", wild_u8x, wild_i32) },
-            { "halide.hexagon.acc_add_4mpy.vuw.vub.ub",     wild_u32x + halide_hexagon_add_4mpy(".vub.ub", wild_u8x, wild_u32) },
+            { "halide.hexagon.acc_add_2mpy.vh.vub.b",       wild_i16x + halide_hexagon_add_2mpy(".vub.b", wild_u8x, wild_i8x4) },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.b",        wild_i32x + halide_hexagon_add_2mpy(".vh.b", wild_i16x, wild_i8x4) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.b",       wild_i32x + halide_hexagon_add_4mpy(".vub.b", wild_u8x, wild_i8x4) },
+            { "halide.hexagon.acc_add_4mpy.vuw.vub.ub",     wild_u32x + halide_hexagon_add_4mpy(".vub.ub", wild_u8x, wild_u8x4) },
             { "halide.hexagon.acc_add_4mpy.vuw.vub.vub",    wild_u32x + halide_hexagon_add_4mpy(".vub.vub", wild_u8x, wild_u8x) },
             { "halide.hexagon.acc_add_4mpy.vw.vub.vb",      wild_i32x + halide_hexagon_add_4mpy(".vub.vb", wild_u8x, wild_i8x) },
             { "halide.hexagon.acc_add_4mpy.vw.vb.vb",       wild_i32x + halide_hexagon_add_4mpy(".vb.vb", wild_i8x, wild_i8x) },
