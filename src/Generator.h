@@ -333,7 +333,7 @@ protected:
     friend class GeneratorBase;
     friend class StubEmitter;
 
-    void check_value_valid() const;
+    EXPORT void check_value_valid() const;
 
     virtual void set_from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
