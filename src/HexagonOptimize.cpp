@@ -63,6 +63,44 @@ namespace {
 // Broadcast to an unknown number of lanes, for making patterns.
 Expr bc(Expr x) { return Broadcast::make(x, 0); }
 
+// Flatten a binary operator tree into a list of operands.
+template <typename BinOp>
+void flatten_binary_op(const BinOp *op, vector<Expr> &operands) {
+    const BinOp *a = op->a.template as<BinOp>();
+    const BinOp *b = op->b.template as<BinOp>();
+    if (a) {
+        flatten_binary_op(a, operands);
+    } else {
+        operands.push_back(op->a);
+    }
+    if (b) {
+        flatten_binary_op(b, operands);
+    } else {
+        operands.push_back(op->b);
+    }
+}
+
+// Reassemble a list of binary operator operands into a (balanced)
+// binary tree.
+template <typename BinOp>
+Expr make_binary_op(const vector<Expr> &operands) {
+    if (operands.empty()) {
+        return Expr();
+    }
+    if (operands.size() == 1) {
+        return operands[0];
+    }
+    vector<Expr> ops;
+    for (size_t i = 0; i < operands.size(); i += 2) {
+        if (i + 1 < operands.size()) {
+            ops.push_back(BinOp::make(operands[i], operands[i + 1]));
+        } else {
+            ops.push_back(operands[i]);
+        }
+    }
+    return make_binary_op<BinOp>(ops);
+}
+
 // This mutator rewrites patterns with an unknown number of lanes to
 // have the specified number of lanes.
 class WithLanes : public IRMutator {
@@ -334,6 +372,7 @@ private:
         IRMutator::visit(op);
     }
 
+    // Helpers to generate horizontally reducing multiply operations.
     static Expr halide_hexagon_add_2mpy(string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
         Type t = v0.type();
         Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
@@ -359,144 +398,242 @@ private:
         return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
     }
 
+    typedef pair<Expr, Expr> MulExpr;
+
+    // In the operands vector, find elements of the operands list that
+    // are widening multiplies from types a_ty and b_ty. If mpy_count
+    // multiplies aren't found (but at least one is), it will attempt
+    // to multiply remaining operands by 1 to match the target
+    // widening multiply.
+    static pair<vector<MulExpr>, Expr> find_mpy_ops(const vector<Expr> &operands, Type a_ty, Type b_ty, int mpy_count) {
+        Type add_ty = operands.front().type();
+        int mpy_bits = std::max(a_ty.bits(), b_ty.bits())*2;
+        Expr a_wild = Variable::make(a_ty.with_bits(mpy_bits).with_code(add_ty.code()), "*");
+        Expr b_wild = Variable::make(b_ty.with_bits(mpy_bits).with_code(add_ty.code()), "*");
+        if (a_wild.type().lanes() == 1) {
+            a_wild = Broadcast::make(a_wild, b_ty.lanes());
+        }
+        if (b_wild.type().lanes() == 1) {
+            b_wild = Broadcast::make(b_wild, a_ty.lanes());
+        }
+
+        // Try to match both the multiply and its commutation.
+        Expr pattern = a_wild*b_wild;
+        Expr commuted_pattern = b_wild*a_wild;
+        if (add_ty.bits() != pattern.type().bits()) {
+            pattern = Cast::make(add_ty, pattern);
+            commuted_pattern = Cast::make(add_ty, commuted_pattern);
+        }
+
+        // Go through the operands, putting the matching multiplies in
+        // matched, and the rest in not_matched.
+        vector<MulExpr> matched;
+        vector<Expr> not_matched;
+        for (Expr i : operands) {
+            if ((int)matched.size() >= mpy_count) {
+                not_matched.emplace_back(i);
+                continue;
+            }
+            Expr a, b;
+            vector<Expr> matches;
+            if (expr_match(pattern, i, matches)) {
+                a = matches[0];
+                b = matches[1];
+            } else if (expr_match(commuted_pattern, i, matches)) {
+                a = matches[1];
+                b = matches[0];
+            }
+
+            if (a.defined()) {
+                a = lossless_cast(a_ty.with_lanes(a.type().lanes()), a);
+            }
+            if (b.defined()) {
+                b = lossless_cast(b_ty.with_lanes(b.type().lanes()), b);
+            }
+
+            if (a.defined() && b.defined()) {
+                matched.emplace_back(a, b);
+            } else {
+                not_matched.emplace_back(i);
+            }
+        }
+
+        if (matched.empty()) {
+            // Don't fake a bunch of mpy ops if there are no real ones.
+            return {matched, make_binary_op<Add>(not_matched)};
+        }
+
+        // If we didn't find mpy_count matches, go through the
+        // not_matched list and try to find elements that match one of
+        // the operand types, and set the other operand to 1.
+        vector<Expr> rest;
+        for (Expr i : not_matched) {
+            if ((int)matched.size() < mpy_count) {
+                Expr as_a = lossless_cast(a_ty.with_lanes(i.type().lanes()), i);
+                Expr as_b = lossless_cast(b_ty.with_lanes(i.type().lanes()), i);
+                if (as_a.defined()) {
+                    matched.emplace_back(as_a, make_one(b_ty));
+                } else if (as_b.defined()) {
+                    matched.emplace_back(make_one(a_ty), as_b);
+                } else {
+                    rest.push_back(i);
+                }
+            } else {
+                rest.push_back(i);
+            }
+        }
+
+        internal_assert((int)matched.size() <= mpy_count);
+
+        return {matched, make_binary_op<Add>(rest)};
+    }
+
     void visit(const Add *op) {
         vector<Expr> matches;
 
-        // vmpa, vdmpy, and vrmpy instructions have a lot of quirky
-        // conditions and matching operations, and would require flags
-        // used only by these instructions (a double
-        // narrowing). Instead, just handle them manually here.
-        Expr r2x_mul_b_pattern = wild_i16x*bc(wild_i16) + wild_i16x*bc(wild_i16);
-        Expr r2x_mul_h_pattern = wild_i32x*bc(wild_i32) + wild_i32x*bc(wild_i32);
-        if (expr_match(r2x_mul_b_pattern, op, matches)) {
-            // Narrow the operands.
-            Expr v0 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[0]);
-            Expr v1 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[2]);
-            Expr c0 = lossless_cast(Int(8), matches[1]);
-            Expr c1 = lossless_cast(Int(8), matches[3]);
+        // vmpa, vdmpy, and vrmpy instructions are hard to match with
+        // patterns, do it manually here.
+        vector<Expr> operands;
+        flatten_binary_op(op, operands);
 
-            if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
-                c0 = mutate(c0);
-                c1 = mutate(c1);
+        // Try to find vrmpy opportunities first, which consume 4 operands.
+        if (op->type.is_vector() && operands.size() >= 4) {
+            int lanes = op->type.lanes();
+            vector<MulExpr> mpys;
+            Expr rest;
+            string suffix;
 
-                // Try interleaving v0 and v1. If they interleave
-                // cleanly, use vdmpy, otherwise use vmpa.
-                Expr v01 = simplify(Shuffle::make_interleave({v0, v1}));
-                if (v01.as<Shuffle>()) {
-                    // We didn't simplify the interleave... use vmpa.
-                    v0 = mutate(v0);
-                    v1 = mutate(v1);
-                    expr = halide_hexagon_add_2mpy(".vub.vub.b.b", v0, v1, c0, c1);
-                } else {
-                    // We did simplify the interleave, use vdmpy.
-                    v01 = mutate(v01);
-                    Expr c01 = i16((u16(c1) << 8) | u16(c0));
-                    expr = halide_hexagon_add_2mpy(".vub.b", v01, c01);
-                }
-                return;
+            // Try to find a vector*scalar multiply first, which will
+            // match a subset of the expressions that vector*vector
+            // matches.
+            if (op->type.is_uint()) {
+                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), UInt(8), 4);
+                suffix = ".vub.ub";
+            } else {
+                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), Int(8), 4);
+                suffix = ".vub.b";
             }
-        } else if (expr_match(r2x_mul_h_pattern, op, matches)) {
-            // Narrow the operands.
-            Expr v0 = lossless_cast(Int(16).with_lanes(op->type.lanes()), matches[0]);
-            Expr v1 = lossless_cast(Int(16).with_lanes(op->type.lanes()), matches[2]);
-            Expr c0 = lossless_cast(Int(8), matches[1]);
-            Expr c1 = lossless_cast(Int(8), matches[3]);
-
-            if (v0.defined() && v1.defined() && c0.defined() && c1.defined()) {
-                c0 = mutate(c0);
-                c1 = mutate(c1);
-
-                // Try interleaving v0 and v1. If they interleave
-                // cleanly, use vdmpy, otherwise use vmpa.
-                Expr v01 = simplify(Shuffle::make_interleave({v0, v1}));
-                if (v01.as<Shuffle>()) {
-                    // We didn't simplify the interleave... use vmpa.
-                    v0 = mutate(v0);
-                    v1 = mutate(v1);
-                    expr = halide_hexagon_add_2mpy(".vh.vh.b.b", v0, v1, c0, c1);
-                } else {
-                    // We did simplify the interleave, use vdmpy.
-                    v01 = mutate(v01);
-                    Expr c01 = i16((u16(c1) << 8) | u16(c0));
-                    expr = halide_hexagon_add_2mpy(".vh.b", v01, c01);
+            if (mpys.size() == 4) {
+                Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
+                a0123 = simplify(a0123);
+                // Only generate vrmpy if the interleave simplified
+                // away.
+                // TODO: This requires the operands to be in a
+                // particular order. It should be more robust... but
+                // this is pretty tough to do, other than simply
+                // trying all permutations.
+                if (!a0123.as<Shuffle>()) {
+                    Expr b0123 =
+                        (u32(mpys[3].second) << 24) |
+                        (u32(mpys[2].second) << 16) |
+                        (u32(mpys[1].second) << 8) |
+                        u32(mpys[0].second);
+                    if (op->type.is_int()) {
+                        b0123 = i32(b0123);
+                    }
+                    expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
+                    if (rest.defined()) {
+                        expr = Add::make(expr, rest);
+                    }
+                    expr = mutate(expr);
+                    return;
                 }
-
-                return;
             }
-        }
 
-        Expr r4x_mul_b_pattern =
-            i32(wild_i16x*bc(wild_i16)) +
-            i32(wild_i16x*bc(wild_i16)) +
-            i32(wild_i16x*bc(wild_i16)) +
-            i32(wild_i16x*bc(wild_i16));
-        if (expr_match(r4x_mul_b_pattern, op, matches)) {
-            // Narrow the operands.
-            Expr v0 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[0]);
-            Expr v1 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[2]);
-            Expr v2 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[4]);
-            Expr v3 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[6]);
-            Expr c0 = lossless_cast(Int(8), matches[1]);
-            Expr c1 = lossless_cast(Int(8), matches[3]);
-            Expr c2 = lossless_cast(Int(8), matches[5]);
-            Expr c3 = lossless_cast(Int(8), matches[7]);
-
-            if (v0.defined() && v1.defined() && v2.defined() && v3.defined() &&
-                c0.defined() && c1.defined() && c2.defined() && c3.defined()) {
-                c0 = mutate(c0);
-                c1 = mutate(c1);
-                c2 = mutate(c2);
-                c3 = mutate(c3);
-
-                // Try interleaving v0 and v1. If they interleave
-                // cleanly, use vrmpy.
-                Expr v0123 = simplify(Shuffle::make_interleave({v0, v1, v2, v3}));
-                if (!v0123.as<Shuffle>()) {
-                    // We did simplify the interleave, use vdmpy.
-                    v0123 = mutate(v0123);
-                    Expr c0123 = i32((u32(c3) << 24) | (u32(c2) << 16) | (u32(c1) << 8) | u32(c0));
-                    expr = halide_hexagon_add_4mpy(".vub.b", v0123, c0123);
+            // Now try to match vector*vector vrmpy expressions.
+            if (op->type.is_uint()) {
+                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), UInt(8).with_lanes(lanes), 4);
+                suffix = ".vub.vub";
+            } else {
+                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), Int(8).with_lanes(lanes), 4);
+                suffix = ".vub.vb";
+            }
+            // TODO: suffix = ".vb.vb"
+            if (mpys.size() == 4) {
+                Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
+                Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
+                a0123 = simplify(a0123);
+                b0123 = simplify(b0123);
+                // Only generate vrmpy if the interleave simplified
+                // away.
+                // TODO: This requires the operands to be in a
+                // particular order. It should be more robust... but
+                // this is pretty tough to do, other than simply
+                // trying all permutations.
+                if (!a0123.as<Shuffle>() && !b0123.as<Shuffle>()) {
+                    expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
+                    if (rest.defined()) {
+                        expr = Add::make(expr, rest);
+                    }
+                    expr = mutate(expr);
                     return;
                 }
             }
         }
-        Expr r4x_mul_ub_pattern =
-            u32(wild_u16x*bc(wild_u16)) +
-            u32(wild_u16x*bc(wild_u16)) +
-            u32(wild_u16x*bc(wild_u16)) +
-            u32(wild_u16x*bc(wild_u16));
-        if (expr_match(r4x_mul_ub_pattern, op, matches)) {
-            // Narrow the operands.
-            Expr v0 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[0]);
-            Expr v1 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[2]);
-            Expr v2 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[4]);
-            Expr v3 = lossless_cast(UInt(8).with_lanes(op->type.lanes()), matches[6]);
-            Expr c0 = lossless_cast(UInt(8), matches[1]);
-            Expr c1 = lossless_cast(UInt(8), matches[3]);
-            Expr c2 = lossless_cast(UInt(8), matches[5]);
-            Expr c3 = lossless_cast(UInt(8), matches[7]);
 
-            if (v0.defined() && v1.defined() && v2.defined() && v3.defined() &&
-                c0.defined() && c1.defined() && c2.defined() && c3.defined()) {
-                c0 = mutate(c0);
-                c1 = mutate(c1);
-                c2 = mutate(c2);
-                c3 = mutate(c3);
+        // Find opportunities vdmpy or vmpa.
+        if (op->type.is_vector() && operands.size() >= 2) {
+            int lanes = op->type.lanes();
 
-                // Try interleaving v0 and v1. If they interleave
-                // cleanly, use vrmpy.
-                Expr v0123 = simplify(Shuffle::make_interleave({v0, v1, v2, v3}));
-                if (!v0123.as<Shuffle>()) {
-                    // We did simplify the interleave, use vdmpy.
-                    v0123 = mutate(v0123);
-                    Expr c0123 = (u32(c3) << 24) | (u32(c2) << 16) | (u32(c1) << 8) | u32(c0);
-                    expr = halide_hexagon_add_4mpy(".vub.ub", v0123, c0123);
-                    return;
+            vector<MulExpr> mpys;
+            Expr rest;
+            string vmpa_suffix;
+            string vdmpy_suffix;
+
+            // Try to find vector*scalar multiplies.
+            if (op->type.bits() == 16) {
+                if (op->type.is_uint()) {
+                    std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), UInt(8), 2);
+                    vmpa_suffix = ".vub.vub.ub.ub";
+                    vdmpy_suffix = ".vub.ub";
+                } else {
+                    std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), Int(8), 2);
+                    vmpa_suffix = ".vub.vub.b.b";
+                    vdmpy_suffix = ".vub.b";
                 }
+            } else if (op->type.bits() == 32) {
+                std::tie(mpys, rest) = find_mpy_ops(operands, Int(16).with_lanes(lanes), Int(8), 2);
+                vmpa_suffix = ".vh.vh.b.b";
+                vdmpy_suffix = ".vh.b";
+            }
+            if (mpys.size() == 2) {
+                Expr a01 = Shuffle::make_interleave({mpys[0].first, mpys[1].first});
+                a01 = simplify(a01);
+                // Only generate vdmpy if the interleave simplified
+                // away.
+                // TODO: This requires the operands to be in a
+                // particular order. It should be more robust... but
+                // this is pretty tough to do, other than simply
+                // trying all permutations.
+                if (!a01.as<Shuffle>()) {
+                    Expr b01 = (u16(mpys[1].second) << 8) | u16(mpys[0].second);
+                    if (op->type.is_int()) {
+                        b01 = i16(b01);
+                    }
+                    expr = halide_hexagon_add_2mpy(vdmpy_suffix, a01, b01);
+                } else {
+                    expr = halide_hexagon_add_2mpy(vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
+                }
+                if (rest.defined()) {
+                    expr = Add::make(expr, rest);
+                }
+                expr = mutate(expr);
+                return;
             }
         }
 
         static vector<Pattern> adds = {
+            // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
+            { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b",   wild_i32x + halide_hexagon_add_2mpy(".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vh.vub.b",       wild_i16x + halide_hexagon_add_2mpy(".vub.b", wild_u8x, wild_i16) },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.b",        wild_i32x + halide_hexagon_add_2mpy(".vh.b", wild_i16x, wild_i16) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.b",       wild_i32x + halide_hexagon_add_4mpy(".vub.b", wild_u8x, wild_i32) },
+            { "halide.hexagon.acc_add_4mpy.vuw.vub.ub",     wild_u32x + halide_hexagon_add_4mpy(".vub.ub", wild_u8x, wild_u32) },
+            { "halide.hexagon.acc_add_4mpy.vuw.vub.vub",    wild_u32x + halide_hexagon_add_4mpy(".vub.vub", wild_u8x, wild_u8x) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.vb",      wild_i32x + halide_hexagon_add_4mpy(".vub.vb", wild_u8x, wild_i8x) },
+            { "halide.hexagon.acc_add_4mpy.vw.vb.vb",       wild_i32x + halide_hexagon_add_4mpy(".vb.vb", wild_i8x, wild_i8x) },
+
             // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
             // To differentiate those from the widening ones, we encode the return type in the name here.
             { "halide.hexagon.add_vuh.vub.vub", wild_u16x + wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
@@ -556,22 +693,6 @@ private:
             if (!expr.same_as(op)) return;
         }
         IRMutator::visit(op);
-
-        // After recursively substituting patterns for the operands,
-        // we might be able to change vmpa, vdmpy, or vrmpy to an
-        // accumulating equivalent.
-        static vector<Pattern> post_process_adds = {
-            { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_2mpy(".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_2mpy.vh.vub.b", wild_i16x + halide_hexagon_add_2mpy(".vub.b", wild_u8x, wild_i16) },
-            { "halide.hexagon.acc_add_2mpy.vw.vh.b", wild_i32x + halide_hexagon_add_2mpy(".vh.b", wild_i16x, wild_i16) },
-            { "halide.hexagon.acc_add_4mpy.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(".vub.b", wild_u8x, wild_i32) },
-            { "halide.hexagon.acc_add_4mpy.vw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(".vub.ub", wild_u8x, wild_u32) },
-        };
-
-        if (!expr.same_as(op) && expr.as<Add>()) {
-            expr = apply_commutative_patterns(expr.as<Add>(), post_process_adds, this);
-        }
     }
 
     void visit(const Sub *op) {
