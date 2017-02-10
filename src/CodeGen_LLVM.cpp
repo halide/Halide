@@ -918,7 +918,11 @@ void CodeGen_LLVM::optimize_module() {
     debug(3) << "Optimizing module\n";
 
     if (debug::debug_level() >= 3) {
+        #if LLVM_VERSION >= 50
+        module->print(dbgs(), nullptr, false, true);
+        #else
         module->dump();
+        #endif
     }
 
     // We override PassManager::add so that we have an opportunity to
@@ -973,7 +977,11 @@ void CodeGen_LLVM::optimize_module() {
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {
+        #if LLVM_VERSION >= 50
+        module->print(dbgs(), nullptr, false, true);
+        #else
         module->dump();
+        #endif
     }
 }
 
