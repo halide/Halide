@@ -40,7 +40,7 @@ struct Task {
     Expr expr;
 };
 
-size_t num_threads = 8;
+size_t num_threads = Halide::Internal::ThreadPool<void>::num_processors_online();
 
 struct Test {
     bool use_avx2{false};
@@ -2027,25 +2027,22 @@ struct Test {
             check_altivec_all();
         }
 
-        // Use a small thread pool to run the tests. Just statically
-        // partition the work between the threads.
-        bool success = true;
-        std::vector<std::thread> threads;
-        for (size_t i = 0; i < num_threads; i++) {
-            threads.emplace_back([this, i, &success]{
-                for (size_t t = i; t < tasks.size(); t += num_threads) {
-                    Task &task = tasks[t];
-                    TestResult result = check_one(task.op, task.name, task.vector_width, task.expr);
-                    std::cout << result.op << "\n";
-                    if (!result.error_msg.empty()) {
-                        std::cerr << result.error_msg;
-                        success = false;
-                    }
-                }
-            });
+        Halide::Internal::ThreadPool<TestResult> pool(num_threads);
+        std::vector<std::future<TestResult>> futures;
+        for (const Task &task : tasks) {
+            futures.push_back(pool.async([this, task]() {
+                return check_one(task.op, task.name, task.vector_width, task.expr);
+            }));
         }
-        for (auto &t : threads) {
-            t.join();
+
+        bool success = true;
+        for (auto &f : futures) {
+            const TestResult &result = f.get();
+            std::cout << result.op << "\n";
+            if (!result.error_msg.empty()) {
+                std::cerr << result.error_msg;
+                success = false;
+            }
         }
 
         return success;
