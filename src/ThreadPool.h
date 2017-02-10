@@ -22,14 +22,14 @@
  * vary over the life of the ThreadPool. (If created without a specific number
  * of threads, it will attempt to use threads == number-of-cores.)
  *
- * Each async request will go into a queue, and will be serviced by the next 
+ * Each async request will go into a queue, and will be serviced by the next
  * available thread from the pool.
- * 
+ *
  * The ThreadPool's dtor will block until all currently-executing tasks
  * to finish (but won't schedule any more).
- * 
+ *
  * Note that this is a fairly simpleminded ThreadPool, meant for tasks
- * that are fairly coarse (e.g. different tasks in a test); it is specifically 
+ * that are fairly coarse (e.g. different tasks in a test); it is specifically
  * *not* intended to be the underlying implementation for Halide runtime threads
  */
 namespace Halide {
@@ -77,7 +77,7 @@ class ThreadPool {
 public:
 
     static size_t num_processors_online() {
-    #ifdef _MSC_VER
+    #ifdef _WIN32
         char *num_cores = getenv("NUMBER_OF_PROCESSORS");
         return num_cores ? atoi(num_cores) : 8;
     #else
@@ -156,4 +156,3 @@ inline void ThreadPool<void>::Job::run_unlocked(std::unique_lock<std::mutex> &un
 }  // namespace Halide
 
 #endif  // HALIDE_THREAD_POOL_H
-
