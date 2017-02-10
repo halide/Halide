@@ -739,7 +739,7 @@ public:
     };
     vector<Site> sites_allowed;
     bool found;
-    
+
     ComputeLegalSchedules(Function f, const map<string, Function> &env) : found(false), func(f), env(env) {}
 
 private:
@@ -927,6 +927,10 @@ public:
     PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
 };
 
+// Check a schedule is legal, throwing an error if it is not. Returns
+// whether or not a realization of the Func should be injected. Unused
+// intermediate Funcs that somehow made it into the Func DAG can be
+// discarded.
 bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
@@ -1010,7 +1014,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     if (!is_output && !legal.found) {
         // It's not an output, and it's not called anywhere. Skip it.
         return false;
-    }    
+    }
 
     // Inlining is allowed only if there is no specialization.
     if (store_at.is_inline() && compute_at.is_inline()) {
@@ -1121,7 +1125,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             // definition.
             continue;
         }
-        
+
         if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
