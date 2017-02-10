@@ -83,26 +83,26 @@ public:
 
 };
 
-Expr substitute(string name, Expr replacement, Expr expr) {
+Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
     map<string, Expr> m;
     m[name] = replacement;
     Substitute s(m);
     return s.mutate(expr);
 }
 
-Stmt substitute(string name, Expr replacement, Stmt stmt) {
+Stmt substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
     map<string, Expr> m;
     m[name] = replacement;
     Substitute s(m);
     return s.mutate(stmt);
 }
 
-Expr substitute(const map<string, Expr> &m, Expr expr) {
+Expr substitute(const map<string, Expr> &m, const Expr &expr) {
     Substitute s(m);
     return s.mutate(expr);
 }
 
-Stmt substitute(const map<string, Expr> &m, Stmt stmt) {
+Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
     Substitute s(m);
     return s.mutate(stmt);
 }
@@ -123,14 +123,14 @@ public:
     }
 };
 
-Expr substitute(Expr find, Expr replacement, Expr expr) {
+Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
     SubstituteExpr s;
     s.find = find;
     s.replacement = replacement;
     return s.mutate(expr);
 }
 
-Stmt substitute(Expr find, Expr replacement, Stmt stmt) {
+Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
     SubstituteExpr s;
     s.find = find;
     s.replacement = replacement;
@@ -154,7 +154,7 @@ class GraphSubstitute : public IRGraphMutator {
 
 public:
 
-    GraphSubstitute(const string &var, Expr value) : var(var), value(value) {}
+    GraphSubstitute(const string &var, const Expr &value) : var(var), value(value) {}
 };
 
 /** Substitute an Expr for another Expr in a graph. Unlike substitute,
@@ -170,22 +170,22 @@ public:
         return IRGraphMutator::mutate(e);
     }
 
-    GraphSubstituteExpr(Expr find, Expr replace) : find(find), replace(replace) {}
+    GraphSubstituteExpr(const Expr &find, const Expr &replace) : find(find), replace(replace) {}
 };
 
-Expr graph_substitute(string name, Expr replacement, Expr expr) {
+Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
     return GraphSubstitute(name, replacement).mutate(expr);
 }
 
-Stmt graph_substitute(string name, Expr replacement, Stmt stmt) {
+Stmt graph_substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
     return GraphSubstitute(name, replacement).mutate(stmt);
 }
 
-Expr graph_substitute(Expr find, Expr replacement, Expr expr) {
+Expr graph_substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
     return GraphSubstituteExpr(find, replacement).mutate(expr);
 }
 
-Stmt graph_substitute(Expr find, Expr replacement, Stmt stmt) {
+Stmt graph_substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
     return GraphSubstituteExpr(find, replacement).mutate(stmt);
 }
 
@@ -200,11 +200,11 @@ class SubstituteInAllLets : public IRGraphMutator {
     }
 };
 
-Expr substitute_in_all_lets(Expr expr) {
+Expr substitute_in_all_lets(const Expr &expr) {
     return SubstituteInAllLets().mutate(expr);
 }
 
-Stmt substitute_in_all_lets(Stmt stmt) {
+Stmt substitute_in_all_lets(const Stmt &stmt) {
     return SubstituteInAllLets().mutate(stmt);
 }
 
