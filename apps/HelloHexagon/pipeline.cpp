@@ -15,10 +15,10 @@ Expr blur5(Expr x0, Expr x1, Expr x2, Expr x3, Expr x4) {
 
 class Blur : public Generator<Blur> {
 public:
-    // Takes an 8-bit input image.
+    // Takes an 8-bit color input image.
     Input<Buffer<uint8_t>> input{"input", 3};
 
-    // Produces an 8-bit output
+    // Produces an 8-bit color output
     Output<Buffer<uint8_t>> blur{"blur", 3};
 
     std::function<void()> schedule;
@@ -43,7 +43,8 @@ public:
                               blur_y(x,     y, c),
                               blur_y(x + 1, y, c),
                               blur_y(x + 2, y, c));
-
+        
+        
         schedule = [=]() mutable {
             // Require the input and output to have 3 channels.
             Func(blur).bound(c, 0, 3);
