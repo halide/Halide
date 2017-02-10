@@ -1882,18 +1882,24 @@ struct Test {
         check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width, u32_1 + u32(u16(u8_1)*u8_1) + u32(u16(u8_2)*u8_2) + u32(u16(u8_3)*u8_3) + u32(u16(u8_4)*u8_4));
         check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i16(i8_1)*i8_1) + i32(i16(i8_2)*i8_2) + i32(i16(i8_3)*i8_3) + i32(i16(i8_4)*i8_4));
 
-        // These should also work with 16 bit results.
-        check("vrmpy(v*.ub,r*.ub)", hvx_width, u16(u8_1)*255 + u16(u8_2)*254 + u16(u8_3)*253 + u16(u8_4)*252);
-        check("vrmpy(v*.ub,r*.b)", hvx_width, i16(u8_1)*127 + i16(u8_2)*126 + i16(u8_3)*125 + i16(u8_4)*124);
-        check("vrmpy(v*.ub,v*.ub)", hvx_width, u16(u8_1)*u8_1 + u16(u8_2)*u8_2 + u16(u8_3)*u8_3 + u16(u8_4)*u8_4);
-        check("vrmpy(v*.b,v*.b)", hvx_width, i16(i8_1)*i8_1 + i16(i8_2)*i8_2 + i16(i8_3)*i8_3 + i16(i8_4)*i8_4);
-
 #if 0
         // These don't generate yet because we don't support mixed signs yet.
         check("vrmpy(v*.ub,v*.b)", hvx_width, i32(i16(u8_1)*i8_1) + i32(i16(u8_2)*i8_2) + i32(i16(u8_3)*i8_3) + i32(i16(u8_4)*i8_4));
         check("v*.w += vrmpy(v*.ub,v*.b)", hvx_width, i32_1 + i32(i16(u8_1)*i8_1) + i32(i16(u8_2)*i8_2) + i32(i16(u8_3)*i8_3) + i32(i16(u8_4)*i8_4));
         check("vrmpy(v*.ub,v*.b)", hvx_width, i16(u8_1)*i8_1 + i16(u8_2)*i8_2 + i16(u8_3)*i8_3 + i16(u8_4)*i8_4);
 #endif
+
+        // These should also work with 16 bit results. However, it is
+        // only profitable to do so if the interleave simplifies away.
+        Expr u8_4x4[] = {
+            in_u8(4*x + 0),
+            in_u8(4*x + 1),
+            in_u8(4*x + 2),
+            in_u8(4*x + 3),
+        };
+        check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*125 + i16(u8_4x4[3])*124);
+        // Make sure it doesn't generate if the operands don't interleave.
+        check("vmpa(v*.ub,r*.b)", hvx_width, i16(u8_1)*127 + i16(u8_2)*126 + i16(u8_3)*125 + i16(u8_4)*124);
 
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, u32_1 + (u32_2 * 8));
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 * 8));
