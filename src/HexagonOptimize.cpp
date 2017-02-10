@@ -545,7 +545,6 @@ private:
                 Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
                 b0123 = simplify(b0123);
-                b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
                 expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
                 if (rest.defined()) {
                     expr = Add::make(expr, rest);
