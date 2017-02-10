@@ -221,6 +221,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     // Create the module itself if necessary.
     if (!(*state)->module) {
+        debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
         if (remote_initialize_kernels_v2) {
             result = remote_initialize_kernels_v2(code, code_size, use_shared_object, &module);
