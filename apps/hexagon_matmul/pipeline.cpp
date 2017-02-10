@@ -39,7 +39,10 @@ int main(int argc, char **argv) {
         u32(u16(A(4*rk + 2, y))*u16(B_swizzled(x, rk, 2))) +
         u32(u16(A(4*rk + 3, y))*u16(B_swizzled(x, rk, 3)));
 
-    Func output = AB.in();
+    // We need a wrapper for the output so we can schedule the
+    // multiply update in tiles.
+    Func output;
+    output(x, y) = AB(x, y);
 
     // Schedule.
     int vector_size_u8 = target.natural_vector_size<uint8_t>();
@@ -54,30 +57,29 @@ int main(int argc, char **argv) {
     int vector_size_u32 = vector_size_u8 / 4;
 
     if (use_hexagon) {
-        RVar rki, rko, rkoo, rkoi;
         Var xo("xo"), yo("yo");
 
-        output
-            .compute_root()
+        // Split the output into tiles, traversed in columns of tiles
+        // that we parallelize over.
+        output.compute_root()
             .hexagon()
             .tile(x, y, xo, yo, x, y, vector_size_u8, 4, TailStrategy::RoundUp)
-            .reorder(x, y, yo, xo)
+            .reorder(yo, xo)
             .vectorize(x)
             .unroll(y)
             .parallel(xo);
 
+        // Compute the product at tiles of the output.
         AB.compute_at(output, yo)
             .vectorize(x)
             .unroll(y);
 
         AB.update(0)
-            // Split k so we can read a cache line of A at a time.
-            .split(rk, rko, rki, k_split_factor)
-            .reorder(x, y, rki, rko)
+            .reorder(x, y, rk)
             .vectorize(x)
-            .unroll(y)
-            .unroll(rki, 4);
+            .unroll(y);
 
+        // Lift the swizzling out of the inner loop.
         B_swizzled.compute_at(output, xo)
             .reorder_storage(k, x, y)
             .reorder(k, x, y)
@@ -91,8 +93,7 @@ int main(int argc, char **argv) {
         constexpr int kBlockSize = 32;
         const int kBlockSizeXi = 8;
 
-        output
-            .compute_root()
+        output.compute_root()
             .tile(x, y, x, y, xi, yi, vector_size_u8, 4, TailStrategy::RoundUp)
             .reorder(xi, yi, x, y)
             .vectorize(xi)
