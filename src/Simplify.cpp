@@ -4385,7 +4385,7 @@ private:
                             }
 
                             for (size_t j = 0; j < first_shuffle->vectors.size() && can_collapse; j++) {
-                                if (!first_shuffle->vectors[j].same_as(i_shuffle->vectors[j])) {
+                                if (!equal(first_shuffle->vectors[j], i_shuffle->vectors[j])) {
                                     can_collapse = false;
                                 }
                             }
