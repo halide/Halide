@@ -78,7 +78,6 @@ int main(int argc, char **argv) {
             .unroll(y)
             .unroll(rki, 4);
 
-        Var kx("kx");
         B_swizzled.compute_at(output, xo)
             .reorder_storage(k, x, y)
             .reorder(k, x, y)
