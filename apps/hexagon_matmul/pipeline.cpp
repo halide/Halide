@@ -15,9 +15,9 @@ int main(int argc, char **argv) {
 
     // Align the extent of the K dimension to the product of our split
     // factors.
-    const int k_split_factor = 32;
+    const int k_unroll_factor = 2;
     Expr k_extent = A.dim(0).extent();
-    k_extent = (k_extent/(k_split_factor*4))*(k_split_factor*4);
+    k_extent = (k_extent/(k_unroll_factor*4))*(k_unroll_factor*4);
     A.dim(0).set_extent(k_extent);
     B.dim(1).set_extent(k_extent);
 
@@ -77,7 +77,8 @@ int main(int argc, char **argv) {
         AB.update(0)
             .reorder(x, y, rk)
             .vectorize(x)
-            .unroll(y);
+            .unroll(y)
+            .unroll(rk, k_unroll_factor);
 
         // Lift the swizzling out of the inner loop.
         B_swizzled.compute_at(output, xo)
