@@ -81,8 +81,9 @@ int main(int argc, char **argv) {
         Var kx("kx");
         B_swizzled.compute_at(output, xo)
             .reorder_storage(k, x, y)
-            .fuse(k, x, kx)
-            .vectorize(kx, vector_size_u8*4, TailStrategy::RoundUp);
+            .reorder(k, x, y)
+            .vectorize(x, vector_size_u8, TailStrategy::RoundUp)
+            .unroll(k);
     } else {
         Var xi("xi"), xii("xii"), yi("yi"), yii("yii");
         RVar rki("rki");
