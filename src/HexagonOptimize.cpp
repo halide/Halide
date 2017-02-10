@@ -210,9 +210,16 @@ Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 // matched operands. Prior to substitution, the matches are mutated
 // with op_mutator.
 Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutator) {
+    debug(3) << "apply_patterns " << x << "\n";
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, x, matches)) {
+            debug(3) << "matched " << p.pattern << "\n";
+            debug(3) << "matches:\n";
+            for (Expr i : matches) {
+                debug(3) << i << "\n";
+            }
+
             // The Pattern::Narrow*Op* flags are ordered such that
             // the operand corresponds to the bit (with operand 0
             // corresponding to the least significant bit), so we
@@ -269,6 +276,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
                 // The pattern wants us to interleave the result.
                 x = native_interleave(x);
             }
+            debug(3) << "rewrote to: " << x << "\n";
             return x;
         }
     }
@@ -373,28 +381,16 @@ private:
     }
 
     // Helpers to generate horizontally reducing multiply operations.
-    static Expr halide_hexagon_add_2mpy(string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
-        Type t = v0.type();
-        Type result_type = Int(t.bits()*2).with_lanes(t.lanes());
+    static Expr halide_hexagon_add_2mpy(Type result_type, string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
         Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
         return native_interleave(call);
     }
 
-    static Expr halide_hexagon_add_2mpy(string suffix, Expr v01, Expr c01) {
-        Type t = v01.type();
-        Type result_type = t.with_bits(t.bits()*2).with_lanes(t.lanes()/2);
-        if (c01.type().is_int()) {
-            result_type = result_type.with_code(Type::Int);
-        }
+    static Expr halide_hexagon_add_2mpy(Type result_type, string suffix, Expr v01, Expr c01) {
         return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v01, c01}, Call::PureExtern);
     }
 
-    static Expr halide_hexagon_add_4mpy(string suffix, Expr v01, Expr c01) {
-        Type t = v01.type();
-        Type result_type = t.with_bits(t.bits()*4).with_lanes(t.lanes()/4);
-        if (c01.type().is_int()) {
-            result_type = result_type.with_code(Type::Int);
-        }
+    static Expr halide_hexagon_add_4mpy(Type result_type, string suffix, Expr v01, Expr c01) {
         return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
     }
 
@@ -497,7 +493,7 @@ private:
         flatten_binary_op(op, operands);
 
         // Try to find vrmpy opportunities first, which consume 4 operands.
-        if (op->type.is_vector() && operands.size() >= 4) {
+        if (op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32) && operands.size() >= 4) {
             int lanes = op->type.lanes();
             vector<MulExpr> mpys;
             Expr rest;
@@ -521,7 +517,15 @@ private:
                 a0123 = simplify(a0123);
                 b0123 = simplify(b0123);
                 b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
-                expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
+                expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                if (op->type.bits() == 16) {
+                    // It's actually safe to use this op on 16 bit
+                    // results, we just need to narrow the
+                    // result. Overflow can occur, but will still
+                    // produce the same result thanks to 2's
+                    // complement arithmetic.
+                    expr = Call::make(op->type, "halide.hexagon.pack.vw", {expr}, Call::PureExtern);
+                }
                 if (rest.defined()) {
                     expr = Add::make(expr, rest);
                 }
@@ -534,10 +538,11 @@ private:
                 std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), UInt(8).with_lanes(lanes), 4);
                 suffix = ".vub.vub";
             } else {
-                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), Int(8).with_lanes(lanes), 4);
-                suffix = ".vub.vb";
+                std::tie(mpys, rest) = find_mpy_ops(operands, Int(8).with_lanes(lanes), Int(8).with_lanes(lanes), 4);
+                suffix = ".vb.vb";
             }
-            // TODO: suffix = ".vb.vb"
+
+            // TODO: suffix = ".vub.vb"
             if (mpys.size() == 4) {
                 // TODO: It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
@@ -545,7 +550,15 @@ private:
                 Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
                 b0123 = simplify(b0123);
-                expr = halide_hexagon_add_4mpy(suffix, a0123, b0123);
+                expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                if (op->type.bits() == 16) {
+                    // It's actually safe to use this op on 16 bit
+                    // results, we just need to narrow the
+                    // result. Overflow can occur, but will still
+                    // produce the same result thanks to 2's
+                    // complement arithmetic.
+                    expr = Call::make(op->type, "halide.hexagon.pack.vw", {expr}, Call::PureExtern);
+                }
                 if (rest.defined()) {
                     expr = Add::make(expr, rest);
                 }
@@ -555,7 +568,7 @@ private:
         }
 
         // Find opportunities vdmpy or vmpa.
-        if (op->type.is_vector() && operands.size() >= 2) {
+        if (op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32) && operands.size() >= 2) {
             int lanes = op->type.lanes();
 
             vector<MulExpr> mpys;
@@ -565,15 +578,9 @@ private:
 
             // Try to find vector*scalar multiplies.
             if (op->type.bits() == 16) {
-                if (op->type.is_uint()) {
-                    std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), UInt(8), 2);
-                    vmpa_suffix = ".vub.vub.ub.ub";
-                    vdmpy_suffix = ".vub.ub";
-                } else {
-                    std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), Int(8), 2);
-                    vmpa_suffix = ".vub.vub.b.b";
-                    vdmpy_suffix = ".vub.b";
-                }
+                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), Int(8), 2);
+                vmpa_suffix = ".vub.vub.b.b";
+                vdmpy_suffix = ".vub.b";
             } else if (op->type.bits() == 32) {
                 std::tie(mpys, rest) = find_mpy_ops(operands, Int(16).with_lanes(lanes), Int(8), 2);
                 vmpa_suffix = ".vh.vh.b.b";
@@ -586,13 +593,13 @@ private:
                 // particular order. It should be more robust... but
                 // this is pretty tough to do, other than simply
                 // trying all permutations.
-                if (!a01.as<Shuffle>()) {
+                if (!a01.as<Shuffle>() || vmpa_suffix.empty()) {
                     Expr b01 = Shuffle::make_interleave({mpys[0].second, mpys[1].second});
                     b01 = simplify(b01);
                     b01 = reinterpret(Type(b01.type().code(), 16, 1), b01);
-                    expr = halide_hexagon_add_2mpy(vdmpy_suffix, a01, b01);
+                    expr = halide_hexagon_add_2mpy(op->type, vdmpy_suffix, a01, b01);
                 } else {
-                    expr = halide_hexagon_add_2mpy(vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
+                    expr = halide_hexagon_add_2mpy(op->type, vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
                 }
                 if (rest.defined()) {
                     expr = Add::make(expr, rest);
@@ -604,15 +611,15 @@ private:
 
         static vector<Pattern> adds = {
             // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
-            { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b",   wild_i32x + halide_hexagon_add_2mpy(".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_2mpy.vh.vub.b",       wild_i16x + halide_hexagon_add_2mpy(".vub.b", wild_u8x, wild_i16) },
-            { "halide.hexagon.acc_add_2mpy.vw.vh.b",        wild_i32x + halide_hexagon_add_2mpy(".vh.b", wild_i16x, wild_i16) },
-            { "halide.hexagon.acc_add_4mpy.vw.vub.b",       wild_i32x + halide_hexagon_add_4mpy(".vub.b", wild_u8x, wild_i32) },
-            { "halide.hexagon.acc_add_4mpy.vuw.vub.ub",     wild_u32x + halide_hexagon_add_4mpy(".vub.ub", wild_u8x, wild_u32) },
-            { "halide.hexagon.acc_add_4mpy.vuw.vub.vub",    wild_u32x + halide_hexagon_add_4mpy(".vub.vub", wild_u8x, wild_u8x) },
-            { "halide.hexagon.acc_add_4mpy.vw.vub.vb",      wild_i32x + halide_hexagon_add_4mpy(".vub.vb", wild_u8x, wild_i8x) },
-            { "halide.hexagon.acc_add_4mpy.vw.vb.vb",       wild_i32x + halide_hexagon_add_4mpy(".vb.vb", wild_i8x, wild_i8x) },
+            { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0),  ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b",   wild_i32x + halide_hexagon_add_2mpy(Int(32, 0),  ".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vh.vub.b",       wild_i16x + halide_hexagon_add_2mpy(Int(16, 0),  ".vub.b", wild_u8x, wild_i16) },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.b",        wild_i32x + halide_hexagon_add_2mpy(Int(32, 0),  ".vh.b", wild_i16x, wild_i16) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.b",       wild_i32x + halide_hexagon_add_4mpy(Int(32, 0),  ".vub.b", wild_u8x, wild_i32) },
+            { "halide.hexagon.acc_add_4mpy.vuw.vub.ub",     wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32) },
+            { "halide.hexagon.acc_add_4mpy.vuw.vub.vub",    wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.vb",      wild_i32x + halide_hexagon_add_4mpy(Int(32, 0),  ".vub.vb", wild_u8x, wild_i8x) },
+            { "halide.hexagon.acc_add_4mpy.vw.vb.vb",       wild_i32x + halide_hexagon_add_4mpy(Int(32, 0),  ".vb.vb", wild_i8x, wild_i8x) },
 
             // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
             // To differentiate those from the widening ones, we encode the return type in the name here.
@@ -860,6 +867,7 @@ private:
             vector<Expr> matches;
             for (auto i : cast_rewrites) {
                 if (expr_match(i.first, cast, matches)) {
+                    debug(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
                     Expr replacement = with_lanes(i.second, op->type.lanes());
                     expr = substitute("*", matches[0], replacement);
                     expr = mutate(expr);

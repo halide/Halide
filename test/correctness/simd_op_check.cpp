@@ -1430,8 +1430,8 @@ struct Test {
     void check_hvx_all() {
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x+16), f32_3 = in_f32(x+32);
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x+16), f64_3 = in_f64(x+32);
-        Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32);
-        Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32);
+        Expr i8_1  = in_i8(x),  i8_2  = in_i8(x+16),  i8_3  = in_i8(x+32), i8_4 = in_i8(x + 48);
+        Expr u8_1  = in_u8(x),  u8_2  = in_u8(x+16),  u8_3  = in_u8(x+32), u8_4 = in_u8(x + 48);
         Expr u8_even = in_u8(2*x), u8_odd = in_u8(2*x+1);
         Expr i16_1 = in_i16(x), i16_2 = in_i16(x+16), i16_3 = in_i16(x+32);
         Expr u16_1 = in_u16(x), u16_2 = in_u16(x+16), u16_3 = in_u16(x+32);
@@ -1843,6 +1843,58 @@ struct Test {
         check("vmpyo(v*.w,v*.h):<<1:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2))/(i64(1) << 31)));
         check("vmpyo(v*.w,v*.h):<<1:rnd:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2) + (1 << 30))/(i64(1) << 31)));
 
+        check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + i16(u8_2)*3);
+        check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + 3*i16(u8_2));
+        check("vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2));
+        check("v*.h += vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2) + i16_1);
+
+        check("vmpa(v*.h,r*.b)", hvx_width/2, i32(i16_1)*2 + i32(i16_2)*3);
+        check("vmpa(v*.h,r*.b)", hvx_width/2, i32(i16_1)*2 + 3*i32(i16_2));
+        check("vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2));
+        check("v*.w += vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2) + i32_1);
+
+        // We only generate vdmpy if the inputs are interleaved (otherwise we would use vmpa).
+        check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3);
+        check("vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3);
+        check("v*.h += vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3 + i16_1);
+        check("v*.w += vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3 + i32_1);
+
+#if 0
+        // These are incorrect because the two operands aren't
+        // interleaved correctly.
+        check("vdmpy(v*:*.ub,r*.b)", (hvx_width/2)*2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3);
+        check("vdmpy(v*:*.h,r*.b)", (hvx_width/4)*2, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3);
+        check("v*:*.h += vdmpy(v*:*.ub,r*.b)", (hvx_width/2)*2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3 + i16_1);
+        check("v*:*.w += vdmpy(v*:*.h,r*.b)", (hvx_width/4)*2, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3 + i32_1);
+#endif
+
+        check("vrmpy(v*.ub,r*.ub)", hvx_width, u32(u16(u8_1)*255) + u32(u16(u8_2)*254) + u32(u16(u8_3)*253) + u32(u16(u8_4)*252));
+        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(i16(u8_1)*127) + i32(i16(u8_2)*126) + i32(i16(u8_3)*125) + i32(i16(u8_4)*124));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width, u32_1 + u32(u16(u8_1)*2) + u32(u16(u8_2)*3) + u32(u16(u8_3)*4) + u32(u16(u8_4)*5));
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(i16(u8_1)*2) + i32(i16(u8_2)*3) + i32(i16(u8_3)*4) + i32(i16(u8_4)*5));
+
+        // Check a few of these with implicit ones.
+        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(u8_1) + i32(i16(u8_2)*2) + i32(i16(u8_3)*3) + i32(i16(u8_4)*4));
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(u8_1) + i32(i16(u8_2)*2) + i32(i16(u8_3)*3) + i32(i16(u8_4)*4));
+
+        check("vrmpy(v*.ub,v*.ub)", hvx_width, u32(u16(u8_1)*u8_1) + u32(u16(u8_2)*u8_2) + u32(u16(u8_3)*u8_3) + u32(u16(u8_4)*u8_4));
+        check("vrmpy(v*.b,v*.b)", hvx_width, i32(i16(i8_1)*i8_1) + i32(i16(i8_2)*i8_2) + i32(i16(i8_3)*i8_3) + i32(i16(i8_4)*i8_4));
+        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width, u32_1 + u32(u16(u8_1)*u8_1) + u32(u16(u8_2)*u8_2) + u32(u16(u8_3)*u8_3) + u32(u16(u8_4)*u8_4));
+        check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i16(i8_1)*i8_1) + i32(i16(i8_2)*i8_2) + i32(i16(i8_3)*i8_3) + i32(i16(i8_4)*i8_4));
+
+        // These should also work with 16 bit results.
+        check("vrmpy(v*.ub,r*.ub)", hvx_width, u16(u8_1)*255 + u16(u8_2)*254 + u16(u8_3)*253 + u16(u8_4)*252);
+        check("vrmpy(v*.ub,r*.b)", hvx_width, i16(u8_1)*127 + i16(u8_2)*126 + i16(u8_3)*125 + i16(u8_4)*124);
+        check("vrmpy(v*.ub,v*.ub)", hvx_width, u16(u8_1)*u8_1 + u16(u8_2)*u8_2 + u16(u8_3)*u8_3 + u16(u8_4)*u8_4);
+        check("vrmpy(v*.b,v*.b)", hvx_width, i16(i8_1)*i8_1 + i16(i8_2)*i8_2 + i16(i8_3)*i8_3 + i16(i8_4)*i8_4);
+
+#if 0
+        // These don't generate yet because we don't support mixed signs yet.
+        check("vrmpy(v*.ub,v*.b)", hvx_width, i32(i16(u8_1)*i8_1) + i32(i16(u8_2)*i8_2) + i32(i16(u8_3)*i8_3) + i32(i16(u8_4)*i8_4));
+        check("v*.w += vrmpy(v*.ub,v*.b)", hvx_width, i32_1 + i32(i16(u8_1)*i8_1) + i32(i16(u8_2)*i8_2) + i32(i16(u8_3)*i8_3) + i32(i16(u8_4)*i8_4));
+        check("vrmpy(v*.ub,v*.b)", hvx_width, i16(u8_1)*i8_1 + i16(u8_2)*i8_2 + i16(u8_3)*i8_3 + i16(u8_4)*i8_4);
+#endif
+
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, u32_1 + (u32_2 * 8));
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 * 8));
         check("v*.w += vasr(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 / 8));
@@ -1855,69 +1907,6 @@ struct Test {
         check("vnormamt(v*.h)", hvx_width/2, max(count_leading_zeros(i16_1), count_leading_zeros(~i16_1)));
         check("vnormamt(v*.w)", hvx_width/4, max(count_leading_zeros(i32_1), count_leading_zeros(~i32_1)));
         check("vpopcount(v*.h)", hvx_width/2, popcount(u16_1));
-
-        check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + i16(u8_2)*3);
-        check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + 3*i16(u8_2));
-        check("vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2));
-        check("v*.h += vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2) + i16_1);
-
-        check("vmpa(v*.h,r*.b)", hvx_width/2, i32(i16_1)*2 + i32(i16_2)*3);
-        check("vmpa(v*.h,r*.b)", hvx_width/2, i32(i16_1)*2 + 3*i32(i16_2));
-        check("vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2));
-        check("v*.w += vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2) + i32_1);
-
-        check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3);
-        check("vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3);
-        check("v*.h += vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3 + i16_1);
-        check("v*.w += vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3 + i32_1);
-#if 0
-        // These are incorrect because the two operands aren't
-        // interleaved correctly.
-        check("vdmpy(v*:*.ub,r*.b)", (hvx_width/2)*2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3);
-        check("vdmpy(v*:*.h,r*.b)", (hvx_width/4)*2, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3);
-        check("v*:*.h += vdmpy(v*:*.ub,r*.b)", (hvx_width/2)*2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3 + i16_1);
-        check("v*:*.w += vdmpy(v*:*.h,r*.b)", (hvx_width/4)*2, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3 + i32_1);
-#endif
-
-        // Define the elements of a 4 way interleaving.
-        Expr u8_4x4[] = {
-            in_u8(4*x + 0),
-            in_u8(4*x + 1),
-            in_u8(4*x + 2),
-            in_u8(4*x + 3),
-        };
-        Expr i8_4x4[] = {
-            in_i8(4*x + 0),
-            in_i8(4*x + 1),
-            in_i8(4*x + 2),
-            in_i8(4*x + 3),
-        };
-
-        check("vrmpy(v*.ub,r*.b)", hvx_width/4, i32(i16(u8_4x4[0])*2) + i32(i16(u8_4x4[1])*3) + i32(i16(u8_4x4[2])*4) + i32(i16(u8_4x4[3])*5));
-        check("vrmpy(v*.ub,r*.ub)", hvx_width/4, u32(u16(u8_4x4[0])*2) + u32(u16(u8_4x4[1])*3) + u32(u16(u8_4x4[2])*4) + u32(u16(u8_4x4[3])*5));
-        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width/4, i32_1 + i32(i16(u8_4x4[0])*2) + i32(i16(u8_4x4[1])*3) + i32(i16(u8_4x4[2])*4) + i32(i16(u8_4x4[3])*5));
-        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width/4, u32_1 + u32(u16(u8_4x4[0])*2) + u32(u16(u8_4x4[1])*3) + u32(u16(u8_4x4[2])*4) + u32(u16(u8_4x4[3])*5));
-
-        // Check a few of these with implicit ones.
-#if 0
-        // These currently don't generate because the pattern matching
-        // can't handle the interleaved values in the incorrect order,
-        // which occurs because the implicit multiply by one term is
-        // moved last.
-        check("vrmpy(v*.ub,r*.b)", hvx_width/4, i32(u8_4x4[0]) + i32(i16(u8_4x4[1])*2) + i32(i16(u8_4x4[2])*3) + i32(i16(u8_4x4[3])*4));
-        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width/4, i32_1 + i32(u8_4x4[0]) + i32(i16(u8_4x4[1])*2) + i32(i16(u8_4x4[2])*3) + i32(i16(u8_4x4[3])*4));
-#endif
-
-        check("vrmpy(v*.ub,v*.b)", hvx_width/4, i32(i16(u8_4x4[0])*i8_4x4[0]) + i32(i16(u8_4x4[1])*i8_4x4[1]) + i32(i16(u8_4x4[2])*i8_4x4[2]) + i32(i16(u8_4x4[3])*i8_4x4[3]));
-        check("v*.w += vrmpy(v*.ub,v*.b)", hvx_width/4, i32_1 + i32(i16(u8_4x4[0])*i8_4x4[0]) + i32(i16(u8_4x4[1])*i8_4x4[1]) + i32(i16(u8_4x4[2])*i8_4x4[2]) + i32(i16(u8_4x4[3])*i8_4x4[3]));
-#if 0
-        // These don't generate because the shuffles don't get
-        // simplified because the slices are CSE'ed.
-        check("vrmpy(v*.ub,v*.ub)", hvx_width/4, i32(i16(u8_4x4[0])*2) + i32(i16(u8_4x4[1])*3) + i32(i16(u8_4x4[2])*4) + i32(i16(u8_4x4[3])*5));
-        check("vrmpy(v*.b,v*.b)", hvx_width/4, u32(u16(u8_4x4[0])*2) + u32(u16(u8_4x4[1])*3) + u32(u16(u8_4x4[2])*4) + u32(u16(u8_4x4[3])*5));
-        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width/4, u32_1 + u32(u16(u8_4x4[0])*u8_4x4[0]) + u32(u16(u8_4x4[1])*u8_4x4[1]) + u32(u16(u8_4x4[2])*u8_4x4[2]) + u32(u16(u8_4x4[3])*u8_4x4[3]));
-        check("v*.w += vrmpy(v*.b,v*.b)", hvx_width/4, i32_1 + i32(i16(i8_4x4[0])*i8_4x4[0]) + i32(i16(i8_4x4[1])*i8_4x4[1]) + i32(i16(i8_4x4[2])*i8_4x4[2]) + i32(i16(i8_4x4[3])*i8_4x4[3]));
-#endif
     }
 
     void check_altivec_all() {
