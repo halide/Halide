@@ -20,9 +20,9 @@ extern "C" {
 #endif
 
 #ifdef _MSC_VER
-#define ALWAYS_INLINE __forceinline
+#define HALIDE_ALWAYS_INLINE __forceinline
 #else
-#define ALWAYS_INLINE __attribute__((always_inline))
+#define HALIDE_ALWAYS_INLINE __attribute__((always_inline))
 #endif
 
 /** \file
@@ -270,27 +270,27 @@ struct halide_type_t {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    HALIDE_ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+    HALIDE_ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Compare two types for equality. */
-    ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
         return (code == other.code &&
                 bits == other.bits &&
                 lanes == other.lanes);
     }
 
-    ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
+    HALIDE_ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
 #endif
 };
 
@@ -348,7 +348,7 @@ struct halide_trace_event_t {
 #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    ALWAYS_INLINE halide_trace_event_t() {}
+    HALIDE_ALWAYS_INLINE halide_trace_event_t() {}
 #endif
 };
 
@@ -409,25 +409,25 @@ struct halide_trace_packet_t {
     #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    ALWAYS_INLINE halide_trace_packet_t() {}
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t() {}
 
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
      * immediately after the packet header. */
-    ALWAYS_INLINE const int *coordinates() const {
+    HALIDE_ALWAYS_INLINE const int *coordinates() const {
         return (const int *)(this + 1);
     }
 
     /** Get the value, assuming this packet is laid out in memory as
      * it was written. The packet comes immediately after the coordinates
      * array. */
-    ALWAYS_INLINE const void *value() const {
+    HALIDE_ALWAYS_INLINE const void *value() const {
         return (const void *)(coordinates() + dimensions);
     }
 
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
-    ALWAYS_INLINE const char *func() const {
+    HALIDE_ALWAYS_INLINE const char *func() const {
         return (const char *)value() + type.lanes * type.bytes();
     }
     #endif
