@@ -41,7 +41,7 @@ $(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
 	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
 
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o process-$* $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
 # This requires root: adb root && adb wait-for-device && adb remount
 run-%-android: $(BIN)/process-%-android
