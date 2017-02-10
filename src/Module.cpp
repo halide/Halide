@@ -322,7 +322,7 @@ void compile_multitarget(const std::string &fn_name,
     std::vector<std::future<void>> futures;
     // If we are running with HL_DEBUG_CODEGEN=1, use threads=1 to enforce
     // sequential execution, so that debug output won't be utterly incomprehensible
-    const size_t num_threads = (debug::debug_level() > 0) ? 1 : (targets.size() + 3);
+    const size_t num_threads = (debug::debug_level() > 0) ? 1 : Internal::ThreadPool<void>::num_processors_online();
     Internal::ThreadPool<void> pool(num_threads);
 
     TemporaryObjectFileDir temp_dir;
