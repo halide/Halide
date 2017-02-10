@@ -15,11 +15,6 @@
 #define HALIDE_ERROR_ALWAYS_INLINE __attribute__((always_inline))
 #endif
 
-// TODO: Not sure if this really moves the needle or not performance-wise.
-#ifndef __GNUC__
-#define __builtin_expect(x, y) (x)
-#endif
-
 namespace Halide {
 
 /** Query whether Halide was compiled with exceptions. */
@@ -138,7 +133,7 @@ class Voidifier {
  * when the assertion is true.
  */
 #define _halide_internal_assertion(condition, flags) \
-  __builtin_expect((condition) != 0, true)           \
+  (condition)                                        \
       ? (void)0                                      \
       : ::Halide::Internal::Voidifier() &            \
         ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
