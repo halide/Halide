@@ -9,104 +9,130 @@ int main(int argc, char **argv) {
     std::cout << "Target: " << target.to_string() << "\n";
 
     // We take two 8 bit matrices as input.
-    // The matrices are indexed by (row, col), so it is the second
-    // dimension that has unit stride (by default, the first dimension
-    // has a unit stride).
-    Var i("i"), j("j");
+    Var x("x"), y("y");
     ImageParam A(UInt(8), 2);
     ImageParam B(UInt(8), 2);
 
     // Align the extent of the K dimension to the product of our split
     // factors.
-    const int k_split_factor = 8;
-    Expr k_extent = A.dim(1).extent();
+    const int k_split_factor = 32;
+    Expr k_extent = A.dim(0).extent();
     k_extent = (k_extent/(k_split_factor*4))*(k_split_factor*4);
-    A.dim(1).set_extent(k_extent);
-    B.dim(0).set_extent(k_extent);
+    A.dim(0).set_extent(k_extent);
+    B.dim(1).set_extent(k_extent);
 
     // We split directly in the algorithm by a factor of 4, so we can
     // generate vrmpy instructions on Hexagon.
     RDom rk(0, k_extent/4, "k");
 
+    // Define the reordering of B as a separate stage so we can lift
+    // the interleaving required by vrmpy out of the inner loop.
+    Func B_swizzled("B_swizzled");
+    Var k("k");
+    B_swizzled(x, y, k) = B(x, 4*y + k);
+
     Func AB("AB");
-    AB(i, j) = u32(0);
-    AB(i, j) +=
-        u32(u16(A(i, 4*rk + 0))*u16(B(4*rk + 0, j))) +
-        u32(u16(A(i, 4*rk + 1))*u16(B(4*rk + 1, j))) +
-        u32(u16(A(i, 4*rk + 2))*u16(B(4*rk + 2, j))) +
-        u32(u16(A(i, 4*rk + 3))*u16(B(4*rk + 3, j)));
+    AB(x, y) = u32(0);
+    AB(x, y) +=
+        u32(u16(A(4*rk + 0, y))*u16(B_swizzled(x, rk, 0))) +
+        u32(u16(A(4*rk + 1, y))*u16(B_swizzled(x, rk, 1))) +
+        u32(u16(A(4*rk + 2, y))*u16(B_swizzled(x, rk, 2))) +
+        u32(u16(A(4*rk + 3, y))*u16(B_swizzled(x, rk, 3)));
+
+    Func output = AB.in();
 
     // Schedule.
     int vector_size_u8 = target.natural_vector_size<uint8_t>();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        vector_size_u8 = target.has_feature(Target::HVX_128) ? 128 : 64;
+    bool use_hexagon = false;
+    if (target.has_feature(Target::HVX_64)) {
+        vector_size_u8 = 64;
+        use_hexagon = true;
+    } else if (target.has_feature(Target::HVX_128)) {
+        vector_size_u8 = 128;
+        use_hexagon = true;
     }
+    int vector_size_u32 = vector_size_u8 / 4;
 
-    AB.compute_root()
-        .vectorize(j, vector_size_u8, TailStrategy::RoundUp)
-        .parallel(i, 16);
-
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        // Some comments on the schedule:
-        // - Vector loads from B are expensive, because vrmpy requires
-        //   interleaving four of them. So, we try to order the loops
-        //   such that those loads are lifted to an outer loop.
-        // - Loads from A are small, so as many columns as possible
-        //   should be loaded together to maximize the utilization of
-        //   cache lines that are loaded.
-        // - There's probably a good Z-order traversal that could be
-        //   used here to improve locality (TODO).
+    if (use_hexagon) {
         RVar rki, rko, rkoo, rkoi;
-        AB.update(0)
-            .split(rk, rko, rki, k_split_factor)
-            .split(rko, rkoo, rkoi, 8)
-            .reorder(rki, rkoi, i, rkoo, j)
-            .vectorize(j, vector_size_u8, TailStrategy::RoundUp)
-            .prefetch(i)
-            .unroll(rki)
-            .parallel(j);
+        Var xo("xo"), yo("yo");
 
-        AB.hexagon();
-        AB.update(0).hexagon();
+        output
+            .compute_root()
+            .hexagon()
+            .tile(x, y, xo, yo, x, y, vector_size_u8, 4, TailStrategy::RoundUp)
+            .reorder(x, y, yo, xo)
+            .vectorize(x)
+            .unroll(y)
+            .parallel(xo);
+
+        AB.compute_at(output, yo)
+            .vectorize(x)
+            .unroll(y);
+
+        AB.update(0)
+            // Split k so we can read a cache line of A at a time.
+            .split(rk, rko, rki, k_split_factor)
+            .reorder(x, y, rki, rko)
+            .vectorize(x)
+            .unroll(y)
+            .unroll(rki, 4);
+
+        Var kx("kx");
+        B_swizzled.compute_at(output, xo)
+            .reorder_storage(k, x, y)
+            .fuse(k, x, kx)
+            .vectorize(kx, vector_size_u8*4, TailStrategy::RoundUp);
     } else {
-        Var ji("ji"), jii("jii"), ii("ii"), iii("iii");
+        Var xi("xi"), xii("xii"), yi("yi"), yii("yii");
         RVar rki("rki");
 
         // This schedule taken from test/performance/matrix_multiplication.cpp
         constexpr int kBlockSize = 32;
-        const int kBlockSizeJi = 8;
+        const int kBlockSizeXi = 8;
+
+        output
+            .compute_root()
+            .tile(x, y, x, y, xi, yi, vector_size_u8, 4, TailStrategy::RoundUp)
+            .reorder(xi, yi, x, y)
+            .vectorize(xi)
+            .unroll(yi)
+            .parallel(y);
+
+        AB.compute_root()
+            .vectorize(x, vector_size_u32);
+
         AB.update(0)
-            .split(j, j, ji, kBlockSize, TailStrategy::GuardWithIf)
-            .split(ji, ji, jii, kBlockSizeJi, TailStrategy::GuardWithIf)
-            .split(i, i, ii, kBlockSize, TailStrategy::GuardWithIf)
-            .split(ii, ii, iii, 4, TailStrategy::GuardWithIf)
+            .split(x, x, xi, kBlockSize, TailStrategy::GuardWithIf)
+            .split(xi, xi, xii, kBlockSizeXi, TailStrategy::GuardWithIf)
+            .split(y, y, yi, kBlockSize, TailStrategy::GuardWithIf)
+            .split(yi, yi, yii, 4, TailStrategy::GuardWithIf)
             .split(rk, rk, rki, kBlockSize, TailStrategy::GuardWithIf)
-            .reorder(jii, iii, ji, rki, ii, rk, j, i)
-            .parallel(i)
-            .vectorize(jii)
-            .unroll(ji)
-            .unroll(iii);
+            .reorder(xii, yii, xi, rki, yi, rk, x, y)
+            .parallel(y)
+            .vectorize(xii)
+            .unroll(xi)
+            .unroll(yii);
     }
 
     // Require scanlines of the input and output to be aligned, and
     // tell Halide about our dimension convention.
-    for (auto i : {(OutputImageParam)A, (OutputImageParam)B, AB.output_buffer()}) {
+    for (auto i : {(OutputImageParam)A, (OutputImageParam)B, output.output_buffer()}) {
         int align = vector_size_u8/i.type().bytes();
         i.dim(0)
-            .set_bounds(0, (i.dim(0).extent()/align)*align)
-            .set_stride((i.dim(0).stride()/align)*align);
+            .set_bounds(0, (i.dim(0).extent()/align)*align);
 
         i.dim(1)
             .set_bounds(0, (i.dim(1).extent()/align)*align)
-            .set_stride(1);
+            .set_stride((i.dim(1).stride()/align)*align);
     }
 
     std::stringstream hdr;
     hdr << argv[2] << ".h";
-    AB.compile_to_header(hdr.str(), {A, B}, argv[2], target);
+    output.compile_to_header(hdr.str(), {A, B}, argv[2], target);
     std::stringstream obj;
     obj << argv[1] << ".o";
-    AB.compile_to_object(obj.str(), {A, B}, argv[2], target);
+    output.compile_to_object(obj.str(), {A, B}, argv[2], target);
 
     return 0;
 }

@@ -52,9 +52,6 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> mat_a(nullptr, N, M);
     Halide::Runtime::Buffer<uint8_t> mat_b(nullptr, K, N);
     Halide::Runtime::Buffer<uint32_t> mat_ab(nullptr, K, M);
-    mat_a.transpose(0, 1);
-    mat_b.transpose(0, 1);
-    mat_ab.transpose(0, 1);
 
     mat_a.device_malloc(halide_hexagon_device_interface());
     mat_b.device_malloc(halide_hexagon_device_interface());
@@ -86,14 +83,14 @@ int main(int argc, char **argv) {
     halide_hexagon_power_hvx_off(NULL);
 
     // Validate that the algorithm did what we expect.
-    mat_ab.for_each_element([&](int i, int j) {
-        uint32_t ab_ij = 0;
+    mat_ab.for_each_element([&](int x, int y) {
+        uint32_t ab_xy = 0;
         for (int k = 0; k < K; k++) {
-            ab_ij += static_cast<uint32_t>(mat_a(i, k))*static_cast<uint32_t>(mat_b(k, j));
+            ab_xy += static_cast<uint32_t>(mat_a(k, y))*static_cast<uint32_t>(mat_b(x, k));
         }
 
-        if (ab_ij != mat_ab(i, j)) {
-            printf("Mismatch at %d %d: %d != %d\n", i, j, ab_ij, mat_ab(i, j));
+        if (ab_xy != mat_ab(x, y)) {
+            printf("Mismatch at %d %d: %d != %d\n", x, y, ab_xy, mat_ab(x, y));
             abort();
         }
 
