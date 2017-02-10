@@ -513,24 +513,29 @@ private:
                 // TODO: It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
-                Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
-                b0123 = simplify(b0123);
-                b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
-                expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
-                if (op->type.bits() == 16) {
-                    // It's actually safe to use this op on 16 bit
-                    // results, we just need to narrow the
-                    // result. Overflow can occur, but will still
-                    // produce the same result thanks to 2's
-                    // complement arithmetic.
-                    expr = Call::make(op->type, "halide.hexagon.pack.vw", {expr}, Call::PureExtern);
+
+                // We can generate this op for 16 bits, but, it's only
+                // faster to do so if the interleave simplifies away.
+                if (op->type.bits() == 32 || !a0123.as<Shuffle>()) {
+                    Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
+                    b0123 = simplify(b0123);
+                    b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
+                    expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                    if (op->type.bits() == 16) {
+                        // It's actually safe to use this op on 16 bit
+                        // results, we just need to narrow the
+                        // result. Overflow can occur, but will still
+                        // produce the same result thanks to 2's
+                        // complement arithmetic.
+                        expr = Call::make(op->type, "halide.hexagon.pack.vw", {expr}, Call::PureExtern);
+                    }
+                    if (rest.defined()) {
+                        expr = Add::make(expr, rest);
+                    }
+                    expr = mutate(expr);
+                    return;
                 }
-                if (rest.defined()) {
-                    expr = Add::make(expr, rest);
-                }
-                expr = mutate(expr);
-                return;
             }
 
             // Now try to match vector*vector vrmpy expressions.
@@ -550,20 +555,24 @@ private:
                 Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                 a0123 = simplify(a0123);
                 b0123 = simplify(b0123);
-                expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
-                if (op->type.bits() == 16) {
-                    // It's actually safe to use this op on 16 bit
-                    // results, we just need to narrow the
-                    // result. Overflow can occur, but will still
-                    // produce the same result thanks to 2's
-                    // complement arithmetic.
-                    expr = Call::make(op->type, "halide.hexagon.pack.vw", {expr}, Call::PureExtern);
+                // We can generate this op for 16 bits, but, it's only
+                // faster to do so if the interleave simplifies away.
+                if (op->type.bits() == 32 || (!a0123.as<Shuffle>() && !b0123.as<Shuffle>())) {
+                    expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                    if (op->type.bits() == 16) {
+                        // It's actually safe to use this op on 16 bit
+                        // results, we just need to narrow the
+                        // result. Overflow can occur, but will still
+                        // produce the same result thanks to 2's
+                        // complement arithmetic.
+                        expr = Call::make(op->type, "halide.hexagon.pack.vw", {expr}, Call::PureExtern);
+                    }
+                    if (rest.defined()) {
+                        expr = Add::make(expr, rest);
+                    }
+                    expr = mutate(expr);
+                    return;
                 }
-                if (rest.defined()) {
-                    expr = Add::make(expr, rest);
-                }
-                expr = mutate(expr);
-                return;
             }
         }
 
