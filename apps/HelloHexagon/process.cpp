@@ -2,7 +2,6 @@
 #include <memory.h>
 #include <assert.h>
 #include <stdlib.h>
-//#include <malloc.h>
 
 #include "../support/benchmark.h"
 
