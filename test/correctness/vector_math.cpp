@@ -623,16 +623,17 @@ bool test(int lanes) {
 int main(int argc, char **argv) {
 
     // Only native vector widths - llvm doesn't handle others well
+    Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    futures.push_back(std::async(test<float>, 4));
-    futures.push_back(std::async(test<float>, 8));
-    futures.push_back(std::async(test<double>, 2));
-    futures.push_back(std::async(test<uint8_t>, 16));
-    futures.push_back(std::async(test<int8_t>, 16));
-    futures.push_back(std::async(test<uint16_t>, 8));
-    futures.push_back(std::async(test<int16_t>, 8));
-    futures.push_back(std::async(test<uint32_t>, 4));
-    futures.push_back(std::async(test<int32_t>, 4));
+    futures.push_back(pool.async(test<float>, 4));
+    futures.push_back(pool.async(test<float>, 8));
+    futures.push_back(pool.async(test<double>, 2));
+    futures.push_back(pool.async(test<uint8_t>, 16));
+    futures.push_back(pool.async(test<int8_t>, 16));
+    futures.push_back(pool.async(test<uint16_t>, 8));
+    futures.push_back(pool.async(test<int16_t>, 8));
+    futures.push_back(pool.async(test<uint32_t>, 4));
+    futures.push_back(pool.async(test<int32_t>, 4));
 
     bool ok = true;
     for (auto &f : futures) {
