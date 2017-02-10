@@ -59,7 +59,7 @@ CCFLAGS-arm-32-android = --sysroot ${ANDROID_NDK_ROOT}/platforms/android-21/arch
 CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 	-L${HEXAGON_TOOLS_ROOT}/lib/iss/ -lwrapper
 
-CCFLAGS-v60 := $(CCFLAGS-v60) ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
+CCFLAGS-v60 := $(CCFLAGS-v60) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Release_toolv80_v62 ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
 
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
 	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release_aarch64/ -ladsprpc
@@ -127,9 +127,21 @@ bin/%/sim_host.o: sim_host.cpp sim_protocol.h
 	mkdir -p $(@D)
 	$(CXX-$*) -std=c++11 $(CCFLAGS-$*) -c sim_host.cpp -o $@
 
+CRT0_STANDALONE=$(shell $(CXX-v60) -G0 -print-file-name=crt0_standalone.o)
+CRT0           =$(shell $(CXX-v60) -G0 -print-file-name=crt0.o)
+INIT           =$(shell $(CXX-v60) -G0 -print-file-name=init.o)
+LIB_STANDALONE =$(shell $(CXX-v60) -G0 -print-file-name=libstandalone.a)
+LIB_C          =$(shell $(CXX-v60) -G0 -print-file-name=libc.a)
+LIB_GCC        =$(shell $(CXX-v60) -G0 -print-file-name=libgcc.a)
+FINI           =$(shell $(CXX-v60) -G0 -print-file-name=fini.o)
+LIBDL          =$(HEXAGON_TOOLS_ROOT)/target/hexagon/lib/v60/G0/libdl.a
+
 bin/%/hexagon_sim_remote: bin/%/sim_remote.o
 	mkdir -p $(@D)
-	$(CC-$*) -m$* -mG0lib -G0 -lc -lstandalone -lgcc -ldl $^ -o $@
+	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) bin/$*/sim_remote.o $(LIBDL) \
+	--start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
+	--dynamic-linker= -E --force-dynamic
+	#$(CC-$*) -m$* -mG0lib -G0 -ldl -lc -lstandalone -lgcc  $^ $(LIBDL) -o $@
 
 bin/host/libhalide_hexagon_host.so: bin/host/sim_host.o
 	mkdir -p $(@D)
