@@ -6,14 +6,7 @@
 
 #include "Debug.h"
 #include "Introspection.h"
-
-// TODO -- these are handy to simplify away code that is just typechecking
-// decoration; oddly, we don't have this defined in non-Runtime code.
-#ifdef _MSC_VER
-#define HALIDE_ERROR_ALWAYS_INLINE __forceinline
-#else
-#define HALIDE_ERROR_ALWAYS_INLINE __attribute__((always_inline))
-#endif
+#include "runtime/HalideRuntime.h"  // for HALIDE_ALWAYS_INLINE
 
 namespace Halide {
 
@@ -83,7 +76,7 @@ struct ErrorReport {
     EXPORT ErrorReport(const char *f, int l, const char *cs, int flags);
 
     // Just a trick used to convert RValue into LValue
-    HALIDE_ERROR_ALWAYS_INLINE ErrorReport& ref() { return *this; }
+    HALIDE_ALWAYS_INLINE ErrorReport& ref() { return *this; }
 
     template<typename T>
     ErrorReport &operator<<(const T &x) {
@@ -112,10 +105,10 @@ struct ErrorReport {
 // expression to void (to match the condition-is-false case).
 class Voidifier {
  public:
-  HALIDE_ERROR_ALWAYS_INLINE Voidifier() {}
+  HALIDE_ALWAYS_INLINE Voidifier() {}
   // This has to be an operator with a precedence lower than << but
   // higher than ?:
-  HALIDE_ERROR_ALWAYS_INLINE void operator&(ErrorReport&) {}
+  HALIDE_ALWAYS_INLINE void operator&(ErrorReport&) {}
 };
 
 /**
