@@ -29,9 +29,6 @@ endfunction(test_plain_c_includes)
 
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp")
-  if (WIN32)
-    LIST(REMOVE_ITEM TESTS "simd_op_check.cpp") # Relies on shell stuff that doesn't work on windows
-  endif()
   set(TEST_NAMES "")
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
