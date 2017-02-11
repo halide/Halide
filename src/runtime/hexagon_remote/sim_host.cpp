@@ -2,6 +2,7 @@
 #include <sstream>
 #include <cassert>
 #include <memory>
+#include <mutex>
 
 #include <HalideRuntime.h>
 #include <HexagonWrapper.h>
@@ -304,11 +305,19 @@ public:
     remote_buffer &operator=(const remote_buffer &) = delete;
 };
 
+// We need to only allow one thread at a time to interact with the runtime.
+// This is done by simply locking this mutex at the entry of each exported
+// runtime function. This is not very efficient, but the simulator is slow
+// anyways.
+std::mutex mutex;
+
 extern "C" {
 
 int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
                                                 int use_shared_object,
                                                 handle_t *module_ptr) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     int ret = init_sim();
     if (ret != 0) return -1;
     // Copy the pointer arguments to the simulator.
@@ -325,6 +334,8 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     return ret;
 }
 int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t* sym) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     assert(sim);
 
     // Copy the pointer arguments to the simulator.
@@ -340,6 +351,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const host_buffer *input_buffersPtrs, int input_buffersLen,
                               host_buffer *output_buffersPtrs, int output_buffersLen,
                               const host_buffer *input_scalarsPtrs, int input_scalarsLen) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     assert(sim);
 
     std::vector<remote_buffer> remote_input_buffers;
@@ -391,6 +404,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     if (!sim) {
         // Due to static destructor ordering issues, the simulator
         // might have been freed before this gets called.
