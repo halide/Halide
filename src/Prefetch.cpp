@@ -205,24 +205,11 @@ private:
                 // either read or written.
                 for (const auto &b : boxes_read) {
                     const string &buf_name = b.first;
-                    Box prefetch_box = b.second;
 
                     // Only prefetch the region that is in bounds.
                     Box bounds = buffer_bounds(buf_name, b.second.size());
+                    Box prefetch_box = box_intersection(b.second, bounds);
 
-#if 1
-                    // TODO: Consider enabling this, which adds likely intrinsics to the
-                    // box prior to clamping it to the bounds of the buffer. This leads
-                    // the loops to be split up such that the steady state does not have
-                    // any boundary condition logic. On matrix multiplication on Hexagon,
-                    // this reduced the runtime by ~4%.
-                    for (auto &i : prefetch_box.bounds) {
-                        i.min = likely(i.min);
-                        i.max = likely(i.max);
-                    }
-#endif
-
-                    prefetch_box = box_intersection(prefetch_box, bounds);
                     body = add_prefetch(buf_name, prefetch_box, body);
                 }
             }
