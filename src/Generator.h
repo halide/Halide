@@ -1793,9 +1793,7 @@ private:
 
     NO_INLINE Func &get_assignable_func_ref(size_t i) {
         internal_assert(this->exprs_.empty() && this->funcs_.size() > i);
-        user_assert(!this->funcs_.at(i).defined())
-            << "Output " << this->name() << " has already defined the Func at array index " << i << "\n";
-        return this->funcs_[i];
+        return this->funcs_.at(i);
     }
 
 protected:
@@ -1824,6 +1822,11 @@ public:
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     Func &operator[](size_t i) {
         return get_assignable_func_ref(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    const Func &operator[](size_t i) const {
+        return Super::operator[](i);
     }
 };
 
