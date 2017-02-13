@@ -1002,7 +1002,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         if (store_at.is_root() && compute_at.is_root()) {
             return true;
         } else {
-            user_error << "Func " << f.name() << " is the output, so must"
+            user_error << "Func " << f.name() << " is an output, so must"
                        << " be scheduled compute_root (which is the default).\n";
         }
     }
