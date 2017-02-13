@@ -25,34 +25,34 @@ public:
 
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};
-    
+
         // Apply a boundary condition to the input.
         Func input_bounded{"input_bounded"};
         input_bounded(x, y, c) = BoundaryConditions::repeat_edge(input)(x, y, c);
 
         // Implement this as a separable blur in y followed by x.
-        Func blur_y{"blur_y"};   
+        Func blur_y{"blur_y"};
         blur_y(x, y, c) = blur5(input_bounded(x, y - 2, c),
                                 input_bounded(x, y - 1, c),
                                 input_bounded(x, y,     c),
                                 input_bounded(x, y + 1, c),
                                 input_bounded(x, y + 2, c));
-        
+
         blur(x, y, c) = blur5(blur_y(x - 2, y, c),
                               blur_y(x - 1, y, c),
                               blur_y(x,     y, c),
                               blur_y(x + 1, y, c),
                               blur_y(x + 2, y, c));
-        
-        
+
+
         schedule = [=]() mutable {
             // Require the input and output to have 3 channels.
             Func(blur).bound(c, 0, 3);
             input.dim(2).set_bounds(0, 3);
-            
+
             if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
                 const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
-                
+
                 // The strategy here is to split each scanline of the result
                 // into chunks of multiples of the vector size, computing the
                 // blur in y at each chunk. We use the RoundUp tail strategy to
@@ -66,7 +66,7 @@ public:
                 blur_y
                     .compute_at(blur, y)
                     .vectorize(x, vector_size, TailStrategy::RoundUp);
-                
+
                 // Line buffer the boundary condition, which is expensive. Line
                 // buffering it computes it once per row, instead of 5 times per row.
                 input_bounded
@@ -75,18 +75,18 @@ public:
                     .align_storage(x, 64)
                     .fold_storage(y, 8)
                     .vectorize(x, vector_size, TailStrategy::RoundUp);
-                
+
                 // Require scanlines of the input and output to be aligned.
                 input.dim(0).set_bounds(0, (input.dim(0).extent()/vector_size)*vector_size);
                 blur.dim(0).set_bounds(0, (blur.dim(0).extent()/vector_size)*vector_size);
-                
+
                 for (int i = 1; i < 3; i++) {
                     input.dim(i).set_stride((input.dim(i).stride()/vector_size)*vector_size);
                     blur.dim(i).set_stride((blur.dim(i).stride()/vector_size)*vector_size);
                 }
             } else {
                 const int vector_size = natural_vector_size<uint8_t>();
-                
+
                 Func(blur).compute_root()
                 .parallel(y, 16)
                 .vectorize(x, vector_size);
@@ -95,8 +95,6 @@ public:
             }
         };
     }
-    
 };
 
-
-Halide::RegisterGenerator<Blur> register_me{"blur"};
+HALIDE_REGISTER_GENERATOR(Blur, "blur");
