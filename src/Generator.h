@@ -1791,6 +1791,11 @@ class GeneratorOutput_Func : public GeneratorOutputImpl<T> {
 private:
     using Super = GeneratorOutputImpl<T>;
 
+    NO_INLINE Func &get_assignable_func_ref(size_t i) {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() > i);
+        return this->funcs_.at(i);
+    }
+
 protected:
     using TBase = typename Super::TBase;
 
@@ -1801,6 +1806,27 @@ protected:
 
     GeneratorOutput_Func(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, IOKind::Function, t, d) {
+    }
+
+public:
+    // Allow Output<Func> = Func
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutput_Func<T> &operator=(const Func &f) {
+        // Don't bother verifying the Func type, dimensions, etc., here: 
+        // That's done later, when we produce the pipeline.
+        get_assignable_func_ref(0) = f;
+        return *this;
+    }
+
+    // Allow Output<Func[]> = Func
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Func &operator[](size_t i) {
+        return get_assignable_func_ref(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    const Func &operator[](size_t i) const {
+        return Super::operator[](i);
     }
 };
 
@@ -1888,6 +1914,11 @@ public:
     template <typename T2>
     GeneratorOutput<T> &operator=(const Internal::StubOutputBuffer<T2> &stub_output_buffer) {
         Super::operator=(stub_output_buffer);
+        return *this;
+    }
+
+    GeneratorOutput<T> &operator=(const Func &f) {
+        Super::operator=(f);
         return *this;
     }
 };
