@@ -20,9 +20,9 @@ extern "C" {
 #endif
 
 #ifdef _MSC_VER
-#define ALWAYS_INLINE __forceinline
+#define HALIDE_ALWAYS_INLINE __forceinline
 #else
-#define ALWAYS_INLINE __attribute__((always_inline))
+#define HALIDE_ALWAYS_INLINE __attribute__((always_inline))
 #endif
 
 /** \file
@@ -270,27 +270,27 @@ struct halide_type_t {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    HALIDE_ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+    HALIDE_ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
 
     /** Compare two types for equality. */
-    ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
         return (code == other.code &&
                 bits == other.bits &&
                 lanes == other.lanes);
     }
 
-    ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
+    HALIDE_ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
 #endif
 };
 
@@ -348,7 +348,7 @@ struct halide_trace_event_t {
 #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    ALWAYS_INLINE halide_trace_event_t() {}
+    HALIDE_ALWAYS_INLINE halide_trace_event_t() {}
 #endif
 };
 
@@ -409,25 +409,25 @@ struct halide_trace_packet_t {
     #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    ALWAYS_INLINE halide_trace_packet_t() {}
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t() {}
 
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
      * immediately after the packet header. */
-    ALWAYS_INLINE const int *coordinates() const {
+    HALIDE_ALWAYS_INLINE const int *coordinates() const {
         return (const int *)(this + 1);
     }
 
     /** Get the value, assuming this packet is laid out in memory as
      * it was written. The packet comes immediately after the coordinates
      * array. */
-    ALWAYS_INLINE const void *value() const {
+    HALIDE_ALWAYS_INLINE const void *value() const {
         return (const void *)(coordinates() + dimensions);
     }
 
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
-    ALWAYS_INLINE const char *func() const {
+    HALIDE_ALWAYS_INLINE const char *func() const {
         return (const char *)value() + type.lanes * type.bytes();
     }
     #endif
@@ -876,7 +876,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
-    halide_target_feature_end = 42 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_use_shared_object = 42, ///< Build shared object code for Hexagon, and use dlopenbuf API.
+    halide_target_feature_end = 43 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

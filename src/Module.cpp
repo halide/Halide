@@ -13,6 +13,7 @@
 #include "IROperator.h"
 #include "Outputs.h"
 #include "StmtToHtml.h"
+#include "ThreadPool.h"
 
 using Halide::Internal::debug;
 
@@ -319,9 +320,10 @@ void compile_multitarget(const std::string &fn_name,
     }
 
     std::vector<std::future<void>> futures;
-    // If we are running with HL_DEBUG_CODEGEN=1, choose a policy that enforces
+    // If we are running with HL_DEBUG_CODEGEN=1, use threads=1 to enforce
     // sequential execution, so that debug output won't be utterly incomprehensible
-    std::launch policy = debug::debug_level() > 0 ? std::launch::deferred : std::launch::async;
+    const size_t num_threads = (debug::debug_level() > 0) ? 1 : Internal::ThreadPool<void>::num_processors_online();
+    Internal::ThreadPool<void> pool(num_threads);
 
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like
@@ -385,7 +387,7 @@ void compile_multitarget(const std::string &fn_name,
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
-        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: compile_sub_target " << o.object_name << "\n";
             m.compile(o);
         }, std::move(sub_module), std::move(sub_out)));
@@ -419,7 +421,7 @@ void compile_multitarget(const std::string &fn_name,
         }
         Outputs runtime_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
-        futures.emplace_back(std::async(policy, [](Target t, Outputs o) {
+        futures.emplace_back(pool.async([](Target t, Outputs o) {
             debug(1) << "compile_multitarget: compile_standalone_runtime " << o.static_library_name << "\n";
             compile_standalone_runtime(o, t);
         }, std::move(runtime_target), std::move(runtime_out)));
@@ -456,7 +458,7 @@ void compile_multitarget(const std::string &fn_name,
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
         Outputs wrapper_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true));
-        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: wrapper " << o.object_name << "\n";
             m.compile(o);
         }, std::move(wrapper_module), std::move(wrapper_out)));
@@ -466,7 +468,7 @@ void compile_multitarget(const std::string &fn_name,
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::External));
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
-        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";
             m.compile(o);
         }, std::move(header_module), std::move(header_out)));

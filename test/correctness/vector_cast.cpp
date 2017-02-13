@@ -141,9 +141,10 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     // We only test power-of-two vector widths for now
+    Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
     for (int vec_width = 1; vec_width <= 64; vec_width*=2) {
-        futures.push_back(std::async(std::launch::async, [=]() {
+        futures.push_back(pool.async([=]() {
             bool success = true;
             success = success && test_all<float>(vec_width, target);
             success = success && test_all<double>(vec_width, target);
