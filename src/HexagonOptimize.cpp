@@ -396,120 +396,117 @@ private:
 
     typedef pair<Expr, Expr> MulExpr;
 
-    // In the operands vector, find elements of the operands list that
-    // are widening multiplies from types a_ty and b_ty. If mpy_count
-    // multiplies aren't found (but at least one is), it will attempt
-    // to multiply remaining operands by 1 to match the target
-    // widening multiply.
-    static pair<vector<MulExpr>, Expr> find_mpy_ops(const vector<Expr> &operands, Type a_ty, Type b_ty, int mpy_count) {
-        Type add_ty = operands.front().type();
+    // If ty is scalar, and x is a vector, try to remove a broadcast
+    // from x prior to using lossless_cast on it.
+    static Expr unbroadcast_lossless_cast(Type ty, Expr x) {
+        if (ty.lanes() == 1 && x.type().lanes() > 1) {
+            if (const Broadcast *bc = x.as<Broadcast>()) {
+                x = bc->value;
+            }
+        }
+        if (ty.lanes() != x.type().lanes()) {
+            return Expr();
+        }
+        return lossless_cast(ty, x);
+    }
+
+    // Try to extract a list of multiplies of the form a_ty*b_ty added
+    // together, such that op is equivalent to the sum of the
+    // multiplies in 'mpys', added to 'rest'.
+    static int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
+                            vector<MulExpr> &mpys, Expr &rest) {
+        if ((int)mpys.size() >= max_mpy_count) {
+            rest = rest.defined() ? Add::make(rest, op) : op;
+            return 0;
+        }
+
+        // If the add is also widening, remove the cast.
         int mpy_bits = std::max(a_ty.bits(), b_ty.bits())*2;
-        Expr a_wild = Variable::make(a_ty.with_bits(mpy_bits).with_code(add_ty.code()), "*");
-        Expr b_wild = Variable::make(b_ty.with_bits(mpy_bits).with_code(add_ty.code()), "*");
-        if (a_wild.type().lanes() == 1) {
-            a_wild = Broadcast::make(a_wild, b_ty.lanes());
-        }
-        if (b_wild.type().lanes() == 1) {
-            b_wild = Broadcast::make(b_wild, a_ty.lanes());
-        }
-
-        // Try to match both the multiply and its commutation.
-        Expr pattern = a_wild*b_wild;
-        Expr commuted_pattern = b_wild*a_wild;
-        if (add_ty.bits() != pattern.type().bits()) {
-            pattern = Cast::make(add_ty, pattern);
-            commuted_pattern = Cast::make(add_ty, commuted_pattern);
-        }
-
-        // Go through the operands, putting the matching multiplies in
-        // matched, and the rest in not_matched.
-        vector<MulExpr> matched;
-        vector<Expr> not_matched;
-        for (Expr i : operands) {
-            if ((int)matched.size() >= mpy_count) {
-                not_matched.emplace_back(i);
-                continue;
-            }
-            Expr a, b;
-            vector<Expr> matches;
-            if (expr_match(pattern, i, matches)) {
-                a = matches[0];
-                b = matches[1];
-            } else if (expr_match(commuted_pattern, i, matches)) {
-                a = matches[1];
-                b = matches[0];
-            }
-
-            if (a.defined()) {
-                a = lossless_cast(a_ty.with_lanes(a.type().lanes()), a);
-            }
-            if (b.defined()) {
-                b = lossless_cast(b_ty.with_lanes(b.type().lanes()), b);
-            }
-
-            if (a.defined() && b.defined()) {
-                matched.emplace_back(a, b);
-            } else {
-                not_matched.emplace_back(i);
-            }
-        }
-
-        if (matched.empty()) {
-            // Don't fake a bunch of mpy ops if there are no real ones.
-            return {matched, make_binary_op<Add>(not_matched)};
-        }
-
-        // If we didn't find mpy_count matches, go through the
-        // not_matched list and try to find elements that match one of
-        // the operand types, and set the other operand to 1.
-        vector<Expr> rest;
-        for (Expr i : not_matched) {
-            if ((int)matched.size() < mpy_count) {
-                Expr as_a = lossless_cast(a_ty.with_lanes(i.type().lanes()), i);
-                Expr as_b = lossless_cast(b_ty.with_lanes(i.type().lanes()), i);
-                if (as_a.defined()) {
-                    matched.emplace_back(as_a, make_one(b_ty));
-                } else if (as_b.defined()) {
-                    matched.emplace_back(make_one(a_ty), as_b);
-                } else {
-                    rest.push_back(i);
+        Expr maybe_mul = op;
+        if (op.type().bits() == mpy_bits*2) {
+            if (const Cast *cast = op.as<Cast>()) {
+                if (cast->value.type().bits() == mpy_bits) {
+                    maybe_mul = cast->value;
                 }
-            } else {
-                rest.push_back(i);
             }
         }
 
-        internal_assert((int)matched.size() <= mpy_count);
+        if (const Mul *mul = maybe_mul.as<Mul>()) {
+            Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
+            Expr b = unbroadcast_lossless_cast(b_ty, mul->b);
+            if (a.defined() && b.defined()) {
+                mpys.emplace_back(a, b);
+                return 1;
+            } else {
+                // Try to commute the op.
+                a = unbroadcast_lossless_cast(a_ty, mul->b);
+                b = unbroadcast_lossless_cast(b_ty, mul->a);
+                if (a.defined() && b.defined()) {
+                    mpys.emplace_back(a, b);
+                    return 1;
+                }
+            }
+        } else if (const Add *add = op.as<Add>()) {
+            int mpy_count = 0;
+            mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+            mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
+            return mpy_count;
+        } else if (const Sub *sub = op.as<Sub>()) {
+            // Try to rewrite subs as adds.
+            if (const Mul *mul_b = sub->b.as<Mul>()) {
+                if (is_positive_const(mul_b->a) || is_negative_negatable_const(mul_b->a)) {
+                    Expr add_b = Mul::make(simplify(-mul_b->a), mul_b->b);
+                    int mpy_count = 0;
+                    mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+                    mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+                    return mpy_count;
+                } else if (is_positive_const(mul_b->b) || is_negative_negatable_const(mul_b->b)) {
+                    Expr add_b = Mul::make(mul_b->a, simplify(-mul_b->b));
+                    int mpy_count = 0;
+                    mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+                    mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+                    return mpy_count;
+                }
+            }
+        }
 
-        return {matched, make_binary_op<Add>(rest)};
+        // Attempt to pretend this op is multiplied by 1.
+        Expr as_a = unbroadcast_lossless_cast(a_ty, op);
+        Expr as_b = unbroadcast_lossless_cast(b_ty, op);
+
+        if (as_a.defined()) {
+            mpys.emplace_back(as_a, make_one(b_ty));
+        } else if (as_b.defined()) {
+            mpys.emplace_back(make_one(a_ty), as_b);
+        } else {
+            rest = rest.defined() ? Add::make(rest, op) : op;
+        }
+        return 0;
     }
 
     void visit(const Add *op) {
-        vector<Expr> matches;
-
         // vmpa, vdmpy, and vrmpy instructions are hard to match with
         // patterns, do it manually here.
-        vector<Expr> operands;
-        flatten_binary_op(op, operands);
-
         // Try to find vrmpy opportunities first, which consume 4 operands.
-        if (op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32) && operands.size() >= 4) {
+        if (op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32)) {
             int lanes = op->type.lanes();
             vector<MulExpr> mpys;
             Expr rest;
             string suffix;
+            int mpy_count;
 
             // Try to find a vector*scalar multiply first, which will
             // match a subset of the expressions that vector*vector
             // matches.
             if (op->type.is_uint()) {
-                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), UInt(8), 4);
+                mpy_count = find_mpy_ops(op, UInt(8, lanes), UInt(8), 4, mpys, rest);
                 suffix = ".vub.ub";
             } else {
-                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), Int(8), 4);
+                mpy_count = find_mpy_ops(op, UInt(8, lanes), Int(8), 4, mpys, rest);
                 suffix = ".vub.b";
             }
-            if (mpys.size() == 4) {
+
+            if (mpy_count > 0 && mpys.size() == 4) {
                 // TODO: It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
@@ -539,16 +536,18 @@ private:
             }
 
             // Now try to match vector*vector vrmpy expressions.
+            mpys.clear();
+            rest = Expr();
             if (op->type.is_uint()) {
-                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), UInt(8).with_lanes(lanes), 4);
+                mpy_count = find_mpy_ops(op, UInt(8, lanes), UInt(8, lanes), 4, mpys, rest);
                 suffix = ".vub.vub";
             } else {
-                std::tie(mpys, rest) = find_mpy_ops(operands, Int(8).with_lanes(lanes), Int(8).with_lanes(lanes), 4);
+                mpy_count = find_mpy_ops(op, Int(8, lanes), Int(8, lanes), 4, mpys, rest);
                 suffix = ".vb.vb";
             }
 
             // TODO: suffix = ".vub.vb"
-            if (mpys.size() == 4) {
+            if (mpy_count > 0 && mpys.size() == 4) {
                 // TODO: It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
                 Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
@@ -577,25 +576,26 @@ private:
         }
 
         // Find opportunities vdmpy or vmpa.
-        if (op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32) && operands.size() >= 2) {
+        if (op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32)) {
             int lanes = op->type.lanes();
 
             vector<MulExpr> mpys;
             Expr rest;
             string vmpa_suffix;
             string vdmpy_suffix;
+            int mpy_count;
 
             // Try to find vector*scalar multiplies.
             if (op->type.bits() == 16) {
-                std::tie(mpys, rest) = find_mpy_ops(operands, UInt(8).with_lanes(lanes), Int(8), 2);
+                mpy_count = find_mpy_ops(op, UInt(8, lanes), Int(8), 2, mpys, rest);
                 vmpa_suffix = ".vub.vub.b.b";
                 vdmpy_suffix = ".vub.b";
             } else if (op->type.bits() == 32) {
-                std::tie(mpys, rest) = find_mpy_ops(operands, Int(16).with_lanes(lanes), Int(8), 2);
+                mpy_count = find_mpy_ops(op, Int(16, lanes), Int(8), 2, mpys, rest);
                 vmpa_suffix = ".vh.vh.b.b";
                 vdmpy_suffix = ".vh.b";
             }
-            if (mpys.size() == 2) {
+            if (mpy_count > 0 && mpys.size() == 2) {
                 Expr a01 = Shuffle::make_interleave({mpys[0].first, mpys[1].first});
                 a01 = simplify(a01);
                 // TODO: This requires the operands to be in a

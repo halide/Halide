@@ -1843,9 +1843,9 @@ struct Test {
         check("vmpyo(v*.w,v*.h):<<1:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2))/(i64(1) << 31)));
         check("vmpyo(v*.w,v*.h):<<1:rnd:sat", hvx_width/4, i32_sat((i64(i32_1)*i64(i32_2) + (1 << 30))/(i64(1) << 31)));
 
-        check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + i16(u8_2)*3);
-        check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*2 + 3*i16(u8_2));
-        check("vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2));
+        check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*127 + i16(u8_2)*-128);
+        check("vmpa(v*.ub,r*.b)", hvx_width/1, i16(u8_1)*127 + 126*i16(u8_2));
+        check("vmpa(v*.ub,r*.b)", hvx_width/1, -100*i16(u8_1) + 40*i16(u8_2));
         check("v*.h += vmpa(v*.ub,r*.b)", hvx_width/1, 2*i16(u8_1) + 3*i16(u8_2) + i16_1);
 
         check("vmpa(v*.h,r*.b)", hvx_width/2, i32(i16_1)*2 + i32(i16_2)*3);
@@ -1854,10 +1854,10 @@ struct Test {
         check("v*.w += vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2) + i32_1);
 
         // We only generate vdmpy if the inputs are interleaved (otherwise we would use vmpa).
-        check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3);
+        check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*127 + i16(in_u8(2*x + 1))*-128);
         check("vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3);
-        check("v*.h += vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*2 + i16(in_u8(2*x + 1))*3 + i16_1);
-        check("v*.w += vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3 + i32_1);
+        check("v*.h += vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*120 + i16(in_u8(2*x + 1))*-50 + i16_1);
+        check("v*.w += vdmpy(v*.h,r*.b)", hvx_width/4, i32(in_i16(2*x))*80 + i32(in_i16(2*x + 1))*33 + i32_1);
 
 #if 0
         // These are incorrect because the two operands aren't
@@ -1869,12 +1869,12 @@ struct Test {
 #endif
 
         check("vrmpy(v*.ub,r*.ub)", hvx_width, u32(u16(u8_1)*255) + u32(u16(u8_2)*254) + u32(u16(u8_3)*253) + u32(u16(u8_4)*252));
-        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(i16(u8_1)*127) + i32(i16(u8_2)*126) + i32(i16(u8_3)*125) + i32(i16(u8_4)*124));
+        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(i16(u8_1)*127) + i32(i16(u8_2)*-128) + i32(i16(u8_3)*126) + i32(i16(u8_4)*-127));
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width, u32_1 + u32(u16(u8_1)*2) + u32(u16(u8_2)*3) + u32(u16(u8_3)*4) + u32(u16(u8_4)*5));
-        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(i16(u8_1)*2) + i32(i16(u8_2)*3) + i32(i16(u8_3)*4) + i32(i16(u8_4)*5));
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(i16(u8_1)*2) + i32(i16(u8_2)*-3) + i32(i16(u8_3)*-4) + i32(i16(u8_4)*5));
 
         // Check a few of these with implicit ones.
-        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(u8_1) + i32(i16(u8_2)*2) + i32(i16(u8_3)*3) + i32(i16(u8_4)*4));
+        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(u8_1) + i32(i16(u8_2)*-2) + i32(i16(u8_3)*3) + i32(i16(u8_4)*-4));
         check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(u8_1) + i32(i16(u8_2)*2) + i32(i16(u8_3)*3) + i32(i16(u8_4)*4));
 
         check("vrmpy(v*.ub,v*.ub)", hvx_width, u32(u16(u8_1)*u8_1) + u32(u16(u8_2)*u8_2) + u32(u16(u8_3)*u8_3) + u32(u16(u8_4)*u8_4));
@@ -1897,9 +1897,9 @@ struct Test {
             in_u8(4*x + 2),
             in_u8(4*x + 3),
         };
-        check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*125 + i16(u8_4x4[3])*124);
+        check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*-125 + i16(u8_4x4[3])*124);
         // Make sure it doesn't generate if the operands don't interleave.
-        check("vmpa(v*.ub,r*.b)", hvx_width, i16(u8_1)*127 + i16(u8_2)*126 + i16(u8_3)*125 + i16(u8_4)*124);
+        check("vmpa(v*.ub,r*.b)", hvx_width, i16(u8_1)*127 + i16(u8_2)*-126 + i16(u8_3)*125 + i16(u8_4)*124);
 
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, u32_1 + (u32_2 * 8));
         check("v*.w += vasl(v*.w,r*)", hvx_width/4, i32_1 + (i32_2 * 8));
