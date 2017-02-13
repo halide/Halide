@@ -57,4 +57,4 @@ run-host: $(BIN)/process-host
 	$(BIN)/process-host hvx128 1
 
 clean:
-	rm -f process-* pipeline-*.o pipeline pipeline.h
+	rm -rf $(BIN)
