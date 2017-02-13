@@ -98,14 +98,14 @@ int main(int arch, char **argv) {
         }
     }
 
-// Boundary condition
-#define BIN(x, y) (((x)>=0 && (x)<W && (y)>=0 && (y)< H) ? in((x), (y)) : exterior)
+    // Boundary condition
+    auto bin = [&](int x, int y) { return (x >= 0 && x < W && y >=0 && y < H) ? in(x, y) : exterior; };
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            int16_t correct = (mask(0,0)*BIN(x-1, y-1) + mask(1,0)*BIN(x, y-1) + mask(2,0)*BIN(x+1, y-1) +
-                               mask(0,1)*BIN(x-1, y)   + mask(1,1)*BIN(x, y)   + mask(2,1)*BIN(x+1, y)   +
-                               mask(0,2)*BIN(x-1, y+1) + mask(1,2)*BIN(x, y+1) + mask(2,2)*BIN(x+1, y+1)) >> 4;
+            int16_t correct = (mask(0,0)*bin(x-1, y-1) + mask(1,0)*bin(x, y-1) + mask(2,0)*bin(x+1, y-1) +
+                               mask(0,1)*bin(x-1, y)   + mask(1,1)*bin(x, y)   + mask(2,1)*bin(x+1, y)   +
+                               mask(0,2)*bin(x-1, y+1) + mask(1,2)*bin(x, y+1) + mask(2,2)*bin(x+1, y+1)) >> 4;
             // clamp
             if (correct > 255) { correct = 255; }
             if (correct < 0) { correct = 0; }
