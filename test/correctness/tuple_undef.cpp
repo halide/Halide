@@ -24,7 +24,7 @@ public:
     CheckStoreCount(int correct) : correct(correct) {}
     using IRMutator::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         CountStores c;
         s.accept(&c);
 
