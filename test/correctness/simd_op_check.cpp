@@ -1868,28 +1868,28 @@ struct Test {
         check("v*:*.w += vdmpy(v*:*.h,r*.b)", (hvx_width/4)*2, i32(in_i16(2*x))*2 + i32(in_i16(2*x + 1))*3 + i32_1);
 #endif
 
-        check("vrmpy(v*.ub,r*.ub)", hvx_width, u32(u16(u8_1)*255) + u32(u16(u8_2)*254) + u32(u16(u8_3)*253) + u32(u16(u8_4)*252));
-        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(i16(u8_1)*127) + i32(i16(u8_2)*-128) + i32(i16(u8_3)*126) + i32(i16(u8_4)*-127));
-        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width, u32_1 + u32(u16(u8_1)*2) + u32(u16(u8_2)*3) + u32(u16(u8_3)*4) + u32(u16(u8_4)*5));
-        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(i16(u8_1)*2) + i32(i16(u8_2)*-3) + i32(i16(u8_3)*-4) + i32(i16(u8_4)*5));
+        check("vrmpy(v*.ub,r*.ub)", hvx_width, u32(u8_1)*255 + u32(u8_2)*254 + u32(u8_3)*253 + u32(u8_4)*252);
+        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(u8_1)*127 + i32(u8_2)*-128 + i32(u8_3)*126 + i32(u8_4)*-127);
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width, u32_1 + u32(u8_1)*2 + u32(u8_2)*3 + u32(u8_3)*4 + u32(u8_4)*5);
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(u8_1)*2 + i32(u8_2)*-3 + i32(u8_3)*-4 + i32(u8_4)*5);
 
         // Check a few of these with implicit ones.
-        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(u8_1) + i32(i16(u8_2)*-2) + i32(i16(u8_3)*3) + i32(i16(u8_4)*-4));
-        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(u8_1) + i32(i16(u8_2)*2) + i32(i16(u8_3)*3) + i32(i16(u8_4)*4));
+        check("vrmpy(v*.ub,r*.b)", hvx_width, i32(u8_1) + i32(u8_2)*-2 + i32(u8_3)*3 + i32(u8_4)*-4);
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(u8_1) + i32(u8_2)*2 + i32(u8_3)*3 + i32(u8_4)*4);
 
         // We should also match this pattern.
-        check("vrmpy(v*.ub,r*.ub)", hvx_width, u32(u8_1)*255 + u32(u8_2)*254 + u32(u8_3)*253 + u32(u8_4)*252);
-        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(u8_1)*127 + i32(u8_2)*-128 + i32(u8_3)*126 + i32(u8_4)*-127);
+        check("vrmpy(v*.ub,r*.ub)", hvx_width, u32(u16(u8_1)*255) + u32(u16(u8_2)*254) + u32(u16(u8_3)*253) + u32(u16(u8_4)*252));
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width, i32_1 + i32(i16(u8_1)*2) + i32(i16(u8_2)*-3) + i32(i16(u8_3)*-4) + i32(i16(u8_4)*5));
 
-        check("vrmpy(v*.ub,v*.ub)", hvx_width, u32(u16(u8_1)*u8_1) + u32(u16(u8_2)*u8_2) + u32(u16(u8_3)*u8_3) + u32(u16(u8_4)*u8_4));
-        check("vrmpy(v*.b,v*.b)", hvx_width, i32(i16(i8_1)*i8_1) + i32(i16(i8_2)*i8_2) + i32(i16(i8_3)*i8_3) + i32(i16(i8_4)*i8_4));
-        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width, u32_1 + u32(u16(u8_1)*u8_1) + u32(u16(u8_2)*u8_2) + u32(u16(u8_3)*u8_3) + u32(u16(u8_4)*u8_4));
-        check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i16(i8_1)*i8_1) + i32(i16(i8_2)*i8_2) + i32(i16(i8_3)*i8_3) + i32(i16(i8_4)*i8_4));
+        check("vrmpy(v*.ub,v*.ub)", hvx_width, u32(u8_1)*u8_1 + u32(u8_2)*u8_2 + u32(u8_3)*u8_3 + u32(u8_4)*u8_4);
+        check("vrmpy(v*.b,v*.b)", hvx_width, i32(i8_1)*i8_1 + i32(i8_2)*i8_2 + i32(i8_3)*i8_3 + i32(i8_4)*i8_4);
+        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width, u32_1 + u32(u8_1)*u8_1 + u32(u8_2)*u8_2 + u32(u8_3)*u8_3 + u32(u8_4)*u8_4);
+check("v*.w += vrmpy(v*.b,v*.b)", hvx_width, i32_1 + i32(i8_1)*i8_1 + i32(i8_2)*i8_2 + i32(i8_3)*i8_3 + i32(i8_4)*i8_4);
 
 #if 0
         // These don't generate yet because we don't support mixed signs yet.
-        check("vrmpy(v*.ub,v*.b)", hvx_width, i32(i16(u8_1)*i8_1) + i32(i16(u8_2)*i8_2) + i32(i16(u8_3)*i8_3) + i32(i16(u8_4)*i8_4));
-        check("v*.w += vrmpy(v*.ub,v*.b)", hvx_width, i32_1 + i32(i16(u8_1)*i8_1) + i32(i16(u8_2)*i8_2) + i32(i16(u8_3)*i8_3) + i32(i16(u8_4)*i8_4));
+        check("vrmpy(v*.ub,v*.b)", hvx_width, i32(u8_1)*i8_1) + i32(u8_2)*i8_2) + i32(u8_3)*i8_3 + i32(u8_4)*i8_4);
+        check("v*.w += vrmpy(v*.ub,v*.b)", hvx_width, i32_1 + i32(u8_1)*i8_1 + i32(u8_2)*i8_2 + i32(u8_3)*i8_3 + i32(u8_4)*i8_4);
         check("vrmpy(v*.ub,v*.b)", hvx_width, i16(u8_1)*i8_1 + i16(u8_2)*i8_2 + i16(u8_3)*i8_3 + i16(u8_4)*i8_4);
 #endif
 
