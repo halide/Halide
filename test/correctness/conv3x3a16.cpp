@@ -46,15 +46,15 @@ int main(int arch, char **argv) {
 #else
     conv3x3(x, y) =
         cast<uint8_t>(clamp(
-            (cast<int32_t>(input(x-1, y-1)) * cast<int32_t>(mask(0,0)) +
-             cast<int32_t>(input(x,   y-1)) * cast<int32_t>(mask(1,0)) +
-             cast<int32_t>(input(x+1, y-1)) * cast<int32_t>(mask(2,0)) +
-             cast<int32_t>(input(x-1, y))   * cast<int32_t>(mask(0,1)) +
-             cast<int32_t>(input(x,   y))   * cast<int32_t>(mask(1,1)) + 
-             cast<int32_t>(input(x+1, y))   * cast<int32_t>(mask(2,1)) +
-             cast<int32_t>(input(x-1, y+1)) * cast<int32_t>(mask(0,2)) +
-             cast<int32_t>(input(x,   y+1)) * cast<int32_t>(mask(1,2)) +
-             cast<int32_t>(input(x+1, y+1)) * cast<int32_t>(mask(2,2))) >> 4,
+            (cast<int16_t>(input(x-1, y-1)) * cast<int16_t>(mask(0,0)) +
+             cast<int16_t>(input(x,   y-1)) * cast<int16_t>(mask(1,0)) +
+             cast<int16_t>(input(x+1, y-1)) * cast<int16_t>(mask(2,0)) +
+             cast<int16_t>(input(x-1, y))   * cast<int16_t>(mask(0,1)) +
+             cast<int16_t>(input(x,   y))   * cast<int16_t>(mask(1,1)) + 
+             cast<int16_t>(input(x+1, y))   * cast<int16_t>(mask(2,1)) +
+             cast<int16_t>(input(x-1, y+1)) * cast<int16_t>(mask(0,2)) +
+             cast<int16_t>(input(x,   y+1)) * cast<int16_t>(mask(1,2)) +
+             cast<int16_t>(input(x+1, y+1)) * cast<int16_t>(mask(2,2))) >> 4,
             0, 255));
 #endif
 
@@ -65,12 +65,10 @@ int main(int arch, char **argv) {
         conv3x3.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
         int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
-        printf("HVX vector_size = %d\n", vector_size); 
         conv3x3.hexagon().vectorize(x, vector_size);
 
         conv3x3.output_buffer().dim(0).set_min(0);
         conv3x3.output_buffer().dim(1).set_min(0);
-        conv3x3.output_buffer().set_host_alignment(vector_size);
 
         // Require scanlines of the input and output to be aligned.
         auto out_buffer = conv3x3.output_buffer();
