@@ -95,7 +95,6 @@ int main(int arch, char **argv) {
             if (correct < 0) { correct = 0; }
 
             if (correct != out(x, y)) {
-                // printf("in(%d, %d) = %d\n", x, y, in(x, y));
                 printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), correct);
                 return -1;
             }
