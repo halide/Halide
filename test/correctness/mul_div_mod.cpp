@@ -570,20 +570,21 @@ int main(int argc, char **argv) {
         div_vector_widths.push_back(1);
     }
 
+    Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
     for (int vector_width : mul_vector_widths) {
         std::cout << "Testing mul vector_width: " << vector_width << "\n";
-        auto f = std::async(test_mul, vector_width, scheduling, target);
+        auto f = pool.async(test_mul, vector_width, scheduling, target);
         futures.push_back(std::move(f));
     }
 
     for (int vector_width : div_vector_widths) {
         std::cout << "Testing div_mod vector_width: " << vector_width << "\n";
-        auto f = std::async(test_div_mod, vector_width, scheduling, target);
+        auto f = pool.async(test_div_mod, vector_width, scheduling, target);
         futures.push_back(std::move(f));
     }
 
-    futures.push_back(std::async(f_mod<float, double>));
+    futures.push_back(pool.async(f_mod<float, double>));
 
     bool success = true;
     for (auto &f : futures) {

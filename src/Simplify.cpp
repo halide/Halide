@@ -38,7 +38,7 @@ using std::vector;
 namespace {
 
 // Things that we can constant fold: Immediates and broadcasts of immediates.
-bool is_simple_const(Expr e) {
+bool is_simple_const(const Expr &e) {
     if (e.as<IntImm>()) return true;
     if (e.as<UIntImm>()) return true;
     // Don't consider NaN to be a "simple const", since it doesn't obey equality rules assumed elsewere
@@ -53,7 +53,7 @@ bool is_simple_const(Expr e) {
 // If the Expr is (var relop const) or (const relop var),
 // fill in the var name and return true.
 template<typename RelOp>
-bool is_var_relop_simple_const(Expr e, string* name) {
+bool is_var_relop_simple_const(const Expr &e, string* name) {
     if (const RelOp *r = e.as<RelOp>()) {
         if (is_simple_const(r->b)) {
             const Variable *v = r->a.template as<Variable>();
@@ -73,7 +73,7 @@ bool is_var_relop_simple_const(Expr e, string* name) {
     return false;
 }
 
-bool is_var_simple_const_comparison(Expr e, string* name) {
+bool is_var_simple_const_comparison(const Expr &e, string* name) {
     // It's not clear if GT, LT, etc would be useful
     // here; leaving them out until proven otherwise.
     return is_var_relop_simple_const<EQ>(e, name) ||
@@ -112,7 +112,7 @@ Expr indeterminate_expression_error(Type t) {
 // If 'e' is indeterminate_expression of other type,
 //      make a new indeterminate_expression of the proper type, set *expr to it and return true.
 // Otherwise, leave *expr untouched and return false.
-bool propagate_indeterminate_expression(Expr e, Type t, Expr *expr) {
+bool propagate_indeterminate_expression(const Expr &e, Type t, Expr *expr) {
     const Call *call = e.as<Call>();
     if (call && call->is_intrinsic(Call::indeterminate_expression)) {
         if (call->type != t) {
@@ -125,12 +125,12 @@ bool propagate_indeterminate_expression(Expr e, Type t, Expr *expr) {
     return false;
 }
 
-bool propagate_indeterminate_expression(Expr e0, Expr e1, Type t, Expr *expr) {
+bool propagate_indeterminate_expression(const Expr &e0, const Expr &e1, Type t, Expr *expr) {
     return propagate_indeterminate_expression(e0, t, expr) ||
            propagate_indeterminate_expression(e1, t, expr);
 }
 
-bool propagate_indeterminate_expression(Expr e0, Expr e1, Expr e2, Type t, Expr *expr) {
+bool propagate_indeterminate_expression(const Expr &e0, const Expr &e1, const Expr &e2, Type t, Expr *expr) {
     return propagate_indeterminate_expression(e0, t, expr) ||
            propagate_indeterminate_expression(e1, t, expr) ||
            propagate_indeterminate_expression(e2, t, expr);
@@ -162,7 +162,7 @@ public:
 
 /** Test if an expression's value could be different at different
  * points in the code. */
-bool expr_is_pure(Expr e) {
+bool expr_is_pure(const Expr &e) {
     ExprIsPure pure;
     e.accept(&pure);
     return pure.result;
@@ -244,7 +244,7 @@ private:
     // the large chains of conditions in the visit methods
     // below. Unlike the versions in IROperator, these only match
     // scalars.
-    bool const_float(Expr e, double *f) {
+    bool const_float(const Expr &e, double *f) {
         if (e.type().is_vector()) {
             return false;
         } else if (const double *p = as_const_float(e)) {
@@ -255,7 +255,7 @@ private:
         }
     }
 
-    bool const_int(Expr e, int64_t *i) {
+    bool const_int(const Expr &e, int64_t *i) {
         if (e.type().is_vector()) {
             return false;
         } else if (const int64_t *p = as_const_int(e)) {
@@ -266,7 +266,7 @@ private:
         }
     }
 
-    bool const_uint(Expr e, uint64_t *u) {
+    bool const_uint(const Expr &e, uint64_t *u) {
         if (e.type().is_vector()) {
             return false;
         } else if (const uint64_t *p = as_const_uint(e)) {
@@ -283,7 +283,7 @@ private:
     // it constant-folds. For some expressions the bounds of the
     // expression is at least as complex as the expression, so
     // recursively mutating the bounds causes havoc.
-    bool const_int_bounds(Expr e, int64_t *min_val, int64_t *max_val) {
+    bool const_int_bounds(const Expr &e, int64_t *min_val, int64_t *max_val) {
         Type t = e.type();
 
         if (const int64_t *i = as_const_int(e)) {
@@ -424,7 +424,7 @@ private:
 
     // Check if an Expr is integer-division-rounding-up by the given
     // factor. If so, return the core expression.
-    Expr is_round_up_div(Expr e, int64_t factor) {
+    Expr is_round_up_div(const Expr &e, int64_t factor) {
         if (!no_overflow(e.type())) return Expr();
         const Div *div = e.as<Div>();
         if (!div) return Expr();
@@ -437,7 +437,7 @@ private:
 
     // Check if an Expr is a rounding-up operation, and if so, return
     // the factor.
-    Expr is_round_up(Expr e, int64_t *factor) {
+    Expr is_round_up(const Expr &e, int64_t *factor) {
         if (!no_overflow(e.type())) return Expr();
         const Mul *mul = e.as<Mul>();
         if (!mul) return Expr();
@@ -4849,7 +4849,7 @@ bool can_prove(Expr e) {
 
 namespace {
 
-void check(Expr a, Expr b) {
+void check(const Expr &a, const Expr &b) {
     //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a);
     if (!equal(simpler, b)) {
@@ -4861,7 +4861,7 @@ void check(Expr a, Expr b) {
     }
 }
 
-void check(Stmt a, Stmt b) {
+void check(const Stmt &a, const Stmt &b) {
     //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Stmt simpler = simplify(a);
     if (!equal(simpler, b)) {
@@ -4873,7 +4873,7 @@ void check(Stmt a, Stmt b) {
     }
 }
 
-void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
+void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
     //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a, true, bi);
     if (!equal(simpler, b)) {
@@ -4890,11 +4890,11 @@ Expr interleave_vectors(vector<Expr> e) {
     return Shuffle::make_interleave(e);
 }
 
-Expr ramp(Expr base, Expr stride, int w) {
+Expr ramp(const Expr &base, const Expr &stride, int w) {
     return Ramp::make(base, stride, w);
 }
 
-Expr broadcast(Expr base, int w) {
+Expr broadcast(const Expr &base, int w) {
     return Broadcast::make(base, w);
 }
 

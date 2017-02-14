@@ -940,7 +940,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
-            auto module_producer = [&generator_name, &generator_args, &cerr]
+            auto module_producer = [&generator_name, &generator_args]
                 (const std::string &name, const Target &target) -> Module {
                     auto sub_generator_args = generator_args;
                     sub_generator_args["target"] = target.to_string();
@@ -969,6 +969,10 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 }
 
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
+
+void GeneratorParamBase::check_value_valid() const {
+    user_assert(value_valid) << "The GeneratorParam " << name << " cannot be accessed before build() or generate() is called.\n";
+}
 
 /* static */
 GeneratorRegistry &GeneratorRegistry::get_registry() {
@@ -1212,6 +1216,9 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
             }
         }
         user_error << "Generator " << generator_name << " has no GeneratorParam named: " << key << "\n";
+    }
+    for (auto p : generator_params) {
+        p->value_valid = true;
     }
     generator_params_set = true;
 }
@@ -1655,6 +1662,7 @@ Target StubOutputBufferBase::get_target() const {
 
 void generator_test() {
     GeneratorParam<int> gp("gp", 1);
+    gp.value_valid = true;
 
     // Verify that RDom parameter-pack variants can convert GeneratorParam to Expr
     RDom rdom(0, gp, 0, gp);
@@ -1706,6 +1714,8 @@ void generator_test() {
     check_ratio(NAN, {0, 0});
     check_ratio(INFINITY, {1, 0});
     check_ratio(-INFINITY, {-1, 0});
+
+    std::cout << "Generator test passed" << std::endl;
 }
 
 }  // namespace Internal

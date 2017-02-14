@@ -13,6 +13,7 @@
 #include "IROperator.h"
 #include "Outputs.h"
 #include "StmtToHtml.h"
+#include "ThreadPool.h"
 
 using Halide::Internal::debug;
 
@@ -94,8 +95,8 @@ uint64_t target_feature_mask(const Target &target) {
     static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
     uint64_t feature_mask = 0;
     for (int i = 0; i < Target::FeatureEnd; ++i) {
-        if (target.has_feature(static_cast<Target::Feature>(i))) {
-            feature_mask |= static_cast<uint64_t>(1) << i;
+        if (target.has_feature((Target::Feature) i)) {
+            feature_mask |= ((uint64_t) 1) << i;
         }
     }
     return feature_mask;
@@ -319,9 +320,21 @@ void compile_multitarget(const std::string &fn_name,
     }
 
     std::vector<std::future<void>> futures;
-    // If we are running with HL_DEBUG_CODEGEN=1, choose a policy that enforces
+    // If we are running with HL_DEBUG_CODEGEN=1, use threads=1 to enforce
     // sequential execution, so that debug output won't be utterly incomprehensible
-    std::launch policy = debug::debug_level() > 0 ? std::launch::deferred : std::launch::async;
+    const size_t num_threads = (debug::debug_level() > 0) ? 1 : Internal::ThreadPool<void>::num_processors_online();
+    Internal::ThreadPool<void> pool(num_threads);
+
+    // For safety, the runtime must be built only with features common to all
+    // of the targets; given an unusual ordering like
+    //
+    //     x86-64-linux,x86-64-sse41 
+    //
+    // we should still always be *correct*: this ordering would never select sse41
+    // (since x86-64-linux would be selected first due to ordering), but could
+    // crash on non-sse41 machines (if we generated a runtime with sse41 instructions
+    // included). So we'll keep track of the common features as we walk thru the targets.
+    uint64_t runtime_features_mask = (uint64_t)-1LL;
 
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
@@ -374,16 +387,19 @@ void compile_multitarget(const std::string &fn_name,
         Outputs sub_out = add_suffixes(output_files, suffix);
         internal_assert(sub_out.object_name.empty());
         sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, target);
-        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: compile_sub_target " << o.object_name << "\n";
             m.compile(o);
         }, std::move(sub_module), std::move(sub_out)));
 
+        const uint64_t cur_target_mask = target_feature_mask(target);
         Expr can_use = (target == base_target) ?
                         IntImm::make(Int(32), 1) :
                         Call::make(Int(32), "halide_can_use_target_features", 
-                                   {UIntImm::make(UInt(64), target_feature_mask(target))}, 
+                                   {UIntImm::make(UInt(64), cur_target_mask)}, 
                                    Call::Extern);
+
+        runtime_features_mask &= cur_target_mask;
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
@@ -392,10 +408,20 @@ void compile_multitarget(const std::string &fn_name,
     // If we haven't specified "no runtime", build a runtime with the base target
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
-        Target runtime_target = base_target.without_feature(Target::NoRuntime);
+        // Start with a bare Target, set only the features we know are common to all.
+        Target runtime_target(base_target.os, base_target.arch, base_target.bits);
+        // We never want NoRuntime set here.
+        runtime_features_mask &= ~(((uint64_t)(1)) << Target::NoRuntime);
+        if (runtime_features_mask) {
+            for (int i = 0; i < Target::FeatureEnd; ++i) {
+                if (runtime_features_mask & (((uint64_t) 1) << i)) {
+                    runtime_target.set_feature((Target::Feature) i);
+                }
+            }
+        }
         Outputs runtime_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_runtime", runtime_target));
-        futures.emplace_back(std::async(policy, [](Target t, Outputs o) {
+        futures.emplace_back(pool.async([](Target t, Outputs o) {
             debug(1) << "compile_multitarget: compile_standalone_runtime " << o.static_library_name << "\n";
             compile_standalone_runtime(o, t);
         }, std::move(runtime_target), std::move(runtime_out)));
@@ -432,7 +458,7 @@ void compile_multitarget(const std::string &fn_name,
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
         Outputs wrapper_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true));
-        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: wrapper " << o.object_name << "\n";
             m.compile(o);
         }, std::move(wrapper_module), std::move(wrapper_out)));
@@ -442,7 +468,7 @@ void compile_multitarget(const std::string &fn_name,
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::External));
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
-        futures.emplace_back(std::async(policy, [](Module m, Outputs o) {
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";
             m.compile(o);
         }, std::move(header_module), std::move(header_out)));

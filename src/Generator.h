@@ -212,6 +212,8 @@ template<typename T> class Buffer;
 
 namespace Internal {
 
+EXPORT void generator_test();
+
 /**
  * ValueTracker is an internal utility class that attempts to track and flag certain
  * obvious Stub-related errors at Halide compile time: it tracks the constraints set
@@ -317,6 +319,8 @@ struct select_type : std::conditional<First::value, typename First::type, typena
 template<typename First>
 struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
 
+class GeneratorBase;
+
 class GeneratorParamBase {
 public:
     EXPORT explicit GeneratorParamBase(const std::string &name);
@@ -325,8 +329,11 @@ public:
     const std::string name;
 
 protected:
+    friend void ::Halide::Internal::generator_test();
     friend class GeneratorBase;
     friend class StubEmitter;
+
+    EXPORT void check_value_valid() const;
 
     virtual void set_from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
@@ -360,6 +367,11 @@ protected:
 private:
     explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
     void operator=(const GeneratorParamBase &) = delete;
+
+    // It is only valid to examine a GeneratorParam's value after the owning
+    // Generator has had set_generator_param_values() called (even if this
+    // particular GP was left unaffected).
+    bool value_valid{false};
 };
 
 template<typename T>
@@ -367,7 +379,7 @@ class GeneratorParamImpl : public GeneratorParamBase {
 public:
     GeneratorParamImpl(const std::string &name, const T &value) : GeneratorParamBase(name), value_(value) {}
 
-    T value() const { return value_; }
+    T value() const { check_value_valid(); return value_; }
 
     operator T() const { return this->value(); }
 
@@ -929,8 +941,6 @@ public:
     StubInputBuffer(const Buffer<T2> &b) : parameter_(parameter_from_buffer(b)) {}
 };
 
-class GeneratorBase;
-
 class StubOutputBufferBase {
 protected:
     Func f;
@@ -1213,12 +1223,12 @@ public:
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    ValueType operator[](size_t i) const {
+    const ValueType &operator[](size_t i) const {
         return get_values<ValueType>()[i];
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    ValueType at(size_t i) const {
+    const ValueType &at(size_t i) const {
         return get_values<ValueType>().at(i);
     }
 
@@ -1637,12 +1647,12 @@ public:
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    ValueType operator[](size_t i) const {
+    const ValueType &operator[](size_t i) const {
         return get_values<ValueType>()[i];
     }
 
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
-    ValueType at(size_t i) const {
+    const ValueType &at(size_t i) const {
         return get_values<ValueType>().at(i);
     }
 
@@ -1781,6 +1791,11 @@ class GeneratorOutput_Func : public GeneratorOutputImpl<T> {
 private:
     using Super = GeneratorOutputImpl<T>;
 
+    NO_INLINE Func &get_assignable_func_ref(size_t i) {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() > i);
+        return this->funcs_.at(i);
+    }
+
 protected:
     using TBase = typename Super::TBase;
 
@@ -1791,6 +1806,27 @@ protected:
 
     GeneratorOutput_Func(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, IOKind::Function, t, d) {
+    }
+
+public:
+    // Allow Output<Func> = Func
+    template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
+    GeneratorOutput_Func<T> &operator=(const Func &f) {
+        // Don't bother verifying the Func type, dimensions, etc., here: 
+        // That's done later, when we produce the pipeline.
+        get_assignable_func_ref(0) = f;
+        return *this;
+    }
+
+    // Allow Output<Func[]> = Func
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Func &operator[](size_t i) {
+        return get_assignable_func_ref(i);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    const Func &operator[](size_t i) const {
+        return Super::operator[](i);
     }
 };
 
@@ -1878,6 +1914,11 @@ public:
     template <typename T2>
     GeneratorOutput<T> &operator=(const Internal::StubOutputBuffer<T2> &stub_output_buffer) {
         Super::operator=(stub_output_buffer);
+        return *this;
+    }
+
+    GeneratorOutput<T> &operator=(const Func &f) {
+        Super::operator=(f);
         return *this;
     }
 };
@@ -2133,8 +2174,6 @@ private:
     GeneratorRegistry(const GeneratorRegistry &) = delete;
     void operator=(const GeneratorRegistry &) = delete;
 };
-
-EXPORT void generator_test();
 
 }  // namespace Internal
 
