@@ -6,18 +6,15 @@ int main(int argc, char **argv) {
     Func f("f"), g("g");
     Var x, xi;
 
-    g(x) = x;
-    f(x) = g(x-2) + g(x+2);
+    g(x) = sqrt(x);
+    f(x) = g(x) + g(x+8);
 
-    g.align_storage(x, 8).fold_storage(x, 8).store_root().compute_at(f, xi);
-    // Uncommenting this would be great, because all access to g would
-    // be at constant indices, and the values could live in 8
-    // registers, but sliding window can't handle it. It only slides
-    // over x or xi, not their combination.
-    
-    f.bound(x, 0, 1024).split(x, x, xi, 8, TailStrategy::RoundUp);
-    
-    f.realize(100);
-    
+    g.store_root().compute_at(f, xi).fold_storage(x, 32).vectorize(x, 8, TailStrategy::RoundUp);//.unroll(x);
+    f.bound(x, 0, 1024).vectorize(x, 8).split(x, x, xi, 4, TailStrategy::RoundUp).unroll(xi);
+
+    f.compile_to_assembly("/dev/stdout", {}, Target("host-no_runtime-no_bounds_query-no_asserts"));
+
+    f.realize(1024);
+
     return 0;
 }
