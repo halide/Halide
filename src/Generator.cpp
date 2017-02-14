@@ -940,7 +940,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
-            auto module_producer = [&generator_name, &generator_args, &cerr]
+            auto module_producer = [&generator_name, &generator_args]
                 (const std::string &name, const Target &target) -> Module {
                     auto sub_generator_args = generator_args;
                     sub_generator_args["target"] = target.to_string();
