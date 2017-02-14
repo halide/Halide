@@ -1532,6 +1532,11 @@ GeneratorInputBase::GeneratorInputBase(size_t array_size,
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this, nullptr);
 }
 
+GeneratorInputBase::GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    : GeneratorInputBase(1, name, kind, t, d) {
+    // nothing
+}
+
 GeneratorInputBase::~GeneratorInputBase() { 
     ObjectInstanceRegistry::unregister_instance(this); 
 }
@@ -1624,6 +1629,11 @@ GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &n
     internal_assert(kind != IOKind::Scalar);
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
                                               this, nullptr);
+}
+
+GeneratorOutputBase::GeneratorOutputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    : GeneratorOutputBase(1, name, kind, t, d) {
+    // nothing
 }
 
 GeneratorOutputBase::~GeneratorOutputBase() { 
