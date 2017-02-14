@@ -49,17 +49,20 @@ extern uint64_t halide_hexagon_get_device_size(void *user_context, struct buffer
  * pipelines. To avoid this cost, HVX can be powered on prior to
  * running several pipelines, and powered off afterwards. If HVX is
  * powered on, subsequent calls to power HVX on will be cheap. */
+// @{
+extern int halide_hexagon_power_hvx_on(void *user_context);
+extern int halide_hexagon_power_hvx_off(void *user_context);
+extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
+// @}
 
-/**
- * Power mode for halide_hexagon_power_hvx_on_mode */
+/** Power modes for Hexagon. */
 typedef enum halide_hvx_power_mode_t {
     halide_hvx_power_low     = 0,
     halide_hvx_power_nominal = 1,
     halide_hvx_power_turbo   = 2
 } halide_hvx_power_mode_t;
 
-/**
- * Performance parameters for halide_hexagon_power_hvx_on_perf
+/** More detailed power settings to control Hexagon.
  * @param set_mips - Set to TRUE to requst MIPS
  * @param mipsPerThread - mips requested per thread, to establish a minimal clock frequency per HW thread
  * @param mipsTotal - Total mips requested, to establish total number of MIPS required across all HW threads
@@ -83,12 +86,12 @@ typedef struct {
     int latency;
 } halide_hvx_power_perf_t;
 
+/** Set a performance target for HVX. HVX applications can vote for
+ * the performance levels they want, which may or may not be respected
+ * by Hexagon. */
 // @{
-extern int halide_hexagon_power_hvx_on(void *user_context);
-extern int halide_hexagon_power_hvx_on_mode(void *user_context, halide_hvx_power_mode_t mode);
-extern int halide_hexagon_power_hvx_on_perf(void *user_context, halide_hvx_power_perf_t *perf);
-extern int halide_hexagon_power_hvx_off(void *user_context);
-extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */);
+extern int halide_hexagon_set_performance_mode(void *user_context, halide_hvx_power_mode_t mode);
+extern int halide_hexagon_set_performance(void *user_context, halide_hvx_power_perf_t *perf);
 // @}
 
 /** These are forward declared here to allow clients to override the
@@ -96,8 +99,10 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 // @{
 extern int halide_hexagon_initialize_kernels(void *user_context,
                                              void **module_ptr,
-                                             const uint8_t *code, uint64_t code_size);
+                                             const uint8_t *code, uint64_t code_size,
+                                             uint32_t use_shared_object);
 extern int halide_hexagon_run(void *user_context,
+                              uint32_t use_shared_object,
                               void *module_ptr,
                               const char *name,
                               halide_hexagon_handle_t *function,
