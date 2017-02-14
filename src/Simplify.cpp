@@ -4275,7 +4275,8 @@ private:
         // of vectors. This is a bit of a hacky heuristic to avoid
         // undoing the work of AlignLoads for Hexagon.
         if (!op->is_concat() || new_vectors[0].type().is_scalar()) {
-            // Try to convert a shuffled load into a shuffle of a load.
+            // Try to convert a load with shuffled indices into a
+            // shuffle of a dense load.
             if (const Load *first_load = new_vectors[0].as<Load>()) {
                 vector<Expr> load_predicates;
                 vector<Expr> load_indices;

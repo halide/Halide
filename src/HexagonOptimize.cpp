@@ -63,44 +63,6 @@ namespace {
 // Broadcast to an unknown number of lanes, for making patterns.
 Expr bc(Expr x) { return Broadcast::make(x, 0); }
 
-// Flatten a binary operator tree into a list of operands.
-template <typename BinOp>
-void flatten_binary_op(const BinOp *op, vector<Expr> &operands) {
-    const BinOp *a = op->a.template as<BinOp>();
-    const BinOp *b = op->b.template as<BinOp>();
-    if (a) {
-        flatten_binary_op(a, operands);
-    } else {
-        operands.push_back(op->a);
-    }
-    if (b) {
-        flatten_binary_op(b, operands);
-    } else {
-        operands.push_back(op->b);
-    }
-}
-
-// Reassemble a list of binary operator operands into a (balanced)
-// binary tree.
-template <typename BinOp>
-Expr make_binary_op(const vector<Expr> &operands) {
-    if (operands.empty()) {
-        return Expr();
-    }
-    if (operands.size() == 1) {
-        return operands[0];
-    }
-    vector<Expr> ops;
-    for (size_t i = 0; i < operands.size(); i += 2) {
-        if (i + 1 < operands.size()) {
-            ops.push_back(BinOp::make(operands[i], operands[i + 1]));
-        } else {
-            ops.push_back(operands[i]);
-        }
-    }
-    return make_binary_op<BinOp>(ops);
-}
-
 // This mutator rewrites patterns with an unknown number of lanes to
 // have the specified number of lanes.
 class WithLanes : public IRMutator {
