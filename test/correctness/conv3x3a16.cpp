@@ -7,7 +7,6 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int arch, char **argv) {
-    int verbose = 0;
     const int W = 256, H = 256;
     Buffer<uint8_t> in(W, H);
     // Set up the input.
@@ -83,14 +82,6 @@ int main(int arch, char **argv) {
     Buffer<uint8_t> out = conv3x3.realize(W, H, target);
 
 
-    if (verbose) {
-        for (int y = 0; y < 3; y++) {
-            for (int x = 0; x < 3; x++) {
-                printf("mask(%d, %d) = %d\n", x, y, mask(x, y));
-            }
-        }
-    }
-
     // Boundary condition
     auto bin = [&](int x, int y) { return (x >= 0 && x < W && y >=0 && y < H) ? in(x, y) : exterior; };
 
@@ -106,8 +97,7 @@ int main(int arch, char **argv) {
             if (correct != out(x, y)) {
                 // printf("in(%d, %d) = %d\n", x, y, in(x, y));
                 printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), correct);
-                if (!verbose)
-                    return -1;
+                return -1;
             }
         }
     }
