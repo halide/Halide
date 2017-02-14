@@ -241,7 +241,7 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
         // Remember this allocation so it can be re-used by a later allocation.
         free_stack_allocs.push_back(alloc);
         cur_stack_alloc_total -= alloc.stack_bytes;
-        debug(4) << "cur_stack_alloc_total += " << alloc.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
+        debug(4) << "cur_stack_alloc_total -= " << alloc.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
     } else {
         internal_assert(alloc.destructor);
         trigger_destructor(alloc.destructor_function, alloc.destructor);
