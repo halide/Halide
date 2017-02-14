@@ -44,18 +44,13 @@ int main(int arch, char **argv) {
                 cast<int16_t>(mask(1+r.x, 1+r.y))) >> 4,
             0, 255));
 #else
-    conv3x3(x, y) =
-        cast<uint8_t>(clamp(
-            (cast<int16_t>(input(x-1, y-1)) * cast<int16_t>(mask(0,0)) +
-             cast<int16_t>(input(x,   y-1)) * cast<int16_t>(mask(1,0)) +
-             cast<int16_t>(input(x+1, y-1)) * cast<int16_t>(mask(2,0)) +
-             cast<int16_t>(input(x-1, y))   * cast<int16_t>(mask(0,1)) +
-             cast<int16_t>(input(x,   y))   * cast<int16_t>(mask(1,1)) + 
-             cast<int16_t>(input(x+1, y))   * cast<int16_t>(mask(2,1)) +
-             cast<int16_t>(input(x-1, y+1)) * cast<int16_t>(mask(0,2)) +
-             cast<int16_t>(input(x,   y+1)) * cast<int16_t>(mask(1,2)) +
-             cast<int16_t>(input(x+1, y+1)) * cast<int16_t>(mask(2,2))) >> 4,
-            0, 255));
+    Expr sum = 0;
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            sum += cast<int16_t>(input(x + j, y + i)) * cast<int16_t>(mask(j + 1, i + 1));
+        }
+    }
+    conv3x3(x, y) = cast<uint8_t>(clamp(sum >> 4, 0, 255));
 #endif
 
     // Schedule.
