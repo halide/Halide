@@ -769,7 +769,7 @@ int main(int argc, char **argv) {
     Buffer<float> output_scalar = Buffer<float>::make_scalar();
     Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
     Buffer<float> output_array2[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array3[2] = {{1}, {1}};
+    Buffer<float> output_array3[2] = {Buffer<float>{1}, Buffer<float>{1}};
 
     result = metadata_tester(
         input,             // Input<Func>

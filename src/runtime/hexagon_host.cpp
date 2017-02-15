@@ -24,7 +24,14 @@ struct _remote_buffer__seq_octet {
    int dataLen;
 };
 
-typedef int (*remote_initialize_kernels_fn)(const unsigned char*, int, halide_hexagon_handle_t*);
+typedef int (*remote_initialize_kernels_v2_fn)(const unsigned char* codeptr,
+                                               int codesize,
+                                               int use_shared_object,
+                                               halide_hexagon_handle_t*);
+typedef int (*remote_initialize_kernels_fn)(const unsigned char* codeptr,
+                                            int codesize,
+                                            halide_hexagon_handle_t*);
+typedef halide_hexagon_handle_t (*remote_get_symbol_v3_fn)(halide_hexagon_handle_t, const char*, int, int, halide_hexagon_handle_t*);
 typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
@@ -40,16 +47,18 @@ typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
 typedef void (*host_free_fn)(void *);
 
+WEAK remote_initialize_kernels_v2_fn remote_initialize_kernels_v2 = NULL;
 WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
+WEAK remote_get_symbol_v3_fn remote_get_symbol_v3 = NULL;
 WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
 WEAK remote_poll_log_fn remote_poll_log = NULL;
 WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
 WEAK remote_power_fn remote_power_hvx_on = NULL;
-WEAK remote_power_mode_fn remote_power_hvx_on_mode = NULL;
-WEAK remote_power_perf_fn remote_power_hvx_on_perf = NULL;
 WEAK remote_power_fn remote_power_hvx_off = NULL;
+WEAK remote_power_perf_fn remote_set_performance = NULL;
+WEAK remote_power_mode_fn remote_set_performance_mode = NULL;
 
 WEAK host_malloc_init_fn host_malloc_init = NULL;
 WEAK host_malloc_init_fn host_malloc_deinit = NULL;
@@ -101,7 +110,8 @@ __attribute__((always_inline)) void get_symbol(void *user_context, void *host_li
 
 // Load the hexagon remote runtime.
 WEAK int init_hexagon_runtime(void *user_context) {
-    if (remote_initialize_kernels && remote_run && remote_release_kernels) {
+    if ((remote_initialize_kernels_v2 || remote_initialize_kernels)
+         && remote_run && remote_release_kernels) {
         // Already loaded.
         return 0;
     }
@@ -115,10 +125,12 @@ WEAK int init_hexagon_runtime(void *user_context) {
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Get the symbols we need from the library.
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels);
-    if (!remote_initialize_kernels) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol);
-    if (!remote_get_symbol) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels_v2", remote_initialize_kernels_v2, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels, /* required */ false);
+    if (!remote_initialize_kernels_v2 && !remote_initialize_kernels) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_v3", remote_get_symbol_v3, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol, /* required */ false);
+    if (!remote_get_symbol && !remote_get_symbol_v3) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels", remote_release_kernels);
@@ -139,9 +151,9 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     // If these are unavailable, then the runtime always powers HVX on and so these are not necessary.
     get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_on", remote_power_hvx_on, /* required */ false);
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_on_mode", remote_power_hvx_on_mode, /* required */ false);
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_on_perf", remote_power_hvx_on_perf, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_power_hvx_off", remote_power_hvx_off, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_set_performance", remote_set_performance, /* required */ false);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_set_performance_mode", remote_set_performance_mode, /* required */ false);
 
     host_malloc_init();
 
@@ -172,15 +184,16 @@ WEAK bool halide_is_hexagon_available(void *user_context) {
 }
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
-                                           const uint8_t *code, uint64_t code_size) {
+                                           const uint8_t *code, uint64_t code_size,
+                                           uint32_t use_shared_object) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
-
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
                         << ", state_ptr: " << state_ptr
                         << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
-                        << ", code_size: " << (int)code_size << ")\n";
+                        << ", code_size: " << (int)code_size
+                        << ", use_shared_object: " << use_shared_object << ")\n";
     halide_assert(user_context, state_ptr != NULL);
 
     #ifdef DEBUG_RUNTIME
@@ -210,7 +223,16 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     if (!(*state)->module) {
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
-        result = remote_initialize_kernels(code, code_size, &module);
+        if (remote_initialize_kernels_v2) {
+            result = remote_initialize_kernels_v2(code, code_size, use_shared_object, &module);
+        } else {
+            halide_assert(user_context, remote_initialize_kernels != NULL);
+            if (use_shared_object) {
+                error(user_context) << "Hexagon runtime does not support shared objects.\n";
+                return -1;
+            }
+            result = remote_initialize_kernels(code, code_size, &module);
+        }
         poll_log(user_context);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
@@ -231,7 +253,6 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
 
     return result != 0 ? -1 : 0;
 }
-
 namespace {
 
 // Prepare an array of remote_buffer arguments, mapping buffers if
@@ -266,6 +287,7 @@ WEAK int map_arguments(void *user_context, int arg_count,
 }  // namespace
 
 WEAK int halide_hexagon_run(void *user_context,
+                            uint32_t use_shared_object,
                             void *state_ptr,
                             const char *name,
                             halide_hexagon_handle_t* function,
@@ -279,6 +301,7 @@ WEAK int halide_hexagon_run(void *user_context,
 
     halide_hexagon_handle_t module = state_ptr ? ((module_state *)state_ptr)->module : 0;
     debug(user_context) << "Hexagon: halide_hexagon_run ("
+                        << "use_shared_object: " << use_shared_object << ", "
                         << "user_context: " << user_context << ", "
                         << "state_ptr: " << state_ptr << " (" << module << "), "
                         << "name: " << name << ", "
@@ -286,8 +309,15 @@ WEAK int halide_hexagon_run(void *user_context,
 
     // If we haven't gotten the symbol for this function, do so now.
     if (*function == 0) {
-        debug(user_context) << "    halide_hexagon_remote_get_symbol " << name << " -> ";
-        *function = remote_get_symbol(module, name, strlen(name) + 1);
+        debug(user_context) << "    halide_hexagon_remote_get_symbol" << name << " -> ";
+        if (remote_get_symbol_v3) {
+            halide_hexagon_handle_t sym = 0;
+            int result = remote_get_symbol_v3(module, name, strlen(name) + 1, use_shared_object, &sym);
+            *function = result == 0 ? sym : 0;
+        } else {
+            halide_assert(user_context, remote_get_symbol != NULL);
+            *function = remote_get_symbol(module, name, strlen(name) + 1);
+        }
         poll_log(user_context);
         debug(user_context) << "        " << *function << "\n";
         if (*function == 0) {
@@ -668,76 +698,6 @@ WEAK int halide_hexagon_power_hvx_on(void *user_context) {
     return 0;
 }
 
-WEAK int halide_hexagon_power_hvx_on_mode(void *user_context, halide_hvx_power_mode_t mode) {
-    int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
-
-    debug(user_context) << "halide_hexagon_power_hvx_on_mode\n";
-    if (!remote_power_hvx_on_mode) {
-        // The power on mode function is not available in this version of the
-        // runtime.  Fallback to the default power on function.
-        return halide_hexagon_power_hvx_on(user_context);
-    }
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
-
-    debug(user_context) << "    remote_power_hvx_on_mode -> ";
-    result = remote_power_hvx_on_mode(mode);
-    debug(user_context) << "        " << result << "\n";
-    if (result != 0) {
-        error(user_context) << "remote_power_hvx_on_mode failed.\n";
-        return result;
-    }
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
-
-    return 0;
-}
-
-WEAK int halide_hexagon_power_hvx_on_perf(void *user_context, halide_hvx_power_perf_t *perf) {
-    int result = init_hexagon_runtime(user_context);
-    if (result != 0) return result;
-
-    debug(user_context) << "halide_hexagon_power_hvx_on_perf\n";
-    if (!remote_power_hvx_on_perf) {
-        // The power on perf function is not available in this version of the
-        // runtime.  Fallback to the default power on function.
-        return halide_hexagon_power_hvx_on(user_context);
-    }
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
-
-    debug(user_context) << "    remote_power_hvx_on_perf -> ";
-    result = remote_power_hvx_on_perf(perf->set_mips,
-                                      perf->mipsPerThread,
-                                      perf->mipsTotal,
-                                      perf->set_bus_bw,
-                                      perf->bwMegabytesPerSec,
-                                      perf->busbwUsagePercentage,
-                                      perf->set_latency,
-                                      perf->latency);
-
-    debug(user_context) << "        " << result << "\n";
-    if (result != 0) {
-        error(user_context) << "remote_power_hvx_on_perf failed.\n";
-        return result;
-    }
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
-
-    return 0;
-}
-
 WEAK int halide_hexagon_power_hvx_off(void *user_context) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
@@ -771,6 +731,56 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
 
 WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */) {
     halide_hexagon_power_hvx_off(user_context);
+}
+
+WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hvx_power_mode_t mode) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
+    debug(user_context) << "halide_hexagon_set_performance_mode\n";
+    if (!remote_set_performance_mode) {
+        // This runtime doesn't support changing the performance target.
+        return 0;
+    }
+
+    debug(user_context) << "    remote_set_performance_mode -> ";
+    result = remote_set_performance_mode(mode);
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "remote_set_performance_mode failed.\n";
+        return result;
+    }
+
+    return 0;
+}
+
+WEAK int halide_hexagon_set_performance(void *user_context, halide_hvx_power_perf_t *perf) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) return result;
+
+    debug(user_context) << "halide_hexagon_set_performance\n";
+    if (!remote_set_performance) {
+        // This runtime doesn't support changing the performance target.
+        return 0;
+    }
+
+    debug(user_context) << "    remote_set_performance -> ";
+    result = remote_set_performance(perf->set_mips,
+                                    perf->mipsPerThread,
+                                    perf->mipsTotal,
+                                    perf->set_bus_bw,
+                                    perf->bwMegabytesPerSec,
+                                    perf->busbwUsagePercentage,
+                                    perf->set_latency,
+                                    perf->latency);
+
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "remote_set_performance failed.\n";
+        return result;
+    }
+
+    return 0;
 }
 
 WEAK const halide_device_interface_t *halide_hexagon_device_interface() {

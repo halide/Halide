@@ -130,6 +130,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // want llvm to be able to promote it to a register.
         allocation.ptr = create_alloca_at_entry(llvm_type_of(type), 1, false, name);
         allocation.stack_bytes = stack_bytes;
+        cur_stack_alloc_total += allocation.stack_bytes;
+        debug(4) << "cur_stack_alloc_total += " << allocation.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
     } else if (!new_expr.defined() && stack_bytes != 0) {
 
         // Try to find a free stack allocation we can use.
@@ -168,6 +170,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             allocation.ptr = create_alloca_at_entry(t, stack_size, false, name);
             allocation.stack_bytes = stack_bytes;
         }
+        cur_stack_alloc_total += allocation.stack_bytes;
+        debug(4) << "cur_stack_alloc_total += " << allocation.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
     } else {
         if (new_expr.defined()) {
             allocation.ptr = codegen(new_expr);
@@ -236,6 +240,8 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     if (alloc.stack_bytes) {
         // Remember this allocation so it can be re-used by a later allocation.
         free_stack_allocs.push_back(alloc);
+        cur_stack_alloc_total -= alloc.stack_bytes;
+        debug(4) << "cur_stack_alloc_total -= " << alloc.stack_bytes << " -> " << cur_stack_alloc_total << " for " << name << "\n";
     } else {
         internal_assert(alloc.destructor);
         trigger_destructor(alloc.destructor_function, alloc.destructor);

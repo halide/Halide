@@ -454,20 +454,20 @@ void IRComparer::visit(const Shuffle *op) {
 
 
 // Now the methods exposed in the header.
-bool equal(Expr a, Expr b) {
+bool equal(const Expr &a, const Expr &b) {
     return IRComparer().compare_expr(a, b) == IRComparer::Equal;
 }
 
-bool graph_equal(Expr a, Expr b) {
+bool graph_equal(const Expr &a, const Expr &b) {
     IRCompareCache cache(8);
     return IRComparer(&cache).compare_expr(a, b) == IRComparer::Equal;
 }
 
-bool equal(Stmt a, Stmt b) {
+bool equal(const Stmt &a, const Stmt &b) {
     return IRComparer().compare_stmt(a, b) == IRComparer::Equal;
 }
 
-bool graph_equal(Stmt a, Stmt b) {
+bool graph_equal(const Stmt &a, const Stmt &b) {
     IRCompareCache cache(8);
     return IRComparer(&cache).compare_stmt(a, b) == IRComparer::Equal;
 }
@@ -503,7 +503,7 @@ IRComparer::CmpResult flip_result(IRComparer::CmpResult r) {
     return IRComparer::Unknown;
 }
 
-void check_equal(Expr a, Expr b) {
+void check_equal(const Expr &a, const Expr &b) {
     IRCompareCache cache(5);
     IRComparer::CmpResult r = IRComparer(&cache).compare_expr(a, b);
     internal_assert(r == IRComparer::Equal)
@@ -513,7 +513,7 @@ void check_equal(Expr a, Expr b) {
         << "\nand\n" << b << "\n";
 }
 
-void check_not_equal(Expr a, Expr b) {
+void check_not_equal(const Expr &a, const Expr &b) {
     IRCompareCache cache(5);
     IRComparer::CmpResult r1 = IRComparer(&cache).compare_expr(a, b);
     IRComparer::CmpResult r2 = IRComparer(&cache).compare_expr(b, a);
