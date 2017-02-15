@@ -332,23 +332,23 @@ public:
         const int idx;
     public:
         /** The lowest coordinate in this dimension */
-        ALWAYS_INLINE int min() const {
+        HALIDE_ALWAYS_INLINE int min() const {
             return buf.min[idx];
         }
 
         /** The number of elements in memory you have to step over to
          * increment this coordinate by one. */
-        ALWAYS_INLINE int stride() const {
+        HALIDE_ALWAYS_INLINE int stride() const {
             return buf.stride[idx];
         }
 
         /** The extent of the image along this dimension */
-        ALWAYS_INLINE int extent() const {
+        HALIDE_ALWAYS_INLINE int extent() const {
             return buf.extent[idx];
         }
 
         /** The highest coordinate in this dimension */
-        ALWAYS_INLINE int max() const {
+        HALIDE_ALWAYS_INLINE int max() const {
             return min() + extent() - 1;
         }
 
@@ -362,12 +362,12 @@ public:
         };
 
         /** An iterator that points to the min coordinate */
-        ALWAYS_INLINE iterator begin() const {
+        HALIDE_ALWAYS_INLINE iterator begin() const {
             return {min()};
         }
 
         /** An iterator that points to one past the max coordinate */
-        ALWAYS_INLINE iterator end() const {
+        HALIDE_ALWAYS_INLINE iterator end() const {
             return {min() + extent()};
         }
 
@@ -375,7 +375,7 @@ public:
     };
 
     /** Access the shape of the buffer */
-    ALWAYS_INLINE Dimension dim(int i) const {
+    HALIDE_ALWAYS_INLINE Dimension dim(int i) const {
         return Dimension(buf, i);
     }
 
@@ -664,8 +664,24 @@ public:
 
     /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
+    // @{
+
+    // The overload with one argument is 'explicit', so that
+    // (say) int is not implicitly convertable to Buffer<int>
+    explicit Buffer(int first) : ty(static_halide_type()) {
+        static_assert(!T_is_void,
+                      "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
+        initialize_shape(0, first);
+        buf.elem_size = ty.bytes();
+        dims = 1;
+        if (!any_zero(first)) {
+            check_overflow();
+            allocate();
+        }
+    }
+
     template<typename ...Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = typename std::enable_if<AllInts<Args...>::value && (sizeof...(Args)>0)>::type>
     Buffer(int first, Args... rest) : ty(static_halide_type()) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
@@ -680,6 +696,7 @@ public:
             allocate();
         }
     }
+    // @}
 
     /** Allocate a new image of unknown type using a vector of ints as the size. */
     Buffer(halide_type_t t, const std::vector<int> &sizes) : ty(t) {
@@ -1344,18 +1361,18 @@ public:
 private:
 
     template<typename ...Args>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     ptrdiff_t offset_of(int d, int first, Args... rest) const {
         return offset_of(d+1, rest...) + this->buf.stride[d] * (first - this->buf.min[d]);
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     ptrdiff_t offset_of(int d) const {
         return 0;
     }
 
     template<typename ...Args>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     storage_T *address_of(Args... args) const {
         if (T_is_void) {
             return (storage_T *)(this->buf.host) + offset_of(0, args...) * this->buf.elem_size;
@@ -1364,7 +1381,7 @@ private:
         }
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     ptrdiff_t offset_of(const int *pos) const {
         ptrdiff_t offset = 0;
         for (int i = this->dimensions() - 1; i >= 0; i--) {
@@ -1373,7 +1390,7 @@ private:
         return offset;
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     storage_T *address_of(const int *pos) const {
         if (T_is_void) {
             return (storage_T *)this->buf.host + offset_of(pos) * this->buf.elem_size;
@@ -1404,14 +1421,14 @@ public:
     //@{
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     const not_void_T &operator()(int first, Args... rest) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         return *((const not_void_T *)(address_of(first, rest...)));
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     const not_void_T &
     operator()() const {
         static_assert(!T_is_void,
@@ -1419,7 +1436,7 @@ public:
         return *((const not_void_T *)(data()));
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     const not_void_T &
     operator()(const int *pos) const {
         static_assert(!T_is_void,
@@ -1429,7 +1446,7 @@ public:
 
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     not_void_T &operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
@@ -1437,7 +1454,7 @@ public:
         return *((not_void_T *)(address_of(first, rest...)));
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     not_void_T &
     operator()() {
         static_assert(!T_is_void,
@@ -1446,7 +1463,7 @@ public:
         return *((not_void_T *)(data()));
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     not_void_T &
     operator()(const int *pos) {
         static_assert(!T_is_void,
@@ -1595,7 +1612,7 @@ struct for_each_element_helpers {
      * resolution. The decltype is to make this version impossible if
      * the function is not callable with this many args. */
     template<typename ...Args>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     static auto for_each_element_variadic(int, int d, Fn &&f, const buffer_t &buf, Args... args)
         -> decltype(f(args...)) {
         return f(args...);
@@ -1605,7 +1622,7 @@ struct for_each_element_helpers {
      * an additional argument and try again. This trick is known as
      * SFINAE. */
     template<typename ...Args>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     static void for_each_element_variadic(double, int d, Fn &&f, const buffer_t &buf, Args... args) {
         int e = buf.extent[d] == 0 ? 1 : buf.extent[d];
         for (int i = 0; i < e; i++) {
@@ -1621,7 +1638,7 @@ struct for_each_element_helpers {
     /** Determine the minimum number of arguments a callable can take
      * using the same trick. */
     template<typename ...Args>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     static auto num_args(int, int *result, Fn &&f, Args... args) -> decltype(f(args...)) {
         *result = sizeof...(args);
         sink(std::forward<Fn>(f), args...);
@@ -1631,7 +1648,7 @@ struct for_each_element_helpers {
      * of 256. This catches callables that aren't callable with any
      * number of ints. */
     template<typename ...Args>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     static void num_args(double, int *result, Fn &&f, Args... args) {
         static_assert(sizeof...(args) <= 256,
                       "Callable passed to for_each_element must accept either a const int *,"
@@ -1639,7 +1656,7 @@ struct for_each_element_helpers {
         return num_args(0, result, std::forward<Fn>(f), 0, args...);
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     static int get_number_of_args(Fn &&f) {
         int result;
         num_args(0, &result, std::forward<Fn>(f));
@@ -1652,7 +1669,7 @@ struct for_each_element_helpers {
      * double trick as above, but is impossible once d hits -1 using
      * std::enable_if. */
     template<int d>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     static typename std::enable_if<d >= 0, void>::type
     for_each_element_array_helper(int, Fn &&f, const buffer_t &buf, int *pos) {
         for (pos[d] = buf.min[d]; pos[d] < buf.min[d] + buf.extent[d]; pos[d]++) {
@@ -1662,7 +1679,7 @@ struct for_each_element_helpers {
 
     /** Base case for recursion above. */
     template<int d>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     static void for_each_element_array_helper(double, Fn &&f, const buffer_t &buf, int *pos) {
         f(pos);
     }
@@ -1711,7 +1728,7 @@ struct for_each_element_helpers {
     /** This one triggers otherwise. It treats the callable as
      * something that takes some number of ints. */
     template<typename Fn2>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     static void for_each_element(double, const buffer_t &buf, Fn2 &&f) {
         int num_args = get_number_of_args(std::forward<Fn2>(f));
         for_each_element_variadic(0, num_args-1, std::forward<Fn2>(f), buf);
@@ -1782,7 +1799,5 @@ void for_each_element(const buffer_t &buf, Fn &&f) {
 
 }  // namespace Runtime
 }  // namespace Halide
-
-#undef ALWAYS_INLINE
 
 #endif  // HALIDE_RUNTIME_IMAGE_H

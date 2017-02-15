@@ -113,15 +113,17 @@ bool test(int vec_width, const Target &target) {
 }
 
 template<typename A>
-void test_all(int vec_width, const Target &target, std::vector<std::future<bool>> &futures) {
-    futures.push_back(std::async(test<A, float>, vec_width, target));
-    futures.push_back(std::async(test<A, double>, vec_width, target));
-    futures.push_back(std::async(test<A, uint8_t>, vec_width, target));
-    futures.push_back(std::async(test<A, int8_t>, vec_width, target));
-    futures.push_back(std::async(test<A, uint16_t>, vec_width, target));
-    futures.push_back(std::async(test<A, int16_t>, vec_width, target));
-    futures.push_back(std::async(test<A, uint32_t>, vec_width, target));
-    futures.push_back(std::async(test<A, int32_t>, vec_width, target));
+bool test_all(int vec_width, const Target &target) {
+    bool success = true;
+    success = success && test<A, float>(vec_width, target);
+    success = success && test<A, double>(vec_width, target);
+    success = success && test<A, uint8_t>(vec_width, target);
+    success = success && test<A, uint16_t>(vec_width, target);
+    success = success && test<A, uint32_t>(vec_width, target);
+    success = success && test<A, int8_t>(vec_width, target);
+    success = success && test<A, int16_t>(vec_width, target);
+    success = success && test<A, int32_t>(vec_width, target);
+    return success;
 }
 
 
@@ -139,17 +141,21 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     // We only test power-of-two vector widths for now
+    Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
     for (int vec_width = 1; vec_width <= 64; vec_width*=2) {
-        printf("Testing vector width %d\n", vec_width);
-        test_all<float>(vec_width, target, futures);
-        test_all<double>(vec_width, target, futures);
-        test_all<uint8_t>(vec_width, target, futures);
-        test_all<int8_t>(vec_width, target, futures);
-        test_all<uint16_t>(vec_width, target, futures);
-        test_all<int16_t>(vec_width, target, futures);
-        test_all<uint32_t>(vec_width, target, futures);
-        test_all<int32_t>(vec_width, target, futures);
+        futures.push_back(pool.async([=]() {
+            bool success = true;
+            success = success && test_all<float>(vec_width, target);
+            success = success && test_all<double>(vec_width, target);
+            success = success && test_all<uint8_t>(vec_width, target);
+            success = success && test_all<uint16_t>(vec_width, target);
+            success = success && test_all<uint32_t>(vec_width, target);
+            success = success && test_all<int8_t>(vec_width, target);
+            success = success && test_all<int16_t>(vec_width, target);
+            success = success && test_all<int32_t>(vec_width, target);
+            return success;
+        }));
     }
 
     bool ok = true;

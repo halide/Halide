@@ -5,7 +5,7 @@ namespace Internal {
 
 using std::vector;
 
-Expr IRMutator::mutate(Expr e) {
+Expr IRMutator::mutate(const Expr &e) {
     if (e.defined()) {
         e.accept(this);
     } else {
@@ -15,7 +15,7 @@ Expr IRMutator::mutate(Expr e) {
     return expr;
 }
 
-Stmt IRMutator::mutate(Stmt s) {
+Stmt IRMutator::mutate(const Stmt &s) {
     if (s.defined()) {
         s.accept(this);
     } else {
@@ -336,7 +336,7 @@ void IRMutator::visit(const Shuffle *op) {
 }
 
 
-Stmt IRGraphMutator::mutate(Stmt s) {
+Stmt IRGraphMutator::mutate(const Stmt &s) {
     auto iter = stmt_replacements.find(s);
     if (iter != stmt_replacements.end()) {
         return iter->second;
@@ -346,7 +346,7 @@ Stmt IRGraphMutator::mutate(Stmt s) {
     return new_s;
 }
 
-Expr IRGraphMutator::mutate(Expr e) {
+Expr IRGraphMutator::mutate(const Expr &e) {
     auto iter = expr_replacements.find(e);
     if (iter != expr_replacements.end()) {
         return iter->second;

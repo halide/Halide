@@ -4,9 +4,11 @@
 // This file may be used by AOT tests, so it deliberately does not
 // include Halide.h
 
-#include <string.h>
+#include <string>
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #else
 #include <stdio.h>
@@ -37,7 +39,7 @@ inline std::string get_env_variable(const char *name) {
 }
 
 // Return absolute path to the current directory. Return empty string if
-// an error occurs. (Does not assert.) 
+// an error occurs. (Does not assert.)
 inline std::string get_current_directory() {
 #ifdef _WIN32
     std::string dir;
@@ -85,7 +87,7 @@ inline std::string get_test_tmp_dir() {
     }
 #endif
     if (!is_absolute) {
-        assert(!"get_test_tmp_dir() is not an absolute path");
+        assert(false && "get_test_tmp_dir() is not an absolute path");
         return "/unlikely_path/";
     }
     if (dir[dir.size() - 1] != sep) {

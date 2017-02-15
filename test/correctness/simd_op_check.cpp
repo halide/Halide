@@ -33,6 +33,15 @@ struct TestResult {
     string error_msg;
 };
 
+struct Task {
+    string op;
+    string name;
+    int vector_width;
+    Expr expr;
+};
+
+size_t num_threads = Halide::Internal::ThreadPool<void>::num_processors_online();
+
 struct Test {
     bool use_avx2{false};
     bool use_avx512{false};
@@ -48,7 +57,7 @@ struct Test {
 
     string filter{"*"};
     string output_directory{Internal::get_test_tmp_dir()};
-    vector<std::future<TestResult>> futures;
+    vector<Task> tasks;
 
     Target target;
 
@@ -226,8 +235,8 @@ struct Test {
         }
 
         // Also compile the error checking Func (to be sure it compiles without error)
-        string fn_name = output_directory + "test_" + name;
-        error.compile_to_file(fn_name, arg_types, fn_name, target);
+        string fn_name = "test_" + name;
+        error.compile_to_file(output_directory + fn_name, arg_types, fn_name, target);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
@@ -252,17 +261,14 @@ struct Test {
             if (!isalnum(name[i])) name[i] = '_';
         }
 
-        name += "_" + std::to_string(futures.size());
+        name += "_" + std::to_string(tasks.size());
 
         // Bail out after generating the unique_name, so that names are
         // unique across different processes and don't depend on filter
         // settings.
         if (!wildcard_match(filter, op)) return;
 
-        static const auto lambda = [this](const string &op, const string &name, int vector_width, Expr e){
-            return check_one(op, name, vector_width, e); 
-        };
-        futures.emplace_back(std::async(lambda, op, name, vector_width, e));
+        tasks.emplace_back(Task {op, name, vector_width, e});
     }
 
     void check_sse_all() {
@@ -1957,6 +1963,7 @@ struct Test {
     }
 
     bool test_all() {
+        // Queue up a bunch of tasks representing each test to run.
         if (target.arch == Target::X86) {
             check_sse_all();
         } else if (target.arch == Target::ARM) {
@@ -1967,18 +1974,25 @@ struct Test {
             check_altivec_all();
         }
 
+        Halide::Internal::ThreadPool<TestResult> pool(num_threads);
+        std::vector<std::future<TestResult>> futures;
+        for (const Task &task : tasks) {
+            futures.push_back(pool.async([this, task]() {
+                return check_one(task.op, task.name, task.vector_width, task.expr);
+            }));
+        }
+
         bool success = true;
         for (auto &f : futures) {
-            const TestResult &r = f.get();
-            std::cout << r.op << "\n";
-            if (!r.error_msg.empty()) {
-                std::cerr << r.error_msg;
+            const TestResult &result = f.get();
+            std::cout << result.op << "\n";
+            if (!result.error_msg.empty()) {
+                std::cerr << result.error_msg;
                 success = false;
-
             }
         }
-        return success;
 
+        return success;
     }
 };
 
@@ -1987,6 +2001,7 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         test.filter = argv[1];
+        num_threads = 1;
     }
 
     if (argc > 2) {
