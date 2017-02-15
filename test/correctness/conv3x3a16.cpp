@@ -43,7 +43,7 @@ int main(int arch, char **argv) {
                 cast<int16_t>(mask(1+r.x, 1+r.y))) >> 4,
             0, 255));
 #else
-    Expr sum = 0;
+    Expr sum = cast<int16_t>(0);
     for (int i = -1; i <= 1; i++) {
         for (int j = -1; j <= 1; j++) {
             sum += cast<int16_t>(input(x + j, y + i)) * cast<int16_t>(mask(j + 1, i + 1));
