@@ -47,7 +47,7 @@ public:
         has_store_count(store), has_load_count(load) {}
     using IRMutator::mutate;
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         CountPredicatedStoreLoad c;
         s.accept(&c);
 

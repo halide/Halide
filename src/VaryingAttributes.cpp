@@ -676,8 +676,8 @@ public:
 // existing structure of Let variable scopes around them.
 class IRFilter : public IRVisitor {
 public:
-    virtual Stmt mutate(Expr expr);
-    virtual Stmt mutate(Stmt stmt);
+    virtual Stmt mutate(const Expr &expr);
+    virtual Stmt mutate(const Stmt &stmt);
 
 protected:
     using IRVisitor::visit;
@@ -725,7 +725,7 @@ protected:
     virtual void visit(const Evaluate *);
 };
 
-Stmt IRFilter::mutate(Expr e) {
+Stmt IRFilter::mutate(const Expr &e) {
     if (e.defined()) {
         e.accept(this);
     }
@@ -735,7 +735,7 @@ Stmt IRFilter::mutate(Expr e) {
     return stmt;
 }
 
-Stmt IRFilter::mutate(Stmt s) {
+Stmt IRFilter::mutate(const Stmt &s) {
     if (s.defined()) {
         s.accept(this);
     } else {
