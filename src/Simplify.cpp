@@ -192,7 +192,7 @@ public:
     }
 
 #if LOG_EXPR_MUTATIONS
-    Expr mutate(const Expr &e) {
+    Expr mutate(Expr e) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
@@ -208,7 +208,7 @@ public:
 #endif
 
 #if LOG_STMT_MUTATIONS
-    Stmt mutate(const Stmt &s) {
+    Stmt mutate(Stmt s) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
         debug_indent++;
@@ -4832,7 +4832,7 @@ Stmt simplify(Stmt s, bool simplify_lets,
 class SimplifyExprs : public IRMutator {
 public:
     using IRMutator::mutate;
-    Expr mutate(const Expr &e) {
+    Expr mutate(Expr e) {
         return simplify(e);
     }
 };
