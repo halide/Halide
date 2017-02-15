@@ -1158,8 +1158,7 @@ protected:
                        const std::vector<Type> &t,
                        int d);
 
-    EXPORT GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
-      : GeneratorInputBase(1, name, kind, t, d) {}
+    EXPORT GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d);
 
     EXPORT ~GeneratorInputBase() override;
 
@@ -1575,8 +1574,7 @@ protected:
     EXPORT GeneratorOutputBase(const std::string &name,
                                IOKind kind,
                                const std::vector<Type> &t,
-                               int d)
-      : GeneratorOutputBase(1, name, kind, t, d) {}
+                               int d);
 
     EXPORT ~GeneratorOutputBase() override;
 
