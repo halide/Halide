@@ -36,7 +36,7 @@ class CheckSinCount : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Stmt mutate(const Stmt &s) {
+    Stmt mutate(Stmt s) {
         Counter c("");
         s.accept(&c);
         if (c.sin_count != correct) {
@@ -56,7 +56,7 @@ class CheckStoreCount : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Stmt mutate(const Stmt &s) {
+    Stmt mutate(Stmt s) {
         Counter c(func);
         s.accept(&c);
         if (c.store_count != correct) {
