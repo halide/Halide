@@ -333,11 +333,17 @@ private:
         };
 
         if (op->type.is_vector()) {
-            expr = apply_commutative_patterns(op, scalar_muls, this);
-            if (!expr.same_as(op)) return;
+            Expr new_expr = apply_commutative_patterns(op, scalar_muls, this);
+            if (!new_expr.same_as(op)) {
+                expr = new_expr;
+                return;
+            }
 
-            expr = apply_commutative_patterns(op, muls, this);
-            if (!expr.same_as(op)) return;
+            new_expr = apply_commutative_patterns(op, muls, this);
+            if (!new_expr.same_as(op)) {
+                expr = new_expr;
+                return;
+            }
         }
         IRMutator::visit(op);
     }
@@ -480,19 +486,19 @@ private:
                     Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                     b0123 = simplify(b0123);
                     b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
-                    expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
                     if (op->type.bits() == 16) {
                         // It's actually safe to use this op on 16 bit
                         // results, we just need to narrow the
                         // result. Overflow can occur, but will still
                         // produce the same result thanks to 2's
                         // complement arithmetic.
-                        expr = Call::make(op->type, "halide.hexagon.pack.vw", {expr}, Call::PureExtern);
+                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
                     }
                     if (rest.defined()) {
-                        expr = Add::make(expr, rest);
+                        new_expr = Add::make(new_expr, rest);
                     }
-                    expr = mutate(expr);
+                    expr = mutate(new_expr);
                     return;
                 }
             }
@@ -519,19 +525,19 @@ private:
                 // We can generate this op for 16 bits, but, it's only
                 // faster to do so if the interleave simplifies away.
                 if (op->type.bits() == 32 || (!a0123.as<Shuffle>() && !b0123.as<Shuffle>())) {
-                    expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
                     if (op->type.bits() == 16) {
                         // It's actually safe to use this op on 16 bit
                         // results, we just need to narrow the
                         // result. Overflow can occur, but will still
                         // produce the same result thanks to 2's
                         // complement arithmetic.
-                        expr = Call::make(op->type, "halide.hexagon.pack.vw", {expr}, Call::PureExtern);
+                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
                     }
                     if (rest.defined()) {
-                        expr = Add::make(expr, rest);
+                        new_expr = Add::make(new_expr, rest);
                     }
-                    expr = mutate(expr);
+                    expr = mutate(new_expr);
                     return;
                 }
             }
@@ -564,18 +570,19 @@ private:
                 // particular order. It should be more robust... but
                 // this is pretty tough to do, other than simply
                 // trying all permutations.
+                Expr new_expr;
                 if (!a01.as<Shuffle>() || vmpa_suffix.empty()) {
                     Expr b01 = Shuffle::make_interleave({mpys[0].second, mpys[1].second});
                     b01 = simplify(b01);
                     b01 = reinterpret(Type(b01.type().code(), 16, 1), b01);
-                    expr = halide_hexagon_add_2mpy(op->type, vdmpy_suffix, a01, b01);
+                    new_expr = halide_hexagon_add_2mpy(op->type, vdmpy_suffix, a01, b01);
                 } else {
-                    expr = halide_hexagon_add_2mpy(op->type, vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
+                    new_expr = halide_hexagon_add_2mpy(op->type, vmpa_suffix, mpys[0].first, mpys[1].first, mpys[0].second, mpys[1].second);
                 }
                 if (rest.defined()) {
-                    expr = Add::make(expr, rest);
+                    new_expr = Add::make(new_expr, rest);
                 }
-                expr = mutate(expr);
+                expr = mutate(new_expr);
                 return;
             }
         }
@@ -647,8 +654,11 @@ private:
         };
 
         if (op->type.is_vector()) {
-            expr = apply_commutative_patterns(op, adds, this);
-            if (!expr.same_as(op)) return;
+            Expr new_expr = apply_commutative_patterns(op, adds, this);
+            if (!new_expr.same_as(op)) {
+                expr = new_expr;
+                return;
+            }
         }
         IRMutator::visit(op);
     }
@@ -669,8 +679,11 @@ private:
                     { "halide.hexagon.sub_vw.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
                 };
 
-                expr = apply_patterns(op, subs, this);
-                if (!expr.same_as(op)) return;
+                Expr new_expr = apply_patterns(op, subs, this);
+                if (!new_expr.same_as(op)) {
+                    expr = new_expr;
+                    return;
+                }
             }
         }
         IRMutator::visit(op);
@@ -830,8 +843,11 @@ private:
         if (op->type.is_vector()) {
             Expr cast = op;
 
-            expr = apply_patterns(cast, casts, this);
-            if (!expr.same_as(cast)) return;
+            Expr new_expr = apply_patterns(cast, casts, this);
+            if (!new_expr.same_as(cast)) {
+                expr = new_expr;
+                return;
+            }
 
             // If we didn't find a pattern, try using one of the
             // rewrites above.
