@@ -71,7 +71,7 @@ bool perform_test(const char *label, const Target target, Func f, int expected_n
     // Check for correct result values
     out.copy_to_host();
 
-    if (!Testing::check_result<float>(out, expected_val, tol)) {
+    if (!Testing::check_result<float>(out, tol, expected_val)) {
         return false;
     }
 

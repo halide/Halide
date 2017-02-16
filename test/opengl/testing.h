@@ -14,9 +14,9 @@ bool neq(T a, T b, T tol) {
     return std::abs(a - b) > tol;
 }
 
-// check 3-dimension buffer
+// Check 3-dimension buffer
 template <typename T>
-bool check_result(const Halide::Buffer<T> &buf, std::function<T(int x, int y, int c)> f, T tol = 0) {
+bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, int y, int c)> f) {
     class err : std::exception {
     public:
         static void vector(const std::vector<T> &v) {
@@ -53,9 +53,9 @@ bool check_result(const Halide::Buffer<T> &buf, std::function<T(int x, int y, in
     return true;
 }
 
-// check 2-dimension buffer
+// Check 2-dimension buffer
 template <typename T>
-bool check_result(const Halide::Buffer<T> &buf, std::function<T(int x, int y)> f, T tol = 0) {
+bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, int y)> f) {
     class err : std::exception {};
     try {
         buf.for_each_element([&](int x, int y) {
@@ -74,6 +74,12 @@ bool check_result(const Halide::Buffer<T> &buf, std::function<T(int x, int y)> f
         return false;
     }
     return true;
+}
+
+// Shorthand to check with tolerance=0
+template <typename T, typename Func>
+bool check_result(const Halide::Buffer<T> &buf, Func f) {
+    return check_result<T>(buf, 0, f);
 }
 }
 
