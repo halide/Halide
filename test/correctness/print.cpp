@@ -180,9 +180,12 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%e\n", img(i));
-            #ifdef __APPLE__
+            // Some versions of the std library can emit some NaN patterns
+            // as "-nan", due to sloppy conversion (or not) of the sign bit.
+            // Halide considers all NaN's equivalent, so paper over this
+            // noise in the test by normalizing all -nan -> nan.
             if (messages[i] == "-nan\n") messages[i] = "nan\n";
-            #endif
+            if (!strcmp(correct, "-nan\n")) strcpy(correct, "nan\n");
             if (messages[i] != correct) {
                 printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
                 return -1;
