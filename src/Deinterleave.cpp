@@ -12,7 +12,6 @@ namespace Halide {
 namespace Internal {
 
 using std::pair;
-using std::make_pair;
 
 class StoreCollector : public IRMutator {
 public:

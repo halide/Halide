@@ -19,7 +19,6 @@ namespace Internal {
 using std::string;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::map;
 
 namespace {
@@ -772,7 +771,7 @@ class RenormalizeGPULoops : public IRMutator {
             // we'd better give it a new name.
             string new_name = unique_name('t');
             Expr new_var = Variable::make(op->value.type(), new_name);
-            lifted_lets.push_back(make_pair(new_name, op->value));
+            lifted_lets.push_back({ new_name, op->value });
             stmt = mutate(substitute(op->name, new_var, op->body));
             return;
         }
