@@ -524,6 +524,18 @@ inline halide_device_free_t halide_get_device_free_fn() {
 }
 #endif
 
+
+/** Versions of the above functions that accept legacy buffer_t structs. */
+// @{
+extern int halide_copy_to_host_legacy(void *user_context, struct buffer_t *buf);
+extern int halide_copy_to_device_legacy(void *user_context, struct buffer_t *buf,
+                                 const struct halide_device_interface_t *device_interface);
+extern int halide_device_sync_legacy(void *user_context, struct buffer_t *buf);
+extern int halide_device_malloc_legacy(void *user_context, struct buffer_t *buf,
+                                const struct halide_device_interface_t *device_interface);
+extern int halide_device_free_legacy(void *user_context, struct buffer_t *buf);
+// @}
+
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
  * HL_GPU_DEVICE. If that variable is unset, Halide uses the last

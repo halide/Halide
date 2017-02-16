@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "old_buffer_t.h"
+#include <assert.h>
 
 int &get_pixel(buffer_t *buf, int x, int y) {
     return *((int *)(buf->host) +
@@ -14,23 +15,28 @@ int &get_pixel(buffer_t *buf, int x, int y) {
 }
 
 extern "C" int extern_stage(buffer_t *in2, buffer_t *f, buffer_t *out) {
-    if (in2->host == nullptr) {
+    bool bounds_query = false;
+    if (in2->host == nullptr && in2->dev == 0) {
         in2->extent[0] = out->extent[0];
         in2->min[0] = out->min[0];
         in2->extent[1] = out->extent[1];
         in2->min[1] = out->min[1] + 7;
+        bounds_query = true;
     }
-    if (f->host == nullptr) {
+    if (f->host == nullptr && f->dev == 0) {
         f->extent[0] = out->extent[0];
         f->min[0] = out->min[0];
         f->extent[1] = out->extent[1];
         f->min[1] = out->min[1];
+        bounds_query = true;
     }
-    if (f->host && in2->host && out->host) {
-        for (int y = 0; y < out->extent[1]; y++) {
-            for (int x = 0; x < out->extent[0]; x++) {
-                get_pixel(out, x, y) = get_pixel(in2, x, y + 7) + get_pixel(f, x, y);
-            }
+    if (bounds_query) {
+        return 0;
+    }
+    halide_copy_to_host_legacy(nullptr, f);
+    for (int y = 0; y < out->extent[1]; y++) {
+        for (int x = 0; x < out->extent[0]; x++) {
+            get_pixel(out, x, y) = get_pixel(in2, x, y + 7) + get_pixel(f, x, y);
         }
     }
     return 0;
@@ -72,6 +78,7 @@ int main(int argc, char **argv) {
 
     memset(in1.host, 1, in1.extent[0] * in1.extent[1] * in1.elem_size);
     memset(in2.host, 2, in2.extent[0] * in2.extent[1] * in2.elem_size);
+    in1.host_dirty = in2.host_dirty = true;
 
     // Run the pipeline for real
     err = old_buffer_t_old_buffer_t(&in1, &in2, scalar_param, &out);
@@ -84,7 +91,7 @@ int main(int argc, char **argv) {
             int result = get_pixel(&out, x, y);
             int correct = 0x01010101 * 2 + 0x02020202 * 2 + scalar_param;
             if (result != correct) {
-                printf("out(%d, %d) = %d instead of %d\n", x, y, result, correct);
+                printf("out(%d, %d) = %x instead of %x\n", x, y, (unsigned)result, (unsigned)correct);
                 return -1;
             }
         }
