@@ -2,7 +2,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#include "./testing.h"
+#include "testing.h"
 
 using namespace Halide;
 
