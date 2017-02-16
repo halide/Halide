@@ -8,7 +8,7 @@ cc_library(
 [cc_test(
     name = test[0:-4],
     srcs = [test],
-    copts = halide_language_copts(),
+    copts = halide_language_copts() + ["-UNDEBUG"],
     linkopts = halide_language_linkopts(),
     deps = [
         "@halide//:language",
