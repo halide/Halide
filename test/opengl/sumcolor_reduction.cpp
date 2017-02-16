@@ -31,8 +31,9 @@ int main() {
     result.copy_to_host();
 
     // Check the result.
-    if (!Testing::check_result<float>(result, [](int x, int y, int c) { return 3.0f * (x + y); }, 1e-6))
+    if (!Testing::check_result<float>(result, [](int x, int y, int c) { return 3.0f * (x + y); }, 1e-6)) {
         return 1;
+    }
 
     printf("Success!\n");
     return 0;

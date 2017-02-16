@@ -17,8 +17,9 @@ int main() {
 
     Buffer<float> result = f.realize(100, 100, 3, target);
 
-    if (!Testing::check_result<float>(result, [&](int x, int y, int c) { return 45; }))
+    if (!Testing::check_result<float>(result, [&](int x, int y, int c) { return 45; })) {
         return 1;
+    }
 
     printf("Success!\n");
 

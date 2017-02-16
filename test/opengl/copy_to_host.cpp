@@ -32,8 +32,9 @@ int main() {
                 case 1: return 127;
                 case 2: return 12;
                 default: return -1;
-            } }))
+            } })) {
         return 1;
+    }
 
     printf("Success!\n");
     return 0;

@@ -71,8 +71,9 @@ bool perform_test(const char *label, const Target target, Func f, int expected_n
     // Check for correct result values
     out.copy_to_host();
 
-    if (!Testing::check_result<float>(out, expected_val, tol))
+    if (!Testing::check_result<float>(out, expected_val, tol)) {
         return false;
+    }
 
     fprintf(stderr, "%s Passed!\n", label);
     return true;
@@ -205,7 +206,9 @@ int main() {
     pass &= test1(target, x, y, c);
     pass &= test2(target, x, y, c);
     pass &= test3(target, x, y, c);
-    if (!pass) return 1;
+    if (!pass) {
+        return 1;
+    }
 
     // The test will return early on error.
     fprintf(stderr, "Success!\n");

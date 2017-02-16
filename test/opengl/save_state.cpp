@@ -137,11 +137,13 @@ private:
         for (int i = 0; i < n; i++) {
             if (val[i] != initial[i]) {
                 fprintf(stderr, "%s did not restore %s: initial value was", operation, label);
-                for (int j = 0; j < n; j++)
+                for (int j = 0; j < n; j++) {
                     fprintf(stderr, " %d", initial[j]);
+                }
                 fprintf(stderr, ", current value is");
-                for (int j = 0; j < n; j++)
+                for (int j = 0; j < n; j++) {
                     fprintf(stderr, " %d", val[j]);
+                }
                 fprintf(stderr, "\n");
                 errors = true;
                 return;
@@ -232,10 +234,11 @@ public:
         glActiveTexture(initial_active_texture = GL_TEXTURE3);
 
         for (int i = 0; i < nvertex_attribs; i++) {
-            if ((initial_vertex_attrib_array_enabled[i] = boolval))
+            if ((initial_vertex_attrib_array_enabled[i] = boolval)) {
                 glEnableVertexAttribArray(i);
-            else
+            } else {
                 glDisableVertexAttribArray(i);
+            }
             char buf[256];
             sprintf(buf, "vertex attrib array %d state", i);
             check_error(buf);

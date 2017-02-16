@@ -51,8 +51,9 @@ int test_lut1d() {
                 case 1: return (float)(8 - x);
                 case 2: return (x > 3) ? 8.0f : 1.0f;
 		default: return -1.0f;
-	    } }))
+	    } })) {
         return 1;
+    }
 
     return 0;
 }
