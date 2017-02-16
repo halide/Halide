@@ -11,12 +11,12 @@ int main() {
 
     Buffer<float> input(255, 255, 3);
     input.fill([](int x, int y, int c) {
-            // Note: the following values can be >1.0f to test whether
-            // OpenGL performs clamping operations as part of the copy
-            // operation.  (It may do so if something other than floats
-            // are stored in the actual texture.)
-            return (10 * x + y + c);
-        });
+        // Note: the following values can be >1.0f to test whether
+        // OpenGL performs clamping operations as part of the copy
+        // operation.  (It may do so if something other than floats
+        // are stored in the actual texture.)
+        return (10 * x + y + c);
+    });
 
     Var x, y, c;
     Func g;

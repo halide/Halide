@@ -4,7 +4,6 @@
 
 #include "./testing.h"
 
-
 using namespace Halide;
 
 // This test creates two input images and uses one to perform a dependent lookup
@@ -21,13 +20,16 @@ int test_lut1d() {
 
     Buffer<uint8_t> input(8, 8, 3);
     input.fill([](int x, int y, int c) {
-            const float v = (1.0f/16.0f) + (float)x/8.0f;
-            switch (c) {
-            case 0: return (uint8_t)(v * 255.0f);
-            case 1: return (uint8_t)((1.0f - v)*255.0f);
-            default: return (uint8_t)((v > 0.5 ? 1.0 : 0.0)*255.0f);
-            }
-        });
+        const float v = (1.0f / 16.0f) + (float)x / 8.0f;
+        switch (c) {
+        case 0:
+            return (uint8_t)(v * 255.0f);
+        case 1:
+            return (uint8_t)((1.0f - v) * 255.0f);
+        default:
+            return (uint8_t)((v > 0.5 ? 1.0 : 0.0) * 255.0f);
+        }
+    });
 
     // 1D Look Up Table case
     Buffer<float> lut1d(8, 1, 3);
@@ -38,7 +40,7 @@ int test_lut1d() {
     }
 
     Func f0("f");
-    Expr e = cast<int>(8.0f * cast<float>(input(x, y, c))/255.0f);
+    Expr e = cast<int>(8.0f * cast<float>(input(x, y, c)) / 255.0f);
 
     f0(x, y, c) = lut1d(clamp(e, 0, 7), 0, c);
 
@@ -55,7 +57,7 @@ int test_lut1d() {
                 case 1: return (float)(8 - x);
                 case 2: return (x > 3) ? 8.0f : 1.0f;
                 default: return std::numeric_limits<float>::infinity();
-            }}))
+            } }))
         return 1;
 
     return 0;

@@ -13,7 +13,7 @@ int main() {
     Var x, y, c;
 
     // Fill buffer using GLSL
-    gpu(x, y, c) = cast<uint8_t>(select(c == 0, 10*x + y,
+    gpu(x, y, c) = cast<uint8_t>(select(c == 0, 10 * x + y,
                                         c == 1, 127,
                                         12));
     gpu.bound(c, 0, 3);
@@ -32,7 +32,7 @@ int main() {
                 case 1: return 127;
                 case 2: return 12;
                 default: return -1;
-            }}))
+            } }))
         return 1;
 
     printf("Success!\n");

@@ -11,12 +11,12 @@ int main() {
 
     Buffer<uint8_t> input(255, 10, 3);
     input.fill([](int x, int y, int c) {
-            return 10*x + y + c;
-        });
+        return 10 * x + y + c;
+    });
 
     Var x, y, c;
     Func g;
-    g(x, y, c) = {input(x, y, c), input(x, y, c) / 2};
+    g(x, y, c) = { input(x, y, c), input(x, y, c) / 2 };
 
     // h will be an opengl stage with tuple input. Tuple outputs
     // aren't supported because OpenGL ES 2.0 doesn't support multiple
@@ -32,7 +32,7 @@ int main() {
     out.copy_to_host();
 
     if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) { return input(x, y, c) / 2; }))
-	return 1;
+        return 1;
 
     printf("Success!\n");
     return 0;

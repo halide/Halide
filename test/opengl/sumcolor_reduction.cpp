@@ -13,8 +13,8 @@ int main() {
     const int width = 10, height = 10, channels = 3;
     Buffer<float> input(width, height, channels);
     input.fill([](int x, int y, int c) {
-            return x + y;
-        });
+        return x + y;
+    });
 
     // Define the algorithm.
     Var x, y, c;
@@ -32,7 +32,7 @@ int main() {
 
     // Check the result.
     if (!Testing::check_result<float>(result, [](int x, int y, int c) { return 3.0f * (x + y); }, 1e-6))
-	return 1;
+        return 1;
 
     printf("Success!\n");
     return 0;
