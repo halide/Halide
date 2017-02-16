@@ -11,8 +11,8 @@ int main() {
 
     Buffer<uint8_t> input(255, 10, 3);
     input.fill([](int x, int y, int c) {
-            return 10*x + y + c;
-        });
+        return 10 * x + y + c;
+    });
 
     Var x, y, c;
     Func g;

@@ -25,7 +25,7 @@ int test_lut1d() {
 	    case 0: return (uint8_t)(v * 255.0f);
 	    case 1: return (uint8_t)((1.0f - v) * 255.0f);
 	    default: return (uint8_t)((v > 0.5 ? 1.0 : 0.0) * 255.0f);
-        }});
+        } });
 
     // 1D Look Up Table case
     Func lut1d("lut1d");
@@ -51,8 +51,8 @@ int test_lut1d() {
                 case 1: return (float)(8 - x);
                 case 2: return (x > 3) ? 8.0f : 1.0f;
 		default: return -1.0f;
-	    }}))
-	return 1;
+	    } }))
+        return 1;
 
     return 0;
 }

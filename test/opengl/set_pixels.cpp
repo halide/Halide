@@ -20,7 +20,7 @@ int main() {
 
     out.copy_to_host();
     if (!Testing::check_result<uint8_t>(out, [](int x, int y, int c) { return 42; }))
-	return 1;
+        return 1;
 
     printf("Success!\n");
     return 0;
