@@ -8,7 +8,7 @@ struct old_dev_wrapper {
     const halide_device_interface_t *interface;
 };
 
-int guess_type_and_dimensionality(void *user_context, buffer_t *old_buf, halide_buffer_t *new_buf) {
+WEAK int guess_type_and_dimensionality(void *user_context, buffer_t *old_buf, halide_buffer_t *new_buf) {
     new_buf->dimensions = 4;
     for (int i = 0; i < 4; i++) {
         if (old_buf->extent[i] == 0) {
