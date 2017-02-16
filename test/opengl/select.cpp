@@ -35,8 +35,9 @@ int test_per_channel_select() {
 		case 1: return x;
 		case 2: return y;
 		default: return x*y;
-	    } }))
+	    } })) {
         return 1;
+    }
 
     return 0;
 }
@@ -71,8 +72,9 @@ int test_flag_scalar_select() {
     // Verify the result
     if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) {
             return !flag_value ? 255 : 128;
-        }))
+        })) {
         return 1;
+    }
 
     return 0;
 }
@@ -116,8 +118,9 @@ int test_flag_pixel_select() {
     // Verify the result
     if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) {
             return !flag_value ? 255 : 128;
-        }))
+        })) {
         return 1;
+    }
 
     return 0;
 }

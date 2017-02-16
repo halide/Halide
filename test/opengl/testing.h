@@ -21,8 +21,10 @@ bool check_result(const Halide::Buffer<T> &buf, std::function<T(int x, int y, in
     public:
         static void vector(const std::vector<T> &v) {
             for (size_t i = 0; i < v.size(); i++) {
-                if (i > 0) std::cerr << ",";
-                std::cerr << +v[i];     // use unary + to promote uint8_t from char to numeric
+                if (i > 0) {
+                    std::cerr << ",";
+                }
+                std::cerr << +v[i];  // use unary + to promote uint8_t from char to numeric
             }
         }
     };

@@ -41,8 +41,9 @@ int main() {
     if (!Testing::check_result<float>(result, [](int x, int y, int c) {
             const float temp = ((x + y) > 4) ? 1.0f : 0.0f;
             return (c == 0) ? temp : (1.0f - temp);
-        }))
+        })) {
         return 1;
+    }
 
     printf("Success!\n");
     return 0;

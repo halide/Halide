@@ -38,8 +38,9 @@ int main() {
             }
             return temp / 10.0f * 255.0f;
         },
-                                      1e-3))
+                                      1e-3)) {
         return 1;
+    }
 
     printf("Success!\n");
     return 0;
