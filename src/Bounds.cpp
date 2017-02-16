@@ -17,7 +17,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::make_pair;
 using std::map;
 using std::vector;
 using std::string;
@@ -94,7 +93,7 @@ private:
         // if we can't get a good bound from the function, fall back to the bounds of the type.
         bounds_of_type(t);
 
-        pair<string, int> key = make_pair(name, value_index);
+        pair<string, int> key = { name, value_index };
 
         FuncValueBounds::const_iterator iter = func_bounds.find(key);
 
@@ -1440,7 +1439,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
         Function f = env.find(order[i])->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
-            pair<string, int> key = make_pair(f.name(), j);
+            pair<string, int> key = { f.name(), j };
 
             Interval result;
 

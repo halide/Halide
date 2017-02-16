@@ -1154,7 +1154,7 @@ Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
         int range_extent_i = std::min(max_index - min_index_i, 255);
         Value *range_i = vlut(slice_vector(lut, min_index_i, range_extent_i), llvm_index, 0, range_extent_i);
 
-        ranges.push_back(std::make_pair(range_i, use_index));
+        ranges.push_back({ range_i, use_index });
     }
 
     // TODO: This could be reduced hierarchically instead of in

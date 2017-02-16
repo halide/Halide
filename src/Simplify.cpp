@@ -28,7 +28,6 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::pair;
-using std::make_pair;
 using std::ostringstream;
 using std::vector;
 
@@ -185,7 +184,7 @@ public:
             int64_t i_min, i_max;
             if (const_int(iter.value().min, &i_min) &&
                 const_int(iter.value().max, &i_max)) {
-                bounds_info.push(iter.name(), make_pair(i_min, i_max));
+                bounds_info.push(iter.name(), { i_min, i_max });
             }
         }
 
@@ -4632,7 +4631,7 @@ private:
             }
             int64_t val_min, val_max;
             if (const_int_bounds(new_value, &val_min, &val_max)) {
-                bounds_info.push(new_name, make_pair(val_min, val_max));
+                bounds_info.push(new_name, { val_min, val_max });
                 new_value_bounds_tracked = true;
             }
         }
@@ -4645,7 +4644,7 @@ private:
             }
             int64_t val_min, val_max;
             if (const_int_bounds(value, &val_min, &val_max)) {
-                bounds_info.push(op->name, make_pair(val_min, val_max));
+                bounds_info.push(op->name, { val_min, val_max });
                 value_bounds_tracked = true;
             }
         }
@@ -4734,7 +4733,7 @@ private:
             const_int(new_extent, &new_extent_int)) {
             bounds_tracked = true;
             int64_t new_max_int = new_min_int + new_extent_int - 1;
-            bounds_info.push(op->name, make_pair(new_min_int, new_max_int));
+            bounds_info.push(op->name, { new_min_int, new_max_int });
         }
 
         Stmt new_body = mutate(op->body);

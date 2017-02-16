@@ -78,7 +78,7 @@ h::RDom *RDom_constructor0(p::tuple args, std::string name = "") {
     assert((exprs.size() % 2) == 0);
     std::vector<std::pair<h::Expr, h::Expr>> ranges;
     for (size_t i = 0; i < exprs.size(); i += 2) {
-        ranges.push_back(std::make_pair(exprs[i], exprs[i + 1]));
+        ranges.push_back({ exprs[i], exprs[i + 1] });
     }
 
     return new h::RDom(ranges, name);
@@ -87,7 +87,7 @@ h::RDom *RDom_constructor0(p::tuple args, std::string name = "") {
 h::RDom *RDom_constructor1(h::Expr min0, h::Expr extent0,
                            std::string name = "") {
     std::vector<std::pair<h::Expr, h::Expr>> ranges;
-    ranges.push_back(std::make_pair(min0, extent0));
+    ranges.push_back({ min0, extent0 });
     return new h::RDom(ranges, name);
 }
 
@@ -95,8 +95,8 @@ h::RDom *RDom_constructor2(h::Expr min0, h::Expr extent0,
                            h::Expr min1, h::Expr extent1,
                            std::string name = "") {
     std::vector<std::pair<h::Expr, h::Expr>> ranges;
-    ranges.push_back(std::make_pair(min0, extent0));
-    ranges.push_back(std::make_pair(min1, extent1));
+    ranges.push_back({ min0, extent0 });
+    ranges.push_back({ min1, extent1 });
     return new h::RDom(ranges, name);
 }
 
@@ -105,9 +105,9 @@ h::RDom *RDom_constructor3(h::Expr min0, h::Expr extent0,
                            h::Expr min2, h::Expr extent2,
                            std::string name = "") {
     std::vector<std::pair<h::Expr, h::Expr>> ranges;
-    ranges.push_back(std::make_pair(min0, extent0));
-    ranges.push_back(std::make_pair(min1, extent1));
-    ranges.push_back(std::make_pair(min2, extent2));
+    ranges.push_back({ min0, extent0 });
+    ranges.push_back({ min1, extent1 });
+    ranges.push_back({ min2, extent2 });
     return new h::RDom(ranges, name);
 }
 
@@ -117,10 +117,10 @@ h::RDom *RDom_constructor4(h::Expr min0, h::Expr extent0,
                            h::Expr min3, h::Expr extent3,
                            std::string name = "") {
     std::vector<std::pair<h::Expr, h::Expr>> ranges;
-    ranges.push_back(std::make_pair(min0, extent0));
-    ranges.push_back(std::make_pair(min1, extent1));
-    ranges.push_back(std::make_pair(min2, extent2));
-    ranges.push_back(std::make_pair(min3, extent3));
+    ranges.push_back({ min0, extent0 });
+    ranges.push_back({ min1, extent1 });
+    ranges.push_back({ min2, extent2 });
+    ranges.push_back({ min3, extent3 });
     return new h::RDom(ranges, name);
 }
 

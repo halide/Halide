@@ -20,7 +20,6 @@ using std::string;
 using std::map;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::set;
 
 namespace {
@@ -409,7 +408,7 @@ Stmt build_produce(Function f, const Target &target) {
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
                 buffers_to_annotate.push_back(extern_call_args.back());
-                lets.push_back(make_pair(buf_name, output_buffer_t));
+                lets.push_back({ buf_name, output_buffer_t });
             }
         }
 
@@ -490,7 +489,7 @@ pair<Stmt, Stmt> build_production(Function func, const Target &target) {
 
     // Combine the update steps
     Stmt merged_updates = Block::make(updates);
-    return make_pair(produce, merged_updates);
+    return { produce, merged_updates };
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -658,7 +657,7 @@ private:
         // Dig through any let statements
         vector<pair<string, Expr>> lets;
         while (const LetStmt *l = body.as<LetStmt>()) {
-            lets.push_back(make_pair(l->name, l->value));
+            lets.push_back({ l->name, l->value });
             body = l->body;
         }
 
