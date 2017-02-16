@@ -236,15 +236,17 @@ private:
                 builder.coordinates.push_back(extent);
             }
 
-            builder.event = (op->is_producer ?
+            const bool is_producer = op->is_producer;
+            builder.event = (is_producer ?
                              halide_trace_end_produce :
                              halide_trace_end_consume);
             Expr call = builder.build();
             Stmt new_body = Block::make(op->body, Evaluate::make(call));
 
-            stmt = ProducerConsumer::make(op->name, op->is_producer, new_body);
+            // Note: this call makes op invalid; don't reference it later
+            stmt = ProducerConsumer::make(op->name, is_producer, new_body);
 
-            builder.event = (op->is_producer ?
+            builder.event = (is_producer ?
                              halide_trace_produce :
                              halide_trace_consume);
             call = builder.build();
