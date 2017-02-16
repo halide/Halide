@@ -247,7 +247,7 @@ halide_library(
 [cc_test(
     name = "%s_jittest" % test,
     srcs = ["%s_jittest.cpp" % test],
-    copts = halide_language_copts(),
+    copts = halide_language_copts() + ["-UNDEBUG"],
     linkopts = halide_language_linkopts(),
     deps = [
         ":%s_generator" % test,

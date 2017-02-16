@@ -3,7 +3,7 @@ load("@halide//:halide.bzl", "halide_language_copts", "halide_language_linkopts"
 [cc_test(
     name = test[0:-4],
     srcs = [test],
-    copts = halide_language_copts(),
+    copts = halide_language_copts() + ["-UNDEBUG"],
     linkopts = halide_language_linkopts() + halide_opengl_linkopts(),
     deps = [
         "@halide//:language",
@@ -17,7 +17,7 @@ load("@halide//:halide.bzl", "halide_language_copts", "halide_language_linkopts"
 cc_test(
     name = "internal",
     srcs = ["internal.cpp"],
-    copts = halide_language_copts(),
+    copts = halide_language_copts() + ["-UNDEBUG"],
     linkopts = halide_language_linkopts() + halide_opengl_linkopts(),
     deps = [
         "@halide//:language",
