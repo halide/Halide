@@ -22,7 +22,7 @@ bool check_result(const Halide::Buffer<T> &buf, std::function<T(int x, int y, in
         static void vector(const std::vector<T> &v) {
             for (size_t i = 0; i < v.size(); i++) {
                 if (i > 0) std::cerr << ",";
-                std::cerr << v[i] + 0;  // need to add 0 to get output -- compiler bug??
+                std::cerr << +v[i];     // use unary + to promote uint8_t from char to numeric
             }
         }
     };
@@ -61,9 +61,9 @@ bool check_result(const Halide::Buffer<T> &buf, std::function<T(int x, int y)> f
             const T result = buf(x, y);
             if (neq(result, expected, tol)) {
                 std::cerr << "Error: result (";
-                std::cerr << result + 0;
+                std::cerr << +result;
                 std::cerr << ") should be (";
-                std::cerr << expected + 0;
+                std::cerr << +expected;
                 std::cerr << ") at x=" << x << " y=" << y << std::endl;
                 throw err();
             }
