@@ -34,7 +34,7 @@ int main() {
     g2.bound(c, 0, 3).glsl(x, y, c);
 
     Buffer<float> result2 = g2.realize(10, 10, 3, target);
-    if (!Testing::check_result<float>(result2, [&](int i, int j, int k) { return (float)(i + j); }, 0.01f)) {
+    if (!Testing::check_result<float>(result2, 0.01f, [&](int i, int j, int k) { return (float)(i + j); })) {
         return 1;
     }
 
