@@ -1,6 +1,6 @@
 #include "Halide.h"
 
-#include "./testing.h"
+#include "testing.h"
 
 using namespace Halide;
 
