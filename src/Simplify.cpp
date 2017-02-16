@@ -4329,7 +4329,11 @@ private:
                 }
             }
             if (can_collapse) {
-                expr = Broadcast::make(b1->value, op->indices.size());
+                if (op->indices.size() == 1) {
+                    expr = b1->value;
+                } else {
+                    expr = Broadcast::make(b1->value, op->indices.size());
+                }
                 return;
             }
         }
