@@ -20,36 +20,41 @@ LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 LDFLAGS-arm-64-profile-android ?= -llog -fPIE -pie
 LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 
-all: process-host process-arm-64-android process-arm-32-android process-arm-64-profile-android process-arm-32-profile-android
+BIN ?= bin
 
-pipeline: pipeline.cpp
-	$(CXX) $(CXXFLAGS) pipeline.cpp -g $(LIB_HALIDE) -o pipeline \
-	$(LDFLAGS) $(LLVM_SHARED_LIBS)
+all: $(BIN)/process-host $(BIN)/process-arm-64-android $(BIN)/process-arm-32-android $(BIN)/process-arm-64-profile-android $(BIN)/process-arm-32-profile-android
 
-pipeline_cpu-%.o: pipeline
-	HL_TARGET=$* ./pipeline pipeline_cpu-$* pipeline_cpu
+$(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-pipeline_hvx64-%.o: pipeline
-	HL_TARGET=$*-hvx_64 ./pipeline pipeline_hvx64-$* pipeline_hvx64
+$(BIN)/%/pipeline_cpu.o: $(BIN)/pipeline
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f pipeline_cpu target=$*
 
-pipeline_hvx128-%.o: pipeline
-	HL_TARGET=$*-hvx_128 ./pipeline pipeline_hvx128-$* pipeline_hvx128
+$(BIN)/%/pipeline_hvx64.o: $(BIN)/pipeline
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
 
-process-%: process.cpp pipeline_cpu-%.o pipeline_hvx64-%.o pipeline_hvx128-%.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -Wall -O3 process.cpp pipeline_cpu-$*.o pipeline_hvx64-$*.o pipeline_hvx128-$*.o -o process-$* $(LDFLAGS-$*)
+$(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
+
+$(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
 # This requires root: adb root && adb wait-for-device && adb remount
-run-%-android: process-%-android
-	adb push process-$*-android /data/
+run-%-android: $(BIN)/process-%-android
+	adb push $(BIN)/process-$*-android /data/
 	adb shell chmod +x /data/process-$*-android
 	adb shell /data/process-$*-android cpu 10
 	adb shell /data/process-$*-android hvx64 10
 	adb shell /data/process-$*-android hvx128 10
 
-run-host: process-host
-	./process-host cpu 10
-	./process-host hvx64 1
-	./process-host hvx128 1
+run-host: $(BIN)/process-host
+	$(BIN)/process-host cpu 10
+	$(BIN)/process-host hvx64 1
+	$(BIN)/process-host hvx128 1
 
 clean:
-	rm -f process-* pipeline-*.o pipeline pipeline.h
+	rm -rf $(BIN)

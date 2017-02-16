@@ -68,7 +68,7 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
 Expr random_expr(Type T, int depth, bool overflow_undef = false);
 
 Expr random_condition(Type T, int depth, bool maybe_scalar) {
-    typedef Expr (*make_bin_op_fn)(Expr, Expr);
+    typedef Expr (*make_bin_op_fn)(const Expr &, const Expr &);
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
         NE::make,
@@ -90,7 +90,7 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
 }
 
 Expr random_expr(Type T, int depth, bool overflow_undef) {
-    typedef Expr (*make_bin_op_fn)(Expr, Expr);
+    typedef Expr (*make_bin_op_fn)(const Expr &, const Expr &);
     static make_bin_op_fn make_bin_op[] = {
         Add::make,
         Sub::make,
