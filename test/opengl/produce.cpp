@@ -19,7 +19,7 @@ int test_lut1d() {
     Var c("c");
 
     Buffer<uint8_t> input(8, 8, 3);
-    Testing::fill<uint8_t>(input, [](int x, int y, int c) {
+    input.fill([](int x, int y, int c) {
             float v = (1.0f / 16.0f) + (float)x / 8.0f;
 	    switch (c) {
 	    case 0: return (uint8_t)(v * 255.0f);

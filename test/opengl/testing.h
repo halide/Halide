@@ -9,15 +9,6 @@
 
 namespace Testing {
 
-    // fill 3-dimension buffer
-    template <typename T>
-        void fill(Halide::Buffer<T> &buf, std::function<T(int x, int y, int c)> f)
-        {
-            buf.for_each_element([&](int x, int y, int c) { 
-                    buf(x, y, c) = f(x, y, c);
-                    });
-        }
-
     template <typename T>
         bool neq(T a, T b, T tol)
         {

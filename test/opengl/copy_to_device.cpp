@@ -11,7 +11,7 @@ int main() {
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Buffer<uint8_t> input(255, 10, 3);
-    Testing::fill<uint8_t>(input, [](int x, int y, int c) {
+    input.fill([](int x, int y, int c) {
             return 10*x + y + c;
         });
 
