@@ -461,7 +461,7 @@ private:
             vector<MulExpr> mpys;
             Expr rest;
             string suffix;
-            int mpy_count;
+            int mpy_count = 0;
 
             // Try to find a vector*scalar multiply first, which will
             // match a subset of the expressions that vector*vector
@@ -551,7 +551,7 @@ private:
             Expr rest;
             string vmpa_suffix;
             string vdmpy_suffix;
-            int mpy_count;
+            int mpy_count = 0;
 
             // Try to find vector*scalar multiplies.
             if (op->type.bits() == 16) {
