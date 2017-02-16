@@ -78,7 +78,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
                 constrained_value = min(constrained_value, param.get_max_value());
             }
 
-            lets.push_back(make_pair(constrained_name, constrained_value));
+            lets.push_back({ constrained_name, constrained_value });
         }
     }
 

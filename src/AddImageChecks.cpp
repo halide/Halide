@@ -273,8 +273,8 @@ Stmt add_image_checks(Stmt s,
             Expr min_required_var = Variable::make(Int(32), min_required_name);
             Expr extent_required_var = Variable::make(Int(32), extent_required_name);
 
-            lets_required.push_back(make_pair(extent_required_name, extent_required));
-            lets_required.push_back(make_pair(min_required_name, min_required));
+            lets_required.push_back({ extent_required_name, extent_required });
+            lets_required.push_back({ min_required_name, min_required });
 
             Expr actual_max = actual_min + actual_extent - 1;
             Expr max_required = min_required_var + extent_required_var - 1;
@@ -305,7 +305,7 @@ Stmt add_image_checks(Stmt s,
                 stride_required = (Variable::make(Int(32), name + ".stride." + last_dim + ".required") *
                                    Variable::make(Int(32), name + ".extent." + last_dim + ".required"));
             }
-            lets_required.push_back(make_pair(name + ".stride." + dim + ".required", stride_required));
+            lets_required.push_back({ name + ".stride." + dim + ".required", stride_required });
 
             // On 32-bit systems, insert checks to make sure the total
             // size of all input and output buffers is <= 2^31 - 1.
@@ -325,13 +325,13 @@ Stmt add_image_checks(Stmt s,
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
             if (!is_secondary_output_buffer) {
                 if (j == 0) {
-                    lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
+                    lets_overflow.push_back({ name + ".total_extent." + dim, cast<int64_t>(actual_extent) });
                 } else {
                     max_size = cast<int64_t>(max_size);
                     Expr last_dim = Variable::make(Int(64), name + ".total_extent." + std::to_string(j-1));
                     Expr this_dim = actual_extent * last_dim;
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
-                    lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
+                    lets_overflow.push_back({ name + ".total_extent." + dim, this_dim });
                     Expr error = Call::make(Int(32), "halide_error_buffer_extents_too_large",
                                             {name, this_dim_var, max_size}, Call::Extern);
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
@@ -428,27 +428,27 @@ Stmt add_image_checks(Stmt s,
             if (stride_constrained.defined()) {
                 // Come up with a suggested stride by passing the
                 // required region through this constraint.
-                constraints.push_back(make_pair(stride_name, stride_constrained));
+                constraints.push_back({ stride_name, stride_constrained });
                 stride_constrained = substitute(replace_with_required, stride_constrained);
-                lets_proposed.push_back(make_pair(stride_name + ".proposed", stride_constrained));
+                lets_proposed.push_back({ stride_name + ".proposed", stride_constrained });
             } else {
-                lets_proposed.push_back(make_pair(stride_name + ".proposed", stride_required));
+                lets_proposed.push_back({ stride_name + ".proposed", stride_required });
             }
 
             if (min_constrained.defined()) {
-                constraints.push_back(make_pair(min_name, min_constrained));
+                constraints.push_back({ min_name, min_constrained });
                 min_constrained = substitute(replace_with_required, min_constrained);
-                lets_proposed.push_back(make_pair(min_name + ".proposed", min_constrained));
+                lets_proposed.push_back({ min_name + ".proposed", min_constrained });
             } else {
-                lets_proposed.push_back(make_pair(min_name + ".proposed", min_required));
+                lets_proposed.push_back({ min_name + ".proposed", min_required });
             }
 
             if (extent_constrained.defined()) {
-                constraints.push_back(make_pair(extent_name, extent_constrained));
+                constraints.push_back({ extent_name, extent_constrained });
                 extent_constrained = substitute(replace_with_required, extent_constrained);
-                lets_proposed.push_back(make_pair(extent_name + ".proposed", extent_constrained));
+                lets_proposed.push_back({ extent_name + ".proposed", extent_constrained });
             } else {
-                lets_proposed.push_back(make_pair(extent_name + ".proposed", extent_required));
+                lets_proposed.push_back({ extent_name + ".proposed", extent_required });
             }
 
             // In bounds inference mode, make sure the proposed
@@ -483,7 +483,7 @@ Stmt add_image_checks(Stmt s,
 
             replace_with_constrained[var_str] = constrained_var;
 
-            lets_constrained.push_back(make_pair(var_str + ".constrained", constraints[i].second));
+            lets_constrained.push_back({ var_str + ".constrained", constraints[i].second });
 
             Expr error = Call::make(Int(32), "halide_error_constraint_violated",
                                     {var_str, var, constrained_var_str, constrained_var},

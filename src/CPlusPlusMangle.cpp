@@ -54,7 +54,7 @@ struct PreviousDeclarations {
                 sub = i->second;
             }
         } else {
-            auto insert_result = table.insert(std::make_pair(name, table.size()));
+            auto insert_result = table.insert({ name, table.size() });
             if (!insert_result.second) {
                 sub = insert_result.first->second;
             }
@@ -369,7 +369,7 @@ struct PrevPrefixes {
     std::map<std::string, int32_t> prev_seen;
 
     bool check_and_enter(const std::string &prefix, std::string &substitute) {
-        auto place = prev_seen.insert(std::make_pair(prefix, prev_seen.size()));
+        auto place = prev_seen.insert({ prefix, prev_seen.size() });
         if (place.first->second == 0) {
             substitute = "S_";
         } else {
