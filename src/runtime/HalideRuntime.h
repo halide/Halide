@@ -55,9 +55,8 @@ extern "C" {
  */
 
 // Forward-declare to suppress warnings if compiling as C.
-#ifndef BUFFER_T_DEFINED
 struct halide_buffer_t;
-#endif
+struct buffer_t;
 
 /** Print a message to stderr. Main use is to support HL_TRACE
  * functionality, print, and print_when calls. Also called by the default
