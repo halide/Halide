@@ -89,7 +89,7 @@ public:
 
     GVN() : protect_loads_in_scope(false), number(0), cache(8) {}
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
     }
@@ -98,7 +98,9 @@ public:
         return ExprWithCompareCache(e, &cache);
     }
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e_in) {
+        Expr e = e_in;
+
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -274,7 +276,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
 
         if (iter != replacements.end()) {
@@ -295,7 +297,7 @@ class CSEEveryExprInStmt : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         return common_subexpression_elimination(e);
     }
 };

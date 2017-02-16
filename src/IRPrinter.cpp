@@ -678,13 +678,18 @@ void IRPrinter::visit(const Evaluate *op) {
 }
 
 void IRPrinter::visit(const Shuffle *op) {
-    if (op->is_interleave()) {
+    if (op->is_concat()) {
+        stream << "concat_vectors(";
+        print_list(op->vectors);
+        stream << ")";
+    } else if (op->is_interleave()) {
         stream << "interleave_vectors(";
         print_list(op->vectors);
         stream << ")";
-    } else if (op->is_concat()) {
-        stream << "concat_vectors(";
+    } else if (op->is_extract_element()) {
+        stream << "extract_element(";
         print_list(op->vectors);
+        stream << ", " << op->indices[0];
         stream << ")";
     } else if (op->is_slice()) {
         stream << "slice_vectors(";

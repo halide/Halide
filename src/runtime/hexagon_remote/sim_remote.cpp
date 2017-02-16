@@ -231,22 +231,64 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(const char *),
                              void *(*)(const char *),
                              void *(*)(void *, const char *));
+void* dlopenbuf(const char*filename, const char* data, int size, int perms) __attribute__ ((weak));
 
-int initialize_kernels(const unsigned char *code, int codeLen,
-                       handle_t *module_ptr) {
-    elf_t *lib = obj_dlopen_mem(code, codeLen);
-    if (!lib) {
-        halide_print(NULL, "dlopen_mem failed\n");
-        return -1;
+static void dllib_init() {
+    // The simulator needs this call to enable dlopen to work...
+    const char *builtin[] = {"libgcc.so", "libc.so", "libstdc++.so"};
+    dlinit(3, const_cast<char**>(builtin));
+}
+
+int initialize_kernels_v2(const unsigned char *code, int codeLen,
+                          bool use_shared_object,
+                          handle_t *module_ptr) {
+
+    // Keep this false, even for dlbuf usage, as we do not yet have api for dlopenbuf from standalone.
+    void *lib = NULL;
+    elf_t *elib = NULL;
+    if (use_shared_object) {
+
+        // Create a unique file name
+        char *newf = tmpnam(NULL);
+        char filename[260];
+        strcpy(filename, newf);
+        strcat(filename, "_halide_hexagon_kernels");
+        strcat(filename, ".so");
+
+        // Open the library
+        dllib_init();
+        if(&dlopenbuf == NULL) {
+            halide_print(NULL, "dlopenbuf missing\n");
+            return -1;
+        }
+        lib = dlopenbuf( filename, (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
+        if (!lib) {
+            halide_print(NULL, "dlopenbuf failed\n");
+            return -1;
+        }
+    } else {
+        elib = obj_dlopen_mem(code, codeLen);
+        if (!elib) {
+            halide_print(NULL, "dlopen_mem failed\n");
+            return -1;
+        }
     }
-
     // Initialize the runtime. The Hexagon runtime can't call any
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
-    set_runtime_t set_runtime = (set_runtime_t)obj_dlsym(lib, "halide_noos_set_runtime");
+    set_runtime_t set_runtime;
+    if (use_shared_object) {
+        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
+    } else {
+        set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
+    }
     if (!set_runtime) {
-        obj_dlclose(lib);
+        if (use_shared_object) {
+            dlclose(lib);
+        } else {
+            obj_dlclose(elib);
+        }
         halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
@@ -261,17 +303,34 @@ int initialize_kernels(const unsigned char *code, int codeLen,
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        obj_dlclose(lib);
+        if (use_shared_object) {
+            dlclose(lib);
+        } else {
+            obj_dlclose(elib);
+        }
         halide_print(NULL, "set_runtime failed\n");
         return result;
     }
-    *module_ptr = reinterpret_cast<handle_t>(lib);
-
+    if (use_shared_object) {
+        *module_ptr = reinterpret_cast<handle_t>(lib);
+    } else {
+        *module_ptr = reinterpret_cast<handle_t>(elib);
+    }
     return 0;
 }
 
-handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+int initialize_kernels(const unsigned char *code, int codeLen,
+                       bool use_shared_object,
+                       handle_t *module_ptr) {
+    return initialize_kernels_v2(code, codeLen, false, module_ptr);
+}
+
+handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, int use_shared_object) {
+    if (use_shared_object) {
+        return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+    } else {
+        return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+    }
 }
 
 int run(handle_t module_ptr, handle_t function,
@@ -357,6 +416,7 @@ void set_rpc_return(int value) {
 }
 
 int main(int argc, const char **argv) {
+
     while(true) {
         switch (rpc_call) {
         case Message::None:
@@ -369,16 +429,18 @@ int main(int argc, const char **argv) {
             set_rpc_return(0);
             break;
         case Message::InitKernels:
-            set_rpc_return(initialize_kernels(
+            set_rpc_return(initialize_kernels_v2(
                 reinterpret_cast<unsigned char*>(RPC_ARG(0)),
                 RPC_ARG(1),
-                reinterpret_cast<handle_t*>(RPC_ARG(2))));
+                RPC_ARG(2),
+                reinterpret_cast<handle_t*>(RPC_ARG(3))));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
                 static_cast<handle_t>(RPC_ARG(0)),
                 reinterpret_cast<const char *>(RPC_ARG(1)),
-                RPC_ARG(2)));
+                RPC_ARG(2),
+                RPC_ARG(3)));
             break;
         case Message::Run:
             set_rpc_return(run(
