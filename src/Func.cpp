@@ -35,7 +35,6 @@ namespace Halide {
 
 using std::max;
 using std::min;
-using std::make_pair;
 using std::map;
 using std::string;
 using std::vector;
@@ -225,7 +224,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return std::make_pair(placeholder_pos, count);
+    return { placeholder_pos, count };
 }
 
 std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
@@ -255,7 +254,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
-    return std::make_pair(placeholder_pos, count);
+    return { placeholder_pos, count };
 }
 
 namespace {
@@ -550,9 +549,9 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
 
     vector<pair<string, Expr>> rvar_bounds;
     for (const ReductionVariable &rv : rvars) {
-        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_min", rv.min));
-        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_max", simplify(rv.min + rv.extent - 1)));
-        rvar_bounds.push_back(std::make_pair(rv.var + ".loop_extent", rv.extent));
+        rvar_bounds.push_back({ rv.var + ".loop_min", rv.min });
+        rvar_bounds.push_back({ rv.var + ".loop_max", simplify(rv.min + rv.extent - 1) });
+        rvar_bounds.push_back({ rv.var + ".loop_extent", rv.extent });
     }
 
     bool found = false;
