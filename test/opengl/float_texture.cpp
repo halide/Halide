@@ -10,7 +10,7 @@ int main() {
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Buffer<float> input(255, 255, 3);
-    Testing::fill<float>(input, [](int x, int y, int c) {
+    input.fill([](int x, int y, int c) {
             // Note: the following values can be >1.0f to test whether
             // OpenGL performs clamping operations as part of the copy
             // operation.  (It may do so if something other than floats

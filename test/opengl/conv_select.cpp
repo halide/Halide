@@ -15,7 +15,7 @@ int main() {
     // Define the input
     const int width = 10, height = 10, channels = 4, res_channels = 2;
     Buffer<float> input(width, height, channels);
-    Testing::fill<float>(input, [](int x, int y, int c) {
+    input.fill([](int x, int y, int c) {
             return float(x + y);
         });
 
