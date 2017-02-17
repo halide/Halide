@@ -4,10 +4,11 @@ AccessModifierOffset: -4
 AlignEscapedNewlinesLeft: true
 AlignTrailingComments: false
 AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortFunctionsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: true
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakBeforeMultilineStrings: false
-AlwaysBreakTemplateDeclarations: false
+AlwaysBreakTemplateDeclarations: true
 BinPackParameters: true
 BreakBeforeBinaryOperators: false
 BreakBeforeBraces: Attach
@@ -33,7 +34,9 @@ PenaltyBreakString: 1000
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerBindsToType: false
+SpaceAfterCStyleCast: true
 SpaceAfterControlStatementKeyword: true
+SpaceAfterTemplateKeyword: false
 SpaceBeforeAssignmentOperators: true
 SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 2
