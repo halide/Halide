@@ -15,6 +15,22 @@ extern "C" {
 
 #include "log.h"
 
+// Add weak entry points and dynamically look up mmap, munmap, mprotect
+// as 8998 does not contain these symbol.
+extern "C" {
+__attribute__((weak)) void* mmap(void*, size_t, int, int, int, off_t);
+__attribute__((weak)) int mprotect(void*, size_t, int);
+__attribute__((weak)) int munmap(void*, size_t);
+
+typedef void* (*mmap_ptr_fn)(void*, size_t, int, int, int, off_t);
+__attribute__((weak)) mmap_ptr_fn mmap_ptr = NULL;
+typedef int (*mprotect_ptr_fn)(void*, size_t, int);
+__attribute__((weak)) mprotect_ptr_fn mprotect_ptr = NULL;
+typedef int (*munmap_ptr_fn)(void *, size_t);
+__attribute__((weak)) munmap_ptr_fn munmap_ptr = NULL;
+
+}
+
 // ELF comes in 32 and 64-bit variants. Define ELF64 to use the 64-bit
 // variant.
 // #define ELF64
@@ -143,7 +159,8 @@ struct elf_t {
         // stuff, the same size again to make a writeable copy, and
         // then an extra page for the global offset table for PIC
         // code.
-        buf = (char *)mmap(NULL, size * 2 + global_offset_table_size,
+        mmap_ptr = (mmap_ptr_fn) halide_get_symbol("mmap");
+        buf = (char *)mmap_ptr(NULL, size * 2 + global_offset_table_size,
                            PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 
         // Copy over the data
@@ -261,7 +278,8 @@ struct elf_t {
     }
 
     void deinit() {
-        munmap(buf, size * 2);
+        munmap_ptr = (munmap_ptr_fn) halide_get_symbol("munmap");
+        munmap_ptr(buf, size * 2);
     }
 
     // Get the address given an offset into the buffer. Asserts that
@@ -813,7 +831,8 @@ struct elf_t {
 
     // Mark the executable pages of the object file executable
     void make_executable() {
-        int err = mprotect(buf, size, PROT_EXEC | PROT_READ);
+        mprotect_ptr = (mprotect_ptr_fn) halide_get_symbol("mprotect");
+        int err = mprotect_ptr(buf, size, PROT_EXEC | PROT_READ);
         if (err) {
             log_printf("mprotect %d %p %d", err, buf, size);
             fail(__LINE__);
