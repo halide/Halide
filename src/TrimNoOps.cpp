@@ -26,7 +26,7 @@ namespace {
 class StripIdentities : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::return_second) ||
             op->is_intrinsic(Call::likely) ||
             op->is_intrinsic(Call::likely_if_innermost)) {
@@ -41,7 +41,7 @@ class StripIdentities : public IRMutator {
 class LoadsFromBuffer : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->name == buffer) {
             result = true;
         } else {
@@ -77,7 +77,7 @@ class IsNoOp : public IRVisitor {
         return a || b;
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (op->value.type().is_handle() || is_zero(op->predicate)) {
             condition = const_false();
         } else {
@@ -110,7 +110,7 @@ class IsNoOp : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (is_zero(condition)) {
             return;
         }
@@ -126,7 +126,7 @@ class IsNoOp : public IRVisitor {
         condition = make_and(old_condition, make_or(condition, simplify(op->extent <= 0)));
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         if (is_zero(condition)) {
             return;
         }
@@ -144,7 +144,7 @@ class IsNoOp : public IRVisitor {
         condition = total_condition;
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // If the loop calls an impure function, we can't remove the
         // call to it. Most notably: image_store.
         if (!op->is_pure()) {
@@ -162,11 +162,11 @@ class IsNoOp : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op);
     }
 
@@ -231,7 +231,7 @@ class SimplifyUsingBounds : public IRMutator {
         return is_one(test);
     }
 
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         if (!op->type.is_int() || op->type.bits() < 32) {
             IRMutator::visit(op);
         } else {
@@ -248,7 +248,7 @@ class SimplifyUsingBounds : public IRMutator {
         }
     }
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         if (!op->type.is_int() || op->type.bits() < 32) {
             IRMutator::visit(op);
         } else {
@@ -274,27 +274,27 @@ class SimplifyUsingBounds : public IRMutator {
         }
     }
 
-    void visit(const LE *op) {
+    void visit(const LE *op) override {
         visit_cmp(op);
     }
 
-    void visit(const LT *op) {
+    void visit(const LT *op) override {
         visit_cmp(op);
     }
 
-    void visit(const GE *op) {
+    void visit(const GE *op) override {
         visit_cmp(op);
     }
 
-    void visit(const GT *op) {
+    void visit(const GT *op) override {
         visit_cmp(op);
     }
 
-    void visit(const EQ *op) {
+    void visit(const EQ *op) override {
         visit_cmp(op);
     }
 
-    void visit(const NE *op) {
+    void visit(const NE *op) override {
         visit_cmp(op);
     }
 
@@ -307,15 +307,15 @@ class SimplifyUsingBounds : public IRMutator {
         return LetStmtOrLet::make(op->name, value, body);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         expr = visit_let<Expr, Let>(op);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         stmt = visit_let<Stmt, LetStmt>(op);
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // Simplify the loop bounds.
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
@@ -335,7 +335,7 @@ public:
 class TrimNoOps : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // Bounds of GPU loops can't depend on outer gpu loop vars
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "TrimNoOps found gpu loop var: " << op->name << "\n";

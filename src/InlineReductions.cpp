@@ -32,7 +32,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         Expr value = mutate(op->value);
         internal.push(op->name, 0);
         Expr body = mutate(op->body);
@@ -45,7 +45,7 @@ private:
         }
     }
 
-    void visit(const Variable *v) {
+    void visit(const Variable *v) override {
 
         string var_name = v->name;
         expr = v;

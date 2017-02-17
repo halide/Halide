@@ -30,7 +30,7 @@ class ReplaceShuffleVectors : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         const Variable *v;
         if (op->indices.size() == 1 &&
             (v = op->vectors[0].as<Variable>()) &&
@@ -197,12 +197,12 @@ class RewriteAccessToVectorAlloc : public IRMutator {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         expr = Load::make(op->type, op->name, mutate_index(op->name, op->index),
                           op->image, op->param, mutate(op->predicate));
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         stmt = Store::make(op->name, mutate(op->value), mutate_index(op->name, op->index),
                            op->param, mutate(op->predicate));
     }
@@ -215,7 +215,7 @@ public:
 class UsesGPUVars : public IRVisitor {
 private:
     using IRVisitor::visit;
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
             debug(3) << "Found gpu loop var: " << op->name << "\n";
             uses_gpu = true;
@@ -266,7 +266,7 @@ class PredicateLoadStore : public IRMutator {
         return pred;
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         valid = valid && should_predicate_store_load(op->type.bits());
         if (!valid) {
             expr = op;
@@ -297,7 +297,7 @@ class PredicateLoadStore : public IRMutator {
         vectorized = true;
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         valid = valid && should_predicate_store_load(op->value.type().bits());
         if (!valid) {
             stmt = op;
@@ -331,7 +331,7 @@ class PredicateLoadStore : public IRMutator {
         vectorized = true;
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // We should not vectorize calls with side-effects
         valid = valid && op->is_pure();
         IRMutator::visit(op);
@@ -387,7 +387,7 @@ class VectorSubs : public IRMutator {
 
     using IRMutator::visit;
 
-    virtual void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         Expr value = mutate(op->value);
         if (value.same_as(op->value)) {
             expr = op;
@@ -397,7 +397,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    virtual void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         string widened_name = op->name + widening_suffix;
         if (op->name == var) {
             expr = replacement;
@@ -421,23 +421,23 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const Add *op) {mutate_binary_operator(op);}
-    void visit(const Sub *op) {mutate_binary_operator(op);}
-    void visit(const Mul *op) {mutate_binary_operator(op);}
-    void visit(const Div *op) {mutate_binary_operator(op);}
-    void visit(const Mod *op) {mutate_binary_operator(op);}
-    void visit(const Min *op) {mutate_binary_operator(op);}
-    void visit(const Max *op) {mutate_binary_operator(op);}
-    void visit(const EQ *op)  {mutate_binary_operator(op);}
-    void visit(const NE *op)  {mutate_binary_operator(op);}
-    void visit(const LT *op)  {mutate_binary_operator(op);}
-    void visit(const LE *op)  {mutate_binary_operator(op);}
-    void visit(const GT *op)  {mutate_binary_operator(op);}
-    void visit(const GE *op)  {mutate_binary_operator(op);}
-    void visit(const And *op) {mutate_binary_operator(op);}
-    void visit(const Or *op)  {mutate_binary_operator(op);}
+    void visit(const Add *op) override {mutate_binary_operator(op);}
+    void visit(const Sub *op) override {mutate_binary_operator(op);}
+    void visit(const Mul *op) override {mutate_binary_operator(op);}
+    void visit(const Div *op) override {mutate_binary_operator(op);}
+    void visit(const Mod *op) override {mutate_binary_operator(op);}
+    void visit(const Min *op) override {mutate_binary_operator(op);}
+    void visit(const Max *op) override {mutate_binary_operator(op);}
+    void visit(const EQ *op) override  {mutate_binary_operator(op);}
+    void visit(const NE *op) override  {mutate_binary_operator(op);}
+    void visit(const LT *op) override  {mutate_binary_operator(op);}
+    void visit(const LE *op) override  {mutate_binary_operator(op);}
+    void visit(const GT *op) override  {mutate_binary_operator(op);}
+    void visit(const GE *op) override  {mutate_binary_operator(op);}
+    void visit(const And *op) override {mutate_binary_operator(op);}
+    void visit(const Or *op) override  {mutate_binary_operator(op);}
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         Expr condition = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
@@ -455,7 +455,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
@@ -469,7 +469,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // Widen the call by changing the lanes of all of its
         // arguments and its return type
         vector<Expr> new_args(op->args.size());
@@ -514,7 +514,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
 
         // Vectorize the let value and check to see if it was vectorized by
         // this mutator. The type of the expression might already be vector
@@ -544,7 +544,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Expr mutated_value = mutate(op->value);
         std::string mutated_name = op->name;
 
@@ -609,7 +609,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         vector<Expr> new_args(op->args.size());
         vector<Expr> new_values(op->values.size());
         bool changed = false;
@@ -646,7 +646,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
@@ -660,7 +660,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) override {
         if (op->condition.type().lanes() > 1) {
             stmt = scalarize(op);
         } else {
@@ -668,7 +668,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
         debug(3) << "Vectorizing over " << var << "\n"
@@ -757,7 +757,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         ForType for_type = op->for_type;
         if (for_type == ForType::Vectorized) {
             user_warning << "Warning: Encountered vector for loop over " << op->name
@@ -802,7 +802,7 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         std::vector<Expr> new_extents;
         Expr new_expr;
 
@@ -914,7 +914,7 @@ class VectorizeLoops : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const For *for_loop) {
+    void visit(const For *for_loop) override {
         bool old_in_hexagon = in_hexagon;
         if (for_loop->device_api == DeviceAPI::Hexagon) {
             in_hexagon = true;

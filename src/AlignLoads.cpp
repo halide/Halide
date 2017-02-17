@@ -39,7 +39,7 @@ private:
                                  index, load->image, load->param, const_true(index.type().lanes())));
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // We shouldn't mess with load inside an address_of.
         if (op->is_intrinsic(Call::address_of)) {
             expr = op;
@@ -48,7 +48,7 @@ private:
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (!is_one(op->predicate)) {
             // TODO(psuriana): Do nothing to predicated loads for now.
             IRMutator::visit(op);
@@ -182,8 +182,8 @@ private:
         }
     }
 
-    void visit(const Let *op) { visit_let(expr, op); }
-    void visit(const LetStmt *op) { visit_let(stmt, op); }
+    void visit(const Let *op) override { visit_let(expr, op); }
+    void visit(const LetStmt *op) override { visit_let(stmt, op); }
 };
 
 }  // namespace

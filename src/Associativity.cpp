@@ -33,7 +33,7 @@ class ConvertSelfRef : public IRMutator {
     string op_x;
     bool is_conditional;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!is_solvable) {
             return;
         }
@@ -73,7 +73,7 @@ class ConvertSelfRef : public IRMutator {
         }
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         is_conditional = true;
         Expr cond = mutate(op->condition);
         is_conditional = false;

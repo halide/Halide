@@ -38,7 +38,7 @@ struct Container {
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = true;
         } else {
@@ -532,13 +532,13 @@ class IsUsedInStmt : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == func) result = true;
     }
 
     // A reference to the function's buffers counts as a use
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_handle() &&
             starts_with(op->name, func + ".") &&
             ends_with(op->name, ".buffer")) {
@@ -630,7 +630,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old = producing;
             producing = op->name;
@@ -647,7 +647,7 @@ private:
         }
     }
 
-    void visit(const For *for_loop) {
+    void visit(const For *for_loop) override {
         debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
         const LoopLevel &compute_level = func.schedule().compute_level();
         const LoopLevel &store_level = func.schedule().store_level();
@@ -714,7 +714,7 @@ private:
     }
 
     // If we're an inline update or extern, we may need to inject a realization here
-    virtual void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         if (op->name != func.name() &&
             !func.is_pure() &&
             func.schedule().compute_level().is_inline() &&
@@ -749,7 +749,7 @@ private:
 
     const map<string, Function> &env;
 
-    void visit(const For *f) {
+    void visit(const For *f) override {
         f->min.accept(this);
         f->extent.accept(this);
         size_t first_dot = f->name.find('.');
@@ -795,7 +795,7 @@ private:
         }
     }
 
-    void visit(const Call *c) {
+    void visit(const Call *c) override {
         IRVisitor::visit(c);
 
         if (c->name == func.name()) {
@@ -803,7 +803,7 @@ private:
         }
     }
 
-    void visit(const Variable *v) {
+    void visit(const Variable *v) override {
         if (v->type.is_handle() &&
             starts_with(v->name, func.name() + ".") &&
             ends_with(v->name, ".buffer")) {
@@ -848,7 +848,7 @@ string schedule_to_source(Function f,
 class StmtUsesFunc : public IRVisitor {
     using IRVisitor::visit;
     string func;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == func) {
             result = true;
         }
@@ -873,7 +873,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (ends_with(op->name, Var::outermost().name()) ||
             ends_with(op->name, LoopLevel::root().to_string())) {
             IRVisitor::visit(op);
@@ -901,7 +901,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old_caller = caller;
             caller = op->name;
@@ -912,7 +912,7 @@ class PrintUsesOfFunc : public IRVisitor {
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == func) {
             do_indent();
             stream << caller << " uses " << func << "\n";
@@ -1073,7 +1073,7 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
 class RemoveLoopsOverOutermost : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (ends_with(op->name, ".__outermost") &&
             is_one(simplify(op->extent)) &&
             op->device_api == DeviceAPI::None) {
@@ -1083,7 +1083,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (ends_with(op->name, ".__outermost.loop_extent") ||
             ends_with(op->name, ".__outermost.loop_min") ||
             ends_with(op->name, ".__outermost.loop_max")) {

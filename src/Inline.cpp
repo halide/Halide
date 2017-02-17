@@ -92,7 +92,7 @@ class Inliner : public IRMutator {
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == func.name()) {
 
             // Mutate the args
@@ -121,7 +121,7 @@ class Inliner : public IRMutator {
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         bool old_found = found;
 
         found = false;

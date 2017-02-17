@@ -33,7 +33,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
         if (iter == cache.end()) {
             // Not in the cache, call the base class version.
@@ -106,7 +106,7 @@ private:
         failed = true;
     }
 
-    void visit(const Add *op) {
+    void visit(const Add *op) override {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -192,7 +192,7 @@ private:
         }
     }
 
-    void visit(const Sub *op) {
+    void visit(const Sub *op) override {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -283,7 +283,7 @@ private:
         }
     }
 
-    void visit(const Mul *op) {
+    void visit(const Mul *op) override {
         bool old_uses_var = uses_var;
         uses_var = false;
         bool old_failed = failed;
@@ -344,7 +344,7 @@ private:
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // Ignore likely intrinsics
         if (op->is_intrinsic(Call::likely) ||
             op->is_intrinsic(Call::likely_if_innermost)) {
@@ -459,11 +459,11 @@ private:
         }
     }
 
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         visit_min_max_op(op, true);
     }
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         visit_min_max_op(op, false);
     }
 
@@ -530,11 +530,11 @@ private:
         }
     }
 
-    void visit(const Or *op) {
+    void visit(const Or *op) override {
         visit_and_or_op(op);
     }
 
-    void visit(const And *op) {
+    void visit(const And *op) override {
         visit_and_or_op(op);
     }
 
@@ -671,31 +671,31 @@ private:
         }
     }
 
-    void visit(const LT *op) {
+    void visit(const LT *op) override {
         visit_cmp<LT, GT>(op);
     }
 
-    void visit(const LE *op) {
+    void visit(const LE *op) override {
         visit_cmp<LE, GE>(op);
     }
 
-    void visit(const GE *op) {
+    void visit(const GE *op) override {
         visit_cmp<GE, LE>(op);
     }
 
-    void visit(const GT *op) {
+    void visit(const GT *op) override {
         visit_cmp<GT, LT>(op);
     }
 
-    void visit(const EQ *op) {
+    void visit(const EQ *op) override {
         visit_cmp<EQ, EQ>(op);
     }
 
-    void visit(const NE *op) {
+    void visit(const NE *op) override {
         visit_cmp<NE, NE>(op);
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == var) {
             uses_var = true;
             expr = op;
@@ -714,7 +714,7 @@ private:
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         bool old_uses_var = uses_var;
         uses_var = false;
         Expr value = mutate(op->value);
@@ -760,7 +760,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const UIntImm *op) {
+    void visit(const UIntImm *op) override {
         internal_assert(op->type.is_bool());
         if ((op->value && target) ||
             (!op->value && !target)) {
@@ -795,7 +795,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const And *op) {
+    void visit(const And *op) override {
         op->a.accept(this);
         Interval ia = result;
         op->b.accept(this);
@@ -813,7 +813,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const Or *op) {
+    void visit(const Or *op) override {
         op->a.accept(this);
         Interval ia = result;
         op->b.accept(this);
@@ -831,13 +831,13 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         target = !target;
         op->a.accept(this);
         target = !target;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         internal_assert(op->type.is_bool());
         // If it's a bool, we might need to know the intervals over
         // which it's definitely or definitely false. We'll do this
@@ -858,7 +858,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         internal_assert(op->type.is_bool());
         if (scope.contains(op->name)) {
             pair<string, bool> key = { op->name, target };
@@ -874,13 +874,13 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const LT *lt) {
+    void visit(const LT *lt) override {
         // Normalize to le
         Expr cond = lt->a <= (lt->b - 1);
         cond.accept(this);
     }
 
-    void visit(const GT *gt) {
+    void visit(const GT *gt) override {
         // Normalize to ge
         Expr cond = gt->a >= (gt->b + 1);
         cond.accept(this);
@@ -911,7 +911,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const LE *le) {
+    void visit(const LE *le) override {
         static string b_name = unique_name('b');
         static string c_name = unique_name('c');
 
@@ -968,7 +968,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const GE *ge) {
+    void visit(const GE *ge) override {
         static string b_name = unique_name('b');
         static string c_name = unique_name('c');
 
@@ -1022,7 +1022,7 @@ class SolveForInterval : public IRVisitor {
         }
     }
 
-    void visit(const EQ *op) {
+    void visit(const EQ *op) override {
         Expr cond;
         if (op->a.type().is_bool()) {
             internal_assert(op->a.type().is_bool() == op->b.type().is_bool());
@@ -1035,7 +1035,7 @@ class SolveForInterval : public IRVisitor {
         cond.accept(this);
     }
 
-    void visit(const NE *op) {
+    void visit(const NE *op) override {
         Expr cond;
         if (op->a.type().is_bool()) {
             internal_assert(op->a.type().is_bool() == op->b.type().is_bool());
@@ -1049,15 +1049,15 @@ class SolveForInterval : public IRVisitor {
     }
 
     // Other unhandled sources of bools
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         fail();
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         fail();
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         fail();
     }
 
@@ -1102,7 +1102,7 @@ class AndConditionOverDomain : public IRMutator {
         return get_bounds(a).min;
     }
 
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         expr = mutate(op->value);
     }
 
@@ -1140,23 +1140,23 @@ class AndConditionOverDomain : public IRMutator {
         }
     }
 
-    void visit(const LT *op) {
+    void visit(const LT *op) override {
         visit_cmp<LT, true>(op);
     }
 
-    void visit(const LE *op) {
+    void visit(const LE *op) override {
         visit_cmp<LE, true>(op);
     }
 
-    void visit(const GT *op) {
+    void visit(const GT *op) override {
         visit_cmp<GT, false>(op);
     }
 
-    void visit(const GE *op) {
+    void visit(const GE *op) override {
         visit_cmp<GE, false>(op);
     }
 
-    void visit(const EQ *op) {
+    void visit(const EQ *op) override {
         if (op->type.is_vector()) {
             fail();
         } else {
@@ -1182,17 +1182,17 @@ class AndConditionOverDomain : public IRMutator {
         }
     }
 
-    void visit(const NE *op) {
+    void visit(const NE *op) override {
         expr = mutate(!(op->a == op->b));
     }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         flipped = !flipped;
         IRMutator::visit(op);
         flipped = !flipped;
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (scope.contains(op->name) && op->type.is_bool()) {
             Interval i = scope.get(op->name);
             if (!flipped) {
@@ -1220,7 +1220,7 @@ class AndConditionOverDomain : public IRMutator {
 
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         // If it's a numeric value, we can just get the bounds of
         // it. If it's a boolean value yet, we don't know whether it
         // would be more conservative to make it true or to make it
@@ -1287,15 +1287,15 @@ class AndConditionOverDomain : public IRMutator {
     }
 
     // Other unhandled sources of bools
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         fail();
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         fail();
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         fail();
     }
 

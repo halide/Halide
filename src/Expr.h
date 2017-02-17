@@ -122,16 +122,16 @@ struct BaseExprNode : public IRNode {
    a concrete instantiation of a unique IRNodeType per class. */
 template<typename T>
 struct ExprNode : public BaseExprNode {
-    EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType type_info() const {return T::_type_info;}
-    virtual ~ExprNode() {}
+    EXPORT void accept(IRVisitor *v) const override;
+    IRNodeType type_info() const override {return T::_type_info;}
+    ~ExprNode() override {}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
-    EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType type_info() const {return T::_type_info;}
-    virtual ~StmtNode() {}
+    EXPORT void accept(IRVisitor *v) const override;
+    IRNodeType type_info() const override {return T::_type_info;}
+    ~StmtNode() override {}
 };
 
 /** IR nodes are passed around opaque handles to them. This is a

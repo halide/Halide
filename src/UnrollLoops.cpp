@@ -12,7 +12,7 @@ namespace Internal {
 class UnrollLoops : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const For *for_loop) {
+    void visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
             // Give it one last chance to simplify to an int
             Expr extent = simplify(for_loop->extent);

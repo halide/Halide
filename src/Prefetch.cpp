@@ -33,7 +33,7 @@ public:
 private:
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == buf_name) {
             load = Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
         } else {
@@ -75,21 +75,21 @@ private:
 private:
     using IRMutator::visit;
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         Interval in = bounds_of_expr_in_scope(op->value, bounds);
         bounds.push(op->name, in);
         IRMutator::visit(op);
         bounds.pop(op->name);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Interval in = bounds_of_expr_in_scope(op->value, bounds);
         bounds.push(op->name, in);
         IRMutator::visit(op);
         bounds.pop(op->name);
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         const vector<Prefetch> *old_prefetches = prefetches;
 
         map<string, Function>::const_iterator iter = env.find(op->name);
@@ -164,7 +164,7 @@ private:
         return Block::make({prefetch, body});
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // Add loop variable to interval scope for any inner loop prefetch
         Expr loop_var = Variable::make(Int(32), op->name);
         bounds.push(op->name, Interval(loop_var, loop_var));

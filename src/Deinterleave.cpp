@@ -30,11 +30,11 @@ private:
     using IRMutator::visit;
 
     // Don't enter any inner constructs for which it's not safe to pull out stores.
-    void visit(const For *op) {collecting = false; stmt = op;}
-    void visit(const IfThenElse *op) {collecting = false; stmt = op;}
-    void visit(const ProducerConsumer *op) {collecting = false; stmt = op;}
-    void visit(const Allocate *op) {collecting = false; stmt = op;}
-    void visit(const Realize *op) {collecting = false; stmt = op;}
+    void visit(const For *op) override {collecting = false; stmt = op;}
+    void visit(const IfThenElse *op) override {collecting = false; stmt = op;}
+    void visit(const ProducerConsumer *op) override {collecting = false; stmt = op;}
+    void visit(const Allocate *op) override {collecting = false; stmt = op;}
+    void visit(const Realize *op) override {collecting = false; stmt = op;}
 
     bool collecting;
     // These are lets that we've encountered since the last collected
@@ -42,7 +42,7 @@ private:
     // become lets used by the collected stores.
     std::vector<Stmt> potential_lets;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (!collecting) {
             expr = op;
             return;
@@ -59,7 +59,7 @@ private:
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (!collecting) {
             stmt = op;
             return;
@@ -105,7 +105,7 @@ private:
         potential_lets.clear();
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (!collecting) {
             stmt = op;
             return;
@@ -118,7 +118,7 @@ private:
         }
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         if (!collecting) {
             stmt = op;
             return;
@@ -158,7 +158,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         if (new_lanes == 1) {
             expr = op->value;
         } else {
@@ -166,7 +166,7 @@ private:
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (op->type.is_scalar()) {
             expr = op;
         } else {
@@ -175,7 +175,7 @@ private:
         }
     }
 
-    void visit(const Ramp *op) {
+    void visit(const Ramp *op) override {
         expr = op->base + starting_lane * op->stride;
         internal_assert(expr.type() == op->base.type());
         if (new_lanes > 1) {
@@ -183,7 +183,7 @@ private:
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_scalar()) {
             expr = op;
         } else {
@@ -223,7 +223,7 @@ private:
         }
     }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         if (op->type.is_scalar()) {
             expr = op;
         } else {
@@ -232,7 +232,7 @@ private:
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         Type t = op->type.with_lanes(new_lanes);
 
         // Don't mutate scalars
@@ -265,7 +265,7 @@ private:
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         if (op->type.is_vector()) {
             Expr new_value = mutate(op->value);
             std::string new_name = unique_name('t');
@@ -285,7 +285,7 @@ private:
         }
     }
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         if (op->is_interleave()) {
             internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
             if ((int)op->vectors.size() == lane_stride) {
@@ -448,15 +448,15 @@ class Interleaver : public IRMutator {
         return result;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         expr = visit_let<Let, Expr>(op);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         stmt = visit_let<LetStmt, Stmt>(op);
     }
 
-    void visit(const Mod *op) {
+    void visit(const Mod *op) override {
         const Ramp *r = op->a.as<Ramp>();
         for (int i = 2; i <= 4; ++i) {
             if (r &&
@@ -470,7 +470,7 @@ class Interleaver : public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Div *op) {
+    void visit(const Div *op) override {
         const Ramp *r = op->a.as<Ramp>();
         for (int i = 2; i <= 4; ++i) {
             if (r && is_const(op->b, i)) {
@@ -482,7 +482,7 @@ class Interleaver : public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::address_of)) {
             // Don't attempt to deinterleave loads inside address_of.
             expr = op;
@@ -491,7 +491,7 @@ class Interleaver : public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         bool old_should_deinterleave = should_deinterleave;
         int old_num_lanes = num_lanes;
 
@@ -529,7 +529,7 @@ class Interleaver : public IRMutator {
         num_lanes = old_num_lanes;
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         bool old_should_deinterleave = should_deinterleave;
         int old_num_lanes = num_lanes;
 
@@ -557,7 +557,7 @@ class Interleaver : public IRMutator {
         num_lanes = old_num_lanes;
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         const LetStmt *let = op->first.as<LetStmt>();
         const Store *store = op->first.as<Store>();
 

@@ -92,7 +92,7 @@ class FindLoads : public IRGraphVisitor {
     // one run to the next.
     set<const Load *> found;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (found.count(op) == 0) {
             found.insert(op);
             result.push_back(op);
@@ -140,7 +140,7 @@ class StepForwards : public IRGraphMutator {
 
     using IRGraphMutator::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (linear.contains(op->name)) {
             Expr step = linear.get(op->name);
             if (!step.defined()) {
@@ -195,7 +195,7 @@ class LoopCarryOverLoop : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         // Track containing LetStmts and their linearity w.r.t. the
         // loop variable.
         Expr value = mutate(op->value);
@@ -216,11 +216,11 @@ class LoopCarryOverLoop : public IRMutator {
         linear.pop(op->name);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         stmt = lift_carried_values_out_of_stmt(op);
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         vector<Stmt> v = block_to_vector(op);
 
         vector<Stmt> stores;
@@ -467,14 +467,14 @@ class LoopCarryOverLoop : public IRMutator {
         return s;
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // Don't lift loads out of code that might not run. Besides,
         // stashing things in registers while we run an inner loop
         // probably isn't a good use of registers.
         stmt = op;
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         // Don't lift loads out of code that might not run.
         stmt = op;
     }
@@ -501,7 +501,7 @@ class LoopCarry : public IRMutator {
     int max_carried_values;
     Scope<int> in_consume;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             IRMutator::visit(op);
         } else {
@@ -512,7 +512,7 @@ class LoopCarry : public IRMutator {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (op->for_type == ForType::Serial && !is_one(op->extent)) {
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);

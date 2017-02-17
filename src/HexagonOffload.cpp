@@ -28,7 +28,7 @@ class ReplaceParams : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             expr = Load::make(op->type, op->name, mutate(op->index), op->image,
@@ -38,7 +38,7 @@ class ReplaceParams : public IRMutator {
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
             stmt = Store::make(op->name, mutate(op->value), mutate(op->index),
@@ -100,7 +100,7 @@ class InjectHexagonRpc : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const For *loop) {
+    void visit(const For *loop) override {
         if (loop->device_api != DeviceAPI::Hexagon) {
             IRMutator::visit(loop);
             return;
@@ -213,7 +213,7 @@ class InjectHexagonRpc : public IRMutator {
         stmt = call_extern_and_assert("halide_hexagon_run", params);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }
@@ -225,7 +225,7 @@ class InjectHexagonRpc : public IRMutator {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (op->value.type() == Int(32)) {
             alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
         }

@@ -19,7 +19,7 @@ class DebugToFile : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() && !iter->second.debug_file().empty()) {
             Function f = iter->second;
@@ -96,7 +96,7 @@ class RemoveDummyRealizations : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         for (Function f : outputs) {
             if (op->name == f.name()) {
                 stmt = mutate(op->body);

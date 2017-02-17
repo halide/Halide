@@ -41,47 +41,47 @@ protected:
      * new value */
     Stmt stmt;
 
-    EXPORT virtual void visit(const IntImm *);
-    EXPORT virtual void visit(const UIntImm *);
-    EXPORT virtual void visit(const FloatImm *);
-    EXPORT virtual void visit(const StringImm *);
-    EXPORT virtual void visit(const Cast *);
-    EXPORT virtual void visit(const Variable *);
-    EXPORT virtual void visit(const Add *);
-    EXPORT virtual void visit(const Sub *);
-    EXPORT virtual void visit(const Mul *);
-    EXPORT virtual void visit(const Div *);
-    EXPORT virtual void visit(const Mod *);
-    EXPORT virtual void visit(const Min *);
-    EXPORT virtual void visit(const Max *);
-    EXPORT virtual void visit(const EQ *);
-    EXPORT virtual void visit(const NE *);
-    EXPORT virtual void visit(const LT *);
-    EXPORT virtual void visit(const LE *);
-    EXPORT virtual void visit(const GT *);
-    EXPORT virtual void visit(const GE *);
-    EXPORT virtual void visit(const And *);
-    EXPORT virtual void visit(const Or *);
-    EXPORT virtual void visit(const Not *);
-    EXPORT virtual void visit(const Select *);
-    EXPORT virtual void visit(const Load *);
-    EXPORT virtual void visit(const Ramp *);
-    EXPORT virtual void visit(const Broadcast *);
-    EXPORT virtual void visit(const Call *);
-    EXPORT virtual void visit(const Let *);
-    EXPORT virtual void visit(const LetStmt *);
-    EXPORT virtual void visit(const AssertStmt *);
-    EXPORT virtual void visit(const ProducerConsumer *);
-    EXPORT virtual void visit(const For *);
-    EXPORT virtual void visit(const Store *);
-    EXPORT virtual void visit(const Provide *);
-    EXPORT virtual void visit(const Allocate *);
-    EXPORT virtual void visit(const Free *);
-    EXPORT virtual void visit(const Realize *);
-    EXPORT virtual void visit(const Block *);
-    EXPORT virtual void visit(const IfThenElse *);
-    EXPORT virtual void visit(const Evaluate *);
-    EXPORT virtual void visit(const Shuffle *);
+    EXPORT void visit(const IntImm *) override;
+    EXPORT void visit(const UIntImm *) override;
+    EXPORT void visit(const FloatImm *) override;
+    EXPORT void visit(const StringImm *) override;
+    EXPORT void visit(const Cast *) override;
+    EXPORT void visit(const Variable *) override;
+    EXPORT void visit(const Add *) override;
+    EXPORT void visit(const Sub *) override;
+    EXPORT void visit(const Mul *) override;
+    EXPORT void visit(const Div *) override;
+    EXPORT void visit(const Mod *) override;
+    EXPORT void visit(const Min *) override;
+    EXPORT void visit(const Max *) override;
+    EXPORT void visit(const EQ *) override;
+    EXPORT void visit(const NE *) override;
+    EXPORT void visit(const LT *) override;
+    EXPORT void visit(const LE *) override;
+    EXPORT void visit(const GT *) override;
+    EXPORT void visit(const GE *) override;
+    EXPORT void visit(const And *) override;
+    EXPORT void visit(const Or *) override;
+    EXPORT void visit(const Not *) override;
+    EXPORT void visit(const Select *) override;
+    EXPORT void visit(const Load *) override;
+    EXPORT void visit(const Ramp *) override;
+    EXPORT void visit(const Broadcast *) override;
+    EXPORT void visit(const Call *) override;
+    EXPORT void visit(const Let *) override;
+    EXPORT void visit(const LetStmt *) override;
+    EXPORT void visit(const AssertStmt *) override;
+    EXPORT void visit(const ProducerConsumer *) override;
+    EXPORT void visit(const For *) override;
+    EXPORT void visit(const Store *) override;
+    EXPORT void visit(const Provide *) override;
+    EXPORT void visit(const Allocate *) override;
+    EXPORT void visit(const Free *) override;
+    EXPORT void visit(const Realize *) override;
+    EXPORT void visit(const Block *) override;
+    EXPORT void visit(const IfThenElse *) override;
+    EXPORT void visit(const Evaluate *) override;
+    EXPORT void visit(const Shuffle *) override;
 };
 
 
@@ -94,8 +94,8 @@ protected:
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
 
 public:
-    EXPORT Stmt mutate(Stmt s);
-    EXPORT Expr mutate(Expr e);
+    EXPORT Stmt mutate(Stmt s) override;
+    EXPORT Expr mutate(Expr e) override;
 };
 
 

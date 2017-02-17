@@ -21,18 +21,18 @@ public:
 
 protected:
 
-    std::string mcpu() const;
-    std::string mattrs() const;
-    bool use_soft_float_abi() const;
-    int native_vector_bits() const;
+    std::string mcpu() const override;
+    std::string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
 
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
-    void visit(const Cast *);
-    void visit(const Min *);
-    void visit(const Max *);
+    void visit(const Cast *) override;
+    void visit(const Min *) override;
+    void visit(const Max *) override;
     // @}
 
     // Call an intrinsic as defined by a pattern. Dispatches to the

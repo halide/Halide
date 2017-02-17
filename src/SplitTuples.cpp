@@ -16,7 +16,7 @@ namespace {
 class UsesExternImage : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *c) {
+    void visit(const Call *c) override {
         if (c->call_type == Call::Image) {
             result = true;
         } else {
@@ -37,7 +37,7 @@ inline bool uses_extern_image(Stmt s) {
 class SplitTuples : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         realizations.push(op->name, 0);
         if (op->types.size() > 1) {
             // Make a nested set of realize nodes for each tuple element
@@ -52,7 +52,7 @@ class SplitTuples : public IRMutator {
         realizations.pop(op->name);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->call_type == Call::Halide) {            
             auto it = env.find(op->name);
             internal_assert(it != env.end());
@@ -75,7 +75,7 @@ class SplitTuples : public IRMutator {
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         if (op->values.size() == 1) {
             IRMutator::visit(op);
             return;

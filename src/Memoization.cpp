@@ -17,7 +17,7 @@ namespace {
 class FindParameterDependencies : public IRGraphVisitor {
 public:
     FindParameterDependencies() { }
-    ~FindParameterDependencies() { }
+    ~FindParameterDependencies() override { }
 
     void visit_function(const Function &function) {
         function.accept(this);
@@ -40,7 +40,7 @@ public:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->param.defined()) {
             record(call->param);
         }
@@ -65,14 +65,14 @@ public:
     }
 
 
-    void visit(const Load *load) {
+    void visit(const Load *load) override {
         if (load->param.defined()) {
             record(load->param);
         }
         IRGraphVisitor::visit(load);
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (var->param.defined()) {
             record(var->param);
         }
@@ -371,7 +371,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -442,7 +442,7 @@ private:
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
             iter->second.schedule().memoized()) {
@@ -512,7 +512,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Allocate *allocation) {
+    void visit(const Allocate *allocation) override {
         std::string realization_name = get_realization_name(allocation->name);
         std::map<std::string, Function>::const_iterator iter = env.find(realization_name);
 
@@ -529,7 +529,7 @@ private:
         }
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (!innermost_realization_name.empty() &&
             call->name == Call::buffer_init) {
             internal_assert(call->args.size() >= 2)
@@ -560,7 +560,7 @@ private:
       IRMutator::visit(call);
     }
 
-    void visit(const LetStmt *let) {
+    void visit(const LetStmt *let) override {
         if (let->name == innermost_realization_name + ".cache_miss") {
             Expr value = mutate(let->value);
             Stmt body = mutate(let->body);

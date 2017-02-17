@@ -10,7 +10,7 @@ namespace Internal {
 class RemoveTrivialForLoops : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const For *for_loop) {
+    void visit(const For *for_loop) override {
         if (for_loop->device_api != DeviceAPI::None) {
             // Don't assume any device API loops are trivial.
             IRMutator::visit(for_loop);

@@ -23,7 +23,7 @@ public:
 private:
     using IRMutator::visit;
 
-    void visit(const Provide *provide) {
+    void visit(const Provide *provide) override {
         if (!inside_kernel_loop ||
             kernel_scope_allocations.contains(provide->name)) {
             IRMutator::visit(provide);
@@ -52,7 +52,7 @@ private:
                                          Call::Intrinsic));
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (!inside_kernel_loop ||
             (call->call_type != Call::Halide &&
              call->call_type != Call::Image) ||
@@ -127,7 +127,7 @@ private:
         expr = load_call;
     }
 
-    void visit(const LetStmt *let) {
+    void visit(const LetStmt *let) override {
         // Discover constrained versions of things.
         bool constrained_version_exists = ends_with(let->name, ".constrained");
         if (constrained_version_exists) {
@@ -141,7 +141,7 @@ private:
         }
     }
 
-    void visit(const For *loop) {
+    void visit(const For *loop) override {
         bool old_kernel_loop = inside_kernel_loop;
         if ((loop->for_type == ForType::GPUBlock || loop->for_type == ForType::GPUThread) &&
             loop->device_api == DeviceAPI::GLSL) {
@@ -151,7 +151,7 @@ private:
         inside_kernel_loop = old_kernel_loop;
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         if (inside_kernel_loop) {
             kernel_scope_allocations.push(op->name, 0);
             IRMutator::visit(op);

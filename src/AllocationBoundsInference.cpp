@@ -24,7 +24,7 @@ class AllocationInference : public IRMutator {
     const FuncValueBounds &func_bounds;
     set<string> touched_by_extern;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         map<string, Function>::const_iterator iter = env.find(op->name);
         internal_assert(iter != env.end());
         Function f = iter->second;

@@ -54,7 +54,7 @@ public:
 private:
     using IRMutator::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
 
         // Calls inside of an address_of don't count, but we want to
         // visit the args of the inner call.
@@ -135,7 +135,7 @@ private:
 
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         IRMutator::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
@@ -175,7 +175,7 @@ private:
         }
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         IRMutator::visit(op);
         op = stmt.as<Realize>();
         internal_assert(op);
@@ -213,7 +213,7 @@ private:
 
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         IRMutator::visit(op);
         op = stmt.as<ProducerConsumer>();
         internal_assert(op);
@@ -259,7 +259,7 @@ class RemoveRealizeOverOutput : public IRMutator {
     using IRMutator::visit;
     const vector<Function> &outputs;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         for (Function f : outputs) {
             if (op->name == f.name()) {
                 stmt = mutate(op->body);
