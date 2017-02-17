@@ -1,9 +1,9 @@
 #include "InjectImageIntrinsics.h"
+#include "CodeGen_GPU_Dev.h"
+#include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "CodeGen_GPU_Dev.h"
 #include "Substitute.h"
-#include "FuseGPUThreadLoops.h"
 
 namespace Halide {
 namespace Internal {
@@ -14,7 +14,9 @@ using std::vector;
 
 class InjectImageIntrinsics : public IRMutator {
 public:
-    InjectImageIntrinsics(const map<string, Function> &e) : inside_kernel_loop(false), env(e) {}
+    InjectImageIntrinsics(const map<string, Function> &e)
+        : inside_kernel_loop(false), env(e) {
+    }
     Scope<int> scope;
     bool inside_kernel_loop;
     Scope<int> kernel_scope_allocations;
@@ -44,7 +46,8 @@ private:
             provide->args[0],
             provide->args[1],
             provide->args[2],
-            value_arg};
+            value_arg
+        };
 
         stmt = Evaluate::make(Call::make(value_arg.type(),
                                          Call::image_store,

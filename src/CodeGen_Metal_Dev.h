@@ -38,13 +38,16 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() { return "metal"; }
+    std::string api_unique_name() {
+        return "metal";
+    }
 
 protected:
-
     class CodeGen_Metal_C : public CodeGen_C {
     public:
-        CodeGen_Metal_C(std::ostream &s) : CodeGen_C(s) {}
+        CodeGen_Metal_C(std::ostream &s)
+            : CodeGen_C(s) {
+        }
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
@@ -83,7 +86,7 @@ protected:
     CodeGen_Metal_C metal_c;
     Target target;
 };
-
-}}
+}
+}
 
 #endif

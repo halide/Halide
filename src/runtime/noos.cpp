@@ -2,7 +2,9 @@
 
 #include "HalideRuntime.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK halide_print_t custom_print = NULL;
 WEAK halide_error_handler_t error_handler = NULL;
@@ -13,8 +15,9 @@ WEAK halide_load_library_t custom_load_library = NULL;
 WEAK halide_get_library_symbol_t custom_get_library_symbol = NULL;
 WEAK halide_do_task_t custom_do_task = NULL;
 WEAK halide_do_par_for_t custom_do_par_for = NULL;
-
-}}} // namespace Halide::Runtime::Interna
+}
+}
+}  // namespace Halide::Runtime::Interna
 
 extern "C" {
 
@@ -91,9 +94,8 @@ WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
 
 WEAK int halide_do_par_for(void *user_context, halide_task_t f,
                            int min, int size, uint8_t *closure) {
-  return (*custom_do_par_for)(user_context, f, min, size, closure);
+    return (*custom_do_par_for)(user_context, f, min, size, closure);
 }
-
 
 WEAK void halide_print(void *user_context, const char *msg) {
     (*custom_print)(user_context, msg);
@@ -132,5 +134,4 @@ int halide_noos_set_runtime(halide_malloc_t user_malloc,
 
     return 0;
 }
-
 }

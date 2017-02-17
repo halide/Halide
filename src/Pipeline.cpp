@@ -1,6 +1,5 @@
 #include <algorithm>
 
-#include "Pipeline.h"
 #include "Argument.h"
 #include "Func.h"
 #include "IRVisitor.h"
@@ -8,6 +7,7 @@
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Outputs.h"
+#include "Pipeline.h"
 #include "PrintLoopNest.h"
 
 using namespace Halide::Internal;
@@ -20,11 +20,11 @@ using std::set;
 
 namespace {
 
-std::string output_name(const string &filename, const string &fn_name, const char* ext) {
+std::string output_name(const string &filename, const string &fn_name, const char *ext) {
     return !filename.empty() ? filename : (fn_name + ext);
 }
 
-std::string output_name(const string &filename, const Module &m, const char* ext) {
+std::string output_name(const string &filename, const Module &m, const char *ext) {
     return output_name(filename, m.name(), ext);
 }
 
@@ -102,11 +102,11 @@ struct PipelineContents {
      * define_extern calls. */
     std::map<std::string, JITExtern> jit_externs;
 
-    PipelineContents() :
-        module("", Target()) {
+    PipelineContents()
+        : module("", Target()) {
         // user_context needs to be a const void * (not a non-const void *)
         // to maintain backwards compatibility with existing code.
-        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
+        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0);
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context",
                                            /*is_explicit_name*/ true, /*register_instance*/ false);
     }
@@ -138,20 +138,23 @@ EXPORT void destroy<PipelineContents>(const PipelineContents *p) {
 }
 }
 
-Pipeline::Pipeline() : contents(nullptr) {
+Pipeline::Pipeline()
+    : contents(nullptr) {
 }
 
 bool Pipeline::defined() const {
     return contents.defined();
 }
 
-Pipeline::Pipeline(Func output) : contents(new PipelineContents) {
+Pipeline::Pipeline(Func output)
+    : contents(new PipelineContents) {
     output.function().freeze();
     contents->outputs.push_back(output.function());
 }
 
-Pipeline::Pipeline(const vector<Func> &outputs) : contents(new PipelineContents) {
-    for (Func f: outputs) {
+Pipeline::Pipeline(const vector<Func> &outputs)
+    : contents(new PipelineContents) {
+    for (Func f : outputs) {
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -179,7 +182,6 @@ void Pipeline::compile_to(const Outputs &output_files,
     compile_to_module(args, fn_name, target).compile(output_files);
 }
 
-
 void Pipeline::compile_to_bitcode(const string &filename,
                                   const vector<Argument> &args,
                                   const string &fn_name,
@@ -201,7 +203,7 @@ void Pipeline::compile_to_object(const string &filename,
                                  const string &fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    const char* ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
+    const char *ext = target.os == Target::Windows && !target.has_feature(Target::MinGW) ? ".obj" : ".o";
     m.compile(Outputs().object(output_name(filename, m, ext)));
 }
 
@@ -220,7 +222,6 @@ void Pipeline::compile_to_assembly(const string &filename,
     Module m = compile_to_module(args, fn_name, target);
     m.compile(Outputs().assembly(output_name(filename, m, ".s")));
 }
-
 
 void Pipeline::compile_to_c(const string &filename,
                             const vector<Argument> &args,
@@ -321,7 +322,7 @@ private:
         return false;
     }
 
-    void visit_exprs(const std::vector<Expr>& v) {
+    void visit_exprs(const std::vector<Expr> &v) {
         for (Expr i : v) {
             visit_expr(i);
         }
@@ -332,7 +333,7 @@ private:
         e.accept(this);
     }
 
-    void visit_function(const Function& func) {
+    void visit_function(const Function &func) {
         if (visited_functions.count(func.name())) return;
         visited_functions.insert(func.name());
 
@@ -370,7 +371,8 @@ private:
                      p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                      p.type(), p.dimensions(), def, min, max),
             p,
-            Buffer<>()};
+            Buffer<>()
+        };
         args.push_back(a);
 
         // Visit child expressions
@@ -394,7 +396,8 @@ private:
         InferredArgument a = {
             Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions()),
             Parameter(),
-            b};
+            b
+        };
         args.push_back(a);
     }
 
@@ -421,7 +424,7 @@ private:
     }
 };
 
-} // namespace Internal
+}  // namespace Internal
 
 vector<Argument> Pipeline::infer_arguments(Stmt body) {
 
@@ -449,7 +452,6 @@ vector<Argument> Pipeline::infer_arguments(Stmt body) {
             result.push_back(arg.arg);
         }
     }
-
 
     return result;
 }
@@ -614,7 +616,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     vector<Expr> private_params;
     for (Argument arg : private_args) {
         if (arg.is_buffer()) {
-            private_params.push_back(Variable::make(type_of<void*>(), arg.name + ".buffer"));
+            private_params.push_back(Variable::make(type_of<void *>(), arg.name + ".buffer"));
         } else {
             private_params.push_back(Variable::make(arg.type, arg.name));
         }
@@ -657,7 +659,8 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // old jit module.
     if (contents->jit_target == target &&
         contents->jit_module.compiled()) {
-        debug(2) << "Reusing old jit module compiled for :\n" << contents->jit_target.to_string() << "\n";
+        debug(2) << "Reusing old jit module compiled for :\n"
+                 << contents->jit_target.to_string() << "\n";
         return contents->jit_module.main_function();
     }
 
@@ -703,7 +706,6 @@ void *Pipeline::compile_jit(const Target &target_arg) {
 
     return jit_module.main_function();
 }
-
 
 void Pipeline::set_error_handler(void (*handler)(void *, const char *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
@@ -751,7 +753,7 @@ const std::map<std::string, JITExtern> &Pipeline::get_jit_externs() {
 void Pipeline::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->invalidate_cache();
-    CustomLoweringPass p = {pass, deleter};
+    CustomLoweringPass p = { pass, deleter };
     contents->custom_lowering_passes.push_back(p);
 }
 
@@ -787,24 +789,24 @@ Realization Pipeline::realize(vector<int32_t> sizes,
 
 Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size,
                               const Target &target) {
-    return realize({x_size, y_size, z_size, w_size}, target);
+    return realize({ x_size, y_size, z_size, w_size }, target);
 }
 
 Realization Pipeline::realize(int x_size, int y_size, int z_size,
                               const Target &target) {
-    return realize({x_size, y_size, z_size}, target);
+    return realize({ x_size, y_size, z_size }, target);
 }
 
 Realization Pipeline::realize(int x_size, int y_size,
                               const Target &target) {
-    return realize({x_size, y_size}, target);
+    return realize({ x_size, y_size }, target);
 }
 
 Realization Pipeline::realize(int x_size,
                               const Target &target) {
     // Use an explicit vector here, since {x_size} can be interpreted
     // as a scalar initializer
-    vector<int32_t> v = {x_size};
+    vector<int32_t> v = { x_size };
     return realize(v, target);
 }
 
@@ -826,14 +828,14 @@ struct ErrorBuffer {
     void concat(const char *message) {
         size_t len = strlen(message);
 
-        if (len && message[len-1] != '\n') {
+        if (len && message[len - 1] != '\n') {
             // Claim some extra space for a newline.
             len++;
         }
 
-        // Atomically claim some space in the buffer
+// Atomically claim some space in the buffer
 #ifdef _MSC_VER
-        int old_end = _InterlockedExchangeAdd((volatile long *)(&end), len);
+        int old_end = _InterlockedExchangeAdd((volatile long *) (&end), len);
 #else
         int old_end = __sync_fetch_and_add(&end, len);
 #endif
@@ -857,8 +859,8 @@ struct ErrorBuffer {
 
     static void handler(void *ctx, const char *message) {
         if (ctx) {
-            JITUserContext *ctx1 = (JITUserContext *)ctx;
-            ErrorBuffer *buf = (ErrorBuffer *)ctx1->user_context;
+            JITUserContext *ctx1 = (JITUserContext *) ctx;
+            ErrorBuffer *buf = (ErrorBuffer *) ctx1->user_context;
             buf->concat(message);
         }
     }
@@ -884,13 +886,13 @@ struct JITFuncCallContext {
         JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
         user_context_param.set_scalar(&jit_context);
 
-        debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << '\n'
-                 << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << '\n'
-                 << "custom_free: " << (void *)jit_context.handlers.custom_free << '\n'
-                 << "custom_do_task: " << (void *)jit_context.handlers.custom_do_task << '\n'
-                 << "custom_do_par_for: " << (void *)jit_context.handlers.custom_do_par_for << '\n'
-                 << "custom_error: " << (void *)jit_context.handlers.custom_error << '\n'
-                 << "custom_trace: " << (void *)jit_context.handlers.custom_trace << '\n';
+        debug(2) << "custom_print: " << (void *) jit_context.handlers.custom_print << '\n'
+                 << "custom_malloc: " << (void *) jit_context.handlers.custom_malloc << '\n'
+                 << "custom_free: " << (void *) jit_context.handlers.custom_free << '\n'
+                 << "custom_do_task: " << (void *) jit_context.handlers.custom_do_task << '\n'
+                 << "custom_do_par_for: " << (void *) jit_context.handlers.custom_do_par_for << '\n'
+                 << "custom_error: " << (void *) jit_context.handlers.custom_error << '\n'
+                 << "custom_trace: " << (void *) jit_context.handlers.custom_trace << '\n';
     }
 
     void report_if_error(int exit_status) {
@@ -909,7 +911,7 @@ struct JITFuncCallContext {
 
     void finalize(int exit_status) {
         report_if_error(exit_status);
-        user_context_param.set_scalar((void *)nullptr); // Don't leave param hanging with pointer to stack.
+        user_context_param.set_scalar((void *) nullptr);  // Don't leave param hanging with pointer to stack.
     }
 };
 
@@ -934,7 +936,7 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     vector<OutputBufferType> output_buffer_types;
     for (Function f : contents->outputs) {
         for (Type t : f.output_types()) {
-            OutputBufferType obt = {f, t, f.dimensions()};
+            OutputBufferType obt = { f, t, f.dimensions() };
             output_buffer_types.push_back(obt);
         }
     }
@@ -947,17 +949,17 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
         Function func = output_buffer_types[i].func;
-        int  dims = output_buffer_types[i].dims;
+        int dims = output_buffer_types[i].dims;
         Type type = output_buffer_types[i].type;
         user_assert(dst[i].dimensions() == dims)
             << "Can't realize Func \"" << func.name()
-            << "\" into Buffer at " << (void *)dst[i].data()
+            << "\" into Buffer at " << (void *) dst[i].data()
             << " because Buffer is " << dst[i].dimensions()
             << "-dimensional, but Func \"" << func.name()
             << "\" is " << dims << "-dimensional.\n";
         user_assert(dst[i].type() == type)
             << "Can't realize Func \"" << func.name()
-            << "\" into Buffer at " << (void *)dst[i].data()
+            << "\" into Buffer at " << (void *) dst[i].data()
             << " because Buffer has type " << Type(dst[i].type())
             << ", but Func \"" << func.name()
             << "\" has type " << type << ".\n";
@@ -1030,9 +1032,7 @@ Pipeline::make_externs_jit_module(const Target &target,
                 // in current mtrunk Halide, but may be in some side branches that
                 // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
-                arg_types.push_back(arg.arg.is_buffer() ?
-                                    type_of<struct buffer_t *>() :
-                                    arg.arg.type);
+                arg_types.push_back(arg.arg.is_buffer() ? type_of<struct buffer_t *>() : arg.arg.type);
             }
             // Add the outputs of the pipeline
             for (size_t i = 0; i < pipeline_contents.outputs.size(); i++) {

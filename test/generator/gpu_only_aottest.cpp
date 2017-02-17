@@ -1,8 +1,8 @@
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
-#include <assert.h>
 #if defined(TEST_OPENCL)
 #include "HalideRuntimeOpenCL.h"
 #elif defined(TEST_CUDA)
@@ -33,19 +33,19 @@ int main(int argc, char **argv) {
     Buffer<int> output(W, H);
 
     // Create buffer_ts without host pointers.
-    buffer_t input_no_host = *((buffer_t *)input);
+    buffer_t input_no_host = *((buffer_t *) input);
     input_no_host.host = nullptr;
 
-    buffer_t output_no_host = *((buffer_t *)output);
+    buffer_t output_no_host = *((buffer_t *) output);
     // We need a fake pointer here to trick Halide into creating the
     // device buffer (and not do bounds inference instead of running
     // the pipeline). Halide will not dereference this pointer.
-    output_no_host.host = (uint8_t *)1;
+    output_no_host.host = (uint8_t *) 1;
 
     gpu_only(&input_no_host, &output_no_host);
 
     // Restore the host pointer and copy to host.
-    output_no_host.host = (uint8_t *)output.data();
+    output_no_host.host = (uint8_t *) output.data();
     halide_copy_to_host(nullptr, &output_no_host);
 
     // Verify output.

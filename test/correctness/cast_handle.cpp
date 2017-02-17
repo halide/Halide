@@ -26,15 +26,15 @@ int main(int argc, char **argv) {
         if (out1(x) != correct) {
             printf("out1(%d) = %llu instead of %llu\n",
                    x,
-                   (long long unsigned)out1(x),
-                   (long long unsigned)correct);
+                   (long long unsigned) out1(x),
+                   (long long unsigned) correct);
             return -1;
         }
         if (out2(x) != correct) {
             printf("out2(%d) = %llu instead of %llu\n",
                    x,
-                   (long long unsigned)out2(x),
-                   (long long unsigned)correct);
+                   (long long unsigned) out2(x),
+                   (long long unsigned) correct);
             return -1;
         }
     }

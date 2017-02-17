@@ -32,10 +32,7 @@ public:
         // CPU schedule:
         //   Parallelize over scan lines, 4 scanlines per task.
         //   Independently, vectorize in x.
-        result
-            .compute_root()
-            .vectorize(x, 8)
-            .parallel(y, 8);
+        result.compute_root().vectorize(x, 8).parallel(y, 8);
 
         // Cope with rotated inputs
         input.dim(0).set_stride(Expr());

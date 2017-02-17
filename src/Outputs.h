@@ -122,7 +122,6 @@ struct Outputs {
         return updated;
     }
 };
-
 }
 
 #endif

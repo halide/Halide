@@ -1,6 +1,6 @@
 #include "SelectGPUAPI.h"
-#include "IRMutator.h"
 #include "DeviceInterface.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -30,8 +30,10 @@ class SelectGPUAPI : public IRMutator {
             stmt = For::make(op->name, op->min, op->extent, op->for_type, selected_api, op->body);
         }
     }
+
 public:
-    SelectGPUAPI(Target t) : target(t) {
+    SelectGPUAPI(Target t)
+        : target(t) {
         default_api = get_default_device_api_for_target(t);
         parent_api = DeviceAPI::Host;
     };
@@ -40,6 +42,5 @@ public:
 Stmt select_gpu_api(Stmt s, Target t) {
     return SelectGPUAPI(t).mutate(s);
 }
-
 }
 }

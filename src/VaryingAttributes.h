@@ -26,7 +26,6 @@ Stmt find_linear_expressions(Stmt s);
  * to invoke the shader
  */
 Stmt setup_gpu_vertex_buffer(Stmt s);
-
 }
 }
 

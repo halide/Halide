@@ -17,9 +17,7 @@ namespace Internal {
 Stmt inline_function(Stmt, Function);
 Expr inline_function(Expr, Function);
 // @}
-
 }
 }
-
 
 #endif

@@ -1,11 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <cmath>
+#include <stdio.h>
 
 using namespace Halide;
 
 // FIXME: Why aren't we using a unit test framework for this?
-void h_assert(bool condition, const char* msg) {
+void h_assert(bool condition, const char *msg) {
     if (!condition) {
         printf("FAIL: %s\n", msg);
         abort();
@@ -24,7 +24,7 @@ int main() {
         const float16_t zeroPStringConstructorDecimal("0.0", RoundingMode::ToNearestTiesToEven);
         const float16_t zeroPStringConstructorHex("0x0p0", RoundingMode::ToNearestTiesToEven);
         const float16_t zeroPFromFloat(0.0f, RoundingMode::ToNearestTiesToEven);
-        const float16_t zeroPFromDouble(0.0,RoundingMode::ToNearestTiesToEven);
+        const float16_t zeroPFromDouble(0.0, RoundingMode::ToNearestTiesToEven);
         const float16_t zeroPFromInt = float16_t::make_from_signed_int(0, RoundingMode::ToNearestTiesToEven);
         h_assert(zeroDefaultConstructor.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
         h_assert(zeroPStringConstructorDecimal.to_bits() == zeroP.to_bits(), "Mismatch between constructors");
@@ -40,11 +40,11 @@ int main() {
         h_assert(zeroP.to_decimal_string(0) == "0.0E+0", "+ve zero decimal string invalid");
 
         // Try converting to native float types
-        h_assert( ((float) zeroP) == 0.0f, "+ve zero conversion to float invalid");
-        h_assert( ((double) zeroP) == 0.0, "+ve zero conversion to double invalid");
+        h_assert(((float) zeroP) == 0.0f, "+ve zero conversion to float invalid");
+        h_assert(((double) zeroP) == 0.0, "+ve zero conversion to double invalid");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&zeroP) == 0x0000,
+        h_assert(*reinterpret_cast<const uint16_t *>(&zeroP) == 0x0000,
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -69,11 +69,11 @@ int main() {
         h_assert(zeroN.to_decimal_string(0) == "-0.0E+0", "-ve zero decimal string invalid");
 
         // Try converting to native float types
-        h_assert( ((float) zeroN) == -0.0f, "-ve zero conversion to float invalid");
-        h_assert( ((double) zeroN) == -0.0, "-ve zero conversion to double invalid");
+        h_assert(((float) zeroN) == -0.0f, "-ve zero conversion to float invalid");
+        h_assert(((double) zeroN) == -0.0, "-ve zero conversion to double invalid");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&zeroN) == 0x8000,
+        h_assert(*reinterpret_cast<const uint16_t *>(&zeroN) == 0x8000,
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -82,8 +82,8 @@ int main() {
         // Try constructing +ve infinity in different ways and check they all
         // represent the same float16_t
         const float16_t infinityP = float16_t::make_infinity(/*positive=*/true);
-        const float16_t infinityPFromFloat( (float) INFINITY, RoundingMode::ToNearestTiesToEven);
-        const float16_t infinityPFromDouble( (double) INFINITY, RoundingMode::ToNearestTiesToEven);
+        const float16_t infinityPFromFloat((float) INFINITY, RoundingMode::ToNearestTiesToEven);
+        const float16_t infinityPFromDouble((double) INFINITY, RoundingMode::ToNearestTiesToEven);
         h_assert(infinityPFromFloat.to_bits() == infinityP.to_bits(), "Mismatch between constructors");
         h_assert(infinityPFromDouble.to_bits() == infinityP.to_bits(), "Mismatch between constructors");
 
@@ -102,7 +102,7 @@ int main() {
                  "+ve infinity conversion to double invalid");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&infinityP) == 0x7c00,
+        h_assert(*reinterpret_cast<const uint16_t *>(&infinityP) == 0x7c00,
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -111,8 +111,8 @@ int main() {
         // Try constructing -ve infinity in different ways and check they all
         // represent the same float16_t
         const float16_t infinityN = float16_t::make_infinity(/*positive=*/false);
-        const float16_t infinityNFromFloat( (float) -INFINITY, RoundingMode::ToNearestTiesToEven);
-        const float16_t infinityNFromDouble( (double) -INFINITY, RoundingMode::ToNearestTiesToEven);
+        const float16_t infinityNFromFloat((float) -INFINITY, RoundingMode::ToNearestTiesToEven);
+        const float16_t infinityNFromDouble((double) -INFINITY, RoundingMode::ToNearestTiesToEven);
         h_assert(infinityNFromFloat.to_bits() == infinityN.to_bits(), "Mismatch between constructors");
         h_assert(infinityNFromDouble.to_bits() == infinityN.to_bits(), "Mismatch between constructors");
 
@@ -131,7 +131,7 @@ int main() {
                  "-ve infinity conversion to double invalid");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&infinityN) == 0xfc00,
+        h_assert(*reinterpret_cast<const uint16_t *>(&infinityN) == 0xfc00,
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -161,7 +161,7 @@ int main() {
         h_assert(std::isnan(nanValued), "NaN conversion to float invalid");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&nanValue) == nanValue.to_bits(),
+        h_assert(*reinterpret_cast<const uint16_t *>(&nanValue) == nanValue.to_bits(),
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -181,7 +181,7 @@ int main() {
         h_assert(largestNormd == 65504.0, "Conversion to double failed");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&largestNorm) == largestNorm.to_bits(),
+        h_assert(*reinterpret_cast<const uint16_t *>(&largestNorm) == largestNorm.to_bits(),
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -201,7 +201,7 @@ int main() {
         h_assert(largestNormd == -65504.0, "Conversion to double failed");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&largestNorm) == largestNorm.to_bits(),
+        h_assert(*reinterpret_cast<const uint16_t *>(&largestNorm) == largestNorm.to_bits(),
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -215,11 +215,11 @@ int main() {
         // Try converting to native float types
         float smallestSubNormf = (float) smallestSubNorm;
         double smallestSubNormd = (double) smallestSubNorm;
-        h_assert(smallestSubNormf == (1.0f)/(1<<24), "conversion to float failed");
-        h_assert(smallestSubNormd == (1.0)/(1<<24), "conversion to double failed");
+        h_assert(smallestSubNormf == (1.0f) / (1 << 24), "conversion to float failed");
+        h_assert(smallestSubNormd == (1.0) / (1 << 24), "conversion to double failed");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&smallestSubNorm) == smallestSubNorm.to_bits(),
+        h_assert(*reinterpret_cast<const uint16_t *>(&smallestSubNorm) == smallestSubNorm.to_bits(),
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -233,11 +233,11 @@ int main() {
         // Try converting to native float types
         float smallestSubNormf = (float) smallestSubNorm;
         double smallestSubNormd = (double) smallestSubNorm;
-        h_assert(smallestSubNormf == (-1.0f)/(1<<24), "conversion to float failed");
-        h_assert(smallestSubNormd == (-1.0)/(1<<24), "conversion to double failed");
+        h_assert(smallestSubNormf == (-1.0f) / (1 << 24), "conversion to float failed");
+        h_assert(smallestSubNormd == (-1.0) / (1 << 24), "conversion to double failed");
 
         // Check that directly accessing the bits of the type is correct
-        h_assert(*reinterpret_cast<const uint16_t*>(&smallestSubNorm) == smallestSubNorm.to_bits(),
+        h_assert(*reinterpret_cast<const uint16_t *>(&smallestSubNorm) == smallestSubNorm.to_bits(),
                  "Casting float16_t to uint16_t failed to give right bits");
     }
 
@@ -266,17 +266,16 @@ int main() {
         // Technically 0.1 is rounded twice (once when compiled and once by
         // float16_t) when using a float or double literal but for this particular
         // example rounding twice does not cause any issues.
-        const float16_t noughtPointOneFCast = (float16_t) 0.1f; // Implicitly RNE
-        const float16_t noughtPointOneDCast = (float16_t) 0.1; // Implicitly RNE
-        const float16_t noughtPointOneExplicitConstructor(0.1f); // Implicitly RNE
-        const float16_t noughtPointOneExplicitConstructorStr("0.1"); // Implicitly RNE
-        const float16_t noughtPointOneMakeFromBits = float16_t::make_from_bits((uint16_t)0x2e66); // Implicitly RNE
+        const float16_t noughtPointOneFCast = (float16_t) 0.1f;  // Implicitly RNE
+        const float16_t noughtPointOneDCast = (float16_t) 0.1;  // Implicitly RNE
+        const float16_t noughtPointOneExplicitConstructor(0.1f);  // Implicitly RNE
+        const float16_t noughtPointOneExplicitConstructorStr("0.1");  // Implicitly RNE
+        const float16_t noughtPointOneMakeFromBits = float16_t::make_from_bits((uint16_t) 0x2e66);  // Implicitly RNE
         h_assert(noughtPointOneFCast.to_bits() == noughtPointOneRNE.to_bits(), "cast from float failed");
         h_assert(noughtPointOneDCast.to_bits() == noughtPointOneRNE.to_bits(), "cast from double failed");
         h_assert(noughtPointOneExplicitConstructor.to_bits() == noughtPointOneRNE.to_bits(), "Use of explicit constructor produced bad value");
         h_assert(noughtPointOneExplicitConstructorStr.to_bits() == noughtPointOneRNE.to_bits(), "Use of explicit constructor produced bad value");
         h_assert(noughtPointOneMakeFromBits.to_bits() == noughtPointOneRNE.to_bits(), "Use of explicit constructor produced bad value");
-
 
         // Try rounding up
         const float16_t noughtPointOneRU("0.1", RoundingMode::TowardPositiveInfinity);

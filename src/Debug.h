@@ -6,8 +6,8 @@
  */
 
 #include <iostream>
-#include <string>
 #include <stdlib.h>
+#include <string>
 
 #include "Introspection.h"
 
@@ -28,7 +28,7 @@ struct Stmt;
 EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 struct LoweredFunc;
-EXPORT std::ostream &operator << (std::ostream &, const LoweredFunc &);
+EXPORT std::ostream &operator<<(std::ostream &, const LoweredFunc &);
 
 /** For optional debugging during codegen, use the debug class as
  * follows:
@@ -48,10 +48,12 @@ class debug {
     const bool logging;
 
 public:
-    debug(int verbosity) : logging(verbosity <= debug_level()) {}
+    debug(int verbosity)
+        : logging(verbosity <= debug_level()) {
+    }
 
     template<typename T>
-    debug &operator<<(T&& x) {
+    debug &operator<<(T &&x) {
         if (logging) {
             std::cerr << std::forward<T>(x);
         }
@@ -60,7 +62,6 @@ public:
 
     EXPORT static int debug_level();
 };
-
 }
 }
 

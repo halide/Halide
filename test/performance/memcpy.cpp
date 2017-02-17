@@ -1,10 +1,9 @@
 #include "Halide.h"
 #include "benchmark.h"
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 using namespace Halide;
-
 
 int main(int argc, char **argv) {
     ImageParam src(UInt(8), 1);
@@ -14,7 +13,7 @@ int main(int argc, char **argv) {
 
     dst.vectorize(x, 32, TailStrategy::GuardWithIf);
 
-    dst.compile_to_assembly("halide_memcpy.s", {src}, "halide_memcpy");
+    dst.compile_to_assembly("halide_memcpy.s", { src }, "halide_memcpy");
     dst.compile_jit();
 
     const int32_t buffer_size = 12345678;

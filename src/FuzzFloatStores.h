@@ -18,7 +18,6 @@ namespace Internal {
  * FMA). It's also a useful way to detect bad tests, such as those
  * that expect exact floating point equality across platforms. */
 Stmt fuzz_float_stores(Stmt s);
-
 }
 }
 

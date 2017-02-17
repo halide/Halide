@@ -19,9 +19,12 @@ class FuncRef;
 class Tuple {
 private:
     std::vector<Expr> exprs;
+
 public:
     /** The number of elements in the tuple. */
-    size_t size() const { return exprs.size(); }
+    size_t size() const {
+        return exprs.size();
+    }
 
     /** Get a reference to an element. */
     Expr &operator[](size_t x) {
@@ -42,14 +45,15 @@ public:
 
     /** Construct a Tuple from some Exprs. */
     //@{
-    template<typename ...Args>
-    Tuple(Expr a, Expr b, Args&&... args) {
-        exprs = std::vector<Expr>{a, b, std::forward<Args>(args)...};
+    template<typename... Args>
+    Tuple(Expr a, Expr b, Args &&... args) {
+        exprs = std::vector<Expr>{ a, b, std::forward<Args>(args)... };
     }
     //@}
 
     /** Construct a Tuple from a vector of Exprs */
-    explicit NO_INLINE Tuple(const std::vector<Expr> &e) : exprs(e) {
+    explicit NO_INLINE Tuple(const std::vector<Expr> &e)
+        : exprs(e) {
         user_assert(e.size() > 0) << "Tuples must have at least one element\n";
     }
 
@@ -69,9 +73,12 @@ Exprs as Realizations are to Buffers. */
 class Realization {
 private:
     std::vector<Buffer<>> images;
+
 public:
     /** The number of images in the Realization. */
-    size_t size() const { return images.size(); }
+    size_t size() const {
+        return images.size();
+    }
 
     /** Get a const reference to one of the images. */
     const Buffer<> &operator[](size_t x) const {
@@ -95,18 +102,18 @@ public:
      * existing Buffers. The element type of the Buffers may not be
      * const. */
     template<typename T,
-             typename ...Args,
+             typename... Args,
              typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
-    Realization(Buffer<T> &a, Args&&... args) {
-        images = std::vector<Buffer<>>({a, args...});
+    Realization(Buffer<T> &a, Args &&... args) {
+        images = std::vector<Buffer<>>({ a, args... });
     }
 
     /** Construct a Realization that refers to the buffers in an
      * existing vector of Buffer<> */
-    explicit Realization(std::vector<Buffer<>> &e) : images(e) {
+    explicit Realization(std::vector<Buffer<>> &e)
+        : images(e) {
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
     }
-
 };
 
 /** Equivalents of some standard operators for tuples. */
@@ -127,7 +134,6 @@ inline Tuple tuple_select(Expr condition, const Tuple &true_value, const Tuple &
     return result;
 }
 // @}
-
 }
 
 #endif

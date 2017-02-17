@@ -62,7 +62,7 @@ h::Buffer<> image_param_get(h::ImageParam &param) {
     return param.get();
 }
 
-template <typename T>
+template<typename T>
 void image_param_set(h::ImageParam &param, const h::Buffer<T> &im) {
     param.set(im);
 }
@@ -278,12 +278,12 @@ void defineOutputImageParam() {
     return;
 }
 
-template <typename T>
+template<typename T>
 h::Expr param_as_expr(h::Param<T> &that) {
     return static_cast<h::Expr>(that);
 }
 
-template <typename T>
+template<typename T>
 std::string param_repr(const h::Param<T> &param) {
     std::string repr;
     const h::Type &t = param.type();
@@ -293,7 +293,7 @@ std::string param_repr(const h::Param<T> &param) {
     return repr;
 }
 
-template <typename T>
+template<typename T>
 void defineParam_impl(const std::string suffix, const h::Type type) {
     using Halide::Param;
 
@@ -397,7 +397,7 @@ void defineParam_impl(const std::string suffix, const h::Type type) {
     return;
 }
 
-template <typename T, typename... Args>
+template<typename T, typename... Args>
 p::object create_param_object(Args... args) {
     typedef h::Param<T> ParamType;
     typedef typename p::manage_new_object::apply<ParamType *>::type converter_t;
@@ -409,7 +409,7 @@ p::object create_param_object(Args... args) {
 struct end_of_recursion_t {};  // dummy helper type
 
 // C++ fun, variadic template recursive function !
-template <typename T = end_of_recursion_t, typename... Types>
+template<typename T = end_of_recursion_t, typename... Types>
 p::object create_param0_impl(h::Type type, std::string name) {
     if (h::type_of<T>() == type) {
         if (name != "") {
@@ -422,7 +422,7 @@ p::object create_param0_impl(h::Type type, std::string name) {
     }
 }
 
-template <>
+template<>
 p::object create_param0_impl<end_of_recursion_t>(h::Type type, std::string /*name*/) {  // end of recursion, did not find a matching type
     printf("create_param0_impl<end_of_recursion_t> received %s\n", type_repr(type).c_str());
     throw std::invalid_argument("ParamFactory::create_param0_impl received type not handled");
@@ -502,7 +502,7 @@ typedef boost::mpl::list<boost::uint8_t, boost::uint16_t, boost::uint32_t,
 // (if you wonder why struct::operator() and not a function,
 // see http://artofsoftware.org/2012/12/20/c-template-function-partial-specialization )
 
-template <typename PixelTypes, typename... Args>
+template<typename PixelTypes, typename... Args>
 struct create_param1_impl_t {
     p::object operator()(h::Type type, p::object val, Args... args) {
         typedef typename boost::mpl::front<PixelTypes>::type pixel_t;
@@ -524,22 +524,22 @@ struct create_param1_impl_t {
         }
     }
 
-    template <typename T>
+    template<typename T>
     p::object call_create_param_object(T true_val) {
         return create_param_object<T>(true_val);
     }
 
-    template <typename T>
+    template<typename T>
     p::object call_create_param_object(T true_val, std::string name) {
         return create_param_object<T>(name, true_val);
     }
 
-    template <typename T>
+    template<typename T>
     p::object call_create_param_object(T true_val, std::string name, h::Expr min, h::Expr max) {
         return create_param_object<T>(name, true_val, min, max);
     }
 
-    template <typename T>
+    template<typename T>
     p::object call_create_param_object(T true_val, h::Expr min, h::Expr max) {
         return create_param_object<T>(true_val, min, max);
     }
@@ -552,7 +552,7 @@ struct create_param1_impl_t {
     //    }
 };
 
-template <typename... Args>
+template<typename... Args>
 struct create_param1_impl_t<boost::mpl::l_end::type, Args...> {
     p::object operator()(h::Type type, p::object val, Args... args) {
         // end of recursion, did not find a matching type

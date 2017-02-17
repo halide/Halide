@@ -4,8 +4,8 @@
 #include "IR.h"
 #include "Util.h"
 
-#include <set>
 #include <map>
+#include <set>
 #include <string>
 
 /** \file
@@ -83,7 +83,6 @@ protected:
     std::set<const IRNode *> visited;
 
 public:
-
     /** These methods should call 'include' on the children to only
      * visit them if they haven't been visited already. */
     // @{
@@ -130,7 +129,6 @@ public:
     EXPORT virtual void visit(const Shuffle *);
     // @}
 };
-
 }
 }
 

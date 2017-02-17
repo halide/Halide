@@ -28,7 +28,6 @@ EXPORT Expr extract_lane(Expr vec, int lane);
 Stmt rewrite_interleavings(Stmt s);
 
 EXPORT void deinterleave_vector_test();
-
 }
 }
 

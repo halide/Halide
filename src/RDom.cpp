@@ -1,10 +1,10 @@
 #include "RDom.h"
-#include "Util.h"
-#include "ImageParam.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "ImageParam.h"
 #include "Simplify.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -15,8 +15,7 @@ using std::vector;
 
 RVar::operator Expr() const {
     if (!min().defined() || !extent().defined()) {
-        user_error << "Use of undefined RDom dimension: " <<
-            (name().empty() ? "<unknown>" : name()) << "\n";
+        user_error << "Use of undefined RDom dimension: " << (name().empty() ? "<unknown>" : name()) << "\n";
     }
     return Variable::make(Int(32), name(), domain());
 }
@@ -45,8 +44,7 @@ const std::string &RVar::name() const {
     }
 }
 
-
-template <int N>
+template<int N>
 ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
     vector<ReductionVariable> d(&vars[0], &vars[N]);
     ReductionDomain dom(d);
@@ -60,7 +58,7 @@ void RDom::init_vars(string name) {
     const std::vector<ReductionVariable> &dom_vars = dom.domain();
     RVar *vars[] = { &x, &y, &z, &w };
 
-    for (size_t i = 0; i < sizeof(vars)/sizeof(vars[0]); i++) {
+    for (size_t i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         if (i < dom_vars.size()) {
             *(vars[i]) = RVar(dom, i);
         } else {
@@ -69,7 +67,8 @@ void RDom::init_vars(string name) {
     }
 }
 
-RDom::RDom(ReductionDomain d) : dom(d) {
+RDom::RDom(ReductionDomain d)
+    : dom(d) {
     if (d.defined()) {
         init_vars("");
     }
@@ -92,6 +91,7 @@ class CheckRDomBounds : public IRGraphVisitor {
             offending_free_var = op->name;
         }
     }
+
 public:
     string offending_func;
     string offending_free_var;
@@ -125,11 +125,21 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
 
         std::string rvar_uniquifier;
         switch (i) {
-            case 0: rvar_uniquifier = "x"; break;
-            case 1: rvar_uniquifier = "y"; break;
-            case 2: rvar_uniquifier = "z"; break;
-            case 3: rvar_uniquifier = "w"; break;
-            default: rvar_uniquifier = std::to_string(i); break;
+        case 0:
+            rvar_uniquifier = "x";
+            break;
+        case 1:
+            rvar_uniquifier = "y";
+            break;
+        case 2:
+            rvar_uniquifier = "z";
+            break;
+        case 3:
+            rvar_uniquifier = "w";
+            break;
+        default:
+            rvar_uniquifier = std::to_string(i);
+            break;
         }
         ReductionVariable rv;
         rv.var = name + "$" + rvar_uniquifier;
@@ -143,7 +153,7 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
 
 RDom::RDom(const Buffer<> &b) {
     string name = unique_name('r');
-    static string var_names[] = {"x", "y", "z", "w"};
+    static string var_names[] = { "x", "y", "z", "w" };
     std::vector<ReductionVariable> vars;
     for (int i = 0; i < b.dimensions(); i++) {
         ReductionVariable var = {
@@ -159,7 +169,7 @@ RDom::RDom(const Buffer<> &b) {
 }
 
 RDom::RDom(ImageParam p) {
-    static string var_names[] = {"x", "y", "z", "w"};
+    static string var_names[] = { "x", "y", "z", "w" };
     std::vector<ReductionVariable> vars;
     for (int i = 0; i < p.dimensions(); i++) {
         ReductionVariable var = {
@@ -174,9 +184,8 @@ RDom::RDom(ImageParam p) {
     init_vars(p.name());
 }
 
-
 int RDom::dimensions() const {
-    return (int)dom.domain().size();
+    return (int) dom.domain().size();
 }
 
 RVar RDom::operator[](int i) const {
@@ -188,7 +197,7 @@ RVar RDom::operator[](int i) const {
         return RVar(dom, i);
     }
     user_error << "Reduction domain index out of bounds: " << i << "\n";
-    return x; // Keep the compiler happy
+    return x;  // Keep the compiler happy
 }
 
 RDom::operator Expr() const {
@@ -237,5 +246,4 @@ std::ostream &operator<<(std::ostream &stream, RDom dom) {
     stream << "\n";
     return stream;
 }
-
 }

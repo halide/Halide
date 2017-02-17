@@ -2,7 +2,7 @@
 
 #include <set>
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -43,12 +43,12 @@ void insert_func_wrapper_helper(map<Function, SubstitutionMap, Function::Compare
     wrappers_map[wrapped_func] = wrapper;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     map<string, Function> wrapped_env;
 
-    map<Function, SubstitutionMap, Function::Compare> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
+    map<Function, SubstitutionMap, Function::Compare> func_wrappers_map;  // In Func -> [wrapped Func -> wrapper]
 
     for (const auto &iter : env) {
         wrapped_env.emplace(iter.first, iter.second);
@@ -69,9 +69,9 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
 
         for (const auto &iter : wrappers) {
             string in_func = iter.first;
-            const Function &wrapper = Function(iter.second); // This is already the deep-copy version
+            const Function &wrapper = Function(iter.second);  // This is already the deep-copy version
 
-            if (in_func.empty()) { // Global wrapper
+            if (in_func.empty()) {  // Global wrapper
                 for (const auto &wrapped_env_iter : wrapped_env) {
                     in_func = wrapped_env_iter.first;
                     if ((wrapper.name() == in_func) || (all_func_wrappers.find(in_func) != all_func_wrappers.end())) {
@@ -89,13 +89,13 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                         continue;
                     }
                     debug(4) << "Global wrapper: replacing reference of \""
-                             << wrapped_fname <<  "\" in \"" << in_func
+                             << wrapped_fname << "\" in \"" << in_func
                              << "\" with \"" << wrapper.name() << "\"\n";
                     insert_func_wrapper_helper(func_wrappers_map, wrapped_env_iter.second, wrapped_func, wrapper);
                 }
-            } else { // Custom wrapper
+            } else {  // Custom wrapper
                 debug(4) << "Custom wrapper: replacing reference of \""
-                         << wrapped_fname <<  "\" in \"" << in_func << "\" with \""
+                         << wrapped_fname << "\" in \"" << in_func << "\" with \""
                          << wrapper.name() << "\"\n";
 
                 const auto &in_func_iter = wrapped_env.find(in_func);
@@ -129,6 +129,5 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
 
     return wrapped_env;
 }
-
 }
 }

@@ -13,22 +13,22 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <iomanip>
+#include <iostream>
 #include <limits>
 #include <memory>
-#include <iostream>
-#include <iomanip>
 #include <sstream>
 #include <stdint.h>
 #include <vector>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 namespace Halide {
 namespace Tools {
 
 static inline void print_dimid(int d, int val) {
-    static const char *dimid[] = {"x", "y", "z", "w"};
+    static const char *dimid[] = { "x", "y", "z", "w" };
     int numdimid = 4;
     if (d < numdimid) {
         std::cout << " " << dimid[d] << ":" << val;
@@ -39,7 +39,7 @@ static inline void print_dimid(int d, int val) {
 
 static inline void print_loc(const std::vector<int32_t> &loc, int dim, const int32_t *min) {
     for (int d = 0; d < dim; d++) {
-        if (d) { 
+        if (d) {
             std::cout << ",";
         }
         std::cout << loc[d] + min[d];
@@ -47,9 +47,9 @@ static inline void print_loc(const std::vector<int32_t> &loc, int dim, const int
 }
 
 static inline void print_memalign(intptr_t val) {
-    intptr_t align_chk = 1024*1024;
+    intptr_t align_chk = 1024 * 1024;
     while (align_chk > 0) {
-        if ((val & (align_chk-1)) == 0) {
+        if ((val & (align_chk - 1)) == 0) {
             char aunit = ' ';
             if (align_chk >= 1024) {
                 align_chk >>= 10;
@@ -87,28 +87,32 @@ void info(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
 
     std::cout << std::endl
               << "-----------------------------------------------------------------------------";
-    std::cout << std::endl << "Buffer info: " << tag
+    std::cout << std::endl
+              << "Buffer info: " << tag
               << " dim:" << dim << " bpp:" << img_bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
         size *= extent[d];
     }
     std::cout << std::endl;
-    std::cout << tag << " class       = 0x" << std::left << std::setw(10) << (void*)img
-                     << std::right << " # ";
-    print_memalign((intptr_t)&img); std::cout << std::endl;
-    std::cout << tag << " class size  = "<< img_csize
-                     << " (0x"<< std::hex << img_csize << std::dec <<")\n";
-    std::cout << tag << "-class => [ 0x" << (void*)&img
-                     << ", 0x" << (void*)(((char*)&img)+img_csize-1)
-                     << " ], # size:" << img_csize << ", ";
-    print_memalign((intptr_t)&img); std::cout << std::endl;
-    std::cout << tag << " buf_t size  = "<< img_bsize
-                     << " (0x"<< std::hex << img_bsize << std::dec <<")\n";
-    std::cout << tag << "-buf_t => [ 0x" << (void*)&buf
-                     << ", 0x" << (void*)(((char*)&buf)+img_bsize-1)
-                     << " ], # size:" << img_bsize << ", ";
-    print_memalign((intptr_t)&buf); std::cout << std::endl;
+    std::cout << tag << " class       = 0x" << std::left << std::setw(10) << (void *) img
+              << std::right << " # ";
+    print_memalign((intptr_t) &img);
+    std::cout << std::endl;
+    std::cout << tag << " class size  = " << img_csize
+              << " (0x" << std::hex << img_csize << std::dec << ")\n";
+    std::cout << tag << "-class => [ 0x" << (void *) &img
+              << ", 0x" << (void *) (((char *) &img) + img_csize - 1)
+              << " ], # size:" << img_csize << ", ";
+    print_memalign((intptr_t) &img);
+    std::cout << std::endl;
+    std::cout << tag << " buf_t size  = " << img_bsize
+              << " (0x" << std::hex << img_bsize << std::dec << ")\n";
+    std::cout << tag << "-buf_t => [ 0x" << (void *) &buf
+              << ", 0x" << (void *) (((char *) &buf) + img_bsize - 1)
+              << " ], # size:" << img_bsize << ", ";
+    print_memalign((intptr_t) &buf);
+    std::cout << std::endl;
     if (img_bpp != img_tsize) {
         std::cout << tag << " sizeof(T)   = " << img_tsize << std::endl;
     }
@@ -138,32 +142,36 @@ void info(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     if (img_bpp > 1) {
         for (int d = 0; d < dim; d++) {
             std::cout << tag << " str[" << d << "]*bpp  = "
-                             << std::left << std::setw(12) << stride[d] * img_bpp
-                             << std::right << " # ";
-            print_memalign(stride[d] * img_bpp); std::cout << std::endl;
+                      << std::left << std::setw(12) << stride[d] * img_bpp
+                      << std::right << " # ";
+            print_memalign(stride[d] * img_bpp);
+            std::cout << std::endl;
         }
     }
 
     const T *img_data = img.data();
     const T *img_next = img_data + size;
     int32_t img_size = size * img_bpp;
-    int32_t data_size = (char*)img_next - (char*)img_data;
+    int32_t data_size = (char *) img_next - (char *) img_data;
     std::cout << tag << " size        = " << size << " (0x"
-                             << std::hex << size << ")" << std::dec << std::endl;
+              << std::hex << size << ")" << std::dec << std::endl;
     std::cout << tag << " img_size    = " << img_size << " (0x"
-                             << std::hex << img_size << ")" << std::dec << std::endl;
-    std::cout << tag << " data        = 0x" << std::left << std::setw(10) << (void *)img_data
-                     << std::right << " # ";
-    print_memalign((intptr_t)img_data); std::cout << std::endl;
-    std::cout << tag << " next        = 0x" << std::left << std::setw(10) << (void *)img_next
-                     << std::right << " # ";
-    print_memalign((intptr_t)img_next); std::cout << std::endl;
-    std::cout << tag << " data_size   = " << data_size  << " (0x"
-                             << std::hex << data_size  << ")" << std::dec << std::endl;
-    std::cout << tag << " => [ 0x" << (void *)img_data
-                         << ", 0x" << (void *)(((char*)img_next)-1)
-                         << "], # size:" << data_size << ", ";
-    print_memalign((intptr_t)img_data); std::cout << std::endl;
+              << std::hex << img_size << ")" << std::dec << std::endl;
+    std::cout << tag << " data        = 0x" << std::left << std::setw(10) << (void *) img_data
+              << std::right << " # ";
+    print_memalign((intptr_t) img_data);
+    std::cout << std::endl;
+    std::cout << tag << " next        = 0x" << std::left << std::setw(10) << (void *) img_next
+              << std::right << " # ";
+    print_memalign((intptr_t) img_next);
+    std::cout << std::endl;
+    std::cout << tag << " data_size   = " << data_size << " (0x"
+              << std::hex << data_size << ")" << std::dec << std::endl;
+    std::cout << tag << " => [ 0x" << (void *) img_data
+              << ", 0x" << (void *) (((char *) img_next) - 1)
+              << "], # size:" << data_size << ", ";
+    print_memalign((intptr_t) img_data);
+    std::cout << std::endl;
 }
 
 template<typename T>
@@ -176,7 +184,8 @@ void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     int bpp = buf->elem_size;
     int32_t size = 1;
 
-    std::cout << std::endl << "Buffer dump: " << tag
+    std::cout << std::endl
+              << "Buffer dump: " << tag
               << " dim:" << dim << " bpp:" << bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
@@ -202,7 +211,7 @@ void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
                 std::cout << std::endl;
                 // Print separators for dimensions beyond (x0,y1)
                 if (d > 1) {
-                    print_dimid(d, curloc[d]+min[d]);
+                    print_dimid(d, curloc[d] + min[d]);
                     std::cout << "\n==========================================";
                 }
             }
@@ -212,14 +221,15 @@ void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
         if ((curloc[0] % 16) == 0) {
             int widx = 0;
             std::ostringstream idx;
-            if (dim > 1) {   // Multi-dim, just report (x0,y1) on each row
-               idx << "(" << curloc[0]+min[0] << "," << curloc[1]+min[1] << ")";
-               widx = 12;
-            } else {         // Single-dim
-               idx << curloc[0]+min[0];
-               widx = 4;
+            if (dim > 1) {  // Multi-dim, just report (x0,y1) on each row
+                idx << "(" << curloc[0] + min[0] << "," << curloc[1] + min[1] << ")";
+                widx = 12;
+            } else {  // Single-dim
+                idx << curloc[0] + min[0];
+                widx = 4;
             }
-            std::cout << std::endl << std::setw(widx) << idx.str() << ": ";
+            std::cout << std::endl
+                      << std::setw(widx) << idx.str() << ": ";
         }
 
         // Display data
@@ -239,7 +249,8 @@ void stats(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     int dim = img.dimensions();
     int bpp = buf->elem_size;
     int32_t size = 1;
-    std::cout << std::endl << "Buffer stats: " << tag
+    std::cout << std::endl
+              << "Buffer stats: " << tag
               << " dim:" << dim << " bpp:" << bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
@@ -310,7 +321,7 @@ void stats(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     std::cout << std::endl;
 }
 
-} // namespace Tools
-} // namespace Halide
+}  // namespace Tools
+}  // namespace Halide
 
 #endif  // HALIDE_TOOLS_IMAGE_INFO_H

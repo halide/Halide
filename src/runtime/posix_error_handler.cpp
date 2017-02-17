@@ -1,7 +1,9 @@
 #include "HalideRuntime.h"
 #include "printer.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK void default_error_handler(void *user_context, const char *msg) {
     char buf[4096];
@@ -20,8 +22,9 @@ WEAK void default_error_handler(void *user_context, const char *msg) {
 }
 
 WEAK halide_error_handler_t error_handler = default_error_handler;
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal
 
 extern "C" {
 
@@ -34,5 +37,4 @@ WEAK halide_error_handler_t halide_set_error_handler(halide_error_handler_t hand
     error_handler = handler;
     return result;
 }
-
 }

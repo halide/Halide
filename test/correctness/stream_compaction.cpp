@@ -15,12 +15,12 @@ int main(int argc, char **argv) {
     Func cum_sum;
     cum_sum(x) = 0;
     RDom r(0, 1000);
-    cum_sum(r+1) = f(r) + cum_sum(r);
+    cum_sum(r + 1) = f(r) + cum_sum(r);
     cum_sum.compute_root();
 
     // Write out the coordinates of all the ones. We'd use Tuples in the 2d case.
     Func ones;
-    ones(x) = -1; // Initialize to -1 as a sentinel.
+    ones(x) = -1;  // Initialize to -1 as a sentinel.
 
     // Figure out which bin each coordinate should go into. Need a
     // clamp so that Halide knows how much space to allocate for ones.
@@ -49,5 +49,4 @@ int main(int argc, char **argv) {
     }
 
     return 0;
-
 }

@@ -5,8 +5,8 @@
  * Defines the code-generator for producing GLSL kernel code for OpenGL Compute.
  */
 
-#include <sstream>
 #include <map>
+#include <sstream>
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
@@ -35,19 +35,22 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() { return "openglcompute"; }
+    std::string api_unique_name() {
+        return "openglcompute";
+    }
 
 protected:
-
     class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
     public:
-        CodeGen_OpenGLCompute_C(std::ostream &s) : CodeGen_GLSLBase(s) {}
+        CodeGen_OpenGLCompute_C(std::ostream &s)
+            : CodeGen_GLSLBase(s) {
+        }
         void add_kernel(Stmt stmt,
                         Target target,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
-    protected:
 
+    protected:
         std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
         using CodeGen_C::visit;
@@ -74,7 +77,7 @@ protected:
     CodeGen_OpenGLCompute_C glc;
     Target target;
 };
-
-}}
+}
+}
 
 #endif

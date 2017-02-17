@@ -17,7 +17,7 @@ extern const struct halide_device_interface_t *halide_opencl_device_interface();
  *  Halide OpenCL runtime. Do not call them. */
 // @{
 extern int halide_opencl_initialize_kernels(void *user_context, void **state_ptr,
-                                               const char *src, int size);
+                                            const char *src, int size);
 extern int halide_opencl_run(void *user_context,
                              void *state_ptr,
                              const char *entry_name,
@@ -28,7 +28,7 @@ extern int halide_opencl_run(void *user_context,
                              void *args[],
                              int8_t arg_is_buffer[],
                              int num_attributes,
-                             float* vertex_buffer,
+                             float *vertex_buffer,
                              int num_coords_dim0,
                              int num_coords_dim1);
 // @}
@@ -88,7 +88,7 @@ extern uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct buffer_t
 extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct buffer_t *buf);
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEOPENCL_H
+#endif  // HALIDE_HALIDERUNTIMEOPENCL_H

@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include <assert.h>
 #include <string.h>
 
@@ -21,14 +21,17 @@ namespace HalideTest {
 int32_t extract_value_ns(const int32_t *arg) {
     return *arg;
 }
-
 }
 
-
 namespace my_namespace {
-class my_class {public: int foo;};
+class my_class {
+public:
+    int foo;
+};
 namespace my_subnamespace {
-struct my_struct {int foo;};
+struct my_struct {
+    int foo;
+};
 }
 }
 union my_union {
@@ -62,7 +65,7 @@ int main(int argc, char **argv) {
     // Don't bother calling this (we haven't linked in the CUDA support it needs),
     // just force a reference to ensure it is linked in.
     auto f = HalideTest::cxx_mangling_gpu;
-    printf("HalideTest::cxx_mangling is at: %p\n", (void*) f);
+    printf("HalideTest::cxx_mangling is at: %p\n", (void *) f);
 #endif
 
     my_namespace::my_class mc;

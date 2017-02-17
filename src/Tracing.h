@@ -19,7 +19,6 @@ namespace Internal {
 Stmt inject_tracing(Stmt, const std::string &pipeline_name,
                     const std::map<std::string, Function> &env,
                     const std::vector<Function> &outputs);
-
 }
 }
 

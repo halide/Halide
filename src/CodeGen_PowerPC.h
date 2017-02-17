@@ -20,7 +20,6 @@ public:
     static void test();
 
 protected:
-
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
@@ -37,9 +36,9 @@ protected:
 
     // Call an intrinsic as defined by a pattern. Dispatches to the
 private:
-    static const char* altivec_int_type_name(const Type&);
+    static const char *altivec_int_type_name(const Type &);
 };
-
-}}
+}
+}
 
 #endif

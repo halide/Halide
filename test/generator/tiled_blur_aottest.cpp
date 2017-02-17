@@ -1,8 +1,8 @@
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
-#include <assert.h>
 
 #include "tiled_blur.h"
 
@@ -41,7 +41,7 @@ void test(Buffer<> (*factory)(halide_type_t, int w, int h, int c)) {
     Buffer<int> input = factory(halide_type_of<int>(), W, H, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
-            input(x, y) = (int)(x * y);
+            input(x, y) = (int) (x * y);
         }
     }
     Buffer<float> output = factory(halide_type_of<float>(), W, H, 3);

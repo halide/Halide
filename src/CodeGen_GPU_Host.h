@@ -8,9 +8,9 @@
 #include <map>
 
 #include "CodeGen_ARM.h"
-#include "CodeGen_X86.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
+#include "CodeGen_X86.h"
 
 #include "IR.h"
 
@@ -24,7 +24,6 @@ struct GPU_Argument;
 template<typename CodeGen_CPU>
 class CodeGen_GPU_Host : public CodeGen_CPU {
 public:
-
     /** Create a GPU code generator. GPU target is selected via
      * CodeGen_GPU_Options. Processor features can be enabled using the
      * appropriate flags from Target */
@@ -84,7 +83,7 @@ private:
     /** Child code generator for device kernels. */
     std::map<DeviceAPI, CodeGen_GPU_Dev *> cgdev;
 };
-
-}}
+}
+}
 
 #endif

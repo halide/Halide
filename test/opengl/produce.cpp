@@ -20,7 +20,7 @@ int test_lut1d() {
     Buffer<uint8_t> input(8, 8, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
-            float v = (1.0f / 16.0f) + (float)x / 8.0f;
+            float v = (1.0f / 16.0f) + (float) x / 8.0f;
             input(x, y, 0) = (uint8_t)(v * 255.0f);
             input(x, y, 1) = (uint8_t)((1.0f - v) * 255.0f);
             input(x, y, 2) = (uint8_t)((v > 0.5 ? 1.0 : 0.0) * 255.0f);
@@ -51,10 +51,10 @@ int test_lut1d() {
                 float expected = std::numeric_limits<float>::infinity();
                 switch (c) {
                 case 0:
-                    expected = (float)(1 + x);
+                    expected = (float) (1 + x);
                     break;
                 case 1:
-                    expected = (float)(8 - x);
+                    expected = (float) (8 - x);
                     break;
                 case 2:
                     expected = x > 3 ? 8.0f : 1.0f;

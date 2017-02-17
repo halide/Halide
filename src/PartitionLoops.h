@@ -16,7 +16,6 @@ namespace Internal {
  * epilogue. Finds the steady state by hunting for use of clamped
  * ramps, or the 'likely' intrinsic. */
 EXPORT Stmt partition_loops(Stmt s);
-
 }
 }
 

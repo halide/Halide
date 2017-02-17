@@ -7,9 +7,9 @@
  * realizations are injected.
  */
 
-#include <vector>
-#include <string>
 #include <map>
+#include <string>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -23,7 +23,6 @@ class Function;
  * traversal of the call graph. */
 std::vector<std::string> realization_order(const std::vector<Function> &output,
                                            const std::map<std::string, Function> &env);
-
 }
 }
 

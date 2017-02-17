@@ -1,6 +1,6 @@
+#include <chrono>
 #include <iomanip>
 #include <sstream>
-#include <chrono>
 
 std::string items_per_second(int N, double elapsed) {
     double ips = N * 1000 / elapsed;

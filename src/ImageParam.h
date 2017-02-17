@@ -6,9 +6,9 @@
  * Classes for declaring image parameters to halide pipelines
  */
 
-#include "Var.h"
-#include "OutputImageParam.h"
 #include "Func.h"
+#include "OutputImageParam.h"
+#include "Var.h"
 
 namespace Halide {
 
@@ -24,9 +24,10 @@ class ImageParam : public OutputImageParam {
     EXPORT void init_func();
 
 public:
-
     /** Construct a nullptr image parameter handle. */
-    ImageParam() : OutputImageParam() {}
+    ImageParam()
+        : OutputImageParam() {
+    }
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
@@ -55,8 +56,8 @@ public:
      * (see \ref Var::implicit)
      */
     // @{
-    template <typename... Args>
-    NO_INLINE Expr operator()(Args&&... args) const {
+    template<typename... Args>
+    NO_INLINE Expr operator()(Args &&... args) const {
         return func(std::forward<Args>(args)...);
     }
     EXPORT Expr operator()(std::vector<Expr>) const;
@@ -77,7 +78,6 @@ public:
      * second dimension of the Func.
      */
     EXPORT operator Func() const;
-
 
     /** Creates and returns a new Func that wraps this ImageParam. During
      * compilation, Halide will replace calls to this ImageParam with calls
@@ -122,7 +122,6 @@ public:
     EXPORT Func in();
     // @}
 };
-
 }
 
 #endif

@@ -9,9 +9,9 @@ int main() {
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Buffer<float> input(255, 255, 3);
-    for (int y=0; y<input.height(); y++) {
-        for (int x=0; x<input.width(); x++) {
-            for (int c=0; c<3; c++) {
+    for (int y = 0; y < input.height(); y++) {
+        for (int x = 0; x < input.width(); x++) {
+            for (int c = 0; c < 3; c++) {
                 // Note: the following values can be >1.0f to test whether
                 // OpenGL performs clamping operations as part of the copy
                 // operation.  (It may do so if something other than floats
@@ -32,8 +32,8 @@ int main() {
     g.realize(out, target);
     out.copy_to_host();
 
-    for (int y=0; y<out.height(); y++) {
-        for (int x=0; x<out.width(); x++) {
+    for (int y = 0; y < out.height(); y++) {
+        for (int x = 0; x < out.width(); x++) {
             if (!(out(x, y, 0) == input(x, y, 0) &&
                   out(x, y, 1) == input(x, y, 1) &&
                   out(x, y, 2) == input(x, y, 2))) {

@@ -52,7 +52,6 @@ class UniquifyVariableNames : public IRMutator {
         } else {
             stmt = LetStmt::make(new_name, value, body);
         }
-
     }
 
     void visit(const Let *op) {
@@ -69,7 +68,6 @@ class UniquifyVariableNames : public IRMutator {
         } else {
             expr = Let::make(new_name, value, body);
         }
-
     }
 
     void visit(const For *op) {
@@ -104,6 +102,5 @@ Stmt uniquify_variable_names(Stmt s) {
     UniquifyVariableNames u;
     return u.mutate(s);
 }
-
 }
 }

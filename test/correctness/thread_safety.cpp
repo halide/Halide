@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 
     std::vector<std::thread> threads;
     for (int i = 0; i < num_threads; i++) {
-        threads.emplace_back([=]{
+        threads.emplace_back([=] {
             for (int i = 0; i < (total_iters / num_threads); i++) {
                 Func f;
                 Var x;

@@ -14,9 +14,7 @@ namespace Internal {
  * is unique. This lets later passes assume syntactic equivalence is
  * semantic equivalence. */
 Stmt uniquify_variable_names(Stmt s);
-
 }
 }
-
 
 #endif

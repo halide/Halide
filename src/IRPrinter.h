@@ -16,8 +16,8 @@
 
 #include <ostream>
 
-#include "Module.h"
 #include "IRVisitor.h"
+#include "Module.h"
 
 namespace Halide {
 

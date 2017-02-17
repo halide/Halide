@@ -1,6 +1,6 @@
 #include "DeepCopy.h"
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -9,12 +9,12 @@ using std::string;
 using std::vector;
 
 pair<vector<Function>, map<string, Function>> deep_copy(
-            const vector<Function> &outputs, const map<string, Function> &env) {
+    const vector<Function> &outputs, const map<string, Function> &env) {
     vector<Function> copy_outputs;
     map<string, Function> copy_env;
 
     // Create empty deep-copies of all Functions in 'env'
-    map<Function, Function, Function::Compare> copied_map; // Original Function -> Deep-copy
+    map<Function, Function, Function::Compare> copied_map;  // Original Function -> Deep-copy
     for (const auto &iter : env) {
         copied_map[iter.second] = Function(iter.second.name());
     }
@@ -48,6 +48,5 @@ pair<vector<Function>, map<string, Function>> deep_copy(
 
     return { copy_outputs, copy_env };
 }
-
 }
 }

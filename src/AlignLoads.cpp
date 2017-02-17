@@ -1,11 +1,11 @@
 #include <algorithm>
 
 #include "AlignLoads.h"
+#include "Bounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Bounds.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Simplify.h"
 
 using std::vector;
@@ -21,7 +21,9 @@ namespace {
 // intended vector out of the aligned vector.
 class AlignLoads : public IRMutator {
 public:
-    AlignLoads(int alignment) : required_alignment(alignment) {}
+    AlignLoads(int alignment)
+        : required_alignment(alignment) {
+    }
 
 private:
     // The desired alignment of a vector load.
@@ -115,7 +117,7 @@ private:
 
             // Load a dense vector covering all of the addresses in the load.
             Expr dense_base = simplify(ramp->base - shift);
-            Expr dense_index = Ramp::make(dense_base, 1, lanes*stride);
+            Expr dense_index = Ramp::make(dense_base, 1, lanes * stride);
             Expr dense = make_load(op, dense_index);
 
             // Shuffle the dense load.
@@ -153,7 +155,7 @@ private:
             // address. Rewrite this is an aligned load of two
             // native vectors, followed by a shuffle.
             Expr aligned_base = simplify(ramp->base - aligned_offset);
-            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes*2));
+            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes * 2));
 
             expr = Shuffle::make_slice(aligned_load, aligned_offset, 1, lanes);
             return;
@@ -182,8 +184,12 @@ private:
         }
     }
 
-    void visit(const Let *op) { visit_let(expr, op); }
-    void visit(const LetStmt *op) { visit_let(stmt, op); }
+    void visit(const Let *op) {
+        visit_let(expr, op);
+    }
+    void visit(const LetStmt *op) {
+        visit_let(stmt, op);
+    }
 };
 
 }  // namespace
@@ -191,6 +197,5 @@ private:
 Stmt align_loads(Stmt s, int alignment) {
     return AlignLoads(alignment).mutate(s);
 }
-
 }
 }

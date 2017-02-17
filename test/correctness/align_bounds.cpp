@@ -8,6 +8,7 @@ class CheckForSelects : public IRVisitor {
     void visit(const Select *op) {
         result = true;
     }
+
 public:
     bool result = false;
 };
@@ -29,16 +30,16 @@ int main(int argc, char **argv) {
 
         f(x) = 3;
 
-        g(x) = select(x % 2 == 0, f(x+1), f(x-1)+8);
+        g(x) = select(x % 2 == 0, f(x + 1), f(x - 1) + 8);
 
         Param<int> p;
-        h(x) = g(x-p) + g(x+p);
+        h(x) = g(x - p) + g(x + p);
 
         f.compute_root();
         g.compute_root().align_bounds(x, 2).unroll(x, 2).trace_realizations();
 
         // The lowered IR should contain no selects.
-        Module m = g.compile_to_module({p});
+        Module m = g.compile_to_module({ p });
         CheckForSelects checker;
         m.functions()[0].body.accept(&checker);
         if (checker.result) {
@@ -51,7 +52,7 @@ int main(int argc, char **argv) {
         Buffer<int> result = h.realize(10);
 
         for (int i = 0; i < 10; i++) {
-            int correct = (i&1) == 1 ? 6 : 22;
+            int correct = (i & 1) == 1 ? 6 : 22;
             if (result(i) != correct) {
                 printf("result(%d) = %d instead of %d\n",
                        i, result(i), correct);
@@ -92,16 +93,16 @@ int main(int argc, char **argv) {
 
         f(x) = 3;
 
-        g(x) = select(x % 2 == 0, f(x+1), f(x-1)+8);
+        g(x) = select(x % 2 == 0, f(x + 1), f(x - 1) + 8);
 
         Param<int> p;
-        h(x) = g(x-p) + g(x+p);
+        h(x) = g(x - p) + g(x + p);
 
         f.compute_root();
         g.compute_root().align_bounds(x, 2, 1).unroll(x, 2).trace_realizations();
 
         // The lowered IR should contain no selects.
-        Module m = g.compile_to_module({p});
+        Module m = g.compile_to_module({ p });
         CheckForSelects checker;
         m.functions()[0].body.accept(&checker);
         if (checker.result) {
@@ -114,7 +115,7 @@ int main(int argc, char **argv) {
         Buffer<int> result = h.realize(10);
 
         for (int i = 0; i < 10; i++) {
-            int correct = (i&1) == 1 ? 6 : 22;
+            int correct = (i & 1) == 1 ? 6 : 22;
             if (result(i) != correct) {
                 printf("result(%d) = %d instead of %d\n",
                        i, result(i), correct);

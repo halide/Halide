@@ -1,8 +1,8 @@
 #include "Halide.h"
 #include "test/common/check_call_graphs.h"
 
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 
 using std::map;
 using std::string;
@@ -52,8 +52,8 @@ int calling_wrap_no_op_test() {
         g(x, y) = d(x, y);
         h(x, y) = d(x, y);
 
-        Func wrapper1 = d.in({e, f, g});
-        Func wrapper2 = d.in({g, f, e});
+        Func wrapper1 = d.in({ e, f, g });
+        Func wrapper2 = d.in({ g, f, e });
         if (wrapper1.name() != wrapper2.name()) {
             std::cerr << "Expect " << wrapper1.name() << "; got " << wrapper2.name() << " instead\n";
             return -1;
@@ -80,9 +80,9 @@ int func_wrap_test() {
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {g.name(), {wrapper.name()}},
-        {wrapper.name(), {f.name()}},
-        {f.name(), {}},
+        { g.name(), { wrapper.name() } },
+        { wrapper.name(), { f.name() } },
+        { f.name(), {} },
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -106,7 +106,7 @@ int multiple_funcs_sharing_wrapper_test() {
     g3(x, y) = f(x);
 
     f.compute_root();
-    Func f_wrapper = f.in({g1, g2, g3}).compute_root();
+    Func f_wrapper = f.in({ g1, g2, g3 }).compute_root();
 
     {
         // Check the call graphs.
@@ -116,9 +116,9 @@ int multiple_funcs_sharing_wrapper_test() {
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g1.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            { g1.name(), { f_wrapper.name() } },
+            { f_wrapper.name(), { f.name() } },
+            { f.name(), {} },
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -139,9 +139,9 @@ int multiple_funcs_sharing_wrapper_test() {
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g2.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            { g2.name(), { f_wrapper.name() } },
+            { f_wrapper.name(), { f.name() } },
+            { f.name(), {} },
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -162,9 +162,9 @@ int multiple_funcs_sharing_wrapper_test() {
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g3.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            { g3.name(), { f_wrapper.name() } },
+            { f_wrapper.name(), { f.name() } },
+            { f.name(), {} },
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -202,17 +202,17 @@ int global_wrap_test() {
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {h.name(), {g.name(), wrapper.name()}},
-        {g.name(), {wrapper.name()}},
-        {wrapper.name(), {f.name()}},
-        {f.name(), {}},
+        { h.name(), { g.name(), wrapper.name() } },
+        { g.name(), { wrapper.name() } },
+        { wrapper.name(), { f.name() } },
+        { f.name(), {} },
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Buffer<int> im = h.realize(200, 200);
-    auto func = [](int x, int y) { return 2*(x + y); };
+    auto func = [](int x, int y) { return 2 * (x + y); };
     if (check_image(im, func)) {
         return -1;
     }
@@ -232,7 +232,7 @@ int update_defined_after_wrap_test() {
     // still call f's wrapper.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
-    g(r.x, r.y) += 2*f(r.x, r.y);
+    g(r.x, r.y) += 2 * f(r.x, r.y);
 
     Param<bool> param;
 
@@ -249,14 +249,14 @@ int update_defined_after_wrap_test() {
         // Check the call graphs.
         // Expect initialization of 'g' to call 'wrapper' and its update to call
         // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
-        Module m = g.compile_to_module({g.infer_arguments()});
+        Module m = g.compile_to_module({ g.infer_arguments() });
         CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g.name(), {wrapper.name(), g.name()}},
-            {wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            { g.name(), { wrapper.name(), g.name() } },
+            { wrapper.name(), { f.name() } },
+            { f.name(), {} },
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -264,7 +264,7 @@ int update_defined_after_wrap_test() {
 
         Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -277,14 +277,14 @@ int update_defined_after_wrap_test() {
         // Check the call graphs.
         // Expect initialization of 'g' to call 'wrapper' and its update to call
         // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
-        Module m = g.compile_to_module({g.infer_arguments()});
+        Module m = g.compile_to_module({ g.infer_arguments() });
         CheckCalls c;
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g.name(), {wrapper.name(), g.name()}},
-            {wrapper.name(), {f.name()}},
-            {f.name(), {}},
+            { g.name(), { wrapper.name(), g.name() } },
+            { wrapper.name(), { f.name() } },
+            { f.name(), {} },
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
@@ -292,7 +292,7 @@ int update_defined_after_wrap_test() {
 
         Buffer<int> im = g.realize(200, 200);
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -325,16 +325,16 @@ int rdom_wrapper_test() {
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {g.name(), {f.name(), g.name()}},
-        {wrapper.name(), {g.name()}},
-        {f.name(), {}},
+        { g.name(), { f.name(), g.name() } },
+        { wrapper.name(), { g.name() } },
+        { f.name(), {} },
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Buffer<int> im = wrapper.realize(200, 200);
-    auto func = [](int x, int y) { return 4*x + 6* y + 10; };
+    auto func = [](int x, int y) { return 4 * x + 6 * y + 10; };
     if (check_image(im, func)) {
         return -1;
     }
@@ -362,24 +362,23 @@ int global_and_custom_wrap_test() {
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {result.name(), {g.name(), f_wrapper.name()}},
-        {g.name(), {f_in_g.name()}},
-        {f_wrapper.name(), {f.name()}},
-        {f_in_g.name(), {f.name()}},
-        {f.name(), {}},
+        { result.name(), { g.name(), f_wrapper.name() } },
+        { g.name(), { f_in_g.name() } },
+        { f_wrapper.name(), { f.name() } },
+        { f_in_g.name(), { f.name() } },
+        { f.name(), {} },
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Buffer<int> im = result.realize(200, 200);
-    auto func = [](int x, int y) { return 2*x; };
+    auto func = [](int x, int y) { return 2 * x; };
     if (check_image(im, func)) {
         return -1;
     }
     return 0;
 }
-
 
 int wrapper_depend_on_mutated_func_test() {
     Func e("e"), f("f"), g("g"), h("h");
@@ -407,12 +406,12 @@ int wrapper_depend_on_mutated_func_test() {
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {h.name(), {g_in_h.name()}},
-        {g_in_h.name(), {g.name()}},
-        {g.name(), {f.name()}},
-        {f.name(), {e_in_f.name()}},
-        {e_in_f.name(), {e.name()}},
-        {e.name(), {}},
+        { h.name(), { g_in_h.name() } },
+        { g_in_h.name(), { g.name() } },
+        { g.name(), { f.name() } },
+        { f.name(), { e_in_f.name() } },
+        { e_in_f.name(), { e.name() } },
+        { e.name(), {} },
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -449,21 +448,21 @@ int wrapper_on_wrapper_test() {
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {h.name(), {f_in_h.name(), g_in_h.name(), f_in_f_in_g.name()}},
-        {f_in_h.name(), {f.name()}},
-        {g_in_h.name(), {g.name()}},
-        {g.name(), {e.name(), f_in_g.name()}},
-        {f_in_g.name(), {f_in_f_in_g.name()}},
-        {f_in_f_in_g.name(), {f.name()}},
-        {f.name(), {e.name()}},
-        {e.name(), {}},
+        { h.name(), { f_in_h.name(), g_in_h.name(), f_in_f_in_g.name() } },
+        { f_in_h.name(), { f.name() } },
+        { g_in_h.name(), { g.name() } },
+        { g.name(), { e.name(), f_in_g.name() } },
+        { f_in_g.name(), { f_in_f_in_g.name() } },
+        { f_in_f_in_g.name(), { f.name() } },
+        { f.name(), { e.name() } },
+        { e.name(), {} },
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Buffer<int> im = h.realize(200, 200);
-    auto func = [](int x, int y) { return 4*(x + y); };
+    auto func = [](int x, int y) { return 4 * (x + y); };
     if (check_image(im, func)) {
         return -1;
     }
@@ -495,11 +494,11 @@ int wrapper_on_rdom_predicate_test() {
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {g.name(), {g.name(), f_in_g.name(), h_wrapper.name()}},
-        {f_in_g.name(), {f.name()}},
-        {f.name(), {}},
-        {h_wrapper.name(), {h.name()}},
-        {h.name(), {}},
+        { g.name(), { g.name(), f_in_g.name(), h_wrapper.name() } },
+        { f_in_g.name(), { f.name() } },
+        { f.name(), {} },
+        { h_wrapper.name(), { h.name() } },
+        { h.name(), {} },
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -519,7 +518,7 @@ int two_fold_wrapper_test() {
     Func input("input"), input_in_output_in_output, input_in_output, output("output");
     Var x("x"), y("y");
 
-    input(x, y) = 2*x + 3*y;
+    input(x, y) = 2 * x + 3 * y;
     input.compute_root();
 
     output(x, y) = input(y, x);
@@ -536,17 +535,17 @@ int two_fold_wrapper_test() {
     m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
-        {output.name(), {input_in_output_in_output.name()}},
-        {input_in_output_in_output.name(), {input_in_output.name()}},
-        {input_in_output.name(), {input.name()}},
-        {input.name(), {}},
+        { output.name(), { input_in_output_in_output.name() } },
+        { input_in_output_in_output.name(), { input_in_output.name() } },
+        { input_in_output.name(), { input.name() } },
+        { input.name(), {} },
     };
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
     }
 
     Buffer<int> im = output.realize(1024, 1024);
-    auto func = [](int x, int y) { return 3*x + 2*y; };
+    auto func = [](int x, int y) { return 3 * x + 2 * y; };
     if (check_image(im, func)) {
         return -1;
     }
@@ -557,7 +556,7 @@ int multi_folds_wrapper_test() {
     Func f("f"), f_in_g_in_g, f_in_g, f_in_g_in_g_in_h, f_in_g_in_g_in_h_in_h, g("g"), h("h");
     Var x("x"), y("y");
 
-    f(x, y) = 2*x + 3*y;
+    f(x, y) = 2 * x + 3 * y;
     f.compute_root();
 
     g(x, y) = f(y, x);
@@ -580,17 +579,17 @@ int multi_folds_wrapper_test() {
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {g.name(), {f_in_g_in_g.name()}},
-            {f_in_g_in_g.name(), {f_in_g.name()}},
-            {f_in_g.name(), {f.name()}},
-            {f.name(), {}},
+            { g.name(), { f_in_g_in_g.name() } },
+            { f_in_g_in_g.name(), { f_in_g.name() } },
+            { f_in_g.name(), { f.name() } },
+            { f.name(), {} },
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
 
         Buffer<int> im = g.realize(1024, 1024);
-        auto func = [](int x, int y) { return 3*x + 2*y; };
+        auto func = [](int x, int y) { return 3 * x + 2 * y; };
         if (check_image(im, func)) {
             return -1;
         }
@@ -603,19 +602,19 @@ int multi_folds_wrapper_test() {
         m.functions().front().body.accept(&c);
 
         CallGraphs expected = {
-            {h.name(), {f_in_g_in_g_in_h_in_h.name()}},
-            {f_in_g_in_g_in_h_in_h.name(), {f_in_g_in_g_in_h.name()}},
-            {f_in_g_in_g_in_h.name(), {f_in_g_in_g.name()}},
-            {f_in_g_in_g.name(), {f_in_g.name()}},
-            {f_in_g.name(), {f.name()}},
-            {f.name(), {}},
+            { h.name(), { f_in_g_in_g_in_h_in_h.name() } },
+            { f_in_g_in_g_in_h_in_h.name(), { f_in_g_in_g_in_h.name() } },
+            { f_in_g_in_g_in_h.name(), { f_in_g_in_g.name() } },
+            { f_in_g_in_g.name(), { f_in_g.name() } },
+            { f_in_g.name(), { f.name() } },
+            { f.name(), {} },
         };
         if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
 
         Buffer<int> im = h.realize(1024, 1024);
-        auto func = [](int x, int y) { return 3*x + 2*y; };
+        auto func = [](int x, int y) { return 3 * x + 2 * y; };
         if (check_image(im, func)) {
             return -1;
         }

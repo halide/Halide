@@ -1,6 +1,6 @@
 #include <map>
-#include <vector>
 #include <sstream>
+#include <vector>
 
 #include "DebugToFile.h"
 #include "IRMutator.h"
@@ -75,7 +75,7 @@ class DebugToFile : public IRMutator {
             Expr call_result_var = Variable::make(Int(32), call_result_name);
             Stmt body = AssertStmt::make(call_result_var == 0,
                                          Call::make(Int(32), "halide_error_debug_to_file_failed",
-                                                    {f.name(), f.debug_file(), call_result_var},
+                                                    { f.name(), f.debug_file(), call_result_var },
                                                     Call::Extern));
             body = LetStmt::make(call_result_name, call, body);
             body = Block::make(mutate(op->body), body);
@@ -88,7 +88,9 @@ class DebugToFile : public IRMutator {
     }
 
 public:
-    DebugToFile(const map<string, Function> &e) : env(e) {}
+    DebugToFile(const map<string, Function> &e)
+        : env(e) {
+    }
 };
 
 class RemoveDummyRealizations : public IRMutator {
@@ -107,7 +109,9 @@ class RemoveDummyRealizations : public IRMutator {
     }
 
 public:
-    RemoveDummyRealizations(const vector<Function> &o) : outputs(o) {}
+    RemoveDummyRealizations(const vector<Function> &o)
+        : outputs(o) {
+    }
 };
 
 Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Function> &env) {
@@ -116,7 +120,7 @@ Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Fu
         std::vector<Range> output_bounds;
         for (int i = 0; i < out.dimensions(); i++) {
             string dim = std::to_string(i);
-            Expr min    = Variable::make(Int(32), out.name() + ".min." + dim);
+            Expr min = Variable::make(Int(32), out.name() + ".min." + dim);
             Expr extent = Variable::make(Int(32), out.name() + ".extent." + dim);
             output_bounds.push_back(Range(min, extent));
         }
@@ -129,6 +133,5 @@ Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Fu
 
     return s;
 }
-
 }
 }

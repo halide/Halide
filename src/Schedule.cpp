@@ -1,8 +1,8 @@
+#include "Schedule.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
-#include "Schedule.h"
 #include "Var.h"
 
 namespace Halide {
@@ -10,9 +10,14 @@ namespace Halide {
 LoopLevel::LoopLevel(const std::string &func_name,
                      const std::string &var_name,
                      bool is_rvar)
-    : func_name(func_name), var_name(var_name), is_rvar(is_rvar) {}
-LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.name(), v.name(), v.is_rvar) {}
-LoopLevel::LoopLevel(Func f, VarOrRVar v) : LoopLevel(f.function().name(), v.name(), v.is_rvar) {}
+    : func_name(func_name), var_name(var_name), is_rvar(is_rvar) {
+}
+LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v)
+    : LoopLevel(f.name(), v.name(), v.is_rvar) {
+}
+LoopLevel::LoopLevel(Func f, VarOrRVar v)
+    : LoopLevel(f.function().name(), v.name(), v.is_rvar) {
+}
 
 std::string LoopLevel::func() const {
     return func_name;
@@ -81,7 +86,8 @@ struct ScheduleContents {
     bool touched;
     bool allow_race_conditions;
 
-    ScheduleContents() : memoized(false), touched(false), allow_race_conditions(false) {};
+    ScheduleContents()
+        : memoized(false), touched(false), allow_race_conditions(false){};
 
     // Pass an IRMutator through to all Exprs referenced in the ScheduleContents
     void mutate(IRMutator *mutator) {
@@ -120,7 +126,6 @@ struct ScheduleContents {
     }
 };
 
-
 template<>
 EXPORT RefCount &ref_count<ScheduleContents>(const ScheduleContents *p) {
     return p->ref_count;
@@ -131,10 +136,12 @@ EXPORT void destroy<ScheduleContents>(const ScheduleContents *p) {
     delete p;
 }
 
-Schedule::Schedule() : contents(new ScheduleContents) {}
+Schedule::Schedule()
+    : contents(new ScheduleContents) {
+}
 
 Schedule Schedule::deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
+    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
 
     internal_assert(contents.defined()) << "Cannot deep-copy undefined Schedule\n";
     Schedule copy;

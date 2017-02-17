@@ -57,9 +57,9 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 
 /** Power modes for Hexagon. */
 typedef enum halide_hvx_power_mode_t {
-    halide_hvx_power_low     = 0,
+    halide_hvx_power_low = 0,
     halide_hvx_power_nominal = 1,
-    halide_hvx_power_turbo   = 2
+    halide_hvx_power_turbo = 2
 } halide_hvx_power_mode_t;
 
 /** More detailed power settings to control Hexagon.
@@ -109,11 +109,11 @@ extern int halide_hexagon_run(void *user_context,
                               uint64_t arg_sizes[],
                               void *args[],
                               int arg_flags[]);
-extern int halide_hexagon_device_release(void* user_context);
+extern int halide_hexagon_device_release(void *user_context);
 // @}
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEHEXAGONHOST_H
+#endif  // HALIDE_HALIDERUNTIMEHEXAGONHOST_H

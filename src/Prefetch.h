@@ -15,7 +15,6 @@ namespace Halide {
 namespace Internal {
 
 Stmt inject_prefetch(Stmt s, const std::map<std::string, Function> &env);
-
 }
 }
 

@@ -51,9 +51,9 @@ extern "C" DLLEXPORT int flip_x(buffer_t *in1, buffer_t *in2, buffer_t *out) {
 
         // Get pointers to the origin from each of the inputs (because
         // we're flipping about the origin)
-        uint8_t *dst = (uint8_t *)(out->host) - out->min[0];
-        uint8_t *src1 = (uint8_t *)(in1->host) - in1->min[0];
-        int *src2 = (int *)(in2->host) - in2->min[0];
+        uint8_t *dst = (uint8_t *) (out->host) - out->min[0];
+        uint8_t *src1 = (uint8_t *) (in1->host) - in1->min[0];
+        int *src2 = (int *) (in2->host) - in2->min[0];
 
         // Do the flip.
         for (int i = min; i <= max; i++) {
@@ -73,11 +73,11 @@ int main(int argc, char **argv) {
     // Make some input data in the range [-99, 0]
     Buffer<uint8_t> input(100);
     input.set_min(-99);
-    lambda(x, cast<uint8_t>(x*x)).realize(input);
+    lambda(x, cast<uint8_t>(x * x)).realize(input);
 
-    assert(input(-99) == (uint8_t)(-99*-99));
+    assert(input(-99) == (uint8_t)(-99 * -99));
 
-    f(x) = x*x;
+    f(x) = x * x;
 
     std::vector<ExternFuncArgument> args(2);
     args[0] = input;
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
     Buffer<uint8_t> result = h.realize(100);
 
     for (int i = 0; i < 100; i++) {
-        uint8_t correct = 4*i*i;
+        uint8_t correct = 4 * i * i;
         if (result(i) != correct) {
             printf("result(%d) = %d instead of %d\n", i, result(i), correct);
             return -1;

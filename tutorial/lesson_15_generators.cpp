@@ -32,8 +32,8 @@ public:
     // member variables. We'll give the parameters explicit names this
     // time. They'll appear in the signature of our generated function
     // in the same order as we declare them.
-    Param<uint8_t> offset{"offset"};
-    ImageParam input{UInt(8), 2, "input"};
+    Param<uint8_t> offset{ "offset" };
+    ImageParam input{ UInt(8), 2, "input" };
 
     // Typically you declare your Vars at this scope as well, so that
     // they can be used in any helper methods you add later.
@@ -60,7 +60,7 @@ public:
 // an "int main(...)" that provides the command-line interface to use
 // your generator class. We need to tell that code about our
 // generator. We do this like so:
-RegisterGenerator<MyFirstGenerator> my_first_generator{"my_first_generator"};
+RegisterGenerator<MyFirstGenerator> my_first_generator{ "my_first_generator" };
 
 // If you like, you can put multiple Generators in the one file. This
 // could be a good idea if they share some common code. Let's define
@@ -71,13 +71,13 @@ public:
     // too. These let you compile multiple variants of a Halide
     // pipeline. We'll define one that tells us whether or not to
     // parallelize in our schedule:
-    GeneratorParam<bool> parallel{"parallel", /* default value */ true};
+    GeneratorParam<bool> parallel{ "parallel", /* default value */ true };
 
     // ... and another representing a constant scale factor to use:
-    GeneratorParam<float> scale{"scale",
-            1.0f /* default value */,
-            0.0f /* minimum value */,
-            100.0f /* maximum value */};
+    GeneratorParam<float> scale{ "scale",
+                                 1.0f /* default value */,
+                                 0.0f /* minimum value */,
+                                 100.0f /* maximum value */ };
 
     // You can define GeneratorParams of all the basic scalar
     // types. For numeric types you can optionally provide a minimum
@@ -86,23 +86,25 @@ public:
     // You can also define GeneratorParams for enums. To make this
     // work you must provide a mapping from strings to your enum
     // values.
-    enum class Rotation { None, Clockwise, CounterClockwise };
-    GeneratorParam<Rotation> rotation{"rotation",
-            /* default value */
-            Rotation::None,
-            /* map from names to values */
-            {{ "none", Rotation::None },
-             { "cw",   Rotation::Clockwise },
-             { "ccw",  Rotation::CounterClockwise }}};
+    enum class Rotation { None,
+                          Clockwise,
+                          CounterClockwise };
+    GeneratorParam<Rotation> rotation{ "rotation",
+                                       /* default value */
+                                       Rotation::None,
+                                       /* map from names to values */
+                                       { { "none", Rotation::None },
+                                         { "cw", Rotation::Clockwise },
+                                         { "ccw", Rotation::CounterClockwise } } };
 
     // Halide::Type is supported as though it was an enum. It's most
     // useful for customizing the type of input or output image
     // params.
-    GeneratorParam<Halide::Type> output_type{"output_type", Int(32)};
+    GeneratorParam<Halide::Type> output_type{ "output_type", Int(32) };
 
     // We'll use the same Param and ImageParam as before:
-    Param<uint8_t> offset{"offset"};
-    ImageParam input{UInt(8), 2, "input"};
+    Param<uint8_t> offset{ "offset" };
+    ImageParam input{ UInt(8), 2, "input" };
 
     // And we'll declare our Vars here as before.
     Var x, y;
@@ -119,15 +121,15 @@ public:
         // the time (e.g. with scale above).
 
         Func rotated;
-        switch ((Rotation)rotation) {
+        switch ((Rotation) rotation) {
         case Rotation::None:
             rotated(x, y) = brighter(x, y);
             break;
         case Rotation::Clockwise:
-            rotated(x, y) = brighter(y, 100-x);
+            rotated(x, y) = brighter(y, 100 - x);
             break;
         case Rotation::CounterClockwise:
-            rotated(x, y) = brighter(100-y, x);
+            rotated(x, y) = brighter(100 - y, x);
             break;
         }
 
@@ -161,11 +163,10 @@ public:
 
         return output;
     }
-
 };
 
 // Register our second generator:
-RegisterGenerator<MySecondGenerator> my_second_generator{"my_second_generator"};
+RegisterGenerator<MySecondGenerator> my_second_generator{ "my_second_generator" };
 
 // After compiling this file, see how to use it in
 // lesson_15_generators_build.sh

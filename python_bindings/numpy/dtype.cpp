@@ -11,30 +11,38 @@
 #define DTYPE_FROM_CODE(code) \
     dtype(python::detail::new_reference(reinterpret_cast<PyObject *>(PyArray_DescrFromType(code))))
 
-#define BUILTIN_INT_DTYPE(bits)                                        \
-    template <>                                                        \
-    struct builtin_int_dtype<bits, false> {                            \
-        static dtype get() { return DTYPE_FROM_CODE(NPY_INT##bits); }  \
-    };                                                                 \
-    template <>                                                        \
-    struct builtin_int_dtype<bits, true> {                             \
-        static dtype get() { return DTYPE_FROM_CODE(NPY_UINT##bits); } \
-    };                                                                 \
-    template dtype get_int_dtype<bits, false>();                       \
+#define BUILTIN_INT_DTYPE(bits)                     \
+    template<>                                      \
+    struct builtin_int_dtype<bits, false> {         \
+        static dtype get() {                        \
+            return DTYPE_FROM_CODE(NPY_INT##bits);  \
+        }                                           \
+    };                                              \
+    template<>                                      \
+    struct builtin_int_dtype<bits, true> {          \
+        static dtype get() {                        \
+            return DTYPE_FROM_CODE(NPY_UINT##bits); \
+        }                                           \
+    };                                              \
+    template dtype get_int_dtype<bits, false>();    \
     template dtype get_int_dtype<bits, true>()
 
-#define BUILTIN_FLOAT_DTYPE(bits)                                       \
-    template <>                                                         \
-    struct builtin_float_dtype<bits> {                                  \
-        static dtype get() { return DTYPE_FROM_CODE(NPY_FLOAT##bits); } \
-    };                                                                  \
+#define BUILTIN_FLOAT_DTYPE(bits)                    \
+    template<>                                       \
+    struct builtin_float_dtype<bits> {               \
+        static dtype get() {                         \
+            return DTYPE_FROM_CODE(NPY_FLOAT##bits); \
+        }                                            \
+    };                                               \
     template dtype get_float_dtype<bits>()
 
-#define BUILTIN_COMPLEX_DTYPE(bits)                                       \
-    template <>                                                           \
-    struct builtin_complex_dtype<bits> {                                  \
-        static dtype get() { return DTYPE_FROM_CODE(NPY_COMPLEX##bits); } \
-    };                                                                    \
+#define BUILTIN_COMPLEX_DTYPE(bits)                    \
+    template<>                                         \
+    struct builtin_complex_dtype<bits> {               \
+        static dtype get() {                           \
+            return DTYPE_FROM_CODE(NPY_COMPLEX##bits); \
+        }                                              \
+    };                                                 \
     template dtype get_complex_dtype<bits>()
 
 namespace boost {
@@ -50,23 +58,29 @@ namespace numpy {
 
 namespace detail {
 
-dtype builtin_dtype<bool, true>::get() { return DTYPE_FROM_CODE(NPY_BOOL); }
+dtype builtin_dtype<bool, true>::get() {
+    return DTYPE_FROM_CODE(NPY_BOOL);
+}
 
-template <int bits, bool isUnsigned>
+template<int bits, bool isUnsigned>
 struct builtin_int_dtype;
-template <int bits>
+template<int bits>
 struct builtin_float_dtype;
-template <int bits>
+template<int bits>
 struct builtin_complex_dtype;
 
-template <int bits, bool isUnsigned>
+template<int bits, bool isUnsigned>
 dtype get_int_dtype() {
     return builtin_int_dtype<bits, isUnsigned>::get();
 }
-template <int bits>
-dtype get_float_dtype() { return builtin_float_dtype<bits>::get(); }
-template <int bits>
-dtype get_complex_dtype() { return builtin_complex_dtype<bits>::get(); }
+template<int bits>
+dtype get_float_dtype() {
+    return builtin_float_dtype<bits>::get();
+}
+template<int bits>
+dtype get_complex_dtype() {
+    return builtin_complex_dtype<bits>::get();
+}
 
 BUILTIN_INT_DTYPE(8);
 BUILTIN_INT_DTYPE(16);
@@ -78,14 +92,18 @@ BUILTIN_FLOAT_DTYPE(64);
 BUILTIN_COMPLEX_DTYPE(64);
 BUILTIN_COMPLEX_DTYPE(128);
 #if NPY_BITSOF_LONGDOUBLE > NPY_BITSOF_DOUBLE
-template <>
+template<>
 struct builtin_float_dtype<NPY_BITSOF_LONGDOUBLE> {
-    static dtype get() { return DTYPE_FROM_CODE(NPY_LONGDOUBLE); }
+    static dtype get() {
+        return DTYPE_FROM_CODE(NPY_LONGDOUBLE);
+    }
 };
 template dtype get_float_dtype<NPY_BITSOF_LONGDOUBLE>();
-template <>
+template<>
 struct builtin_complex_dtype<2 * NPY_BITSOF_LONGDOUBLE> {
-    static dtype get() { return DTYPE_FROM_CODE(NPY_CLONGDOUBLE); }
+    static dtype get() {
+        return DTYPE_FROM_CODE(NPY_CLONGDOUBLE);
+    }
 };
 template dtype get_complex_dtype<2 * NPY_BITSOF_LONGDOUBLE>();
 #endif
@@ -104,7 +122,9 @@ python::detail::new_reference dtype::convert(python::object const &arg, bool ali
     return python::detail::new_reference(reinterpret_cast<PyObject *>(obj));
 }
 
-int dtype::get_itemsize() const { return reinterpret_cast<PyArray_Descr *>(ptr())->elsize; }
+int dtype::get_itemsize() const {
+    return reinterpret_cast<PyArray_Descr *>(ptr())->elsize;
+}
 
 bool equivalent(dtype const &a, dtype const &b) {
 // On Windows x64, the behaviour described on
@@ -137,7 +157,7 @@ namespace {
 
 namespace pyconv = boost::python::converter;
 
-template <typename T>
+template<typename T>
 class array_scalar_converter {
 public:
     static PyTypeObject const *get_pytype() {

@@ -27,7 +27,6 @@ std::map<std::string, Function> find_direct_calls(Function f);
  *  _includes_ the Function f.
  */
 std::map<std::string, Function> find_transitive_calls(Function f);
-
 }
 }
 

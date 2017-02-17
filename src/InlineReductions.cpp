@@ -1,10 +1,10 @@
 #include "InlineReductions.h"
-#include "Func.h"
-#include "Scope.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Debug.h"
 #include "CSE.h"
+#include "Debug.h"
+#include "Func.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Scope.h"
 
 namespace Halide {
 
@@ -20,8 +20,8 @@ public:
     vector<Expr> call_args;
     RDom rdom;
 
-    FindFreeVars(RDom r, const string &n) :
-        rdom(r), explicit_rdom(r.defined()), name(n) {
+    FindFreeVars(RDom r, const string &n)
+        : rdom(r), explicit_rdom(r.defined()), name(n) {
     }
 
 private:
@@ -175,13 +175,13 @@ Tuple argmax(RDom r, Expr e, const std::string &name) {
 
     user_assert(v.rdom.defined()) << "Expression passed to argmax must reference a reduction domain";
 
-    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
-    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions() + 1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions() + 1));
     for (int i = 0; i < v.rdom.dimensions(); i++) {
         initial_tup[i] = 0;
         update_tup[i] = v.rdom[i];
     }
-    int value_index = (int)initial_tup.size()-1;
+    int value_index = (int) initial_tup.size() - 1;
     initial_tup[value_index] = e.type().min();
     update_tup[value_index] = e;
 
@@ -204,13 +204,13 @@ Tuple argmin(RDom r, Expr e, const std::string &name) {
 
     user_assert(v.rdom.defined()) << "Expression passed to argmin must reference a reduction domain";
 
-    Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
-    Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
+    Tuple initial_tup(vector<Expr>(v.rdom.dimensions() + 1));
+    Tuple update_tup(vector<Expr>(v.rdom.dimensions() + 1));
     for (int i = 0; i < v.rdom.dimensions(); i++) {
         initial_tup[i] = 0;
         update_tup[i] = v.rdom[i];
     }
-    int value_index = (int)initial_tup.size()-1;
+    int value_index = (int) initial_tup.size() - 1;
     initial_tup[value_index] = e.type().max();
     update_tup[value_index] = e;
 
@@ -219,5 +219,4 @@ Tuple argmin(RDom r, Expr e, const std::string &name) {
     f(v.free_vars) = tuple_select(better, update_tup, f(v.free_vars));
     return f(v.call_args);
 }
-
 }

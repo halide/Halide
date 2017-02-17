@@ -29,6 +29,5 @@ class FuzzFloatStores : public IRMutator {
 Stmt fuzz_float_stores(Stmt s) {
     return FuzzFloatStores().mutate(s);
 }
-
 }
 }

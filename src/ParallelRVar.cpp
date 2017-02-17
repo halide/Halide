@@ -1,12 +1,12 @@
-#include "IR.h"
 #include "ParallelRVar.h"
-#include "IRMutator.h"
-#include "Debug.h"
-#include "Simplify.h"
-#include "IROperator.h"
-#include "Substitute.h"
 #include "CSE.h"
+#include "Debug.h"
+#include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -40,7 +40,9 @@ class FindLoads : public IRVisitor {
     }
 
 public:
-    FindLoads(const string &f) : func(f) {}
+    FindLoads(const string &f)
+        : func(f) {
+    }
 
     vector<vector<Expr>> loads;
 };
@@ -69,10 +71,7 @@ public:
             new_names[s] = new_name;
             return new_name;
         }
-
     }
-
-
 };
 
 /** Substitute in boolean expressions. */
@@ -164,6 +163,5 @@ bool can_parallelize_rvar(const string &v,
 
     return is_zero(hazard);
 }
-
 }
 }

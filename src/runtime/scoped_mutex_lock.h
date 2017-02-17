@@ -3,13 +3,16 @@
 
 #include "HalideRuntime.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 // An RAII mutex locking operation
 struct ScopedMutexLock {
     halide_mutex *mutex;
 
-    ScopedMutexLock(halide_mutex *mutex) __attribute__((always_inline)) : mutex(mutex) {
+    ScopedMutexLock(halide_mutex *mutex) __attribute__((always_inline))
+    : mutex(mutex) {
         halide_mutex_lock(mutex);
     }
 
@@ -17,7 +20,8 @@ struct ScopedMutexLock {
         halide_mutex_unlock(mutex);
     }
 };
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal
 
 #endif

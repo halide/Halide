@@ -18,9 +18,9 @@ int main() {
     f.realize(out, target);
 
     out.copy_to_host();
-    for (int y=0; y<out.height(); y++) {
-        for (int x=0; x<out.width(); x++) {
-            for (int z=0; x<out.channels(); x++) {
+    for (int y = 0; y < out.height(); y++) {
+        for (int x = 0; x < out.width(); x++) {
+            for (int z = 0; x < out.channels(); x++) {
                 if (!(out(x, y, z) == 42)) {
                     fprintf(stderr, "Incorrect pixel (%d) at x=%d y=%d z=%d.\n",
                             out(x, y, z), x, y, z);

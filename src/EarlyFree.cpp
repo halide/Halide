@@ -1,9 +1,9 @@
 #include <map>
 
 #include "EarlyFree.h"
-#include "IRMutator.h"
-#include "IREquality.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
 #include "InjectHostDevBufferCopies.h"
 
 namespace Halide {
@@ -19,7 +19,9 @@ public:
     Stmt last_use;
     bool found_device_malloc;
 
-    FindLastUse(string s) : func(s), found_device_malloc(false), in_loop(false) {}
+    FindLastUse(string s)
+        : func(s), found_device_malloc(false), in_loop(false) {
+    }
 
 private:
     bool in_loop;
@@ -100,8 +102,8 @@ Stmt make_free(string func, bool device) {
     Stmt free = Free::make(func);
     if (device) {
         Expr buf = Variable::make(Handle(), func + ".buffer");
-        Stmt device_free = call_extern_and_assert("halide_device_free", {buf});
-        free = Block::make({device_free, free});
+        Stmt device_free = call_extern_and_assert("halide_device_free", { buf });
+        free = Block::make({ device_free, free });
     }
     return free;
 }
@@ -112,9 +114,11 @@ public:
     Stmt last_use;
     bool inject_device_free;
 
-    InjectMarker() : inject_device_free(false), injected(false) {}
-private:
+    InjectMarker()
+        : inject_device_free(false), injected(false) {
+    }
 
+private:
     bool injected;
 
     using IRMutator::visit;
@@ -164,7 +168,6 @@ class InjectEarlyFrees : public IRMutator {
                                   Block::make(alloc->body, make_free(alloc->name, last_use.found_device_malloc)),
                                   alloc->new_expr);
         }
-
     }
 };
 
@@ -174,6 +177,5 @@ Stmt inject_early_frees(Stmt s) {
 }
 
 // TODO: test
-
 }
 }

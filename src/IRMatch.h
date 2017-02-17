@@ -44,7 +44,6 @@ EXPORT bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
 EXPORT bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &result);
 
 EXPORT void expr_match_test();
-
 }
 }
 

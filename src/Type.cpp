@@ -1,6 +1,6 @@
-#include <sstream>
-#include <cfloat>
 #include "IR.h"
+#include <cfloat>
+#include <sstream>
 
 namespace Halide {
 
@@ -13,14 +13,13 @@ uint64_t max_uint(int bits) {
 }
 
 int64_t max_int(int bits) {
-    int64_t  max_val = 0x7fffffffffffffffLL;
+    int64_t max_val = 0x7fffffffffffffffLL;
     return max_val >> (64 - bits);
 }
 
 int64_t min_int(int bits) {
     return -max_int(bits) - 1;
 }
-
 }
 
 /** Return an expression which is the maximum value of this type */
@@ -72,12 +71,12 @@ Halide::Expr Type::min() const {
 }
 
 bool Type::is_max(int64_t x) const {
-    return x > 0 && is_max((uint64_t)x);
+    return x > 0 && is_max((uint64_t) x);
 }
 
 bool Type::is_max(uint64_t x) const {
     if (is_int()) {
-        return x == (uint64_t)max_int(bits());
+        return x == (uint64_t) max_int(bits());
     } else if (is_uint()) {
         return x == max_uint(bits());
     } else {
@@ -119,15 +118,15 @@ bool Type::can_represent(int64_t x) const {
     if (is_int()) {
         return x >= min_int(bits()) && x <= max_int(bits());
     } else if (is_uint()) {
-        return x >= 0 && (uint64_t)x <= max_uint(bits());
+        return x >= 0 && (uint64_t) x <= max_uint(bits());
     } else if (is_float()) {
         switch (bits()) {
         case 16:
-            return (int64_t)(float)(float16_t)(float)x == x;
+            return (int64_t)(float) (float16_t)(float) x == x;
         case 32:
-            return (int64_t)(float)x == x;
+            return (int64_t)(float) x == x;
         case 64:
-            return (int64_t)(double)x == x;
+            return (int64_t)(double) x == x;
         default:
             return false;
         }
@@ -144,11 +143,11 @@ bool Type::can_represent(uint64_t x) const {
     } else if (is_float()) {
         switch (bits()) {
         case 16:
-            return (uint64_t)(float)(float16_t)(float)x == x;
+            return (uint64_t)(float) (float16_t)(float) x == x;
         case 32:
-            return (uint64_t)(float)x == x;
+            return (uint64_t)(float) x == x;
         case 64:
-            return (uint64_t)(double)x == x;
+            return (uint64_t)(double) x == x;
         default:
             return false;
         }
@@ -160,16 +159,16 @@ bool Type::can_represent(uint64_t x) const {
 bool Type::can_represent(double x) const {
     if (is_int()) {
         int64_t i = x;
-        return (x >= min_int(bits())) && (x <= max_int(bits())) && (x == (double)i);
+        return (x >= min_int(bits())) && (x <= max_int(bits())) && (x == (double) i);
     } else if (is_uint()) {
         uint64_t u = x;
-        return (x >= 0) && (x <= max_uint(bits())) && (x == (double)u);
+        return (x >= 0) && (x <= max_uint(bits())) && (x == (double) u);
     } else if (is_float()) {
         switch (bits()) {
         case 16:
-            return (double)(float16_t)x == x;
+            return (double) (float16_t) x == x;
         case 32:
-            return (double)(float)x == x;
+            return (double) (float) x == x;
         case 64:
             return true;
         default:
@@ -189,17 +188,16 @@ bool Type::same_handle_type(const Type &other) const {
     }
 
     if (first == nullptr) {
-        first = halide_handle_traits<void*>::type_info();
+        first = halide_handle_traits<void *>::type_info();
     }
     if (second == nullptr) {
-        second = halide_handle_traits<void*>::type_info();
+        second = halide_handle_traits<void *>::type_info();
     }
 
     return first->inner_name == second->inner_name &&
-        first->namespaces == second->namespaces &&
-        first->enclosing_types == second->enclosing_types &&
-        first->cpp_type_modifiers == second->cpp_type_modifiers &&
-        first->reference_type == second->reference_type;
+           first->namespaces == second->namespaces &&
+           first->enclosing_types == second->enclosing_types &&
+           first->cpp_type_modifiers == second->cpp_type_modifiers &&
+           first->reference_type == second->reference_type;
 }
-
 }

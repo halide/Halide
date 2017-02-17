@@ -13,13 +13,11 @@ namespace Internal {
 /** A code generator that emits posix code from a given Halide stmt. */
 class CodeGen_Posix : public CodeGen_LLVM {
 public:
-
     /** Create an posix code generator. Processor features can be
      * enabled using the appropriate arguments */
     CodeGen_Posix(Target t);
 
 protected:
-
     using CodeGen_LLVM::visit;
 
     /** Posix implementation of Allocate. Small constant-sized allocations go
@@ -71,7 +69,6 @@ protected:
     std::string get_allocation_name(const std::string &n);
 
 private:
-
     /** Stack allocations that were freed, but haven't gone out of
      * scope yet.  This allows us to re-use stack allocations when
      * they aren't being used. */
@@ -79,7 +76,7 @@ private:
 
     /** current size of all alloca instances in use; this is tracked only
      * for debug output purposes. */
-    size_t cur_stack_alloc_total{0};
+    size_t cur_stack_alloc_total{ 0 };
 
     /** Generates code for computing the size of an allocation from a
      * list of its extents and its size. Fires a runtime assert
@@ -107,9 +104,8 @@ private:
     /** Free an allocation previously allocated with
      * create_allocation */
     void free_allocation(const std::string &name);
-
 };
-
-}}
+}
+}
 
 #endif

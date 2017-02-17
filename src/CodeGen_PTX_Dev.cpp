@@ -1,19 +1,23 @@
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Internal.h"
+#include "Debug.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Debug.h"
-#include "Target.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+#include "Target.h"
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
 #ifdef WITH_PTX
 #if LLVM_VERSION >= 39
-namespace llvm { FunctionPass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+namespace llvm {
+FunctionPass *createNVVMReflectPass(const StringMap<int> &Mapping);
+}
 #else
-namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+namespace llvm {
+ModulePass *createNVVMReflectPass(const StringMap<int> &Mapping);
+}
 #endif
 #endif
 
@@ -25,10 +29,11 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
-    #if !(WITH_PTX)
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host)
+    : CodeGen_LLVM(host) {
+#if !(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
-    #endif
+#endif
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
 
     context = new llvm::LLVMContext();
@@ -69,10 +74,9 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            function->setDoesNotAlias(i+1);
+            function->setDoesNotAlias(i + 1);
         }
     }
-
 
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
@@ -128,7 +132,6 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(md_node);
 
-
     // Now verify the function is ok
     verifyFunction(*function);
 
@@ -146,9 +149,9 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 void CodeGen_PTX_Dev::init_module() {
     init_context();
 
-    #ifdef WITH_PTX
+#ifdef WITH_PTX
     module = get_initial_module_for_ptx_device(target, context);
-    #endif
+#endif
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
@@ -186,8 +189,8 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 }
 
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
-    user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n" <<
-        "(Memoization is not supported inside GPU kernels at present.)\n";
+    user_assert(!alloc->new_expr.defined()) << "Allocate node inside PTX kernel has custom new expression.\n"
+                                            << "(Memoization is not supported inside GPU kernels at present.)\n";
 
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
@@ -249,15 +252,14 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.features_any_of({Target::CUDACapability32,
-                                Target::CUDACapability50})) {
+    if (target.features_any_of({ Target::CUDACapability32,
+                                 Target::CUDACapability50 })) {
         // Need ptx isa 4.0.
         return "+ptx40";
     } else {
         // Use the default. For llvm 3.5 it's ptx 3.2.
         return "";
     }
-
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -266,7 +268,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
-    #ifdef WITH_PTX
+#ifdef WITH_PTX
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
@@ -315,28 +317,28 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
-    // NVidia's libdevice library uses a __nvvm_reflect to choose
-    // how to handle denormalized numbers. (The pass replaces calls
-    // to __nvvm_reflect with a constant via a map lookup. The inliner
-    // pass then resolves these situations to fast code, often a single
-    // instruction per decision point.)
-    //
-    // The default is (more) IEEE like handling. FTZ mode flushes them
-    // to zero. (This may only apply to single-precision.)
-    //
-    // The libdevice documentation covers other options for math accuracy
-    // such as replacing division with multiply by the reciprocal and
-    // use of fused-multiply-add, but they do not seem to be controlled
-    // by this __nvvvm_reflect mechanism and may be flags to earlier compiler
-    // passes.
-    #define kDefaultDenorms 0
-    #define kFTZDenorms     1
+// NVidia's libdevice library uses a __nvvm_reflect to choose
+// how to handle denormalized numbers. (The pass replaces calls
+// to __nvvm_reflect with a constant via a map lookup. The inliner
+// pass then resolves these situations to fast code, often a single
+// instruction per decision point.)
+//
+// The default is (more) IEEE like handling. FTZ mode flushes them
+// to zero. (This may only apply to single-precision.)
+//
+// The libdevice documentation covers other options for math accuracy
+// such as replacing division with multiply by the reciprocal and
+// use of fused-multiply-add, but they do not seem to be controlled
+// by this __nvvvm_reflect mechanism and may be flags to earlier compiler
+// passes.
+#define kDefaultDenorms 0
+#define kFTZDenorms 1
 
-    #if LLVM_VERSION <= 40
+#if LLVM_VERSION <= 40
     StringMap<int> reflect_mapping;
     reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
     module_pass_manager.add(createNVVMReflectPass(reflect_mapping));
-    #else
+#else
     // Insert a module flag for the FTZ handling.
     module->addModuleFlag(llvm::Module::Override, "nvvm-reflect-ftz",
                           kFTZDenorms);
@@ -346,7 +348,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
             fn.addFnAttr("nvptx-f32ftz", "true");
         }
     }
-    #endif
+#endif
 
     PassManagerBuilder b;
     b.OptLevel = 3;
@@ -354,9 +356,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     b.LoopVectorize = true;
     b.SLPVectorize = true;
 
-    #if LLVM_VERSION > 40
+#if LLVM_VERSION > 40
     target_machine->adjustPassManager(b);
-    #endif
+#endif
 
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
@@ -382,20 +384,21 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
 
-    #if LLVM_VERSION < 38
+#if LLVM_VERSION < 38
     ostream.flush();
-    #endif
+#endif
 
     if (debug::debug_level() >= 2) {
         dump();
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-    debug(1) << "PTX kernel:\n" << outstr.c_str() << "\n";
+    debug(1) << "PTX kernel:\n"
+             << outstr.c_str() << "\n";
     vector<char> buffer(outstr.begin(), outstr.end());
     buffer.push_back(0);
     return buffer;
-#else // WITH_PTX
+#else  // WITH_PTX
     return vector<char>();
 #endif
 }
@@ -410,15 +413,15 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_PTX_Dev::dump() {
-    #if LLVM_VERSION >= 50
+#if LLVM_VERSION >= 50
     module->print(dbgs(), nullptr, false, true);
-    #else
+#else
     module->dump();
-    #endif
+#endif
 }
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
-
-}}
+}
+}

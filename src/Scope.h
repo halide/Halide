@@ -1,15 +1,15 @@
 #ifndef HALIDE_SCOPE_H
 #define HALIDE_SCOPE_H
 
-#include <string>
+#include <iostream>
 #include <map>
 #include <stack>
+#include <string>
 #include <utility>
-#include <iostream>
 
-#include "Util.h"
 #include "Debug.h"
 #include "Error.h"
+#include "Util.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR
@@ -28,7 +28,9 @@ private:
     bool _empty;
 
 public:
-    SmallStack() : _empty(true) {}
+    SmallStack()
+        : _empty(true) {
+    }
 
     void pop() {
         if (_rest.empty()) {
@@ -82,9 +84,10 @@ private:
 
     const Scope<T> *containing_scope;
 
-
 public:
-    Scope() : containing_scope(nullptr) {}
+    Scope()
+        : containing_scope(nullptr) {
+    }
 
     /** Set the parent scope. If lookups fail in this scope, they
      * check the containing scope before returning an error. Caller is
@@ -158,12 +161,14 @@ public:
     /** Iterate through the scope. Does not capture any containing scope. */
     class const_iterator {
         typename std::map<std::string, SmallStack<T>>::const_iterator iter;
+
     public:
-        explicit const_iterator(const typename std::map<std::string, SmallStack<T>>::const_iterator &i) :
-            iter(i) {
+        explicit const_iterator(const typename std::map<std::string, SmallStack<T>>::const_iterator &i)
+            : iter(i) {
         }
 
-        const_iterator() {}
+        const_iterator() {
+        }
 
         bool operator!=(const const_iterator &other) {
             return iter != other.iter;
@@ -196,12 +201,14 @@ public:
 
     class iterator {
         typename std::map<std::string, SmallStack<T>>::iterator iter;
+
     public:
-        explicit iterator(typename std::map<std::string, SmallStack<T>>::iterator i) :
-            iter(i) {
+        explicit iterator(typename std::map<std::string, SmallStack<T>>::iterator i)
+            : iter(i) {
         }
 
-        iterator() {}
+        iterator() {
+        }
 
         bool operator!=(const iterator &other) {
             return iter != other.iter;
@@ -239,7 +246,7 @@ public:
 };
 
 template<typename T>
-std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
+std::ostream &operator<<(std::ostream &stream, const Scope<T> &s) {
     stream << "{\n";
     typename Scope<T>::const_iterator iter;
     for (iter = s.cbegin(); iter != s.cend(); ++iter) {
@@ -248,7 +255,6 @@ std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
     stream << "}";
     return stream;
 }
-
 }
 }
 

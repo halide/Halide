@@ -1,6 +1,6 @@
 #include "IREquality.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,10 +13,12 @@ namespace {
 /** The class that does the work of comparing two IR nodes. */
 class IRComparer : public IRVisitor {
 public:
-
     /** Different possible results of a comparison. Unknown should
      * only occur internally due to a cache miss. */
-    enum CmpResult {Unknown, Equal, LessThan, GreaterThan};
+    enum CmpResult { Unknown,
+                     Equal,
+                     LessThan,
+                     GreaterThan };
 
     /** The result of the comparison. Should be Equal, LessThan, or GreaterThan. */
     CmpResult result;
@@ -33,7 +35,9 @@ public:
      * subexpressions, it's worth passing in a cache to use.
      * Currently this is only done in common-subexpression
      * elimination. */
-    IRComparer(IRCompareCache *c = nullptr) : result(Equal), cache(c) {}
+    IRComparer(IRCompareCache *c = nullptr)
+        : result(Equal), cache(c) {
+    }
 
 private:
     Expr expr;
@@ -200,7 +204,7 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     compare_scalar(a.code(), b.code());
     compare_scalar(a.bits(), b.bits());
     compare_scalar(a.lanes(), b.lanes());
-    compare_scalar((uintptr_t)a.handle_type, (uintptr_t)b.handle_type);
+    compare_scalar((uintptr_t) a.handle_type, (uintptr_t) b.handle_type);
 
     return result;
 }
@@ -217,7 +221,6 @@ IRComparer::CmpResult IRComparer::compare_names(const string &a, const string &b
 
     return result;
 }
-
 
 IRComparer::CmpResult IRComparer::compare_expr_vector(const vector<Expr> &a, const vector<Expr> &b) {
     if (result != Equal) return result;
@@ -268,21 +271,51 @@ void visit_binary_operator(IRComparer *cmp, const T *op, Expr expr) {
 }
 }
 
-void IRComparer::visit(const Add *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const Sub *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const Mul *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const Div *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const Mod *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const Min *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const Max *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const EQ *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const NE *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const LT *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const LE *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const GT *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const GE *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const And *op) {visit_binary_operator(this, op, expr);}
-void IRComparer::visit(const Or *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Add *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const Sub *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const Mul *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const Div *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const Mod *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const Min *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const Max *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const EQ *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const NE *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const LT *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const LE *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const GT *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const GE *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const And *op) {
+    visit_binary_operator(this, op, expr);
+}
+void IRComparer::visit(const Or *op) {
+    visit_binary_operator(this, op, expr);
+}
 
 void IRComparer::visit(const Not *op) {
     const Not *e = expr.as<Not>();
@@ -294,7 +327,6 @@ void IRComparer::visit(const Select *op) {
     compare_expr(e->condition, op->condition);
     compare_expr(e->true_value, op->true_value);
     compare_expr(e->false_value, op->false_value);
-
 }
 
 void IRComparer::visit(const Load *op) {
@@ -450,8 +482,7 @@ void IRComparer::visit(const Shuffle *op) {
     }
 }
 
-} // namespace
-
+}  // namespace
 
 // Now the methods exposed in the header.
 bool equal(const Expr &a, const Expr &b) {
@@ -494,11 +525,15 @@ bool ExprWithCompareCache::operator<(const ExprWithCompareCache &other) const {
 namespace {
 
 IRComparer::CmpResult flip_result(IRComparer::CmpResult r) {
-    switch(r) {
-    case IRComparer::LessThan: return IRComparer::GreaterThan;
-    case IRComparer::Equal: return IRComparer::Equal;
-    case IRComparer::GreaterThan: return IRComparer::LessThan;
-    case IRComparer::Unknown: return IRComparer::Unknown;
+    switch (r) {
+    case IRComparer::LessThan:
+        return IRComparer::GreaterThan;
+    case IRComparer::Equal:
+        return IRComparer::Equal;
+    case IRComparer::GreaterThan:
+        return IRComparer::LessThan;
+    case IRComparer::Unknown:
+        return IRComparer::Unknown;
     }
     return IRComparer::Unknown;
 }
@@ -509,8 +544,10 @@ void check_equal(const Expr &a, const Expr &b) {
     internal_assert(r == IRComparer::Equal)
         << "Error in ir_equality_test: " << r
         << " instead of " << IRComparer::Equal
-        << " when comparing:\n" << a
-        << "\nand\n" << b << "\n";
+        << " when comparing:\n"
+        << a
+        << "\nand\n"
+        << b << "\n";
 }
 
 void check_not_equal(const Expr &a, const Expr &b) {
@@ -522,11 +559,13 @@ void check_not_equal(const Expr &a, const Expr &b) {
                     flip_result(r1) == r2)
         << "Error in ir_equality_test: " << r1
         << " is not the opposite of " << r2
-        << " when comparing:\n" << a
-        << "\nand\n" << b << "\n";
+        << " when comparing:\n"
+        << a
+        << "\nand\n"
+        << b << "\n";
 }
 
-} // namespace
+}  // namespace
 
 void ir_equality_test() {
     Expr x = Variable::make(Int(32), "x");
@@ -540,15 +579,15 @@ void ir_equality_test() {
     // complexity.
     Expr e1 = x, e2 = x;
     for (int i = 0; i < 100; i++) {
-        e1 = e1*e1 + e1;
-        e2 = e2*e2 + e2;
+        e1 = e1 * e1 + e1;
+        e2 = e2 * e2 + e2;
     }
     check_equal(e1, e2);
     // These are only discovered to be not equal way down the tree:
-    e2 = e2*e2 + e2;
+    e2 = e2 * e2 + e2;
     check_not_equal(e1, e2);
 
     debug(0) << "ir_equality_test passed\n";
 }
-
-}}
+}
+}

@@ -24,9 +24,9 @@ public:
     GeneratorParam<int32_t> int_arg{ "int_arg", 33 };
 
     Input<Buffer<uint8_t>> input{ "input", 3 };
-    Output<Buffer<uint8_t>> calculated_output{"calculated_output" };
-    Output<Buffer<float>> float32_buffer_output{"float32_buffer_output" };
-    Output<Buffer<int32_t>> int32_buffer_output{"int32_buffer_output" };
+    Output<Buffer<uint8_t>> calculated_output{ "calculated_output" };
+    Output<Buffer<float>> float32_buffer_output{ "float32_buffer_output" };
+    Output<Buffer<int32_t>> int32_buffer_output{ "int32_buffer_output" };
 
     void generate() {
 
@@ -52,7 +52,7 @@ public:
         calculated_output(x, y, c) = cast<uint8_t>(stub.tuple_output(x, y, c)[1] + kOffset);
 
         // Stub outputs that are Output<Buffer> (rather than Output<Func>)
-        // can really only be assigned to another Output<Buffer>; this is 
+        // can really only be assigned to another Output<Buffer>; this is
         // nevertheless useful, as we can still set stride (etc) constraints
         // on the Output.
         float32_buffer_output = stub.typed_buffer_output;
@@ -65,7 +65,7 @@ public:
     }
 
 private:
-    Var x{"x"}, y{"y"}, c{"c"};
+    Var x{ "x" }, y{ "y" }, c{ "c" };
     StubTest stub;
 };
 

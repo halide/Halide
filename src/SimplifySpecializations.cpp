@@ -1,14 +1,14 @@
 #include "SimplifySpecializations.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Simplify.h"
-#include "Substitute.h"
 #include "Definition.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 #include <set>
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -51,7 +51,9 @@ public:
     }
 
     Expr fact;
-    SimplifyUsingFact(Expr f) : fact(f) {}
+    SimplifyUsingFact(Expr f)
+        : fact(f) {
+    }
 };
 
 void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
@@ -72,8 +74,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def) {
 
     vector<Specialization> &specializations = def.specializations();
     for (size_t i = specializations.size(); i > 0; i--) {
-        Expr c = specializations[i-1].condition;
-        Definition &s_def = specializations[i-1].definition;
+        Expr c = specializations[i - 1].condition;
+        Definition &s_def = specializations[i - 1].definition;
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 
@@ -103,10 +105,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def) {
 
     return result;
 }
-
 }
-
-
 
 void simplify_specializations(map<string, Function> &env) {
     for (auto &iter : env) {
@@ -114,6 +113,5 @@ void simplify_specializations(map<string, Function> &env) {
         propagate_specialization_in_definition(func.definition());
     }
 }
-
 }
 }

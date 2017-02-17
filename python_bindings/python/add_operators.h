@@ -5,7 +5,7 @@
 #include <boost/python/self.hpp>
 //#include <boost/python/def.hpp>
 
-template <typename A, typename B, typename WrappedType>
+template<typename A, typename B, typename WrappedType>
 //WrappedType floordiv(A /*a*/, B /*b*/)
 auto floordiv(A a, B b) -> decltype(a / b) {
     //throw std::invalid_argument("Halide floordiv not yet implemented, use '/' instead.");
@@ -16,7 +16,7 @@ auto floordiv(A a, B b) -> decltype(a / b) {
     return a / b;
 }
 
-template <typename PythonClass, typename T>
+template<typename PythonClass, typename T>
 void add_operators_with(PythonClass &class_instance) {
     using namespace boost::python;
 
@@ -80,7 +80,7 @@ void add_operators_with(PythonClass &class_instance) {
     return;
 }
 
-template <typename PythonClass>
+template<typename PythonClass>
 void add_operators(PythonClass &class_instance) {
     using namespace boost::python;
 

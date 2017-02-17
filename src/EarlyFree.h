@@ -17,7 +17,6 @@ namespace Internal {
  * allocation. Targets may use this to free buffers earlier than the
  * close of their Allocate node. */
 Stmt inject_early_frees(Stmt s);
-
 }
 }
 

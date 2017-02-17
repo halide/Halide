@@ -1,11 +1,11 @@
-#include "Var.h"
+#include "Reduction.h"
 #include "IR.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "IRMutator.h"
-#include "Reduction.h"
 #include "Simplify.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -40,7 +40,6 @@ void check(Expr pred, std::vector<Expr> &expected) {
         internal_error << "\n";
     }
 }
-
 }
 
 void split_predicate_test() {
@@ -95,7 +94,8 @@ struct ReductionDomainContents {
     Expr predicate;
     bool frozen;
 
-    ReductionDomainContents() : predicate(const_true()), frozen(false) {
+    ReductionDomainContents()
+        : predicate(const_true()), frozen(false) {
     }
 
     // Pass an IRVisitor through to all Exprs referenced in the ReductionDomainContents
@@ -130,13 +130,17 @@ struct ReductionDomainContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {return p->ref_count;}
+EXPORT RefCount &ref_count<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {
+    return p->ref_count;
+}
 
 template<>
-EXPORT void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {delete p;}
+EXPORT void destroy<Halide::Internal::ReductionDomainContents>(const ReductionDomainContents *p) {
+    delete p;
+}
 
-ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain) :
-    contents(new ReductionDomainContents) {
+ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain)
+    : contents(new ReductionDomainContents) {
     contents->domain = domain;
 }
 
@@ -169,11 +173,13 @@ class DropSelfReferences : public IRMutator {
             expr = op;
         }
     }
+
 public:
     Expr predicate;
     const ReductionDomain &domain;
-    DropSelfReferences(Expr p, const ReductionDomain &d) :
-        predicate(p), domain(d) {}
+    DropSelfReferences(Expr p, const ReductionDomain &d)
+        : predicate(p), domain(d) {
+    }
 };
 }
 
@@ -216,6 +222,5 @@ void ReductionDomain::mutate(IRMutator *mutator) {
         contents->mutate(mutator);
     }
 }
-
 }
 }

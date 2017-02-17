@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 
     // It's not valid to call f.in(g1) after defining a shared wrapper for
     // {g1, g2, g3}
-    Func wrapper1 = f.in({g1, g4, g3});
+    Func wrapper1 = f.in({ g1, g4, g3 });
     Func wrapper2 = f.in(g3);
     return 0;
 }

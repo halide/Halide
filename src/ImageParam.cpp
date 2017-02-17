@@ -3,15 +3,13 @@
 namespace Halide {
 
 ImageParam::ImageParam(Type t, int d)
-        : OutputImageParam(Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide::ImageParam", 'p')), Argument::InputBuffer)
-        , func(name() + "_im") {
+    : OutputImageParam(Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide::ImageParam", 'p')), Argument::InputBuffer), func(name() + "_im") {
     // Create the Func representation of this ImageParam
     init_func();
 }
 
 ImageParam::ImageParam(Type t, int d, const std::string &n)
-        : OutputImageParam(Internal::Parameter(t, true, d, n, /* is_explicit_name */ true), Argument::InputBuffer)
-        , func(name() + "_im") {
+    : OutputImageParam(Internal::Parameter(t, true, d, n, /* is_explicit_name */ true), Argument::InputBuffer), func(name() + "_im") {
     // Discourage future Funcs from having the same name
     Internal::unique_name(n);
     // Create the Func representation of this ImageParam
@@ -73,5 +71,4 @@ Func ImageParam::in() {
     internal_assert(func.defined());
     return func.in();
 }
-
 }

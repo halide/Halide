@@ -21,7 +21,6 @@ Stmt zero_gpu_loop_mins(Stmt s);
  * allocations at the block level out into a single shared memory
  * array. */
 Stmt fuse_gpu_thread_loops(Stmt s);
-
 }
 }
 

@@ -1,11 +1,11 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <cmath>
+#include <stdio.h>
 
 using namespace Halide;
 
 // FIXME: Why aren't we using a unit test framework for this?
-void h_assert(bool condition, const char* msg) {
+void h_assert(bool condition, const char *msg) {
     if (!condition) {
         printf("FAIL: %s\n", msg);
         abort();
@@ -63,7 +63,7 @@ int main() {
     // Infinities are comparable
     const float16_t infinityP = float16_t::make_infinity(/*positive=*/true);
     const float16_t infinityN = float16_t::make_infinity(/*positive=*/false);
-    h_assert(!infinityP.are_unordered(infinityN),"Infinities are ordered");
+    h_assert(!infinityP.are_unordered(infinityN), "Infinities are ordered");
     h_assert(infinityP > infinityN, "inf+ should be > inf-");
     h_assert(infinityN < infinityP, "inf- should be < inf+");
     h_assert(one < infinityP, "1.0 should be < inf+");

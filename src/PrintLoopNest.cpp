@@ -1,10 +1,10 @@
 #include "PrintLoopNest.h"
 #include "DeepCopy.h"
 #include "FindCalls.h"
-#include "Function.h"
 #include "Func.h"
-#include "RealizationOrder.h"
+#include "Function.h"
 #include "IRPrinter.h"
+#include "RealizationOrder.h"
 #include "ScheduleFunctions.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
@@ -22,8 +22,10 @@ using std::map;
 
 class PrintLoopNest : public IRVisitor {
 public:
-    PrintLoopNest(std::ostream &output, const map<string, Function> &e) :
-        out(output), env(e), indent(0) {}
+    PrintLoopNest(std::ostream &output, const map<string, Function> &e)
+        : out(output), env(e), indent(0) {
+    }
+
 private:
     std::ostream &out;
     const map<string, Function> &env;
@@ -165,7 +167,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     std::tie(outputs, env) = deep_copy(output_funcs, env);
 
     // Output functions should all be computed and stored at root.
-    for (Function f: outputs) {
+    for (Function f : outputs) {
         Func(f).compute_root().store_root();
     }
 
@@ -196,6 +198,5 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     s.accept(&pln);
     return sstr.str();
 }
-
 }
 }

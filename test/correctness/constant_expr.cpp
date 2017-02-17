@@ -1,6 +1,6 @@
-#include <stdio.h>
-#include <limits>
 #include "Halide.h"
+#include <limits>
+#include <stdio.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -9,7 +9,6 @@ template<typename T>
 bool bit_flip(T a) {
     return ~a;
 }
-
 
 template<typename T>
 bool scalar_from_constant_expr(Expr e, T *val) {
@@ -32,7 +31,6 @@ bool scalar_from_constant_expr(Expr e, T *val) {
         return false;
     }
 }
-
 
 template<typename T>
 void test_expr(T value) {

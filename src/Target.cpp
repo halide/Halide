@@ -1,10 +1,10 @@
 #include <iostream>
 #include <string>
 
-#include "Target.h"
 #include "Debug.h"
 #include "Error.h"
 #include "LLVM_Headers.h"
+#include "Target.h"
 #include "Util.h"
 
 #if defined(__powerpc__) && defined(__linux__)
@@ -32,20 +32,20 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 #ifdef _LP64
 static void cpuid(int info[4], int infoType, int extra) {
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "cpuid                 \n\t"
-        : "=a" (info[0]), "=b" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
+        : "0"(infoType), "2"(extra));
 }
 #else
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "mov{l}\t{%%}ebx, %1  \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
-        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "=a"(info[0]), "=r"(info[1]), "=c"(info[2]), "=d"(info[3])
+        : "0"(infoType), "2"(extra));
 }
 #endif
 #endif
@@ -80,15 +80,15 @@ Target calculate_host_target() {
     unsigned long hwcap = getauxval(AT_HWCAP);
     unsigned long hwcap2 = getauxval(AT_HWCAP2);
     bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
-    bool have_vsx     = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
-    bool arch_2_07    = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
+    bool have_vsx = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
+    bool arch_2_07 = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
 
     user_assert(have_altivec)
         << "The POWERPC backend assumes at least AltiVec support. This machine does not appear to have AltiVec.\n";
 
     std::vector<Target::Feature> initial_features;
-    if (have_vsx)     initial_features.push_back(Target::VSX);
-    if (arch_2_07)    initial_features.push_back(Target::POWER_ARCH_2_07);
+    if (have_vsx) initial_features.push_back(Target::VSX);
+    if (arch_2_07) initial_features.push_back(Target::POWER_ARCH_2_07);
 
     return Target(os, arch, bits, initial_features);
 #else
@@ -96,12 +96,12 @@ Target calculate_host_target() {
 
     int info[4];
     cpuid(info, 1, 0);
-    bool have_sse41  = info[2] & (1 << 19);
-    bool have_sse2   = info[3] & (1 << 26);
-    bool have_avx    = info[2] & (1 << 28);
-    bool have_f16c   = info[2] & (1 << 29);
+    bool have_sse41 = info[2] & (1 << 19);
+    bool have_sse2 = info[3] & (1 << 26);
+    bool have_avx = info[2] & (1 << 28);
+    bool have_f16c = info[2] & (1 << 29);
     bool have_rdrand = info[2] & (1 << 30);
-    bool have_fma    = info[2] & (1 << 12);
+    bool have_fma = info[2] & (1 << 12);
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -114,9 +114,9 @@ Target calculate_host_target() {
 
     std::vector<Target::Feature> initial_features;
     if (have_sse41) initial_features.push_back(Target::SSE41);
-    if (have_avx)   initial_features.push_back(Target::AVX);
-    if (have_f16c)  initial_features.push_back(Target::F16C);
-    if (have_fma)   initial_features.push_back(Target::FMA);
+    if (have_avx) initial_features.push_back(Target::AVX);
+    if (have_f16c) initial_features.push_back(Target::F16C);
+    if (have_fma) initial_features.push_back(Target::FMA);
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2/512?
@@ -135,7 +135,7 @@ Target calculate_host_target() {
         const uint32_t avx512 = avx512f | avx512cd;
         const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
         const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
-        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma; // Assume ifma => vbmi
+        const uint32_t avx512_cannonlake = avx512_skylake | avx512ifma;  // Assume ifma => vbmi
         if ((info2[1] & avx2) == avx2) {
             initial_features.push_back(Target::AVX2);
         }
@@ -178,14 +178,14 @@ Target get_host_target() {
 namespace {
 
 const std::map<std::string, Target::OS> os_name_map = {
-    {"os_unknown", Target::OSUnknown},
-    {"linux", Target::Linux},
-    {"windows", Target::Windows},
-    {"osx", Target::OSX},
-    {"android", Target::Android},
-    {"ios", Target::IOS},
-    {"qurt", Target::QuRT},
-    {"noos", Target::NoOS},
+    { "os_unknown", Target::OSUnknown },
+    { "linux", Target::Linux },
+    { "windows", Target::Windows },
+    { "osx", Target::OSX },
+    { "android", Target::Android },
+    { "ios", Target::IOS },
+    { "qurt", Target::QuRT },
+    { "noos", Target::NoOS },
 };
 
 bool lookup_os(const std::string &tok, Target::OS &result) {
@@ -198,12 +198,12 @@ bool lookup_os(const std::string &tok, Target::OS &result) {
 }
 
 const std::map<std::string, Target::Arch> arch_name_map = {
-    {"arch_unknown", Target::ArchUnknown},
-    {"x86", Target::X86},
-    {"arm", Target::ARM},
-    {"mips", Target::MIPS},
-    {"powerpc", Target::POWERPC},
-    {"hexagon", Target::Hexagon},
+    { "arch_unknown", Target::ArchUnknown },
+    { "x86", Target::X86 },
+    { "arm", Target::ARM },
+    { "mips", Target::MIPS },
+    { "powerpc", Target::POWERPC },
+    { "hexagon", Target::Hexagon },
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -216,48 +216,48 @@ bool lookup_arch(const std::string &tok, Target::Arch &result) {
 }
 
 const std::map<std::string, Target::Feature> feature_name_map = {
-    {"jit", Target::JIT},
-    {"debug", Target::Debug},
-    {"no_asserts", Target::NoAsserts},
-    {"no_bounds_query", Target::NoBoundsQuery},
-    {"sse41", Target::SSE41},
-    {"avx", Target::AVX},
-    {"avx2", Target::AVX2},
-    {"fma", Target::FMA},
-    {"fma4", Target::FMA4},
-    {"f16c", Target::F16C},
-    {"armv7s", Target::ARMv7s},
-    {"no_neon", Target::NoNEON},
-    {"vsx", Target::VSX},
-    {"power_arch_2_07", Target::POWER_ARCH_2_07},
-    {"cuda", Target::CUDA},
-    {"cuda_capability_30", Target::CUDACapability30},
-    {"cuda_capability_32", Target::CUDACapability32},
-    {"cuda_capability_35", Target::CUDACapability35},
-    {"cuda_capability_50", Target::CUDACapability50},
-    {"opencl", Target::OpenCL},
-    {"cl_doubles", Target::CLDoubles},
-    {"opengl", Target::OpenGL},
-    {"openglcompute", Target::OpenGLCompute},
-    {"user_context", Target::UserContext},
-    {"matlab", Target::Matlab},
-    {"profile", Target::Profile},
-    {"no_runtime", Target::NoRuntime},
-    {"metal", Target::Metal},
-    {"mingw", Target::MinGW},
-    {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
-    {"large_buffers", Target::LargeBuffers},
-    {"hvx_64", Target::HVX_64},
-    {"hvx_128", Target::HVX_128},
-    {"hvx_v62", Target::HVX_v62},
-    {"hvx_shared_object", Target::HVX_shared_object},
-    {"fuzz_float_stores", Target::FuzzFloatStores},
-    {"soft_float_abi", Target::SoftFloatABI},
-    {"msan", Target::MSAN},
-    {"avx512", Target::AVX512},
-    {"avx512_knl", Target::AVX512_KNL},
-    {"avx512_skylake", Target::AVX512_Skylake},
-    {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    { "jit", Target::JIT },
+    { "debug", Target::Debug },
+    { "no_asserts", Target::NoAsserts },
+    { "no_bounds_query", Target::NoBoundsQuery },
+    { "sse41", Target::SSE41 },
+    { "avx", Target::AVX },
+    { "avx2", Target::AVX2 },
+    { "fma", Target::FMA },
+    { "fma4", Target::FMA4 },
+    { "f16c", Target::F16C },
+    { "armv7s", Target::ARMv7s },
+    { "no_neon", Target::NoNEON },
+    { "vsx", Target::VSX },
+    { "power_arch_2_07", Target::POWER_ARCH_2_07 },
+    { "cuda", Target::CUDA },
+    { "cuda_capability_30", Target::CUDACapability30 },
+    { "cuda_capability_32", Target::CUDACapability32 },
+    { "cuda_capability_35", Target::CUDACapability35 },
+    { "cuda_capability_50", Target::CUDACapability50 },
+    { "opencl", Target::OpenCL },
+    { "cl_doubles", Target::CLDoubles },
+    { "opengl", Target::OpenGL },
+    { "openglcompute", Target::OpenGLCompute },
+    { "user_context", Target::UserContext },
+    { "matlab", Target::Matlab },
+    { "profile", Target::Profile },
+    { "no_runtime", Target::NoRuntime },
+    { "metal", Target::Metal },
+    { "mingw", Target::MinGW },
+    { "c_plus_plus_name_mangling", Target::CPlusPlusMangling },
+    { "large_buffers", Target::LargeBuffers },
+    { "hvx_64", Target::HVX_64 },
+    { "hvx_128", Target::HVX_128 },
+    { "hvx_v62", Target::HVX_v62 },
+    { "hvx_shared_object", Target::HVX_shared_object },
+    { "fuzz_float_stores", Target::FuzzFloatStores },
+    { "soft_float_abi", Target::SoftFloatABI },
+    { "msan", Target::MSAN },
+    { "avx512", Target::AVX512 },
+    { "avx512_knl", Target::AVX512_KNL },
+    { "avx512_skylake", Target::AVX512_Skylake },
+    { "avx512_cannonlake", Target::AVX512_Cannonlake },
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
@@ -269,7 +269,7 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
     return false;
 }
 
-} // End anonymous namespace
+}  // End anonymous namespace
 
 Target get_target_from_environment() {
     string target = Internal::get_env_variable("HL_TARGET");
@@ -378,7 +378,7 @@ void bad_target_string(const std::string &target) {
     separator = "";
     // Format the features to go one feature over 70 characters per line,
     // assume the first line starts with "Features are ".
-    int line_char_start = -(int)sizeof("Features are");
+    int line_char_start = -(int) sizeof("Features are");
     std::string features;
     for (auto feature_entry : feature_name_map) {
         features += separator + feature_entry.first;
@@ -405,7 +405,6 @@ void bad_target_string(const std::string &target) {
                << "\n"
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
 }
-
 }
 
 Target::Target(const std::string &target) {
@@ -499,22 +498,33 @@ bool Target::supported() const {
 
 bool Target::supports_device_api(DeviceAPI api) const {
     switch (api) {
-    case DeviceAPI::None:        return true;
-    case DeviceAPI::Host:        return true;
-    case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
-    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
-    default:                     return has_feature(target_feature_for_device_api(api));
+    case DeviceAPI::None:
+        return true;
+    case DeviceAPI::Host:
+        return true;
+    case DeviceAPI::Default_GPU:
+        return has_gpu_feature() || has_feature(Target::OpenGLCompute);
+    case DeviceAPI::Hexagon:
+        return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
+    default:
+        return has_feature(target_feature_for_device_api(api));
     }
 }
 
 Target::Feature target_feature_for_device_api(DeviceAPI api) {
     switch (api) {
-    case DeviceAPI::CUDA:          return Target::CUDA;
-    case DeviceAPI::OpenCL:        return Target::OpenCL;
-    case DeviceAPI::GLSL:          return Target::OpenGL;
-    case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
-    case DeviceAPI::Metal:         return Target::Metal;
-    default:                       return Target::FeatureEnd;
+    case DeviceAPI::CUDA:
+        return Target::CUDA;
+    case DeviceAPI::OpenCL:
+        return Target::OpenCL;
+    case DeviceAPI::GLSL:
+        return Target::OpenGL;
+    case DeviceAPI::OpenGLCompute:
+        return Target::OpenGLCompute;
+    case DeviceAPI::Metal:
+        return Target::Metal;
+    default:
+        return Target::FeatureEnd;
     }
 }
 
@@ -525,14 +535,11 @@ EXPORT void target_test() {
     for (const auto &feature : feature_name_map) {
         t.set_feature(feature.second);
     }
-    for (int i = 0; i < (int)(Target::FeatureEnd); i++) {
+    for (int i = 0; i < (int) (Target::FeatureEnd); i++) {
         if (i == halide_target_feature_unused_23) continue;
-        internal_assert(t.has_feature((Target::Feature)i)) << "Feature " << i << " not in feature_names_map.\n";
+        internal_assert(t.has_feature((Target::Feature) i)) << "Feature " << i << " not in feature_names_map.\n";
     }
     std::cout << "Target test passed" << std::endl;
 }
-
-
 }
-
 }

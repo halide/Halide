@@ -9,11 +9,11 @@ public:
     Func build() {
         Var x, y;
         Func f("f");
-        f(x, y) = cast<uint32_t>((int32_t)0xdeadbeef);
+        f(x, y) = cast<uint32_t>((int32_t) 0xdeadbeef);
         return f;
     }
 };
 
-Halide::RegisterGenerator<CanUseTarget> register_my_gen{"can_use_target"};
+Halide::RegisterGenerator<CanUseTarget> register_my_gen{ "can_use_target" };
 
 }  // namespace

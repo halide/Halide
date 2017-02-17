@@ -7,6 +7,5 @@
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 
-@property (retain) NSMutableDictionary* database;
+@property(retain) NSMutableDictionary *database;
 @end
-

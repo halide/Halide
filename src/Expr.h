@@ -11,8 +11,8 @@
 #include "Debug.h"
 #include "Error.h"
 #include "Float16.h"
-#include "Type.h"
 #include "IntrusivePtr.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace Halide {
@@ -73,8 +73,10 @@ struct IRNode {
      * visitors.
      */
     virtual void accept(IRVisitor *v) const = 0;
-    IRNode() {}
-    virtual ~IRNode() {}
+    IRNode() {
+    }
+    virtual ~IRNode() {
+    }
 
     /** These classes are all managed with intrusive reference
        counting, so we also track a reference count. It's mutable
@@ -92,10 +94,14 @@ struct IRNode {
 };
 
 template<>
-EXPORT inline RefCount &ref_count<IRNode>(const IRNode *n) {return n->ref_count;}
+EXPORT inline RefCount &ref_count<IRNode>(const IRNode *n) {
+    return n->ref_count;
+}
 
 template<>
-EXPORT inline void destroy<IRNode>(const IRNode *n) {delete n;}
+EXPORT inline void destroy<IRNode>(const IRNode *n) {
+    delete n;
+}
 
 /** IR nodes are split into expressions and statements. These are
    similar to expressions and statements in C - expressions
@@ -123,23 +129,33 @@ struct BaseExprNode : public IRNode {
 template<typename T>
 struct ExprNode : public BaseExprNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType type_info() const {return T::_type_info;}
-    virtual ~ExprNode() {}
+    virtual IRNodeType type_info() const {
+        return T::_type_info;
+    }
+    virtual ~ExprNode() {
+    }
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType type_info() const {return T::_type_info;}
-    virtual ~StmtNode() {}
+    virtual IRNodeType type_info() const {
+        return T::_type_info;
+    }
+    virtual ~StmtNode() {
+    }
 };
 
 /** IR nodes are passed around opaque handles to them. This is a
    base class for those handles. It manages the reference count,
    and dispatches visitors. */
 struct IRHandle : public IntrusivePtr<const IRNode> {
-    IRHandle() : IntrusivePtr<const IRNode>() {}
-    IRHandle(const IRNode *p) : IntrusivePtr<const IRNode>(p) {}
+    IRHandle()
+        : IntrusivePtr<const IRNode>() {
+    }
+    IRHandle(const IRNode *p)
+        : IntrusivePtr<const IRNode>(p) {
+    }
 
     /** Dispatch to the correct visitor method for this node. E.g. if
      * this node is actually an Add node, then this will call
@@ -156,14 +172,14 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      *   // This is an add node
      * }
      */
-    template<typename T> const T *as() const {
+    template<typename T>
+    const T *as() const {
         if (ptr && ptr->type_info() == T::_type_info) {
-            return (const T *)ptr;
+            return (const T *) ptr;
         }
         return nullptr;
     }
 };
-
 
 /** Integer constants */
 struct IntImm : public ExprNode<IntImm> {
@@ -223,10 +239,10 @@ struct FloatImm : public ExprNode<FloatImm> {
         node->type = t;
         switch (t.bits()) {
         case 16:
-            node->value = (double)((float16_t)value);
+            node->value = (double) ((float16_t) value);
             break;
         case 32:
-            node->value = (float)value;
+            node->value = (float) value;
             break;
         case 64:
             node->value = value;
@@ -262,33 +278,60 @@ struct StringImm : public ExprNode<StringImm> {
  * can treat it as a value type. */
 struct Expr : public Internal::IRHandle {
     /** Make an undefined expression */
-    Expr() : Internal::IRHandle() {}
+    Expr()
+        : Internal::IRHandle() {
+    }
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
-    Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
-
+    Expr(const Internal::BaseExprNode *n)
+        : IRHandle(n) {
+    }
 
     /** Make an expression representing numeric constants of various types. */
     // @{
-    EXPORT explicit Expr(int8_t x)    : IRHandle(Internal::IntImm::make(Int(8), x)) {}
-    EXPORT explicit Expr(int16_t x)   : IRHandle(Internal::IntImm::make(Int(16), x)) {}
-    EXPORT          Expr(int32_t x)   : IRHandle(Internal::IntImm::make(Int(32), x)) {}
-    EXPORT explicit Expr(int64_t x)   : IRHandle(Internal::IntImm::make(Int(64), x)) {}
-    EXPORT explicit Expr(uint8_t x)   : IRHandle(Internal::UIntImm::make(UInt(8), x)) {}
-    EXPORT explicit Expr(uint16_t x)  : IRHandle(Internal::UIntImm::make(UInt(16), x)) {}
-    EXPORT explicit Expr(uint32_t x)  : IRHandle(Internal::UIntImm::make(UInt(32), x)) {}
-    EXPORT explicit Expr(uint64_t x)  : IRHandle(Internal::UIntImm::make(UInt(64), x)) {}
-    EXPORT          Expr(float16_t x) : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {}
-    EXPORT          Expr(float x)     : IRHandle(Internal::FloatImm::make(Float(32), x)) {}
-    EXPORT explicit Expr(double x)    : IRHandle(Internal::FloatImm::make(Float(64), x)) {}
+    EXPORT explicit Expr(int8_t x)
+        : IRHandle(Internal::IntImm::make(Int(8), x)) {
+    }
+    EXPORT explicit Expr(int16_t x)
+        : IRHandle(Internal::IntImm::make(Int(16), x)) {
+    }
+    EXPORT Expr(int32_t x)
+        : IRHandle(Internal::IntImm::make(Int(32), x)) {
+    }
+    EXPORT explicit Expr(int64_t x)
+        : IRHandle(Internal::IntImm::make(Int(64), x)) {
+    }
+    EXPORT explicit Expr(uint8_t x)
+        : IRHandle(Internal::UIntImm::make(UInt(8), x)) {
+    }
+    EXPORT explicit Expr(uint16_t x)
+        : IRHandle(Internal::UIntImm::make(UInt(16), x)) {
+    }
+    EXPORT explicit Expr(uint32_t x)
+        : IRHandle(Internal::UIntImm::make(UInt(32), x)) {
+    }
+    EXPORT explicit Expr(uint64_t x)
+        : IRHandle(Internal::UIntImm::make(UInt(64), x)) {
+    }
+    EXPORT Expr(float16_t x)
+        : IRHandle(Internal::FloatImm::make(Float(16), (double) x)) {
+    }
+    EXPORT Expr(float x)
+        : IRHandle(Internal::FloatImm::make(Float(32), x)) {
+    }
+    EXPORT explicit Expr(double x)
+        : IRHandle(Internal::FloatImm::make(Float(64), x)) {
+    }
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-    EXPORT          Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {}
+    EXPORT Expr(const std::string &s)
+        : IRHandle(Internal::StringImm::make(s)) {
+    }
 
     /** Get the type of this expression node */
     Type type() const {
-        return ((const Internal::BaseExprNode *)ptr)->type;
+        return ((const Internal::BaseExprNode *) ptr)->type;
     }
 };
 
@@ -303,7 +346,7 @@ struct ExprCompare {
 /** An enum describing a type of device API. Used by schedules, and in
  * the For loop IR node. */
 enum class DeviceAPI {
-    None, /// Used to denote for loops that run on the same device as the containing code.
+    None,  /// Used to denote for loops that run on the same device as the containing code.
     Host,
     Default_GPU,
     CUDA,
@@ -316,15 +359,15 @@ enum class DeviceAPI {
 
 /** An array containing all the device apis. Useful for iterating
  * through them. */
-const DeviceAPI all_device_apis[] = {DeviceAPI::None,
-                                     DeviceAPI::Host,
-                                     DeviceAPI::Default_GPU,
-                                     DeviceAPI::CUDA,
-                                     DeviceAPI::OpenCL,
-                                     DeviceAPI::GLSL,
-                                     DeviceAPI::OpenGLCompute,
-                                     DeviceAPI::Metal,
-                                     DeviceAPI::Hexagon};
+const DeviceAPI all_device_apis[] = { DeviceAPI::None,
+                                      DeviceAPI::Host,
+                                      DeviceAPI::Default_GPU,
+                                      DeviceAPI::CUDA,
+                                      DeviceAPI::OpenCL,
+                                      DeviceAPI::GLSL,
+                                      DeviceAPI::OpenGLCompute,
+                                      DeviceAPI::Metal,
+                                      DeviceAPI::Hexagon };
 
 namespace Internal {
 
@@ -339,11 +382,14 @@ enum class ForType {
     GPUThread
 };
 
-
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {
-    Stmt() : IRHandle() {}
-    Stmt(const BaseStmtNode *n) : IRHandle(n) {}
+    Stmt()
+        : IRHandle() {
+    }
+    Stmt(const BaseStmtNode *n)
+        : IRHandle(n) {
+    }
 
     /** This lets you use a Stmt as a key in a map of the form
      * map<Stmt, Foo, Stmt::Compare> */
@@ -353,7 +399,6 @@ struct Stmt : public IRHandle {
         }
     };
 };
-
 
 }  // namespace Internal
 }  // namespace Halide

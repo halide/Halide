@@ -24,7 +24,6 @@ int main() {
         .vectorize(x_vectors)
         .unroll(y_pairs);
 
-
     std::string result_file_1 = Internal::get_test_tmp_dir() + "stmt_to_html_dump_1.html";
     Internal::ensure_no_file_exists(result_file_1);
     gradient_fast.compile_to_lowered_stmt(result_file_1, {}, Halide::HTML);
@@ -34,7 +33,7 @@ int main() {
     std::string result_file_2 = Internal::get_test_tmp_dir() + "stmt_to_html_dump_2.html";
     Internal::ensure_no_file_exists(result_file_2);
     Buffer<int> im(800, 600);
-    gradient_fast.compile_to_lowered_stmt(result_file_2, {im}, Halide::HTML);
+    gradient_fast.compile_to_lowered_stmt(result_file_2, { im }, Halide::HTML);
     Internal::assert_file_exists(result_file_2);
 
     // Check a multi-output pipeline.

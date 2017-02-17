@@ -1,12 +1,12 @@
-#include "LLVM_Headers.h"
 #include "LLVM_Output.h"
-#include "LLVM_Runtime_Linker.h"
-#include "CodeGen_LLVM.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 namespace Halide {
 
@@ -21,7 +21,7 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
     return raw_out;
 }
 
-void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_file(llvm::Module &module, Internal::LLVMOStream &out, llvm::TargetMachine::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
 
@@ -29,11 +29,11 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     auto target_machine = Internal::make_target_machine(module);
     internal_assert(target_machine.get()) << "Could not allocate target machine!\n";
 
-    #if LLVM_VERSION == 37
+#if LLVM_VERSION == 37
     llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
-    #else
+#else
     llvm::DataLayout target_data_layout(target_machine->createDataLayout());
-    #endif
+#endif
     if (!(target_data_layout == module.getDataLayout())) {
         internal_error << "Warning: module's data layout does not match target machine's\n"
                        << target_data_layout.getStringRepresentation() << "\n"
@@ -45,12 +45,12 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
 
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module.getTargetTriple())));
 
-    // Make sure things marked as always-inline get inlined
-    #if LLVM_VERSION < 40
+// Make sure things marked as always-inline get inlined
+#if LLVM_VERSION < 40
     pass_manager.add(llvm::createAlwaysInlinerPass());
-    #else
+#else
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
-    #endif
+#endif
 
     // Enable symbol rewriting. This allows code outside libHalide to
     // use symbol rewriting when compiling Halide code (for example, by
@@ -71,24 +71,24 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
     return codegen_llvm(module, context);
 }
 
-void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream& out) {
+void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
     emit_file(module, out, llvm::TargetMachine::CGFT_ObjectFile);
 }
 
-void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
+void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
     emit_file(module, out, llvm::TargetMachine::CGFT_AssemblyFile);
 }
 
-void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream& out) {
+void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {
     WriteBitcodeToFile(&module, out);
 }
 
-void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream& out) {
+void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
     module.print(out, nullptr);
 }
 
 void create_static_library(const std::vector<std::string> &src_files, const Target &target,
-                    const std::string &dst_file, bool deterministic) {
+                           const std::string &dst_file, bool deterministic) {
     internal_assert(!src_files.empty());
 #if LLVM_VERSION >= 39
     std::vector<llvm::NewArchiveMember> new_members;
@@ -117,25 +117,25 @@ void create_static_library(const std::vector<std::string> &src_files, const Targ
 
     const bool write_symtab = true;
     const auto kind = Internal::get_triple_for_target(target).isOSDarwin()
-        ? llvm::object::Archive::K_BSD
-        : llvm::object::Archive::K_GNU;
+                          ? llvm::object::Archive::K_BSD
+                          : llvm::object::Archive::K_GNU;
 #if LLVM_VERSION == 37
     auto result = llvm::writeArchive(dst_file, new_members,
-                       write_symtab, kind,
-                       deterministic);
+                                     write_symtab, kind,
+                                     deterministic);
 #elif LLVM_VERSION == 38
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
-                       write_symtab, kind,
-                       deterministic, thin);
+                                     write_symtab, kind,
+                                     deterministic, thin);
 #else
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
-                       write_symtab, kind,
-                       deterministic, thin, nullptr);
+                                     write_symtab, kind,
+                                     deterministic, thin, nullptr);
 #endif
     internal_assert(!result.second) << "Failed to write archive: " << dst_file
-        << ", reason: " << result.second << "\n";
+                                    << ", reason: " << result.second << "\n";
 }
 
 }  // namespace Halide

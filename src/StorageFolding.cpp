@@ -1,13 +1,13 @@
 #include "StorageFolding.h"
-#include "IROperator.h"
-#include "IRMutator.h"
-#include "Simplify.h"
 #include "Bounds.h"
-#include "IRPrinter.h"
-#include "Substitute.h"
 #include "Debug.h"
-#include "Monotonic.h"
 #include "ExprUsesVar.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Monotonic.h"
+#include "Simplify.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -41,7 +41,9 @@ class CountProducers : public IRVisitor {
 public:
     int count = 0;
 
-    CountProducers(const std::string &name) : name(name) {}
+    CountProducers(const std::string &name)
+        : name(name) {
+    }
 };
 
 int count_producers(Stmt in, const std::string &name) {
@@ -64,7 +66,7 @@ class FoldStorageOfFunction : public IRMutator {
         internal_assert(op);
         if (op->name == func && op->call_type == Call::Halide) {
             vector<Expr> args = op->args;
-            internal_assert(dim < (int)args.size());
+            internal_assert(dim < (int) args.size());
             args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
@@ -83,8 +85,9 @@ class FoldStorageOfFunction : public IRMutator {
     }
 
 public:
-    FoldStorageOfFunction(string f, int d, Expr e) :
-        func(f), dim(d), factor(e) {}
+    FoldStorageOfFunction(string f, int d, Expr e)
+        : func(f), dim(d), factor(e) {
+    }
 };
 
 // Attempt to fold the storage of a particular function in a statement
@@ -122,10 +125,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
-            Expr min = simplify(box[i-1].min);
-            Expr max = simplify(box[i-1].max);
+            Expr min = simplify(box[i - 1].min);
+            Expr max = simplify(box[i - 1].max);
 
-            const StorageDim &storage_dim = func.schedule().storage_dims()[i-1];
+            const StorageDim &storage_dim = func.schedule().storage_dims()[i - 1];
             Expr explicit_factor;
             if (expr_uses_var(min, op->name) || expr_uses_var(max, op->name)) {
                 // We only use the explicit fold factor if the fold is
@@ -142,10 +145,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).
             bool min_monotonic_increasing = !explicit_only &&
-                (is_monotonic(min, op->name) == Monotonic::Increasing);
+                                            (is_monotonic(min, op->name) == Monotonic::Increasing);
 
             bool max_monotonic_decreasing = !explicit_only &&
-                (is_monotonic(max, op->name) == Monotonic::Decreasing);
+                                            (is_monotonic(max, op->name) == Monotonic::Decreasing);
 
             if (!min_monotonic_increasing && !max_monotonic_decreasing &&
                 explicit_factor.defined()) {
@@ -169,7 +172,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     max_monotonic_decreasing = true;
                 }
                 Expr error = Call::make(Int(32), "halide_error_bad_fold",
-                                        {func.name(), storage_dim.var, op->name},
+                                        { func.name(), storage_dim.var, op->name },
                                         Call::Extern);
 
                 body = Block::make(AssertStmt::make(condition, error), body);
@@ -182,7 +185,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr factor;
                 if (explicit_factor.defined()) {
                     Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                            {func.name(), storage_dim.var, explicit_factor, op->name, extent},
+                                            { func.name(), storage_dim.var, explicit_factor, op->name, extent },
                                             Call::Extern);
                     body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
 
@@ -211,9 +214,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 if (factor.defined()) {
                     debug(3) << "Proceeding with factor " << factor << "\n";
 
-                    Fold fold = {(int)i - 1, factor};
+                    Fold fold = { (int) i - 1, factor };
                     dims_folded.push_back(fold);
-                    body = FoldStorageOfFunction(func.name(), (int)i - 1, factor).mutate(body);
+                    body = FoldStorageOfFunction(func.name(), (int) i - 1, factor).mutate(body);
 
                     Expr next_var = Variable::make(Int(32), op->name) + 1;
                     Expr next_min = substitute(op->name, next_var, min);
@@ -259,7 +262,8 @@ public:
     vector<Fold> dims_folded;
 
     AttemptStorageFoldingOfFunction(Function f, bool explicit_only)
-        : func(f), explicit_only(explicit_only) {}
+        : func(f), explicit_only(explicit_only) {
+    }
 };
 
 /** Check if a buffer's allocated is referred to directly via an
@@ -270,9 +274,11 @@ public:
     string func;
     bool special = false;
 
-    IsBufferSpecial(string f) : func(f) {}
-private:
+    IsBufferSpecial(string f)
+        : func(f) {
+    }
 
+private:
     using IRVisitor::visit;
 
     void visit(const Variable *var) {
@@ -332,7 +338,7 @@ class StorageFolding : public IRMutator {
                     int d = folder.dims_folded[i].dim;
                     Expr f = folder.dims_folded[i].factor;
                     internal_assert(d >= 0 &&
-                                    d < (int)bounds.size());
+                                    d < (int) bounds.size());
 
                     bounds[d] = Range(0, f);
                 }
@@ -343,7 +349,9 @@ class StorageFolding : public IRMutator {
     }
 
 public:
-    StorageFolding(const map<string, Function> &env) : env(env) {}
+    StorageFolding(const map<string, Function> &env)
+        : env(env) {
+    }
 };
 
 // Because storage folding runs before simplification, it's useful to
@@ -385,6 +393,5 @@ Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env) {
     s = StorageFolding(env).mutate(s);
     return s;
 }
-
 }
 }

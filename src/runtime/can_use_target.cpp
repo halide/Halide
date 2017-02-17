@@ -1,8 +1,12 @@
 #include "HalideRuntime.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 WEAK halide_can_use_target_features_t custom_can_use_target_features = halide_default_can_use_target_features;
-}}}
+}
+}
+}
 
 extern "C" {
 
@@ -34,5 +38,4 @@ WEAK int halide_default_can_use_target_features(uint64_t features) {
 
     return 1;
 }
-
 }

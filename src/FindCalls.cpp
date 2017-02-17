@@ -1,7 +1,7 @@
 #include "FindCalls.h"
 #include "IRVisitor.h"
 
-namespace Halide{
+namespace Halide {
 namespace Internal {
 
 using std::map;
@@ -34,7 +34,6 @@ public:
             Function f(call->func);
             include_function(f);
         }
-
     }
 };
 
@@ -80,6 +79,5 @@ map<string, Function> find_direct_calls(Function f) {
     populate_environment(f, res, false);
     return res;
 }
-
 }
 }

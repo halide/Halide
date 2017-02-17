@@ -1,14 +1,13 @@
 #ifndef YUV_BUFFER_T_H
 #define YUV_BUFFER_T_H
 
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include <assert.h>
 #include <string.h>
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
 
 class YuvBufferT {
 public:
-
     enum class ChromaStorage {
         // UVUVUV... Interleaved U and V with element stride 2
         // UVUVUV... and arbitrary row stride.
@@ -38,14 +37,14 @@ public:
     YuvBufferT() = default;
 
     YuvBufferT(uint8_t *lumaPointer,
-        int32_t lumaWidth, int32_t lumaHeight,
-        int32_t lumaElementStrideBytes, int32_t lumaRowStrideBytes,
-        uint8_t *chromaUPointer,
-        int32_t chromaUWidth, int32_t chromaUHeight,
-        int32_t chromaUElementStrideBytes, int32_t chromaURowStrideBytes,
-        uint8_t *chromaVPointer,
-        int32_t chromaVWidth, int32_t chromaVHeight,
-        int32_t chromaVElementStrideBytes, int32_t chromaVRowStrideBytes);
+               int32_t lumaWidth, int32_t lumaHeight,
+               int32_t lumaElementStrideBytes, int32_t lumaRowStrideBytes,
+               uint8_t *chromaUPointer,
+               int32_t chromaUWidth, int32_t chromaUHeight,
+               int32_t chromaUElementStrideBytes, int32_t chromaURowStrideBytes,
+               uint8_t *chromaVPointer,
+               int32_t chromaVWidth, int32_t chromaVHeight,
+               int32_t chromaVElementStrideBytes, int32_t chromaVRowStrideBytes);
 
     YuvBufferT(const YuvBufferT &copy) = default;
 
@@ -89,7 +88,6 @@ public:
     void fillUV(uint8_t u, uint8_t v);
 
 private:
-
     Halide::Runtime::Buffer<uint8_t> luma_;
     Halide::Runtime::Buffer<uint8_t> chromaU_;
     Halide::Runtime::Buffer<uint8_t> chromaV_;
@@ -100,4 +98,4 @@ private:
     Halide::Runtime::Buffer<uint8_t> packedPlanarChromaView_;
 };
 
-#endif // YUV_BUFFER_T_H
+#endif  // YUV_BUFFER_T_H

@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     f.compute_at(g, x);
     f.set_custom_trace(allocation_bound_test_trace);
 
-    Module m = g.compile_to_module({g.infer_arguments()});
+    Module m = g.compile_to_module({ g.infer_arguments() });
     CheckCompute checker;
     m.functions().front().body.accept(&checker);
 

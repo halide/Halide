@@ -4,34 +4,37 @@ namespace Halide {
 
 namespace {
 
-CompileTimeErrorReporter* custom_error_reporter = nullptr;
+CompileTimeErrorReporter *custom_error_reporter = nullptr;
 
 }  // namespace
 
-void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter) {
+void set_custom_compile_time_error_reporter(CompileTimeErrorReporter *error_reporter) {
     custom_error_reporter = error_reporter;
 }
 
 bool exceptions_enabled() {
-    #ifdef WITH_EXCEPTIONS
+#ifdef WITH_EXCEPTIONS
     return true;
-    #else
+#else
     return false;
-    #endif
+#endif
 }
 
-Error::Error(const std::string &msg) : std::runtime_error(msg) {
+Error::Error(const std::string &msg)
+    : std::runtime_error(msg) {
 }
 
-CompileError::CompileError(const std::string &msg) : Error(msg) {
+CompileError::CompileError(const std::string &msg)
+    : Error(msg) {
 }
 
-RuntimeError::RuntimeError(const std::string &msg) : Error(msg) {
+RuntimeError::RuntimeError(const std::string &msg)
+    : Error(msg) {
 }
 
-InternalError::InternalError(const std::string &msg) : Error(msg) {
+InternalError::InternalError(const std::string &msg)
+    : Error(msg) {
 }
-
 
 namespace Internal {
 
@@ -42,7 +45,8 @@ RuntimeError _runtime_error("");
 InternalError _internal_error("");
 }
 
-ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags) : flags(flags) {
+ErrorReport::ErrorReport(const char *file, int line, const char *condition_string, int flags)
+    : flags(flags) {
 
     const std::string &source_loc = Introspection::get_source_location();
 
@@ -82,7 +86,7 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     }
 }
 
-ErrorReport::~ErrorReport() 
+ErrorReport::~ErrorReport()
 #if __cplusplus >= 201100 || _MSC_VER >= 1900
     noexcept(false)
 #endif
@@ -128,5 +132,4 @@ ErrorReport::~ErrorReport()
 #endif
 }
 }
-
 }

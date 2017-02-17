@@ -13,32 +13,26 @@ void blur(std::string suffix, ImageParam input) {
     clamped = BoundaryConditions::repeat_edge(input);
 
     Func blur_x("blur_x");
-    blur_x(x, y, c) = (clamped(x - 1, y, c) +
-                       clamped(x, y, c) +
-                       clamped(x + 1, y, c)) / 3;
+    blur_x(x, y, c) =
+        (clamped(x - 1, y, c) + clamped(x, y, c) + clamped(x + 1, y, c)) / 3;
 
     Func result("avg_filter");
-    result(x, y, c) = (blur_x(x, y - 1, c) +
-                       blur_x(x, y, c) +
-                       blur_x(x, y + 1, c)) / 3;
+    result(x, y, c) =
+        (blur_x(x, y - 1, c) + blur_x(x, y, c) + blur_x(x, y + 1, c)) / 3;
 
-    result.output_buffer().set_bounds(2, 0, CHANNELS).set_stride(0, CHANNELS).set_stride(2, 1);
+    result.output_buffer()
+        .set_bounds(2, 0, CHANNELS)
+        .set_stride(0, CHANNELS)
+        .set_stride(2, 1);
 
     Target target = get_target_from_environment();
-    result.bound(c, 0, CHANNELS)
-          .reorder_storage(c, x, y)
-          .reorder(c, x, y);
+    result.bound(c, 0, CHANNELS).reorder_storage(c, x, y).reorder(c, x, y);
     if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
         Var xi("xi"), yi("yi");
-        result.unroll(c)
-              .gpu_tile(x, y, xi, yi, 64, 64);
+        result.unroll(c).gpu_tile(x, y, xi, yi, 64, 64);
     } else {
         Var yi("yi");
-        result
-            .unroll(c)
-            .split(y, y, yi, 32)
-            .parallel(y)
-            .vectorize(x, 4);
+        result.unroll(c).split(y, y, yi, 32).parallel(y).vectorize(x, 4);
         blur_x.store_at(result, y)
             .compute_at(result, yi)
             .reorder(c, x, y)
@@ -47,13 +41,13 @@ void blur(std::string suffix, ImageParam input) {
     }
 
     std::string fn_name = std::string("avg_filter") + suffix;
-    result.compile_to_file(fn_name, {input}, fn_name);
+    result.compile_to_file(fn_name, { input }, fn_name);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     ImageParam input_uint32(UInt(32), 3, "input");
-    blur(std::string("_uint32t") + (argc > 1? argv[1]: ""), input_uint32);
+    blur(std::string("_uint32t") + (argc > 1 ? argv[1] : ""), input_uint32);
 
     ImageParam input_float(Float(32), 3, "input");
-    blur(std::string("_float") + (argc > 1? argv[1]: ""), input_float);
+    blur(std::string("_float") + (argc > 1 ? argv[1] : ""), input_float);
 }

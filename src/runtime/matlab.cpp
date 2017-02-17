@@ -72,7 +72,7 @@ typedef ptrdiff_t mwSignedIndex;
 typedef void (*mex_exit_fn)(void);
 
 // Declare function pointers for the mex APIs.
-#define MEX_FN(ret, func, args) ret (*func)args;
+#define MEX_FN(ret, func, args) ret(*func) args;
 #include "mex_functions.h"
 
 // Given a halide type code and bit width, find the equivalent matlab class ID.
@@ -80,26 +80,38 @@ WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
     switch (type_code) {
     case halide_type_int:
         switch (type_bits) {
-        case 1: return mxLOGICAL_CLASS;
-        case 8: return mxINT8_CLASS;
-        case 16: return mxINT16_CLASS;
-        case 32: return mxINT32_CLASS;
-        case 64: return mxINT64_CLASS;
+        case 1:
+            return mxLOGICAL_CLASS;
+        case 8:
+            return mxINT8_CLASS;
+        case 16:
+            return mxINT16_CLASS;
+        case 32:
+            return mxINT32_CLASS;
+        case 64:
+            return mxINT64_CLASS;
         }
         return mxUNKNOWN_CLASS;
     case halide_type_uint:
         switch (type_bits) {
-        case 1: return mxLOGICAL_CLASS;
-        case 8: return mxUINT8_CLASS;
-        case 16: return mxUINT16_CLASS;
-        case 32: return mxUINT32_CLASS;
-        case 64: return mxUINT64_CLASS;
+        case 1:
+            return mxLOGICAL_CLASS;
+        case 8:
+            return mxUINT8_CLASS;
+        case 16:
+            return mxUINT16_CLASS;
+        case 32:
+            return mxUINT32_CLASS;
+        case 64:
+            return mxUINT64_CLASS;
         }
         return mxUNKNOWN_CLASS;
     case halide_type_float:
         switch (type_bits) {
-        case 32: return mxSINGLE_CLASS;
-        case 64: return mxDOUBLE_CLASS;
+        case 32:
+            return mxSINGLE_CLASS;
+        case 64:
+            return mxDOUBLE_CLASS;
         }
         return mxUNKNOWN_CLASS;
     }
@@ -109,38 +121,61 @@ WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
 // Convert a matlab class ID to a string.
 WEAK const char *get_class_name(mxClassID id) {
     switch (id) {
-    case mxCELL_CLASS: return "cell";
-    case mxSTRUCT_CLASS: return "struct";
-    case mxLOGICAL_CLASS: return "logical";
-    case mxCHAR_CLASS: return "char";
-    case mxVOID_CLASS: return "void";
-    case mxDOUBLE_CLASS: return "double";
-    case mxSINGLE_CLASS: return "single";
-    case mxINT8_CLASS: return "int8";
-    case mxUINT8_CLASS: return "uint8";
-    case mxINT16_CLASS: return "int16";
-    case mxUINT16_CLASS: return "uint16";
-    case mxINT32_CLASS: return "int32";
-    case mxUINT32_CLASS: return "uint32";
-    case mxINT64_CLASS: return "int64";
-    case mxUINT64_CLASS: return "uint64";
-    case mxFUNCTION_CLASS: return "function";
-    case mxOPAQUE_CLASS: return "opaque";
-    case mxOBJECT_CLASS: return "object";
-    default: return "unknown";
+    case mxCELL_CLASS:
+        return "cell";
+    case mxSTRUCT_CLASS:
+        return "struct";
+    case mxLOGICAL_CLASS:
+        return "logical";
+    case mxCHAR_CLASS:
+        return "char";
+    case mxVOID_CLASS:
+        return "void";
+    case mxDOUBLE_CLASS:
+        return "double";
+    case mxSINGLE_CLASS:
+        return "single";
+    case mxINT8_CLASS:
+        return "int8";
+    case mxUINT8_CLASS:
+        return "uint8";
+    case mxINT16_CLASS:
+        return "int16";
+    case mxUINT16_CLASS:
+        return "uint16";
+    case mxINT32_CLASS:
+        return "int32";
+    case mxUINT32_CLASS:
+        return "uint32";
+    case mxINT64_CLASS:
+        return "int64";
+    case mxUINT64_CLASS:
+        return "uint64";
+    case mxFUNCTION_CLASS:
+        return "function";
+    case mxOPAQUE_CLASS:
+        return "opaque";
+    case mxOBJECT_CLASS:
+        return "object";
+    default:
+        return "unknown";
     }
 }
 
 // Get the real data pointer from an mxArray.
-template <typename T>
-INLINE T* get_data(mxArray *a) { return (T *)mxGetData(a); }
-template <typename T>
-INLINE const T* get_data(const mxArray *a) { return (const T *)mxGetData(a); }
+template<typename T>
+INLINE T *get_data(mxArray *a) {
+    return (T *) mxGetData(a);
+}
+template<typename T>
+INLINE const T *get_data(const mxArray *a) {
+    return (const T *) mxGetData(a);
+}
 
 // Search for a symbol in the calling process (i.e. matlab).
-template <typename T>
+template<typename T>
 INLINE T get_mex_symbol(void *user_context, const char *name, bool required) {
-    T s = (T)halide_get_symbol(name);
+    T s = (T) halide_get_symbol(name);
     if (required && s == NULL) {
         error(user_context) << "mex API not found: " << name << "\n";
         return NULL;
@@ -210,8 +245,6 @@ WEAK void halide_matlab_note_pipeline_description(void *user_context, const hali
     halide_print(user_context, desc.str());
 }
 
-
-
 WEAK void halide_matlab_error(void *user_context, const char *msg) {
     // Note that mexErrMsg/mexErrMsgIdAndTxt crash Matlab. It seems to
     // be a common problem, those APIs seem to be very fragile.
@@ -230,10 +263,10 @@ WEAK int halide_matlab_init(void *user_context) {
         return halide_error_code_success;
     }
 
-    #define MEX_FN(ret, func, args) func = get_mex_symbol<ret (*)args>(user_context, #func, true);
-    #define MEX_FN_700(ret, func, func_700, args) func_700 = get_mex_symbol<ret (*)args>(user_context, #func, false);
-    #define MEX_FN_730(ret, func, func_730, args) func_730 = get_mex_symbol<ret (*)args>(user_context, #func_730, false);
-    #include "mex_functions.h"
+#define MEX_FN(ret, func, args) func = get_mex_symbol<ret(*) args>(user_context, #func, true);
+#define MEX_FN_700(ret, func, func_700, args) func_700 = get_mex_symbol<ret(*) args>(user_context, #func, false);
+#define MEX_FN_730(ret, func, func_730, args) func_730 = get_mex_symbol<ret(*) args>(user_context, #func_730, false);
+#include "mex_functions.h"
 
     if (!mexWarnMsgTxt) {
         return halide_error_code_matlab_init_failed;
@@ -288,7 +321,7 @@ WEAK int halide_matlab_array_to_buffer_t(void *user_context,
         return halide_error_code_matlab_bad_param_type;
     }
 
-    buf->host = (uint8_t *)mxGetData(arr);
+    buf->host = (uint8_t *) mxGetData(arr);
     buf->host_dirty = true;
     buf->elem_size = mxGetElementSize(arr);
 
@@ -340,24 +373,48 @@ WEAK int halide_matlab_array_to_scalar(void *user_context,
 
     if (type_code == halide_type_int) {
         switch (type_bits) {
-        case 1: *reinterpret_cast<bool *>(scalar) = value != 0; return halide_error_code_success;
-        case 8: *reinterpret_cast<int8_t *>(scalar) = static_cast<int8_t>(value); return halide_error_code_success;
-        case 16: *reinterpret_cast<int16_t *>(scalar) = static_cast<int16_t>(value); return halide_error_code_success;
-        case 32: *reinterpret_cast<int32_t *>(scalar) = static_cast<int32_t>(value); return halide_error_code_success;
-        case 64: *reinterpret_cast<int64_t *>(scalar) = static_cast<int64_t>(value); return halide_error_code_success;
+        case 1:
+            *reinterpret_cast<bool *>(scalar) = value != 0;
+            return halide_error_code_success;
+        case 8:
+            *reinterpret_cast<int8_t *>(scalar) = static_cast<int8_t>(value);
+            return halide_error_code_success;
+        case 16:
+            *reinterpret_cast<int16_t *>(scalar) = static_cast<int16_t>(value);
+            return halide_error_code_success;
+        case 32:
+            *reinterpret_cast<int32_t *>(scalar) = static_cast<int32_t>(value);
+            return halide_error_code_success;
+        case 64:
+            *reinterpret_cast<int64_t *>(scalar) = static_cast<int64_t>(value);
+            return halide_error_code_success;
         }
     } else if (type_code == halide_type_uint) {
         switch (type_bits) {
-        case 1: *reinterpret_cast<bool *>(scalar) = value != 0; return halide_error_code_success;
-        case 8: *reinterpret_cast<uint8_t *>(scalar) = static_cast<uint8_t>(value); return halide_error_code_success;
-        case 16: *reinterpret_cast<uint16_t *>(scalar) = static_cast<uint16_t>(value); return halide_error_code_success;
-        case 32: *reinterpret_cast<uint32_t *>(scalar) = static_cast<uint32_t>(value); return halide_error_code_success;
-        case 64: *reinterpret_cast<uint64_t *>(scalar) = static_cast<uint64_t>(value); return halide_error_code_success;
+        case 1:
+            *reinterpret_cast<bool *>(scalar) = value != 0;
+            return halide_error_code_success;
+        case 8:
+            *reinterpret_cast<uint8_t *>(scalar) = static_cast<uint8_t>(value);
+            return halide_error_code_success;
+        case 16:
+            *reinterpret_cast<uint16_t *>(scalar) = static_cast<uint16_t>(value);
+            return halide_error_code_success;
+        case 32:
+            *reinterpret_cast<uint32_t *>(scalar) = static_cast<uint32_t>(value);
+            return halide_error_code_success;
+        case 64:
+            *reinterpret_cast<uint64_t *>(scalar) = static_cast<uint64_t>(value);
+            return halide_error_code_success;
         }
     } else if (type_code == halide_type_float) {
         switch (type_bits) {
-        case 32: *reinterpret_cast<float *>(scalar) = static_cast<float>(value); return halide_error_code_success;
-        case 64: *reinterpret_cast<double *>(scalar) = static_cast<double>(value); return halide_error_code_success;
+        case 32:
+            *reinterpret_cast<float *>(scalar) = static_cast<float>(value);
+            return halide_error_code_success;
+        case 64:
+            *reinterpret_cast<double *>(scalar) = static_cast<double>(value);
+            return halide_error_code_success;
         }
     } else if (type_code == halide_type_handle) {
         error(user_context) << "Parameter " << arg->name << " is of a type not supported by Matlab.\n";
@@ -407,14 +464,14 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
         return result;
     }
 
-    void **args = (void **)__builtin_alloca(nrhs * sizeof(void *));
+    void **args = (void **) __builtin_alloca(nrhs * sizeof(void *));
     for (int i = 0; i < nrhs; i++) {
         const mxArray *arg = prhs[i];
         const halide_filter_argument_t *arg_metadata = &metadata->arguments[i];
 
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
-            buffer_t *buf = (buffer_t *)__builtin_alloca(sizeof(buffer_t));
+            buffer_t *buf = (buffer_t *) __builtin_alloca(sizeof(buffer_t));
             result = halide_matlab_array_to_buffer_t(user_context, arg, arg_metadata, buf);
             if (result != 0) {
                 halide_matlab_note_pipeline_description(user_context, metadata);
@@ -441,12 +498,12 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
         const halide_filter_argument_t *arg_metadata = &metadata->arguments[i];
 
         if (arg_metadata->kind == halide_argument_kind_output_buffer) {
-            buffer_t *buf = (buffer_t *)args[i];
+            buffer_t *buf = (buffer_t *) args[i];
             halide_copy_to_host(user_context, buf);
         }
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
-            buffer_t *buf = (buffer_t *)args[i];
+            buffer_t *buf = (buffer_t *) args[i];
             halide_device_free(user_context, buf);
         }
     }

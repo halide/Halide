@@ -1,12 +1,12 @@
 #include "Associativity.h"
-#include "Substitute.h"
-#include "Simplify.h"
-#include "IROperator.h"
+#include "CSE.h"
+#include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
+#include "IROperator.h"
+#include "Simplify.h"
 #include "Solve.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Substitute.h"
 
 #include <sstream>
 
@@ -90,8 +90,9 @@ class ConvertSelfRef : public IRMutator {
     }
 
 public:
-    ConvertSelfRef(const string &f, const vector<Expr> &args, int idx, const string &x) :
-        func(f), args(args), value_index(idx), op_x(x), is_conditional(false) {}
+    ConvertSelfRef(const string &f, const vector<Expr> &args, int idx, const string &x)
+        : func(f), args(args), value_index(idx), op_x(x), is_conditional(false) {
+    }
 
     bool is_solvable = true;
     Expr x_part;
@@ -99,45 +100,45 @@ public:
 
 template<typename T>
 std::pair<bool, bool> visit_associative_binary_op(
-        const string &op_x, const string &op_y, Expr x_part,
-        Expr lhs, Expr rhs, AssociativeOp &op) {
+    const string &op_x, const string &op_y, Expr x_part,
+    Expr lhs, Expr rhs, AssociativeOp &op) {
     const Variable *var_a = lhs.as<Variable>();
     if (!var_a || (var_a->name != op_x)) {
         debug(4) << "Can't prove associativity of " << T::make(lhs, rhs) << "\n";
-        return {false, false};
+        return { false, false };
     } else if (expr_uses_var(rhs, op_x)) {
         debug(4) << "Can't prove associativity of " << T::make(lhs, rhs) << "\n";
-        return {false, false};
+        return { false, false };
     } else {
         // op(x, y)
-        op.x = {op_x, x_part};
-        op.y = {op_y, rhs};
+        op.x = { op_x, x_part };
+        op.y = { op_y, rhs };
     }
     if (std::is_same<T, Sub>::value) {
         // Sub is associative but not commutative
-        return {true, false};
+        return { true, false };
     }
-    return {true, true};
+    return { true, true };
 }
 
 // Return a pair of booleans indicating if an operator is associative and commutative
 // respectively. 'op' contains the the equivalent associative binary/unary operator
 // for that operator. If the operator is non-associative, 'op' is not valid.
 std::pair<bool, bool> extract_associative_op(
-        const string &op_x, const string &op_y, Expr x_part, Expr e, AssociativeOp &op) {
+    const string &op_x, const string &op_y, Expr x_part, Expr e, AssociativeOp &op) {
     Type t = e.type();
     Expr x = Variable::make(t, op_x);
     Expr y = Variable::make(t, op_y);
 
-    if (!x_part.defined()) { // op(y)
+    if (!x_part.defined()) {  // op(y)
         // Update with no self-recurrence is associative and the identity can be
         // anything since it's going to be replaced anyway, but it's not
         // commutative
         op.op = y;
         op.identity = make_const(t, 0);
-        op.x = {"", Expr()};
-        op.y = {op_y, e};
-        return {true, false};
+        op.x = { "", Expr() };
+        op.y = { op_y, e };
+        return { true, false };
     }
 
     if (const Add *a = e.as<Add>()) {
@@ -172,13 +173,12 @@ std::pair<bool, bool> extract_associative_op(
         internal_error << "Let should have been substituted before calling this function\n";
     } else {
         debug(4) << "Can't prove associativity of " << e << "\n";
-        return {false, false};
+        return { false, false };
     }
-    return {false, false};
+    return { false, false };
 }
 
-} // anonymous namespace
-
+}  // anonymous namespace
 
 // TODO(psuriana): This does not handle cross-dependencies among tuple elements.
 // It also is not able to handle associative select() (e.g. argmin/argmax)
@@ -217,7 +217,7 @@ ProveAssociativityResult prove_associativity(const string &f, vector<Expr> args,
 
         expr = common_subexpression_elimination(expr);
         expr = simplify(expr);
-        expr = solve_expression(expr, op_x).result; // Move 'x' to the left as possible
+        expr = solve_expression(expr, op_x).result;  // Move 'x' to the left as possible
         if (!expr.defined()) {
             return ProveAssociativityResult();
         }
@@ -310,7 +310,7 @@ void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 void associativity_test() {
     Expr x = Variable::make(Int(32), "x");
@@ -318,63 +318,62 @@ void associativity_test() {
     Expr z = Variable::make(Int(32), "z");
     Expr rx = Variable::make(Int(32), "rx");
 
-    Expr f_call_0 = Call::make(Int(32), "f", {x}, Call::CallType::Halide, nullptr, 0);
-    Expr f_call_1 = Call::make(Int(32), "f", {x}, Call::CallType::Halide, nullptr, 1);
-    Expr f_call_2 = Call::make(Int(32), "f", {x}, Call::CallType::Halide, nullptr, 2);
-    Expr g_call = Call::make(Int(32), "g", {rx}, Call::CallType::Halide, nullptr, 0);
-
+    Expr f_call_0 = Call::make(Int(32), "f", { x }, Call::CallType::Halide, nullptr, 0);
+    Expr f_call_1 = Call::make(Int(32), "f", { x }, Call::CallType::Halide, nullptr, 1);
+    Expr f_call_2 = Call::make(Int(32), "f", { x }, Call::CallType::Halide, nullptr, 2);
+    Expr g_call = Call::make(Int(32), "g", { rx }, Call::CallType::Halide, nullptr, 0);
 
     // f(x) = min(f(x), int16(z))
-    check_associativity("f", {x}, {min(f_call_0, y + Cast::make(Int(16), z))},
-                        true, {{min(x, y), Int(32).max(), {"x", f_call_0}, {"y", y + Cast::make(Int(16), z)}}});
+    check_associativity("f", { x }, { min(f_call_0, y + Cast::make(Int(16), z)) },
+                        true, { { min(x, y), Int(32).max(), { "x", f_call_0 }, { "y", y + Cast::make(Int(16), z) } } });
 
     // f(x) = f(x) + g(rx) + y + z
-    check_associativity("f", {x}, {y + z + f_call_0},
-                        true, {{x + y, make_const(Int(32), 0), {"x", f_call_0}, {"y", y + z}}});
+    check_associativity("f", { x }, { y + z + f_call_0 },
+                        true, { { x + y, make_const(Int(32), 0), { "x", f_call_0 }, { "y", y + z } } });
 
     // f(x) = max(y, f(x))
-    check_associativity("f", {x}, {max(y, f_call_0)},
-                        true, {{max(x, y), Int(32).min(), {"x", f_call_0}, {"y", y}}});
+    check_associativity("f", { x }, { max(y, f_call_0) },
+                        true, { { max(x, y), Int(32).min(), { "x", f_call_0 }, { "y", y } } });
 
     // f(x) = Tuple(2, 3, f(x)[2] + z)
-    check_associativity("f", {x}, {2, 3, f_call_2 + z},
+    check_associativity("f", { x }, { 2, 3, f_call_2 + z },
                         true,
-                        {{y, make_const(Int(32), 0), {"", Expr()}, {"y", 2}},
-                         {y, make_const(Int(32), 0), {"", Expr()}, {"y", 3}},
-                         {x + y, make_const(Int(32), 0), {"x", f_call_2}, {"y", z}},
+                        {
+                            { y, make_const(Int(32), 0), { "", Expr() }, { "y", 2 } },
+                            { y, make_const(Int(32), 0), { "", Expr() }, { "y", 3 } },
+                            { x + y, make_const(Int(32), 0), { "x", f_call_2 }, { "y", z } },
                         });
 
     // f(x) = Tuple(min(f(x)[0], g(rx)), f(x)[1]*g(x)*2, f(x)[2] + z)
-    check_associativity("f", {x}, {min(f_call_0, g_call), f_call_1*g_call*2, f_call_2 + z},
+    check_associativity("f", { x }, { min(f_call_0, g_call), f_call_1 * g_call * 2, f_call_2 + z },
                         true,
-                        {{min(x, y), Int(32).max(), {"x", f_call_0}, {"y", g_call}},
-                         {x * y, make_const(Int(32), 1), {"x", f_call_1}, {"y", g_call*2}},
-                         {x + y, make_const(Int(32), 0), {"x", f_call_2}, {"y", z}},
+                        {
+                            { min(x, y), Int(32).max(), { "x", f_call_0 }, { "y", g_call } },
+                            { x * y, make_const(Int(32), 1), { "x", f_call_1 }, { "y", g_call * 2 } },
+                            { x + y, make_const(Int(32), 0), { "x", f_call_2 }, { "y", z } },
                         });
 
     // f(x) = max(f(x) + g(rx), g(rx)) -> not associative
-    check_associativity("f", {x}, {max(f_call_0 + g_call, g_call)},
+    check_associativity("f", { x }, { max(f_call_0 + g_call, g_call) },
                         false, {});
 
     // f(x) = max(f(x) + g(rx), f(x) - 3) -> f(x) + max(g(rx) - 3)
-    check_associativity("f", {x}, {max(f_call_0 + g_call, f_call_0 - 3)},
-                        true, {{x + y, 0, {"x", f_call_0}, {"y", max(g_call, -3)}}});
+    check_associativity("f", { x }, { max(f_call_0 + g_call, f_call_0 - 3) },
+                        true, { { x + y, 0, { "x", f_call_0 }, { "y", max(g_call, -3) } } });
 
     // f(x) = f(x) - g(rx) -> Is associative given that the merging operator is +
-    check_associativity("f", {x}, {f_call_0 - g_call},
-                        true, {{x + y, 0, {"x", f_call_0}, {"y", g_call}}});
+    check_associativity("f", { x }, { f_call_0 - g_call },
+                        true, { { x + y, 0, { "x", f_call_0 }, { "y", g_call } } });
 
     // f(x) = min(4, g(rx)) -> trivially associative
-    check_associativity("f", {x}, {min(4, g_call)},
-                        true, {{y, make_const(Int(32), 0), {"", Expr()}, {"y", min(g_call, 4)}}});
+    check_associativity("f", { x }, { min(4, g_call) },
+                        true, { { y, make_const(Int(32), 0), { "", Expr() }, { "y", min(g_call, 4) } } });
 
     // f(x) = f(x) -> associative but doesn't really make any sense, so we'll treat it as non-associative
-    check_associativity("f", {x}, {f_call_0},
+    check_associativity("f", { x }, { f_call_0 },
                         false, {});
 
     std::cout << "Associativity test passed" << std::endl;
 }
-
-
 }
 }

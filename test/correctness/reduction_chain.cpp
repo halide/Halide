@@ -12,12 +12,11 @@ int main(int argc, char **argv) {
     f1(x, y) = 1;
     f2(x, y) = 2;
 
-
     g(x, y) = 0;
-    g(x, x) = g(x, x-1) + g(x, x+1) + f0(x, x);
-    g(y, y) = g(y-1, y) + g(y+1, y) + f1(y, y);
-    g(x, x) = g(x, x-1) + g(x, x+1) + f2(x, x);
-    out(x, y) = g(x-1, y-1) + g(x+1, y+1);
+    g(x, x) = g(x, x - 1) + g(x, x + 1) + f0(x, x);
+    g(y, y) = g(y - 1, y) + g(y + 1, y) + f1(y, y);
+    g(x, x) = g(x, x - 1) + g(x, x + 1) + f2(x, x);
+    out(x, y) = g(x - 1, y - 1) + g(x + 1, y + 1);
 
     g.store_root().compute_at(out, x);
     f0.store_at(out, x).compute_at(g, x);

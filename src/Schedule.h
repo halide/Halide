@@ -90,7 +90,9 @@ public:
     /** Construct an empty LoopLevel, which is interpreted as
      * 'inline'. This is a special LoopLevel value that implies
      * that a function should be inlined away */
-    LoopLevel() : func_name(""), var_name(""), is_rvar(false) {}
+    LoopLevel()
+        : func_name(""), var_name(""), is_rvar(false) {
+    }
 
     /** Return the Func name. Asserts if the LoopLevel is_root() or is_inline(). */
     EXPORT std::string func() const;
@@ -123,7 +125,9 @@ public:
     /** Check if two loop levels are exactly the same. */
     EXPORT bool operator==(const LoopLevel &other) const;
 
-    bool operator!=(const LoopLevel &other) const { return !(*this == other); }
+    bool operator!=(const LoopLevel &other) const {
+        return !(*this == other);
+    }
 };
 
 namespace Internal {
@@ -134,12 +138,15 @@ struct ReductionVariable;
 struct Split {
     std::string old_var, outer, inner;
     Expr factor;
-    bool exact; // Is it required that the factor divides the extent
-                // of the old var. True for splits of RVars. Forces
-                // tail strategy to be GuardWithIf.
+    bool exact;  // Is it required that the factor divides the extent
+    // of the old var. True for splits of RVars. Forces
+    // tail strategy to be GuardWithIf.
     TailStrategy tail;
 
-    enum SplitType {SplitVar = 0, RenameVar, FuseVars, PurifyRVar};
+    enum SplitType { SplitVar = 0,
+                     RenameVar,
+                     FuseVars,
+                     PurifyRVar };
 
     // If split_type is Rename, then this is just a renaming of the
     // old_var to the outer and not a split. The inner var should
@@ -155,10 +162,18 @@ struct Split {
     // split, it joins the outer and inner into the old_var.
     SplitType split_type;
 
-    bool is_rename() const {return split_type == RenameVar;}
-    bool is_split() const {return split_type == SplitVar;}
-    bool is_fuse() const {return split_type == FuseVars;}
-    bool is_purify() const {return split_type == PurifyRVar;}
+    bool is_rename() const {
+        return split_type == RenameVar;
+    }
+    bool is_split() const {
+        return split_type == SplitVar;
+    }
+    bool is_fuse() const {
+        return split_type == FuseVars;
+    }
+    bool is_purify() const {
+        return split_type == PurifyRVar;
+    }
 };
 
 struct Dim {
@@ -166,11 +181,17 @@ struct Dim {
     ForType for_type;
     DeviceAPI device_api;
 
-    enum Type {PureVar = 0, PureRVar, ImpureRVar};
+    enum Type { PureVar = 0,
+                PureRVar,
+                ImpureRVar };
     Type dim_type;
 
-    bool is_pure() const {return (dim_type == PureVar) || (dim_type == PureRVar);}
-    bool is_rvar() const {return (dim_type == PureRVar) || (dim_type == ImpureRVar);}
+    bool is_pure() const {
+        return (dim_type == PureVar) || (dim_type == PureRVar);
+    }
+    bool is_rvar() const {
+        return (dim_type == PureRVar) || (dim_type == ImpureRVar);
+    }
     bool is_parallel() const {
         return (for_type == ForType::Parallel ||
                 for_type == ForType::GPUBlock ||
@@ -206,9 +227,12 @@ class Schedule {
     IntrusivePtr<ScheduleContents> contents;
 
 public:
-
-    Schedule(IntrusivePtr<ScheduleContents> c) : contents(c) {}
-    Schedule(const Schedule &other) : contents(other.contents) {}
+    Schedule(IntrusivePtr<ScheduleContents> c)
+        : contents(c) {
+    }
+    Schedule(const Schedule &other)
+        : contents(other.contents) {
+    }
     EXPORT Schedule();
 
     /** Return a deep copy of this Schedule. It recursively deep copies all called
@@ -323,7 +347,6 @@ public:
      * Schedule. */
     void mutate(IRMutator *);
 };
-
 }
 }
 

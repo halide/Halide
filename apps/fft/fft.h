@@ -3,11 +3,11 @@
 
 #include <algorithm>
 #include <limits>
-#include <vector>
 #include <string>
+#include <vector>
 
-#include "complex.h"
 #include "Halide.h"
+#include "complex.h"
 
 // This is an optional extra description for the details of computing an FFT.
 struct Fft2dDesc {
@@ -47,8 +47,8 @@ struct Fft2dDesc {
 //   X = fft2d_c2c(x, N0, N1, -1);
 //   x = fft2d_c2c(X, N0, N1, 1) / (N0 * N1);
 ComplexFunc fft2d_c2c(ComplexFunc x, int N0, int N1, int sign,
-                      const Halide::Target& target,
-                      const Fft2dDesc& desc = Fft2dDesc());
+                      const Halide::Target &target,
+                      const Fft2dDesc &desc = Fft2dDesc());
 
 // Compute the N0 x N1 2D complex DFT of the first 2 dimensions of a real valued
 // function r. The first 2 dimensions of r should be defined on at least [0, N0)
@@ -56,14 +56,14 @@ ComplexFunc fft2d_c2c(ComplexFunc x, int N0, int N1, int sign,
 // has dimensions N0 x N1 / 2 + 1 due to the conjugate symmetry of real DFTs.
 // There is no normalization.
 ComplexFunc fft2d_r2c(Halide::Func r, int N0, int N1,
-                      const Halide::Target& target,
-                      const Fft2dDesc& desc = Fft2dDesc());
+                      const Halide::Target &target,
+                      const Fft2dDesc &desc = Fft2dDesc());
 
 // Compute the real valued N0 x N1 2D inverse DFT of dimensions 0, 1 of c. Note
 // that the transform domain has dimensions N0 x N1 / 2 + 1 due to the conjugate
 // symmetry of real DFTs. There is no normalization.
 Halide::Func fft2d_c2r(ComplexFunc c, int N0, int N1,
-                       const Halide::Target& target,
-                       const Fft2dDesc& desc = Fft2dDesc());
+                       const Halide::Target &target,
+                       const Fft2dDesc &desc = Fft2dDesc());
 
 #endif

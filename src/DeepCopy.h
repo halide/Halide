@@ -17,7 +17,6 @@ namespace Internal {
   * deep-copied versions of 'outputs' and 'env' */
 std::pair<std::vector<Function>, std::map<std::string, Function>> deep_copy(
     const std::vector<Function> &outputs, const std::map<std::string, Function> &env);
-
 }
 }
 

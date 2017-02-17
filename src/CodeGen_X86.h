@@ -23,7 +23,6 @@ public:
     CodeGen_X86(Target);
 
 protected:
-
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
@@ -50,7 +49,7 @@ protected:
     void visit(const Select *);
     // @}
 };
-
-}}
+}
+}
 
 #endif

@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 using namespace Halide;
 
@@ -23,14 +23,16 @@ public:
     int errors_occurred;
     int warnings_occurred;
 
-    MyCustomErrorReporter() : errors_occurred(0), warnings_occurred(0) {}
+    MyCustomErrorReporter()
+        : errors_occurred(0), warnings_occurred(0) {
+    }
 
-    void warning(const char* msg) {
+    void warning(const char *msg) {
         printf("Custom warning: %s\n", msg);
         warnings_occurred++;
     }
 
-    void error(const char* msg) {
+    void error(const char *msg) {
         printf("Custom error: %s\n", msg);
         errors_occurred++;
 

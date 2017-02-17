@@ -16,8 +16,10 @@ namespace {
 
 class FindParameterDependencies : public IRGraphVisitor {
 public:
-    FindParameterDependencies() { }
-    ~FindParameterDependencies() { }
+    FindParameterDependencies() {
+    }
+    ~FindParameterDependencies() {
+    }
 
     void visit_function(const Function &function) {
         function.accept(this);
@@ -64,7 +66,6 @@ public:
         }
     }
 
-
     void visit(const Load *load) {
         if (load->param.defined()) {
             record(load->param);
@@ -85,17 +86,15 @@ public:
         info.type = parameter.type();
 
         if (parameter.is_buffer()) {
-            internal_error << "Buffer parameter " << parameter.name() <<
-                " encountered in computed_cached computation.\n" <<
-                "Computations which depend on buffer parameters " <<
-                "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for buffer.\n";
+            internal_error << "Buffer parameter " << parameter.name() << " encountered in computed_cached computation.\n"
+                           << "Computations which depend on buffer parameters "
+                           << "cannot be scheduled compute_cached.\n"
+                           << "Use memoize_tag to provide cache key information for buffer.\n";
         } else if (info.type.is_handle()) {
-            internal_error << "Handle parameter " << parameter.name() <<
-                " encountered in computed_cached computation.\n" <<
-                "Computations which depend on handle parameters " <<
-                "cannot be scheduled compute_cached.\n" <<
-                "Use memoize_tag to provide cache key information for handle.\n";
+            internal_error << "Handle parameter " << parameter.name() << " encountered in computed_cached computation.\n"
+                           << "Computations which depend on handle parameters "
+                           << "cannot be scheduled compute_cached.\n"
+                           << "Use memoize_tag to provide cache key information for handle.\n";
         } else {
             info.size_expr = info.type.bytes();
             info.value_expr = Internal::Variable::make(info.type, parameter.name(), parameter);
@@ -182,20 +181,19 @@ class KeyInfo {
 #if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
         Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(UInt(8), key_name, index, Buffer<>(), Parameter(), const_true())},
+                               { Load::make(UInt(8), key_name, index, Buffer<>(), Parameter(), const_true()) },
                                Call::PureIntrinsic);
         Expr src = StringImm::make(value);
-        Expr copy_size = (int32_t)value.size();
+        Expr copy_size = (int32_t) value.size();
 
         return Evaluate::make(Call::make(UInt(8), Call::copy_memory,
-                                         {dest, src, copy_size}, Call::Intrinsic));
+                                         { dest, src, copy_size }, Call::Intrinsic));
     }
 #endif
 
 public:
-  KeyInfo(const Function &function, const std::string &name)
-        : top_level_name(name), function_name(function.name())
-    {
+    KeyInfo(const Function &function, const std::string &name)
+        : top_level_name(name), function_name(function.name()) {
         dependencies.visit_function(function);
         size_t size_so_far = 0;
 
@@ -210,7 +208,7 @@ public:
         if (needed_alignment > 1) {
             size_so_far = (size_so_far + needed_alignment - 1) & ~(needed_alignment - 1);
         }
-        key_size_expr = (int32_t)size_so_far;
+        key_size_expr = (int32_t) size_so_far;
 
         for (const DependencyKeyInfoPair &i : dependencies.dependency_info) {
             key_size_expr += i.second.size_expr;
@@ -219,7 +217,9 @@ public:
 
     // Return the number of bytes needed to store the cache key
     // for the target function. Make sure it takes 4 bytes in cache key.
-    Expr key_size() { return cast<int32_t>(key_size_expr); };
+    Expr key_size() {
+        return cast<int32_t>(key_size_expr);
+    };
 
     // Code to fill in the Allocation named key_name with the byte of
     // the key. The Allocation is guaranteed to be 1d, of type uint8_t
@@ -232,7 +232,7 @@ public:
         // In code below, casts to vec type is done because stores to
         // the buffer can be unaligned.
 
-        Expr top_level_name_size = (int32_t)top_level_name.size();
+        Expr top_level_name_size = (int32_t) top_level_name.size();
         writes.push_back(Store::make(key_name,
                                      Cast::make(Int(32), top_level_name_size),
                                      (index / Int(32).bytes()), Parameter(),
@@ -249,7 +249,7 @@ public:
             alignment++;
         }
 
-        Expr name_size = (int32_t)function_name.size();
+        Expr name_size = (int32_t) function_name.size();
         writes.push_back(Store::make(key_name,
                                      Cast::make(Int(32), name_size),
                                      (index / Int(32).bytes())));
@@ -273,7 +273,7 @@ public:
         index += Handle().bytes();
 
         // Halide compilation is not threadsafe anyway...
-        static std::atomic<int> memoize_instance {0};
+        static std::atomic<int> memoize_instance{ 0 };
         writes.push_back(Store::make(key_name,
                                      memoize_instance++,
                                      (index / Int(32).bytes()),
@@ -312,7 +312,7 @@ public:
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true())},
+                                  { Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true()) },
                                   Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -335,7 +335,7 @@ public:
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true())},
+                                  { Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true()) },
                                   Call::PureIntrinsic));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
@@ -354,7 +354,6 @@ public:
         return Evaluate::make(Call::make(Int(32), "halide_memoization_cache_store", args, Call::Extern));
     }
 };
-
 }
 
 // Inject caching structure around memoized realizations.
@@ -364,11 +363,12 @@ public:
     const std::string &top_level_name;
     const std::vector<Function> &outputs;
 
-  InjectMemoization(const std::map<std::string, Function> &e, const std::string &name,
-                    const std::vector<Function> &outputs) :
-    env(e), top_level_name(name), outputs(outputs) {}
-private:
+    InjectMemoization(const std::map<std::string, Function> &e, const std::string &name,
+                      const std::vector<Function> &outputs)
+        : env(e), top_level_name(name), outputs(outputs) {
+    }
 
+private:
     using IRMutator::visit;
 
     void visit(const Realize *op) {
@@ -409,13 +409,12 @@ private:
                                                    Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
                                                    mutated_body);
             Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
-                                                                   Call::make(Int(32), "halide_error_out_of_memory", { }, Call::Extern)),
+                                                                   Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern)),
                                                   cache_miss_marker);
 
             Stmt cache_lookup = LetStmt::make(cache_result_name,
                                               key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name),
                                               cache_lookup_check);
-
 
             BufferBuilder builder;
             builder.dimensions = f.dimensions();
@@ -433,7 +432,7 @@ private:
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
             Stmt cache_key_alloc =
-                Allocate::make(cache_key_name, UInt(8), {key_info.key_size()},
+                Allocate::make(cache_key_name, UInt(8), { key_info.key_size() },
                                const_true(), generate_key);
 
             stmt = Realize::make(op->name, op->types, op->bounds, op->condition, cache_key_alloc);
@@ -488,7 +487,8 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
 class RewriteMemoizedAllocations : public IRMutator {
 public:
     RewriteMemoizedAllocations(const std::map<std::string, Function> &e)
-        : env(e) {}
+        : env(e) {
+    }
 
 private:
     const std::map<std::string, Function> &env;
@@ -554,10 +554,10 @@ private:
                     }
                 }
             }
-      }
+        }
 
-      // If any part of the match failed, do default mutator action.
-      IRMutator::visit(call);
+        // If any part of the match failed, do default mutator action.
+        IRMutator::visit(call);
     }
 
     void visit(const LetStmt *let) {
@@ -591,6 +591,5 @@ Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> 
 
     return rewriter.mutate(s);
 }
-
 }
 }

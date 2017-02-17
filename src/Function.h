@@ -5,13 +5,13 @@
  * Defines the internal representation of a halide function and related classes
  */
 
+#include "Buffer.h"
+#include "Definition.h"
 #include "Expr.h"
 #include "IntrusivePtr.h"
 #include "Parameter.h"
-#include "Schedule.h"
 #include "Reduction.h"
-#include "Definition.h"
-#include "Buffer.h"
+#include "Schedule.h"
 
 #include <map>
 
@@ -24,39 +24,66 @@ struct FunctionContents;
 /** An argument to an extern-defined Func. May be a Function, Buffer,
  * ImageParam or Expr. */
 struct ExternFuncArgument {
-    enum ArgType {UndefinedArg = 0, FuncArg, BufferArg, ExprArg, ImageParamArg};
+    enum ArgType { UndefinedArg = 0,
+                   FuncArg,
+                   BufferArg,
+                   ExprArg,
+                   ImageParamArg };
     ArgType arg_type;
     Internal::IntrusivePtr<Internal::FunctionContents> func;
     Buffer<> buffer;
     Expr expr;
     Internal::Parameter image_param;
 
-    ExternFuncArgument(Internal::IntrusivePtr<Internal::FunctionContents> f): arg_type(FuncArg), func(f) {}
+    ExternFuncArgument(Internal::IntrusivePtr<Internal::FunctionContents> f)
+        : arg_type(FuncArg), func(f) {
+    }
 
     template<typename T>
-    ExternFuncArgument(Buffer<T> b): arg_type(BufferArg), buffer(b) {}
-    ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
-    ExternFuncArgument(int e): arg_type(ExprArg), expr(e) {}
-    ExternFuncArgument(float e): arg_type(ExprArg), expr(e) {}
+    ExternFuncArgument(Buffer<T> b)
+        : arg_type(BufferArg), buffer(b) {
+    }
+    ExternFuncArgument(Expr e)
+        : arg_type(ExprArg), expr(e) {
+    }
+    ExternFuncArgument(int e)
+        : arg_type(ExprArg), expr(e) {
+    }
+    ExternFuncArgument(float e)
+        : arg_type(ExprArg), expr(e) {
+    }
 
-    ExternFuncArgument(Internal::Parameter p) : arg_type(ImageParamArg), image_param(p) {
+    ExternFuncArgument(Internal::Parameter p)
+        : arg_type(ImageParamArg), image_param(p) {
         // Scalar params come in via the Expr constructor.
         internal_assert(p.is_buffer());
     }
-    ExternFuncArgument() : arg_type(UndefinedArg) {}
+    ExternFuncArgument()
+        : arg_type(UndefinedArg) {
+    }
 
-    bool is_func() const {return arg_type == FuncArg;}
-    bool is_expr() const {return arg_type == ExprArg;}
-    bool is_buffer() const {return arg_type == BufferArg;}
-    bool is_image_param() const {return arg_type == ImageParamArg;}
-    bool defined() const {return arg_type != UndefinedArg;}
+    bool is_func() const {
+        return arg_type == FuncArg;
+    }
+    bool is_expr() const {
+        return arg_type == ExprArg;
+    }
+    bool is_buffer() const {
+        return arg_type == BufferArg;
+    }
+    bool is_image_param() const {
+        return arg_type == ImageParamArg;
+    }
+    bool defined() const {
+        return arg_type != UndefinedArg;
+    }
 };
 
 /** An enum to specify calling convention for extern stages. */
 enum class NameMangling {
-    Default,   ///< Match whatever is specified in the Target
-    C,         ///< No name mangling
-    CPlusPlus, ///< C++ name mangling
+    Default,  ///< Match whatever is specified in the Target
+    C,  ///< No name mangling
+    CPlusPlus,  ///< C++ name mangling
 };
 
 namespace Internal {
@@ -143,7 +170,7 @@ public:
 
     /** Get the number of outputs. */
     int outputs() const {
-        return (int)output_types().size();
+        return (int) output_types().size();
     }
 
     /** Get the types of the outputs. */
@@ -273,7 +300,7 @@ public:
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
     // @}
 };
-
-}}
+}
+}
 
 #endif

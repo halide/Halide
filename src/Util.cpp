@@ -1,22 +1,22 @@
 #include "Util.h"
-#include "Introspection.h"
 #include "Debug.h"
 #include "Error.h"
-#include <sstream>
-#include <map>
+#include "Introspection.h"
 #include <atomic>
-#include <mutex>
-#include <string>
 #include <iomanip>
+#include <map>
+#include <mutex>
+#include <sstream>
+#include <string>
 
 #ifdef _MSC_VER
 #include <io.h>
 #else
-#include <unistd.h>
 #include <stdlib.h>
+#include <unistd.h>
 #endif
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #ifdef __linux__
 #define CAN_GET_RUNNING_PROGRAM_NAME
@@ -43,42 +43,42 @@ std::string get_env_variable(char const *env_var_name) {
         return "";
     }
 
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     char lvl[128];
     size_t read = 0;
     if (getenv_s(&read, lvl, env_var_name) != 0) read = 0;
     if (read) return std::string(lvl);
-    #else
+#else
     char *lvl = getenv(env_var_name);
     if (lvl) return std::string(lvl);
-    #endif
+#endif
 
     return "";
 }
 
 string running_program_name() {
-    #ifndef CAN_GET_RUNNING_PROGRAM_NAME
+#ifndef CAN_GET_RUNNING_PROGRAM_NAME
+    return "";
+#else
+    string program_name;
+    char path[PATH_MAX] = { 0 };
+    uint32_t size = sizeof(path);
+#if defined(__linux__)
+    ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
+#elif defined(__APPLE__)
+    ssize_t len = ::_NSGetExecutablePath(path, &size);
+#endif
+    if (len != -1) {
+#if defined(__linux__)
+        path[len] = '\0';
+#endif
+        string tmp = std::string(path);
+        program_name = tmp.substr(tmp.find_last_of("/") + 1);
+    } else {
         return "";
-    #else
-        string program_name;
-        char path[PATH_MAX] = { 0 };
-        uint32_t size = sizeof(path);
-        #if defined(__linux__)
-            ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
-        #elif defined(__APPLE__)
-            ssize_t len = ::_NSGetExecutablePath(path, &size);
-        #endif
-        if (len != -1) {
-            #if defined(__linux__)
-                path[len] = '\0';
-            #endif
-            string tmp = std::string(path);
-            program_name = tmp.substr(tmp.find_last_of("/") + 1);
-        } else {
-            return "";
-        }
-        return program_name;
-    #endif
+    }
+    return program_name;
+#endif
 }
 
 namespace {
@@ -155,8 +155,6 @@ string unique_name(const std::string &prefix) {
     return sanitized + "$" + std::to_string(count);
 }
 
-
-
 bool starts_with(const string &str, const string &prefix) {
     if (str.size() < prefix.size()) return false;
     for (size_t i = 0; i < prefix.size(); i++) {
@@ -169,7 +167,7 @@ bool ends_with(const string &str, const string &suffix) {
     if (str.size() < suffix.size()) return false;
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off+i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) return false;
     }
     return true;
 }
@@ -225,11 +223,11 @@ std::string extract_namespaces(const std::string &name, std::vector<std::string>
 }
 
 bool file_exists(const std::string &name) {
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     return _access(name.c_str(), 0) == 0;
-    #else
+#else
     return ::access(name.c_str(), F_OK) == 0;
-    #endif
+#endif
 }
 
 void assert_file_exists(const std::string &name) {
@@ -241,11 +239,11 @@ void assert_no_file_exists(const std::string &name) {
 }
 
 void file_unlink(const std::string &name) {
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     _unlink(name.c_str());
-    #else
+#else
     ::unlink(name.c_str());
-    #endif
+#endif
 }
 
 void ensure_no_file_exists(const std::string &name) {
@@ -256,32 +254,32 @@ void ensure_no_file_exists(const std::string &name) {
 }
 
 void dir_rmdir(const std::string &name) {
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     BOOL r = RemoveDirectoryA(name.c_str());
     internal_assert(r != 0) << "Unable to remove dir: " << name << ":" << GetLastError() << "\n";
-    #else
+#else
     int r = ::rmdir(name.c_str());
     internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
-    #endif
+#endif
 }
 
 FileStat file_stat(const std::string &name) {
-    #ifdef _MSC_VER
+#ifdef _MSC_VER
     struct _stat a;
     if (_stat(name.c_str(), &a) != 0) {
         user_error << "Could not stat " << name << "\n";
     }
-    #else
+#else
     struct stat a;
     if (::stat(name.c_str(), &a) != 0) {
         user_error << "Could not stat " << name << "\n";
     }
-    #endif
-    return {static_cast<uint64_t>(a.st_size),
-            static_cast<uint32_t>(a.st_mtime),
-            static_cast<uint32_t>(a.st_uid),
-            static_cast<uint32_t>(a.st_gid),
-            static_cast<uint32_t>(a.st_mode)};
+#endif
+    return { static_cast<uint64_t>(a.st_size),
+             static_cast<uint32_t>(a.st_mtime),
+             static_cast<uint32_t>(a.st_uid),
+             static_cast<uint32_t>(a.st_gid),
+             static_cast<uint32_t>(a.st_mode) };
 }
 
 std::string file_make_temp(const std::string &prefix, const std::string &suffix) {
@@ -289,7 +287,7 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
                     prefix.find("\\") == string::npos &&
                     suffix.find("/") == string::npos &&
                     suffix.find("\\") == string::npos);
-    #ifdef _WIN32
+#ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
     char tmp_path[MAX_PATH], tmp_file[MAX_PATH];
@@ -299,7 +297,7 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     ret = GetTempFileNameA(tmp_path, prefix.c_str(), 0, tmp_file);
     internal_assert(ret != 0);
     return std::string(tmp_file);
-    #else
+#else
     std::string templ = "/tmp/" + prefix + "XXXXXX" + suffix;
     // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
     std::vector<char> buf(templ.size() + 1);
@@ -308,16 +306,16 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     internal_assert(fd != -1) << "Unable to create temp file for (" << &buf[0] << ")\n";
     close(fd);
     return std::string(&buf[0]);
-    #endif
+#endif
 }
 
 std::string dir_make_temp() {
-    #ifdef _WIN32
+#ifdef _WIN32
     char tmp_path[MAX_PATH];
     DWORD ret = GetTempPathA(MAX_PATH, tmp_path);
     internal_assert(ret != 0);
     // There's no direct API to do this in Windows;
-    // our clunky-but-adequate approach here is to use 
+    // our clunky-but-adequate approach here is to use
     // CoCreateGuid() to create a probably-unique name.
     // Add a limit on the number of tries just in case.
     for (int tries = 0; tries < 100; ++tries) {
@@ -334,8 +332,8 @@ std::string dir_make_temp() {
              << guid.Data3
              << std::setw(2);
         for (int i = 0; i < 8; i++) {
-            name << (int)guid.Data4[i];
-        }       
+            name << (int) guid.Data4[i];
+        }
         std::string dir = std::string(tmp_path) + std::string(name.str());
         BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
         if (result) {
@@ -350,31 +348,29 @@ std::string dir_make_temp() {
     }
     internal_assert(false) << "Unable to create temp directory.\n";
     return "";
-    #else
+#else
     std::string templ = "/tmp/XXXXXX";
     // Copy into a temporary buffer, since mkdtemp modifies the buffer in place.
     std::vector<char> buf(templ.size() + 1);
     strcpy(&buf[0], templ.c_str());
-    char* result = mkdtemp(&buf[0]);
+    char *result = mkdtemp(&buf[0]);
     internal_assert(result != nullptr) << "Unable to create temp directory.\n";
     return std::string(result);
-    #endif
+#endif
 }
 
 bool add_would_overflow(int bits, int64_t a, int64_t b) {
     int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
     int64_t min_val = -max_val - 1;
-    return
-        ((b > 0 && a > max_val - b) || // (a + b) > max_val, rewritten to avoid overflow
-         (b < 0 && a < min_val - b));  // (a + b) < min_val, rewritten to avoid overflow
+    return ((b > 0 && a > max_val - b) ||  // (a + b) > max_val, rewritten to avoid overflow
+            (b < 0 && a < min_val - b));  // (a + b) < min_val, rewritten to avoid overflow
 }
 
 bool sub_would_overflow(int bits, int64_t a, int64_t b) {
     int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
     int64_t min_val = -max_val - 1;
-    return
-        ((b < 0 && a > max_val + b) || // (a - b) > max_val, rewritten to avoid overflow
-         (b > 0 && a < min_val + b));  // (a - b) < min_val, rewritten to avoid overflow
+    return ((b < 0 && a > max_val + b) ||  // (a - b) > max_val, rewritten to avoid overflow
+            (b > 0 && a < min_val + b));  // (a - b) < min_val, rewritten to avoid overflow
 }
 
 bool mul_would_overflow(int bits, int64_t a, int64_t b) {
@@ -388,13 +384,12 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b) {
         // Do the multiplication as a uint64, for which overflow is
         // well defined, then cast the bits back to int64 to get
         // multiplication modulo 2^64.
-        int64_t ab = (int64_t)((uint64_t)a)*((uint64_t)b);
+        int64_t ab = (int64_t)((uint64_t) a) * ((uint64_t) b);
         // The first two clauses catch overflow mod 2^bits, assuming
         // no 64-bit overflow occurs, and the third clause catches
         // 64-bit overflow.
         return ab < min_val || ab > max_val || (ab / a != b);
     }
 }
-
 }
 }

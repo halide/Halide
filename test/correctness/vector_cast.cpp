@@ -1,15 +1,17 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <future>
+#include <stdio.h>
 
 using namespace Halide;
 
 template<typename A>
 const char *string_of_type();
 
-#define DECL_SOT(name)                                          \
-    template<>                                                  \
-    const char *string_of_type<name>() {return #name;}
+#define DECL_SOT(name)                   \
+    template<>                           \
+    const char *string_of_type<name>() { \
+        return #name;                    \
+    }
 
 DECL_SOT(uint8_t);
 DECL_SOT(int8_t);
@@ -20,26 +22,26 @@ DECL_SOT(int32_t);
 DECL_SOT(float);
 DECL_SOT(double);
 
-template <typename T>
+template<typename T>
 bool is_type_supported(int vec_width, const Target &target) {
     return target.supports_type(type_of<T>().with_lanes(vec_width));
 }
 
-template <>
+template<>
 bool is_type_supported<float>(int vec_width, const Target &target) {
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.features_any_of({ Target::HVX_64, Target::HVX_128 })) {
         return vec_width == 1;
     } else {
         return true;
     }
 }
 
-template <>
+template<>
 bool is_type_supported<double>(int vec_width, const Target &target) {
     if (target.has_feature(Target::OpenCL) &&
         !target.has_feature(Target::CLDoubles)) {
         return false;
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (target.features_any_of({ Target::HVX_64, Target::HVX_128 })) {
         return vec_width == 1;
     } else {
         return true;
@@ -59,7 +61,7 @@ bool test(int vec_width, const Target &target) {
     Buffer<A> input(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            input(x, y) = (A)((rand()&0xffff)*0.1);
+            input(x, y) = (A)((rand() & 0xffff) * 0.1);
         }
     }
 
@@ -72,7 +74,7 @@ bool test(int vec_width, const Target &target) {
         Var xo, xi;
         f.gpu_tile(x, xo, xi, 64);
     } else {
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.features_any_of({ Target::HVX_64, Target::HVX_128 })) {
             // TODO: Non-native vector widths hang the compiler here.
             //f.hexagon();
         }
@@ -97,13 +99,13 @@ bool test(int vec_width, const Target &target) {
             bool ok = ((B)(input(x, y)) == output(x, y));
             if (!ok) {
                 fprintf(stderr, "%s x %d -> %s x %d failed\n",
-                       string_of_type<A>(), vec_width,
-                       string_of_type<B>(), vec_width);
+                        string_of_type<A>(), vec_width,
+                        string_of_type<B>(), vec_width);
                 fprintf(stderr, "At %d %d, %f -> %f instead of %f\n",
-                       x, y,
-                       (double)(input(x, y)),
-                       (double)(output(x, y)),
-                       (double)((B)(input(x, y))));
+                        x, y,
+                        (double) (input(x, y)),
+                        (double) (output(x, y)),
+                        (double) ((B)(input(x, y))));
                 return false;
             }
         }
@@ -126,24 +128,23 @@ bool test_all(int vec_width, const Target &target) {
     return success;
 }
 
-
 int main(int argc, char **argv) {
 
-    // We don't test this on windows, because float-to-int conversions
-    // on windows use _ftol2, which has its own unique calling
-    // convention, and older LLVMs (e.g. pnacl) don't do it right so
-    // you get clobbered registers.
-    #ifdef WIN32
+// We don't test this on windows, because float-to-int conversions
+// on windows use _ftol2, which has its own unique calling
+// convention, and older LLVMs (e.g. pnacl) don't do it right so
+// you get clobbered registers.
+#ifdef WIN32
     printf("Not testing on windows\n");
     return 0;
-    #endif
+#endif
 
     Target target = get_jit_target_from_environment();
 
     // We only test power-of-two vector widths for now
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    for (int vec_width = 1; vec_width <= 64; vec_width*=2) {
+    for (int vec_width = 1; vec_width <= 64; vec_width *= 2) {
         futures.push_back(pool.async([=]() {
             bool success = true;
             success = success && test_all<float>(vec_width, target);

@@ -97,7 +97,6 @@ int main(int argc, char **argv) {
         check(input, 3, W + 5, 7, H + 10);
     }
 
-
     // Define a pipeline that uses an input image in an extern stage
     // and an internal stage with different bounds required for each.
     {

@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Func f;
     Var x;
 
-    int cases[] = {3, 7, 24, 5, 37, 91, 33, 14};
+    int cases[] = { 3, 7, 24, 5, 37, 91, 33, 14 };
 
     f(x) = select(x == 0, cases[0],
                   x == 1, cases[1],

@@ -1,5 +1,7 @@
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 struct work {
     work *next_job;
@@ -9,7 +11,9 @@ struct work {
     uint8_t *closure;
     int active_workers;
     int exit_status;
-    bool running() { return next < max || active_workers > 0; }
+    bool running() {
+        return next < max || active_workers > 0;
+    }
 };
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
@@ -55,12 +59,11 @@ struct work_queue_t {
     bool running() {
         return !shutdown;
     }
-
 };
 WEAK work_queue_t work_queue;
 
 WEAK int default_do_task(void *user_context, halide_task_t f, int idx,
-                        uint8_t *closure) {
+                         uint8_t *closure) {
     return f(user_context, idx, closure);
 }
 
@@ -94,7 +97,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
     // job is complete. If I'm a lowly worker thread, I should stay in
     // this function as long as the work queue is running.
     while (owned_job != NULL ? owned_job->running()
-           : work_queue.running()) {
+                             : work_queue.running()) {
 
         if (work_queue.jobs == NULL) {
             if (owned_job) {
@@ -154,7 +157,6 @@ WEAK void worker_thread_already_locked(work *owned_job) {
     }
 }
 
-
 WEAK void worker_thread(void *) {
     halide_mutex_lock(&work_queue.mutex);
     worker_thread_already_locked(NULL);
@@ -198,12 +200,12 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
 
     // Make the job.
     work job;
-    job.f = f;               // The job should call this function. It takes an index and a closure.
+    job.f = f;  // The job should call this function. It takes an index and a closure.
     job.user_context = user_context;
-    job.next = min;          // Start at this index.
-    job.max  = min + size;   // Keep going until one less than this index.
-    job.closure = closure;   // Use this closure.
-    job.exit_status = 0;     // The job hasn't failed yet
+    job.next = min;  // Start at this index.
+    job.max = min + size;  // Keep going until one less than this index.
+    job.closure = closure;  // Use this closure.
+    job.exit_status = 0;  // The job hasn't failed yet
     job.active_workers = 0;  // Nobody is working on this yet
 
     if (!work_queue.jobs && size < work_queue.desired_num_threads) {
@@ -242,8 +244,9 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
     // status of one of the failing jobs (whichever one failed last).
     return job.exit_status;
 }
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal
 
 using namespace Halide::Runtime::Internal;
 
@@ -290,5 +293,4 @@ WEAK void halide_shutdown_thread_pool() {
     halide_cond_destroy(&work_queue.wakeup_b_team);
     work_queue.initialized = false;
 }
-
 }

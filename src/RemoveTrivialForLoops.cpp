@@ -1,7 +1,7 @@
 #include "RemoveTrivialForLoops.h"
+#include "CodeGen_GPU_Dev.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "CodeGen_GPU_Dev.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -50,6 +50,5 @@ class RemoveTrivialForLoops : public IRMutator {
 Stmt remove_trivial_for_loops(Stmt s) {
     return RemoveTrivialForLoops().mutate(s);
 }
-
 }
 }

@@ -5,12 +5,13 @@ using namespace Halide;
 #include <iostream>
 #include <limits>
 
-#include <halide_image_io.h>
 #include <benchmark.h>
+#include <halide_image_io.h>
 
-enum InterpolationType {
-    BOX, LINEAR, CUBIC, LANCZOS
-};
+enum InterpolationType { BOX,
+                         LINEAR,
+                         CUBIC,
+                         LANCZOS };
 
 Expr kernel_box(Expr x) {
     Expr xx = abs(x);
@@ -28,9 +29,9 @@ Expr kernel_cubic(Expr x) {
     Expr xx3 = xx2 * xx;
     float a = -0.5f;
 
-    return select(xx < 1.0f, (a + 2.0f) * xx3 - (a + 3.0f) * xx2 + 1,
-                  select (xx < 2.0f, a * xx3 - 5 * a * xx2 + 8 * a * xx - 4.0f * a,
-                          0.0f));
+    return select(
+        xx < 1.0f, (a + 2.0f) * xx3 - (a + 3.0f) * xx2 + 1,
+        select(xx < 2.0f, a * xx3 - 5 * a * xx2 + 8 * a * xx - 4.0f * a, 0.0f));
 }
 
 Expr sinc(Expr x) {
@@ -38,9 +39,9 @@ Expr sinc(Expr x) {
 }
 
 Expr kernel_lanczos(Expr x) {
-    Expr value = sinc(x) * sinc(x/3);
-    value = select(x == 0.0f, 1.0f, value); // Take care of singularity at zero
-    value = select(x > 3 || x < -3, 0.0f, value); // Clamp to zero out of bounds
+    Expr value = sinc(x) * sinc(x / 3);
+    value = select(x == 0.0f, 1.0f, value);  // Take care of singularity at zero
+    value = select(x > 3 || x < -3, 0.0f, value);  // Clamp to zero out of bounds
     return value;
 }
 
@@ -50,13 +51,10 @@ struct KernelInfo {
     Expr (*kernel)(Expr);
 };
 
-static KernelInfo kernelInfo[] = {
-    { "box", 0.5f, kernel_box },
-    { "linear", 1.0f, kernel_linear },
-    { "cubic", 2.0f, kernel_cubic },
-    { "lanczos", 3.0f, kernel_lanczos }
-};
-
+static KernelInfo kernelInfo[] = { { "box", 0.5f, kernel_box },
+                                   { "linear", 1.0f, kernel_linear },
+                                   { "cubic", 2.0f, kernel_cubic },
+                                   { "lanczos", 3.0f, kernel_lanczos } };
 
 std::string infile, outfile;
 InterpolationType interpolationType = LINEAR;
@@ -67,15 +65,15 @@ int schedule = 0;
 void parse_commandline(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "-f" && i+1 < argc) {
+        if (arg == "-f" && i + 1 < argc) {
             scaleFactor = atof(argv[++i]);
-        } else if (arg == "-s" && i+1 < argc) {
+        } else if (arg == "-s" && i + 1 < argc) {
             schedule = atoi(argv[++i]);
             if (schedule < 0 || schedule > 3) {
                 fprintf(stderr, "Invalid schedule\n");
                 show_usage = true;
             }
-        } else if (arg == "-t" && i+1 < argc) {
+        } else if (arg == "-t" && i + 1 < argc) {
             arg = argv[++i];
             if (arg == "box") {
                 interpolationType = BOX;
@@ -103,10 +101,11 @@ void parse_commandline(int argc, char **argv) {
 int main(int argc, char **argv) {
     parse_commandline(argc, argv);
     if (infile.empty() || outfile.empty() || show_usage) {
-        fprintf(stderr,
-                "Usage:\n"
-                "\t./resample [-f scalefactor] [-s schedule] [-t box|linear|cubic|lanczos] in.png out.png\n"
-                "\t\tSchedules: 0=default 1=vectorized 2=parallel 3=vectorized+parallel\n");
+        fprintf(stderr, "Usage:\n"
+                        "\t./resample [-f scalefactor] [-s schedule] [-t "
+                        "box|linear|cubic|lanczos] in.png out.png\n"
+                        "\t\tSchedules: 0=default 1=vectorized 2=parallel "
+                        "3=vectorized+parallel\n");
         return 1;
     }
 
@@ -145,7 +144,8 @@ int main(int argc, char **argv) {
     // Perform separable resizing
     Func resized_x("resized_x");
     Func resized_y("resized_y");
-    resized_x(x, y, c) = sum(kernelx(x, domx) * cast<float>(clamped(domx + beginx, y, c)));
+    resized_x(x, y, c) =
+        sum(kernelx(x, domx) * cast<float>(clamped(domx + beginx, y, c)));
     resized_y(x, y, c) = sum(kernely(y, domy) * resized_x(x, domy + beginy, c));
 
     Func final("final");
@@ -183,9 +183,7 @@ int main(int argc, char **argv) {
     Buffer<float> out(out_width, out_height, 3);
     input.set(in_png);
     printf("Resampling '%s' from %dx%d to %dx%d using %s interpolation\n",
-           infile.c_str(),
-           in_png.width(), in_png.height(),
-           out_width, out_height,
+           infile.c_str(), in_png.width(), in_png.height(), out_width, out_height,
            kernelInfo[interpolationType].name);
 
     double min = benchmark(10, 1, [&]() { final.realize(out); });

@@ -15,8 +15,8 @@ using std::vector;
 using std::string;
 
 namespace {
-string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
-string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
+string thread_names[] = { "__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w" };
+string block_names[] = { "__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w" };
 
 string get_thread_name(int index) {
     internal_assert(index >= 0 && index < 4);
@@ -29,7 +29,7 @@ string get_block_name(int index) {
 }
 
 class CountGPUBlocksThreads : public IRVisitor {
-    string prefix; // Producer name + stage
+    string prefix;  // Producer name + stage
 
     using IRVisitor::visit;
 
@@ -63,7 +63,9 @@ class CountGPUBlocksThreads : public IRVisitor {
     }
 
 public:
-    CountGPUBlocksThreads(const string &p) : prefix(p), nblocks(0), nthreads(0) {}
+    CountGPUBlocksThreads(const string &p)
+        : prefix(p), nblocks(0), nthreads(0) {
+    }
     int nblocks;
     int nthreads;
 };
@@ -155,7 +157,6 @@ class CanonicalizeGPUVars : public IRMutator {
         }
     }
 
-
     void visit(const LetStmt *op) {
         Expr value = mutate(op->value);
         Stmt body = mutate(op->body);
@@ -196,13 +197,12 @@ class CanonicalizeGPUVars : public IRMutator {
     }
 };
 
-} // anonymous namespace
+}  // anonymous namespace
 
 Stmt canonicalize_gpu_vars(Stmt s) {
     CanonicalizeGPUVars canonicalizer;
     s = canonicalizer.mutate(s);
     return s;
 }
-
 }
 }

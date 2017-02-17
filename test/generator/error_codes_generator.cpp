@@ -4,9 +4,8 @@ namespace {
 
 class ErrorCodes : public Halide::Generator<ErrorCodes> {
 public:
-    ImageParam input { Int(32), 2, "input" };
-    Param<int> f_explicit_bound {"f_explicit_bound", 1, 0, 64};
-
+    ImageParam input{ Int(32), 2, "input" };
+    Param<int> f_explicit_bound{ "f_explicit_bound", 1, 0, 64 };
 
     Func build() {
         target.set(get_target().without_feature(Target::LargeBuffers));
@@ -20,6 +19,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<ErrorCodes> register_my_gen{"error_codes"};
+Halide::RegisterGenerator<ErrorCodes> register_my_gen{ "error_codes" };
 
 }  // namespace

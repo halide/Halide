@@ -22,6 +22,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<GpuOnly> register_my_gen{"gpu_only"};
+Halide::RegisterGenerator<GpuOnly> register_my_gen{ "gpu_only" };
 
 }  // namespace

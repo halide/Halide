@@ -21,14 +21,14 @@ int main(int argc, char **argv) {
 
     Func f;
     Var x, y;
-    f(x, y) = call_counter(sin(x*3 + y));
+    f(x, y) = call_counter(sin(x * 3 + y));
 
     // f contains values in [-1, 1]. Now compute a convolution over f
     // only where f is positive. If f is negative, we'll skip the work
     // and write a zero instead.
     Func blur;
     RDom r(-10, 20, -10, 20);
-    blur(x, y) = select(f(x, y) > 0, sum(f(x+r.x, y+r.y)), 0);
+    blur(x, y) = select(f(x, y) > 0, sum(f(x + r.x, y + r.y)), 0);
 
     call_count = 0;
     blur.realize(100, 100);

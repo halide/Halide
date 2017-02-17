@@ -23,7 +23,7 @@ int main() {
     RDom r(0, 5, "r");
     Func g;
     Expr coordx = clamp(x + r, 0, input.width() - 1);
-    g(x, y, c) = cast<float>( sum(input(coordx, y, c)) / sum(r) * 255.0f );
+    g(x, y, c) = cast<float>(sum(input(coordx, y, c)) / sum(r) * 255.0f);
 
     // Schedule f and g to compute in separate passes on the GPU.
     g.bound(c, 0, 4).glsl(x, y, c);
@@ -37,8 +37,8 @@ int main() {
         for (int y = 0; y < result.height(); y++) {
             for (int x = 0; x < result.width(); x++) {
                 float temp = 0.0f;
-                for (int r = 0; r < 5; r++){
-                    temp += input(std::min(x+r, input.width()-1), y, c);
+                for (int r = 0; r < 5; r++) {
+                    temp += input(std::min(x + r, input.width() - 1), y, c);
                 }
                 float correct = temp / 10.0f * 255.0f;
                 if (fabs(result(x, y, c) - correct) > 1e-3) {

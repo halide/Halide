@@ -1,8 +1,8 @@
+#include "Halide.h"
+#include "HalideRuntime.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "Halide.h"
-#include "HalideRuntime.h"
 
 using namespace Halide;
 
@@ -55,10 +55,10 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t
         }
         in->elem_size = out->elem_size;
     } else if (out->host) {
-        assert(stage < static_cast<int32_t>(sizeof(call_count_staged)/sizeof(call_count_staged[0])));
+        assert(stage < static_cast<int32_t>(sizeof(call_count_staged) / sizeof(call_count_staged[0])));
         call_count_staged[stage]++;
         Halide::Runtime::Buffer<uint8_t> out_buf(*out), in_buf(*in);
-        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) {out = in + val;}, in_buf);
+        out_buf.for_each_value([&](uint8_t &out, uint8_t &in) { out = in + val; }, in_buf);
     }
     return 0;
 }
@@ -166,10 +166,10 @@ int main(int argc, char **argv) {
 
     {
         Func count_calls_23;
-        count_calls_23.define_extern("count_calls_with_arg", {cast<uint8_t>(23)}, UInt(8), 2);
+        count_calls_23.define_extern("count_calls_with_arg", { cast<uint8_t>(23) }, UInt(8), 2);
 
         Func count_calls_42;
-        count_calls_42.define_extern("count_calls_with_arg", {cast<uint8_t>(42)}, UInt(8), 2);
+        count_calls_42.define_extern("count_calls_with_arg", { cast<uint8_t>(42) }, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -195,10 +195,10 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls_val1;
-        count_calls_val1.define_extern("count_calls_with_arg", {val1}, UInt(8), 2);
+        count_calls_val1.define_extern("count_calls_with_arg", { val1 }, UInt(8), 2);
 
         Func count_calls_val2;
-        count_calls_val2.define_extern("count_calls_with_arg", {val2}, UInt(8), 2);
+        count_calls_val2.define_extern("count_calls_with_arg", { val2 }, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -224,7 +224,6 @@ int main(int argc, char **argv) {
         val2.set(57);
         Buffer<uint8_t> out6 = f.realize(256, 256);
 
-
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
                 assert(out1(i, j) == (23 + 42));
@@ -243,7 +242,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", { cast<uint8_t>(val) }, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -269,7 +268,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg", {memoize_tag(cast<uint8_t>(val))}, UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", { memoize_tag(cast<uint8_t>(val)) }, UInt(8), 2);
 
         Func f;
         Var x, y;
@@ -297,7 +296,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", { cast<uint8_t>(val) }, UInt(8), 2);
         Func f, g, h;
         Var x;
 
@@ -328,7 +327,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", { cast<uint8_t>(val) }, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -344,7 +343,6 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> out0 = out[0];
         Buffer<int32_t> out1 = out[1];
 
-
         for (int32_t i = 0; i < 100; i++) {
             for (int32_t j = 0; j < 100; j++) {
                 assert(out0(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
@@ -354,7 +352,6 @@ int main(int argc, char **argv) {
         out = g.realize(128, 128);
         out0 = out[0];
         out1 = out[1];
-
 
         for (int32_t i = 0; i < 100; i++) {
             for (int32_t j = 0; j < 100; j++) {
@@ -371,7 +368,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", { cast<uint8_t>(val) }, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -384,7 +381,7 @@ int main(int argc, char **argv) {
 
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
-            val.set((float)r);
+            val.set((float) r);
             Buffer<uint8_t> out1 = g.realize(128, 128);
 
             for (int32_t i = 0; i < 100; i++) {
@@ -406,7 +403,7 @@ int main(int argc, char **argv) {
 
         call_count_with_arg = 0;
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", { cast<uint8_t>(val) }, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -419,7 +416,7 @@ int main(int argc, char **argv) {
 
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
-            val.set((float)r);
+            val.set((float) r);
             Buffer<uint8_t> out1 = g.realize(128, 128);
 
             for (int32_t i = 0; i < 100; i++) {
@@ -442,7 +439,7 @@ int main(int argc, char **argv) {
         call_count_with_arg = 0;
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
-            val.set((float)r);
+            val.set((float) r);
             Buffer<uint8_t> out1 = g.realize(128, 128);
 
             for (int32_t i = 0; i < 100; i++) {
@@ -463,7 +460,7 @@ int main(int argc, char **argv) {
         Param<float> val;
 
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg_parallel", {cast<uint8_t>(val)}, UInt(8), 3);
+        count_calls.define_extern("count_calls_with_arg_parallel", { cast<uint8_t>(val) }, UInt(8), 3);
 
         Func f;
         Var x, y;
@@ -489,7 +486,7 @@ int main(int argc, char **argv) {
 
         // TODO work out an assertion on call counts here.
         for (int i = 0; i < 8; i++) {
-          fprintf(stderr, "Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
+            fprintf(stderr, "Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
 
         // Return cache size to default.
@@ -519,7 +516,7 @@ int main(int argc, char **argv) {
 
         f.compute_root();
         for (int i = 0; i < 3; i++) {
-          stage[i].compute_root();
+            stage[i].compute_root();
         }
         stage[3].compute_root().memoize();
         Func output;
@@ -529,18 +526,7 @@ int main(int argc, char **argv) {
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
-            }
-        }
-
-        for (int i = 0; i < 4; i++) {
-          fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
-        }
-
-        result = output.realize(128, 128);
-        for (int32_t i = 0; i < 128; i++) {
-            for (int32_t j = 0; j < 128; j++) {
-              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
             }
         }
 
@@ -548,6 +534,16 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
+        result = output.realize(128, 128);
+        for (int32_t i = 0; i < 128; i++) {
+            for (int32_t j = 0; j < 128; j++) {
+                assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+            }
+        }
+
+        for (int i = 0; i < 4; i++) {
+            fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
+        }
     }
 
     {
@@ -555,7 +551,7 @@ int main(int argc, char **argv) {
         Param<float> val;
 
         Func count_calls;
-        count_calls.define_extern("count_calls_with_arg", {cast<uint8_t>(val)}, UInt(8), 2);
+        count_calls.define_extern("count_calls_with_arg", { cast<uint8_t>(val) }, UInt(8), 2);
 
         Func f;
         Var x, y, xi, yi;
@@ -586,7 +582,7 @@ int main(int argc, char **argv) {
 
                 for (int32_t i = 0; i < 16; i++) {
                     for (int32_t j = 0; j < 16; j++) {
-                      assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                        assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                         assert(out1(i, j) == i);
                     }
                 }
@@ -601,7 +597,7 @@ int main(int argc, char **argv) {
 
                     for (int32_t i = 0; i < 16; i++) {
                         for (int32_t j = 0; j < 16; j++) {
-                          assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
+                            assert(out0(i, j) == (uint8_t)(3 * (23 + trial) + i + (i - 1) + (i + 1)));
                             assert(out1(i, j) == i);
                         }
                     }
@@ -612,8 +608,6 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr, "In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
-
-
     }
 
     fprintf(stderr, "Success!\n");

@@ -25,6 +25,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<EmbedImage> register_my_gen{"embed_image"};
+Halide::RegisterGenerator<EmbedImage> register_my_gen{ "embed_image" };
 
 }  // namespace

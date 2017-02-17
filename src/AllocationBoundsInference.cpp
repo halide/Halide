@@ -1,7 +1,7 @@
 #include "AllocationBoundsInference.h"
+#include "Bounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Bounds.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -105,7 +105,7 @@ class AllocationInference : public IRMutator {
             internal_assert(max_var.type() == max.type());
 
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
-                                        {f_args[i], f.name(), min_var, max_var, b[i].min, b[i].max},
+                                        { f_args[i], f.name(), min_var, max_var, b[i].min, b[i].max },
                                         Call::Extern);
 
             if (bound.min.defined()) {
@@ -119,12 +119,11 @@ class AllocationInference : public IRMutator {
             stmt = LetStmt::make(min_name, min, stmt);
             stmt = LetStmt::make(max_name, max, stmt);
         }
-
     }
 
 public:
-    AllocationInference(const map<string, Function> &e, const FuncValueBounds &fb) :
-        env(e), func_bounds(fb) {
+    AllocationInference(const map<string, Function> &e, const FuncValueBounds &fb)
+        : env(e), func_bounds(fb) {
         // Figure out which buffers are touched by extern stages
         for (map<string, Function>::const_iterator iter = e.begin();
              iter != e.end(); ++iter) {
@@ -149,6 +148,5 @@ Stmt allocation_bounds_inference(Stmt s,
     s = inf.mutate(s);
     return s;
 }
-
 }
 }

@@ -20,7 +20,7 @@ HalideExtern_1(int, call_count, int);
 void check(Buffer<int> im) {
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
-            int correct = 99*3;
+            int correct = 99 * 3;
             if (im(x, y) != correct) {
                 printf("Value at %d %d was %d instead of %d\n",
                        x, y, im(x, y), correct);
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
         f(x, y) = call_count(f(x, y));
 
         Func g("g");
-        g(x, y) = f(x, y) + f(x, y-1) + f(x, y-2);
+        g(x, y) = f(x, y) + f(x, y - 1) + f(x, y - 2);
 
         f.store_root().compute_at(g, y);
 
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         f(x, y) = call_count(f(x, y));
 
         Func g("g");
-        g(x, y) = f(x, y) + f(x, y-1) + f(x, y-2);
+        g(x, y) = f(x, y) + f(x, y - 1) + f(x, y - 2);
 
         f.store_root().compute_at(g, y);
 
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         f.update(1);
 
         Func g("g");
-        g(x, y) = f(x, y) + f(x, y-1) + f(x, y-2);
+        g(x, y) = f(x, y) + f(x, y - 1) + f(x, y - 2);
 
         f.store_root().compute_at(g, y);
 

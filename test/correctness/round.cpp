@@ -5,7 +5,7 @@ using namespace Halide;
 
 Var x;
 
-template <class T>
+template<class T>
 bool test(Expr e, const char *funcname, int vector_width, int N, Buffer<T> &input, T *result) {
     Func f;
     f(x) = e;
@@ -25,12 +25,9 @@ bool test(Expr e, const char *funcname, int vector_width, int N, Buffer<T> &inpu
     return ok;
 }
 
-template <class T>
+template<class T>
 bool test(Expr e, const char *funcname, int N, Buffer<T> &input, T *result) {
-    return test(e, funcname, 1, N, input, result)
-        && test(e, funcname, 2, N, input, result)
-        && test(e, funcname, 4, N, input, result)
-        && test(e, funcname, 8, N, input, result);
+    return test(e, funcname, 1, N, input, result) && test(e, funcname, 2, N, input, result) && test(e, funcname, 4, N, input, result) && test(e, funcname, 8, N, input, result);
 }
 
 int main(int argc, char **argv) {

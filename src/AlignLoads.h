@@ -15,7 +15,6 @@ namespace Internal {
  * load, and then slice the original load out of the aligned
  * vectors. */
 Stmt align_loads(Stmt s, int alignment);
-
 }
 }
 

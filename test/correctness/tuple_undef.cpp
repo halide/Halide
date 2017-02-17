@@ -8,7 +8,9 @@ class CountStores : public IRVisitor {
 public:
     int count;
 
-    CountStores() : count(0) {}
+    CountStores()
+        : count(0) {
+    }
 
 protected:
     using IRVisitor::visit;
@@ -20,8 +22,11 @@ protected:
 
 class CheckStoreCount : public IRMutator {
     int correct;
+
 public:
-    CheckStoreCount(int correct) : correct(correct) {}
+    CheckStoreCount(int correct)
+        : correct(correct) {
+    }
     using IRMutator::mutate;
 
     Stmt mutate(Stmt s) {
@@ -56,7 +61,7 @@ int main(int argc, char **argv) {
         // Pre-fill with unlikely values so we can verify that undef bits are untouched.
         a.fill(A);
         b.fill(B);
-        f.realize({a, b});
+        f.realize({ a, b });
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x + y;
@@ -76,7 +81,7 @@ int main(int argc, char **argv) {
         Func f("f");
 
         f(x, y) = Tuple(x, y);
-        f(x, y) = Tuple(undef<int>(), select(x < 20, 20*f(x, y)[0], undef<int>()));
+        f(x, y) = Tuple(undef<int>(), select(x < 20, 20 * f(x, y)[0], undef<int>()));
 
         // There should be three stores: the undef store to the 1st element of
         // the Tuple in the update definition should have been removed.
@@ -84,11 +89,11 @@ int main(int argc, char **argv) {
 
         a.fill(A);
         b.fill(B);
-        f.realize({a, b});
+        f.realize({ a, b });
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = x;
-                int correct_b = (x < 20) ? 20*x : y;
+                int correct_b = (x < 20) ? 20 * x : y;
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
@@ -103,16 +108,16 @@ int main(int argc, char **argv) {
         Var x("x"), y("y");
         Func f("f"), g("g");
 
-        f(x, y) = {0, 0};
+        f(x, y) = { 0, 0 };
 
         RDom r(0, 10);
         Expr arg_0 = clamp(select(r.x < 2, 13, undef<int>()), 0, 100);
         Expr arg_1 = clamp(select(r.x < 2, 23, undef<int>()), 0, 100);
-        f(arg_0, arg_1) = {f(arg_0, arg_1)[0] + 10, f(arg_0, arg_1)[1] + 5};
+        f(arg_0, arg_1) = { f(arg_0, arg_1)[0] + 10, f(arg_0, arg_1)[1] + 5 };
 
         a.fill(A);
         b.fill(B);
-        f.realize({a, b});
+        f.realize({ a, b });
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
                 int correct_a = (x == 13) && (y == 23) ? 20 : 0;
@@ -140,7 +145,7 @@ int main(int argc, char **argv) {
         // Pre-fill with unlikely values so we can verify that undef bits are untouched.
         a.fill(A);
         b.fill(B);
-        f.realize({a, b});
+        f.realize({ a, b });
     }
 
     printf("Success!\n");

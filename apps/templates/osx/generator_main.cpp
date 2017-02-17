@@ -8,5 +8,5 @@ using namespace std;
 
 int main(int argc, char **argv) {
 
-  return generate_filter_main(argc, argv, std::cerr);
+    return generate_filter_main(argc, argv, std::cerr);
 }

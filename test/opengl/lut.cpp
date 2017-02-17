@@ -19,10 +19,10 @@ int test_lut1d() {
     Buffer<uint8_t> input(8, 8, 3);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
-            float v = (1.0f/16.0f) + (float)x/8.0f;
+            float v = (1.0f / 16.0f) + (float) x / 8.0f;
             input(x, y, 0) = (uint8_t)(v * 255.0f);
-            input(x, y, 1) = (uint8_t)((1.0f - v)*255.0f);
-            input(x, y, 2) = (uint8_t)((v > 0.5 ? 1.0 : 0.0)*255.0f);
+            input(x, y, 1) = (uint8_t)((1.0f - v) * 255.0f);
+            input(x, y, 2) = (uint8_t)((v > 0.5 ? 1.0 : 0.0) * 255.0f);
         }
     }
 
@@ -30,12 +30,12 @@ int test_lut1d() {
     Buffer<float> lut1d(8, 1, 3);
     for (int c = 0; c != 3; ++c) {
         for (int i = 0; i != 8; ++i) {
-            lut1d(i, 0, c) = (float)(1 + i);
+            lut1d(i, 0, c) = (float) (1 + i);
         }
     }
 
     Func f0("f");
-    Expr e = cast<int>(8.0f * cast<float>(input(x, y, c))/255.0f);
+    Expr e = cast<int>(8.0f * cast<float>(input(x, y, c)) / 255.0f);
 
     f0(x, y, c) = lut1d(clamp(e, 0, 7), 0, c);
 
@@ -51,15 +51,15 @@ int test_lut1d() {
             for (int x = 0; x != out0.extent(0); ++x) {
                 float expected = std::numeric_limits<float>::infinity();
                 switch (c) {
-                    case 0:
-                        expected = (float)(1 + x);
-                        break;
-                    case 1:
-                        expected = (float)(8 - x);
-                        break;
-                    case 2:
-                        expected = x > 3 ? 8.0f : 1.0f;
-                        break;
+                case 0:
+                    expected = (float) (1 + x);
+                    break;
+                case 1:
+                    expected = (float) (8 - x);
+                    break;
+                case 2:
+                    expected = x > 3 ? 8.0f : 1.0f;
+                    break;
                 }
                 float result = out0(x, y, c);
 

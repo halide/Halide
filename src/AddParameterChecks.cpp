@@ -1,8 +1,8 @@
 #include "AddParameterChecks.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 #include "Substitute.h"
 #include "Target.h"
-#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -100,7 +100,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
         // Upgrade the types to 64-bit versions for the error call
         Type wider = p.value.type().with_bits(64);
         p.limit_value = cast(wider, p.limit_value);
-        p.value       = cast(wider, p.value);
+        p.value = cast(wider, p.value);
 
         string error_call_name = "halide_error_param";
 
@@ -121,7 +121,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
         }
 
         Expr error = Call::make(Int(32), error_call_name,
-                                {p.param_name, p.value, p.limit_value},
+                                { p.param_name, p.value, p.limit_value },
                                 Call::Extern);
 
         s = Block::make(AssertStmt::make(p.condition, error), s);
@@ -129,8 +129,5 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 
     return s;
 }
-
-
-
 }
 }

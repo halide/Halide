@@ -21,7 +21,6 @@ Stmt storage_flattening(Stmt s,
                         const std::vector<Function> &outputs,
                         const std::map<std::string, Function> &env,
                         const Target &target);
-
 }
 }
 

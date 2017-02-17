@@ -1,14 +1,14 @@
 #include <iostream>
 
-#include "CodeGen_Posix.h"
+#include "CSE.h"
 #include "CodeGen_Internal.h"
-#include "LLVM_Headers.h"
+#include "CodeGen_Posix.h"
+#include "Debug.h"
 #include "IR.h"
 #include "IROperator.h"
-#include "Debug.h"
 #include "IRPrinter.h"
+#include "LLVM_Headers.h"
 #include "Simplify.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,8 +20,8 @@ using std::pair;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix(Target t) :
-  CodeGen_LLVM(t) {
+CodeGen_Posix::CodeGen_Posix(Target t)
+    : CodeGen_LLVM(t) {
 }
 
 Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
@@ -65,7 +65,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     if (!is_one(size_check)) {
         create_assertion(codegen(size_check),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
-                                    {name, total_size, max_size}, Call::Extern));
+                                    { name, total_size, max_size }, Call::Extern));
     }
 
     total_size = simplify(total_size);
@@ -108,7 +108,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // of the stack, so we only need this for heap allocations.
         Value *padding = ConstantInt::get(llvm_size->getType(), allocation_padding(type));
         llvm_size = builder->CreateAdd(llvm_size, padding);
-
 
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
@@ -165,7 +164,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
             // Handles are stored as uint64s
             llvm::Type *t =
-                llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);   
+                llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);
             allocation.ptr = create_alloca_at_entry(t, stack_size, false, name);
             allocation.stack_bytes = stack_bytes;
         }
@@ -195,7 +194,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             Value *call = builder->CreateCall(malloc_fn, args);
 
             // Fix the type to avoid pointless bitcasts later
-            call = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());    
+            call = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());
 
             allocation.ptr = call;
         }
@@ -280,5 +279,5 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 void CodeGen_Posix::visit(const Free *stmt) {
     free_allocation(stmt->name);
 }
-
-}}
+}
+}

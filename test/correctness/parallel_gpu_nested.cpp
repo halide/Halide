@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     Param<int> k;
     k.set(3);
 
-    f(x, y, z) = x*y+z*k+1;
+    f(x, y, z) = x * y + z * k + 1;
 
     Var xi, yi;
     f.gpu_tile(x, y, xi, yi, 16, 16);
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {
             for (int z = 0; z < 64; z++) {
-                if (im(x, y, z) != x*y+z*3+1) {
+                if (im(x, y, z) != x * y + z * 3 + 1) {
                     printf("im(%d, %d, %d) = %d\n", x, y, z, im(x, y, z));
                     return -1;
                 }

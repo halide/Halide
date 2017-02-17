@@ -41,7 +41,8 @@ class IsBlockUniform : public IRVisitor {
 public:
     bool result;
 
-    IsBlockUniform() : result(true) {
+    IsBlockUniform()
+        : result(true) {
     }
 };
 }
@@ -82,7 +83,8 @@ public:
     bool result;
     const std::string &buffer;
 
-    IsBufferConstant(const std::string &b) : result(true), buffer(b) {
+    IsBufferConstant(const std::string &b)
+        : result(true), buffer(b) {
     }
 };
 }
@@ -93,5 +95,5 @@ bool CodeGen_GPU_Dev::is_buffer_constant(Stmt kernel,
     kernel.accept(&v);
     return v.result;
 }
-
-}}
+}
+}

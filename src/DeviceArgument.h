@@ -5,8 +5,8 @@
  * Defines helpers for passing arguments to separate devices, such as GPUs.
  */
 
-#include "IR.h"
 #include "Closure.h"
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -59,27 +59,29 @@ struct DeviceArgument {
     bool read;
     bool write;
 
-    DeviceArgument() :
-        is_buffer(false),
-        dimensions(0),
-        size(0),
-        packed_index(0),
-        read(false),
-        write(false) {}
+    DeviceArgument()
+        : is_buffer(false),
+          dimensions(0),
+          size(0),
+          packed_index(0),
+          read(false),
+          write(false) {
+    }
 
     DeviceArgument(const std::string &_name,
                    bool _is_buffer,
                    Type _type,
                    uint8_t _dimensions,
-                   size_t _size = 0) :
-        name(_name),
-        is_buffer(_is_buffer),
-        dimensions(_dimensions),
-        type(_type),
-        size(_size),
-        packed_index(0),
-        read(_is_buffer),
-        write(_is_buffer) {}
+                   size_t _size = 0)
+        : name(_name),
+          is_buffer(_is_buffer),
+          dimensions(_dimensions),
+          type(_type),
+          size(_size),
+          packed_index(0),
+          read(_is_buffer),
+          write(_is_buffer) {
+    }
 };
 
 /** A Closure modified to inspect GPU-specific memory accesses, and
@@ -96,7 +98,7 @@ protected:
     void visit(const For *loop);
     void visit(const Call *op);
 };
-
-}}
+}
+}
 
 #endif

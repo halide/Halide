@@ -1,14 +1,14 @@
-#include <stdio.h>
 #include "Halide.h"
 #include <iostream>
 #include <limits>
+#include <stdio.h>
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 
 typedef Expr (*cast_maker_t)(Expr);
 
-template <typename source_t, typename target_t>
+template<typename source_t, typename target_t>
 void test_saturating() {
     source_t source_min = std::numeric_limits<source_t>::lowest();
     source_t source_max = std::numeric_limits<source_t>::max();
@@ -17,15 +17,15 @@ void test_saturating() {
     target_t target_max = std::numeric_limits<target_t>::max();
 
     Buffer<source_t> in(7);
-    in(0) = (source_t)0;
-    in(1) = (source_t)1;
+    in(0) = (source_t) 0;
+    in(1) = (source_t) 1;
     // This can intentionally change the value if source_t is unsigned
-    in(2) = (source_t)-1;
-    in(3) = (source_t)source_max;
-    in(4) = (source_t)source_min;
+    in(2) = (source_t) -1;
+    in(3) = (source_t) source_max;
+    in(4) = (source_t) source_min;
     // These two can intentionally change the value if source_t is smaller than target_t
-    in(5) = (source_t)target_min;
-    in(6) = (source_t)target_max;
+    in(5) = (source_t) target_min;
+    in(6) = (source_t) target_max;
 
     Var x;
     Func f;
@@ -42,35 +42,35 @@ void test_saturating() {
 
         target_t correct_result;
         if (source_floating) {
-            double bounded_lower = std::max((double)in(i), (double)target_min);
-            if (bounded_lower >= (double)target_max) {
+            double bounded_lower = std::max((double) in(i), (double) target_min);
+            if (bounded_lower >= (double) target_max) {
                 correct_result = target_max;
             } else {
-                correct_result = (target_t)bounded_lower;
+                correct_result = (target_t) bounded_lower;
             }
         } else if (target_floating) {
-            correct_result = (target_t)std::min((double)in(i), (double)target_max);
+            correct_result = (target_t) std::min((double) in(i), (double) target_max);
         } else if (source_signed == target_signed) {
             if (sizeof(source_t) > sizeof(target_t)) {
-                correct_result = (target_t)std::min(std::max(in(i),
-                                                             (source_t)target_min),
-                                                    (source_t)target_max);
+                correct_result = (target_t) std::min(std::max(in(i),
+                                                              (source_t) target_min),
+                                                     (source_t) target_max);
             } else {
-                correct_result = (target_t)in(i);
+                correct_result = (target_t) in(i);
             }
         } else {
             if (source_signed) {
-                source_t val = std::max(in(i), (source_t)0);
+                source_t val = std::max(in(i), (source_t) 0);
                 if (sizeof(source_t) > sizeof(target_t)) {
-                    correct_result = (target_t)std::min(val, (source_t)target_max);
+                    correct_result = (target_t) std::min(val, (source_t) target_max);
                 } else {
-                    correct_result = (target_t)val;
+                    correct_result = (target_t) val;
                 }
             } else {
                 if (sizeof(source_t) >= sizeof(target_t)) {
-                    correct_result = (target_t)std::min(in(i), (source_t)target_max);
-                } else { // dest is signed, but larger so unsigned source_t guaranteed to fit
-                    correct_result = std::min((target_t)in(i), target_max);
+                    correct_result = (target_t) std::min(in(i), (source_t) target_max);
+                } else {  // dest is signed, but larger so unsigned source_t guaranteed to fit
+                    correct_result = std::min((target_t) in(i), target_max);
                 }
             }
         }
@@ -80,34 +80,34 @@ void test_saturating() {
             !source_floating && (sizeof(source_t) < 8 || source_signed)) {
             int64_t simpler_correct_result;
 
-            simpler_correct_result = std::min(std::max((int64_t)in(i),
-                                                       (int64_t)target_min),
-                                              (int64_t)target_max);
+            simpler_correct_result = std::min(std::max((int64_t) in(i),
+                                                       (int64_t) target_min),
+                                              (int64_t) target_max);
 
-            if (simpler_correct_result != (int64_t)correct_result) {
+            if (simpler_correct_result != (int64_t) correct_result) {
                 std::cout << "Simpler verification failed for index " << i
-			  << " correct_result is " << correct_result
-			  << " correct_result casted to int64_t is " << (int64_t)correct_result
-			  << " simpler_correct_result is " << simpler_correct_result << "\n";
+                          << " correct_result is " << correct_result
+                          << " correct_result casted to int64_t is " << (int64_t) correct_result
+                          << " simpler_correct_result is " << simpler_correct_result << "\n";
                 std::cout << "in(i) " << in(i)
-			  << " target_min " << target_min
-			  << " target_max " << target_max << "\n";
+                          << " target_min " << target_min
+                          << " target_max " << target_max << "\n";
             }
-            assert(simpler_correct_result == (int64_t)correct_result);
+            assert(simpler_correct_result == (int64_t) correct_result);
         }
 
         if (result(i) != correct_result) {
             std::cout << "Match failure at index " << i
-		      << " got " << result(i)
-		      << " expected " << correct_result
-		      << " for input " << in(i) << std::endl;
+                      << " got " << result(i)
+                      << " expected " << correct_result
+                      << " for input " << in(i) << std::endl;
         }
 
         assert(result(i) == correct_result);
     }
 }
 
-template <typename source_t, typename target_t>
+template<typename source_t, typename target_t>
 void test_concise(cast_maker_t cast_maker, bool saturating) {
     source_t source_min = std::numeric_limits<source_t>::min();
     source_t source_max = std::numeric_limits<source_t>::max();
@@ -116,15 +116,15 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
     target_t target_max = std::numeric_limits<target_t>::max();
 
     Buffer<source_t> in(7);
-    in(0) = (source_t)0;
-    in(1) = (source_t)1;
+    in(0) = (source_t) 0;
+    in(1) = (source_t) 1;
     // This can intentionally change the value if source_t is unsigned
-    in(2) = (source_t)-1;
-    in(3) = (source_t)source_max;
-    in(4) = (source_t)source_min;
+    in(2) = (source_t) -1;
+    in(3) = (source_t) source_max;
+    in(4) = (source_t) source_min;
     // These two can intentionally change the value if source_t is smaller than target_t
-    in(5) = (source_t)target_min;
-    in(6) = (source_t)target_max;
+    in(5) = (source_t) target_min;
+    in(6) = (source_t) target_max;
 
     Var x;
     Func f;
@@ -141,33 +141,33 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
         target_t correct_result;
         if (saturating) {
             if (source_floating) {
-                source_t bounded_lower = std::max(in(i), (source_t)target_min);
-                if (bounded_lower >= (source_t)target_max) {
+                source_t bounded_lower = std::max(in(i), (source_t) target_min);
+                if (bounded_lower >= (source_t) target_max) {
                     correct_result = target_max;
                 } else {
-                    correct_result = (target_t)bounded_lower;
+                    correct_result = (target_t) bounded_lower;
                 }
             } else if (source_signed == target_signed) {
                 if (sizeof(source_t) > sizeof(target_t)) {
-                    correct_result = (target_t)std::min(std::max(in(i),
-                                                                 (source_t)target_min),
-                                                        (source_t)target_max);
+                    correct_result = (target_t) std::min(std::max(in(i),
+                                                                  (source_t) target_min),
+                                                         (source_t) target_max);
                 } else {
-                  correct_result = (target_t)in(i);
+                    correct_result = (target_t) in(i);
                 }
             } else {
                 if (source_signed) {
-                    source_t val = std::max(in(i), (source_t)0);
+                    source_t val = std::max(in(i), (source_t) 0);
                     if (sizeof(source_t) > sizeof(target_t)) {
-                        correct_result = (target_t)std::min(val, (source_t)target_max);
+                        correct_result = (target_t) std::min(val, (source_t) target_max);
                     } else {
-                        correct_result = (target_t)val;
+                        correct_result = (target_t) val;
                     }
                 } else {
                     if (sizeof(source_t) >= sizeof(target_t)) {
-                        correct_result = (target_t)std::min(in(i), (source_t)target_max);
-                    } else { // dest is signed, but larger so unsigned source_t guaranteed to fit
-                        correct_result = std::min((target_t)in(i), target_max);
+                        correct_result = (target_t) std::min(in(i), (source_t) target_max);
+                    } else {  // dest is signed, but larger so unsigned source_t guaranteed to fit
+                        correct_result = std::min((target_t) in(i), target_max);
                     }
                 }
             }
@@ -178,32 +178,32 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
                 int64_t simpler_correct_result;
 
                 if (source_floating) {
-                    double bounded_lower = std::max((double)in(i), (double)target_min);
-                    if (bounded_lower >= (double)target_max) {
+                    double bounded_lower = std::max((double) in(i), (double) target_min);
+                    if (bounded_lower >= (double) target_max) {
                         simpler_correct_result = target_max;
                     } else {
-                        simpler_correct_result = (int64_t)bounded_lower;
+                        simpler_correct_result = (int64_t) bounded_lower;
                     }
                 } else {
-                  simpler_correct_result = std::min(std::max((int64_t)in(i),
-                                                             (int64_t)target_min),
-                                                    (int64_t)target_max);
+                    simpler_correct_result = std::min(std::max((int64_t) in(i),
+                                                               (int64_t) target_min),
+                                                      (int64_t) target_max);
                 }
 
-                if (simpler_correct_result != (int64_t)correct_result) {
+                if (simpler_correct_result != (int64_t) correct_result) {
                     std::cout << "Simpler verification failed for index " << i
                               << " correct_result is " << correct_result
-                              << " correct_result casted to int64_t is " << (int64_t)correct_result
+                              << " correct_result casted to int64_t is " << (int64_t) correct_result
                               << " simpler_correct_result is " << simpler_correct_result << "\n";
                     std::cout << "in(i) " << in(i)
                               << " target_min " << target_min
                               << " target_max " << target_max << "\n";
                 }
-                assert(simpler_correct_result == (int64_t)correct_result);
+                assert(simpler_correct_result == (int64_t) correct_result);
             }
 
         } else {
-            correct_result = (target_t)in(i);
+            correct_result = (target_t) in(i);
         }
 
         if (result(i) != correct_result) {
@@ -218,7 +218,7 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
     }
 }
 
-template <typename source_t>
+template<typename source_t>
 void test_one_source_saturating() {
     test_saturating<source_t, int8_t>();
     test_saturating<source_t, uint8_t>();
@@ -236,8 +236,7 @@ void test_one_source_saturating() {
     test_saturating<source_t, double>();
 }
 
-
-template <typename source_t>
+template<typename source_t>
 void test_one_source_concise() {
     test_concise<source_t, int8_t>(i8, false);
     test_concise<source_t, uint8_t>(u8, false);
@@ -260,7 +259,7 @@ void test_one_source_concise() {
     test_concise<source_t, uint64_t>(u64_sat, true);
 }
 
-template <typename source_t>
+template<typename source_t>
 void test_one_source() {
     test_one_source_saturating<source_t>();
     test_one_source_concise<source_t>();

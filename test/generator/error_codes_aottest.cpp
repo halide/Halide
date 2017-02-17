@@ -21,16 +21,16 @@ int main(int argc, char **argv) {
 
     halide_set_error_handler(&my_halide_error);
 
-    buffer_t in = {0}, out = {0};
+    buffer_t in = { 0 }, out = { 0 };
 
-    in.host = (uint8_t *)malloc(64*64*4);
+    in.host = (uint8_t *) malloc(64 * 64 * 4);
     in.elem_size = 4;
     in.extent[0] = 64;
     in.stride[0] = 1;
     in.extent[1] = 64;
     in.stride[1] = 64;
 
-    out.host = (uint8_t *)malloc(64*64*4);
+    out.host = (uint8_t *) malloc(64 * 64 * 4);
     out.elem_size = 4;
     out.extent[0] = 64;
     out.stride[0] = 1;

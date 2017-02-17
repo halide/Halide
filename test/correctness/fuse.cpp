@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Func f, g;
     Var x("x"), y("y");
 
-    Expr e = x*3 + y;
+    Expr e = x * 3 + y;
     f(x, y) = e;
     g(x, y) = e;
 
@@ -23,8 +23,13 @@ int main(int argc, char **argv) {
     // whatever that means.
 
     g.compute_root()
-        .tile(x, y, xo, yo, xi, yi, 3, 5).fuse(xo, yo, y).fuse(xi, yi, x)
-        .tile(x, y, xo, yo, xi, yi, 7, 6).fuse(xo, yo, y).fuse(xi, yi, x).vectorize(y, 4);
+        .tile(x, y, xo, yo, xi, yi, 3, 5)
+        .fuse(xo, yo, y)
+        .fuse(xi, yi, x)
+        .tile(x, y, xo, yo, xi, yi, 7, 6)
+        .fuse(xo, yo, y)
+        .fuse(xi, yi, x)
+        .vectorize(y, 4);
 
     RDom r(-16, 32, -16, 32);
     Func error;
@@ -39,6 +44,3 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
-
-
-

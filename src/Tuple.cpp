@@ -1,10 +1,11 @@
 #include "Tuple.h"
-#include "Func.h"
 #include "Debug.h"
+#include "Func.h"
 
 namespace Halide {
 
-Tuple::Tuple(const FuncRef &f) : exprs(f.size()) {
+Tuple::Tuple(const FuncRef &f)
+    : exprs(f.size()) {
     user_assert(f.size() > 1)
         << "Can't construct a Tuple from a call to Func \""
         << f.function().name() << "\" because it does not return a Tuple.\n";
@@ -12,5 +13,4 @@ Tuple::Tuple(const FuncRef &f) : exprs(f.size()) {
         exprs[i] = f[i];
     }
 }
-
 }

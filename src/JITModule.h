@@ -36,8 +36,12 @@ struct JITModule {
     struct Symbol {
         void *address;
         llvm::Type *llvm_type;
-        Symbol() : address(nullptr), llvm_type(nullptr) {}
-        Symbol(void *address, llvm::Type *llvm_type) : address(address), llvm_type(llvm_type) {}
+        Symbol()
+            : address(nullptr), llvm_type(nullptr) {
+        }
+        Symbol(void *address, llvm::Type *llvm_type)
+            : address(address), llvm_type(llvm_type) {
+        }
     };
 
     EXPORT JITModule();
@@ -126,16 +130,16 @@ struct JITModule {
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
 
 struct JITHandlers {
-    void (*custom_print)(void *, const char *){nullptr};
-    void *(*custom_malloc)(void *, size_t){nullptr};
-    void (*custom_free)(void *, void *){nullptr};
-    int (*custom_do_task)(void *, halide_task, int, uint8_t *){nullptr};
-    int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *){nullptr};
-    void (*custom_error)(void *, const char *){nullptr};
-    int32_t (*custom_trace)(void *, const halide_trace_event_t *){nullptr};
-    void *(*custom_get_symbol)(const char *name){nullptr};
-    void *(*custom_load_library)(const char *name){nullptr};
-    void *(*custom_get_library_symbol)(void *lib, const char *name){nullptr};
+    void (*custom_print)(void *, const char *){ nullptr };
+    void *(*custom_malloc)(void *, size_t){ nullptr };
+    void (*custom_free)(void *, void *){ nullptr };
+    int (*custom_do_task)(void *, halide_task, int, uint8_t *){ nullptr };
+    int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *){ nullptr };
+    void (*custom_error)(void *, const char *){ nullptr };
+    int32_t (*custom_trace)(void *, const halide_trace_event_t *){ nullptr };
+    void *(*custom_get_symbol)(const char *name){ nullptr };
+    void *(*custom_load_library)(const char *name){ nullptr };
+    void *(*custom_get_library_symbol)(void *lib, const char *name){ nullptr };
 };
 
 struct JITUserContext {
@@ -158,7 +162,6 @@ public:
 
     EXPORT static void release_all();
 };
-
 }
 }
 

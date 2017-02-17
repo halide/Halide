@@ -15,21 +15,25 @@ namespace {
 // (NOTE: gcc didn't add proper std::regex support until v4.9;
 // we don't yet require this, hence the hand-rolled replacement.)
 
-bool is_alpha(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); }
+bool is_alpha(char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
 
 // Note that this includes '_'
-bool is_alnum(char c) { return is_alpha(c) || (c == '_') || (c >= '0' && c <= '9'); }
+bool is_alnum(char c) {
+    return is_alpha(c) || (c == '_') || (c >= '0' && c <= '9');
+}
 
 // Basically, a valid C identifier, except:
 //
 // -- initial _ is forbidden (rather than merely "reserved")
 // -- two underscores in a row is also forbidden
-bool is_valid_name(const std::string& n) {
+bool is_valid_name(const std::string &n) {
     if (n.empty()) return false;
     if (!is_alpha(n[0])) return false;
     for (size_t i = 1; i < n.size(); ++i) {
         if (!is_alnum(n[i])) return false;
-        if (n[i] == '_' && n[i-1] == '_') return false;
+        if (n[i] == '_' && n[i - 1] == '_') return false;
     }
     return true;
 }
@@ -43,7 +47,7 @@ std::string compute_base_path(const std::string &output_dir,
     return base_path;
 }
 
-std::string get_extension(const std::string& def, const GeneratorBase::EmitOptions &options) {
+std::string get_extension(const std::string &def, const GeneratorBase::EmitOptions &options) {
     auto it = options.substitutions.find(def);
     if (it != options.substitutions.end()) {
         return it->second;
@@ -55,7 +59,7 @@ Outputs compute_outputs(const Target &target,
                         const std::string &base_path,
                         const GeneratorBase::EmitOptions &options) {
     const bool is_windows_coff = target.os == Target::Windows &&
-                                !target.has_feature(Target::MinGW);
+                                 !target.has_feature(Target::MinGW);
     Outputs output_files;
     if (options.emit_o) {
         if (is_windows_coff) {
@@ -104,34 +108,34 @@ Argument to_argument(const Internal::Parameter &param) {
         max = param.get_max_value();
     }
     return Argument(param.name(),
-        param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-        param.type(), param.dimensions(), def, min, max);
+                    param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
+                    param.type(), param.dimensions(), def, min, max);
 }
 
 std::pair<int64_t, int64_t> rational_approximation_helper(double d, int max_depth) {
     const int64_t int_part = static_cast<int64_t>(std::floor(d));
     const double float_part = d - int_part;
     if (max_depth == 0 || float_part == 0.0) {
-        return {int_part, 1};
+        return { int_part, 1 };
     }
 
-    const auto r = rational_approximation_helper(1.0/float_part, max_depth - 1);
+    const auto r = rational_approximation_helper(1.0 / float_part, max_depth - 1);
     const int64_t num = r.second;
     const int64_t den = r.first;
     if (mul_would_overflow(64, int_part, den) ||
         add_would_overflow(64, num, int_part * den)) {
-        return {0, 0};
+        return { 0, 0 };
     }
 
-    return {num + int_part * den, den};
+    return { num + int_part * den, den };
 }
-    
+
 std::pair<int64_t, int64_t> rational_approximation(double d) {
     // Special-case non-finite numbers.
-    if (std::isnan(d)) return {0, 0};
+    if (std::isnan(d)) return { 0, 0 };
 
     const int64_t sign = (d < 0) ? -1 : 1;
-    if (!std::isfinite(d)) return {sign, 0};
+    if (!std::isfinite(d)) return { sign, 0 };
 
     d = std::abs(d);
 
@@ -141,10 +145,10 @@ std::pair<int64_t, int64_t> rational_approximation(double d) {
     // overflow our rational type, and because they're evaluated
     // backwards it's not easy to stop at the point which will not
     // trigger overflow. Use binary search to find the right depth.
-    std::pair<int64_t, int64_t> best {0, 0};
-    int lo = 0, hi = 64; 
+    std::pair<int64_t, int64_t> best{ 0, 0 };
+    int lo = 0, hi = 64;
     while (lo + 1 < hi) {
-        int mid = (lo + hi)/2;
+        int mid = (lo + hi) / 2;
         auto next = rational_approximation_helper(d, mid);
         if (next.first == 0 && next.second == 0) {
             hi = mid;
@@ -153,8 +157,8 @@ std::pair<int64_t, int64_t> rational_approximation(double d) {
             best = next;
         }
     }
-    
-    return {best.first * sign, best.second};
+
+    return { best.first * sign, best.second };
 }
 
 std::vector<Type> parse_halide_type_list(const std::string &types) {
@@ -197,7 +201,7 @@ void ValueTracker::track_values(const std::string &name, const std::vector<Expr>
     std::vector<std::vector<Expr>> &history = values_history[name];
     if (history.empty()) {
         for (size_t i = 0; i < values.size(); ++i) {
-            history.push_back({values[i]});
+            history.push_back({ values[i] });
         }
         return;
     }
@@ -257,20 +261,21 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
 
 class StubEmitter {
 public:
-    StubEmitter(std::ostream &dest, 
+    StubEmitter(std::ostream &dest,
                 const std::string &generator_name,
-                const std::vector<Internal::GeneratorParamBase *>& generator_params,
-                const std::vector<Internal::GeneratorInputBase *>& inputs,
-                const std::vector<Internal::GeneratorOutputBase *>& outputs) 
-        : stream(dest), 
-          generator_name(generator_name), 
-          generator_params(filter_params(generator_params, false)), 
-          schedule_params(filter_params(generator_params, true)), 
-          inputs(inputs), 
+                const std::vector<Internal::GeneratorParamBase *> &generator_params,
+                const std::vector<Internal::GeneratorInputBase *> &inputs,
+                const std::vector<Internal::GeneratorOutputBase *> &outputs)
+        : stream(dest),
+          generator_name(generator_name),
+          generator_params(filter_params(generator_params, false)),
+          schedule_params(filter_params(generator_params, true)),
+          inputs(inputs),
           outputs(outputs) {
     }
 
     void emit();
+
 private:
     std::ostream &stream;
     const std::string generator_name;
@@ -278,9 +283,9 @@ private:
     const std::vector<Internal::GeneratorParamBase *> schedule_params;
     const std::vector<Internal::GeneratorInputBase *> inputs;
     const std::vector<Internal::GeneratorOutputBase *> outputs;
-    int indent_level{0};
+    int indent_level{ 0 };
 
-    std::vector<Internal::GeneratorParamBase *> filter_params(const std::vector<Internal::GeneratorParamBase *> &in, 
+    std::vector<Internal::GeneratorParamBase *> filter_params(const std::vector<Internal::GeneratorParamBase *> &in,
                                                               bool is_schedule_params) {
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto p : in) {
@@ -349,7 +354,7 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
     for (auto p : v) {
         if (p->is_looplevel_param()) continue;
         stream << indent() << "if (" << p->name << " != " << p->get_default_value() << ") "
-                        << "m[\"" << p->name << "\"] = " << p->call_to_string(p->name) << ";\n";
+               << "m[\"" << p->name << "\"] = " << p->call_to_string(p->name) << ";\n";
     }
     stream << indent() << "return m;\n";
     indent_level--;
@@ -363,7 +368,7 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
         for (auto p : v) {
             if (!p->is_looplevel_param()) continue;
             stream << indent() << "if (" << p->name << " != " << p->get_default_value() << ") "
-                            << "m[\"" << p->name << "\"] = " << p->name << ";\n";
+                   << "m[\"" << p->name << "\"] = " << p->name << ";\n";
         }
         stream << indent() << "return m;\n";
         indent_level--;
@@ -386,7 +391,7 @@ void StubEmitter::emit_inputs_struct() {
         if (input->is_array()) {
             c_type = "std::vector<" + c_type + ">";
         }
-        in_info.push_back({c_type, input->name()});
+        in_info.push_back({ c_type, input->name() });
     }
 
     const std::string name = "Inputs";
@@ -426,7 +431,7 @@ void StubEmitter::emit_inputs_struct() {
 
 void StubEmitter::emit() {
     if (outputs.empty()) {
-        // The generator can't support a real stub. Instead, generate an (essentially) 
+        // The generator can't support a real stub. Instead, generate an (essentially)
         // empty .stub.h file, so that build systems like Bazel will still get the output file
         // they expected. Note that we deliberately don't emit an ifndef header guard,
         // since we can't reliably assume that the generator_name will be globally unique;
@@ -456,14 +461,15 @@ void StubEmitter::emit() {
     for (auto output : outputs) {
         std::string c_type = output->get_c_type();
         std::string getter;
-        if (output->is_array()) getter = "get_output_vector";
-        else if (c_type == "Func") getter = "get_output";
-        else getter = "get_output_buffer<" + c_type + ">";
-        out_info.push_back({
-            output->name(),
-            output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-            getter + "(\"" + output->name() + "\")"
-        });
+        if (output->is_array())
+            getter = "get_output_vector";
+        else if (c_type == "Func")
+            getter = "get_output";
+        else
+            getter = "get_output_buffer<" + c_type + ">";
+        out_info.push_back({ output->name(),
+                             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
+                             getter + "(\"" + output->name() + "\")" });
     }
 
     std::ostringstream guard;
@@ -565,10 +571,11 @@ void StubEmitter::emit() {
             if (type == "float" || type == "double") {
                 // floats and doubles can't be used as template value arguments;
                 // it turns out to be pretty uncommon use floating point types
-                // in GeneratorParams, but to avoid breaking these cases entirely, 
+                // in GeneratorParams, but to avoid breaking these cases entirely,
                 // use std::ratio as an approximation for the default value.
                 auto ratio = rational_approximation(std::atof(value.c_str()));
-                stream << indent() << comma << "typename" << " " << p->name << " = std::ratio<" << ratio.first << ", " << ratio.second << ">\n";
+                stream << indent() << comma << "typename"
+                       << " " << p->name << " = std::ratio<" << ratio.first << ", " << ratio.second << ">\n";
             } else {
                 stream << indent() << comma << type << " " << p->name << " = " << value << "\n";
             }
@@ -610,7 +617,7 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << indent() << "// move constructor\n";
-    stream << indent() << class_name << "("<< class_name << "&& that)\n";
+    stream << indent() << class_name << "(" << class_name << "&& that)\n";
     indent_level++;
     stream << indent() << ": GeneratorStub(std::move(that))\n";
     for (const auto &out : out_info) {
@@ -622,7 +629,7 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << indent() << "// move assignment operator\n";
-    stream << indent() << class_name << "& operator=("<< class_name << "&& that) {\n";
+    stream << indent() << class_name << "& operator=(" << class_name << "&& that) {\n";
     indent_level++;
     stream << indent() << "GeneratorStub::operator=(std::move(that));\n";
     for (const auto &out : out_info) {
@@ -669,7 +676,7 @@ void StubEmitter::emit() {
     stream << indent() << "};\n";
     stream << "\n";
 
-    for (int i = (int)namespaces.size() - 1; i >= 0 ; --i) {
+    for (int i = (int) namespaces.size() - 1; i >= 0; --i) {
         stream << indent() << "}  // namespace " << namespaces[i] << "\n";
     }
     stream << "\n";
@@ -691,17 +698,17 @@ GeneratorStub::GeneratorStub(const GeneratorContext *context,
 }
 
 void GeneratorStub::schedule(const std::map<std::string, std::string> &schedule_params,
-              const std::map<std::string, LoopLevel> &schedule_params_looplevels) {
+                             const std::map<std::string, LoopLevel> &schedule_params_looplevels) {
     generator->set_schedule_param_values(schedule_params, schedule_params_looplevels);
     generator->call_schedule();
 }
 
 void GeneratorStub::verify_same_funcs(const Func &a, const Func &b) {
-    user_assert(a.function().get_contents().same_as(b.function().get_contents())) 
+    user_assert(a.function().get_contents().same_as(b.function().get_contents()))
         << "Expected Func " << a.name() << " and " << b.name() << " to match.\n";
 }
 
-void GeneratorStub::verify_same_funcs(const std::vector<Func>& a, const std::vector<Func>& b) {
+void GeneratorStub::verify_same_funcs(const std::vector<Func> &a, const std::vector<Func> &b) {
     user_assert(a.size() == b.size()) << "Mismatch in Function vector length.\n";
     for (size_t i = 0; i < a.size(); ++i) {
         verify_same_funcs(a[i], b[i]);
@@ -710,15 +717,15 @@ void GeneratorStub::verify_same_funcs(const std::vector<Func>& a, const std::vec
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {
     static const std::map<std::string, Type> halide_type_enum_map{
-        {"bool", Bool()},
-        {"int8", Int(8)},
-        {"int16", Int(16)},
-        {"int32", Int(32)},
-        {"uint8", UInt(8)},
-        {"uint16", UInt(16)},
-        {"uint32", UInt(32)},
-        {"float32", Float(32)},
-        {"float64", Float(64)}
+        { "bool", Bool() },
+        { "int8", Int(8) },
+        { "int16", Int(16) },
+        { "int32", Int(32) },
+        { "uint8", UInt(8) },
+        { "uint16", UInt(16) },
+        { "uint32", UInt(32) },
+        { "float32", Float(32) },
+        { "float64", Float(64) }
     };
     return halide_type_enum_map;
 }
@@ -731,7 +738,7 @@ std::string halide_type_to_c_source(const Type &t) {
         { halide_type_handle, "Handle" },
     };
     std::ostringstream oss;
-    oss << "Halide::" << m.at(t.code()) << "(" << t.bits() << + ")";
+    oss << "Halide::" << m.at(t.code()) << "(" << t.bits() << +")";
     return oss.str();
 }
 
@@ -761,9 +768,9 @@ LoopLevel get_halide_undefined_looplevel() {
 
 const std::map<std::string, LoopLevel> &get_halide_looplevel_enum_map() {
     static const std::map<std::string, LoopLevel> halide_looplevel_enum_map{
-        {"root", LoopLevel::root()},
-        {"undefined", get_halide_undefined_looplevel()},
-        {"inline", LoopLevel()},
+        { "root", LoopLevel::root() },
+        { "undefined", get_halide_undefined_looplevel() },
+        { "inline", LoopLevel() },
     };
     return halide_looplevel_enum_map;
 }
@@ -782,7 +789,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                                                       { "-e", "" },
                                                       { "-n", "" },
                                                       { "-x", "" },
-                                                      { "-r", "" }};
+                                                      { "-r", "" } };
     std::map<std::string, std::string> generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -940,15 +947,14 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             Outputs output_files = compute_outputs(targets[0], base_path, emit_options);
-            auto module_producer = [&generator_name, &generator_args]
-                (const std::string &name, const Target &target) -> Module {
-                    auto sub_generator_args = generator_args;
-                    sub_generator_args["target"] = target.to_string();
-                    // Must re-create each time since each instance will have a different Target
-                    // GeneratorRegistry::create never returns null
-                    auto gen = GeneratorRegistry::create(generator_name, sub_generator_args);
-                    return gen->build_module(name);
-                };
+            auto module_producer = [&generator_name, &generator_args](const std::string &name, const Target &target) -> Module {
+                auto sub_generator_args = generator_args;
+                sub_generator_args["target"] = target.to_string();
+                // Must re-create each time since each instance will have a different Target
+                // GeneratorRegistry::create never returns null
+                auto gen = GeneratorRegistry::create(generator_name, sub_generator_args);
+                return gen->build_module(name);
+            };
             if (targets.size() > 1 || !emit_options.substitutions.empty()) {
                 compile_multitarget(function_name, output_files, targets, module_producer, emit_options.substitutions);
             } else {
@@ -963,12 +969,15 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     return 0;
 }
 
-GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
+GeneratorParamBase::GeneratorParamBase(const std::string &name)
+    : name(name) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
                                               this, nullptr);
 }
 
-GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
+GeneratorParamBase::~GeneratorParamBase() {
+    ObjectInstanceRegistry::unregister_instance(this);
+}
 
 void GeneratorParamBase::check_value_valid() const {
     user_assert(value_valid) << "The GeneratorParam " << name << " cannot be accessed before build() or generate() is called.\n";
@@ -1027,19 +1036,19 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     std::vector<std::string> result;
-    for (const auto& i : registry.factories) {
+    for (const auto &i : registry.factories) {
         result.push_back(i.first);
     }
     return result;
 }
 
-GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper) 
+GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
     : size(size) {
     ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this, introspection_helper);
 }
 
-GeneratorBase::~GeneratorBase() { 
-    ObjectInstanceRegistry::unregister_instance(this); 
+GeneratorBase::~GeneratorBase() {
+    ObjectInstanceRegistry::unregister_instance(this);
 }
 
 void GeneratorBase::build_params(bool force) {
@@ -1119,7 +1128,7 @@ Func GeneratorBase::get_first_output() {
 }
 
 Func GeneratorBase::get_output(const std::string &n) {
-    user_assert(generate_called) << "Must call generate() before accessing Generator outputs."; 
+    user_assert(generate_called) << "Must call generate() before accessing Generator outputs.";
     // There usually are very few outputs, so a linear search is fine
     build_params();
     for (auto output : filter_outputs) {
@@ -1136,7 +1145,7 @@ Func GeneratorBase::get_output(const std::string &n) {
 }
 
 std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
-    user_assert(generate_called) << "Must call generate() before accessing Generator outputs."; 
+    user_assert(generate_called) << "Must call generate() before accessing Generator outputs.";
     // There usually are very few outputs, so a linear search is fine
     build_params();
     for (auto output : filter_outputs) {
@@ -1169,7 +1178,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
             dim_names[i->name() + ".dim"] = i;
         }
         if (i->is_array()) {
-            array_size_names[i->name() + ".size"] = i;    
+            array_size_names[i->name() + ".size"] = i;
         }
     }
     for (auto o : filter_outputs) {
@@ -1181,7 +1190,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
             dim_names[o->name() + ".dim"] = o;
         }
         if (o->is_array()) {
-            array_size_names[o->name() + ".size"] = o;    
+            array_size_names[o->name() + ".size"] = o;
         }
     }
     for (auto key_value : params) {
@@ -1223,7 +1232,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
     generator_params_set = true;
 }
 
-void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::string> &params, 
+void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::string> &params,
                                               const std::map<std::string, LoopLevel> &looplevel_params) {
     user_assert(!schedule_params_set) << "set_schedule_param_values() must be called at most once per Generator instance.\n";
     build_params();
@@ -1254,9 +1263,9 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
 void GeneratorBase::set_inputs(const std::vector<std::vector<StubInput>> &inputs) {
     internal_assert(!inputs_set) << "set_inputs() must be called at most once per Generator instance.\n";
     build_params();
-    user_assert(inputs.size() == filter_inputs.size()) 
-            << "Expected exactly " << filter_inputs.size() 
-            << " inputs but got " << inputs.size() << "\n";
+    user_assert(inputs.size() == filter_inputs.size())
+        << "Expected exactly " << filter_inputs.size()
+        << " inputs but got " << inputs.size() << "\n";
     for (size_t i = 0; i < filter_inputs.size(); ++i) {
         filter_inputs[i]->set_inputs(inputs[i]);
     }
@@ -1334,20 +1343,20 @@ Pipeline GeneratorBase::produce_pipeline() {
         for (const auto &f : output->funcs()) {
             user_assert(f.defined()) << "Output \"" << f.name() << "\" was not defined.\n";
             if (output->dimensions_defined()) {
-                user_assert(f.dimensions() == output->dimensions()) << "Output \"" << f.name() 
-                    << "\" requires dimensions=" << output->dimensions() 
-                    << " but was defined as dimensions=" << f.dimensions() << ".\n";
+                user_assert(f.dimensions() == output->dimensions()) << "Output \"" << f.name()
+                                                                    << "\" requires dimensions=" << output->dimensions()
+                                                                    << " but was defined as dimensions=" << f.dimensions() << ".\n";
             }
             if (output->types_defined()) {
-                user_assert((int)f.outputs() == (int)output->types().size()) << "Output \"" << f.name() 
-                        << "\" requires a Tuple of size " << output->types().size() 
-                        << " but was defined as Tuple of size " << f.outputs() << ".\n";
+                user_assert((int) f.outputs() == (int) output->types().size()) << "Output \"" << f.name()
+                                                                               << "\" requires a Tuple of size " << output->types().size()
+                                                                               << " but was defined as Tuple of size " << f.outputs() << ".\n";
                 for (size_t i = 0; i < f.output_types().size(); ++i) {
                     Type expected = output->types().at(i);
                     Type actual = f.output_types()[i];
-                    user_assert(expected == actual) << "Output \"" << f.name() 
-                        << "\" requires type " << expected 
-                        << " but was defined as type " << actual << ".\n";
+                    user_assert(expected == actual) << "Output \"" << f.name()
+                                                    << "\" requires type " << expected
+                                                    << " but was defined as type " << actual << ".\n";
                 }
             }
             funcs.push_back(f);
@@ -1385,62 +1394,63 @@ void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     emit.emit();
 }
 
-GIOBase::GIOBase(size_t array_size, 
-                 const std::string &name, 
-                 IOKind kind,             
+GIOBase::GIOBase(size_t array_size,
+                 const std::string &name,
+                 IOKind kind,
                  const std::vector<Type> &types,
-                 int dimensions) 
+                 int dimensions)
     : array_size_(array_size), name_(name), kind_(kind), types_(types), dimensions_(dimensions) {
 }
 
-GIOBase::~GIOBase() { 
+GIOBase::~GIOBase() {
     // nothing
 }
 
 bool GIOBase::array_size_defined() const {
-    return array_size_ != -1;  
+    return array_size_ != -1;
 }
 
-size_t GIOBase::array_size() const { 
-    internal_assert(array_size_defined()) << "ArraySize is unspecified for " << name() 
-        << "; you need to explicit set it via the resize() method or by setting " 
-        << name() << ".size = value in your build rules.";
-    return (size_t) array_size_; 
+size_t GIOBase::array_size() const {
+    internal_assert(array_size_defined()) << "ArraySize is unspecified for " << name()
+                                          << "; you need to explicit set it via the resize() method or by setting "
+                                          << name() << ".size = value in your build rules.";
+    return (size_t) array_size_;
 }
 
-bool GIOBase::is_array() const { 
-    internal_error << "Unimplemented"; return false; 
+bool GIOBase::is_array() const {
+    internal_error << "Unimplemented";
+    return false;
 }
 
-const std::string &GIOBase::name() const { 
-    return name_; 
+const std::string &GIOBase::name() const {
+    return name_;
 }
 
-IOKind GIOBase::kind() const { 
-    return kind_; 
+IOKind GIOBase::kind() const {
+    return kind_;
 }
 
 bool GIOBase::types_defined() const {
-    return !types_.empty();  
+    return !types_.empty();
 }
 
-const std::vector<Type> &GIOBase::types() const { 
+const std::vector<Type> &GIOBase::types() const {
     internal_assert(types_defined()) << "Type is unspecified for " << name() << "\n";
-    return types_; 
+    return types_;
 }
 
-Type GIOBase::type() const { 
+Type GIOBase::type() const {
     internal_assert(types_.size() == 1) << "Expected types_.size() == 1, saw " << types_.size() << " for " << name() << "\n";
-    return types_.at(0); 
+    return types_.at(0);
 }
 
 bool GIOBase::dimensions_defined() const {
-    return dimensions_ != -1;  
+    return dimensions_ != -1;
 }
 
-int GIOBase::dimensions() const { 
+int GIOBase::dimensions() const {
     internal_assert(dimensions_defined()) << "Dimensions unspecified for " << name() << "\n";
-    return dimensions_; 
+    return dimensions_;
 }
 
 const std::vector<Func> &GIOBase::funcs() const {
@@ -1459,28 +1469,28 @@ void GIOBase::verify_internals() const {
     if (kind() != IOKind::Scalar) {
         for (const Func &f : funcs()) {
             user_assert(f.defined()) << "Input/Output " << name() << " is not defined.\n";
-            user_assert(f.dimensions() == dimensions()) 
-                << "Expected dimensions " << dimensions() 
+            user_assert(f.dimensions() == dimensions())
+                << "Expected dimensions " << dimensions()
                 << " but got " << f.dimensions()
                 << " for " << name() << "\n";
             user_assert(f.outputs() == 1)
-                << "Expected outputs() == " << 1 
+                << "Expected outputs() == " << 1
                 << " but got " << f.outputs()
                 << " for " << name() << "\n";
             user_assert(f.output_types().size() == 1)
-                << "Expected output_types().size() == " << 1 
+                << "Expected output_types().size() == " << 1
                 << " but got " << f.outputs()
                 << " for " << name() << "\n";
-            user_assert(f.output_types()[0] == type()) 
-                << "Expected type " << type() 
-                << " but got " << f.output_types()[0] 
+            user_assert(f.output_types()[0] == type())
+                << "Expected type " << type()
+                << " but got " << f.output_types()[0]
                 << " for " << name() << "\n";
         }
     } else {
         for (const Expr &e : exprs()) {
             user_assert(e.defined()) << "Input/Ouput " << name() << " is not defined.\n";
             user_assert(e.type() == type())
-                << "Expected type " << type() 
+                << "Expected type " << type()
                 << " but got " << e.type()
                 << " for " << name() << "\n";
         }
@@ -1524,10 +1534,10 @@ void GIOBase::check_matching_array_size(size_t size) {
 }
 
 GeneratorInputBase::GeneratorInputBase(size_t array_size,
-                                       const std::string &name, 
-                                       IOKind kind, 
-                                       const std::vector<Type> &t, 
-                                       int d) 
+                                       const std::string &name,
+                                       IOKind kind,
+                                       const std::vector<Type> &t,
+                                       int d)
     : GIOBase(array_size, name, kind, t, d) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this, nullptr);
 }
@@ -1537,8 +1547,8 @@ GeneratorInputBase::GeneratorInputBase(const std::string &name, IOKind kind, con
     // nothing
 }
 
-GeneratorInputBase::~GeneratorInputBase() { 
-    ObjectInstanceRegistry::unregister_instance(this); 
+GeneratorInputBase::~GeneratorInputBase() {
+    ObjectInstanceRegistry::unregister_instance(this);
 }
 
 void GeneratorInputBase::set_def_min_max() {
@@ -1557,8 +1567,8 @@ void GeneratorInputBase::verify_internals() const {
     GIOBase::verify_internals();
 
     const size_t expected = (kind() != IOKind::Scalar) ? funcs().size() : exprs().size();
-    user_assert(parameters_.size() == expected) << "Expected parameters_.size() == " 
-        << expected << ", saw " << parameters_.size() << " for " << name() << "\n";
+    user_assert(parameters_.size() == expected) << "Expected parameters_.size() == "
+                                                << expected << ", saw " << parameters_.size() << " for " << name() << "\n";
 }
 
 void GeneratorInputBase::init_internals() {
@@ -1579,7 +1589,7 @@ void GeneratorInputBase::init_internals() {
             exprs_.push_back(e);
         }
     }
-    
+
     verify_internals();
 }
 
@@ -1598,11 +1608,11 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
             parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i), true, false);
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
-            check_matching_type_and_dim({p.type()}, p.dimensions());
+            check_matching_type_and_dim({ p.type() }, p.dimensions());
             auto b = p.get_buffer();
             if (b.defined()) {
                 // If the Parameter has an explicit BufferPtr set, bind directly to
-                // it (this happens in JIT mode and also with statically-compiled 
+                // it (this happens in JIT mode and also with statically-compiled
                 // Buffers)
                 Func f(name() + "_im");
                 f(_) = b(_);
@@ -1613,18 +1623,18 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
             parameters_.push_back(p);
         } else {
             auto e = in.expr();
-            check_matching_type_and_dim({e.type()}, 0);
+            check_matching_type_and_dim({ e.type() }, 0);
             exprs_.push_back(e);
             parameters_.emplace_back(e.type(), false, 0, array_name(i), true, false);
         }
     }
-    
+
     set_def_min_max();
 
     verify_internals();
 }
 
-GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, IOKind kind, const std::vector<Type> &t, int d) 
+GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
     : GIOBase(array_size, name, kind, t, d) {
     internal_assert(kind != IOKind::Scalar);
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
@@ -1636,8 +1646,8 @@ GeneratorOutputBase::GeneratorOutputBase(const std::string &name, IOKind kind, c
     // nothing
 }
 
-GeneratorOutputBase::~GeneratorOutputBase() { 
-    ObjectInstanceRegistry::unregister_instance(this); 
+GeneratorOutputBase::~GeneratorOutputBase() {
+    ObjectInstanceRegistry::unregister_instance(this);
 }
 
 void GeneratorOutputBase::init_internals() {
@@ -1656,17 +1666,17 @@ void GeneratorOutputBase::init_internals() {
 
 void GeneratorOutputBase::resize(size_t size) {
     internal_assert(is_array());
-    internal_assert(!array_size_defined()) << "You may only call " << name() 
-        << ".resize() when then size is undefined\n";
+    internal_assert(!array_size_defined()) << "You may only call " << name()
+                                           << ".resize() when then size is undefined\n";
     array_size_ = (int) size;
     init_internals();
 }
 
-void StubOutputBufferBase::check_scheduled(const char* m) const { 
-    user_assert(generator->schedule_called) << "Must call schedule() before calling " << m << "()"; 
+void StubOutputBufferBase::check_scheduled(const char *m) const {
+    user_assert(generator->schedule_called) << "Must call schedule() before calling " << m << "()";
 }
 
-Target StubOutputBufferBase::get_target() const { 
+Target StubOutputBufferBase::get_target() const {
     return generator->get_target();
 }
 
@@ -1681,9 +1691,9 @@ void generator_test() {
     Var x, y;
     Func f, g;
     f(x, y) = x + y;
-    g(x, y) = f(gp, gp);                            // check Func::operator() overloads
+    g(x, y) = f(gp, gp);  // check Func::operator() overloads
     g(rdom.x, rdom.y) += f(rdom.x, rdom.y);
-    g.update(0).reorder(rdom.y, rdom.x);            // check Func::reorder() overloads for RDom::operator RVar()
+    g.update(0).reorder(rdom.y, rdom.x);  // check Func::reorder() overloads for RDom::operator RVar()
 
     // Verify that print() parameter-pack variants can convert GeneratorParam to Expr
     print(f(0, 0), g(1, 1), gp);
@@ -1695,7 +1705,7 @@ void generator_test() {
     // Test rational_approximation
     auto check_ratio = [](double d, std::pair<int64_t, int64_t> expected) {
         auto actual = rational_approximation(d);
-        internal_assert(actual == expected) 
+        internal_assert(actual == expected)
             << "rational_approximation(" << d << ") failed:"
             << " expected " << expected.first << "/" << expected.second
             << " actual " << actual.first << "/" << actual.second << "\n";
@@ -1705,25 +1715,25 @@ void generator_test() {
     // we minimize testing variation across compilers
     const double kFrac1 = 1234.125;
     const double kFrac2 = 123412341234.125;
-    const double kFrac3 = 1.0/65536.0;
+    const double kFrac3 = 1.0 / 65536.0;
 
-    check_ratio(0.0,        {0, 1});
-    check_ratio(1.0,        {1, 1});
-    check_ratio(2.0,        {2, 1});
-    check_ratio(kFrac1,     {9873, 8});
-    check_ratio(kFrac2,     {987298729873, 8});
-    check_ratio(kFrac3,     {1, 65536});
+    check_ratio(0.0, { 0, 1 });
+    check_ratio(1.0, { 1, 1 });
+    check_ratio(2.0, { 2, 1 });
+    check_ratio(kFrac1, { 9873, 8 });
+    check_ratio(kFrac2, { 987298729873, 8 });
+    check_ratio(kFrac3, { 1, 65536 });
 
-    check_ratio(-0.0,       {0, 1});
-    check_ratio(-1.0,       {-1, 1});
-    check_ratio(-2.0,       {-2, 1});
-    check_ratio(-kFrac1,    {-9873, 8});
-    check_ratio(-kFrac2,    {-987298729873, 8});
-    check_ratio(-kFrac3,    {-1, 65536});
+    check_ratio(-0.0, { 0, 1 });
+    check_ratio(-1.0, { -1, 1 });
+    check_ratio(-2.0, { -2, 1 });
+    check_ratio(-kFrac1, { -9873, 8 });
+    check_ratio(-kFrac2, { -987298729873, 8 });
+    check_ratio(-kFrac3, { -1, 65536 });
 
-    check_ratio(NAN, {0, 0});
-    check_ratio(INFINITY, {1, 0});
-    check_ratio(-INFINITY, {-1, 0});
+    check_ratio(NAN, { 0, 0 });
+    check_ratio(INFINITY, { 1, 0 });
+    check_ratio(-INFINITY, { -1, 0 });
 
     std::cout << "Generator test passed" << std::endl;
 }

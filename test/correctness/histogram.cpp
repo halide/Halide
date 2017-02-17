@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     Func g;
 
-    g(x) = hist(x+10);
+    g(x) = hist(x + 10);
 
     // No parallel reductions
     /*
@@ -45,10 +45,10 @@ int main(int argc, char **argv) {
     }
     */
 
-    Buffer<int32_t> histogram = g.realize(10); // buckets 10-20 only
+    Buffer<int32_t> histogram = g.realize(10);  // buckets 10-20 only
 
     for (int i = 10; i < 20; i++) {
-        if (histogram(i-10) != reference_hist[i]) {
+        if (histogram(i - 10) != reference_hist[i]) {
             printf("Error: bucket %d is %d instead of %d\n", i, histogram(i), reference_hist[i]);
             return -1;
         }
@@ -57,5 +57,4 @@ int main(int argc, char **argv) {
     printf("Success!\n");
 
     return 0;
-
 }

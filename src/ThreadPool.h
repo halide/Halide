@@ -57,7 +57,7 @@ class ThreadPool {
     std::vector<std::thread> threads;
 
     // True if the pool is shutting down.
-    bool shutting_down{false};
+    bool shutting_down{ false };
 
     void worker_thread() {
         std::unique_lock<std::mutex> unique_lock(mutex);
@@ -75,14 +75,13 @@ class ThreadPool {
     }
 
 public:
-
     static size_t num_processors_online() {
-    #ifdef _WIN32
+#ifdef _WIN32
         char *num_cores = getenv("NUMBER_OF_PROCESSORS");
         return num_cores ? atoi(num_cores) : 8;
-    #else
+#else
         return sysconf(_SC_NPROCESSORS_ONLN);
-    #endif
+#endif
     }
 
     // Default to number of available cores if not specified otherwise
@@ -93,7 +92,7 @@ public:
 
         // Create all the threads.
         for (size_t i = 0; i < desired_num_threads; ++i) {
-            threads.emplace_back([this]{ worker_thread(); });
+            threads.emplace_back([this] { worker_thread(); });
         }
     }
 
@@ -150,7 +149,6 @@ inline void ThreadPool<void>::Job::run_unlocked(std::unique_lock<std::mutex> &un
     unique_lock.lock();
     result.set_value();
 }
-
 
 }  // namespace Internal
 }  // namespace Halide

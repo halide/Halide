@@ -5,8 +5,8 @@
  * Defines the internal representation of parameters to halide piplines
  */
 
-#include "Expr.h"
 #include "Buffer.h"
+#include "Expr.h"
 
 namespace Halide {
 
@@ -52,8 +52,8 @@ public:
                      bool register_instance = true);
 
     /** Copy ctor, operator=, and dtor, needed for ObjectRegistry accounting. */
-    EXPORT Parameter(const Parameter&);
-    EXPORT Parameter& operator=(const Parameter&);
+    EXPORT Parameter(const Parameter &);
+    EXPORT Parameter &operator=(const Parameter &);
     EXPORT ~Parameter();
 
     /** Get the type of this parameter */
@@ -79,7 +79,7 @@ public:
         user_assert(type() == type_of<T>() || (type().is_handle() && type_of<T>() == UInt(64)))
             << "Can't get Param<" << type()
             << "> as scalar of type " << type_of<T>() << "\n";
-        return *((const T *)(get_scalar_address()));
+        return *((const T *) (get_scalar_address()));
     }
 
     /** This returns the current value of get_scalar<type()>()
@@ -94,7 +94,7 @@ public:
         user_assert(type() == type_of<T>() || (type().is_handle() && type_of<T>() == UInt(64)))
             << "Can't set Param<" << type()
             << "> to scalar of type " << type_of<T>() << "\n";
-        *((T *)(get_scalar_address())) = val;
+        *((T *) (get_scalar_address())) = val;
     }
 
     /** If the parameter is a buffer parameter, get its currently
@@ -218,10 +218,8 @@ private:
     int d;
 };
 
-
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);
-
 }
 }
 

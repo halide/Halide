@@ -1,10 +1,10 @@
 #ifndef HALIDE_FLOAT16_H
 #define HALIDE_FLOAT16_H
+#include "RoundingMode.h"
+#include "Util.h"
 #include "runtime/HalideRuntime.h"
 #include <stdint.h>
 #include <string>
-#include "RoundingMode.h"
-#include "Util.h"
 
 namespace Halide {
 
@@ -30,7 +30,7 @@ struct float16_t {
      *  \param roundingMode The rounding mode to use
      *
      */
-    EXPORT explicit float16_t(float value, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
+    EXPORT explicit float16_t(float value, RoundingMode roundingMode = RoundingMode::ToNearestTiesToEven);
 
     /** Construct from a double using a particular rounding mode.
      *  A warning will be emitted if the result cannot be represented exactly
@@ -40,7 +40,7 @@ struct float16_t {
      *  \param roundingMode The rounding mode to use
      *
      */
-    EXPORT explicit float16_t(double value, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
+    EXPORT explicit float16_t(double value, RoundingMode roundingMode = RoundingMode::ToNearestTiesToEven);
 
     /** Construct by parsing a string using a particular rounding mode.
      *  A warning will be emitted if the result cannot be represented exactly
@@ -52,7 +52,7 @@ struct float16_t {
      *  \param roundingMode The rounding mode to use
      *
      */
-    EXPORT explicit float16_t(const char *stringRepr, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
+    EXPORT explicit float16_t(const char *stringRepr, RoundingMode roundingMode = RoundingMode::ToNearestTiesToEven);
 
     /** Construct a float16_t with the bits initialised to 0. This represents
      * positive zero.*/
@@ -67,10 +67,10 @@ struct float16_t {
     EXPORT explicit operator double() const;
 
     // Be explicit about how the copy constructor is expected to behave
-    EXPORT float16_t(const float16_t&) = default;
+    EXPORT float16_t(const float16_t &) = default;
 
     // Be explicit about how assignment is expected to behave
-    EXPORT float16_t& operator=(const float16_t&) = default;
+    EXPORT float16_t &operator=(const float16_t &) = default;
 
     /** \name Convenience "constructors"
      */
@@ -96,11 +96,11 @@ struct float16_t {
      * \param bits The bits conformant to IEEE754 binary16
      */
     EXPORT static float16_t make_from_bits(uint16_t bits);
-    
+
     /** Get a new float16_t from a signed integer.
      *  It is not provided as a constructor to avoid call ambiguity
      * */
-    EXPORT static float16_t make_from_signed_int(int64_t value, RoundingMode roundingMode=RoundingMode::ToNearestTiesToEven);
+    EXPORT static float16_t make_from_signed_int(int64_t value, RoundingMode roundingMode = RoundingMode::ToNearestTiesToEven);
     /**@}*/
 
     /**\name Arithmetic operators
@@ -125,7 +125,6 @@ struct float16_t {
     EXPORT float16_t mod(float16_t denominator, RoundingMode roudingMode) const;
     /**@}*/
 
-
     /** Return a new float16_t with a negated sign bit*/
     EXPORT float16_t operator-() const;
 
@@ -144,15 +143,21 @@ struct float16_t {
     /** Equality */
     EXPORT bool operator==(float16_t rhs) const;
     /** Not equal */
-    EXPORT bool operator!=(float16_t rhs) const { return !(*this == rhs); }
+    EXPORT bool operator!=(float16_t rhs) const {
+        return !(*this == rhs);
+    }
     /** Greater than */
     EXPORT bool operator>(float16_t rhs) const;
     /** Less than */
     EXPORT bool operator<(float16_t rhs) const;
     /** Greater than or equal to*/
-    EXPORT bool operator>=(float16_t rhs) const { return (*this > rhs) || (*this == rhs); }
+    EXPORT bool operator>=(float16_t rhs) const {
+        return (*this > rhs) || (*this == rhs);
+    }
     /** Less than or equal to*/
-    EXPORT bool operator<=(float16_t rhs) const { return (*this < rhs) || (*this == rhs); }
+    EXPORT bool operator<=(float16_t rhs) const {
+        return (*this < rhs) || (*this == rhs);
+    }
     /** \return true if and only if the float16_t and ``rhs`` are not ordered. E.g.
      * NaN and a normalised number
      */
@@ -204,9 +209,10 @@ namespace {
 
 template<>
 struct halide_type_of_helper<Halide::float16_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_float, 16); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_float, 16);
+    }
 };
-
 }
 
 #endif

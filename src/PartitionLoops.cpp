@@ -1,17 +1,17 @@
 #include <algorithm>
 #include <numeric>
 
-#include "PartitionLoops.h"
+#include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "PartitionLoops.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
 #include "Substitute.h"
-#include "CodeGen_GPU_Dev.h"
 #include "Var.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -100,6 +100,7 @@ class HasLikelyTag : public IRVisitor {
             IRVisitor::visit(op);
         }
     }
+
 public:
     bool result = false;
 };
@@ -229,8 +230,11 @@ class ExprUsesInvalidBuffers : public IRVisitor {
             IRVisitor::visit(op);
         }
     }
+
 public:
-    ExprUsesInvalidBuffers(const Scope<int> &buffers) : invalid_buffers(buffers), invalid(false) {}
+    ExprUsesInvalidBuffers(const Scope<int> &buffers)
+        : invalid_buffers(buffers), invalid(false) {
+    }
     bool invalid;
 };
 
@@ -263,7 +267,7 @@ class FindSimplifications : public IRVisitor {
             return;
         }
         condition = RemoveLikelyTags().mutate(condition);
-        Simplification s = {condition, old, likely_val, unlikely_val, true};
+        Simplification s = { condition, old, likely_val, unlikely_val, true };
         if (s.condition.type().is_vector()) {
             s.condition = simplify(s.condition);
             if (const Broadcast *b = s.condition.as<Broadcast>()) {
@@ -379,6 +383,7 @@ class FindSimplifications : public IRVisitor {
     void visit(const Let *op) {
         visit_let(op);
     }
+
 public:
     vector<Simplification> simplifications;
 
@@ -394,8 +399,9 @@ class MakeSimplifications : public IRMutator {
     const vector<Simplification> &simplifications;
 
 public:
-
-    MakeSimplifications(const vector<Simplification> &s) : simplifications(s) {}
+    MakeSimplifications(const vector<Simplification> &s)
+        : simplifications(s) {
+    }
 
     using IRMutator::mutate;
     Expr mutate(Expr e) {
@@ -406,7 +412,6 @@ public:
         }
         return IRMutator::mutate(e);
     }
-
 };
 
 class ContainsThreadBarrier : public IRVisitor {
@@ -720,7 +725,7 @@ class RenormalizeGPULoops : public IRMutator {
     // Track all vars that depend on GPU loop indices or loops inside GPU kernels.
     Scope<int> gpu_vars;
 
-    vector<pair<string, Expr> > lifted_lets;
+    vector<pair<string, Expr>> lifted_lets;
 
     void visit(const For *op) {
         if (op->device_api == DeviceAPI::GLSL) {
@@ -874,11 +879,8 @@ class RenormalizeGPULoops : public IRMutator {
         } else {
             internal_error << "Unexpected construct inside if statement: " << Stmt(op) << "\n";
         }
-
     }
-
 };
-
 
 // Expand selects of boolean conditions so that the partitioner can
 // consider them one-at-a-time.
@@ -890,8 +892,8 @@ class ExpandSelects : public IRMutator {
     }
 
     void visit(const Select *op) {
-        Expr condition   = mutate(op->condition);
-        Expr true_value  = mutate(op->true_value);
+        Expr condition = mutate(op->condition);
+        Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
         if (const Or *o = condition.as<Or>()) {
             if (is_trivial(true_value)) {
@@ -948,6 +950,7 @@ class ContainsLoop : public IRVisitor {
     void visit(const For *op) {
         result = true;
     }
+
 public:
     bool result = false;
 };
@@ -961,7 +964,7 @@ class LowerLikelyIfInnermost : public IRMutator {
         if (op->is_intrinsic(Call::likely_if_innermost)) {
             internal_assert(op->args.size() == 1);
             if (inside_innermost_loop) {
-                expr = Call::make(op->type, Call::likely, {mutate(op->args[0])}, Call::PureIntrinsic);
+                expr = Call::make(op->type, Call::likely, { mutate(op->args[0]) }, Call::PureIntrinsic);
             } else {
                 expr = mutate(op->args[0]);
             }
@@ -978,7 +981,6 @@ class LowerLikelyIfInnermost : public IRMutator {
         inside_innermost_loop = false;
     }
 };
-
 }
 
 Stmt partition_loops(Stmt s) {
@@ -991,6 +993,5 @@ Stmt partition_loops(Stmt s) {
     s = CollapseSelects().mutate(s);
     return s;
 }
-
 }
 }

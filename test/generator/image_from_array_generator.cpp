@@ -4,7 +4,7 @@ namespace {
 
 class ImageFromArray : public Halide::Generator<ImageFromArray> {
 public:
-   Func build() {
+    Func build() {
         // Currently the test just exercises halide_image.h.
         Var x;
         Func f;
@@ -13,6 +13,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<ImageFromArray> register_my_gen{"image_from_array"};
+Halide::RegisterGenerator<ImageFromArray> register_my_gen{ "image_from_array" };
 
 }  // namespace

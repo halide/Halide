@@ -1,9 +1,9 @@
 #include <stdlib.h>
 
-#include "IR.h"
-#include "IROperator.h"
-#include "IRMutator.h"
 #include "Definition.h"
+#include "IR.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 #include "Var.h"
 
 namespace Halide {
@@ -21,7 +21,9 @@ struct DefinitionContents {
     Schedule schedule;
     std::vector<Specialization> specializations;
 
-    DefinitionContents() : is_init(true), predicate(const_true()) {}
+    DefinitionContents()
+        : is_init(true), predicate(const_true()) {
+    }
 
     void accept(IRVisitor *visitor) const {
         if (predicate.defined()) {
@@ -78,16 +80,19 @@ EXPORT void destroy<DefinitionContents>(const DefinitionContents *d) {
     delete d;
 }
 
-Definition::Definition() : contents(new DefinitionContents) {}
+Definition::Definition()
+    : contents(new DefinitionContents) {
+}
 
-Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr) : contents(ptr) {
+Definition::Definition(const IntrusivePtr<DefinitionContents> &ptr)
+    : contents(ptr) {
     internal_assert(ptr.defined())
         << "Can't construct Function from undefined DefinitionContents ptr\n";
 }
 
 Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
                        const ReductionDomain &rdom, bool is_init)
-                       : contents(new DefinitionContents) {
+    : contents(new DefinitionContents) {
     contents->is_init = is_init;
     contents->values = values;
     contents->args = args;
@@ -101,7 +106,7 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
 
 // Return deep-copy of Definition
 Definition Definition::deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
+    std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
     internal_assert(contents.defined()) << "Cannot deep-copy undefined Definition\n";
 
     Definition copy;
@@ -185,23 +190,22 @@ const Specialization &Definition::add_specialization(Expr condition) {
     s.definition.contents->is_init = contents->is_init;
     s.definition.contents->predicate = contents->predicate;
     s.definition.contents->values = contents->values;
-    s.definition.contents->args   = contents->args;
+    s.definition.contents->args = contents->args;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
-    s.definition.contents->schedule.store_level()      = contents->schedule.store_level();
-    s.definition.contents->schedule.compute_level()    = contents->schedule.compute_level();
-    s.definition.contents->schedule.rvars()            = contents->schedule.rvars();
-    s.definition.contents->schedule.splits()           = contents->schedule.splits();
-    s.definition.contents->schedule.dims()             = contents->schedule.dims();
-    s.definition.contents->schedule.storage_dims()     = contents->schedule.storage_dims();
-    s.definition.contents->schedule.bounds()           = contents->schedule.bounds();
-    s.definition.contents->schedule.memoized()         = contents->schedule.memoized();
-    s.definition.contents->schedule.touched()          = contents->schedule.touched();
+    s.definition.contents->schedule.store_level() = contents->schedule.store_level();
+    s.definition.contents->schedule.compute_level() = contents->schedule.compute_level();
+    s.definition.contents->schedule.rvars() = contents->schedule.rvars();
+    s.definition.contents->schedule.splits() = contents->schedule.splits();
+    s.definition.contents->schedule.dims() = contents->schedule.dims();
+    s.definition.contents->schedule.storage_dims() = contents->schedule.storage_dims();
+    s.definition.contents->schedule.bounds() = contents->schedule.bounds();
+    s.definition.contents->schedule.memoized() = contents->schedule.memoized();
+    s.definition.contents->schedule.touched() = contents->schedule.touched();
     s.definition.contents->schedule.allow_race_conditions() = contents->schedule.allow_race_conditions();
 
     contents->specializations.push_back(s);
     return contents->specializations.back();
 }
-
 }
 }

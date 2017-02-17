@@ -1,13 +1,13 @@
 #ifndef CHECK_CALL_GRAPHS_H
 #define CHECK_CALL_GRAPHS_H
 
-#include <assert.h>
-#include <stdio.h>
-#include <string.h>
 #include <algorithm>
-#include <numeric>
+#include <assert.h>
 #include <functional>
 #include <map>
+#include <numeric>
+#include <stdio.h>
+#include <string.h>
 
 #include "Halide.h"
 
@@ -16,8 +16,9 @@ typedef std::map<std::string, std::vector<std::string>> CallGraphs;
 // For each producer node, find all functions that it calls.
 class CheckCalls : public Halide::Internal::IRVisitor {
 public:
-    CallGraphs calls; // Caller -> vector of callees
+    CallGraphs calls;  // Caller -> vector of callees
     std::string producer = "";
+
 private:
     using Halide::Internal::IRVisitor::visit;
 
@@ -25,7 +26,7 @@ private:
         if (op->is_producer) {
             std::string old_producer = producer;
             producer = op->name;
-            calls[producer]; // Make sure each producer is allocated a slot
+            calls[producer];  // Make sure each producer is allocated a slot
             // Group the callees of the 'produce' and 'update' together
             op->body.accept(this);
             producer = old_producer;
@@ -39,7 +40,7 @@ private:
         if (!producer.empty()) {
             assert(calls.count(producer) > 0);
             std::vector<std::string> &callees = calls[producer];
-            if(std::find(callees.begin(), callees.end(), op->name) == callees.end()) {
+            if (std::find(callees.begin(), callees.end(), op->name) == callees.end()) {
                 callees.push_back(op->name);
             }
         }
@@ -49,7 +50,7 @@ private:
 // These are declared "inline" to avoid "unused function" warnings
 inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
     if (result.size() != expected.size()) {
-        printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
+        printf("Expect %d callers instead of %d\n", (int) expected.size(), (int) result.size());
         return -1;
     }
     for (auto &iter : expected) {
@@ -74,15 +75,14 @@ inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
                 });
 
             printf("Expect calless of %s to be (%s); got (%s) instead\n",
-                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
+                   iter.first.c_str(), expected_str.c_str(), result_str.c_str());
             return -1;
         }
-
     }
     return 0;
 }
 
-inline int check_image(const Halide::Buffer<int> &im, const std::function<int(int,int)> &func) {
+inline int check_image(const Halide::Buffer<int> &im, const std::function<int(int, int)> &func) {
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = func(x, y);
@@ -96,7 +96,7 @@ inline int check_image(const Halide::Buffer<int> &im, const std::function<int(in
     return 0;
 }
 
-inline int check_image(const Halide::Buffer<int> &im, const std::function<int(int,int,int)> &func) {
+inline int check_image(const Halide::Buffer<int> &im, const std::function<int(int, int, int)> &func) {
     for (int z = 0; z < im.channels(); z++) {
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {

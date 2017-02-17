@@ -4,8 +4,8 @@
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -36,20 +36,19 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
     }
     return false;
 }
-
 }
-
 
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
-    PredicateFinder(const string &b, bool s) : predicate(const_false()),
-                                               buffer(b),
-                                               varies(false),
-                                               treat_selects_as_guards(s) {}
+    PredicateFinder(const string &b, bool s)
+        : predicate(const_false()),
+          buffer(b),
+          varies(false),
+          treat_selects_as_guards(s) {
+    }
 
 private:
-
     using IRVisitor::visit;
     string buffer;
     bool varies;
@@ -259,8 +258,10 @@ private:
 
 class ProductionGuarder : public IRMutator {
 public:
-    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p):
-        buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {}
+    ProductionGuarder(const string &b, Expr compute_p, Expr alloc_p)
+        : buffer(b), compute_predicate(compute_p), alloc_predicate(alloc_p) {
+    }
+
 private:
     string buffer;
     Expr compute_predicate;
@@ -285,7 +286,7 @@ private:
     void visit(const Call *op) {
 
         if ((op->name == "halide_memoization_cache_lookup") &&
-             memoize_call_uses_buffer(op)) {
+            memoize_call_uses_buffer(op)) {
             // We need to guard call to halide_memoization_cache_lookup to only
             // be executed if the corresponding buffer is allocated. We ignore
             // the compute_predicate since in the case that alloc_predicate is
@@ -295,14 +296,14 @@ private:
             // to load from. For memoized func, the memory might already be in
             // the cache, so we perform the lookup instead of allocating a new one.
             expr = Call::make(op->type, Call::if_then_else,
-                              {alloc_predicate, op, 0}, Call::PureIntrinsic);
+                              { alloc_predicate, op, 0 }, Call::PureIntrinsic);
         } else if ((op->name == "halide_memoization_cache_store") &&
-                    memoize_call_uses_buffer(op)) {
+                   memoize_call_uses_buffer(op)) {
             // We need to wrap the halide_memoization_cache_store with the
             // compute_predicate, since the data to be written is only valid if
             // the producer of the buffer is executed.
             expr = Call::make(op->type, Call::if_then_else,
-                              {compute_predicate, op, 0}, Call::PureIntrinsic);
+                              { compute_predicate, op, 0 }, Call::PureIntrinsic);
         } else {
             IRMutator::visit(op);
         }
@@ -326,7 +327,10 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &f) : func(f), in_vector_loop(false) {}
+    StageSkipper(const string &f)
+        : func(f), in_vector_loop(false) {
+    }
+
 private:
     string func;
     using IRMutator::visit;
@@ -493,24 +497,25 @@ class MightBeSkippable : public IRVisitor {
 public:
     bool result;
 
-    MightBeSkippable(string f) : func(f), guarded(false), result(false) {}
+    MightBeSkippable(string f)
+        : func(f), guarded(false), result(false) {
+    }
 };
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     // Don't consider the last stage, because it's the output, so it's
     // never skippable.
-    for (size_t i = order.size()-1; i > 0; i--) {
-        debug(2) << "skip_stages checking " << order[i-1] << "\n";
-        MightBeSkippable check(order[i-1]);
+    for (size_t i = order.size() - 1; i > 0; i--) {
+        debug(2) << "skip_stages checking " << order[i - 1] << "\n";
+        MightBeSkippable check(order[i - 1]);
         stmt.accept(&check);
         if (check.result) {
-            debug(2) << "skip_stages can skip " << order[i-1] << "\n";
-            StageSkipper skipper(order[i-1]);
+            debug(2) << "skip_stages can skip " << order[i - 1] << "\n";
+            StageSkipper skipper(order[i - 1]);
             stmt = skipper.mutate(stmt);
         }
     }
     return stmt;
 }
-
 }
 }

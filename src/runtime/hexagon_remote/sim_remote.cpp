@@ -1,14 +1,14 @@
 #include "bin/src/halide_hexagon_remote.h"
 #include <HalideRuntime.h>
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <dlfcn.h>
 #include <hexagon_standalone.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-#include "sim_protocol.h"
-#include "log.h"
 #include "elf.h"
+#include "log.h"
+#include "sim_protocol.h"
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
@@ -130,7 +130,8 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
-void halide_mutex_destroy(halide_mutex *) {}
+void halide_mutex_destroy(halide_mutex *) {
+}
 
 void *halide_get_symbol(const char *name) {
     // dlsym is just a stub on the simulator, so we need to support
@@ -140,73 +141,73 @@ void *halide_get_symbol(const char *name) {
         char *addr;
     };
     static known_sym known_syms[] = {
-        {"close", (char *)(&close)},
-        {"abort", (char *)(&abort)},
-        {"memcpy", (char *)(&memcpy)},
-        {"memmove", (char *)(&memmove)},
-        {"memset", (char *)(&memset)},
-        {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
-        {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
-        {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
-        {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
-        {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
-        {"__hexagon_muldf3", (char *)(&__hexagon_muldf3)},
-        {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
-        {"__hexagon_subdf3", (char *)(&__hexagon_subdf3)},
-        {"__hexagon_divsf3", (char *)(&__hexagon_divsf3)},
-        {"__hexagon_udivdi3", (char *)(&__hexagon_udivdi3)},
-        {"__hexagon_udivsi3", (char *)(&__hexagon_udivsi3)},
-        {"__hexagon_umodsi3", (char *)(&__hexagon_umodsi3)},
-        {"__hexagon_divsi3", (char *)(&__hexagon_divsi3)},
-        {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
-        {"__hexagon_sqrtf", (char *)(&sqrtf)},
-        {"sqrtf", (char *)(&sqrtf)},
-        {"sqrt", (char *)(&sqrt)},
-        {"sinf", (char *)(&sinf)},
-        {"expf", (char *)(&expf)},
-        {"exp", (char *)(&exp)},
-        {"logf", (char *)(&logf)},
-        {"log", (char *)(&log)},
-        {"powf", (char *)(&powf)},
-        {"pow", (char *)(&pow)},
-        {"sin", (char *)(&sin)},
-        {"cosf", (char *)(&cosf)},
-        {"cos", (char *)(&cos)},
-        {"tanf", (char *)(&tanf)},
-        {"tan", (char *)(&tan)},
-        {"asinf", (char *)(&asinf)},
-        {"asin", (char *)(&asin)},
-        {"acosf", (char *)(&acosf)},
-        {"acos", (char *)(&acos)},
-        {"atanf", (char *)(&atanf)},
-        {"atan", (char *)(&atan)},
-        {"atan2f", (char *)(&atan2f)},
-        {"atan2", (char *)(&atan2)},
-        {"sinhf", (char *)(&sinhf)},
-        {"sinh", (char *)(&sinh)},
-        {"coshf", (char *)(&coshf)},
-        {"cosh", (char *)(&cosh)},
-        {"tanhf", (char *)(&tanhf)},
-        {"tanh", (char *)(&tanh)},
-        {"asinhf", (char *)(&asinhf)},
-        {"asinh", (char *)(&asinh)},
-        {"acoshf", (char *)(&acoshf)},
-        {"acosh", (char *)(&acosh)},
-        {"atanhf", (char *)(&atanhf)},
-        {"atanh", (char *)(&atanh)},
-        {"nearbyintf", (char *)(&nearbyintf)},
-        {"nearbyint", (char *)(&nearbyint)},
-        {"truncf", (char *)(&truncf)},
-        {"trunc", (char *)(&trunc)},
-        {"floorf", (char *)(&floorf)},
-        {"floor", (char *)(&floor)},
-        {"ceilf", (char *)(&ceilf)},
-        {"ceil", (char *)(&ceil)},
-        {NULL, NULL} // Null terminator.
+        { "close", (char *) (&close) },
+        { "abort", (char *) (&abort) },
+        { "memcpy", (char *) (&memcpy) },
+        { "memmove", (char *) (&memmove) },
+        { "memset", (char *) (&memset) },
+        { "halide_mutex_destroy", (char *) (&halide_mutex_destroy) },
+        { "halide_profiler_get_state", (char *) (&halide_profiler_get_state) },
+        { "qurt_hvx_lock", (char *) (&qurt_hvx_lock) },
+        { "qurt_hvx_unlock", (char *) (&qurt_hvx_unlock) },
+        { "__hexagon_divdf3", (char *) (&__hexagon_divdf3) },
+        { "__hexagon_muldf3", (char *) (&__hexagon_muldf3) },
+        { "__hexagon_adddf3", (char *) (&__hexagon_adddf3) },
+        { "__hexagon_subdf3", (char *) (&__hexagon_subdf3) },
+        { "__hexagon_divsf3", (char *) (&__hexagon_divsf3) },
+        { "__hexagon_udivdi3", (char *) (&__hexagon_udivdi3) },
+        { "__hexagon_udivsi3", (char *) (&__hexagon_udivsi3) },
+        { "__hexagon_umodsi3", (char *) (&__hexagon_umodsi3) },
+        { "__hexagon_divsi3", (char *) (&__hexagon_divsi3) },
+        { "__hexagon_modsi3", (char *) (&__hexagon_modsi3) },
+        { "__hexagon_sqrtf", (char *) (&sqrtf) },
+        { "sqrtf", (char *) (&sqrtf) },
+        { "sqrt", (char *) (&sqrt) },
+        { "sinf", (char *) (&sinf) },
+        { "expf", (char *) (&expf) },
+        { "exp", (char *) (&exp) },
+        { "logf", (char *) (&logf) },
+        { "log", (char *) (&log) },
+        { "powf", (char *) (&powf) },
+        { "pow", (char *) (&pow) },
+        { "sin", (char *) (&sin) },
+        { "cosf", (char *) (&cosf) },
+        { "cos", (char *) (&cos) },
+        { "tanf", (char *) (&tanf) },
+        { "tan", (char *) (&tan) },
+        { "asinf", (char *) (&asinf) },
+        { "asin", (char *) (&asin) },
+        { "acosf", (char *) (&acosf) },
+        { "acos", (char *) (&acos) },
+        { "atanf", (char *) (&atanf) },
+        { "atan", (char *) (&atan) },
+        { "atan2f", (char *) (&atan2f) },
+        { "atan2", (char *) (&atan2) },
+        { "sinhf", (char *) (&sinhf) },
+        { "sinh", (char *) (&sinh) },
+        { "coshf", (char *) (&coshf) },
+        { "cosh", (char *) (&cosh) },
+        { "tanhf", (char *) (&tanhf) },
+        { "tanh", (char *) (&tanh) },
+        { "asinhf", (char *) (&asinhf) },
+        { "asinh", (char *) (&asinh) },
+        { "acoshf", (char *) (&acoshf) },
+        { "acosh", (char *) (&acosh) },
+        { "atanhf", (char *) (&atanhf) },
+        { "atanh", (char *) (&atanh) },
+        { "nearbyintf", (char *) (&nearbyintf) },
+        { "nearbyint", (char *) (&nearbyint) },
+        { "truncf", (char *) (&truncf) },
+        { "trunc", (char *) (&trunc) },
+        { "floorf", (char *) (&floorf) },
+        { "floor", (char *) (&floor) },
+        { "ceilf", (char *) (&ceilf) },
+        { "ceil", (char *) (&ceil) },
+        { NULL, NULL }  // Null terminator.
     };
 
     for (int i = 0; known_syms[i].name; i++) {
-        if (strncmp(name, known_syms[i].name, strlen(known_syms[i].name)+1) == 0) {
+        if (strncmp(name, known_syms[i].name, strlen(known_syms[i].name) + 1) == 0) {
             return known_syms[i].addr;
         }
     }
@@ -228,15 +229,15 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              halide_error_handler_t error_handler,
                              halide_do_par_for_t do_par_for,
                              halide_do_task_t do_task,
-                             void *(*)(const char *),
-                             void *(*)(const char *),
-                             void *(*)(void *, const char *));
-void* dlopenbuf(const char*filename, const char* data, int size, int perms) __attribute__ ((weak));
+                             void *(*) (const char *),
+                             void *(*) (const char *),
+                             void *(*) (void *, const char *) );
+void *dlopenbuf(const char *filename, const char *data, int size, int perms) __attribute__((weak));
 
 static void dllib_init() {
     // The simulator needs this call to enable dlopen to work...
-    const char *builtin[] = {"libgcc.so", "libc.so", "libstdc++.so"};
-    dlinit(3, const_cast<char**>(builtin));
+    const char *builtin[] = { "libgcc.so", "libc.so", "libstdc++.so" };
+    dlinit(3, const_cast<char **>(builtin));
 }
 
 int initialize_kernels_v2(const unsigned char *code, int codeLen,
@@ -257,11 +258,11 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
 
         // Open the library
         dllib_init();
-        if(&dlopenbuf == NULL) {
+        if (&dlopenbuf == NULL) {
             halide_print(NULL, "dlopenbuf missing\n");
             return -1;
         }
-        lib = dlopenbuf( filename, (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
+        lib = dlopenbuf(filename, (const char *) code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
             halide_print(NULL, "dlopenbuf failed\n");
             return -1;
@@ -279,9 +280,9 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
     // to them in here.
     set_runtime_t set_runtime;
     if (use_shared_object) {
-        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
+        set_runtime = (set_runtime_t) dlsym(lib, "halide_noos_set_runtime");
     } else {
-        set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
+        set_runtime = (set_runtime_t) obj_dlsym(elib, "halide_noos_set_runtime");
     }
     if (!set_runtime) {
         if (use_shared_object) {
@@ -325,11 +326,11 @@ int initialize_kernels(const unsigned char *code, int codeLen,
     return initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
 
-handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, int use_shared_object) {
+handle_t get_symbol(handle_t module_ptr, const char *name, int nameLen, int use_shared_object) {
     if (use_shared_object) {
-        return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+        return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t *>(module_ptr), name));
     } else {
-        return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+        return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t *>(module_ptr), name));
     }
 }
 
@@ -348,10 +349,10 @@ int run(handle_t module_ptr, handle_t function,
     // can just make this dummy buffer_t type.
     struct buffer_t {
         uint64_t dev;
-        uint8_t* host;
+        uint8_t *host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
-    buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
+    void **args = (void **) __builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
+    buffer_t *buffers = (buffer_t *) __builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
 
     void **next_arg = &args[0];
     buffer_t *next_buffer_t = &buffers[0];
@@ -375,7 +376,7 @@ int run(handle_t module_ptr, handle_t function,
 }
 
 int release_kernels(handle_t module_ptr, int codeLen) {
-    obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
+    obj_dlclose(reinterpret_cast<elf_t *>(module_ptr));
     return 0;
 }
 
@@ -385,7 +386,7 @@ int *profiler_current_func_addr = &profiler_state.current_func;
 }
 
 halide_profiler_state *halide_profiler_get_state() {
-    return (halide_profiler_state *)(&profiler_state);
+    return (halide_profiler_state *) (&profiler_state);
 }
 
 extern "C" {
@@ -412,12 +413,11 @@ void set_rpc_return(int value) {
     rpc_ret = value;
     rpc_call = Message::None;
 }
-
 }
 
 int main(int argc, const char **argv) {
 
-    while(true) {
+    while (true) {
         switch (rpc_call) {
         case Message::None:
             break;
@@ -425,15 +425,15 @@ int main(int argc, const char **argv) {
             set_rpc_return(reinterpret_cast<int>(memalign(hvx_alignment, RPC_ARG(0))));
             break;
         case Message::Free:
-            free(reinterpret_cast<void*>(RPC_ARG(0)));
+            free(reinterpret_cast<void *>(RPC_ARG(0)));
             set_rpc_return(0);
             break;
         case Message::InitKernels:
             set_rpc_return(initialize_kernels_v2(
-                reinterpret_cast<unsigned char*>(RPC_ARG(0)),
+                reinterpret_cast<unsigned char *>(RPC_ARG(0)),
                 RPC_ARG(1),
                 RPC_ARG(2),
-                reinterpret_cast<handle_t*>(RPC_ARG(3))));
+                reinterpret_cast<handle_t *>(RPC_ARG(3))));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
@@ -446,11 +446,11 @@ int main(int argc, const char **argv) {
             set_rpc_return(run(
                 static_cast<handle_t>(RPC_ARG(0)),
                 static_cast<handle_t>(RPC_ARG(1)),
-                reinterpret_cast<const buffer*>(RPC_ARG(2)),
+                reinterpret_cast<const buffer *>(RPC_ARG(2)),
                 RPC_ARG(3),
-                reinterpret_cast<buffer*>(RPC_ARG(4)),
+                reinterpret_cast<buffer *>(RPC_ARG(4)),
                 RPC_ARG(5),
-                reinterpret_cast<const buffer*>(RPC_ARG(6)),
+                reinterpret_cast<const buffer *>(RPC_ARG(6)),
                 RPC_ARG(7)));
             break;
         case Message::ReleaseKernels:

@@ -12,14 +12,14 @@ int main() {
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             for (int c = 0; c < 3; c++) {
-                input(x, y, c) = 10*x + y + c;
+                input(x, y, c) = 10 * x + y + c;
             }
         }
     }
 
     Var x, y, c;
     Func g;
-    g(x, y, c) = {input(x, y, c), input(x, y, c) / 2};
+    g(x, y, c) = { input(x, y, c), input(x, y, c) / 2 };
 
     // h will be an opengl stage with tuple input. Tuple outputs
     // aren't supported because OpenGL ES 2.0 doesn't support multiple

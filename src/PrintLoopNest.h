@@ -18,7 +18,6 @@ class Function;
  * nest specified by this pipeline's schedule, and the schedules of
  * the functions it uses. */
 std::string print_loop_nest(const std::vector<Function> &output_funcs);
-
 }
 }
 

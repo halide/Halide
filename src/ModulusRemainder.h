@@ -12,8 +12,12 @@ namespace Internal {
 
 /** The result of modulus_remainder analysis */
 struct ModulusRemainder {
-    ModulusRemainder() : modulus(0), remainder(0) {}
-    ModulusRemainder(int m, int r) : modulus(m), remainder(r) {}
+    ModulusRemainder()
+        : modulus(0), remainder(0) {
+    }
+    ModulusRemainder(int m, int r)
+        : modulus(m), remainder(r) {
+    }
     int modulus, remainder;
 };
 
@@ -50,7 +54,6 @@ EXPORT int gcd(int, int);
 
 /** The least common multiple of two integers */
 EXPORT int lcm(int, int);
-
 }
 }
 

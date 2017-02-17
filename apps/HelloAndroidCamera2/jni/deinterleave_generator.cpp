@@ -15,9 +15,7 @@ public:
         // CPU schedule:
         //   Parallelize over scan lines, 4 scanlines per task.
         //   Independently, vectorize over x.
-        result
-            .parallel(y, 4)
-            .vectorize(x, natural_vector_size(UInt(8)));
+        result.parallel(y, 4).vectorize(x, natural_vector_size(UInt(8)));
 
         // Cope with rotated inputs
         uvInterleaved.dim(0).set_stride(Expr());

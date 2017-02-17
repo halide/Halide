@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     Param<float> p1, p2;
     Var x;
     Func f;
-    f(x) = require((p1 + p2) == kPrime1, 
+    f(x) = require((p1 + p2) == kPrime1,
                    (p1 + p2) * kPrime2,
                    "The parameters should add to exactly", (kPrime1 * kPrime2), "but were", p1, p2);
     f.set_error_handler(&halide_error);
@@ -40,9 +40,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-
     p1.set(1);
-    p2.set(kPrime1-1);
+    p2.set(kPrime1 - 1);
     error_occurred = false;
     result = f.realize(1);
     if (error_occurred) {
@@ -56,5 +55,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

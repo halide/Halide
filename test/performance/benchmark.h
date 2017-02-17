@@ -12,7 +12,7 @@
 extern "C" bool __stdcall QueryPerformanceCounter(uint64_t *);
 extern "C" bool __stdcall QueryPerformanceFrequency(uint64_t *);
 
-template <typename F>
+template<typename F>
 double benchmark(int samples, int iterations, F op) {
     uint64_t freq;
     QueryPerformanceFrequency(&freq);
@@ -36,7 +36,7 @@ double benchmark(int samples, int iterations, F op) {
 
 #include <chrono>
 
-template <typename F>
+template<typename F>
 double benchmark(int samples, int iterations, F op) {
     double best = std::numeric_limits<double>::infinity();
     for (int i = 0; i < samples; i++) {

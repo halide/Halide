@@ -1,6 +1,6 @@
 #include "UnifyDuplicateLets.h"
-#include "IRMutator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include <map>
 
 namespace Halide {
@@ -109,6 +109,5 @@ protected:
 Stmt unify_duplicate_lets(Stmt s) {
     return UnifyDuplicateLets().mutate(s);
 }
-
 }
 }

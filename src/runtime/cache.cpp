@@ -10,7 +10,9 @@
 // later. In the meantime, on some platforms it can be replaced by a
 // platform specific LRU cache such as libcache from Apple.
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 #define CACHE_DEBUGGING 0
 
@@ -35,9 +37,9 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
     debug(user_context) << "Key for " << msg << "\n";
     char buf[1024];
     bool append_ellipses = false;
-    if ((size_t)key_size > (sizeof(buf) / 2) - 1) { // Each byte in key can take two bytes in output
+    if ((size_t) key_size > (sizeof(buf) / 2) - 1) {  // Each byte in key can take two bytes in output
         append_ellipses = true;
-        key_size = (sizeof(buf) / 2) - 4; // room for NUL and "..."
+        key_size = (sizeof(buf) / 2) - 4;  // room for NUL and "..."
     }
     char *buf_ptr = buf;
     for (int i = 0; i < key_size; i++) {
@@ -90,7 +92,7 @@ struct CacheEntry {
     size_t key_size;
     uint8_t *key;
     uint32_t hash;
-    uint32_t in_use_count; // 0 if none returned from halide_cache_lookup
+    uint32_t in_use_count;  // 0 if none returned from halide_cache_lookup
     uint32_t tuple_count;
     buffer_t computed_bounds;
     buffer_t buf[1];
@@ -101,7 +103,6 @@ struct CacheEntry {
               int32_t tuples, buffer_t **tuple_buffers);
     void destroy();
     buffer_t &buffer(int32_t i);
-
 };
 
 struct CacheBlockHeader {
@@ -109,8 +110,8 @@ struct CacheBlockHeader {
     uint32_t hash;
 };
 
-WEAK CacheBlockHeader *get_pointer_to_header(uint8_t * host) {
-    return (CacheBlockHeader *)(host - extra_bytes_host_bytes);
+WEAK CacheBlockHeader *get_pointer_to_header(uint8_t *host) {
+    return (CacheBlockHeader *) (host - extra_bytes_host_bytes);
 }
 
 WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
@@ -124,7 +125,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     in_use_count = 0;
     tuple_count = tuples;
 
-    key = (uint8_t *)halide_malloc(NULL, key_size);
+    key = (uint8_t *) halide_malloc(NULL, key_size);
     if (key == NULL) {
         return false;
     }
@@ -153,10 +154,10 @@ WEAK buffer_t &CacheEntry::buffer(int32_t i) {
     return buf_ptr[i];
 }
 
-WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
+WEAK uint32_t djb_hash(const uint8_t *key, size_t key_size) {
     uint32_t h = 5381;
     for (size_t i = 0; i < key_size; i++) {
-      h = (h << 5) + h + key[i];
+        h = (h << 5) + h + key[i];
     }
     return h;
 }
@@ -278,8 +279,9 @@ WEAK void prune_cache() {
     validate_cache();
 #endif
 }
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal
 
 extern "C" {
 
@@ -316,10 +318,10 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
-        if (entry->hash == h && entry->key_size == (size_t)size &&
+        if (entry->hash == h && entry->key_size == (size_t) size &&
             keys_equal(entry->key, cache_key, size) &&
             bounds_equal(entry->computed_bounds, *computed_bounds) &&
-            entry->tuple_count == (uint32_t)tuple_count) {
+            entry->tuple_count == (uint32_t) tuple_count) {
 
             bool all_bounds_equal = true;
 
@@ -367,7 +369,7 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
         buffer_t *buf = tuple_buffers[i];
 
         // See documentation on extra_bytes_host_bytes
-        buf->host = ((uint8_t *)halide_malloc(user_context, buf_size(buf) + extra_bytes_host_bytes));
+        buf->host = ((uint8_t *) halide_malloc(user_context, buf_size(buf) + extra_bytes_host_bytes));
         if (buf->host == NULL) {
             for (int32_t j = i; j > 0; j--) {
                 halide_free(user_context, get_pointer_to_header(tuple_buffers[j - 1]->host));
@@ -413,10 +415,10 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
-        if (entry->hash == h && entry->key_size == (size_t)size &&
+        if (entry->hash == h && entry->key_size == (size_t) size &&
             keys_equal(entry->key, cache_key, size) &&
             bounds_equal(entry->computed_bounds, *computed_bounds) &&
-            entry->tuple_count == (uint32_t)tuple_count) {
+            entry->tuple_count == (uint32_t) tuple_count) {
 
             bool all_bounds_equal = true;
             bool no_host_pointers_equal = true;
@@ -435,7 +437,6 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
                 // so halide_memoization_cache_release can free the buffer.
                 for (int32_t i = 0; i < tuple_count; i++) {
                     get_pointer_to_header(tuple_buffers[i]->host)->entry = NULL;
-
                 }
                 return 0;
             }
@@ -465,7 +466,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
         return 0;
     }
 
-    CacheEntry *new_entry = (CacheEntry *)entry_storage;
+    CacheEntry *new_entry = (CacheEntry *) entry_storage;
     bool inited = new_entry->init(cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);
     if (!inited) {
         current_cache_size -= added_size;
@@ -506,7 +507,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
 }
 
 WEAK void halide_memoization_cache_release(void *user_context, void *host) {
-    CacheBlockHeader *header = get_pointer_to_header((uint8_t *)host);
+    CacheBlockHeader *header = get_pointer_to_header((uint8_t *) host);
     debug(user_context) << "halide_memoization_cache_release\n";
     CacheEntry *entry = header->entry;
 
@@ -544,10 +545,9 @@ WEAK void halide_memoization_cache_cleanup() {
 namespace {
 
 __attribute__((destructor))
-WEAK void halide_cache_cleanup() {
+WEAK void
+halide_cache_cleanup() {
     halide_memoization_cache_cleanup();
 }
-
 }
-
 }

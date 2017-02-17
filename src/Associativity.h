@@ -42,7 +42,7 @@ namespace Internal {
  * anything.
  */
 struct AssociativeOp {
-    Expr op; // op(x, y)
+    Expr op;  // op(x, y)
     Expr identity;
     std::pair<std::string, Expr> x;
     std::pair<std::string, Expr> y;
@@ -62,9 +62,12 @@ struct ProveAssociativityResult {
     std::vector<AssociativeOp> ops;
 
     ProveAssociativityResult(bool associative, bool commutative, const std::vector<AssociativeOp> &ops)
-        : is_associative(associative), is_commutative(commutative), ops(ops) {}
+        : is_associative(associative), is_commutative(commutative), ops(ops) {
+    }
 
-    ProveAssociativityResult() : ProveAssociativityResult(false, false, std::vector<AssociativeOp>()) {}
+    ProveAssociativityResult()
+        : ProveAssociativityResult(false, false, std::vector<AssociativeOp>()) {
+    }
 };
 
 /**
@@ -90,7 +93,6 @@ ProveAssociativityResult prove_associativity(
     const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
 
 EXPORT void associativity_test();
-
 }
 }
 

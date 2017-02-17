@@ -1,8 +1,8 @@
-#include <sstream>
 #include <algorithm>
+#include <sstream>
 
-#include "CodeGen_Metal_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
 #include "IROperator.h"
 
@@ -16,8 +16,8 @@ using std::sort;
 
 static ostringstream nil;
 
-CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t) :
-    metal_c(src_stream), target(t) {
+CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t)
+    : metal_c(src_stream), target(t) {
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space) {
@@ -70,7 +70,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, b
             oss << type.lanes();
             break;
         default:
-            user_error <<  "Unsupported vector width in Metal C: " << type << "\n";
+            user_error << "Unsupported vector width in Metal C: " << type << "\n";
         }
     }
     if (space == AppendSpace) {
@@ -97,8 +97,6 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, Expr e) 
     oss << "*(" << print_type(type) << " thread *)(&" << temp << ")";
     return oss.str();
 }
-
-
 
 namespace {
 string simt_intrinsic(const string &name) {
@@ -141,7 +139,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
+        oss << print_expr(op->a) << " & " << ((1 << bits) - 1);
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
@@ -210,7 +208,6 @@ Expr is_ramp_one(Expr e) {
 }
 }
 
-
 string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
     return "__address_space_" + print_name(buf);
 }
@@ -272,7 +269,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
         for (int i = 0; i < op->type.lanes(); ++i) {
             do_indent();
             stream
-              << id << "[" << i << "]"
+                << id << "[" << i << "]"
                 << " = ((" << get_memory_space(op->name) << " "
                 << print_type(op->type.element_of()) << "*)"
                 << print_name(op->name) << ")"
@@ -422,10 +419,14 @@ struct BufferSize {
     string name;
     size_t size;
 
-    BufferSize() : size(0) {}
-    BufferSize(string name, size_t size) : name(name), size(size) {}
+    BufferSize()
+        : size(0) {
+    }
+    BufferSize(string name, size_t size)
+        : name(name), size(size) {
+    }
 
-    bool operator < (const BufferSize &r) const {
+    bool operator<(const BufferSize &r) const {
         return size < r.size;
     }
 };
@@ -529,7 +530,8 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(Stmt s,
             allocations.push(args[i].name, alloc);
         }
     }
-    stream << ",\n" << " threadgroup int16_t* __shared [[ threadgroup(0) ]]";
+    stream << ",\n"
+           << " threadgroup int16_t* __shared [[ threadgroup(0) ]]";
 
     stream << ")\n";
 
@@ -573,10 +575,10 @@ void CodeGen_Metal_Dev::init_module() {
 
     // Write out the Halide math functions.
     src_stream << "#include <metal_stdlib>\n"
-               << "using namespace metal;\n" // Seems like the right way to go.
+               << "using namespace metal;\n"  // Seems like the right way to go.
                << "namespace {\n"
                << "constexpr float float_from_bits(unsigned int x) {return as_type<float>(x);}\n"
-               << "constexpr float nan_f32() { return as_type<float>(0x7fc00000); }\n" // Quiet NaN with minimum fractional value.
+               << "constexpr float nan_f32() { return as_type<float>(0x7fc00000); }\n"  // Quiet NaN with minimum fractional value.
                << "constexpr float neg_inf_f32() { return float_from_bits(0xff800000); }\n"
                << "constexpr float inf_f32() { return float_from_bits(0x7f800000); }\n"
                << "float fast_inverse_f32(float x) { return 1.0f / x; } \n"
@@ -603,9 +605,9 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define tanh_f32 tanh \n"
                << "#define atanh_f32 atanh \n"
                << "#define fast_inverse_sqrt_f32 rsqrt \n"
-               << "#define halide_gpu_thread_barrier() \\\n" // Must to be a #define as barriers in an inline function don't work
-               << "  (threadgroup_barrier(mem_flags::mem_threadgroup), 0)\n" // Halide only ever needs threadgroup (OpenCL "local") memory fences. (mem_threadgroup)
-               << "}\n"; // close namespace
+               << "#define halide_gpu_thread_barrier() \\\n"  // Must to be a #define as barriers in an inline function don't work
+               << "  (threadgroup_barrier(mem_flags::mem_threadgroup), 0)\n"  // Halide only ever needs threadgroup (OpenCL "local") memory fences. (mem_threadgroup)
+               << "}\n";  // close namespace
 
     // __shared always has address space threadgroup.
     src_stream << "#define __address_space___shared threadgroup\n";
@@ -617,7 +619,8 @@ void CodeGen_Metal_Dev::init_module() {
 
 vector<char> CodeGen_Metal_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "Metal kernel:\n" << str << "\n";
+    debug(1) << "Metal kernel:\n"
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -634,5 +637,5 @@ void CodeGen_Metal_Dev::dump() {
 std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
-
-}}
+}
+}

@@ -8,7 +8,7 @@
 
 #import <Foundation/Foundation.h>
 
-extern NSString* kAppProtocolURLScheme;
+extern NSString *kAppProtocolURLScheme;
 
 @interface AppProtocol : NSURLProtocol
 

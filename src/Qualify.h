@@ -13,9 +13,7 @@ namespace Internal {
 
 /** Prefix all variable names in the given expression with the prefix string. */
 Expr qualify(const std::string &prefix, Expr value);
-
 }
 }
-
 
 #endif

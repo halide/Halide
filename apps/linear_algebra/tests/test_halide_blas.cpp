@@ -1,62 +1,62 @@
+#include "Halide.h"
+#include <cblas.h>
 #include <cmath>
+#include <halide_blas.h>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <random>
 #include <string>
-#include <cblas.h>
-#include <halide_blas.h>
-#include "Halide.h"
 
-#define RUN_TEST(method)                                                \
+#define RUN_TEST(method)                                                   \
     std::cout << std::setw(30) << ("Testing " #method ": ") << std::flush; \
-    if (test_##method(N)) {                                             \
-        std::cout << "PASSED\n";                                        \
-    }                                                                   \
-
-#define L1_VECTOR_TEST(method, code)            \
-    bool test_##method(int N) {                 \
-        Scalar alpha = random_scalar();         \
-        Vector ex(random_vector(N));            \
-        Vector ey(random_vector(N));            \
-        Vector ax(ex), ay(ey);                  \
-                                                \
-        {                                       \
-            Scalar *x = &(ex[0]);               \
-            Scalar *y = &(ey[0]);               \
-            cblas_##code;                       \
-        }                                       \
-                                                \
-        {                                       \
-            Scalar *x = &(ax[0]);               \
-            Scalar *y = &(ay[0]);               \
-            hblas_##code;                       \
-        }                                       \
-                                                \
-        return compareVectors(N, ey, ay);       \
+    if (test_##method(N)) {                                                \
+        std::cout << "PASSED\n";                                           \
     }
 
-#define L1_SCALAR_TEST(method, code)            \
-    bool test_##method(int N) {                 \
-        Scalar alpha = random_scalar();         \
-        Vector ex(random_vector(N));            \
-        Vector ey(random_vector(N));            \
-        Vector ax(ex), ay(ey);                  \
-        Scalar er, ar;                          \
-                                                \
-        {                                       \
-            Scalar *x = &(ex[0]);               \
-            Scalar *y = &(ey[0]);               \
-            er = cblas_##code;                  \
-        }                                       \
-                                                \
-        {                                       \
-            Scalar *x = &(ax[0]);               \
-            Scalar *y = &(ay[0]);               \
-            ar = hblas_##code;                  \
-        }                                       \
-                                                \
-        return compareScalars(er, ar);          \
+#define L1_VECTOR_TEST(method, code)      \
+    bool test_##method(int N) {           \
+        Scalar alpha = random_scalar();   \
+        Vector ex(random_vector(N));      \
+        Vector ey(random_vector(N));      \
+        Vector ax(ex), ay(ey);            \
+                                          \
+        {                                 \
+            Scalar *x = &(ex[0]);         \
+            Scalar *y = &(ey[0]);         \
+            cblas_##code;                 \
+        }                                 \
+                                          \
+        {                                 \
+            Scalar *x = &(ax[0]);         \
+            Scalar *y = &(ay[0]);         \
+            hblas_##code;                 \
+        }                                 \
+                                          \
+        return compareVectors(N, ey, ay); \
+    }
+
+#define L1_SCALAR_TEST(method, code)    \
+    bool test_##method(int N) {         \
+        Scalar alpha = random_scalar(); \
+        Vector ex(random_vector(N));    \
+        Vector ey(random_vector(N));    \
+        Vector ax(ex), ay(ey);          \
+        Scalar er, ar;                  \
+                                        \
+        {                               \
+            Scalar *x = &(ex[0]);       \
+            Scalar *y = &(ey[0]);       \
+            er = cblas_##code;          \
+        }                               \
+                                        \
+        {                               \
+            Scalar *x = &(ax[0]);       \
+            Scalar *y = &(ay[0]);       \
+            ar = hblas_##code;          \
+        }                               \
+                                        \
+        return compareScalars(er, ar);  \
     }
 
 #define L2_TEST(method, cblas_code, hblas_code) \
@@ -112,7 +112,6 @@
         return compareMatrices(N, eC, aC);      \
     }
 
-
 template<class T>
 struct BLASTestBase {
     typedef T Scalar;
@@ -122,7 +121,9 @@ struct BLASTestBase {
     std::random_device rand_dev;
     std::default_random_engine rand_eng;
 
-    BLASTestBase() : rand_eng(rand_dev()) {}
+    BLASTestBase()
+        : rand_eng(rand_dev()) {
+    }
 
     Scalar random_scalar() {
         std::uniform_real_distribution<T> uniform_dist(0.0, 1.0);
@@ -131,7 +132,7 @@ struct BLASTestBase {
 
     Vector random_vector(int N) {
         Vector buff(N);
-        for (int i=0; i<N; ++i) {
+        for (int i = 0; i < N; ++i) {
             buff[i] = random_scalar();
         }
         return buff;
@@ -139,13 +140,15 @@ struct BLASTestBase {
 
     Matrix random_matrix(int N) {
         Matrix buff(N * N);
-        for (int i=0; i<N*N; ++i) {
+        for (int i = 0; i < N * N; ++i) {
             buff[i] = random_scalar();
         }
         return buff;
     }
 
-    bool compareScalars(Scalar x, Scalar y, Scalar epsilon = 4 * std::numeric_limits<Scalar>::epsilon()) {
+    bool compareScalars(Scalar x, Scalar y,
+                        Scalar epsilon = 4 *
+                                         std::numeric_limits<Scalar>::epsilon()) {
         if (x == y) {
             return true;
         } else {
@@ -171,7 +174,8 @@ struct BLASTestBase {
     }
 
     bool compareVectors(int N, const Vector &x, const Vector &y,
-                        Scalar epsilon = 16 * std::numeric_limits<Scalar>::epsilon()) {
+                        Scalar epsilon = 16 *
+                                         std::numeric_limits<Scalar>::epsilon()) {
         bool equal = true;
         for (int i = 0; i < N; ++i) {
             if (!compareScalars(x[i], y[i], epsilon)) {
@@ -183,12 +187,14 @@ struct BLASTestBase {
         return equal;
     }
 
-    bool compareMatrices(int N, const Matrix &A, const Matrix &B,
-                         Scalar epsilon = 16 * std::numeric_limits<Scalar>::epsilon()) {
+    bool compareMatrices(
+        int N, const Matrix &A, const Matrix &B,
+        Scalar epsilon = 16 * std::numeric_limits<Scalar>::epsilon()) {
         bool equal = true;
-        for (int i = 0; i < N*N; ++i) {
+        for (int i = 0; i < N * N; ++i) {
             if (!compareScalars(A[i], B[i], epsilon)) {
-                std::cerr << "Matrices differ at coords: (" << i%N << ", " << i/N << ")\n";
+                std::cerr << "Matrices differ at coords: (" << i % N << ", " << i / N
+                          << ")\n";
                 equal = false;
                 break;
             }
@@ -220,28 +226,33 @@ struct BLASFloatTests : public BLASTestBase<float> {
     L1_SCALAR_TEST(sdot, sdot(N, x, 1, y, 1))
     L1_SCALAR_TEST(sasum, sasum(N, x, 1))
 
-    L2_TEST(sgemv_notrans,
-            cblas_sgemv(CblasColMajor, CblasNoTrans, N, N, alpha, A, N, x, 1, beta, y, 1),
-            hblas_sgemv(HblasColMajor, HblasNoTrans, N, N, alpha, A, N, x, 1, beta, y, 1));
-    L2_TEST(sgemv_trans,
-            cblas_sgemv(CblasColMajor, CblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1),
-            hblas_sgemv(HblasColMajor, HblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1));
-    L2_TEST(sger,
-            cblas_sger(CblasColMajor, N, N, alpha, x, 1, y, 1, A, N),
+    L2_TEST(sgemv_notrans, cblas_sgemv(CblasColMajor, CblasNoTrans, N, N, alpha,
+                                       A, N, x, 1, beta, y, 1),
+            hblas_sgemv(HblasColMajor, HblasNoTrans, N, N, alpha, A, N, x, 1,
+                        beta, y, 1));
+    L2_TEST(sgemv_trans, cblas_sgemv(CblasColMajor, CblasTrans, N, N, alpha, A, N,
+                                     x, 1, beta, y, 1),
+            hblas_sgemv(HblasColMajor, HblasTrans, N, N, alpha, A, N, x, 1, beta,
+                        y, 1));
+    L2_TEST(sger, cblas_sger(CblasColMajor, N, N, alpha, x, 1, y, 1, A, N),
             hblas_sger(HblasColMajor, N, N, alpha, x, 1, y, 1, A, N));
 
-    L3_TEST(sgemm_notrans,
-            cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
-            hblas_sgemm(HblasColMajor, HblasNoTrans, HblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
-    L3_TEST(sgemm_transA,
-            cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
-            hblas_sgemm(HblasColMajor, HblasTrans, HblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
-    L3_TEST(sgemm_transB,
-            cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
-            hblas_sgemm(HblasColMajor, HblasNoTrans, HblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
-    L3_TEST(sgemm_transAB,
-            cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
-            hblas_sgemm(HblasColMajor, HblasTrans, HblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
+    L3_TEST(sgemm_notrans, cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+                                       N, N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_sgemm(HblasColMajor, HblasNoTrans, HblasNoTrans, N, N, N, alpha,
+                        A, N, B, N, beta, C, N));
+    L3_TEST(sgemm_transA, cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans, N,
+                                      N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_sgemm(HblasColMajor, HblasTrans, HblasNoTrans, N, N, N, alpha,
+                        A, N, B, N, beta, C, N));
+    L3_TEST(sgemm_transB, cblas_sgemm(CblasColMajor, CblasNoTrans, CblasTrans, N,
+                                      N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_sgemm(HblasColMajor, HblasNoTrans, HblasTrans, N, N, N, alpha,
+                        A, N, B, N, beta, C, N));
+    L3_TEST(sgemm_transAB, cblas_sgemm(CblasColMajor, CblasTrans, CblasTrans, N,
+                                       N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_sgemm(HblasColMajor, HblasTrans, HblasTrans, N, N, N, alpha, A,
+                        N, B, N, beta, C, N));
 };
 
 struct BLASDoubleTests : public BLASTestBase<double> {
@@ -267,34 +278,38 @@ struct BLASDoubleTests : public BLASTestBase<double> {
     L1_SCALAR_TEST(ddot, ddot(N, x, 1, y, 1))
     L1_SCALAR_TEST(dasum, dasum(N, x, 1))
 
-    L2_TEST(dgemv_notrans,
-            cblas_dgemv(CblasColMajor, CblasNoTrans, N, N, alpha, A, N, x, 1, beta, y, 1),
-            hblas_dgemv(HblasColMajor, HblasNoTrans, N, N, alpha, A, N, x, 1, beta, y, 1));
-    L2_TEST(dgemv_trans,
-            cblas_dgemv(CblasColMajor, CblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1),
-            hblas_dgemv(HblasColMajor, HblasTrans, N, N, alpha, A, N, x, 1, beta, y, 1));
-    L2_TEST(dger,
-            cblas_dger(CblasColMajor, N, N, alpha, x, 1, y, 1, A, N),
+    L2_TEST(dgemv_notrans, cblas_dgemv(CblasColMajor, CblasNoTrans, N, N, alpha,
+                                       A, N, x, 1, beta, y, 1),
+            hblas_dgemv(HblasColMajor, HblasNoTrans, N, N, alpha, A, N, x, 1,
+                        beta, y, 1));
+    L2_TEST(dgemv_trans, cblas_dgemv(CblasColMajor, CblasTrans, N, N, alpha, A, N,
+                                     x, 1, beta, y, 1),
+            hblas_dgemv(HblasColMajor, HblasTrans, N, N, alpha, A, N, x, 1, beta,
+                        y, 1));
+    L2_TEST(dger, cblas_dger(CblasColMajor, N, N, alpha, x, 1, y, 1, A, N),
             hblas_dger(HblasColMajor, N, N, alpha, x, 1, y, 1, A, N));
 
-    L3_TEST(dgemm_notrans,
-            cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
-            hblas_dgemm(HblasColMajor, HblasNoTrans, HblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
-    L3_TEST(dgemm_transA,
-            cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
-            hblas_dgemm(HblasColMajor, HblasTrans, HblasNoTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
-    L3_TEST(dgemm_transB,
-            cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
-            hblas_dgemm(HblasColMajor, HblasNoTrans, HblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
-    L3_TEST(dgemm_transAB,
-            cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N),
-            hblas_dgemm(HblasColMajor, HblasTrans, HblasTrans, N, N, N, alpha, A, N, B, N, beta, C, N));
+    L3_TEST(dgemm_notrans, cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+                                       N, N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_dgemm(HblasColMajor, HblasNoTrans, HblasNoTrans, N, N, N, alpha,
+                        A, N, B, N, beta, C, N));
+    L3_TEST(dgemm_transA, cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans, N,
+                                      N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_dgemm(HblasColMajor, HblasTrans, HblasNoTrans, N, N, N, alpha,
+                        A, N, B, N, beta, C, N));
+    L3_TEST(dgemm_transB, cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans, N,
+                                      N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_dgemm(HblasColMajor, HblasNoTrans, HblasTrans, N, N, N, alpha,
+                        A, N, B, N, beta, C, N));
+    L3_TEST(dgemm_transAB, cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans, N,
+                                       N, N, alpha, A, N, B, N, beta, C, N),
+            hblas_dgemm(HblasColMajor, HblasTrans, HblasTrans, N, N, N, alpha, A,
+                        N, B, N, beta, C, N));
 };
 
 int main(int argc, char *argv[]) {
-    BLASFloatTests  s;
+    BLASFloatTests s;
     BLASDoubleTests d;
-
 
     if (argc > 1) {
         for (int i = 1; i < argc; ++i) {

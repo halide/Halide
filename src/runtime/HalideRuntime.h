@@ -2,9 +2,9 @@
 #define HALIDE_HALIDERUNTIME_H
 
 #ifndef COMPILING_HALIDE_RUNTIME
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
 #else
 #include "runtime_internal.h"
 #endif
@@ -12,7 +12,8 @@
 #ifdef __cplusplus
 // Forward declare type to allow naming typed handles.
 // See Type.h for documentation.
-template<typename T> struct halide_handle_traits;
+template<typename T>
+struct halide_handle_traits;
 #endif
 
 #ifdef __cplusplus
@@ -127,7 +128,7 @@ extern void halide_shutdown_thread_pool();
 
 /** Set a custom method for performing a parallel for loop. Returns
  * the old do_par_for handler. */
-typedef int (*halide_do_par_for_t)(void *, halide_task_t, int, int, uint8_t*);
+typedef int (*halide_do_par_for_t)(void *, halide_task_t, int, int, uint8_t *);
 extern halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t do_par_for);
 
 /** If you use the default do_par_for, you can still set a custom
@@ -227,23 +228,23 @@ extern int32_t halide_debug_to_file(void *user_context, const char *filename,
  */
 typedef enum halide_type_code_t
 #if __cplusplus >= 201103L
-: uint8_t
+    : uint8_t
 #endif
 {
-    halide_type_int = 0,   //!< signed integers
+    halide_type_int = 0,  //!< signed integers
     halide_type_uint = 1,  //!< unsigned integers
-    halide_type_float = 2, //!< floating point numbers
-    halide_type_handle = 3 //!< opaque pointer type (void *)
+    halide_type_float = 2,  //!< floating point numbers
+    halide_type_handle = 3  //!< opaque pointer type (void *)
 } halide_type_code_t;
 
 // Note that while __attribute__ can go before or after the declaration,
 // __declspec apparently is only allowed before.
 #ifndef HALIDE_ATTRIBUTE_ALIGN
-    #ifdef _MSC_VER
-        #define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
-    #else
-        #define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
-    #endif
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
+#else
+#define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
+#endif
 #endif
 
 /** A runtime tag for a type in the halide type system. Can be ints,
@@ -252,18 +253,22 @@ typedef enum halide_type_code_t
  * field to something larger than one). This struct should be
  * exactly 32-bits in size. */
 struct halide_type_t {
-    /** The basic type code: signed integer, unsigned integer, or floating point. */
+/** The basic type code: signed integer, unsigned integer, or floating point. */
 #if __cplusplus >= 201103L
-    HALIDE_ATTRIBUTE_ALIGN(1) halide_type_code_t code; // halide_type_code_t
+    HALIDE_ATTRIBUTE_ALIGN(1)
+    halide_type_code_t code;  // halide_type_code_t
 #else
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t code; // halide_type_code_t
+    HALIDE_ATTRIBUTE_ALIGN(1)
+    uint8_t code;  // halide_type_code_t
 #endif
 
     /** The number of bits of precision of a single scalar value of this type. */
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t bits;
+    HALIDE_ATTRIBUTE_ALIGN(1)
+    uint8_t bits;
 
     /** How many elements in a vector. This is 1 for scalar types. */
-    HALIDE_ATTRIBUTE_ALIGN(2) uint16_t lanes;
+    HALIDE_ATTRIBUTE_ALIGN(2)
+    uint16_t lanes;
 
 #ifdef __cplusplus
     /** Construct a runtime representation of a Halide type from:
@@ -276,7 +281,9 @@ struct halide_type_t {
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    HALIDE_ALWAYS_INLINE halide_type_t() : code((halide_type_code_t)0), bits(0), lanes(0) {}
+    HALIDE_ALWAYS_INLINE halide_type_t()
+        : code((halide_type_code_t) 0), bits(0), lanes(0) {
+    }
 
     /** Compare two types for equality. */
     HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
@@ -290,20 +297,22 @@ struct halide_type_t {
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    HALIDE_ALWAYS_INLINE int bytes() const { return (bits + 7) / 8; }
+    HALIDE_ALWAYS_INLINE int bytes() const {
+        return (bits + 7) / 8;
+    }
 #endif
 };
 
-enum halide_trace_event_code_t {halide_trace_load = 0,
-                                halide_trace_store = 1,
-                                halide_trace_begin_realization = 2,
-                                halide_trace_end_realization = 3,
-                                halide_trace_produce = 4,
-                                halide_trace_end_produce = 5,
-                                halide_trace_consume = 6,
-                                halide_trace_end_consume = 7,
-                                halide_trace_begin_pipeline = 8,
-                                halide_trace_end_pipeline = 9};
+enum halide_trace_event_code_t { halide_trace_load = 0,
+                                 halide_trace_store = 1,
+                                 halide_trace_begin_realization = 2,
+                                 halide_trace_end_realization = 3,
+                                 halide_trace_produce = 4,
+                                 halide_trace_end_produce = 5,
+                                 halide_trace_consume = 6,
+                                 halide_trace_end_consume = 7,
+                                 halide_trace_begin_pipeline = 8,
+                                 halide_trace_end_pipeline = 9 };
 
 struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
@@ -348,7 +357,8 @@ struct halide_trace_event_t {
 #ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_event_t() {}
+    HALIDE_ALWAYS_INLINE halide_trace_event_t() {
+    }
 #endif
 };
 
@@ -404,36 +414,35 @@ struct halide_trace_packet_t {
     int32_t parent_id;
     int32_t value_index;
     int32_t dimensions;
-    // @}
+// @}
 
-    #ifdef __cplusplus
+#ifdef __cplusplus
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_packet_t() {}
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t() {
+    }
 
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
      * immediately after the packet header. */
     HALIDE_ALWAYS_INLINE const int *coordinates() const {
-        return (const int *)(this + 1);
+        return (const int *) (this + 1);
     }
 
     /** Get the value, assuming this packet is laid out in memory as
      * it was written. The packet comes immediately after the coordinates
      * array. */
     HALIDE_ALWAYS_INLINE const void *value() const {
-        return (const void *)(coordinates() + dimensions);
+        return (const void *) (coordinates() + dimensions);
     }
 
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
     HALIDE_ALWAYS_INLINE const char *func() const {
-        return (const char *)value() + type.lanes * type.bytes();
+        return (const char *) value() + type.lanes * type.bytes();
     }
-    #endif
+#endif
 };
-
-
 
 /** Set the file descriptor that Halide should write binary trace
  * events to. If called with 0 as the argument, Halide outputs trace
@@ -505,7 +514,7 @@ extern int halide_weak_device_free(void *user_context, struct buffer_t *buf);
 #pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
 #endif
 inline halide_device_free_t halide_get_device_free_fn() {
-    if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
+    if ((const void **) (&halide_weak_device_free) == &halide_dummy_device_free) {
         return NULL;
     } else {
         return &halide_weak_device_free;
@@ -615,8 +624,8 @@ extern void halide_memoization_cache_cleanup();
  * for deleting this file. Returns nonzero value if an error occurs.
  */
 extern int halide_create_temp_file(void *user_context,
-  const char *prefix, const char *suffix,
-  char *path_buf, size_t path_buf_size);
+                                   const char *prefix, const char *suffix,
+                                   char *path_buf, size_t path_buf_size);
 
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
@@ -775,7 +784,7 @@ extern int halide_error_extern_stage_failed(void *user_context, const char *exte
  * description of each. */
 // @{
 extern int halide_error_explicit_bounds_too_small(void *user_context, const char *func_name, const char *var_name,
-                                                      int min_bound, int max_bound, int min_required, int max_required);
+                                                  int min_bound, int max_bound, int min_required, int max_required);
 extern int halide_error_bad_elem_size(void *user_context, const char *func_name,
                                       const char *type_name, int elem_size_given, int correct_elem_size);
 extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
@@ -823,7 +832,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_jit = 0,  ///< Generate code that will run immediately inside the calling process.
     halide_target_feature_debug = 1,  ///< Turn on debug info and output for runtime code.
     halide_target_feature_no_asserts = 2,  ///< Disable all runtime checks, for slightly tighter code.
-    halide_target_feature_no_bounds_query = 3, ///< Disable the bounds querying functionality.
+    halide_target_feature_no_bounds_query = 3,  ///< Disable the bounds querying functionality.
 
     halide_target_feature_sse41 = 4,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
     halide_target_feature_avx = 5,  ///< Use AVX 1 instructions. Only relevant on x86.
@@ -848,36 +857,36 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cl_doubles = 20,  ///< Enable double support on OpenCL targets
 
     halide_target_feature_opengl = 21,  ///< Enable the OpenGL runtime.
-    halide_target_feature_openglcompute = 22, ///< Enable OpenGL Compute runtime.
+    halide_target_feature_openglcompute = 22,  ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_unused_23 = 23, ///< Unused. (Formerly: Enable the RenderScript runtime.)
+    halide_target_feature_unused_23 = 23,  ///< Unused. (Formerly: Enable the RenderScript runtime.)
 
     halide_target_feature_user_context = 24,  ///< Generated code takes a user_context pointer as first argument
 
     halide_target_feature_matlab = 25,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
 
-    halide_target_feature_profile = 26, ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
-    halide_target_feature_no_runtime = 27, ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+    halide_target_feature_profile = 26,  ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_no_runtime = 27,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
-    halide_target_feature_metal = 28, ///< Enable the (Apple) Metal runtime.
-    halide_target_feature_mingw = 29, ///< For Windows compile to MinGW toolset rather then Visual Studio
+    halide_target_feature_metal = 28,  ///< Enable the (Apple) Metal runtime.
+    halide_target_feature_mingw = 29,  ///< For Windows compile to MinGW toolset rather then Visual Studio
 
-    halide_target_feature_c_plus_plus_mangling = 30, ///< Generate C++ mangled names for result function, et al
+    halide_target_feature_c_plus_plus_mangling = 30,  ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_large_buffers = 31, ///< Enable 64-bit buffer indexing to support buffers > 2GB.
+    halide_target_feature_large_buffers = 31,  ///< Enable 64-bit buffer indexing to support buffers > 2GB.
 
-    halide_target_feature_hvx_64 = 32, ///< Enable HVX 64 byte mode.
-    halide_target_feature_hvx_128 = 33, ///< Enable HVX 128 byte mode.
-    halide_target_feature_hvx_v62 = 34, ///< Enable Hexagon v62 architecture.
-    halide_target_feature_fuzz_float_stores = 35, ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
-    halide_target_feature_soft_float_abi = 36, ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
-    halide_target_feature_msan = 37, ///< Enable hooks for MSAN support.
-    halide_target_feature_avx512 = 38, ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
-    halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
-    halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
-    halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
-    halide_target_feature_hvx_use_shared_object = 42, ///< Build shared object code for Hexagon, and use dlopenbuf API.
-    halide_target_feature_end = 43 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_hvx_64 = 32,  ///< Enable HVX 64 byte mode.
+    halide_target_feature_hvx_128 = 33,  ///< Enable HVX 128 byte mode.
+    halide_target_feature_hvx_v62 = 34,  ///< Enable Hexagon v62 architecture.
+    halide_target_feature_fuzz_float_stores = 35,  ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
+    halide_target_feature_soft_float_abi = 36,  ///< Enable soft float ABI. This only enables the soft float ABI calling convention, which does not necessarily use soft floats.
+    halide_target_feature_msan = 37,  ///< Enable hooks for MSAN support.
+    halide_target_feature_avx512 = 38,  ///< Enable the base AVX512 subset supported by all AVX512 architectures. The specific feature sets are AVX-512F and AVX512-CD. See https://en.wikipedia.org/wiki/AVX-512 for a description of each AVX subset.
+    halide_target_feature_avx512_knl = 39,  ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
+    halide_target_feature_avx512_skylake = 40,  ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
+    halide_target_feature_avx512_cannonlake = 41,  ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
+    halide_target_feature_hvx_use_shared_object = 42,  ///< Build shared object code for Hexagon, and use dlopenbuf API.
+    halide_target_feature_end = 43  ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
@@ -916,7 +925,6 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  */
 extern int halide_default_can_use_target_features(uint64_t features);
 
-
 #ifndef HALIDE_ATTRIBUTE_DEPRECATED
 #ifdef HALIDE_ALLOW_DEPRECATED
 #define HALIDE_ATTRIBUTE_DEPRECATED(x)
@@ -928,7 +936,6 @@ extern int halide_default_can_use_target_features(uint64_t features);
 #endif
 #endif
 #endif
-
 
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
@@ -945,7 +952,7 @@ typedef struct buffer_t {
     /** A pointer to the start of the data in main memory. In terms of
      * the Halide coordinate system, this is the address of the min
      * coordinates (defined below). */
-    uint8_t* host;
+    uint8_t *host;
 
     /** The size of the buffer in each dimension. */
     int32_t extent[4];
@@ -974,17 +981,20 @@ typedef struct buffer_t {
     /** This should be true if there is an existing device allocation
     * mirroring this buffer, and the data has been modified on the
     * host side. */
-    HALIDE_ATTRIBUTE_ALIGN(1) bool host_dirty;
+    HALIDE_ATTRIBUTE_ALIGN(1)
+    bool host_dirty;
 
     /** This should be true if there is an existing device allocation
     mirroring this buffer, and the data has been modified on the
     device side. */
-    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;
+    HALIDE_ATTRIBUTE_ALIGN(1)
+    bool dev_dirty;
 
     // Some compilers will add extra padding at the end to ensure
     // the size is a multiple of 8; we'll do that explicitly so that
     // there is no ambiguity.
-    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
+    HALIDE_ATTRIBUTE_ALIGN(1)
+    uint8_t _padding[10 - sizeof(void *)];
 } buffer_t;
 
 #endif
@@ -1036,9 +1046,9 @@ enum halide_argument_kind_t {
  * Halide::Argument; most user code will never need to create one.
  */
 struct halide_filter_argument_t {
-    const char *name;       // name of the argument; will never be null or empty.
-    int32_t kind;           // actually halide_argument_kind_t
-    int32_t dimensions;     // always zero for scalar arguments
+    const char *name;  // name of the argument; will never be null or empty.
+    int32_t kind;  // actually halide_argument_kind_t
+    int32_t dimensions;  // always zero for scalar arguments
     struct halide_type_t type;
     // These pointers should always be null for buffer arguments,
     // and *may* be null for scalar arguments. (A null value means
@@ -1059,14 +1069,14 @@ struct halide_filter_metadata_t {
      * null. The order of arguments is not guaranteed (input and output arguments
      * may come in any order); however, it is guaranteed that all arguments
      * will have a unique name within a given filter. */
-    const struct halide_filter_argument_t* arguments;
+    const struct halide_filter_argument_t *arguments;
 
     /** The Target for which the filter was compiled. This is always
      * a canonical Target string (ie a product of Target::to_string). */
-    const char* target;
+    const char *target;
 
     /** The function name of the filter. */
-    const char* name;
+    const char *name;
 };
 
 /** The functions below here are relevant for pipelines compiled with
@@ -1225,7 +1235,7 @@ extern double halide_float16_bits_to_double(uint16_t);
 //@}
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
 #ifdef __cplusplus
@@ -1261,66 +1271,88 @@ struct halide_type_of_helper<T &&> {
 
 template<>
 struct halide_type_of_helper<float> {
-    operator halide_type_t() { return halide_type_t(halide_type_float, 32); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_float, 32);
+    }
 };
 
 template<>
 struct halide_type_of_helper<double> {
-    operator halide_type_t() { return halide_type_t(halide_type_float, 64); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_float, 64);
+    }
 };
 
 template<>
 struct halide_type_of_helper<uint8_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 8); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_uint, 8);
+    }
 };
 
 template<>
 struct halide_type_of_helper<uint16_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 16); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_uint, 16);
+    }
 };
 
 template<>
 struct halide_type_of_helper<uint32_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 32); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_uint, 32);
+    }
 };
 
 template<>
 struct halide_type_of_helper<uint64_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 64); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_uint, 64);
+    }
 };
 
 template<>
 struct halide_type_of_helper<int8_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_int, 8); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_int, 8);
+    }
 };
 
 template<>
 struct halide_type_of_helper<int16_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_int, 16); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_int, 16);
+    }
 };
 
 template<>
 struct halide_type_of_helper<int32_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_int, 32); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_int, 32);
+    }
 };
 
 template<>
 struct halide_type_of_helper<int64_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_int, 64); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_int, 64);
+    }
 };
 
 template<>
 struct halide_type_of_helper<bool> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 1); }
+    operator halide_type_t() {
+        return halide_type_t(halide_type_uint, 1);
+    }
 };
-
 }
 
 /** Construct the halide equivalent of a C type */
-template<typename T> halide_type_t halide_type_of() {
+template<typename T>
+halide_type_t halide_type_of() {
     return halide_type_of_helper<T>();
 }
 
 #endif
 
-#endif // HALIDE_HALIDERUNTIME_H
+#endif  // HALIDE_HALIDERUNTIME_H

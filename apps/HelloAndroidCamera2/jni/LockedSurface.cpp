@@ -1,11 +1,12 @@
 #include "LockedSurface.h"
 
-// Defined in http://developer.android.com/reference/android/graphics/ImageFormat.html
+// Defined in
+// http://developer.android.com/reference/android/graphics/ImageFormat.html
 #define IMAGE_FORMAT_YV12 842094169
 
 // Round x up to a multiple of mask.
 // E.g., ALIGN(x, 16) means round x up to the nearest multiple of 16.
-#define ALIGN(x, mask) (((x) + (mask)-1) & ~((mask)-1))
+#define ALIGN(x, mask) (((x) + (mask) -1) & ~((mask) -1))
 
 LockedSurface *LockedSurface::lock(JNIEnv *env, jobject surface) {
     LockedSurface *output = new LockedSurface;
@@ -45,14 +46,10 @@ YuvBufferT LockedSurface::yuvView() const {
     uint8_t *chromaVPtr = lumaPtr + lumaSizeBytes;
     uint8_t *chromaUPtr = lumaPtr + lumaSizeBytes + chromaSizeBytes;
 
-    return YuvBufferT(lumaPtr,
-        buffer_.width, buffer_.height,
-        1 /* lumaElementStrideBytes */, lumaRowStrideBytes,
-        chromaUPtr,
-        buffer_.width / 2, buffer_.height / 2,
-        1 /* chromaUElementStrideBytes */, chromaRowStrideBytes,
-        chromaVPtr,
-        buffer_.width / 2, buffer_.height / 2,
-        1 /* chromaVElementStrideBytes */, chromaRowStrideBytes
-    );
+    return YuvBufferT(lumaPtr, buffer_.width, buffer_.height,
+                      1 /* lumaElementStrideBytes */, lumaRowStrideBytes,
+                      chromaUPtr, buffer_.width / 2, buffer_.height / 2,
+                      1 /* chromaUElementStrideBytes */, chromaRowStrideBytes,
+                      chromaVPtr, buffer_.width / 2, buffer_.height / 2,
+                      1 /* chromaVElementStrideBytes */, chromaRowStrideBytes);
 }

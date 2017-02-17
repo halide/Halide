@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 
     Func f;
     Var x, y;
-    f(x, y) = input(2*x, y/2);
+    f(x, y) = input(2 * x, y / 2);
 
     f.compile_jit();
 

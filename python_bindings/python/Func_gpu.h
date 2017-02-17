@@ -16,74 +16,74 @@ namespace func_and_stage_implementation_details {
 namespace hh = Halide;
 namespace bp = boost::python;
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_threads0(FuncOrStage &that, hh::VarOrRVar thread_x, hh::DeviceAPI device_api) {
     return that.gpu_threads(thread_x, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_threads1(FuncOrStage &that, hh::VarOrRVar thread_x, hh::VarOrRVar thread_y, hh::DeviceAPI device_api) {
     return that.gpu_threads(thread_x, thread_y, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_threads2(FuncOrStage &that, hh::VarOrRVar thread_x, hh::VarOrRVar thread_y, hh::VarOrRVar thread_z, hh::DeviceAPI device_api) {
     return that.gpu_threads(thread_x, thread_y, thread_z, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_blocks0(FuncOrStage &that, hh::VarOrRVar block_x, hh::DeviceAPI device_api) {
     return that.gpu_blocks(block_x, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_blocks1(FuncOrStage &that, hh::VarOrRVar block_x, hh::VarOrRVar block_y, hh::DeviceAPI device_api) {
     return that.gpu_blocks(block_x, block_y, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_blocks2(FuncOrStage &that, hh::VarOrRVar block_x, hh::VarOrRVar block_y, hh::VarOrRVar block_z, hh::DeviceAPI device_api) {
     return that.gpu_blocks(block_x, block_y, block_z, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu0(FuncOrStage &that, hh::VarOrRVar block_x, hh::VarOrRVar thread_x,
                        hh::DeviceAPI device_api) {
     return that.gpu(block_x, thread_x, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu1(FuncOrStage &that, hh::VarOrRVar block_x, hh::VarOrRVar block_y,
                        hh::VarOrRVar thread_x, hh::VarOrRVar thread_y,
                        hh::DeviceAPI device_api) {
     return that.gpu(block_x, block_y, thread_x, thread_y, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu2(FuncOrStage &that, hh::VarOrRVar block_x, hh::VarOrRVar block_y, hh::VarOrRVar block_z,
                        hh::VarOrRVar thread_x, hh::VarOrRVar thread_y, hh::VarOrRVar thread_z,
                        hh::DeviceAPI device_api) {
     return that.gpu(block_x, block_y, block_z, thread_x, thread_y, thread_z, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile0(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar bx,
                             hh::Var tx, int x_size, hh::DeviceAPI device_api) {
     return that.gpu_tile(x, bx, tx, x_size, hh::TailStrategy::Auto, device_api);
 }
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile1(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar bx,
                             hh::RVar tx, int x_size, hh::DeviceAPI device_api) {
     return that.gpu_tile(x, bx, tx, x_size, hh::TailStrategy::Auto, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile2(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar tx,
                             int x_size, hh::DeviceAPI device_api) {
     return that.gpu_tile(x, tx, x_size, hh::TailStrategy::Auto, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile3(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                             hh::VarOrRVar bx, hh::VarOrRVar by,
                             hh::VarOrRVar tx, hh::VarOrRVar ty,
@@ -92,14 +92,14 @@ FuncOrStage &func_gpu_tile3(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
     return that.gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, hh::TailStrategy::Auto, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile4(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                             hh::VarOrRVar tx, hh::Var ty,
                             int x_size, int y_size,
                             hh::DeviceAPI device_api) {
     return that.gpu_tile(x, y, tx, ty, x_size, y_size, hh::TailStrategy::Auto, device_api);
 }
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile5(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                             hh::VarOrRVar tx, hh::RVar ty,
                             int x_size, int y_size,
@@ -107,7 +107,7 @@ FuncOrStage &func_gpu_tile5(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
     return that.gpu_tile(x, y, tx, ty, x_size, y_size, hh::TailStrategy::Auto, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile6(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y, hh::VarOrRVar z,
                             hh::VarOrRVar bx, hh::VarOrRVar by, hh::VarOrRVar bz,
                             hh::VarOrRVar tx, hh::VarOrRVar ty, hh::VarOrRVar tz,
@@ -116,7 +116,7 @@ FuncOrStage &func_gpu_tile6(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
     return that.gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, hh::TailStrategy::Auto, device_api);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile7(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y, hh::VarOrRVar z,
                             hh::VarOrRVar tx, hh::VarOrRVar ty, hh::VarOrRVar tz,
                             int x_size, int y_size, int z_size,
@@ -125,26 +125,26 @@ FuncOrStage &func_gpu_tile7(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
 }
 
 // Will be deprecated
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile8(FuncOrStage &that, hh::VarOrRVar x, int x_size,
                             hh::DeviceAPI device_api) {
     return that.gpu_tile(x, x_size, hh::TailStrategy::Auto, device_api);
 }
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile9(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                             int x_size, int y_size,
                             hh::DeviceAPI device_api) {
     return that.gpu_tile(x, y, x_size, y_size, hh::TailStrategy::Auto, device_api);
 }
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_gpu_tile10(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y, hh::VarOrRVar z,
-                            int x_size, int y_size, int z_size,
-                            hh::DeviceAPI device_api) {
+                             int x_size, int y_size, int z_size,
+                             hh::DeviceAPI device_api) {
     return that.gpu_tile(x, y, z, x_size, y_size, z_size, hh::TailStrategy::Auto, device_api);
 }
 
 /// Define all gpu related methods
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class) {
     func_or_stage_class
         .def("gpu_threads", &func_gpu_threads2<FuncOrStage>,

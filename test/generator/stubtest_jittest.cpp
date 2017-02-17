@@ -42,7 +42,7 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const 
                 const OutputType expected = static_cast<OutputType>(input(x, y, c) * float_arg + int_arg);
                 const OutputType actual = output(x, y, c);
                 if (expected != actual) {
-                    fprintf(stderr, "img[%d, %d, %d] = %f, expected %f\n", x, y, c, (double)actual, (double)expected);
+                    fprintf(stderr, "img[%d, %d, %d] = %f, expected %f\n", x, y, c, (double) actual, (double) expected);
                     exit(-1);
                 }
             }
@@ -74,8 +74,7 @@ int main(int argc, char **argv) {
             Func(simple_input),
             { Func(array_input[0]), Func(array_input[1]) },
             1.25f,
-            int_args_expr
-        });
+            int_args_expr });
 
     StubTest::ScheduleParams sp;
     // This generator defaults intermediate_level to "undefined",

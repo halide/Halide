@@ -1,8 +1,11 @@
+#include "metal_objc_platform_dependent.h"
 #include "HalideRuntime.h"
 #include "objc_support.h"
-#include "metal_objc_platform_dependent.h"
 
-namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace Metal {
 
 WEAK void dispatch_threadgroups(mtl_compute_command_encoder *encoder,
                                 int32_t blocks_x, int32_t blocks_y, int32_t blocks_z,
@@ -26,14 +29,14 @@ WEAK void dispatch_threadgroups(mtl_compute_command_encoder *encoder,
 
 #if ARM_COMPILE
     typedef void (*dispatch_threadgroups_method)(objc_id encoder, objc_sel sel,
-                                                 MTLSize *threadgroupsPerGrid, MTLSize *threadsPerThreadgroup);
-    dispatch_threadgroups_method method = (dispatch_threadgroups_method)&objc_msgSend;
+                                                 MTLSize * threadgroupsPerGrid, MTLSize * threadsPerThreadgroup);
+    dispatch_threadgroups_method method = (dispatch_threadgroups_method) &objc_msgSend;
     (*method)(encoder, sel_getUid("dispatchThreadgroups:threadsPerThreadgroup:"),
               &threadgroupsPerGrid, &threadsPerThreadgroup);
 #elif X86_COMPILE
     typedef void (*dispatch_threadgroups_method)(objc_id encoder, objc_sel sel,
                                                  MTLSize threadgroupsPerGrid, MTLSize threadsPerThreadgroup);
-    dispatch_threadgroups_method method = (dispatch_threadgroups_method)&objc_msgSend;
+    dispatch_threadgroups_method method = (dispatch_threadgroups_method) &objc_msgSend;
     (*method)(encoder, sel_getUid("dispatchThreadgroups:threadsPerThreadgroup:"),
               threadgroupsPerGrid, threadsPerThreadgroup);
 #endif
@@ -41,10 +44,12 @@ WEAK void dispatch_threadgroups(mtl_compute_command_encoder *encoder,
     typedef void (*dispatch_threadgroups_method)(objc_id encoder, objc_sel sel,
                                                  int32_t blocks_x, int32_t blocks_y, int32_t blocks_z,
                                                  int32_t threads_x, int32_t threads_y, int32_t threads_z);
-    dispatch_threadgroups_method method = (dispatch_threadgroups_method)&objc_msgSend;
+    dispatch_threadgroups_method method = (dispatch_threadgroups_method) &objc_msgSend;
     (*method)(encoder, sel_getUid("dispatchThreadgroups:threadsPerThreadgroup:"),
               blocks_x, blocks_y, blocks_z, threads_x, threads_y, threads_z);
 #endif
 }
-
-}}}}
+}
+}
+}
+}

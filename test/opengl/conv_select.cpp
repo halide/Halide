@@ -1,6 +1,5 @@
 // test case provided by Lee Yuguang
 
-
 #include "Halide.h"
 #include <stdio.h>
 
@@ -31,7 +30,7 @@ int main() {
 
     Expr R = select(f(x, y, c) > 9.0f, 1.0f, 0.0f);
     Expr G = select(f(x, y, c) > 9.0f, 0.f, 1.0f);
-    g(x, y, c) = select(c==0, R, G);
+    g(x, y, c) = select(c == 0, R, G);
 
     // Schedule f and g to compute in separate passes on the GPU.
     g.bound(c, 0, 2).glsl(x, y, c);
@@ -44,9 +43,9 @@ int main() {
     for (int c = 0; c < result.channels(); c++) {
         for (int y = 0; y < result.height(); y++) {
             for (int x = 0; x < result.width(); x++) {
-                float temp = ((x + y)>4)?1.0f:0.0f;
+                float temp = ((x + y) > 4) ? 1.0f : 0.0f;
 
-                float correct = (c==0)? temp : (1.0f - temp);
+                float correct = (c == 0) ? temp : (1.0f - temp);
                 if (result(x, y, c) != correct) {
                     fprintf(stderr, "result(%d, %d, %d) = %f instead of %f\n",
                             x, y, c, result(x, y, c), correct);

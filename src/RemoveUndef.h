@@ -13,7 +13,6 @@ namespace Internal {
 /** Removes stores that depend on undef values, and statements that
  * only contain such stores. */
 Stmt remove_undef(Stmt s);
-
 }
 }
 

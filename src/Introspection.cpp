@@ -3,13 +3,13 @@
 #ifdef WITH_INTROSPECTION
 
 #include "Debug.h"
-#include "LLVM_Headers.h"
 #include "Error.h"
+#include "LLVM_Headers.h"
 
-#include <string>
 #include <iostream>
 #include <sstream>
 #include <stdio.h>
+#include <string>
 
 // defines backtrace, which gets the call stack as instruction pointers
 #include <execinfo.h>
@@ -43,14 +43,20 @@ class DebugSections {
 
     struct FieldFormat {
         uint64_t name, form;
-        FieldFormat() : name(0), form(0) {}
-        FieldFormat(uint64_t n, uint64_t f) : name(n), form(f) {}
+        FieldFormat()
+            : name(0), form(0) {
+        }
+        FieldFormat(uint64_t n, uint64_t f)
+            : name(n), form(f) {
+        }
     };
 
     struct EntryFormat {
         uint64_t code, tag;
         bool has_children;
-        EntryFormat() : code(0), tag(0), has_children(false) {}
+        EntryFormat()
+            : code(0), tag(0), has_children(false) {
+        }
         vector<FieldFormat> fields;
     };
     vector<EntryFormat> entry_formats;
@@ -67,12 +73,14 @@ class DebugSections {
         uint64_t type_def_loc;
         uint64_t def_loc, spec_loc;
         uint64_t addr;
-        GlobalVariable() : name(""),
-                           type(nullptr),
-                           type_def_loc(0),
-                           def_loc(0),
-                           spec_loc(0),
-                           addr(0) {}
+        GlobalVariable()
+            : name(""),
+              type(nullptr),
+              type_def_loc(0),
+              def_loc(0),
+              spec_loc(0),
+              addr(0) {
+        }
         bool operator<(const GlobalVariable &other) const {
             return addr < other.addr;
         }
@@ -105,12 +113,14 @@ class DebugSections {
         // is empty, the variables are alive for the entire containing
         // function.
         vector<LiveRange> live_ranges;
-        LocalVariable() : name(""),
-                          type(nullptr),
-                          stack_offset(0),
-                          type_def_loc(0),
-                          def_loc(0),
-                          origin_loc(0) {}
+        LocalVariable()
+            : name(""),
+              type(nullptr),
+              stack_offset(0),
+              type_def_loc(0),
+              def_loc(0),
+              origin_loc(0) {
+        }
     };
 
     struct FunctionInfo {
@@ -122,8 +132,13 @@ class DebugSections {
         // gcc: the top of the stack frame (one below the return address to the caller)
         // clang with frame pointers: the bottom of the stack frame (one above the return address to this function)
         // clang without frame pointers: the top of the stack frame (...TODO...)
-        enum {Unknown = 0, GCC, ClangFP, ClangNoFP} frame_base;
-        FunctionInfo() : name(""), pc_begin(0), pc_end(0), def_loc(0), spec_loc(0) {}
+        enum { Unknown = 0,
+               GCC,
+               ClangFP,
+               ClangNoFP } frame_base;
+        FunctionInfo()
+            : name(""), pc_begin(0), pc_end(0), def_loc(0), spec_loc(0) {
+        }
 
         bool operator<(const FunctionInfo &other) const {
             return pc_begin < other.pc_begin;
@@ -135,7 +150,7 @@ class DebugSections {
     struct LineInfo {
         uint64_t pc;
         uint32_t line;
-        uint32_t file; // Index into source_files
+        uint32_t file;  // Index into source_files
         bool operator<(const LineInfo &other) const {
             return pc < other.pc;
         }
@@ -152,18 +167,27 @@ class DebugSections {
         // another type, in which case there's a single member, which
         // represents the value pointed to (its name is empty and its
         // stack_offset is meaningless).
-        enum {Primitive, Class, Struct, Pointer, Typedef, Const, Reference, Array} type;
+        enum { Primitive,
+               Class,
+               Struct,
+               Pointer,
+               Typedef,
+               Const,
+               Reference,
+               Array } type;
 
-        TypeInfo() : size(0), def_loc(0), type(Primitive) {}
+        TypeInfo()
+            : size(0), def_loc(0), type(Primitive) {
+        }
     };
     vector<TypeInfo> types;
 
 public:
-
     bool working;
 
-    DebugSections(std::string binary) : calibrated(false), working(false) {
-        #ifdef __APPLE__
+    DebugSections(std::string binary)
+        : calibrated(false), working(false) {
+#ifdef __APPLE__
         size_t last_slash = binary.rfind('/');
         if (last_slash == std::string::npos ||
             last_slash >= binary.size() - 1) {
@@ -173,7 +197,7 @@ public:
         }
         std::string file_only = binary.substr(last_slash, binary.size() - last_slash);
         binary += ".dSYM/Contents/Resources/DWARF/" + file_only;
-        #endif
+#endif
 
         debug(5) << "Loading " << binary << "\n";
 
@@ -194,7 +218,7 @@ public:
         // in the debug info and the instruction pointers in the
         // actual file.
         bool found = false;
-        uint64_t pc_real = (uint64_t)fn;
+        uint64_t pc_real = (uint64_t) fn;
         int64_t pc_adjust = 0;
         for (size_t i = 0; i < functions.size(); i++) {
             if (functions[i].name == "HalideIntrospectionCanary::offset_marker" &&
@@ -268,8 +292,8 @@ public:
         if (query_type == actual_type) {
             return true;
         }
-        if (query_type[query_type.size()-1] == '?' &&
-            starts_with(actual_type, query_type.substr(0, query_type.size()-1))) {
+        if (query_type[query_type.size() - 1] == '?' &&
+            starts_with(actual_type, query_type.substr(0, query_type.size() - 1))) {
             return true;
         }
 
@@ -288,7 +312,7 @@ public:
         size_t hi = global_variables.size();
         size_t lo = 0;
         while (hi > lo + 1) {
-            size_t mid = (hi + lo)/2;
+            size_t mid = (hi + lo) / 2;
             uint64_t addr_mid = global_variables[mid].addr;
             if (address < addr_mid) {
                 hi = mid;
@@ -303,7 +327,7 @@ public:
 
         // There may be multiple matching addresses. Walk backwards to find the first one.
         size_t idx = lo;
-        while (idx > 0 && global_variables[idx-1].addr == global_variables[lo].addr) {
+        while (idx > 0 && global_variables[idx - 1].addr == global_variables[lo].addr) {
             idx--;
         }
 
@@ -324,7 +348,7 @@ public:
             return -1;
         }
 
-        return (int)idx;
+        return (int) idx;
     }
 
     // Get the debug name of a global var from a pointer to it
@@ -337,10 +361,10 @@ public:
             return "";
         }
 
-        uint64_t address = (uint64_t)global_pointer;
+        uint64_t address = (uint64_t) global_pointer;
 
         // Now test all of them
-        for (; (size_t)idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
+        for (; (size_t) idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
 
             GlobalVariable &v = global_variables[idx];
             TypeInfo *elem_type = nullptr;
@@ -359,7 +383,7 @@ public:
                 (type_name.empty() ||
                  (v.type && type_name_match(v.type->name, type_name)))) {
                 return v.name;
-            } else if (elem_type && // Check if it's an array element
+            } else if (elem_type &&  // Check if it's an array element
                        (type_name.empty() ||
                         (elem_type && type_name_match(elem_type->name, type_name)))) {
                 int64_t array_size_bytes = v.type->size * elem_type->size;
@@ -407,7 +431,7 @@ public:
 
         HeapObject heap_object;
         heap_object.type = object_type;
-        heap_object.addr = (uint64_t)obj;
+        heap_object.addr = (uint64_t) obj;
 
         // Recursively enumerate the members.
         for (size_t i = 0; i < object_type->members.size(); i++) {
@@ -418,7 +442,7 @@ public:
             member.addr = heap_object.addr + member_spec.stack_offset;
             if (member.type) {
                 heap_object.members.push_back(member);
-                debug(5) << member.name << " - " << (int)(member.type->type) << "\n";
+                debug(5) << member.name << " - " << (int) (member.type->type) << "\n";
             }
         }
 
@@ -449,7 +473,7 @@ public:
                     // We're just following a type modifier. It's still the same member.
                     child.name = parent.name;
                 } else if (parent.type->type == TypeInfo::Array) {
-                    child.name = ""; // the '[index]' gets added in the query routine.
+                    child.name = "";  // the '[index]' gets added in the query routine.
                 } else {
                     child.name = member_spec.name;
                 }
@@ -457,7 +481,7 @@ public:
                 child.addr = parent.addr + member_spec.stack_offset;
 
                 if (child.type) {
-                    debug(5) << child.name << " - " << (int)(child.type->type) << "\n";
+                    debug(5) << child.name << " - " << (int) (child.type->type) << "\n";
                     heap_object.members.push_back(child);
                 }
             }
@@ -476,7 +500,7 @@ public:
     }
 
     void deregister_heap_object(const void *obj, size_t size) {
-        heap_objects.erase((uint64_t)obj);
+        heap_objects.erase((uint64_t) obj);
     }
 
     // Get the debug name of a member of a heap variable from a pointer to it
@@ -488,7 +512,7 @@ public:
             return "";
         }
 
-        uint64_t addr = (uint64_t)ptr;
+        uint64_t addr = (uint64_t) ptr;
         std::map<uint64_t, HeapObject>::iterator it = heap_objects.upper_bound(addr);
 
         if (it == heap_objects.begin()) {
@@ -508,7 +532,6 @@ public:
             return "";
         }
 
-
         std::ostringstream name;
 
         // Look in the members for the appropriate offset.
@@ -520,8 +543,7 @@ public:
             debug(5) << "Comparing to member " << obj.members[i].name
                      << " at address " << std::hex << obj.members[i].addr << std::dec
                      << " with type " << t->name
-                     << " and type type " << (int)t->type << "\n";
-
+                     << " and type type " << (int) t->type << "\n";
 
             if (obj.members[i].addr == addr &&
                 type_name_match(t->name, type_name)) {
@@ -567,7 +589,7 @@ public:
 
         // Check it's a plausible stack pointer
         int marker = 0;
-        uint64_t marker_addr = (uint64_t)&marker;
+        uint64_t marker_addr = (uint64_t) &marker;
         uint64_t top_of_stack;
         if (marker_addr >> 63) {
             top_of_stack = (uint64_t)(-1);
@@ -578,8 +600,8 @@ public:
             top_of_stack = ((marker_addr >> 30) + 1) << 30;
         }
 
-        if ((uint64_t)stack_pointer > top_of_stack ||
-            (uint64_t)stack_pointer < marker_addr) {
+        if ((uint64_t) stack_pointer > top_of_stack ||
+            (uint64_t) stack_pointer < marker_addr) {
             return "";
         }
 
@@ -588,13 +610,13 @@ public:
             void *return_address;
         };
 
-        frame_info *fp = (frame_info *)__builtin_frame_address(0);
+        frame_info *fp = (frame_info *) __builtin_frame_address(0);
         frame_info *next_fp = nullptr;
 
         // Walk up the stack until we pass the pointer.
         debug(5) << "Walking up the stack\n";
         while (fp < stack_pointer) {
-            debug(5) << "frame pointer: " << (void *)(fp->frame_pointer)
+            debug(5) << "frame pointer: " << (void *) (fp->frame_pointer)
                      << " return address: " << fp->return_address << "\n";
             next_fp = fp;
             if (fp->frame_pointer < fp) {
@@ -604,7 +626,7 @@ public:
                 return "";
             }
             fp = fp->frame_pointer;
-            if (fp < (void *)&marker) {
+            if (fp < (void *) &marker) {
                 // If we're still below the marker after one hop,
                 // something is wrong. Maybe this was a heap pointer.
                 debug(5) << "Bailing out because we're below the marker\n";
@@ -623,7 +645,7 @@ public:
         // next_fp->return_address
 
         // Get the program counter at the position of the call
-        uint64_t pc = (uint64_t)(next_fp->return_address) - 5; // -5 for the callq instruction
+        uint64_t pc = (uint64_t)(next_fp->return_address) - 5;  // -5 for the callq instruction
 
         FunctionInfo *func = find_containing_function(next_fp->return_address);
 
@@ -634,18 +656,18 @@ public:
 
         // Now what is its offset in that function's frame? The return
         // address is always at the top of the frame.
-        int offset_above = (int)((int64_t)(stack_pointer) - (int64_t)(fp));
-        int offset_below = (int)((int64_t)(stack_pointer) - (int64_t)(next_fp));
+        int offset_above = (int) ((int64_t)(stack_pointer) - (int64_t)(fp));
+        int offset_below = (int) ((int64_t)(stack_pointer) - (int64_t)(next_fp));
 
         const int addr_size = sizeof(void *);
 
         int offset;
         if (func->frame_base == FunctionInfo::GCC) {
-            offset = offset_above - 2*addr_size;
+            offset = offset_above - 2 * addr_size;
         } else if (func->frame_base == FunctionInfo::ClangFP) {
             offset = offset_above;
         } else if (func->frame_base == FunctionInfo::ClangNoFP) {
-            offset = offset_below - 2*addr_size;
+            offset = offset_below - 2 * addr_size;
         } else {
             debug(5) << "Bailing out because containing function used an unknown mechanism for specifying stack offsets\n";
             return "";
@@ -688,9 +710,9 @@ public:
                  (type && type_name_match(type->name, type_name)))) {
                 debug(5) << "Successful match to scalar var\n";
                 return var.name;
-            } else if (elem_type && // Check if it's an array element
+            } else if (elem_type &&  // Check if it's an array element
                        (type_name.empty() ||
-                        (elem_type && // Check the type matches
+                        (elem_type &&  // Check the type matches
                          type_name_match(elem_type->name, type_name)))) {
                 int64_t array_size_bytes = type->size * elem_type->size;
                 int64_t pos_bytes = offset - var.stack_offset;
@@ -709,7 +731,6 @@ public:
         return "";
     }
 
-
     // Look up n stack frames and get the source location as filename:line
     std::string get_source_location() {
         debug(5) << "Finding source location\n";
@@ -723,14 +744,14 @@ public:
 
         // Get the backtrace
         vector<void *> trace(max_stack_frames);
-        int trace_size = backtrace(&trace[0], (int)(trace.size()));
+        int trace_size = backtrace(&trace[0], (int) (trace.size()));
 
         for (int frame = 2; frame < trace_size; frame++) {
-            uint64_t address = (uint64_t)trace[frame];
+            uint64_t address = (uint64_t) trace[frame];
 
-            debug(5) << "Considering address " << ((void *)address) << "\n";
+            debug(5) << "Considering address " << ((void *) address) << "\n";
 
-            const uint8_t *inst_ptr = (const uint8_t *)address;
+            const uint8_t *inst_ptr = (const uint8_t *) address;
             if (inst_ptr[-5] == 0xe8) {
                 // The actual address of the call is probably 5 bytes
                 // earlier (using callq with an immediate address)
@@ -740,12 +761,12 @@ public:
                 // register address)
                 address -= 2;
             } else {
-                debug(5) << "Skipping function because there's no callq before " << (const void *)(inst_ptr) << "\n";
+                debug(5) << "Skipping function because there's no callq before " << (const void *) (inst_ptr) << "\n";
                 continue;
             }
 
             // Binary search into functions
-            FunctionInfo *f = find_containing_function((void *)address);
+            FunctionInfo *f = find_containing_function((void *) address);
 
             // If no debug info for this function, we must still be
             // inside libHalide. Continue searching upwards.
@@ -767,7 +788,7 @@ public:
             size_t hi = source_lines.size();
             size_t lo = 0;
             while (hi > lo + 1) {
-                size_t mid = (hi + lo)/2;
+                size_t mid = (hi + lo) / 2;
                 uint64_t pc_mid = source_lines[mid].pc;
                 if (address < pc_mid) {
                     hi = mid;
@@ -796,8 +817,8 @@ public:
         for (size_t i = 0; i < types.size(); i++) {
             printf("Class %s of size %llu @ %llx: \n",
                    types[i].name.c_str(),
-                   (unsigned long long)(types[i].size),
-                   (unsigned long long)(types[i].def_loc));
+                   (unsigned long long) (types[i].size),
+                   (unsigned long long) (types[i].def_loc));
             for (size_t j = 0; j < types[i].members.size(); j++) {
                 TypeInfo *c = types[i].members[j].type;
                 const char *type_name = "(unknown)";
@@ -808,7 +829,7 @@ public:
                        types[i].members[j].name.c_str(),
                        types[i].members[j].stack_offset,
                        type_name,
-                       (long long unsigned)types[i].members[j].type_def_loc);
+                       (long long unsigned) types[i].members[j].type_def_loc);
             }
         }
 
@@ -817,9 +838,9 @@ public:
             const FunctionInfo &f = functions[i];
             printf("Function %s at %llx - %llx (frame_base %d): \n",
                    f.name.c_str(),
-                   (unsigned long long)(f.pc_begin),
-                   (unsigned long long)(f.pc_end),
-                   (int)f.frame_base);
+                   (unsigned long long) (f.pc_begin),
+                   (unsigned long long) (f.pc_end),
+                   (int) f.frame_base);
             for (size_t j = 0; j < f.variables.size(); j++) {
                 const LocalVariable &v = f.variables[j];
                 TypeInfo *c = v.type;
@@ -831,11 +852,11 @@ public:
                        v.name.c_str(),
                        v.stack_offset,
                        type_name,
-                       (long long unsigned)v.type_def_loc);
+                       (long long unsigned) v.type_def_loc);
                 for (size_t k = 0; k < v.live_ranges.size(); k++) {
                     printf("    Live range: %llx - %llx\n",
-                           (unsigned long long)v.live_ranges[k].pc_begin,
-                           (unsigned long long)v.live_ranges[k].pc_end);
+                           (unsigned long long) v.live_ranges[k].pc_begin,
+                           (unsigned long long) v.live_ranges[k].pc_end);
                 }
             }
         }
@@ -843,7 +864,7 @@ public:
         // Dump the pc -> source file relationship
         for (size_t i = 0; i < source_lines.size(); i++) {
             printf("%p -> %s:%d\n",
-                   (void *)(source_lines[i].pc),
+                   (void *) (source_lines[i].pc),
                    source_files[source_lines[i].file].c_str(),
                    source_lines[i].line);
         }
@@ -858,19 +879,17 @@ public:
             }
             printf("  Global variable %s at %llx of type %s\n",
                    v.name.c_str(),
-                   (long long unsigned)v.addr,
+                   (long long unsigned) v.addr,
                    type_name);
         }
-
     }
 
 private:
-
     void load_and_parse_object_file(const std::string &binary) {
         llvm::object::ObjectFile *obj = nullptr;
 
-        // Open the object file in question. The API to do this keeps changing.
-        #if LLVM_VERSION >= 39
+// Open the object file in question. The API to do this keeps changing.
+#if LLVM_VERSION >= 39
 
         llvm::Expected<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
@@ -883,7 +902,7 @@ private:
 
         obj = maybe_obj.get().getBinary();
 
-        #else
+#else
 
         llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
@@ -894,7 +913,7 @@ private:
         }
 
         obj = maybe_obj.get().getBinary();
-        #endif
+#endif
 
         if (obj) {
             working = true;
@@ -957,7 +976,6 @@ private:
     }
 
     void parse_debug_ranges(const llvm::DataExtractor &e) {
-
     }
 
     void parse_debug_abbrev(const llvm::DataExtractor &e, uint32_t off = 0) {
@@ -1107,7 +1125,7 @@ private:
                 }
 
                 assert(abbrev_code <= entry_formats.size());
-                const EntryFormat &fmt = entry_formats[abbrev_code-1];
+                const EntryFormat &fmt = entry_formats[abbrev_code - 1];
                 assert(fmt.code == abbrev_code);
 
                 LocalVariable var;
@@ -1150,8 +1168,8 @@ private:
                     // payload size. If val is zero the payload is a
                     // null-terminated string.
 
-                    switch(fmt.fields[i].form) {
-                    case 1: // addr (4 or 8 bytes)
+                    switch (fmt.fields[i].form) {
+                    case 1:  // addr (4 or 8 bytes)
                     {
                         if (address_size == 4) {
                             val = e.getU32(&off);
@@ -1160,77 +1178,78 @@ private:
                         }
                         break;
                     }
-                    case 2: // There is no case 2
+                    case 2:  // There is no case 2
                     {
                         assert(false && "What's form 2?");
                         break;
                     }
-                    case 3: // block2 (2 byte length followed by payload)
+                    case 3:  // block2 (2 byte length followed by payload)
                     {
                         val = e.getU16(&off);
-                        payload = (const uint8_t *)(debug_info.data() + off);
+                        payload = (const uint8_t *) (debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 4: // block4 (4 byte length followed by payload)
+                    case 4:  // block4 (4 byte length followed by payload)
                     {
                         val = e.getU32(&off);
-                        payload = (const uint8_t *)(debug_info.data() + off);
+                        payload = (const uint8_t *) (debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 5: // data2 (2 bytes)
+                    case 5:  // data2 (2 bytes)
                     {
                         val = e.getU16(&off);
                         break;
                     }
-                    case 6: // data4 (4 bytes)
+                    case 6:  // data4 (4 bytes)
                     {
                         val = e.getU32(&off);
                         break;
                     }
-                    case 7: // data8 (8 bytes)
+                    case 7:  // data8 (8 bytes)
                     {
                         val = e.getU64(&off);
                         break;
                     }
-                    case 8: // string (null terminated sequence of bytes)
+                    case 8:  // string (null terminated sequence of bytes)
                     {
                         val = 0;
-                        payload = (const uint8_t *)(debug_info.data() + off);
-                        while (e.getU8(&off));
+                        payload = (const uint8_t *) (debug_info.data() + off);
+                        while (e.getU8(&off))
+                            ;
                         break;
                     }
-                    case 9: // block (uleb128 length followed by payload)
+                    case 9:  // block (uleb128 length followed by payload)
                     {
                         val = e.getULEB128(&off);
-                        payload = (const uint8_t *)(debug_info.data() + off);
+                        payload = (const uint8_t *) (debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 10: // block1 (1 byte length followed by payload)
+                    case 10:  // block1 (1 byte length followed by payload)
                     {
                         val = e.getU8(&off);
-                        payload = (const uint8_t *)(debug_info.data() + off);
+                        payload = (const uint8_t *) (debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 11: // data1 (1 byte)
+                    case 11:  // data1 (1 byte)
                     {
                         val = e.getU8(&off);
                         break;
                     }
-                    case 12: // flag (1 byte)
+                    case 12:  // flag (1 byte)
                     {
                         val = e.getU8(&off);
                         break;
                     }
-                    case 13: // sdata (sleb128 constant)
+                    case 13:  // sdata (sleb128 constant)
                     {
-                        val = (uint64_t)e.getSLEB128(&off);
+                        val = (uint64_t) e.getSLEB128(&off);
                         break;
                     }
-                    case 14: // strp (offset into debug_str section. 4 bytes in dwarf 32, 8 in dwarf 64)
+                    case 14:  // strp (offset into debug_str section. 4 bytes in dwarf 32, 8 in dwarf 64)
                     {
                         uint64_t offset;
                         if (dwarf_64) {
@@ -1239,15 +1258,15 @@ private:
                             offset = e.getU32(&off);
                         }
                         val = 0;
-                        payload = (const uint8_t *)(debug_str.data() + offset);
+                        payload = (const uint8_t *) (debug_str.data() + offset);
                         break;
                     }
-                    case 15: // udata (uleb128 constant)
+                    case 15:  // udata (uleb128 constant)
                     {
                         val = e.getULEB128(&off);
                         break;
                     }
-                    case 16: // ref_addr (offset from beginning of debug_info. 4 bytes in dwarf 32, 8 in dwarf 64)
+                    case 16:  // ref_addr (offset from beginning of debug_info. 4 bytes in dwarf 32, 8 in dwarf 64)
                     {
                         if ((dwarf_version <= 2 && address_size == 8) ||
                             (dwarf_version > 2 && dwarf_64)) {
@@ -1257,37 +1276,37 @@ private:
                         }
                         break;
                     }
-                    case 17: // ref1 (1 byte offset from the first byte of the compilation unit header)
+                    case 17:  // ref1 (1 byte offset from the first byte of the compilation unit header)
                     {
                         val = e.getU8(&off) + start_of_unit_header;
                         break;
                     }
-                    case 18: // ref2 (2 byte version of the same)
+                    case 18:  // ref2 (2 byte version of the same)
                     {
                         val = e.getU16(&off) + start_of_unit_header;
                         break;
                     }
-                    case 19: // ref4 (4 byte version of the same)
+                    case 19:  // ref4 (4 byte version of the same)
                     {
                         val = e.getU32(&off) + start_of_unit_header;
                         break;
                     }
-                    case 20: // ref8 (8 byte version of the same)
+                    case 20:  // ref8 (8 byte version of the same)
                     {
                         val = e.getU64(&off) + start_of_unit_header;
                         break;
                     }
-                    case 21: // ref_udata (uleb128 version of the same)
+                    case 21:  // ref_udata (uleb128 version of the same)
                     {
                         val = e.getULEB128(&off) + start_of_unit_header;
                         break;
                     }
-                    case 22: // indirect
+                    case 22:  // indirect
                     {
                         assert(false && "Can't handle indirect form");
                         break;
                     }
-                    case 23: // sec_offset
+                    case 23:  // sec_offset
                     {
                         if (dwarf_64) {
                             val = e.getU64(&off);
@@ -1296,22 +1315,22 @@ private:
                         }
                         break;
                     }
-                    case 24: // exprloc
+                    case 24:  // exprloc
                     {
                         // Length
                         val = e.getULEB128(&off);
                         // Payload (contains a DWARF expression to evaluate (ugh))
-                        payload = (const uint8_t *)(debug_info.data() + off);
+                        payload = (const uint8_t *) (debug_info.data() + off);
                         off += val;
                         break;
                     }
-                    case 25: // flag_present
+                    case 25:  // flag_present
                     {
                         val = 0;
                         // Just the existence of this field is information apparently? There's no data.
                         break;
                     }
-                    case 32: // ref_sig8
+                    case 32:  // ref_sig8
                     {
                         // 64-bit type signature for a reference in its own type unit
                         val = e.getU64(&off);
@@ -1324,7 +1343,7 @@ private:
 
                     if (fmt.tag == tag_function) {
                         if (attr == attr_name) {
-                            func.name = containing_namespace + std::string((const char *)payload);
+                            func.name = containing_namespace + std::string((const char *) payload);
                         } else if (attr == attr_low_pc) {
                             func.pc_begin = val;
                         } else if (attr == attr_high_pc) {
@@ -1355,28 +1374,28 @@ private:
                         }
                     } else if (fmt.tag == tag_base_type) {
                         if (attr == attr_name) {
-                            type_info.name = containing_namespace + std::string((const char *)payload);
+                            type_info.name = containing_namespace + std::string((const char *) payload);
                             type_info.type = TypeInfo::Primitive;
                         } else if (attr == attr_byte_size) {
                             type_info.size = val;
                         }
                     } else if (fmt.tag == tag_class_type) {
                         if (attr == attr_name) {
-                            type_info.name = containing_namespace + std::string((const char *)payload);
+                            type_info.name = containing_namespace + std::string((const char *) payload);
                             type_info.type = TypeInfo::Class;
                         } else if (attr == attr_byte_size) {
                             type_info.size = val;
                         }
                     } else if (fmt.tag == tag_structure_type) {
                         if (attr == attr_name) {
-                            type_info.name = containing_namespace + std::string((const char *)payload);
+                            type_info.name = containing_namespace + std::string((const char *) payload);
                             type_info.type = TypeInfo::Struct;
                         } else if (attr == attr_byte_size) {
                             type_info.size = val;
                         }
                     } else if (fmt.tag == tag_typedef) {
                         if (attr == attr_name) {
-                            type_info.name = containing_namespace + std::string((const char *)payload);
+                            type_info.name = containing_namespace + std::string((const char *) payload);
                             type_info.type = TypeInfo::Typedef;
                         } else if (attr == attr_type) {
                             // Approximate a typedef as a single-member class
@@ -1439,10 +1458,10 @@ private:
                         if (attr == attr_name) {
                             if (func_stack.empty()) {
                                 // Global var
-                                gvar.name = containing_namespace + std::string((const char *)payload);
+                                gvar.name = containing_namespace + std::string((const char *) payload);
                             } else {
                                 // Either a local var, or a static var inside a function
-                                gvar.name = var.name = std::string((const char *)payload);
+                                gvar.name = var.name = std::string((const char *) payload);
                             }
                         } else if (attr == attr_location) {
                             // We only understand locations which are
@@ -1450,11 +1469,11 @@ private:
                             if (payload && payload[0] == 0x91) {
                                 // It's a local
                                 // payload + 1 is a sleb128
-                                var.stack_offset = (int)(get_sleb128(payload+1));
+                                var.stack_offset = (int) (get_sleb128(payload + 1));
                             } else if (payload && payload[0] == 0x03 && val == (sizeof(void *) + 1)) {
                                 // It's a global
                                 // payload + 1 is an address
-                                const void *addr = *((const void * const *)(payload + 1));
+                                const void *addr = *((const void *const *) (payload + 1));
                                 gvar.addr = (uint64_t)(addr);
                             } else {
                                 // Some other format that we don't understand
@@ -1472,7 +1491,7 @@ private:
                         }
                     } else if (fmt.tag == tag_member) {
                         if (attr == attr_name) {
-                            var.name = std::string((const char *)payload);
+                            var.name = std::string((const char *) payload);
                             if (type_stack.size()) {
                                 gvar.name = type_stack.back().first.name + "::" + var.name;
                             } else {
@@ -1482,7 +1501,7 @@ private:
                             if (!payload) {
                                 var.stack_offset = val;
                             } else if (payload[0] == 0x23) {
-                                var.stack_offset = (int)(get_uleb128(payload+1));
+                                var.stack_offset = (int) (get_uleb128(payload + 1));
                             }
                         } else if (attr == attr_type) {
                             var.type_def_loc = val;
@@ -1490,14 +1509,14 @@ private:
                         }
                     } else if (fmt.tag == tag_namespace) {
                         if (attr == attr_name) {
-                            namespace_name = std::string((const char *)payload);
+                            namespace_name = std::string((const char *) payload);
                         }
                     } else if (fmt.tag == tag_subrange_type) {
                         // Could be telling us the size of an array type
                         if (attr == attr_upper_bound &&
                             type_stack.size() &&
                             type_stack.back().first.type == TypeInfo::Array) {
-                            type_stack.back().first.size = val+1;
+                            type_stack.back().first.size = val + 1;
                         } else if (attr == attr_count &&
                                    type_stack.size() &&
                                    type_stack.back().first.type == TypeInfo::Array) {
@@ -1506,7 +1525,7 @@ private:
                     } else if (fmt.tag == tag_inlined_subroutine ||
                                fmt.tag == tag_lexical_block) {
                         if (attr == attr_low_pc) {
-                            LiveRange r = {val, val};
+                            LiveRange r = { val, val };
                             live_ranges.push_back(r);
                         } else if (attr == attr_high_pc && live_ranges.size()) {
                             if (fmt.fields[i].form == 0x1) {
@@ -1519,10 +1538,10 @@ private:
                         } else if (attr == attr_ranges) {
                             if (val < debug_ranges.size()) {
                                 // It's an array of addresses
-                                const void * const * ptr = (const void * const *)(debug_ranges.data() + val);
-                                const void * const * end = (const void * const *)(debug_ranges.data() + debug_ranges.size());
-                                while (ptr[0] && ptr < end-1) {
-                                    LiveRange r = {(uint64_t)ptr[0], (uint64_t)ptr[1]};
+                                const void *const *ptr = (const void *const *) (debug_ranges.data() + val);
+                                const void *const *end = (const void *const *) (debug_ranges.data() + debug_ranges.size());
+                                while (ptr[0] && ptr < end - 1) {
+                                    LiveRange r = { (uint64_t) ptr[0], (uint64_t) ptr[1] };
                                     r.pc_begin += compile_unit_base_pc;
                                     r.pc_end += compile_unit_base_pc;
                                     live_ranges.push_back(r);
@@ -1535,7 +1554,6 @@ private:
                             compile_unit_base_pc = val;
                         }
                     }
-
                 }
 
                 if (fmt.tag == tag_variable) {
@@ -1731,8 +1749,6 @@ private:
             }
         }
 
-
-
         // Unpack class members into the local variables list.
         for (size_t i = 0; i < functions.size(); i++) {
             vector<LocalVariable> new_vars = functions[i].variables;
@@ -1751,15 +1767,15 @@ private:
 
                     // Typedefs retain the same name and stack offset
                     if (new_vars[j].type->type == TypeInfo::Typedef) {
-                        new_vars[j+1].name = new_vars[j].name;
-                        new_vars[j+1].stack_offset = new_vars[j].stack_offset;
+                        new_vars[j + 1].name = new_vars[j].name;
+                        new_vars[j + 1].stack_offset = new_vars[j].stack_offset;
                     } else {
                         // Correct the stack offsets and names
                         for (size_t k = 0; k < members; k++) {
-                            new_vars[j+k+1].stack_offset += new_vars[j].stack_offset;
-                            if (new_vars[j+k+1].name.size() &&
+                            new_vars[j + k + 1].stack_offset += new_vars[j].stack_offset;
+                            if (new_vars[j + k + 1].name.size() &&
                                 new_vars[j].name.size()) {
-                                new_vars[j+k+1].name = new_vars[j].name + "." + new_vars[j+k+1].name;
+                                new_vars[j + k + 1].name = new_vars[j].name + "." + new_vars[j + k + 1].name;
                             }
                         }
                     }
@@ -1775,7 +1791,6 @@ private:
                     }
                 }
             }
-
         }
 
         // Unpack class members of global variables
@@ -1884,8 +1899,8 @@ private:
                 max_ops_per_instruction = e.getU8(&off);
             }
             uint8_t default_is_stmt = e.getU8(&off);
-            int8_t line_base    = (int8_t)e.getU8(&off);
-            uint8_t line_range  = e.getU8(&off);
+            int8_t line_base = (int8_t) e.getU8(&off);
+            uint8_t line_range = e.getU8(&off);
             uint8_t opcode_base = e.getU8(&off);
 
             vector<uint8_t> standard_opcode_length(opcode_base);
@@ -1915,8 +1930,8 @@ private:
                     uint64_t dir = e.getULEB128(&off);
                     uint64_t mod_time = e.getULEB128(&off);
                     uint64_t length = e.getULEB128(&off);
-                    (void)mod_time;
-                    (void)length;
+                    (void) mod_time;
+                    (void) length;
                     assert(dir <= include_dirs.size());
                     source_files.push_back(include_dirs[dir] + "/" + name);
                 } else {
@@ -1941,7 +1956,7 @@ private:
                 uint32_t discriminator;
 
                 void append_row(vector<LineInfo> &lines) {
-                    LineInfo l = {address, line, file};
+                    LineInfo l = { address, line, file };
                     lines.push_back(l);
                 }
             } state, initial_state;
@@ -1972,42 +1987,42 @@ private:
                     uint32_t arg_size = len - (off - ext_offset);
                     uint8_t sub_opcode = e.getU8(&off);
                     switch (sub_opcode) {
-                    case 1: // end_sequence
+                    case 1:  // end_sequence
                     {
                         state.end_sequence = true;
                         state.append_row(source_lines);
                         state = initial_state;
                         break;
                     }
-                    case 2: // set_address
+                    case 2:  // set_address
                     {
                         state.address = e.getAddress(&off);
                         break;
                     }
-                    case 3: // define_file
+                    case 3:  // define_file
                     {
                         const char *name = e.getCStr(&off);
                         uint64_t dir_index = e.getULEB128(&off);
                         uint64_t mod_time = e.getULEB128(&off);
                         uint64_t length = e.getULEB128(&off);
-                        (void)mod_time;
-                        (void)length;
+                        (void) mod_time;
+                        (void) length;
                         assert(dir_index < include_dirs.size());
                         source_files.push_back(include_dirs[dir_index] + "/" + name);
                         break;
                     }
-                    case 4: // set_discriminator
+                    case 4:  // set_discriminator
                     {
                         state.discriminator = e.getULEB128(&off);
                         break;
                     }
-                    default: // Some unknown thing. Skip it.
+                    default:  // Some unknown thing. Skip it.
                         off += arg_size;
                     }
                 } else if (opcode < opcode_base) {
                     // A standard opcode
                     switch (opcode) {
-                    case 1: // copy
+                    case 1:  // copy
                     {
                         state.append_row(source_lines);
                         state.basic_block = false;
@@ -2016,39 +2031,39 @@ private:
                         state.discriminator = 0;
                         break;
                     }
-                    case 2: // advance_pc
+                    case 2:  // advance_pc
                     {
                         uint64_t advance = e.getULEB128(&off);
                         state.address += min_instruction_length * ((state.op_index + advance) / max_ops_per_instruction);
                         state.op_index = (state.op_index + advance) % max_ops_per_instruction;
                         break;
                     }
-                    case 3: // advance_line
+                    case 3:  // advance_line
                     {
                         state.line += e.getSLEB128(&off);
                         break;
                     }
-                    case 4: // set_file
+                    case 4:  // set_file
                     {
                         state.file = e.getULEB128(&off) - 1 + source_files_base;
                         break;
                     }
-                    case 5: // set_column
+                    case 5:  // set_column
                     {
                         state.column = e.getULEB128(&off);
                         break;
                     }
-                    case 6: // negate_stmt
+                    case 6:  // negate_stmt
                     {
                         state.is_stmt = !state.is_stmt;
                         break;
                     }
-                    case 7: // set_basic_block
+                    case 7:  // set_basic_block
                     {
                         state.basic_block = true;
                         break;
                     }
-                    case 8: // const_add_pc
+                    case 8:  // const_add_pc
                     {
                         // Same as special opcode 255 (but doesn't emit a row or reset state)
                         uint8_t adjust_opcode = 255 - opcode_base;
@@ -2057,35 +2072,35 @@ private:
                         state.op_index = (state.op_index + advance) % max_ops_per_instruction;
                         break;
                     }
-                    case 9: // fixed_advance_pc
+                    case 9:  // fixed_advance_pc
                     {
                         uint16_t advance = e.getU16(&off);
                         state.address += advance;
                         break;
                     }
-                    case 10: // set_prologue_end
+                    case 10:  // set_prologue_end
                     {
                         state.prologue_end = true;
                         break;
                     }
-                    case 11: // set_epilogue_begin
+                    case 11:  // set_epilogue_begin
                     {
                         state.epilogue_begin = true;
                         break;
                     }
-                    case 12: // set_isa
+                    case 12:  // set_isa
                     {
                         state.isa = e.getULEB128(&off);
                         break;
                     }
-                    default:
-                    {
+                    default: {
                         // Unknown standard opcode. Skip over the args.
                         uint8_t args = standard_opcode_length[opcode];
                         for (int i = 0; i < args; i++) {
                             e.getULEB128(&off);
                         }
-                    }}
+                    }
+                    }
                 } else {
                     // Special opcode
                     uint8_t adjust_opcode = opcode - opcode_base;
@@ -2105,18 +2120,15 @@ private:
 
         // Sort the sequences and functions by low PC to make searching into it faster.
         std::sort(source_lines.begin(), source_lines.end());
-
     }
 
-
-
     FunctionInfo *find_containing_function(void *addr) {
-        uint64_t address = (uint64_t)addr;
+        uint64_t address = (uint64_t) addr;
         debug(5) << "Searching for function containing address " << addr << "\n";
         size_t hi = functions.size();
         size_t lo = 0;
         while (hi > lo) {
-            size_t mid = (hi + lo)/2;
+            size_t mid = (hi + lo) / 2;
             uint64_t pc_mid_begin = functions[mid].pc_begin;
             uint64_t pc_mid_end = functions[mid].pc_end;
             if (address < pc_mid_begin) {
@@ -2125,8 +2137,8 @@ private:
                 lo = mid + 1;
             } else {
                 debug(5) << "At function " << functions[mid].name
-                         << " spanning: " << (void *)pc_mid_begin
-                         << ", " << (void *)pc_mid_end << "\n";
+                         << " spanning: " << (void *) pc_mid_begin
+                         << ", " << (void *) pc_mid_end << "\n";
                 return &functions[mid];
             }
         }
@@ -2216,17 +2228,16 @@ void deregister_heap_object(const void *obj, size_t size) {
 
 bool saves_frame_pointer(void *fn) {
     // On x86-64, if we save the frame pointer, the first two instructions should be pushing the stack pointer and the frame pointer:
-    const uint8_t *ptr = (const uint8_t *)(fn);
-    return ptr[0] == 0x55; // push %rbp
+    const uint8_t *ptr = (const uint8_t *) (fn);
+    return ptr[0] == 0x55;  // push %rbp
 }
-
 
 void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
                            bool (*test_a)(const void *, const std::string &),
                            void (*calib)()) {
-    #ifdef __ARM__
+#ifdef __ARM__
     return;
-    #else
+#else
 
     // Skip entirely on arm or 32-bit
     if (sizeof(void *) == 4) {
@@ -2262,16 +2273,15 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
         debug(5) << "Test passed\n";
     }
 
-    //debug_sections->dump();
+//debug_sections->dump();
 
-    #endif
+#endif
+}
+}
+}
 }
 
-}
-}
-}
-
-#else // WITH_INTROSPECTION
+#else  // WITH_INTROSPECTION
 
 namespace Halide {
 namespace Internal {
@@ -2295,7 +2305,6 @@ void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string
                            bool (*test_a)(const void *, const std::string &),
                            void (*calib)()) {
 }
-
 }
 }
 }

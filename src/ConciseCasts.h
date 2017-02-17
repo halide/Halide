@@ -86,7 +86,6 @@ inline Expr i64_sat(Expr e) {
 inline Expr u64_sat(Expr e) {
     return saturating_cast(UInt(64, e.type().lanes()), e);
 }
-
 };
 };
 

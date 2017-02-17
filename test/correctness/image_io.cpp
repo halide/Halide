@@ -26,9 +26,9 @@ void test_round_trip(Buffer<uint8_t> buf, std::string format) {
     RDom r(reloaded);
     std::vector<Expr> args;
     if (buf.dimensions() == 2) {
-        args = {r.x, r.y};
+        args = { r.x, r.y };
     } else {
-        args = {r.x, r.y, r.z};
+        args = { r.x, r.y, r.z };
     }
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(reloaded(args)))));
 
@@ -50,11 +50,12 @@ Func make_noise(int depth) {
     } else {
         Func g = make_noise(depth - 1);
         Func g_up;
-        f(x, y, c) = (g(x/2, y/2, c) +
-                      g((x+1)/2, y/2, c) +
-                      g(x/2, (y+1)/2, c) +
-                      g((x+1)/2, (y+1)/2, c) +
-                      0.25f * random_float()) / 4.25f;
+        f(x, y, c) = (g(x / 2, y / 2, c) +
+                      g((x + 1) / 2, y / 2, c) +
+                      g(x / 2, (y + 1) / 2, c) +
+                      g((x + 1) / 2, (y + 1) / 2, c) +
+                      0.25f * random_float()) /
+                     4.25f;
     }
     f.compute_root();
     return f;
@@ -75,7 +76,7 @@ int main(int argc, char **argv) {
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2, 0);
 
-    std::string formats[] = {"jpg", "png", "ppm"};
+    std::string formats[] = { "jpg", "png", "ppm" };
     for (std::string format : formats) {
         test_round_trip(color_buf, format);
         if (format != "ppm") {

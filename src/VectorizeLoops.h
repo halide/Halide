@@ -16,7 +16,6 @@ namespace Internal {
  * question must have constant extent.
  */
 Stmt vectorize_loops(Stmt s, const Target &t);
-
 }
 }
 

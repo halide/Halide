@@ -1,6 +1,6 @@
 #include "ObjectInstanceRegistry.h"
-#include "Introspection.h"
 #include "Error.h"
+#include "Introspection.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,7 +16,7 @@ void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind
                                                void *subject_ptr, const void *introspection_helper) {
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
-    uintptr_t key = (uintptr_t)this_ptr;
+    uintptr_t key = (uintptr_t) this_ptr;
     internal_assert(registry.instances.find(key) == registry.instances.end());
     if (introspection_helper) {
         registry.instances[key] = InstanceInfo(size, kind, subject_ptr, true);
@@ -30,7 +30,7 @@ void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind
 void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
-    uintptr_t key = (uintptr_t)this_ptr;
+    uintptr_t key = (uintptr_t) this_ptr;
     std::map<uintptr_t, InstanceInfo>::iterator it = registry.instances.find(key);
     internal_assert(it != registry.instances.end());
     if (it->second.registered_for_introspection) {
@@ -48,15 +48,15 @@ std::vector<void *> ObjectInstanceRegistry::instances_in_range(void *start, size
     std::lock_guard<std::mutex> lock(registry.mutex);
 
     std::map<uintptr_t, InstanceInfo>::const_iterator it =
-        registry.instances.lower_bound((uintptr_t)start);
+        registry.instances.lower_bound((uintptr_t) start);
 
-    uintptr_t limit_ptr = ((uintptr_t)start) + size;
+    uintptr_t limit_ptr = ((uintptr_t) start) + size;
     while (it != registry.instances.end() && it->first < limit_ptr) {
         if (it->second.kind == kind) {
             results.push_back(it->second.subject_ptr);
         }
 
-        if (it->first > (uintptr_t)start && it->second.size != 0) {
+        if (it->first > (uintptr_t) start && it->second.size != 0) {
             // Skip over containers that we enclose
             it = registry.instances.lower_bound(it->first + it->second.size);
         } else {

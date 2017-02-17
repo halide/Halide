@@ -24,57 +24,58 @@ class Param {
 
     void check_name() const {
         user_assert(param.name() != "__user_context") << "Param<void*>(\"__user_context\") "
-            << "is no longer used to control whether Halide functions take explicit "
-            << "user_context arguments. Use set_custom_user_context() when jitting, "
-            << "or add Target::UserContext to the Target feature set when compiling ahead of time.";
+                                                      << "is no longer used to control whether Halide functions take explicit "
+                                                      << "user_context arguments. Use set_custom_user_context() when jitting, "
+                                                      << "or add Target::UserContext to the Target feature set when compiling ahead of time.";
     }
 
 public:
     /** Construct a scalar parameter of type T with a unique
      * auto-generated name */
-    Param() :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {}
+    Param()
+        : param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+    }
 
     /** Construct a scalar parameter of type T with the given name. */
     // @{
-    explicit Param(const std::string &n) :
-        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
+    explicit Param(const std::string &n)
+        : param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
         check_name();
     }
-    explicit Param(const char *n) :
-        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
+    explicit Param(const char *n)
+        : param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
         check_name();
     }
     // @}
 
     /** Construct a scalar parameter of type T an initial value of
      * 'val'. Only triggers for non-pointer types. */
-    template <typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
-    explicit Param(T val) :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+    template<typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
+    explicit Param(T val)
+        : param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
         set(val);
     }
 
     /** Construct a scalar parameter of type T with the given name
      * and an initial value of 'val'. */
-    Param(const std::string &n, T val) :
-        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
+    Param(const std::string &n, T val)
+        : param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
         check_name();
         set(val);
     }
 
     /** Construct a scalar parameter of type T with an initial value of 'val'
     * and a given min and max. */
-    Param(T val, Expr min, Expr max) :
-        param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+    Param(T val, Expr min, Expr max)
+        : param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
         set_range(min, max);
         set(val);
     }
 
     /** Construct a scalar parameter of type T with the given name
      * and an initial value of 'val' and a given min and max. */
-    Param(const std::string &n, T val, Expr min, Expr max) :
-        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
+    Param(const std::string &n, T val, Expr min, Expr max)
+        : param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
         check_name();
         set_range(min, max);
         set(val);
@@ -103,7 +104,7 @@ public:
     /** Get a pointer to the location that stores the current value of
      * this parameter. Only meaningful for jitting. */
     NO_INLINE T *get_address() const {
-        return (T *)(param.get_scalar_address());
+        return (T *) (param.get_scalar_address());
     }
 
     /** Get the halide type of T */
@@ -159,7 +160,7 @@ public:
      * statically compiling halide pipelines. */
     operator Argument() const {
         return Argument(name(), Argument::InputScalar, type(), 0,
-            param.get_scalar_expr(), param.get_min_value(), param.get_max_value());
+                        param.get_scalar_expr(), param.get_min_value(), param.get_max_value());
     }
 };
 
@@ -168,9 +169,8 @@ public:
  * (e.g. to pass the user context to an extern function written in C). */
 inline Expr user_context_value() {
     return Internal::Variable::make(Handle(), "__user_context",
-        Internal::Parameter(Handle(), false, 0, "__user_context", true));
+                                    Internal::Parameter(Handle(), false, 0, "__user_context", true));
 }
-
 }
 
 #endif

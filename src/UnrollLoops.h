@@ -14,7 +14,6 @@ namespace Internal {
  * each into several copies of the innermost statement. I.e. unroll
  * the loop. */
 Stmt unroll_loops(Stmt);
-
 }
 }
 

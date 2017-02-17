@@ -47,17 +47,17 @@ h::Realization python_object_to_realization(p::object obj) {
     return h::Realization(buffers);
 }
 
-template <typename... Args>
+template<typename... Args>
 p::object func_realize(h::Func &f, Args... args) {
     return realization_to_python_object(f.realize(args...));
 }
 
-template <typename... Args>
+template<typename... Args>
 void func_realize_into(h::Func &f, Args... args) {
     f.realize(args...);
 }
 
-template <typename... Args>
+template<typename... Args>
 void func_realize_tuple(h::Func &f, p::tuple obj, Args... args) {
     f.realize(python_object_to_realization(obj), args...);
 }

@@ -11,10 +11,10 @@ int main() {
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
 
     Buffer<uint8_t> input(255, 10, 3);
-    for (int y=0; y<input.height(); y++) {
-        for (int x=0; x<input.width(); x++) {
-            for (int c=0; c<3; c++) {
-              input(x, y, c) = 10*x + y + c;
+    for (int y = 0; y < input.height(); y++) {
+        for (int x = 0; x < input.width(); x++) {
+            for (int c = 0; c < 3; c++) {
+                input(x, y, c) = 10 * x + y + c;
             }
         }
     }
@@ -33,8 +33,8 @@ int main() {
     g.realize(out, target);
     out.copy_to_host();
 
-    for (int y=0; y<out.height(); y++) {
-        for (int x=0; x<out.width(); x++) {
+    for (int y = 0; y < out.height(); y++) {
+        for (int x = 0; x < out.width(); x++) {
             if (!(out(x, y, 0) == input(x, y, 0) &&
                   out(x, y, 1) == input(x, y, 1) &&
                   out(x, y, 2) == input(x, y, 2))) {

@@ -25,7 +25,6 @@ EXPORT Expr common_subexpression_elimination(Expr);
 EXPORT Stmt common_subexpression_elimination(Stmt);
 
 EXPORT void cse_test();
-
 }
 }
 

@@ -10,7 +10,7 @@
 
 @interface ViewController : UIViewController <UIWebViewDelegate>
 
-@property (retain) UIWebView *outputView;
-@property (retain) NSMutableDictionary* database;
+@property(retain) UIWebView *outputView;
+@property(retain) NSMutableDictionary *database;
 
 @end

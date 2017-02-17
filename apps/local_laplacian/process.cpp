@@ -1,10 +1,10 @@
-#include <cstdio>
 #include <chrono>
+#include <cstdio>
 
 #include "local_laplacian.h"
 
-#include "benchmark.h"
 #include "HalideBuffer.h"
+#include "benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide::Runtime;
@@ -12,7 +12,8 @@ using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc < 7) {
-        printf("Usage: ./process input.png levels alpha beta timing_iterations output.png\n"
+        printf("Usage: ./process input.png levels alpha beta timing_iterations "
+               "output.png\n"
                "e.g.: ./process input.png 8 1 1 10 output.png\n");
         return 0;
     }
@@ -25,12 +26,11 @@ int main(int argc, char **argv) {
 
     // Timing code
     double best = benchmark(timing, 1, [&]() {
-        local_laplacian(input, levels, alpha/(levels-1), beta, output);
+        local_laplacian(input, levels, alpha / (levels - 1), beta, output);
     });
     printf("%gus\n", best * 1e6);
 
-
-    local_laplacian(input, levels, alpha/(levels-1), beta, output);
+    local_laplacian(input, levels, alpha / (levels - 1), beta, output);
 
     save_image(output, argv[6]);
 

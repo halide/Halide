@@ -23,7 +23,6 @@ namespace Internal {
  */
 class IRMutator : public IRVisitor {
 public:
-
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
      * sub-statements.
@@ -32,7 +31,6 @@ public:
     EXPORT virtual Stmt mutate(Stmt stmt);
 
 protected:
-
     /** visit methods that take Exprs assign to this to return their
      * new value */
     Expr expr;
@@ -84,7 +82,6 @@ protected:
     EXPORT virtual void visit(const Shuffle *);
 };
 
-
 /** A mutator that caches and reapplies previously-done mutations, so
  * that it can handle graphs of IR that have not had CSE done to
  * them. */
@@ -97,8 +94,6 @@ public:
     EXPORT Stmt mutate(Stmt s);
     EXPORT Expr mutate(Expr e);
 };
-
-
 }
 }
 

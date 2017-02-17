@@ -1,11 +1,11 @@
 #include "StmtToHtml.h"
-#include "IRVisitor.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 
-#include <iterator>
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <iterator>
 #include <sstream>
 #include <stdio.h>
 
@@ -15,11 +15,11 @@ namespace Internal {
 using std::string;
 
 namespace {
-template <typename T>
+template<typename T>
 std::string to_string(T value) {
-    std::ostringstream os ;
-    os << value ;
-    return os.str() ;
+    std::ostringstream os;
+    os << value;
+    return os.str();
 }
 
 class StmtToHtml : public IRVisitor {
@@ -32,7 +32,9 @@ class StmtToHtml : public IRVisitor {
 private:
     std::ofstream stream;
 
-    int unique_id() { return ++id_count; }
+    int unique_id() {
+        return ++id_count;
+    }
 
     // All spans and divs will have an id of the form "x-y", where x
     // is shared among all spans/divs in the same context, and y is unique.
@@ -85,12 +87,22 @@ private:
         return close_tag("div") + "\n";
     }
 
-    string open_line() { return "<p class=WrapLine>"; }
-    string close_line() { return "</p>"; }
+    string open_line() {
+        return "<p class=WrapLine>";
+    }
+    string close_line() {
+        return "</p>";
+    }
 
-    string keyword(const string &x) { return span("Keyword", x); }
-    string type(const string &x) { return span("Type", x); }
-    string symbol(const string &x) { return span("Symbol", x); }
+    string keyword(const string &x) {
+        return span("Keyword", x);
+    }
+    string type(const string &x) {
+        return span("Type", x);
+    }
+    string symbol(const string &x) {
+        return span("Symbol", x);
+    }
 
     Scope<int> scope;
     string var(const string &x) {
@@ -127,8 +139,10 @@ private:
         std::stringstream button;
         button << "<a class=ExpandButton onclick='return toggle(" << id << ");' href=_blank>"
                << "<div style='position:relative; width:0; height:0;'>"
-               << "<div class=ShowHide style='display:none;' id=" << id << "-show" << "><i class='fa fa-plus-square-o'></i></div>"
-               << "<div class=ShowHide id=" << id << "-hide" << "><i class='fa fa-minus-square-o'></i></div>"
+               << "<div class=ShowHide style='display:none;' id=" << id << "-show"
+               << "><i class='fa fa-plus-square-o'></i></div>"
+               << "<div class=ShowHide id=" << id << "-hide"
+               << "><i class='fa fa-minus-square-o'></i></div>"
                << "</div>";
         return button.str();
     }
@@ -137,25 +151,25 @@ private:
         return "</a>";
     }
 
-    void visit(const IntImm *op){
+    void visit(const IntImm *op) {
         stream << open_span("IntImm Imm");
         stream << Expr(op);
         stream << close_span();
     }
 
-    void visit(const UIntImm *op){
+    void visit(const UIntImm *op) {
         stream << open_span("UIntImm Imm");
         stream << Expr(op);
         stream << close_span();
     }
 
-    void visit(const FloatImm *op){
+    void visit(const FloatImm *op) {
         stream << open_span("FloatImm Imm");
         stream << Expr(op);
         stream << close_span();
     }
 
-    void visit(const StringImm *op){
+    void visit(const StringImm *op) {
         stream << open_span("StringImm");
         stream << '"';
         for (size_t i = 0; i < op->value.size(); i++) {
@@ -190,11 +204,11 @@ private:
         stream << close_span();
     }
 
-    void visit(const Variable *op){
+    void visit(const Variable *op) {
         stream << var(op->name);
     }
 
-    void visit(const Cast *op){
+    void visit(const Cast *op) {
         stream << open_span("Cast");
 
         stream << open_span("Matched");
@@ -219,28 +233,54 @@ private:
         stream << close_span();
     }
 
-    void visit(const Add *op) { visit_binary_op(op->a, op->b, "+"); }
-    void visit(const Sub *op) { visit_binary_op(op->a, op->b, "-"); }
-    void visit(const Mul *op) { visit_binary_op(op->a, op->b, "*"); }
-    void visit(const Div *op) { visit_binary_op(op->a, op->b, "/"); }
-    void visit(const Mod *op) { visit_binary_op(op->a, op->b, "%"); }
-    void visit(const And *op) { visit_binary_op(op->a, op->b, "&amp;&amp;"); }
-    void visit(const Or *op) { visit_binary_op(op->a, op->b, "||"); }
-    void visit(const NE *op) { visit_binary_op(op->a, op->b, "!="); }
-    void visit(const LT *op) { visit_binary_op(op->a, op->b, "&lt;"); }
-    void visit(const LE *op) { visit_binary_op(op->a, op->b, "&lt="); }
-    void visit(const GT *op) { visit_binary_op(op->a, op->b, "&gt;"); }
-    void visit(const GE *op) { visit_binary_op(op->a, op->b, "&gt;="); }
-    void visit(const EQ *op) { visit_binary_op(op->a, op->b, "=="); }
+    void visit(const Add *op) {
+        visit_binary_op(op->a, op->b, "+");
+    }
+    void visit(const Sub *op) {
+        visit_binary_op(op->a, op->b, "-");
+    }
+    void visit(const Mul *op) {
+        visit_binary_op(op->a, op->b, "*");
+    }
+    void visit(const Div *op) {
+        visit_binary_op(op->a, op->b, "/");
+    }
+    void visit(const Mod *op) {
+        visit_binary_op(op->a, op->b, "%");
+    }
+    void visit(const And *op) {
+        visit_binary_op(op->a, op->b, "&amp;&amp;");
+    }
+    void visit(const Or *op) {
+        visit_binary_op(op->a, op->b, "||");
+    }
+    void visit(const NE *op) {
+        visit_binary_op(op->a, op->b, "!=");
+    }
+    void visit(const LT *op) {
+        visit_binary_op(op->a, op->b, "&lt;");
+    }
+    void visit(const LE *op) {
+        visit_binary_op(op->a, op->b, "&lt=");
+    }
+    void visit(const GT *op) {
+        visit_binary_op(op->a, op->b, "&gt;");
+    }
+    void visit(const GE *op) {
+        visit_binary_op(op->a, op->b, "&gt;=");
+    }
+    void visit(const EQ *op) {
+        visit_binary_op(op->a, op->b, "==");
+    }
 
     void visit(const Min *op) {
         stream << open_span("Min");
-        print_list(symbol("min") + "(", {op->a, op->b}, ")");
+        print_list(symbol("min") + "(", { op->a, op->b }, ")");
         stream << close_span();
     }
     void visit(const Max *op) {
         stream << open_span("Max");
-        print_list(symbol("max") + "(", {op->a, op->b}, ")");
+        print_list(symbol("max") + "(", { op->a, op->b }, ")");
         stream << close_span();
     }
     void visit(const Not *op) {
@@ -251,7 +291,7 @@ private:
     }
     void visit(const Select *op) {
         stream << open_span("Select");
-        print_list(symbol("select") + "(", {op->condition, op->true_value, op->false_value}, ")");
+        print_list(symbol("select") + "(", { op->condition, op->true_value, op->false_value }, ")");
         stream << close_span();
     }
     void visit(const Load *op) {
@@ -269,7 +309,7 @@ private:
     }
     void visit(const Ramp *op) {
         stream << open_span("Ramp");
-        print_list(symbol("ramp") + "(", {op->base, op->stride, Expr(op->lanes)}, ")");
+        print_list(symbol("ramp") + "(", { op->base, op->stride, Expr(op->lanes) }, ")");
         stream << close_span();
     }
     void visit(const Broadcast *op) {
@@ -333,7 +373,8 @@ private:
         stream << keyword(op->is_producer ? "produce" : "consume") << " ";
         stream << var(op->name);
         stream << close_expand_button() << " {";
-        stream << close_span();;
+        stream << close_span();
+        ;
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent", produce_id);
         print(op->body);
         stream << close_div();
@@ -361,11 +402,11 @@ private:
         } else if (op->for_type == ForType::GPUThread) {
             stream << keyword("gpu_thread");
         } else {
-            internal_assert(false) << "Unknown for type: " << ((int)op->for_type) << "\n";
+            internal_assert(false) << "Unknown for type: " << ((int) op->for_type) << "\n";
         }
         stream << " (";
         stream << close_span();
-        print_list({Variable::make(Int(32), op->name), op->min, op->extent});
+        print_list({ Variable::make(Int(32), op->name), op->min, op->extent });
         stream << matched(")");
         stream << close_expand_button();
         stream << " " << matched("{");
@@ -422,7 +463,7 @@ private:
         stream << close_span();
 
         for (size_t i = 0; i < op->extents.size(); i++) {
-            stream  << " * ";
+            stream << " * ";
             print(op->extents[i]);
         }
         stream << matched("]");
@@ -464,7 +505,7 @@ private:
         stream << var(op->name);
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
+            print_list("[", { op->bounds[i].min, op->bounds[i].extent }, "]");
             if (i < op->bounds.size() - 1) stream << ", ";
         }
         stream << matched(")");
@@ -509,11 +550,11 @@ private:
             print(op->condition);
             stream << matched(")");
             stream << close_expand_button() << " ";
-            stream << matched("{"); // close if (or else if) span
+            stream << matched("{");  // close if (or else if) span
 
             stream << open_div("ThenBody Indent", id);
             print(op->then_case);
-            stream << close_div(); // close thenbody div
+            stream << close_div();  // close thenbody div
 
             if (!op->else_case.defined()) {
                 stream << matched("}");
@@ -541,7 +582,7 @@ private:
                 break;
             }
         }
-        stream << close_div(); // Closing ifthenelse div.
+        stream << close_div();  // Closing ifthenelse div.
     }
 
     void visit(const Evaluate *op) {
@@ -619,12 +660,13 @@ public:
         stream << close_div();
     }
 
-    StmtToHtml(string filename) : id_count(0), context_stack(1, 0) {
+    StmtToHtml(string filename)
+        : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
         stream << "<style type='text/css'>" << css << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
-        stream <<"<link rel='stylesheet' type='text/css' href='my.css'>\n";
+        stream << "<link rel='stylesheet' type='text/css' href='my.css'>\n";
         stream << "<script language='javascript' type='text/javascript' src='my.js'></script>\n";
         stream << "<link href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css' rel='stylesheet'>\n";
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
@@ -694,6 +736,5 @@ void print_to_html(string filename, const Module &m) {
         sth.print(f);
     }
 }
-
 }
 }

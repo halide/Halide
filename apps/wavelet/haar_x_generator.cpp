@@ -14,14 +14,14 @@ public:
         Func in = Halide::BoundaryConditions::repeat_edge(in_);
 
         Func out("out");
-        out(x, y, c) = select(c == 0,
-                              (in(2*x, y) + in(2*x+1, y)),
-                              (in(2*x, y) - in(2*x+1, y)))/2;
+        out(x, y, c) = select(c == 0, (in(2 * x, y) + in(2 * x + 1, y)),
+                              (in(2 * x, y) - in(2 * x + 1, y))) /
+                       2;
         out.unroll(c, 2);
         return out;
     }
 };
 
-Halide::RegisterGenerator<haar_x> register_my_gen{"haar_x"};
+Halide::RegisterGenerator<haar_x> register_my_gen{ "haar_x" };
 
 }  // namespace

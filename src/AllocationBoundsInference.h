@@ -5,8 +5,8 @@
  * Defines the lowering pass that determines how large internal allocations should be.
  */
 
-#include "IR.h"
 #include "Bounds.h"
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

@@ -16,6 +16,7 @@ namespace Halide {
  * Int(32). */
 class Var {
     std::string _name;
+
 public:
     /** Construct a Var with the given name */
     EXPORT Var(const std::string &n);
@@ -24,10 +25,14 @@ public:
     EXPORT Var();
 
     /** Get the name of a Var */
-    const std::string &name() const {return _name;}
+    const std::string &name() const {
+        return _name;
+    }
 
     /** Test if two Vars are the same. This simply compares the names. */
-    bool same_as(const Var &other) const {return _name == other._name;}
+    bool same_as(const Var &other) const {
+        return _name == other._name;
+    }
 
     /** Implicit var constructor. Implicit variables are injected
      * automatically into a function call if the number of arguments
@@ -163,7 +168,6 @@ public:
     static Var outermost() {
         return Var("__outermost");
     }
-
 };
 
 /** A placeholder variable for infered arguments. See \ref Var::implicit */
@@ -173,7 +177,6 @@ EXPORT extern Var _;
 // @{
 EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
 // @}
-
 }
 
 #endif
