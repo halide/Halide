@@ -12,7 +12,7 @@ namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
 
 // Define the function pointers for the OpenCL API. OpenCL 1.2
 // currently disabled so we can work on build bots without it.
-//#define HAVE_OPENCL_12
+#define HAVE_OPENCL_12
 #define CL_FN(ret, fn, args) WEAK ret (CL_API_CALL *fn) args;
 #include "cl_functions.h"
 
@@ -66,6 +66,7 @@ WEAK void load_libopencl(void *user_context) {
 }
 
 extern WEAK halide_device_interface_t opencl_device_interface;
+extern WEAK halide_device_interface_t opencl_textures_device_interface;
 
 WEAK const char *get_opencl_error_name(cl_int err);
 WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_queue *q);
@@ -454,11 +455,10 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
-}}}} // namespace Halide::Runtime::Internal::OpenCL
-
-extern "C" {
-
-WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
+WEAK int common_device_free(void *user_context, halide_buffer_t* buf, bool textures) {
+    debug(user_context)
+        << "CL: halide_opencl" << (textures ? "_textures" : "") << "_device_free (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
     // halide_opencl_device_free, at present, can be exposed to clients and they
     // should be allowed to call halide_opencl_device_free on any halide_buffer_t
     // including ones that have never been used with a GPU.
@@ -482,7 +482,8 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
     #endif
 
     halide_assert(user_context, validate_device_pointer(user_context, buf));
-    debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
+    debug(user_context) << "    clReleaseMemObject " << (textures ? "Image " : "Buffer ")
+                        << (void *)dev_ptr << "\n";
     cl_int result = clReleaseMemObject((cl_mem)dev_ptr);
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
     // we just end our reference to it regardless.
@@ -503,6 +504,17 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
     return 0;
 }
 
+}}}} // namespace Halide::Runtime::Internal::OpenCL
+
+extern "C" {
+
+WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
+    return common_device_free(user_context, buf, false);
+}
+
+WEAK int halide_opencl_textures_device_free(void *user_context, halide_buffer_t* buf) {
+    return common_device_free(user_context, buf, true);
+}
 
 WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, const char* src, int size) {
     debug(user_context)
@@ -757,6 +769,161 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
     return CL_SUCCESS;
 }
 
+WEAK int halide_opencl_textures_device_malloc(void *user_context, halide_buffer_t* buf) {
+#ifdef HAVE_OPENCL_12
+    if (buf->dim[0].extent == 0) {
+        // 0-size images are handled as buffers.
+        return halide_opencl_device_malloc(user_context, buf);
+    }
+
+    debug(user_context)
+         << "CL: halide_opencl_textures_device_malloc (user_context: " << user_context
+         << ", buf: " << buf << ")\n";
+
+     ClContext ctx(user_context);
+
+     size_t size = buf->size_in_bytes();
+     if (buf->device) {
+         halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+         return 0;
+     }
+
+     for (int i = 0; i < buf->dimensions; i++) {
+         halide_assert(user_context, buf->dim[i].stride >= 0);
+     }
+     if (buf->dimensions < 1 || buf->dimensions > 3) {
+         error(user_context) << "Buffer has " << buf->dimensions << " dimensions, must be between 1 and 3";
+     }
+
+    #ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << "    Allocating image buffer of " << (int)size << " bytes,"
+        << " extents: " << buf->dim[0].extent;
+    for (int i = 1; i < buf->dimensions; i++) {
+        debug(user_context) << "x" << buf->dim[i].extent;
+    }
+    debug(user_context) << " strides: " << buf->dim[0].stride;
+    for (int i = 1; i < buf->dimensions; i++) {
+        debug(user_context) << "x" << buf->dim[i].stride;
+    }
+    debug(user_context) << " (type: " << buf->type << ")\n";
+
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    cl_int err;
+    debug(user_context) << "    clCreateImage " << buf->dimensions << "D ";
+    cl_mem_object_type image_type;
+    switch (buf->dimensions) {
+    case 1:
+        image_type = CL_MEM_OBJECT_IMAGE1D;
+        break;
+    case 2:
+        image_type = CL_MEM_OBJECT_IMAGE2D;
+        break;
+    case 3:
+        image_type = CL_MEM_OBJECT_IMAGE3D;
+        break;
+    }
+    cl_channel_order channel_order = CL_R;
+
+    cl_channel_type channel_type = 0;
+    if (buf->type.code == halide_type_int) {
+	switch (buf->type.bytes()) {
+        case 1:
+            debug(user_context) << "CL_SIGNED_INT8";
+            channel_type = CL_SIGNED_INT8;
+            break;
+        case 2:
+            debug(user_context) << "CL_SIGNED_INT16";
+            channel_type = CL_SIGNED_INT16;
+            break;
+        case 4:
+            debug(user_context) << "CL_SIGNED_INT32";
+            channel_type = CL_SIGNED_INT32;
+            break;
+	default:
+	    error(user_context) << "Invalid bytes for int type: " << buf->type.bytes() << "\n";
+	}
+    } else if (buf->type.code == halide_type_uint) {
+        switch (buf->type.bytes()) {
+        case 1:
+            debug(user_context) << "CL_UNSIGNED_INT8";
+            channel_type = CL_UNSIGNED_INT8;
+            break;
+        case 2:
+            debug(user_context) << "CL_UNSIGNED_INT16";
+            channel_type = CL_UNSIGNED_INT16;
+            break;
+        case 4:
+            debug(user_context) << "CL_UNSIGNED_INT32";
+            channel_type = CL_UNSIGNED_INT32;
+            break;
+        default:
+            error(user_context) << "Invalid bytes for uint type: " << buf->type.bytes() << "\n";
+        }
+    } else if (buf->type.code == halide_type_float) {
+	switch (buf->type.bytes()) {
+	case 2:
+	    debug(user_context) << "CL_HALF_FLOAT";
+	    channel_type = CL_HALF_FLOAT;
+	    break;
+	case 4:
+	    debug(user_context) << "CL_FLOAT";
+	    channel_type = CL_FLOAT;
+	    break;
+	default:
+	    error(user_context) << "Invalid bytes for float type:" << buf->type.bytes() << "\n";
+	}
+    }
+    cl_image_format image_format;
+    image_format.image_channel_order = channel_order;
+    image_format.image_channel_data_type = channel_type;
+    cl_image_desc image_desc = {0};
+    image_desc.image_type = image_type;
+    switch (buf->dimensions) {
+    case 3:
+        image_desc.image_depth = buf->dim[2].extent;
+    case 2:
+        image_desc.image_height = buf->dim[1].extent;
+    case 1:
+        image_desc.image_width = buf->dim[0].extent;
+    }
+
+    cl_mem dev_ptr = clCreateImage(ctx.context,
+                                   CL_MEM_READ_WRITE,
+                                   &image_format,
+                                   &image_desc,
+                                   NULL,
+                                   &err);
+    if (err != CL_SUCCESS || dev_ptr == 0) {
+        error(user_context) << "CL: clCreateImage failed: "
+                            << get_opencl_error_name(err);
+        return err;
+    } else {
+        debug(user_context) << " -> " << (void *)dev_ptr << "\n";
+    }
+
+    buf->device = (uint64_t)dev_ptr;
+    buf->device_interface = &opencl_textures_device_interface;
+    buf->device_interface->use_module();
+
+    debug(user_context)
+        << "    Allocated device buffer " << (void *)buf->device
+        << " for buffer " << buf << "\n";
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return CL_SUCCESS;
+#else
+    error(user_context) << "OpenCL 1.2 not supported in this version of the Halide runtime\n";
+    return -1;
+#endif
+}
+
 namespace {
 WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
                              const device_copy &c,
@@ -877,6 +1044,70 @@ WEAK int halide_opencl_copy_to_device(void *user_context, halide_buffer_t* buf) 
     return 0;
 }
 
+WEAK int halide_opencl_textures_copy_to_device(void *user_context, halide_buffer_t* buf) {
+    if (buf->dim[0].extent == 0) {
+        // 0-size images are handled as buffers.
+        return halide_opencl_copy_to_device(user_context, buf);
+    }
+
+    int err = halide_opencl_textures_device_malloc(user_context, buf);
+    if (err) {
+        return err;
+    }
+
+    debug(user_context)
+        << "CL: halide_opencl_textures_copy_to_device (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    halide_assert(user_context, buf->host && buf->device);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
+
+    size_t offset[3] = { 0, 0, 0 };
+    size_t region[3] = { 1, 1, 1 };
+    for (int i = 0; i < buf->dimensions; i++) {
+        region[i] = buf->dim[i].extent;
+    }
+
+    debug(user_context)
+        << "    clEnqueueWriteImage ((" << (void *)buf->host << " -> " << (void *)buf->device
+        << "), dimensions " << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << "\n";
+
+    err = clEnqueueWriteImage(ctx.cmd_queue,
+                              (cl_mem)buf->device,
+                              CL_FALSE,
+                              offset, region,
+                              0, 0,
+                              (void *)buf->host,
+                              0, NULL, NULL);
+
+    if (err != CL_SUCCESS) {
+        error(user_context) << "CL: clEnqueueWriteImage failed: "
+                            << get_opencl_error_name(err);
+        return err;
+    }
+
+    // The writes above are all non-blocking, so empty the command
+    // queue before we proceed so that other host code won't write
+    // to the buffer while the above writes are still running.
+    clFinish(ctx.cmd_queue);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
 WEAK int halide_opencl_copy_to_host(void *user_context, halide_buffer_t* buf) {
     debug(user_context)
         << "CL: halide_copy_to_host (user_context: " << user_context
@@ -902,6 +1133,64 @@ WEAK int halide_opencl_copy_to_host(void *user_context, halide_buffer_t* buf) {
     do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, true);
 
     // The reads above are all non-blocking, so empty the command
+    // queue before we proceed so that other host code won't read
+    // bad data.
+    clFinish(ctx.cmd_queue);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
+    return 0;
+}
+
+WEAK int halide_opencl_textures_copy_to_host(void *user_context, halide_buffer_t* buf) {
+    debug(user_context)
+        << "CL: halide_opencl_textures_copy_to_host (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    // Acquire the context so we can use the command queue. This also avoids multiple
+    // redundant calls to clEnqueueReadImage when multiple threads are trying to copy
+    // the same buffer.
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
+    halide_assert(user_context, buf->host && buf->device);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
+
+    // device_copy c = make_device_to_host_copy(buf);
+
+    size_t offset[3] = { 0, 0, 0 };
+    size_t region[3] = { 1, 1, 1 };
+    for (int i = 0; i < buf->dimensions; i++) {
+        region[i] = buf->dim[i].extent;
+    }
+
+    debug(user_context)
+        << "    clEnqueueReadImage ((" << (void *)buf->device << " -> " << (void *)buf->host
+        << "), dimensions " << (int)region[0] << "x" << (int)region[1] << "x" << (int)region[2] << "\n";
+
+    cl_int err = clEnqueueReadImage(ctx.cmd_queue,
+                                    (cl_mem)buf->device,
+                                    CL_FALSE,
+                                    offset, region,
+                                    0, 0,
+                                    (void *)buf->host,
+                                    0, NULL, NULL);
+
+    if (err != CL_SUCCESS) {
+        error(user_context) << "CL: clEnqueueReadImage failed: "
+                            << get_opencl_error_name(err);
+        return err;
+    }
+    // The writes above are all non-blocking, so empty the command
     // queue before we proceed so that other host code won't read
     // bad data.
     clFinish(ctx.cmd_queue);
@@ -1050,6 +1339,14 @@ WEAK int halide_opencl_device_and_host_free(void *user_context, struct halide_bu
     return halide_default_device_and_host_free(user_context, buf, &opencl_device_interface);
 }
 
+WEAK int halide_opencl_textures_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf, &opencl_textures_device_interface);
+}
+
+WEAK int halide_opencl_textures_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf, &opencl_textures_device_interface);
+}
+
 WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uintptr_t mem) {
     halide_assert(user_context, buf->device == 0);
     if (buf->device != 0) {
@@ -1091,6 +1388,10 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, halide_buffer_t *buf
 
 WEAK const struct halide_device_interface_t *halide_opencl_device_interface() {
     return &opencl_device_interface;
+}
+
+WEAK const struct halide_device_interface_t *halide_opencl_textures_device_interface() {
+    return &opencl_textures_device_interface;
 }
 
 namespace {
@@ -1167,6 +1468,19 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_opencl_copy_to_device,
     halide_opencl_device_and_host_malloc,
     halide_opencl_device_and_host_free,
+};
+
+WEAK halide_device_interface_t opencl_textures_device_interface = {
+    halide_use_jit_module,
+    halide_release_jit_module,
+    halide_opencl_textures_device_malloc,
+    halide_opencl_textures_device_free,
+    halide_opencl_device_sync,
+    halide_opencl_device_release,
+    halide_opencl_textures_copy_to_host,
+    halide_opencl_textures_copy_to_device,
+    halide_opencl_textures_device_and_host_malloc,
+    halide_opencl_textures_device_and_host_free,
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL

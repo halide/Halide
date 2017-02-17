@@ -909,7 +909,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
     halide_target_feature_hvx_use_shared_object = 42, ///< Build shared object code for Hexagon, and use dlopenbuf API.
-    halide_target_feature_end = 43 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_textures = 43, ///< Default to using textures for GPU buffers. Only usable with OpenCL
+    halide_target_feature_end = 44 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine

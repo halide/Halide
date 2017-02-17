@@ -701,6 +701,14 @@ class ExprContainsLoad : public IRVisitor {
         result = true;
     }
 
+    void visit(const Call *op) {
+        if (op->is_intrinsic(Call::image_load)) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
 public:
     bool result = false;
 };

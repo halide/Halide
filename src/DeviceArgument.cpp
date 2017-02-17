@@ -15,7 +15,7 @@ std::vector<DeviceArgument> HostClosure::arguments() {
     std::vector<DeviceArgument> res;
     for (const std::pair<std::string, Type> &i : vars) {
         debug(2) << "var: " << i.first << "\n";
-        res.push_back(DeviceArgument(i.first, false, i.second, 0));
+        res.push_back(DeviceArgument(i.first, false, false, i.second, 0));
     }
     for (const std::pair<std::string, Buffer> &i : buffers) {
         debug(2) << "buffer: " << i.first << " " << i.second.size;
@@ -23,7 +23,8 @@ std::vector<DeviceArgument> HostClosure::arguments() {
         if (i.second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        DeviceArgument arg(i.first, true, i.second.type, i.second.dimensions, i.second.size);
+        bool is_texture = textures.find(i.first) != textures.end();
+        DeviceArgument arg(i.first, true, is_texture, i.second.type, i.second.dimensions, i.second.size);
         arg.read = i.second.read;
         arg.write = i.second.write;
         res.push_back(arg);
@@ -51,14 +52,15 @@ void HostClosure::visit(const Call *op) {
         std::string bufname = string_imm->value;
         Buffer &ref = buffers[bufname];
         ref.type = op->type;
-        // TODO: do we need to set ref.dimensions?
 
         if (op->name == Call::glsl_texture_load ||
             op->name == Call::image_load) {
             ref.read = true;
+            ref.dimensions = (op->args.size() - 2) / 2;
         } else if (op->name == Call::glsl_texture_store ||
                    op->name == Call::image_store) {
             ref.write = true;
+            ref.dimensions = op->args.size() - 3;
         }
 
         // The Func's name and the associated .buffer are mentioned in the
@@ -68,6 +70,7 @@ void HostClosure::visit(const Call *op) {
         Internal::Closure::visit(op);
         ignore.pop(bufname + ".buffer");
         ignore.pop(bufname);
+        textures.insert(bufname);
     } else {
         Internal::Closure::visit(op);
     }

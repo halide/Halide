@@ -77,6 +77,9 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::OpenCL:
         out << "<OpenCL>";
         break;
+    case DeviceAPI::OpenCLTextures:
+        out << "<OpenCLTextures>";
+        break;
     case DeviceAPI::OpenGLCompute:
         out << "<OpenGLCompute>";
         break;

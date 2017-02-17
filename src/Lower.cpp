@@ -184,9 +184,9 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     s = split_tuples(s, env);
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::OpenGL)) {
+    if (t.features_any_of({Target::OpenGL, Target::Textures})) {
         debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s, env);
+        s = inject_image_intrinsics(s, env, t);
         debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
     }
 

@@ -686,7 +686,8 @@ class ZeroGPULoopMins : public IRMutator {
         bool old_in_non_glsl_gpu = in_non_glsl_gpu;
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
-          (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
+          (op->device_api == DeviceAPI::CUDA) ||
+          (op->device_api == DeviceAPI::OpenCL) || (op->device_api == DeviceAPI::OpenCLTextures) ||
           (op->device_api == DeviceAPI::Metal);
 
         IRMutator::visit(op);

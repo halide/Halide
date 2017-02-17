@@ -21,14 +21,15 @@ class GpuObjectLifetimeTracker {
             is_global(is_global), total_created(0), live_count(0) {}
     };
 
-    std::array<ObjectType, 13> object_types = {{
+    std::array<ObjectType, 14> object_types = {{
         // OpenCL objects
         {"clCreateContext", "clReleaseContext", true},
         {"clCreateCommandQueue", "clReleaseCommandQueue", true},
         // This handles both "clCreateProgramWithSource" and
         // "clCreateProgramWithBinary".
         {"clCreateProgram", "clReleaseProgram"},
-        {"clCreateBuffer", "clReleaseMemObject"},
+        {"clCreateBuffer", "clReleaseMemObject Buffer"},
+        {"clCreateImage", "clReleaseMemObject Image"},
         {"clCreateKernel", "clReleaseKernel"},
 
         // CUDA objects

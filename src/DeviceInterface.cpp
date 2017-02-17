@@ -85,7 +85,7 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
     if (target.has_feature(Target::Metal)) {
         return DeviceAPI::Metal;
     } else if (target.has_feature(Target::OpenCL)) {
-        return DeviceAPI::OpenCL;
+        return target.has_feature(Target::Textures) ? DeviceAPI::OpenCLTextures : DeviceAPI::OpenCL;
     } else if (target.has_feature(Target::CUDA)) {
         return DeviceAPI::CUDA;
     } else if (target.has_feature(Target::OpenGLCompute)) {
@@ -208,6 +208,20 @@ const struct halide_device_interface_t *halide_opencl_device_interface() {
     return get_device_interface_for_device_api(DeviceAPI::OpenCL, t);
 }
 EXPORT_SYM(halide_opencl_device_interface)
+
+const struct halide_device_interface_t *halide_opencl_textures_device_interface() {
+    Target target(get_host_target());
+    // TODO(zalman): Decide if keeping separate runtimes for OpenCL with and without textures.
+    // At present the Textures flag here will not do anything, both types of OpenCL
+    // are always included.
+    target.set_features({ Target::OpenCL, Target::Textures });
+    struct halide_device_interface_t *(*fn)();
+    if (lookup_runtime_routine("halide_opencl_textures_device_interface", target, fn)) {
+        return (*fn)();
+    }
+    return NULL;
+}
+EXPORT_SYM(halide_opencl_textures_device_interface)
 
 const struct halide_device_interface_t *halide_opengl_device_interface() {
     Target t = get_jit_target_from_environment().with_feature(Target::OpenGL);

@@ -113,7 +113,7 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
     }
     if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
+        cgdev[DeviceAPI::OpenCL] = cgdev[DeviceAPI::OpenCLTextures] = new CodeGen_OpenCL_Dev(target);
     }
     if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
@@ -128,7 +128,10 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(tar
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
     for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
-        delete i.second;
+        // TODO(zalman): This is a special kind of ugly. Probably worth uniq'ing the collection of pointers.
+        if (i.first != DeviceAPI::OpenCLTextures) {
+            delete i.second;
+        }
     }
 }
 

@@ -174,6 +174,9 @@ class InjectBufferCopies : public IRMutator {
           case DeviceAPI::OpenCL:
             interface_name = "halide_opencl_device_interface";
             break;
+        case DeviceAPI::OpenCLTextures:
+            interface_name = "halide_opencl_textures_device_interface";
+            break;
           case DeviceAPI::Metal:
             interface_name = "halide_metal_device_interface";
             break;
@@ -424,7 +427,8 @@ class InjectBufferCopies : public IRMutator {
             }
         } else if (op->is_intrinsic(Call::image_load)) {
             // counts as a device read
-            internal_assert(device_api == DeviceAPI::GLSL);
+            internal_assert(device_api == DeviceAPI::GLSL ||
+                            device_api == DeviceAPI::OpenCLTextures);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
@@ -434,7 +438,8 @@ class InjectBufferCopies : public IRMutator {
             IRMutator::visit(op);
         } else if (op->is_intrinsic(Call::image_store)) {
             // counts as a device store
-            internal_assert(device_api == DeviceAPI::GLSL);
+            internal_assert(device_api == DeviceAPI::GLSL ||
+                            device_api == DeviceAPI::OpenCLTextures);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));

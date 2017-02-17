@@ -16,6 +16,10 @@ int check_result(Buffer<T> output, int n_types, int offset) {
     return 0;
 }
 
+bool target_supports_int64(Target &t) {
+    return !t.has_feature(Target::Metal) && !t.features_all_of({Target::OpenCL, Target::Textures});
+}
+
 int main(int argc, char **argv) {
     Target t(get_jit_target_from_environment());
     if (!t.has_gpu_feature()) {
@@ -35,18 +39,18 @@ int main(int argc, char **argv) {
     Func out("out");
 
     Type result_type;
-    if (t.has_feature(Target::Metal)) {
-        result_type = UInt(32);
-    } else {
+    if (target_supports_int64(t)) {
         result_type = UInt(64);
+    } else {
+        result_type = UInt(32);
     }
     Expr e = cast(result_type, 0);
     int offset = 0;
     for (int i = 0; i < n_types; i++) {
         int off = 0;
         if ((types[i].is_int() || types[i].is_uint())) {
-            // Metal does not support 64-bit integers.
-            if (t.has_feature(Target::Metal) &&
+            // Metal and OpenCL Textures do not support 64-bit integers.
+            if (!target_supports_int64(t) &&
                 types[i].bits() >= 64) {
                 continue;
             }
@@ -69,10 +73,10 @@ int main(int argc, char **argv) {
     Buffer<> output = out.realize(23*5);
 
     int result;
-    if (t.has_feature(Target::Metal)) {
-        result = check_result<uint32_t>(output, n_types - 2, offset);
-    } else {
+    if (target_supports_int64(t)) {
         result = check_result<uint64_t>(output, n_types, offset);
+    } else {
+        result = check_result<uint32_t>(output, n_types - 2, offset);
     }
     if (result != 0) {
         return result;

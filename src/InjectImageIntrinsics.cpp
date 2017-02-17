@@ -14,13 +14,14 @@ using std::vector;
 
 class InjectImageIntrinsics : public IRMutator {
 public:
-    InjectImageIntrinsics(const map<string, Function> &e) : inside_kernel_loop(false), env(e) {}
+    InjectImageIntrinsics(const map<string, Function> &e, Target t) : inside_kernel_loop(false), env(e), target(t) {}
     Scope<int> scope;
     bool inside_kernel_loop;
     Scope<int> kernel_scope_allocations;
     const map<string, Function> &env;
 
 private:
+    Target target;
     using IRMutator::visit;
 
     void visit(const Provide *provide) {
@@ -30,26 +31,70 @@ private:
             return;
         }
 
-        internal_assert(provide->values.size() == 1)
-            << "Image currently only supports single-valued stores.\n";
-        user_assert(provide->args.size() == 3)
-            << "Image stores require three coordinates.\n";
+        if (target.has_feature(Target::OpenCL)) {
+            if (provide->args.size() == 0) {
+                // 0-arg images should be handled as buffers.
+                IRMutator::visit(provide);
+                return;
+            }
+            user_assert(provide->args.size() >= 1 && provide->args.size() <= 3)
+                << "OpenCL image stores require one to three coordinates.\n";
+        } else {
+            internal_assert(provide->values.size() == 1)
+                << "Image currently only supports single-valued stores.\n";
+            user_assert(provide->args.size() == 3)
+                << "Image stores require three coordinates.\n";
+        }
 
-        // Create image_store("name", name.buffer, x, y, c, value)
-        // intrinsic.
-        Expr value_arg = mutate(provide->values[0]);
-        vector<Expr> args = {
-            provide->name,
-            Variable::make(type_of<struct halide_buffer_t *>(), provide->name + ".buffer"),
-            provide->args[0],
-            provide->args[1],
-            provide->args[2],
-            value_arg};
+        if (provide->values.size() > 1) {
+            // Flatten this provide into a sequence of image_stores
+            Stmt result;
+            for (size_t i = 0; i < provide->values.size(); i++) {
+                // Create image_store("name", name.buffer, x, y, c, value)
+                // intrinsic.
+                Expr value_arg = mutate(provide->values[i]);
+                Type t = value_arg.type().with_bits(value_arg.type().bytes() * 8);
+                if (t.bits() != value_arg.type().bits()) {
+                    value_arg = Cast::make(t, value_arg);
+                }
+                string name = provide->name + "." + std::to_string(i);
+                vector<Expr> args = {
+                    name,
+                    Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer"),
+                };
+                for (const Expr &arg: provide->args) {
+                    args.push_back(arg);
+                }
+                args.push_back(value_arg);
+                Stmt image_store = Evaluate::make(Call::make(value_arg.type(),
+                                                             Call::image_store,
+                                                             args,
+                                                             Call::Intrinsic));
+                if (result.defined()) {
+                    result = Block::make(result, image_store);
+                } else {
+                    result = image_store;
+                }
+            }
+            stmt = result;
+        } else {
+            // Create image_store("name", name.buffer, x, y, c, value)
+            // intrinsic.
+            Expr value_arg = mutate(provide->values[0]);
+            vector<Expr> args = {
+                provide->name,
+                Variable::make(type_of<struct halide_buffer_t *>(), provide->name + ".buffer"),
+            };
+            for (const Expr &arg : provide->args) {
+                args.push_back(arg);
+            }
+            args.push_back(value_arg);
 
-        stmt = Evaluate::make(Call::make(value_arg.type(),
-                                         Call::image_store,
-                                         args,
-                                         Call::Intrinsic));
+            stmt = Evaluate::make(Call::make(value_arg.type(),
+                                             Call::image_store,
+                                             args,
+                                             Call::Intrinsic));
+        }
     }
 
     void visit(const Call *call) {
@@ -70,10 +115,12 @@ private:
         }
 
         vector<Expr> padded_call_args = call->args;
-        // Check to see if we are reading from a one or two dimension function
-        // and pad to three dimensions.
-        while (padded_call_args.size() < 3) {
-            padded_call_args.push_back(0);
+        if (!target.has_feature(Target::OpenCL)) {
+            // Check to see if we are reading from a one or two dimension function
+            // and pad to three dimensions.
+            while (padded_call_args.size() < 3) {
+                padded_call_args.push_back(0);
+            }
         }
 
         // Create image_load("name", name.buffer, x, x_extent, y, y_extent, ...).
@@ -81,7 +128,7 @@ private:
         // for coordinates normalization.
         vector<Expr> args(2);
         args[0] = call->name;
-        args[1] = Variable::make(type_of<struct halide_buffer_t *>(), call->name + ".buffer");
+        args[1] = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
         for (size_t i = 0; i < padded_call_args.size(); i++) {
 
             // If this is an ordinary dimension, insert a variable that will be
@@ -144,7 +191,8 @@ private:
     void visit(const For *loop) {
         bool old_kernel_loop = inside_kernel_loop;
         if ((loop->for_type == ForType::GPUBlock || loop->for_type == ForType::GPUThread) &&
-            loop->device_api == DeviceAPI::GLSL) {
+            (loop->device_api == DeviceAPI::GLSL ||
+             (loop->device_api == DeviceAPI::Default_GPU && target.has_feature(Target::Textures)))) {
             inside_kernel_loop = true;
         }
         IRMutator::visit(loop);
@@ -162,12 +210,12 @@ private:
     }
 };
 
-Stmt inject_image_intrinsics(Stmt s, const map<string, Function> &env) {
+Stmt inject_image_intrinsics(Stmt s, const map<string, Function> &env, Target t) {
     debug(4)
         << "InjectImageIntrinsics: inject_image_intrinsics stmt: "
         << s << "\n";
     s = zero_gpu_loop_mins(s);
-    InjectImageIntrinsics gl(env);
+    InjectImageIntrinsics gl(env, t);
     return gl.mutate(s);
 }
 }

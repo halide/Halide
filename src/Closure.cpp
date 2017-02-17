@@ -57,6 +57,35 @@ void Closure::visit(const Load *op) {
     }
 }
 
+void Closure::visit(const Call *op) {
+    // It's possible to encounter these intrinsics when a parallel CPU
+    // loop contains a GPU loop. Ensure that the buffers being read
+    // from and written to go in the buffers map, so they are
+    // correctly handled when packing and unpacking the closure.
+    if (op->is_intrinsic(Call::glsl_texture_load) ||
+        op->is_intrinsic(Call::image_load) ||
+        op->is_intrinsic(Call::glsl_texture_store) ||
+        op->is_intrinsic(Call::image_store)) {
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        if (!string_imm) {
+            internal_assert(op->args[0].as<Broadcast>());
+            string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+        }
+        internal_assert(string_imm);
+        std::string bufname = string_imm->value;
+        Buffer &ref = buffers[bufname];
+        ref.type = op->type;
+
+        ignore.push(bufname, 0);
+        ignore.push(bufname + ".buffer", 0);
+        IRVisitor::visit(op);
+        ignore.pop(bufname + ".buffer");
+        ignore.pop(bufname);
+    } else {
+        IRVisitor::visit(op);
+    }
+}
+
 void Closure::visit(const Store *op) {
     op->predicate.accept(this);
     op->index.accept(this);
