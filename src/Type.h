@@ -235,33 +235,33 @@ template<typename T>
 struct halide_handle_traits {
     // NULL here means "void *". This trait must return a pointer to a
     // global structure. I.e. it should never be freed.
-    static const halide_handle_cplusplus_type *type_info() { return nullptr; }
+    inline static const halide_handle_cplusplus_type *type_info() { return nullptr; }
 };
 
 template<typename T>
 struct halide_handle_traits<T *> {
-    static const halide_handle_cplusplus_type *type_info() {
+    inline static const halide_handle_cplusplus_type *type_info() {
         return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(true, halide_handle_cplusplus_type::NotReference);
      }
 };
 
 template<typename T>
 struct halide_handle_traits<T &> {
-    static const halide_handle_cplusplus_type *type_info() {
+    inline static const halide_handle_cplusplus_type *type_info() {
         return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(false, halide_handle_cplusplus_type::LValueReference);
     }
 };
 
 template<typename T>
 struct halide_handle_traits<T &&> {
-    static const halide_handle_cplusplus_type *type_info() {
+    inline static const halide_handle_cplusplus_type *type_info() {
         return halide_internal_handle_traits<T, halide_c_type_to_name<typename std::remove_cv<T>::type>::known_type>::type_info(false, halide_handle_cplusplus_type::RValueReference);
     }
 };
 
 template<>
 struct halide_handle_traits<const char *> {
-    static const halide_handle_cplusplus_type *type_info() {
+    inline static const halide_handle_cplusplus_type *type_info() {
         static const halide_handle_cplusplus_type the_info{
             halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "char"),
             {}, {}, { halide_handle_cplusplus_type::Pointer |
