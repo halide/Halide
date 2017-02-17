@@ -621,17 +621,6 @@ class InjectBufferCopies : public IRMutator {
             if (!should_track(buf_name)) {
                 return;
             }
-
-            Expr value = op->value;
-            if (!state[buf_name].host_touched) {
-                // Use null as a host pointer if there's no host allocation
-                const Call *create_buffer = op->value.as<Call>();
-                internal_assert(create_buffer && create_buffer->name == Call::buffer_init);
-                vector<Expr> args = create_buffer->args;
-                args[1] = make_zero(Handle());
-                value = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init, args, Call::Extern);
-                stmt = LetStmt::make(op->name, value, op->body);
-            }
         }
     }
 
