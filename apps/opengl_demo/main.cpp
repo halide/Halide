@@ -1,24 +1,26 @@
 #include <iostream>
 #include <stdlib.h>
 
-#include "glfw_helpers.h"
-#include "layout.h"
-#include "opengl_helpers.h"
 #include "png_helpers.h"
+#include "glfw_helpers.h"
+#include "opengl_helpers.h"
+#include "layout.h"
 #include "timer.h"
 
+#include <HalideRuntimeOpenGL.h>
 #include "sample_filter_cpu.h"
 #include "sample_filter_opengl.h"
-#include <HalideRuntimeOpenGL.h>
+
 
 /*
  * Initializes a halide buffer_t object for 8-bit RGBA data stored
  * interleaved as rgbargba... in row-major order.
  */
-buffer_t create_buffer(int width, int height) {
+buffer_t create_buffer(int width, int height)
+{
     const int channels = 4;
     const int elem_size = 1;
-    buffer_t buf = { 0 };
+    buffer_t buf = {0};
     buf.stride[0] = channels;
     buf.stride[1] = channels * width;
     buf.stride[2] = 1;
@@ -36,14 +38,13 @@ buffer_t create_buffer(int width, int height) {
  * data to filter, and a pointer to memory in which to place the result
  * data.
  */
-std::string run_cpu_filter(const uint8_t *image_data, uint8_t *result_data,
-                           int width, int height) {
+std::string run_cpu_filter(const uint8_t *image_data, uint8_t *result_data, int width, int height)
+{
     const auto time = Timer::start("CPU");
 
     // Create halide input buffer and point it at the passed image data
     auto input_buf = create_buffer(width, height);
-    input_buf.host = (uint8_t *) image_data;  // OK to break the const, since we
-    // know halide won't change the input
+    input_buf.host = (uint8_t *) image_data; // OK to break the const, since we know halide won't change the input
 
     // Create halide output buffer and point it at the passed result data storage
     auto output_buf = create_buffer(width, height);
@@ -60,9 +61,8 @@ std::string run_cpu_filter(const uint8_t *image_data, uint8_t *result_data,
  * data to filter, and a pointer to memory in which to place the result
  * data.
  */
-std::string run_opengl_filter_from_host_to_host(const uint8_t *image_data,
-                                                uint8_t *result_data, int width,
-                                                int height) {
+std::string run_opengl_filter_from_host_to_host(const uint8_t *image_data, uint8_t *result_data, int width, int height)
+{
     const auto time = Timer::start("OpenGL host-to-host");
 
     // Create halide input buffer and point it at the passed image data for
@@ -70,8 +70,7 @@ std::string run_opengl_filter_from_host_to_host(const uint8_t *image_data,
     // hold the data on the GPU.  Mark the host memory as "dirty" so halide
     // will know it needs to transfer the data to the GPU texture.
     auto input_buf = create_buffer(width, height);
-    input_buf.host = (uint8_t *) image_data;  // OK to break the const, since we
-    // know halide won't change the input
+    input_buf.host = (uint8_t *) image_data; // OK to break the const, since we know halide won't change the input
     input_buf.host_dirty = true;
 
     // Create halide output buffer and point it at the passed result data
@@ -82,9 +81,7 @@ std::string run_opengl_filter_from_host_to_host(const uint8_t *image_data,
 
     // Run the AOT-compiled OpenGL filter
     sample_filter_opengl(&input_buf, &output_buf);
-    halide_copy_to_host(
-        nullptr,
-        &output_buf);  // Ensure that halide copies the data back to the host
+    halide_copy_to_host(nullptr, &output_buf); // Ensure that halide copies the data back to the host
 
     return Timer::report(time);
 }
@@ -93,9 +90,8 @@ std::string run_opengl_filter_from_host_to_host(const uint8_t *image_data,
  * Runs the filter on OpenGL.  Assumes the data is already in a texture,
  * and leaves the output in a texture
  */
-std::string run_opengl_filter_from_texture_to_texture(GLuint input_texture_id,
-                                                      GLuint output_texture_id,
-                                                      int width, int height) {
+std::string run_opengl_filter_from_texture_to_texture(GLuint input_texture_id, GLuint output_texture_id, int width, int height)
+{
     const auto time = Timer::start("OpenGL texture-to-texture");
 
     // Create halide input buffer and tell it to use the existing GPU
@@ -120,10 +116,11 @@ std::string run_opengl_filter_from_texture_to_texture(GLuint input_texture_id,
     return Timer::report(time);
 }
 
-int main(const int argc, const char *argv[]) {
+int main(const int argc, const char *argv[])
+{
     if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " filename" << std::endl;
-        exit(1);
+	std::cerr << "Usage: " << argv[0] << " filename" << std::endl;
+	exit(1);
     }
     const std::string filename = argv[1];
 
@@ -131,48 +128,42 @@ int main(const int argc, const char *argv[]) {
     const auto width = image.width;
     const auto height = image.height;
 
+
     const auto layout = Layout::setup(width, height);
-    const auto glfw =
-        GlfwHelpers::setup(layout.window_width, layout.window_height);
+    const auto glfw = GlfwHelpers::setup(layout.window_width, layout.window_height);
     OpenGLHelpers::setup(glfw.dpi_scale);
 
     /*
-   * Draw the original image
-   */
+     * Draw the original image
+     */
     Layout::draw_image(Layout::UL, image.data, width, height, "Input");
 
     std::string report;
 
     /*
-   * Draw the result of running the filter on the CPU
-   */
-    const auto cpu_result_data =
-        (uint8_t *) calloc(width * height * 4, sizeof(uint8_t));
+     * Draw the result of running the filter on the CPU
+     */
+    const auto cpu_result_data = (uint8_t *) calloc(width * height * 4, sizeof(uint8_t));
     report = run_cpu_filter(image.data, cpu_result_data, width, height);
     Layout::draw_image(Layout::UR, cpu_result_data, width, height, report);
-    free((void *) cpu_result_data);
+    free((void*) cpu_result_data);
 
     /*
-   * Draw the result of running the filter on OpenGL, with data starting
-   * from and ending up on the host
-   */
-    const auto opengl_result_data =
-        (uint8_t *) calloc(width * height * 4, sizeof(uint8_t));
-    report = run_opengl_filter_from_host_to_host(image.data, opengl_result_data,
-                                                 width, height);
+     * Draw the result of running the filter on OpenGL, with data starting
+     * from and ending up on the host
+     */
+    const auto opengl_result_data = (uint8_t *) calloc(width * height * 4, sizeof(uint8_t));
+    report = run_opengl_filter_from_host_to_host(image.data, opengl_result_data, width, height);
     Layout::draw_image(Layout::LL, opengl_result_data, width, height, report);
-    free((void *) opengl_result_data);
+    free((void*) opengl_result_data);
 
     /*
-   * Draw the result of running the filter on OpenGL, with data starting
-   * from and ending up in a texture on the device
-   */
-    const auto image_texture_id =
-        OpenGLHelpers::create_texture(width, height, image.data);
-    const auto result_texture_id =
-        OpenGLHelpers::create_texture(width, height, nullptr);
-    report = run_opengl_filter_from_texture_to_texture(
-        image_texture_id, result_texture_id, width, height);
+     * Draw the result of running the filter on OpenGL, with data starting
+     * from and ending up in a texture on the device
+     */
+    const auto image_texture_id = OpenGLHelpers::create_texture(width, height, image.data);
+    const auto result_texture_id = OpenGLHelpers::create_texture(width, height, nullptr);
+    report = run_opengl_filter_from_texture_to_texture(image_texture_id, result_texture_id, width, height);
     Layout::draw_texture(Layout::LR, result_texture_id, width, height, report);
     OpenGLHelpers::delete_texture(image_texture_id);
     OpenGLHelpers::delete_texture(result_texture_id);
@@ -182,7 +173,7 @@ int main(const int argc, const char *argv[]) {
 
     GlfwHelpers::terminate();
 
-    free((void *) image.data);
+    free((void*) image.data);
 
     return 0;
 }
@@ -195,7 +186,8 @@ int main(const int argc, const char *argv[]) {
  * and return 0 on success.
  */
 
-int halide_opengl_create_context(void * /*user_context*/) {
+int halide_opengl_create_context(void * /*user_context*/)
+{
     GlfwHelpers::set_opengl_context();
     return 0;
 }

@@ -1,23 +1,21 @@
-#include <assert.h>
-#include <memory.h>
 #include <stdio.h>
+#include <memory.h>
+#include <assert.h>
 #include <stdlib.h>
 
 #include "../support/benchmark.h"
 
 #include "pipeline_cpu.h"
-#include "pipeline_hvx128.h"
 #include "pipeline_hvx64.h"
+#include "pipeline_hvx128.h"
 
-#include "HalideBuffer.h"
 #include "HalideRuntimeHexagonHost.h"
+#include "HalideBuffer.h"
 
-template<typename T>
+template <typename T>
 T clamp(T x, T min, T max) {
-    if (x < min)
-        x = min;
-    if (x > max)
-        x = max;
+    if (x < min) x = min;
+    if (x > max) x = max;
     return x;
 }
 
@@ -27,7 +25,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    int (*pipeline)(buffer_t *, buffer_t *);
+    int (*pipeline)(buffer_t *, buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
         pipeline = pipeline_cpu;
         printf("Using CPU schedule\n");
@@ -47,6 +45,7 @@ int main(int argc, char **argv) {
     const int W = 1024;
     const int H = 1024;
 
+
     // Hexagon's device_malloc implementation will also set the host
     // pointer if it is null, giving a zero copy buffer.
     Halide::Runtime::Buffer<uint8_t> in(nullptr, W, H, 3);
@@ -56,7 +55,9 @@ int main(int argc, char **argv) {
     out.device_malloc(halide_hexagon_device_interface());
 
     // Fill the input buffer with random data.
-    in.for_each_value([&](uint8_t &x) { x = static_cast<uint8_t>(rand()); });
+    in.for_each_value([&](uint8_t &x) {
+        x = static_cast<uint8_t>(rand());
+    });
 
     // To avoid the cost of powering HVX on in each call of the
     // pipeline, power it on once now. Also, set HVX performance to turbo.

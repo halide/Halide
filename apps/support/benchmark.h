@@ -11,23 +11,23 @@
 
 union _LARGE_INTEGER;
 typedef union _LARGE_INTEGER LARGE_INTEGER;
-extern "C" int __stdcall QueryPerformanceCounter(LARGE_INTEGER *);
-extern "C" int __stdcall QueryPerformanceFrequency(LARGE_INTEGER *);
+extern "C" int __stdcall QueryPerformanceCounter(LARGE_INTEGER*);
+extern "C" int __stdcall QueryPerformanceFrequency(LARGE_INTEGER*);
 
-template<typename F>
+template <typename F>
 double benchmark(int samples, int iterations, F op) {
     int64_t freq;
-    QueryPerformanceFrequency((LARGE_INTEGER *) &freq);
+    QueryPerformanceFrequency((LARGE_INTEGER*)&freq);
 
     double best = std::numeric_limits<double>::infinity();
     for (int i = 0; i < samples; i++) {
         int64_t t1;
-        QueryPerformanceCounter((LARGE_INTEGER *) &t1);
+        QueryPerformanceCounter((LARGE_INTEGER*)&t1);
         for (int j = 0; j < iterations; j++) {
             op();
         }
         int64_t t2;
-        QueryPerformanceCounter((LARGE_INTEGER *) &t2);
+        QueryPerformanceCounter((LARGE_INTEGER*)&t2);
         double dt = (t2 - t1) / static_cast<double>(freq);
         if (dt < best) best = dt;
     }
@@ -38,7 +38,7 @@ double benchmark(int samples, int iterations, F op) {
 
 #include <chrono>
 
-template<typename F>
+template <typename F>
 double benchmark(int samples, int iterations, F op) {
     double best = std::numeric_limits<double>::infinity();
     for (int i = 0; i < samples; i++) {

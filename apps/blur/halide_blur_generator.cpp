@@ -3,39 +3,41 @@
 namespace {
 
 enum class BlurGPUSchedule {
-    Inline,  // Fully inlining schedule.
-    Cache,  // Schedule caching intermedia result of blur_x.
-    Slide,  // Schedule enabling sliding window opt within each
-    // work-item or cuda thread.
-    SlideVectorize,  // The same as above plus vectorization per work-item.
+    Inline,         // Fully inlining schedule.
+    Cache,          // Schedule caching intermedia result of blur_x.
+    Slide,          // Schedule enabling sliding window opt within each
+                    // work-item or cuda thread.
+    SlideVectorize, // The same as above plus vectorization per work-item.
 };
 
 std::map<std::string, BlurGPUSchedule> blurGPUScheduleEnumMap() {
     return {
-        { "inline", BlurGPUSchedule::Inline },
-        { "cache", BlurGPUSchedule::Cache },
-        { "slide", BlurGPUSchedule::Slide },
-        { "slide_vector", BlurGPUSchedule::SlideVectorize },
+        {"inline",        BlurGPUSchedule::Inline},
+        {"cache",         BlurGPUSchedule::Cache},
+        {"slide",         BlurGPUSchedule::Slide},
+        {"slide_vector",  BlurGPUSchedule::SlideVectorize},
     };
 };
 
 class HalideBlur : public Halide::Generator<HalideBlur> {
 public:
     GeneratorParam<BlurGPUSchedule> schedule{
-        "schedule", BlurGPUSchedule::SlideVectorize, blurGPUScheduleEnumMap()
+        "schedule",
+        BlurGPUSchedule::SlideVectorize,
+        blurGPUScheduleEnumMap()
     };
-    GeneratorParam<int> tile_x{ "tile_x", 32 };  // X tile.
-    GeneratorParam<int> tile_y{ "tile_y", 8 };  // Y tile.
+    GeneratorParam<int> tile_x{"tile_x", 32}; // X tile.
+    GeneratorParam<int> tile_y{"tile_y", 8};  // Y tile.
 
-    ImageParam input{ UInt(16), 2, "input" };
+    ImageParam input{UInt(16), 2, "input"};
 
     Func build() {
         Func blur_x("blur_x"), blur_y("blur_y");
         Var x("x"), y("y"), xi("xi"), yi("yi");
 
         // The algorithm
-        blur_x(x, y) = (input(x, y) + input(x + 1, y) + input(x + 2, y)) / 3;
-        blur_y(x, y) = (blur_x(x, y) + blur_x(x, y + 1) + blur_x(x, y + 2)) / 3;
+        blur_x(x, y) = (input(x, y) + input(x+1, y) + input(x+2, y))/3;
+        blur_y(x, y) = (blur_x(x, y) + blur_x(x, y+1) + blur_x(x, y+2))/3;
 
         // How to schedule it
         if (get_target().has_gpu_feature()) {
@@ -57,20 +59,16 @@ public:
                 //   blur_x calculation is re-used implicitly. This achieves
                 //   the similar schedule of sliding window.
                 Var yi("yi");
-                blur_y.split(y, y, yi, tile_y)
-                    .reorder(yi, x)
-                    .unroll(yi)
+                blur_y.split(y, y, yi, tile_y).reorder(yi, x).unroll(yi)
                     .gpu_tile(x, y, tile_x, 1);
                 break;
             }
             case BlurGPUSchedule::SlideVectorize: {
                 // Vectorization factor.
-                int factor = sizeof(int) / sizeof(short);
+                int factor = sizeof(int)/sizeof(short);
                 Var yi("yi");
                 blur_y.vectorize(x, factor)
-                    .split(y, y, yi, tile_y)
-                    .reorder(yi, x)
-                    .unroll(yi)
+                    .split(y, y, yi, tile_y).reorder(yi, x).unroll(yi)
                     .gpu_tile(x, y, tile_x, 1);
                 break;
             }
@@ -87,6 +85,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<HalideBlur> register_me{ "halide_blur" };
+Halide::RegisterGenerator<HalideBlur> register_me{"halide_blur"};
 
 }  // namespace

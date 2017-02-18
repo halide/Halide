@@ -1,24 +1,22 @@
-#include <assert.h>
-#include <malloc.h>
-#include <memory.h>
 #include <stdio.h>
+#include <memory.h>
+#include <assert.h>
 #include <stdlib.h>
+#include <malloc.h>
 
 #include "../support/benchmark.h"
 
 #include "pipeline_cpu.h"
-#include "pipeline_hvx128.h"
 #include "pipeline_hvx64.h"
+#include "pipeline_hvx128.h"
 
-#include "HalideBuffer.h"
 #include "HalideRuntimeHexagonHost.h"
+#include "HalideBuffer.h"
 
-template<typename T>
+template <typename T>
 T clamp(T x, T min, T max) {
-    if (x < min)
-        x = min;
-    if (x > max)
-        x = max;
+    if (x < min) x = min;
+    if (x > max) x = max;
     return x;
 }
 
@@ -28,7 +26,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    int (*pipeline)(buffer_t *, buffer_t *, buffer_t *);
+    int (*pipeline)(buffer_t *, buffer_t*, buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
         pipeline = pipeline_cpu;
         printf("Using CPU schedule\n");
@@ -60,8 +58,12 @@ int main(int argc, char **argv) {
     mat_ab.device_malloc(halide_hexagon_device_interface());
 
     // Fill the input buffer with random data.
-    mat_a.for_each_value([&](uint8_t &x) { x = static_cast<uint8_t>(rand()); });
-    mat_b.for_each_value([&](uint8_t &x) { x = static_cast<uint8_t>(rand()); });
+    mat_a.for_each_value([&](uint8_t &x) {
+        x = static_cast<uint8_t>(rand());
+    });
+    mat_b.for_each_value([&](uint8_t &x) {
+        x = static_cast<uint8_t>(rand());
+    });
 
     // To avoid the cost of powering HVX on in each call of the
     // pipeline, power it on once now.
@@ -85,8 +87,7 @@ int main(int argc, char **argv) {
     mat_ab.for_each_element([&](int x, int y) {
         uint32_t ab_xy = 0;
         for (int k = 0; k < K; k++) {
-            ab_xy += static_cast<uint32_t>(mat_a(k, y)) *
-                     static_cast<uint32_t>(mat_b(x, k));
+            ab_xy += static_cast<uint32_t>(mat_a(k, y))*static_cast<uint32_t>(mat_b(x, k));
         }
 
         if (ab_xy != mat_ab(x, y)) {

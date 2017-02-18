@@ -1,14 +1,14 @@
+#include <string.h>
+#include <iostream>
 #include "halide_blas.h"
 #include "HalideBuffer.h"
-#include <iostream>
-#include <string.h>
 
 using Halide::Runtime::Buffer;
 
-#define assert_no_error(func)                                           \
-    if (func != 0) {                                                    \
-        std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
-    }
+#define assert_no_error(func)                                       \
+  if (func != 0) {                                                  \
+    std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
+  }                                                                 \
 
 namespace {
 
@@ -19,15 +19,16 @@ Buffer<T> init_scalar_buffer(T *x) {
 
 template<typename T>
 Buffer<T> init_vector_buffer(const int N, T *x, const int incx) {
-    halide_dimension_t shape = { 0, N, incx };
+    halide_dimension_t shape = {0, N, incx};
     return Buffer<T>(x, 1, &shape);
 }
 
 template<typename T>
 Buffer<T> init_matrix_buffer(const int M, const int N, T *A, const int lda) {
-    halide_dimension_t shape[] = { { 0, M, 1 }, { 0, N, lda } };
+    halide_dimension_t shape[] = {{0, M, 1}, {0, N, lda}};
     return Buffer<T>(A, 2, shape);
 }
+
 }
 
 #ifdef __cplusplus
@@ -38,15 +39,15 @@ extern "C" {
 // copy //
 //////////
 
-void hblas_scopy(const int N, const float *x, const int incx, float *y,
-                 const int incy) {
+void hblas_scopy(const int N, const float *x, const int incx,
+                 float *y, const int incy) {
     auto buff_x = init_vector_buffer(N, x, incx);
     auto buff_y = init_vector_buffer(N, y, incy);
     assert_no_error(halide_scopy(buff_x, buff_y));
 }
 
-void hblas_dcopy(const int N, const double *x, const int incx, double *y,
-                 const int incy) {
+void hblas_dcopy(const int N, const double *x, const int incx,
+                 double *y, const int incy) {
     auto buff_x = init_vector_buffer(N, x, incx);
     auto buff_y = init_vector_buffer(N, y, incy);
     assert_no_error(halide_dcopy(buff_x, buff_y));
@@ -88,8 +89,8 @@ void hblas_daxpy(const int N, const double a, const double *x, const int incx,
 // dot  //
 //////////
 
-float hblas_sdot(const int N, const float *x, const int incx, const float *y,
-                 const int incy) {
+float hblas_sdot(const int N, const float *x, const int incx,
+                 const float *y, const int incy) {
     float result;
     auto buff_x = init_vector_buffer(N, x, incx);
     auto buff_y = init_vector_buffer(N, y, incy);
@@ -98,8 +99,8 @@ float hblas_sdot(const int N, const float *x, const int incx, const float *y,
     return result;
 }
 
-double hblas_ddot(const int N, const double *x, const int incx, const double *y,
-                  const int incy) {
+double hblas_ddot(const int N, const double *x, const int incx,
+                  const double *y, const int incy) {
     double result;
     auto buff_x = init_vector_buffer(N, x, incx);
     auto buff_y = init_vector_buffer(N, y, incy);
@@ -153,18 +154,15 @@ double hblas_dasum(const int N, const double *x, const int incx) {
 //////////
 
 void hblas_sgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
-                 const int M, const int N, const float a, const float *A,
-                 const int lda, const float *x, const int incx, const float b,
-                 float *y, const int incy) {
+                 const int M, const int N, const float a, const float *A, const int lda,
+                 const float *x, const int incx, const float b, float *y, const int incy) {
     bool t = false;
     switch (trans) {
     case HblasNoTrans:
-        t = false;
-        break;
+        t = false; break;
     case HblasConjTrans:
     case HblasTrans:
-        t = true;
-        break;
+        t = true; break;
     };
 
     auto buff_A = init_matrix_buffer(M, N, A, lda);
@@ -175,18 +173,15 @@ void hblas_sgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
 }
 
 void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
-                 const int M, const int N, const double a, const double *A,
-                 const int lda, const double *x, const int incx, const double b,
-                 double *y, const int incy) {
+                 const int M, const int N, const double a, const double *A, const int lda,
+                 const double *x, const int incx, const double b, double *y, const int incy) {
     bool t = false;
     switch (trans) {
     case HblasNoTrans:
-        t = false;
-        break;
+        t = false; break;
     case HblasConjTrans:
     case HblasTrans:
-        t = true;
-        break;
+        t = true; break;
     };
 
     auto buff_A = init_matrix_buffer(M, N, A, lda);
@@ -202,7 +197,8 @@ void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
 
 void hblas_sger(const enum HBLAS_ORDER order, const int M, const int N,
                 const float alpha, const float *x, const int incx,
-                const float *y, const int incy, float *A, const int lda) {
+                const float *y, const int incy, float *A, const int lda)
+{
     auto buff_x = init_vector_buffer(M, x, incx);
     auto buff_y = init_vector_buffer(N, y, incy);
     auto buff_A = init_matrix_buffer(M, N, A, lda);
@@ -212,7 +208,8 @@ void hblas_sger(const enum HBLAS_ORDER order, const int M, const int N,
 
 void hblas_dger(const enum HBLAS_ORDER order, const int M, const int N,
                 const double alpha, const double *x, const int incx,
-                const double *y, const int incy, double *A, const int lda) {
+                const double *y, const int incy, double *A, const int lda)
+{
     auto buff_x = init_vector_buffer(M, x, incx);
     auto buff_y = init_vector_buffer(N, y, incy);
     auto buff_A = init_matrix_buffer(M, N, A, lda);
@@ -224,31 +221,26 @@ void hblas_dger(const enum HBLAS_ORDER order, const int M, const int N,
 // gemm //
 //////////
 
-void hblas_sgemm(const enum HBLAS_ORDER Order,
-                 const enum HBLAS_TRANSPOSE TransA,
+void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
                  const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
-                 const int K, const float alpha, const float *A, const int lda,
-                 const float *B, const int ldb, const float beta, float *C,
-                 const int ldc) {
+                 const int K, const float alpha, const float *A,
+                 const int lda, const float *B, const int ldb,
+                 const float beta, float *C, const int ldc) {
     bool tA = false, tB = false;
     switch (TransA) {
     case HblasNoTrans:
-        tA = false;
-        break;
+        tA = false; break;
     case HblasConjTrans:
     case HblasTrans:
-        tA = true;
-        break;
+        tA = true; break;
     };
 
     switch (TransB) {
     case HblasNoTrans:
-        tB = false;
-        break;
+        tB = false; break;
     case HblasConjTrans:
     case HblasTrans:
-        tB = true;
-        break;
+        tB = true; break;
     };
 
     auto buff_A = init_matrix_buffer(tA ? K : M, tA ? M : K, A, lda);
@@ -258,8 +250,7 @@ void hblas_sgemm(const enum HBLAS_ORDER Order,
     assert_no_error(halide_sgemm(tA, tB, alpha, buff_A, buff_B, beta, buff_C));
 }
 
-void hblas_dgemm(const enum HBLAS_ORDER Order,
-                 const enum HBLAS_TRANSPOSE TransA,
+void hblas_dgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
                  const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
                  const int K, const double alpha, const double *A,
                  const int lda, const double *B, const int ldb,
@@ -267,22 +258,18 @@ void hblas_dgemm(const enum HBLAS_ORDER Order,
     bool tA = false, tB = false;
     switch (TransA) {
     case HblasNoTrans:
-        tA = false;
-        break;
+        tA = false; break;
     case HblasConjTrans:
     case HblasTrans:
-        tA = true;
-        break;
+        tA = true; break;
     };
 
     switch (TransB) {
     case HblasNoTrans:
-        tB = false;
-        break;
+        tB = false; break;
     case HblasConjTrans:
     case HblasTrans:
-        tB = true;
-        break;
+        tB = true; break;
     };
 
     auto buff_A = init_matrix_buffer(tA ? K : M, tA ? M : K, A, lda);
@@ -291,6 +278,7 @@ void hblas_dgemm(const enum HBLAS_ORDER Order,
 
     assert_no_error(halide_dgemm(tA, tB, alpha, buff_A, buff_B, beta, buff_C));
 }
+
 
 #ifdef __cplusplus
 }

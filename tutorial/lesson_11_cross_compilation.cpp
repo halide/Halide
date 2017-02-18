@@ -53,10 +53,10 @@ int main(int argc, char **argv) {
 
     // Let's use this to compile a 32-bit arm android version of this code:
     Target target;
-    target.os = Target::Android;  // The operating system
-    target.arch = Target::ARM;  // The CPU architecture
-    target.bits = 32;  // The bit-width of the architecture
-    std::vector<Target::Feature> arm_features;  // A list of features to set
+    target.os = Target::Android; // The operating system
+    target.arch = Target::ARM;   // The CPU architecture
+    target.bits = 32;            // The bit-width of the architecture
+    std::vector<Target::Feature> arm_features; // A list of features to set
     target.set_features(arm_features);
     // We then pass the target as the last argument to compile_to_file.
     brighter.compile_to_file("lesson_11_arm_32_android", args, "brighter", target);
@@ -85,14 +85,15 @@ int main(int argc, char **argv) {
     target.set_features(armv7s_features);
     brighter.compile_to_file("lesson_11_arm_32_ios", args, "brighter", target);
 
+
     // Now let's check these files are what they claim, by examining
     // their first few bytes.
 
     // 32-arm android object files start with the magic bytes:
-    uint8_t arm_32_android_magic[] = { 0x7f, 'E', 'L', 'F',  // ELF format
-                                       1,  // 32-bit
-                                       1,  // 2's complement little-endian
-                                       1 };  // Current version of elf
+    uint8_t arm_32_android_magic[] = {0x7f, 'E', 'L', 'F', // ELF format
+                                      1,       // 32-bit
+                                      1,       // 2's complement little-endian
+                                      1};      // Current version of elf
 
     FILE *f = fopen("lesson_11_arm_32_android.o", "rb");
     uint8_t header[32];
@@ -109,7 +110,7 @@ int main(int argc, char **argv) {
 
     // 64-bit windows object files start with the magic 16-bit value 0x8664
     // (presumably referring to x86-64)
-    uint8_t win_64_magic[] = { 0x64, 0x86 };
+    uint8_t win_64_magic[] = {0x64, 0x86};
 
     f = fopen("lesson_11_x86_64_windows.obj", "rb");
     if (!f || fread(header, 32, 1, f) != 1) {
@@ -124,10 +125,10 @@ int main(int argc, char **argv) {
     }
 
     // 32-bit arm iOS mach-o files start with the following magic bytes:
-    uint32_t arm_32_ios_magic[] = { 0xfeedface,  // Mach-o magic bytes
-                                    12,  // CPU type is ARM
-                                    11,  // CPU subtype is ARMv7s
-                                    1 };  // It's a relocatable object file.
+    uint32_t arm_32_ios_magic[] = {0xfeedface, // Mach-o magic bytes
+                                   12,  // CPU type is ARM
+                                   11,  // CPU subtype is ARMv7s
+                                   1};  // It's a relocatable object file.
     f = fopen("lesson_11_arm_32_ios.o", "rb");
     if (!f || fread(header, 32, 1, f) != 1) {
         printf("Object file not generated\n");

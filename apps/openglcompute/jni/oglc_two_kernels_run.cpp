@@ -1,22 +1,20 @@
-#include "two_kernels_filter.h"
 #include <android/log.h>
-#include <iomanip>
-#include <iostream>
 #include <jni.h>
+#include <iostream>
+#include <iomanip>
+#include "two_kernels_filter.h"
 #include <sstream>
 
 #include "HalideBuffer.h"
 #include "HalideRuntimeOpenGLCompute.h"
 
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
-#define LOGE(...) \
-    __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
+#define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
+#define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
 
 extern "C" int halide_copy_to_host(void *, buffer_t *);
 extern "C" int halide_device_sync(void *, buffer_t *);
-extern "C" int halide_device_free(void *, buffer_t *buf);
-extern "C" void
-halide_device_release(void *, const halide_device_interface_t *interface);
+extern "C" int halide_device_free(void *, buffer_t* buf);
+extern "C" void halide_device_release(void *, const halide_device_interface_t *interface);
 
 template<typename T>
 void print(Halide::Runtime::Buffer<T> buf) {
@@ -37,25 +35,24 @@ void print(Halide::Runtime::Buffer<T> buf) {
     }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     LOGI("\nvvvv vvvv vvvv");
 
     int width = 128;
     int height = 128;
     int channels = 4;
 
-    auto input =
-        Halide::Runtime::Buffer<int>::make_interleaved(width, height, channels);
+    auto input = Halide::Runtime::Buffer<int>::make_interleaved(width, height, channels);
     LOGI("Allocated memory for %dx%dx%d image", width, height, channels);
 
-    input.for_each_element(
-        [&](int i, int j, int k) { input(i, j, k) = ((i + j) % 2) * 6; });
+    input.for_each_element([&](int i, int j, int k) {
+        input(i, j, k) = ((i + j) % 2) * 6;
+    });
 
     LOGI("Input :\n");
     print(input);
 
-    auto output =
-        Halide::Runtime::Buffer<int>::make_interleaved(width, height, channels);
+    auto output = Halide::Runtime::Buffer<int>::make_interleaved(width, height, channels);
 
     two_kernels_filter(input, output);
     LOGI("Filter is done.");
@@ -74,15 +71,16 @@ int main(int argc, char **argv) {
             if (count_mismatches < 100) {
                 std::ostringstream str;
                 str << "output and input results differ at "
-                    << "(" << i << ", " << j << ", " << k << "):" << output_value
-                    << " != " << input_value << "\n";
+                    << "(" << i << ", " << j << ", " << k << "):"
+                    << output_value << " != " << input_value
+                    << "\n";
                 LOGI("%s", str.str().c_str());
             }
             count_mismatches++;
         }
     });
 
-    LOGI(count_mismatches == 0 ? "Test passed.\n" : "Test failed.\n");
+    LOGI(count_mismatches == 0 ? "Test passed.\n": "Test failed.\n");
 
     halide_device_release(NULL, halide_openglcompute_device_interface());
 
@@ -90,9 +88,7 @@ int main(int argc, char **argv) {
 }
 
 extern "C" {
-JNIEXPORT void JNICALL
-Java_com_example_hellohalideopenglcompute_HalideOpenGLComputeActivity_runTwoKernelsTest(
-    JNIEnv *env, jobject obj) {
+JNIEXPORT void JNICALL Java_com_example_hellohalideopenglcompute_HalideOpenGLComputeActivity_runTwoKernelsTest(JNIEnv *env, jobject obj) {
     main(0, NULL);
 }
 }

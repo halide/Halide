@@ -22,7 +22,7 @@ extern "C" int an_extern_stage(buffer_t *in, buffer_t *out) {
     } else {
         assert(out->host);
         int result = 0;
-        int16_t *origin = (int16_t *) in->host;
+        int16_t *origin = (int16_t *)in->host;
         origin -= in->min[0] * in->stride[0];
         origin -= in->min[1] * in->stride[1];
         for (int y = 0; y < 10; y++) {
@@ -30,7 +30,7 @@ extern "C" int an_extern_stage(buffer_t *in, buffer_t *out) {
                 result += origin[x * in->stride[0] + y * in->stride[1]];
             }
         }
-        int16_t *dst = (int16_t *) (out->host);
+        int16_t *dst = (int16_t *)(out->host);
         dst[0] = result;
     }
     return 0;
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
     for (int y = 0; y < in.height(); y++) {
         for (int x = 0; x < in.width(); x++) {
-            in(x, y) = (uint16_t) rand();
+            in(x, y) = (uint16_t)rand();
         }
     }
 
@@ -55,8 +55,9 @@ int main(int argc, char **argv) {
     for (int y = 0; y < out_native.height(); y++) {
         for (int x = 0; x < out_native.width(); x++) {
             if (out_native(x, y) != out_c(x, y)) {
-                printf("out_native(%d, %d) = %d, but out_c(%d, %d) = %d\n", x, y,
-                       out_native(x, y), x, y, out_c(x, y));
+                printf("out_native(%d, %d) = %d, but out_c(%d, %d) = %d\n",
+                       x, y, out_native(x, y),
+                       x, y, out_c(x, y));
             }
         }
     }

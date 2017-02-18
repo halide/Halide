@@ -1,6 +1,6 @@
-#include "HalideBuffer.h"
-#include "benchmark.h"
 #include "bin/mat_mul.h"
+#include "benchmark.h"
+#include "HalideBuffer.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
@@ -23,15 +23,15 @@ int main(int argc, char **argv) {
 
     {
         float *A, *B, *C;
-        cudaMalloc((void **) &A, size * size * 4);
-        cudaMalloc((void **) &B, size * size * 4);
-        cudaMalloc((void **) &C, size * size * 4);
+        cudaMalloc((void **)&A, size*size*4);
+        cudaMalloc((void **)&B, size*size*4);
+        cudaMalloc((void **)&C, size*size*4);
         cublasHandle_t handle;
         cublasCreate(&handle);
         float alpha = 1.0f, beta = 1.0f;
         double t = benchmark(10, 10, [&]() {
-            cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, size, size, size, &alpha, A,
-                        size, B, size, &beta, C, size);
+            cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+                        size, size, size, &alpha, A, size, B, size, &beta, C, size);
             cudaDeviceSynchronize();
         });
         cudaFree(A);

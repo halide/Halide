@@ -19,11 +19,12 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha) {
     blur(x, 0, c) = input(x, 0, c);
     // Update 1: run the IIR filter down the columns.
     RDom ry(1, height - 1);
-    blur(x, ry, c) = (1 - alpha) * blur(x, ry - 1, c) + alpha * input(x, ry, c);
+    blur(x, ry, c) =
+        (1 - alpha)*blur(x, ry - 1, c) + alpha*input(x, ry, c);
     // Update 2: run the IIR blur up the columns.
     Expr flip_ry = height - ry - 1;
     blur(x, flip_ry, c) =
-        (1 - alpha) * blur(x, flip_ry + 1, c) + alpha * blur(x, flip_ry, c);
+        (1 - alpha)*blur(x, flip_ry + 1, c) + alpha*blur(x, flip_ry, c);
 
     // Transpose the blur.
     Func transpose;
@@ -44,8 +45,12 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha) {
     blur.compute_at(transpose, yo);
 
     // Vectorize computations within the strips.
-    blur.update(1).reorder(x, ry).vectorize(x);
-    blur.update(2).reorder(x, ry).vectorize(x);
+    blur.update(1)
+        .reorder(x, ry)
+        .vectorize(x);
+    blur.update(2)
+        .reorder(x, ry)
+        .vectorize(x);
 
     return transpose;
 }
@@ -54,10 +59,10 @@ class IirBlur : public Generator<IirBlur> {
 public:
     // This is the input image: a 3D (color) image with 32 bit float
     // pixels.
-    ImageParam input{ Float(32), 3, "input" };
+    ImageParam input{Float(32), 3, "input"};
     // The filter coefficient, alpha is the weight of the input to the
     // filter.
-    Param<float> alpha{ "alpha" };
+    Param<float> alpha{"alpha"};
 
     Func build() {
         Expr width = input.width();

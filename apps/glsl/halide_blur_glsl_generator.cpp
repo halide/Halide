@@ -4,7 +4,7 @@ namespace {
 
 class HalideBlurGLSL : public Halide::Generator<HalideBlurGLSL> {
 public:
-    ImageParam input8{ UInt(8), 3, "input8" };
+    ImageParam input8{UInt(8), 3, "input8"};
     Func build() {
         assert(get_target().has_feature(Target::OpenGL));
 
@@ -13,14 +13,10 @@ public:
 
         // The algorithm
         Func input;
-        input(x, y, c) =
-            cast<float>(input8(clamp(x, input8.left(), input8.right()),
-                               clamp(y, input8.top(), input8.bottom()), c)) /
-            255.f;
-        blur_x(x, y, c) =
-            (input(x, y, c) + input(x + 1, y, c) + input(x + 2, y, c)) / 3;
-        blur_y(x, y, c) =
-            (blur_x(x, y, c) + blur_x(x, y + 1, c) + blur_x(x, y + 2, c)) / 3;
+        input(x,y,c) = cast<float>(input8(clamp(x, input8.left(), input8.right()),
+                                          clamp(y, input8.top(), input8.bottom()), c)) / 255.f;
+        blur_x(x, y, c) = (input(x, y, c) + input(x+1, y, c) + input(x+2, y, c)) / 3;
+        blur_y(x, y, c) = (blur_x(x, y, c) + blur_x(x, y+1, c) + blur_x(x, y+2, c)) / 3;
         out(x, y, c) = cast<uint8_t>(blur_y(x, y, c) * 255.f);
 
         // Schedule for GLSL
@@ -32,6 +28,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<HalideBlurGLSL> register_me{ "halide_blur_glsl" };
+Halide::RegisterGenerator<HalideBlurGLSL> register_me{"halide_blur_glsl"};
 
 }  // namespace
