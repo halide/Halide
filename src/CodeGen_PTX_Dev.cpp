@@ -314,7 +314,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
     function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
-    
+
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls
     // to __nvvm_reflect with a constant via a map lookup. The inliner
@@ -331,16 +331,33 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // passes.
     #define kDefaultDenorms 0
     #define kFTZDenorms     1
-   
+
+    #if LLVM_VERSION <= 40
     StringMap<int> reflect_mapping;
     reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
     module_pass_manager.add(createNVVMReflectPass(reflect_mapping));
-    
+    #else
+    // Insert a module flag for the FTZ handling.
+    module->addModuleFlag(llvm::Module::Override, "nvvm-reflect-ftz",
+                          kFTZDenorms);
+
+    if (kFTZDenorms) {
+        for (llvm::Function &fn : *module) {
+            fn.addFnAttr("nvptx-f32ftz", "true");
+        }
+    }
+    #endif
+
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
     b.LoopVectorize = true;
     b.SLPVectorize = true;
+
+    #if LLVM_VERSION > 40
+    target_machine->adjustPassManager(b);
+    #endif
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
@@ -363,14 +380,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         function_pass_manager.run(*i);
     }
     function_pass_manager.doFinalization();
-    module_pass_manager.run(*module);    
-    
+    module_pass_manager.run(*module);
+
     #if LLVM_VERSION < 38
     ostream.flush();
     #endif
 
-    if (debug::debug_level >= 2) {
-        module->dump();
+    if (debug::debug_level() >= 2) {
+        dump();
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
@@ -393,7 +410,11 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 }
 
 void CodeGen_PTX_Dev::dump() {
+    #if LLVM_VERSION >= 50
+    module->print(dbgs(), nullptr, false, true);
+    #else
     module->dump();
+    #endif
 }
 
 std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {

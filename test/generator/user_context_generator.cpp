@@ -4,7 +4,7 @@ namespace {
 
 class UserContext : public Halide::Generator<UserContext> {
 public:
-    ImageParam input{ Int(32), 2, "input" };
+    ImageParam input{ Float(32), 2, "input" };
 
     Func build() {
         Var x, y;

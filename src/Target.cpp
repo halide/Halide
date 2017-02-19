@@ -176,25 +176,6 @@ Target get_host_target() {
 }
 
 namespace {
-string get_env(const char *name) {
-#ifdef _MSC_VER
-    char buf[128];
-    size_t read = 0;
-    getenv_s(&read, buf, name);
-    if (read) {
-        return string(buf);
-    } else {
-        return "";
-    }
-#else
-    char *buf = getenv(name);
-    if (buf) {
-        return string(buf);
-    } else {
-        return "";
-    }
-#endif
-}
 
 const std::map<std::string, Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
@@ -269,6 +250,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_64", Target::HVX_64},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},
+    {"hvx_shared_object", Target::HVX_shared_object},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
@@ -290,7 +272,7 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
 } // End anonymous namespace
 
 Target get_target_from_environment() {
-    string target = get_env("HL_TARGET");
+    string target = Internal::get_env_variable("HL_TARGET");
     if (target.empty()) {
         return get_host_target();
     } else {
@@ -301,7 +283,7 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
-    string target = get_env("HL_JIT_TARGET");
+    string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
         return host;
     } else {
@@ -520,8 +502,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::None:        return true;
     case DeviceAPI::Host:        return true;
     case DeviceAPI::Default_GPU: return has_gpu_feature() || has_feature(Target::OpenGLCompute);
-    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128) ||
-                                        has_feature(Target::HVX_v62);
+    case DeviceAPI::Hexagon:     return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
     default:                     return has_feature(target_feature_for_device_api(api));
     }
 }

@@ -1,6 +1,6 @@
 HALIDE_BIN_PATH ?= ../..
 HALIDE_SRC_PATH ?= ../..
-LDFLAGS ?= 
+LDFLAGS ?=
 BIN ?= ./bin
 IMAGES ?= ../images
 HL_TARGET ?= host
@@ -16,7 +16,7 @@ CXX ?= g++
 GXX ?= g++
 
 CFLAGS += -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
-CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/ 
+CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
 
 ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
@@ -52,7 +52,15 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
-PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
+
+LIBJPEG_LIBS = -ljpeg
+LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
+LIBJPEG_CXX_FLAGS ?= $(LIBPNG_INCLUDE_DIRS:=/..)
+
+IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
+IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
+
+IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
 
 UNAME = $(shell uname)
 
@@ -64,5 +72,3 @@ endif
 ifneq (, $(findstring opengl,$(HL_TARGET)))
   OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
 endif
-
-

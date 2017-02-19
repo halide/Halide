@@ -782,7 +782,7 @@ int subtraction_rfactor_test() {
     return 0;
 }
 
-int allocation_bound_test_trace(void *user_context, const halide_trace_event *e) {
+int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *e) {
     // The schedule implies that f will be stored from 0 to 1
     if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] != 2) {

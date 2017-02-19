@@ -64,10 +64,10 @@ DstType reinterpret_bits(const SrcType &src) {
 EXPORT std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
 
 /** Get value of an environment variable. Returns its value
- * is defined in the environment. Input: env_var_name. Output: var_defined.
- * Sets to true var_defined if the environment var is defined; false otherwise.
+ * is defined in the environment. If the var is not defined, an empty string
+ * is returned.
  */
-EXPORT std::string get_env_variable(char const *env_var_name, size_t &var_defined);
+EXPORT std::string get_env_variable(char const *env_var_name);
 
 /** Get the name of the currently running executable. Platform-specific.
  * If program name cannot be retrieved, function returns an empty string. */
@@ -166,7 +166,7 @@ template<typename To, typename... Args>
 struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
 /** Returns base name and fills in namespaces, outermost one first in vector. */
-std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
+EXPORT std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
 
 struct FileStat {
     uint64_t file_size;
@@ -196,11 +196,24 @@ EXPORT std::string file_make_temp(const std::string &prefix, const std::string &
  */
 EXPORT std::string dir_make_temp();
 
-/** Wrapper for access(). Asserts upon error. */
+/** Wrapper for access(). Quietly ignores errors. */
 EXPORT bool file_exists(const std::string &name);
+
+/** assert-fail if the file doesn't exist. useful primarily for testing purposes. */
+EXPORT void assert_file_exists(const std::string &name);
+
+/** assert-fail if the file DOES exist. useful primarily for testing purposes. */
+EXPORT void assert_no_file_exists(const std::string &name);
 
 /** Wrapper for unlink(). Asserts upon error. */
 EXPORT void file_unlink(const std::string &name);
+
+/** Wrapper for unlink(). Quietly ignores errors. */
+EXPORT void file_unlink(const std::string &name);
+
+/** Ensure that no file with this path exists. If such a file
+ * exists and cannot be removed, assert-fail. */
+EXPORT void ensure_no_file_exists(const std::string &name);
 
 /** Wrapper for rmdir(). Asserts upon error. */
 EXPORT void dir_rmdir(const std::string &name);

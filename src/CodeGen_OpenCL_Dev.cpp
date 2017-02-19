@@ -173,56 +173,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf)
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
-    if (op->is_intrinsic(Call::interleave_vectors)) {
-        int op_lanes = op->type.lanes();
-        internal_assert(op->args.size() > 0);
-        int arg_lanes = op->args[0].type().lanes();
-        if (op->args.size() == 1) {
-            // 1 argument, just do a simple assignment
-            internal_assert(op_lanes == arg_lanes);
-            print_assignment(op->type, print_expr(op->args[0]));
-        } else if (op->args.size() == 2) {
-            // 2 arguments, set the .even to the first arg and the
-            // .odd to the second arg
-            internal_assert(op->args[1].type().lanes() == arg_lanes);
-            internal_assert(op_lanes / 2 == arg_lanes);
-            string a1 = print_expr(op->args[0]);
-            string a2 = print_expr(op->args[1]);
-            id = unique_name('_');
-            do_indent();
-            stream << print_type(op->type) << " " << id << ";\n";
-            do_indent();
-            stream << id << ".even = " << a1 << ";\n";
-            do_indent();
-            stream << id << ".odd = " << a2 << ";\n";
-        } else {
-            // 3+ arguments, interleave via a vector literal
-            // selecting the appropriate elements of the args
-            int dest_lanes = op->type.lanes();
-            internal_assert(dest_lanes <= 16);
-            int num_args = op->args.size();
-            vector<string> arg_exprs(num_args);
-            for (int i = 0; i < num_args; i++) {
-                internal_assert(op->args[i].type().lanes() == arg_lanes);
-                arg_exprs[i] = print_expr(op->args[i]);
-            }
-            internal_assert(num_args * arg_lanes >= dest_lanes);
-            id = unique_name('_');
-            do_indent();
-            stream << print_type(op->type) << " " << id;
-            stream << " = (" << print_type(op->type) << ")(";
-            for (int i = 0; i < dest_lanes; i++) {
-                int arg = i % num_args;
-                int arg_idx = i / num_args;
-                internal_assert(arg_idx <= arg_lanes);
-                stream << arg_exprs[arg] << ".s" << vector_elements[arg_idx];
-                if (i != dest_lanes - 1) {
-                    stream << ", ";
-                }
-            }
-            stream << ");\n";
-        }
-    } else if (op->is_intrinsic(Call::bool_to_mask)) {
+    if (op->is_intrinsic(Call::bool_to_mask)) {
         if (op->args[0].type().is_vector()) {
             // The argument is already a mask of the right width. Just
             // sign-extend to the expected type.
@@ -269,6 +220,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
+
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = is_ramp1(op->index);
     if (ramp_base.defined()) {
@@ -333,6 +286,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
+    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside OpenCL kernel.\n";
+
     string id_value = print_expr(op->value);
     Type t = op->value.type();
 
@@ -486,6 +441,61 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const AssertStmt *op) {
     user_warning << "Ignoring assertion inside OpenCL kernel: " << op->condition << "\n";
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
+    if (op->is_interleave()) {
+        int op_lanes = op->type.lanes();
+        internal_assert(!op->vectors.empty());
+        int arg_lanes = op->vectors[0].type().lanes();
+        if (op->vectors.size() == 1) {
+            // 1 argument, just do a simple assignment
+            internal_assert(op_lanes == arg_lanes);
+            print_assignment(op->type, print_expr(op->vectors[0]));
+        } else if (op->vectors.size() == 2) {
+            // 2 arguments, set the .even to the first arg and the
+            // .odd to the second arg
+            internal_assert(op->vectors[1].type().lanes() == arg_lanes);
+            internal_assert(op_lanes / 2 == arg_lanes);
+            string a1 = print_expr(op->vectors[0]);
+            string a2 = print_expr(op->vectors[1]);
+            id = unique_name('_');
+            do_indent();
+            stream << print_type(op->type) << " " << id << ";\n";
+            do_indent();
+            stream << id << ".even = " << a1 << ";\n";
+            do_indent();
+            stream << id << ".odd = " << a2 << ";\n";
+        } else {
+            // 3+ arguments, interleave via a vector literal
+            // selecting the appropriate elements of the vectors
+            int dest_lanes = op->type.lanes();
+            internal_assert(dest_lanes <= 16);
+            int num_vectors = op->vectors.size();
+            vector<string> arg_exprs(num_vectors);
+            for (int i = 0; i < num_vectors; i++) {
+                internal_assert(op->vectors[i].type().lanes() == arg_lanes);
+                arg_exprs[i] = print_expr(op->vectors[i]);
+            }
+            internal_assert(num_vectors * arg_lanes >= dest_lanes);
+            id = unique_name('_');
+            do_indent();
+            stream << print_type(op->type) << " " << id;
+            stream << " = (" << print_type(op->type) << ")(";
+            for (int i = 0; i < dest_lanes; i++) {
+                int arg = i % num_vectors;
+                int arg_idx = i / num_vectors;
+                internal_assert(arg_idx <= arg_lanes);
+                stream << arg_exprs[arg] << ".s" << vector_elements[arg_idx];
+                if (i != dest_lanes - 1) {
+                    stream << ", ";
+                }
+            }
+            stream << ");\n";
+        }
+    } else {
+        internal_error << "Shuffle not implemented.\n";
+    }
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,

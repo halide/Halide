@@ -632,6 +632,12 @@ void CodeGen_ARM::visit(const Max *op) {
 }
 
 void CodeGen_ARM::visit(const Store *op) {
+    // Predicated store
+    if (!is_one(op->predicate)) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
@@ -653,13 +659,13 @@ void CodeGen_ARM::visit(const Store *op) {
         rhs = let->body;
         lets.push_back(make_pair(let->name, let->value));
     }
-    const Call *call = rhs.as<Call>();
+    const Shuffle *shuffle = rhs.as<Shuffle>();
 
     // Interleaving store instructions only exist for certain types.
     bool type_ok_for_vst = false;
     Type intrin_type = Handle();
-    if (call && !call->args.empty()) {
-        Type t = call->args[0].type();
+    if (shuffle) {
+        Type t = shuffle->vectors[0].type();
         intrin_type = t;
         Type elt = t.element_of();
         int vec_bits = t.bits() * t.lanes();
@@ -677,15 +683,14 @@ void CodeGen_ARM::visit(const Store *op) {
     }
 
     if (is_one(ramp->stride) &&
-        call &&
-        call->is_intrinsic(Call::interleave_vectors) &&
+        shuffle && shuffle->is_interleave() &&
         type_ok_for_vst &&
-        2 <= call->args.size() && call->args.size() <= 4) {
+        2 <= shuffle->vectors.size() && shuffle->vectors.size() <= 4) {
 
-        const int num_vecs = call->args.size();
+        const int num_vecs = shuffle->vectors.size();
         vector<Value *> args(num_vecs);
 
-        Type t = call->args[0].type();
+        Type t = shuffle->vectors[0].type();
 
         // Assume element-aligned.
         int alignment = t.bytes();
@@ -697,7 +702,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
         // Codegen all the vector args.
         for (int i = 0; i < num_vecs; ++i) {
-            args[i] = codegen(call->args[i]);
+            args[i] = codegen(shuffle->vectors[i]);
         }
 
         // Declare the function
@@ -740,7 +745,7 @@ void CodeGen_ARM::visit(const Store *op) {
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
-            Value *ptr = codegen_buffer_pointer(op->name, call->args[0].type().element_of(), slice_base);
+            Value *ptr = codegen_buffer_pointer(op->name, shuffle->vectors[0].type().element_of(), slice_base);
 
             vector<Value *> slice_args = args;
             // Take a slice of each arg
@@ -806,6 +811,12 @@ void CodeGen_ARM::visit(const Store *op) {
 }
 
 void CodeGen_ARM::visit(const Load *op) {
+    // Predicated load
+    if (!is_one(op->predicate)) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;

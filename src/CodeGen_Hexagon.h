@@ -109,14 +109,6 @@ protected:
      * to manipulate the IR. This function avoids generating redundant
      * bitcasts. */
     llvm::Value *create_bitcast(llvm::Value *v, llvm::Type *ty);
-
-private:
-
-    /** Hexagon implementation of predicated store/load. Since LLVM does not
-     * currently support masked load/store on Hexagon, we need to scalarize
-     * the op. */
-    void codegen_predicated_vector_load(const Call *load_addr, Expr predicate);
-    void codegen_predicated_vector_store(const Call *store_addr, Expr predicate, Expr value);
 };
 
 }}

@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
     // sp.intermediate_level = LoopLevel(gen.tuple_output, Var("c"));
     gen.schedule(sp);
 
-    Halide::Realization simple_output_realized = gen.realize(kSize, kSize, 3);
+    Halide::Realization simple_output_realized = gen.simple_output.realize(kSize, kSize, 3);
     Buffer<float> s0 = simple_output_realized;
     verify(array_input[0], 1.f, 0, s0);
 

@@ -16,14 +16,6 @@
 
 #include "HalideRuntime.h"
 
-// Certain methods of Buffer *must* be inlined for reasonable
-// performance in debug builds.
-#ifdef _MSC_VER
-#define ALWAYS_INLINE __forceinline
-#else
-#define ALWAYS_INLINE __attribute__((always_inline))
-#endif
-
 #ifndef EXPORT
 #if defined(_WIN32) && defined(Halide_SHARED)
 #ifdef Halide_EXPORTS
@@ -51,8 +43,6 @@ struct halide_dimension_t {
 namespace Halide {
 namespace Runtime {
 
-template<typename Fn>
-void for_each_element(const buffer_t &buf, Fn &&f);
 
 // Forward-declare our Buffer class
 template<typename T, int D> class Buffer;
@@ -340,23 +330,23 @@ public:
         const int idx;
     public:
         /** The lowest coordinate in this dimension */
-        ALWAYS_INLINE int min() const {
+        HALIDE_ALWAYS_INLINE int min() const {
             return buf.min[idx];
         }
 
         /** The number of elements in memory you have to step over to
          * increment this coordinate by one. */
-        ALWAYS_INLINE int stride() const {
+        HALIDE_ALWAYS_INLINE int stride() const {
             return buf.stride[idx];
         }
 
         /** The extent of the image along this dimension */
-        ALWAYS_INLINE int extent() const {
+        HALIDE_ALWAYS_INLINE int extent() const {
             return buf.extent[idx];
         }
 
         /** The highest coordinate in this dimension */
-        ALWAYS_INLINE int max() const {
+        HALIDE_ALWAYS_INLINE int max() const {
             return min() + extent() - 1;
         }
 
@@ -370,12 +360,12 @@ public:
         };
 
         /** An iterator that points to the min coordinate */
-        ALWAYS_INLINE iterator begin() const {
+        HALIDE_ALWAYS_INLINE iterator begin() const {
             return {min()};
         }
 
         /** An iterator that points to one past the max coordinate */
-        ALWAYS_INLINE iterator end() const {
+        HALIDE_ALWAYS_INLINE iterator end() const {
             return {min() + extent()};
         }
 
@@ -383,7 +373,7 @@ public:
     };
 
     /** Access the shape of the buffer */
-    ALWAYS_INLINE Dimension dim(int i) const {
+    HALIDE_ALWAYS_INLINE Dimension dim(int i) const {
         return Dimension(buf, i);
     }
 
@@ -672,8 +662,24 @@ public:
 
     /** Allocate a new image of the given size. Pass zeroes to make a
      * buffer suitable for bounds query calls. */
+    // @{
+
+    // The overload with one argument is 'explicit', so that
+    // (say) int is not implicitly convertable to Buffer<int>
+    explicit Buffer(int first) : ty(static_halide_type()) {
+        static_assert(!T_is_void,
+                      "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
+        initialize_shape(0, first);
+        buf.elem_size = ty.bytes();
+        dims = 1;
+        if (!any_zero(first)) {
+            check_overflow();
+            allocate();
+        }
+    }
+
     template<typename ...Args,
-             typename = typename std::enable_if<AllInts<Args...>::value>::type>
+             typename = typename std::enable_if<AllInts<Args...>::value && (sizeof...(Args)>0)>::type>
     Buffer(int first, Args... rest) : ty(static_halide_type()) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
@@ -688,6 +694,7 @@ public:
             allocate();
         }
     }
+    // @}
 
     /** Allocate a new image of unknown type using a vector of ints as the size. */
     Buffer(halide_type_t t, const std::vector<int> &sizes) : ty(t) {
@@ -1180,13 +1187,6 @@ public:
         buf.stride[dims-1] = s;
     }
 
-    /** Call a callable at each location within the image. See
-     * for_each_element below for more details. */
-    template<typename Fn>
-    void for_each_element(Fn f) const {
-        Halide::Runtime::for_each_element(buf, f);
-    }
-
     /** Methods for managing any GPU allocation. */
     // @{
     void set_host_dirty(bool v = true) {
@@ -1352,18 +1352,18 @@ public:
 private:
 
     template<typename ...Args>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     ptrdiff_t offset_of(int d, int first, Args... rest) const {
         return offset_of(d+1, rest...) + this->buf.stride[d] * (first - this->buf.min[d]);
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     ptrdiff_t offset_of(int d) const {
         return 0;
     }
 
     template<typename ...Args>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     storage_T *address_of(Args... args) const {
         if (T_is_void) {
             return (storage_T *)(this->buf.host) + offset_of(0, args...) * this->buf.elem_size;
@@ -1372,7 +1372,7 @@ private:
         }
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     ptrdiff_t offset_of(const int *pos) const {
         ptrdiff_t offset = 0;
         for (int i = this->dimensions() - 1; i >= 0; i--) {
@@ -1381,7 +1381,7 @@ private:
         return offset;
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     storage_T *address_of(const int *pos) const {
         if (T_is_void) {
             return (storage_T *)this->buf.host + offset_of(pos) * this->buf.elem_size;
@@ -1412,14 +1412,14 @@ public:
     //@{
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     const not_void_T &operator()(int first, Args... rest) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         return *((const not_void_T *)(address_of(first, rest...)));
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     const not_void_T &
     operator()() const {
         static_assert(!T_is_void,
@@ -1427,7 +1427,7 @@ public:
         return *((const not_void_T *)(data()));
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     const not_void_T &
     operator()(const int *pos) const {
         static_assert(!T_is_void,
@@ -1437,7 +1437,7 @@ public:
 
     template<typename ...Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     not_void_T &operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
@@ -1445,7 +1445,7 @@ public:
         return *((not_void_T *)(address_of(first, rest...)));
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     not_void_T &
     operator()() {
         static_assert(!T_is_void,
@@ -1454,7 +1454,7 @@ public:
         return *((not_void_T *)(data()));
     }
 
-    ALWAYS_INLINE
+    HALIDE_ALWAYS_INLINE
     not_void_T &
     operator()(const int *pos) {
         static_assert(!T_is_void,
@@ -1592,66 +1592,57 @@ public:
             for_each_value_helper<D-1, false>(f, t, begin(), (other_buffers.begin())...);
         }
     }
-};
 
-/** Some helpers for for_each_element. */
-template<typename Fn>
-struct for_each_element_helpers {
+private:
 
-    /** If f is callable with this many args, call it. The first dummy
-     * argument is to make this version preferable for overload
-     * resolution. The decltype is to make this version impossible if
-     * the function is not callable with this many args. */
-    template<typename ...Args>
-    ALWAYS_INLINE
-    static auto for_each_element_variadic(int, int d, Fn &&f, const buffer_t &buf, Args... args)
-        -> decltype(f(args...)) {
-        return f(args...);
+    // Helper functions for for_each_element
+    struct for_each_element_task_dim {
+        int min, max;
+    };
+
+    /** If f is callable with this many args, call it. The first
+     * argument is just to make the overloads distinct. Actual
+     * overload selection is done using the enable_if. */
+    template<typename Fn,
+             typename ...Args,
+             typename = decltype(std::declval<Fn>()(std::declval<Args>()...))>
+    HALIDE_ALWAYS_INLINE
+    static void for_each_element_variadic(int, int, const for_each_element_task_dim *, Fn &&f, Args... args) {
+        f(args...);
     }
 
     /** If the above overload is impossible, we add an outer loop over
-     * an additional argument and try again. This trick is known as
-     * SFINAE. */
-    template<typename ...Args>
-    ALWAYS_INLINE
-    static void for_each_element_variadic(double, int d, Fn &&f, const buffer_t &buf, Args... args) {
-        int e = buf.extent[d] == 0 ? 1 : buf.extent[d];
-        for (int i = 0; i < e; i++) {
-            for_each_element_variadic(0, d-1, std::forward<Fn>(f), buf, buf.min[d] + i, args...);
+     * an additional argument and try again. */
+    template<typename Fn,
+             typename ...Args>
+    HALIDE_ALWAYS_INLINE
+    static void for_each_element_variadic(double, int d, const for_each_element_task_dim *t, Fn &&f, Args... args) {
+        for (int i = t[d].min; i <= t[d].max; i++) {
+            for_each_element_variadic(0, d - 1, t, std::forward<Fn>(f), i, args...);
         }
     }
 
-    /** A sink function used to suppress compiler warnings in
-     * compilers that don't think decltype counts as a use. */
-    template<typename ...Args>
-    static void sink(Args... ) {}
-
     /** Determine the minimum number of arguments a callable can take
      * using the same trick. */
-    template<typename ...Args>
-    ALWAYS_INLINE
-    static auto num_args(int, int *result, Fn &&f, Args... args) -> decltype(f(args...)) {
-        *result = sizeof...(args);
-        sink(std::forward<Fn>(f), args...);
+    template<typename Fn,
+             typename ...Args,
+             typename = decltype(std::declval<Fn>()(std::declval<Args>()...))>
+    HALIDE_ALWAYS_INLINE
+    static int num_args(int, Fn &&, Args...) {
+        return (int)(sizeof...(Args));
     }
 
     /** The recursive version is only enabled up to a recursion limit
      * of 256. This catches callables that aren't callable with any
      * number of ints. */
-    template<typename ...Args>
-    ALWAYS_INLINE
-    static void num_args(double, int *result, Fn &&f, Args... args) {
+    template<typename Fn,
+             typename ...Args>
+    HALIDE_ALWAYS_INLINE
+    static int num_args(double, Fn &&f, Args... args) {
         static_assert(sizeof...(args) <= 256,
                       "Callable passed to for_each_element must accept either a const int *,"
                       " or up to 256 ints. No such operator found. Expect infinite template recursion.");
-        return num_args(0, result, std::forward<Fn>(f), 0, args...);
-    }
-
-    ALWAYS_INLINE
-    static int get_number_of_args(Fn &&f) {
-        int result;
-        num_args(0, &result, std::forward<Fn>(f));
-        return result;
+        return num_args(0, std::forward<Fn>(f), 0, args...);
     }
 
     /** A version where the callable takes a position array instead,
@@ -1659,45 +1650,48 @@ struct for_each_element_helpers {
      * overload is preferred to the one below using the same int vs
      * double trick as above, but is impossible once d hits -1 using
      * std::enable_if. */
-    template<int d>
-    ALWAYS_INLINE
-    static typename std::enable_if<d >= 0, void>::type
-    for_each_element_array_helper(int, Fn &&f, const buffer_t &buf, int *pos) {
-        for (pos[d] = buf.min[d]; pos[d] < buf.min[d] + buf.extent[d]; pos[d]++) {
-            for_each_element_array_helper<d - 1>(0, std::forward<Fn>(f), buf, pos);
+    template<int d,
+             typename Fn,
+             typename = typename std::enable_if<(d >= 0)>::type>
+    HALIDE_ALWAYS_INLINE
+    static void for_each_element_array_helper(int, const for_each_element_task_dim *t, Fn &&f, int *pos) {
+        for (pos[d] = t[d].min; pos[d] <= t[d].max; pos[d]++) {
+            for_each_element_array_helper<d - 1>(0, t, std::forward<Fn>(f), pos);
         }
     }
 
     /** Base case for recursion above. */
-    template<int d>
-    ALWAYS_INLINE
-    static void for_each_element_array_helper(double, Fn &&f, const buffer_t &buf, int *pos) {
+    template<int d,
+             typename Fn,
+             typename = typename std::enable_if<(d < 0)>::type>
+    HALIDE_ALWAYS_INLINE
+    static void for_each_element_array_helper(double, const for_each_element_task_dim *t, Fn &&f, int *pos) {
         f(pos);
     }
-
 
     /** A run-time-recursive version (instead of
      * compile-time-recursive) that requires the callable to take a
      * pointer to a position array instead. Dispatches to the
      * compile-time-recursive version once the dimensionality gets
      * small. */
-    static void for_each_element_array(int d, Fn &&f, const buffer_t &buf, int *pos) {
+    template<typename Fn>
+    static void for_each_element_array(int d, const for_each_element_task_dim *t, Fn &&f, int *pos) {
         if (d == -1) {
             f(pos);
         } else if (d == 0) {
             // Once the dimensionality gets small enough, dispatch to
             // a compile-time-recursive version for better codegen of
             // the inner loops.
-            for_each_element_array_helper<0>(0, std::forward<Fn>(f), buf, pos);
+            for_each_element_array_helper<0, Fn>(0, t, std::forward<Fn>(f), pos);
         } else if (d == 1) {
-            for_each_element_array_helper<1>(0, std::forward<Fn>(f), buf, pos);
+            for_each_element_array_helper<1, Fn>(0, t, std::forward<Fn>(f), pos);
         } else if (d == 2) {
-            for_each_element_array_helper<2>(0, std::forward<Fn>(f), buf, pos);
+            for_each_element_array_helper<2, Fn>(0, t, std::forward<Fn>(f), pos);
         } else if (d == 3) {
-            for_each_element_array_helper<3>(0, std::forward<Fn>(f), buf, pos);
+            for_each_element_array_helper<3, Fn>(0, t, std::forward<Fn>(f), pos);
         } else {
-            for (pos[d] = buf.min[d]; pos[d] < buf.min[d] + buf.extent[d]; pos[d]++) {
-                for_each_element_array(d - 1, std::forward<Fn>(f), buf, pos);
+            for (pos[d] = t[d].min; pos[d] <= t[d].max; pos[d]++) {
+                for_each_element_array(d - 1, t, std::forward<Fn>(f), pos);
             }
         }
     }
@@ -1705,92 +1699,121 @@ struct for_each_element_helpers {
     /** We now have two overloads for for_each_element. This one
      * triggers if the callable takes a const int *.
      */
-    template<typename Fn2>
-    static auto for_each_element(int, const buffer_t &buf, Fn2 &&f)
-        -> decltype(f((const int *)0)) {
-        int pos[4] = {0, 0, 0, 0};
-        int dimensions = 0;
-        while (buf.extent[dimensions] != 0 && dimensions < 4) {
-            dimensions++;
-        }
-        for_each_element_array(dimensions - 1, std::forward<Fn2>(f), buf, pos);
+    template<typename Fn,
+             typename = decltype(std::declval<Fn>()((const int *)nullptr))>
+    static void for_each_element(int, int dims, const for_each_element_task_dim *t, Fn &&f, int check = 0) {
+        int pos[D];
+        for_each_element_array(dims - 1, t, std::forward<Fn>(f), pos);
     }
 
     /** This one triggers otherwise. It treats the callable as
      * something that takes some number of ints. */
-    template<typename Fn2>
-    ALWAYS_INLINE
-    static void for_each_element(double, const buffer_t &buf, Fn2 &&f) {
-        int num_args = get_number_of_args(std::forward<Fn2>(f));
-        for_each_element_variadic(0, num_args-1, std::forward<Fn2>(f), buf);
+    template<typename Fn>
+    HALIDE_ALWAYS_INLINE
+    static void for_each_element(double, int dims, const for_each_element_task_dim *t, Fn &&f) {
+        int args = num_args(0, std::forward<Fn>(f));
+        assert(dims >= args);
+        for_each_element_variadic(0, args - 1, t, std::forward<Fn>(f));
     }
+public:
+
+    /** Call a function at each site in a buffer. This is likely to be
+     * much slower than using Halide code to populate a buffer, but is
+     * convenient for tests. If the function has more arguments than the
+     * buffer has dimensions, the remaining arguments will be zero. If it
+     * has fewer arguments than the buffer has dimensions then the last
+     * few dimensions of the buffer are not iterated over. For example,
+     * the following code exploits this to set a floating point RGB image
+     * to red:
+
+     \code
+     Buffer<float, 3> im(100, 100, 3);
+     im.for_each_element([&](int x, int y) {
+         im(x, y, 0) = 1.0f;
+         im(x, y, 1) = 0.0f;
+         im(x, y, 2) = 0.0f:
+     });
+     \endcode
+
+     * The compiled code is equivalent to writing the a nested for loop,
+     * and compilers are capable of optimizing it in the same way.
+     *
+     * If the callable can be called with an int * as the sole argument,
+     * that version is called instead. Each location in the buffer is
+     * passed to it in a coordinate array. This version is higher-overhead
+     * than the variadic version, but is useful for writing generic code
+     * that accepts buffers of arbitrary dimensionality. For example, the
+     * following sets the value at all sites in an arbitrary-dimensional
+     * buffer to their first coordinate:
+
+     \code
+     im.for_each_element([&](const int *pos) {im(pos) = pos[0];});
+     \endcode
+
+     * It is also possible to use for_each_element to iterate over entire
+     * rows or columns by cropping the buffer to a single column or row
+     * respectively and iterating over elements of the result. For example,
+     * to set the diagonal of the image to 1 by iterating over the columns:
+
+     \code
+     Buffer<float, 3> im(100, 100, 3);
+         im.sliced(1, 0).for_each_element([&](int x, int c) {
+         im(x, x, c) = 1.0f;
+     });
+     \endcode
+
+     * Or, assuming the memory layout is known to be dense per row, one can
+     * memset each row of an image like so:
+
+     \code
+     Buffer<float, 3> im(100, 100, 3);
+     im.sliced(0, 0).for_each_element([&](int y, int c) {
+         memset(&im(0, y, c), 0, sizeof(float) * im.width());
+     });
+     \endcode
+
+    */
+    template<typename Fn>
+    void for_each_element(Fn &&f) const {
+        for_each_element_task_dim t[D];
+        for (int i = 0; i < dimensions(); i++) {
+            t[i].min = dim(i).min();
+            t[i].max = dim(i).max();
+        }
+        for_each_element(0, dimensions(), t, std::forward<Fn>(f));
+    }
+
+private:
+    template<typename Fn>
+    struct FillHelper {
+        Fn f;
+        Buffer<T, D> *buf;
+
+        template<typename... Args,
+                 typename = decltype(std::declval<Fn>()(std::declval<Args>()...))>
+        void operator()(Args... args) {
+            (*buf)(args...) = f(args...);
+        }
+
+        FillHelper(Fn &&f, Buffer<T, D> *buf) : f(std::forward<Fn>(f)), buf(buf) {}
+    };
+
+public:
+    /** Fill a buffer by evaluating a callable at every site. The
+     * callable should look much like a callable passed to
+     * for_each_element, but it should return the value that should be
+     * stored to the coordinate corresponding to the arguments. */
+    template<typename Fn,
+             typename = typename std::enable_if<!std::is_arithmetic<typename std::decay<Fn>::type>::value>::type>
+    void fill(Fn &&f) {
+        // We'll go via for_each_element. We need a variadic wrapper lambda.
+        FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
+        for_each_element(wrapper);
+    }
+
 };
-
-/** Call a function at each site in a buffer. This is likely to be
- * much slower than using Halide code to populate a buffer, but is
- * convenient for tests. If the function has more arguments than the
- * buffer has dimensions, the remaining arguments will be zero. If it
- * has fewer arguments than the buffer has dimensions then the last
- * few dimensions of the buffer are not iterated over. For example,
- * the following code exploits this to set a floating point RGB image
- * to red:
-
-\code
-Buffer<float, 3> im(100, 100, 3);
-for_each_element(im, [&](int x, int y) {
-    im(x, y, 0) = 1.0f;
-    im(x, y, 1) = 0.0f;
-    im(x, y, 2) = 0.0f:
-});
-\endcode
-
- * The compiled code is equivalent to writing the a nested for loop,
- * and compilers are capable of optimizing it in the same way.
- *
- * If the callable can be called with an int * as the sole argument,
- * that version is called instead. Each location in the buffer is
- * passed to it in a coordinate array. This version is higher-overhead
- * than the variadic version, but is useful for writing generic code
- * that accepts buffers of arbitrary dimensionality. For example, the
- * following sets the value at all sites in an arbitrary-dimensional
- * buffer to their first coordinate:
-
-\code
-for_each_element(im, [&](const int *pos) {im(pos) = pos[0];});
-\endcode
-
-* It is also possible to use for_each_element to iterate over entire
-* rows or columns by cropping the buffer to a single column or row
-* respectively and iterating over elements of the result. For example,
-* to set the diagonal of the image to 1 by iterating over the columns:
-
-\code
-Buffer<float, 3> im(100, 100, 3);
-for_each_element(im.sliced(1, 0), [&](int x, int c) {
-    im(x, x, c) = 1.0f;
-});
-\endcode
-
-* Or, assuming the memory layout is known to be dense per row, one can
-* memset each row of an image like so:
-
-Buffer<float, 3> im(100, 100, 3);
-for_each_element(im.sliced(0, 0), [&](int y, int c) {
-    memset(&im(0, y, c), 0, sizeof(float) * im.width());
-});
-
-
-\endcode
-
-*/
-template<typename Fn>
-void for_each_element(const buffer_t &buf, Fn &&f) {
-    for_each_element_helpers<Fn>::for_each_element(0, buf, std::forward<Fn>(f));
-}
 
 }  // namespace Runtime
 }  // namespace Halide
-
-#undef ALWAYS_INLINE
 
 #endif  // HALIDE_RUNTIME_IMAGE_H

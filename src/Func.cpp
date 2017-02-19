@@ -165,8 +165,8 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
                          int dimensionality,
-                         bool is_c_plus_plus) {
-    func.define_extern(function_name, args, types, dimensionality, is_c_plus_plus);
+                         NameMangling mangling) {
+    func.define_extern(function_name, args, types, dimensionality, mangling);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
@@ -2912,7 +2912,7 @@ void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, u
     pipeline().set_custom_do_task(cust_do_task);
 }
 
-void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
+void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
     pipeline().set_custom_trace(trace_fn);
 }
 

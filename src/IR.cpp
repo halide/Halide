@@ -5,7 +5,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr Cast::make(Type t, Expr v) {
+Expr Cast::make(Type t, const Expr &v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
     internal_assert(t.lanes() == v.type().lanes()) << "Cast may not change vector widths\n";
 
@@ -15,7 +15,7 @@ Expr Cast::make(Type t, Expr v) {
     return node;
 }
 
-Expr Add::make(Expr a, Expr b) {
+Expr Add::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "Add of undefined\n";
     internal_assert(b.defined()) << "Add of undefined\n";
     internal_assert(a.type() == b.type()) << "Add of mismatched types\n";
@@ -27,7 +27,7 @@ Expr Add::make(Expr a, Expr b) {
     return node;
 }
 
-Expr Sub::make(Expr a, Expr b) {
+Expr Sub::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "Sub of undefined\n";
     internal_assert(b.defined()) << "Sub of undefined\n";
     internal_assert(a.type() == b.type()) << "Sub of mismatched types\n";
@@ -39,7 +39,7 @@ Expr Sub::make(Expr a, Expr b) {
     return node;
 }
 
-Expr Mul::make(Expr a, Expr b) {
+Expr Mul::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "Mul of undefined\n";
     internal_assert(b.defined()) << "Mul of undefined\n";
     internal_assert(a.type() == b.type()) << "Mul of mismatched types\n";
@@ -51,7 +51,7 @@ Expr Mul::make(Expr a, Expr b) {
     return node;
 }
 
-Expr Div::make(Expr a, Expr b) {
+Expr Div::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "Div of undefined\n";
     internal_assert(b.defined()) << "Div of undefined\n";
     internal_assert(a.type() == b.type()) << "Div of mismatched types\n";
@@ -63,7 +63,7 @@ Expr Div::make(Expr a, Expr b) {
     return node;
 }
 
-Expr Mod::make(Expr a, Expr b) {
+Expr Mod::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "Mod of undefined\n";
     internal_assert(b.defined()) << "Mod of undefined\n";
     internal_assert(a.type() == b.type()) << "Mod of mismatched types\n";
@@ -75,7 +75,7 @@ Expr Mod::make(Expr a, Expr b) {
     return node;
 }
 
-Expr Min::make(Expr a, Expr b) {
+Expr Min::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "Min of undefined\n";
     internal_assert(b.defined()) << "Min of undefined\n";
     internal_assert(a.type() == b.type()) << "Min of mismatched types\n";
@@ -87,7 +87,7 @@ Expr Min::make(Expr a, Expr b) {
     return node;
 }
 
-Expr Max::make(Expr a, Expr b) {
+Expr Max::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "Max of undefined\n";
     internal_assert(b.defined()) << "Max of undefined\n";
     internal_assert(a.type() == b.type()) << "Max of mismatched types\n";
@@ -99,7 +99,7 @@ Expr Max::make(Expr a, Expr b) {
     return node;
 }
 
-Expr EQ::make(Expr a, Expr b) {
+Expr EQ::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "EQ of undefined\n";
     internal_assert(b.defined()) << "EQ of undefined\n";
     internal_assert(a.type() == b.type()) << "EQ of mismatched types\n";
@@ -111,7 +111,7 @@ Expr EQ::make(Expr a, Expr b) {
     return node;
 }
 
-Expr NE::make(Expr a, Expr b) {
+Expr NE::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "NE of undefined\n";
     internal_assert(b.defined()) << "NE of undefined\n";
     internal_assert(a.type() == b.type()) << "NE of mismatched types\n";
@@ -123,7 +123,7 @@ Expr NE::make(Expr a, Expr b) {
     return node;
 }
 
-Expr LT::make(Expr a, Expr b) {
+Expr LT::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "LT of undefined\n";
     internal_assert(b.defined()) << "LT of undefined\n";
     internal_assert(a.type() == b.type()) << "LT of mismatched types\n";
@@ -136,7 +136,7 @@ Expr LT::make(Expr a, Expr b) {
 }
 
 
-Expr LE::make(Expr a, Expr b) {
+Expr LE::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "LE of undefined\n";
     internal_assert(b.defined()) << "LE of undefined\n";
     internal_assert(a.type() == b.type()) << "LE of mismatched types\n";
@@ -148,7 +148,7 @@ Expr LE::make(Expr a, Expr b) {
     return node;
 }
 
-Expr GT::make(Expr a, Expr b) {
+Expr GT::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "GT of undefined\n";
     internal_assert(b.defined()) << "GT of undefined\n";
     internal_assert(a.type() == b.type()) << "GT of mismatched types\n";
@@ -161,7 +161,7 @@ Expr GT::make(Expr a, Expr b) {
 }
 
 
-Expr GE::make(Expr a, Expr b) {
+Expr GE::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "GE of undefined\n";
     internal_assert(b.defined()) << "GE of undefined\n";
     internal_assert(a.type() == b.type()) << "GE of mismatched types\n";
@@ -173,7 +173,7 @@ Expr GE::make(Expr a, Expr b) {
     return node;
 }
 
-Expr And::make(Expr a, Expr b) {
+Expr And::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "And of undefined\n";
     internal_assert(b.defined()) << "And of undefined\n";
     internal_assert(a.type().is_bool()) << "lhs of And is not a bool\n";
@@ -187,7 +187,7 @@ Expr And::make(Expr a, Expr b) {
     return node;
 }
 
-Expr Or::make(Expr a, Expr b) {
+Expr Or::make(const Expr &a, const Expr &b) {
     internal_assert(a.defined()) << "Or of undefined\n";
     internal_assert(b.defined()) << "Or of undefined\n";
     internal_assert(a.type().is_bool()) << "lhs of Or is not a bool\n";
@@ -201,7 +201,7 @@ Expr Or::make(Expr a, Expr b) {
     return node;
 }
 
-Expr Not::make(Expr a) {
+Expr Not::make(const Expr &a) {
     internal_assert(a.defined()) << "Not of undefined\n";
     internal_assert(a.type().is_bool()) << "argument of Not is not a bool\n";
 
@@ -211,7 +211,7 @@ Expr Not::make(Expr a) {
     return node;
 }
 
-Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
+Expr Select::make(const Expr &condition, const Expr &true_value, const Expr &false_value) {
     internal_assert(condition.defined()) << "Select of undefined\n";
     internal_assert(true_value.defined()) << "Select of undefined\n";
     internal_assert(false_value.defined()) << "Select of undefined\n";
@@ -229,20 +229,24 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     return node;
 }
 
-Expr Load::make(Type type, std::string name, Expr index, Buffer<> image, Parameter param) {
+Expr Load::make(Type type, const std::string &name, const Expr &index, Buffer<> image, Parameter param, const Expr &predicate) {
+    internal_assert(predicate.defined()) << "Load with undefined predicate\n";
     internal_assert(index.defined()) << "Load of undefined\n";
     internal_assert(type.lanes() == index.type().lanes()) << "Vector lanes of Load must match vector lanes of index\n";
+    internal_assert(type.lanes() == predicate.type().lanes())
+        << "Vector lanes of Load must match vector lanes of predicate\n";
 
     Load *node = new Load;
     node->type = type;
     node->name = name;
+    node->predicate = predicate;
     node->index = index;
     node->image = image;
     node->param = param;
     return node;
 }
 
-Expr Ramp::make(Expr base, Expr stride, int lanes) {
+Expr Ramp::make(const Expr &base, const Expr &stride, int lanes) {
     internal_assert(base.defined()) << "Ramp of undefined\n";
     internal_assert(stride.defined()) << "Ramp of undefined\n";
     internal_assert(base.type().is_scalar()) << "Ramp with vector base\n";
@@ -258,7 +262,7 @@ Expr Ramp::make(Expr base, Expr stride, int lanes) {
     return node;
 }
 
-Expr Broadcast::make(Expr value, int lanes) {
+Expr Broadcast::make(const Expr &value, int lanes) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
     internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
     internal_assert(lanes != 1) << "Broadcast of lanes 1\n";
@@ -270,7 +274,7 @@ Expr Broadcast::make(Expr value, int lanes) {
     return node;
 }
 
-Expr Let::make(std::string name, Expr value, Expr body) {
+Expr Let::make(const std::string &name, const Expr &value, const Expr &body) {
     internal_assert(value.defined()) << "Let of undefined\n";
     internal_assert(body.defined()) << "Let of undefined\n";
 
@@ -282,7 +286,7 @@ Expr Let::make(std::string name, Expr value, Expr body) {
     return node;
 }
 
-Stmt LetStmt::make(std::string name, Expr value, Stmt body) {
+Stmt LetStmt::make(const std::string &name, const Expr &value, const Stmt &body) {
     internal_assert(value.defined()) << "Let of undefined\n";
     internal_assert(body.defined()) << "Let of undefined\n";
 
@@ -293,7 +297,7 @@ Stmt LetStmt::make(std::string name, Expr value, Stmt body) {
     return node;
 }
 
-Stmt AssertStmt::make(Expr condition, Expr message) {
+Stmt AssertStmt::make(const Expr &condition, const Expr &message) {
     internal_assert(condition.defined()) << "AssertStmt of undefined\n";
     internal_assert(message.type() == Int(32)) << "AssertStmt message must be an int:" << message << "\n";
 
@@ -303,7 +307,7 @@ Stmt AssertStmt::make(Expr condition, Expr message) {
     return node;
 }
 
-Stmt ProducerConsumer::make(std::string name, bool is_producer, Stmt body) {
+Stmt ProducerConsumer::make(const std::string &name, bool is_producer, const Stmt &body) {
     internal_assert(body.defined()) << "ProducerConsumer of undefined\n";
 
     ProducerConsumer *node = new ProducerConsumer;
@@ -313,7 +317,15 @@ Stmt ProducerConsumer::make(std::string name, bool is_producer, Stmt body) {
     return node;
 }
 
-Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
+Stmt ProducerConsumer::make_produce(const std::string &name, const Stmt &body) {
+    return ProducerConsumer::make(name, true, body);
+}
+
+Stmt ProducerConsumer::make_consume(const std::string &name, const Stmt &body) {
+    return ProducerConsumer::make(name, false, body);
+}
+
+Stmt For::make(const std::string &name, const Expr &min, const Expr &extent, ForType for_type, DeviceAPI device_api, const Stmt &body) {
     internal_assert(min.defined()) << "For of undefined\n";
     internal_assert(extent.defined()) << "For of undefined\n";
     internal_assert(min.type().is_scalar()) << "For with vector min\n";
@@ -330,19 +342,24 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Device
     return node;
 }
 
-Stmt Store::make(std::string name, Expr value, Expr index, Parameter param) {
+Stmt Store::make(const std::string &name, const Expr &value, const Expr &index, Parameter param, const Expr &predicate) {
+    internal_assert(predicate.defined()) << "Store with undefined predicate\n";
     internal_assert(value.defined()) << "Store of undefined\n";
     internal_assert(index.defined()) << "Store of undefined\n";
+    internal_assert(value.type().lanes() == index.type().lanes()) << "Vector lanes of Store must match vector lanes of index\n";
+    internal_assert(value.type().lanes() == predicate.type().lanes())
+        << "Vector lanes of Store must match vector lanes of predicate\n";
 
     Store *node = new Store;
     node->name = name;
+    node->predicate = predicate;
     node->value = value;
     node->index = index;
     node->param = param;
     return node;
 }
 
-Stmt Provide::make(std::string name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
+Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
     internal_assert(!values.empty()) << "Provide of no values\n";
     for (size_t i = 0; i < values.size(); i++) {
         internal_assert(values[i].defined()) << "Provide of undefined value\n";
@@ -358,9 +375,9 @@ Stmt Provide::make(std::string name, const std::vector<Expr> &values, const std:
     return node;
 }
 
-Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extents,
-                    Expr condition, Stmt body,
-                    Expr new_expr, std::string free_function) {
+Stmt Allocate::make(const std::string &name, Type type, const std::vector<Expr> &extents,
+                    const Expr &condition, const Stmt &body,
+                    const Expr &new_expr, const std::string &free_function) {
     for (size_t i = 0; i < extents.size(); i++) {
         internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
         internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -415,13 +432,13 @@ int32_t Allocate::constant_allocation_size() const {
     return Allocate::constant_allocation_size(extents, name);
 }
 
-Stmt Free::make(std::string name) {
+Stmt Free::make(const std::string &name) {
     Free *node = new Free;
     node->name = name;
     return node;
 }
 
-Stmt Realize::make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Expr condition, Stmt body) {
+Stmt Realize::make(const std::string &name, const std::vector<Type> &types, const Region &bounds, const Expr &condition, const Stmt &body) {
     for (size_t i = 0; i < bounds.size(); i++) {
         internal_assert(bounds[i].min.defined()) << "Realize of undefined\n";
         internal_assert(bounds[i].extent.defined()) << "Realize of undefined\n";
@@ -442,7 +459,7 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
     return node;
 }
 
-Stmt Block::make(Stmt first, Stmt rest) {
+Stmt Block::make(const Stmt &first, const Stmt &rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
     internal_assert(rest.defined()) << "Block of undefined\n";
 
@@ -471,7 +488,7 @@ Stmt Block::make(const std::vector<Stmt> &stmts) {
     return result;
 }
 
-Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
+Stmt IfThenElse::make(const Expr &condition, const Stmt &then_case, const Stmt &else_case) {
     internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
     // else_case may be null.
 
@@ -482,7 +499,7 @@ Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     return node;
 }
 
-Stmt Evaluate::make(Expr v) {
+Stmt Evaluate::make(const Expr &v) {
     internal_assert(v.defined()) << "Evaluate of undefined\n";
 
     Evaluate *node = new Evaluate;
@@ -499,7 +516,7 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
     return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer<>(), Parameter());
 }
 
-Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
+Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                 IntrusivePtr<FunctionContents> func, int value_index,
                 Buffer<> image, Parameter param) {
     for (size_t i = 0; i < args.size(); i++) {
@@ -543,6 +560,158 @@ Expr Variable::make(Type type, std::string name, Buffer<> image, Parameter param
     return node;
 }
 
+Expr Shuffle::make(const std::vector<Expr> &vectors,
+                   const std::vector<int> &indices) {
+    internal_assert(!vectors.empty()) << "Shuffle of zero vectors.\n";
+    internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
+    Type element_ty = vectors.front().type().element_of();
+    int input_lanes = 0;
+    for (Expr i : vectors) {
+        internal_assert(i.type().element_of() == element_ty) << "Shuffle of vectors of mismatched types.\n";
+        input_lanes += i.type().lanes();
+    }
+    for (int i : indices) {
+        internal_assert(0 <= i && i < input_lanes) << "Shuffle vector index out of range: " << i << "\n";
+    }
+
+    Shuffle *node = new Shuffle;
+    node->type = element_ty.with_lanes((int)indices.size());
+    node->vectors = vectors;
+    node->indices = indices;
+    return node;
+}
+
+Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
+    internal_assert(!vectors.empty()) << "Interleave of zero vectors.\n";
+
+    if (vectors.size() == 1) {
+        return vectors.front();
+    }
+
+    int lanes = vectors.front().type().lanes();
+
+    for (Expr i : vectors) {
+        internal_assert(i.type().lanes() == lanes)
+            << "Interleave of vectors with different sizes.\n";
+    }
+
+    std::vector<int> indices;
+    for (int i = 0; i < lanes; i++) {
+        for (int j = 0; j < (int)vectors.size(); j++) {
+            indices.push_back(j * lanes + i);
+        }
+    }
+
+    return make(vectors, indices);
+}
+
+Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
+    internal_assert(!vectors.empty()) << "Concat of zero vectors.\n";
+
+    if (vectors.size() == 1) {
+        return vectors.front();
+    }
+
+    std::vector<int> indices;
+    int lane = 0;
+    for (int i = 0; i < (int)vectors.size(); i++) {
+        for (int j = 0; j < vectors[i].type().lanes(); j++) {
+            indices.push_back(lane++);
+        }
+    }
+
+    return make(vectors, indices);
+}
+
+Expr Shuffle::make_slice(const Expr &vector, int begin, int stride, int size) {
+    if (begin == 0 && size == vector.type().lanes() && stride == 1) {
+        return vector;
+    }
+
+    std::vector<int> indices;
+    for (int i = 0; i < size; i++) {
+        indices.push_back(begin + i * stride);
+    }
+
+    return make({vector}, indices);
+}
+
+Expr Shuffle::make_extract_element(const Expr &vector, int i) {
+    return make_slice(vector, i, 1, 1);
+}
+
+bool Shuffle::is_interleave() const {
+    int lanes = vectors.front().type().lanes();
+
+    // Don't consider concat of scalars as an interleave.
+    if (lanes == 1) {
+        return false;
+    }
+
+    for (Expr i : vectors) {
+        if (i.type().lanes() != lanes) {
+            return false;
+        }
+    }
+
+    // Require that we are a complete interleaving.
+    if (lanes * vectors.size() != indices.size()) {
+        return false;
+    }
+
+    for (int i = 0; i < (int)vectors.size(); i++) {
+        for (int j = 0; j < lanes; j++) {
+            if (indices[j * (int)vectors.size() + i] != i * lanes + j) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+namespace {
+
+// Helper function to determine if a sequence of indices is a
+// contiguous ramp.
+bool is_ramp(const std::vector<int> &indices, int stride = 1) {
+    for (size_t i = 0; i + 1 < indices.size(); i++) {
+        if (indices[i + 1] != indices[i] + stride) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+bool Shuffle::is_concat() const {
+    size_t input_lanes = 0;
+    for (Expr i : vectors ) {
+        input_lanes += i.type().lanes();
+    }
+
+    // A concat is a ramp where the output has the same number of
+    // lanes as the input.
+    return indices.size() == input_lanes && is_ramp(indices);
+}
+
+bool Shuffle::is_slice() const {
+    size_t input_lanes = 0;
+    for (Expr i : vectors ) {
+        input_lanes += i.type().lanes();
+    }
+
+    // A slice is a ramp where the output does not contain all of the
+    // lanes of the input.
+    return indices.size() < input_lanes && is_ramp(indices, slice_stride());
+}
+
+bool Shuffle::is_extract_element() const {
+    return indices.size() == 1;
+}
+
+
 template<> void ExprNode<IntImm>::accept(IRVisitor *v) const { v->visit((const IntImm *)this); }
 template<> void ExprNode<UIntImm>::accept(IRVisitor *v) const { v->visit((const UIntImm *)this); }
 template<> void ExprNode<FloatImm>::accept(IRVisitor *v) const { v->visit((const FloatImm *)this); }
@@ -570,6 +739,7 @@ template<> void ExprNode<Load>::accept(IRVisitor *v) const { v->visit((const Loa
 template<> void ExprNode<Ramp>::accept(IRVisitor *v) const { v->visit((const Ramp *)this); }
 template<> void ExprNode<Broadcast>::accept(IRVisitor *v) const { v->visit((const Broadcast *)this); }
 template<> void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Call *)this); }
+template<> void ExprNode<Shuffle>::accept(IRVisitor *v) const { v->visit((const Shuffle *)this); }
 template<> void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
 template<> void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
 template<> void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
@@ -585,9 +755,6 @@ template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((con
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
-Call::ConstString Call::shuffle_vector = "shuffle_vector";
-Call::ConstString Call::interleave_vectors = "interleave_vectors";
-Call::ConstString Call::concat_vectors = "concat_vectors";
 Call::ConstString Call::reinterpret = "reinterpret";
 Call::ConstString Call::bitwise_and = "bitwise_and";
 Call::ConstString Call::bitwise_not = "bitwise_not";
@@ -604,8 +771,6 @@ Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
 Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
 Call::ConstString Call::undef = "undef";
 Call::ConstString Call::address_of = "address_of";
-Call::ConstString Call::trace = "trace";
-Call::ConstString Call::trace_expr = "trace_expr";
 Call::ConstString Call::return_second = "return_second";
 Call::ConstString Call::if_then_else = "if_then_else";
 Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
@@ -623,24 +788,23 @@ Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
 Call::ConstString Call::register_destructor = "register_destructor";
 Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
-Call::ConstString Call::slice_vector = "slice_vector";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
 Call::ConstString Call::prefetch = "prefetch";
 Call::ConstString Call::prefetch_2d = "prefetch_2d";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
-Call::ConstString Call::predicated_store = "predicated_store";
-Call::ConstString Call::predicated_load = "predicated_load";
 Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
+Call::ConstString Call::extract_mask_element = "extract_mask_element";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
-Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";    
+Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
 Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
-Call::ConstString Call::buffer_init = "_halide_buffer_init";    
+Call::ConstString Call::buffer_init = "_halide_buffer_init";
+Call::ConstString Call::trace = "halide_trace_helper";
 
 }
 }

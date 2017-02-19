@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <algorithm>
+#include <future>
 
 using namespace Halide;
 using Halide::Internal::Call;
@@ -268,10 +269,10 @@ enum ScheduleVariant {
 // Test multiplication of T1 x T2 -> RT
 template<typename T1, typename T2, typename RT, typename BIG>
 bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
-    std::cout << "Test multiplication of "
-              << type_of<T1>() << 'x' << vector_width << '*'
-              << type_of<T2>() << 'x' << vector_width << "->"
-              << type_of<RT>() << 'x' << vector_width << '\n';
+    // std::cout << "Test multiplication of "
+    //           << type_of<T1>() << 'x' << vector_width << '*'
+    //           << type_of<T2>() << 'x' << vector_width << "->"
+    //           << type_of<RT>() << 'x' << vector_width << '\n';
 
     int i, j;
     Type t1 = type_of<T1>();
@@ -311,7 +312,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
             RT ri = r(i, j);
             RT correct = RT(ai)*RT(bi);
             if (correct != ri && (ecount++) < 10) {
-                std::cout << ai << "*" << bi << " -> " << ri << " != " << correct << "\n";
+                std::cerr << ai << "*" << bi << " -> " << ri << " != " << correct << "\n";
                 success = false;
             }
 
@@ -324,7 +325,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
                     // Don't check correctness of signed integer overflow.
                 } else {
                     if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
-                        std::cout << "Compiled a*b != simplified a*b: " << (int64_t)ai
+                        std::cerr << "Compiled a*b != simplified a*b: " << (int64_t)ai
                                   << "*" << (int64_t)bi
                                   << " = " << (int64_t)ri
                                   << " != " << re << "\n";
@@ -343,7 +344,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
 // T should be a type known to Halide.
 template<typename T, typename BIG>
 bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target) {
-    std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
+    // std::cout << "Test division of " << type_of<T>() << 'x' << vector_width << '\n';
 
     int i, j;
     Type t = type_of<T>();
@@ -399,7 +400,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             T ri = r(i, j);
 
             if (qi*bi + ri != ai && (ecount++) < 10) {
-                std::cout << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
+                std::cerr << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
                           << ", " << (int64_t)ri << "\n";
@@ -407,7 +408,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             } else if (!(0 <= ri &&
                          (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
                        (ecount++) < 10) {
-                std::cout << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
+                std::cerr << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
                           << ", " << (int64_t)ri << "\n";
@@ -421,13 +422,13 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
                 Expr re = simplify(ae%be);
 
                 if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
-                    std::cout << "Compiled a/b != simplified a/b: " << (int64_t)ai
+                    std::cerr << "Compiled a/b != simplified a/b: " << (int64_t)ai
                               << "/" << (int64_t)bi
                               << " = " << (int64_t)qi
                               << " != " << qe << "\n";
                     success = false;
                 } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
-                    std::cout << "Compiled a%b != simplified a%b: " << (int64_t)ai
+                    std::cerr << "Compiled a%b != simplified a%b: " << (int64_t)ai
                               << "/" << (int64_t)bi
                               << " = " << (int64_t)ri
                               << " != " << re << "\n";
@@ -445,7 +446,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
 // T should be a type known to Halide.
 template<typename T, typename BIG>
 bool f_mod() {
-    std::cout << "Test mod of " << type_of<T>() << '\n';
+    // std::cout << "Test mod of " << type_of<T>() << '\n';
 
     int i, j;
     Type t = type_of<T>();
@@ -484,8 +485,8 @@ bool f_mod() {
                 Expr diff = simplify(e - eout);
                 Expr smalldiff = simplify(diff < (float) (0.000001) && diff > (float) (-0.000001));
                 if (! Internal::is_one(smalldiff)) {
-                    std::cout << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
-                    std::cout << "          difference=" << diff << "\n";
+                    std::cerr << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
+                    std::cerr << "          difference=" << diff << "\n";
                     success = false;
                 }
             }
@@ -495,10 +496,47 @@ bool f_mod() {
     return success;
 }
 
-int main(int argc, char **argv) {
+bool test_mul(int vector_width, ScheduleVariant scheduling, Target target) {
     bool success = true;
-    success &= f_mod<float, double>();
 
+    // Non-widening multiplication.
+    success &= mul<uint8_t, uint8_t, uint8_t, uint64_t>(vector_width, scheduling, target);
+    success &= mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target);
+    success &= mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
+    success &= mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target);
+    success &= mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target);
+    success &= mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
+
+    // Widening multiplication.
+    success &= mul<uint8_t, uint8_t, uint16_t, uint64_t>(vector_width, scheduling, target);
+    success &= mul<uint16_t, uint16_t, uint32_t, uint64_t>(vector_width, scheduling, target);
+    success &= mul<int8_t, int8_t, int16_t, int64_t>(vector_width, scheduling, target);
+    success &= mul<int16_t, int16_t, int32_t, int64_t>(vector_width, scheduling, target);
+
+    // Mixed multiplication. This isn't all of the possible mixed
+    // multiplications, but it covers all of the special cases we
+    // have in Halide.
+    success &= mul<uint16_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
+    success &= mul<int16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
+    success &= mul<uint16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
+
+    return success;
+}
+
+bool test_div_mod(int vector_width, ScheduleVariant scheduling, Target target) {
+    bool success = true;
+
+    success &= div_mod<uint8_t, uint64_t>(vector_width, scheduling, target);
+    success &= div_mod<uint16_t, uint64_t>(vector_width, scheduling, target);
+    success &= div_mod<uint32_t, uint64_t>(vector_width, scheduling, target);
+    success &= div_mod<int8_t, int64_t>(vector_width, scheduling, target);
+    success &= div_mod<int16_t, int64_t>(vector_width, scheduling, target);
+    success &= div_mod<int32_t, int64_t>(vector_width, scheduling, target);
+
+    return success;
+}
+
+int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     ScheduleVariant scheduling = CPU;
@@ -509,58 +547,48 @@ int main(int argc, char **argv) {
     }
 
     // Test multiplication
-    std::vector<int> vector_widths = { 1 };
+    std::vector<int> mul_vector_widths = { 1 };
     if (target.has_feature(Target::Metal)) {
         for (int i = 2; i <= 4; i *= 2) {
-            vector_widths.push_back(i);
+            mul_vector_widths.push_back(i);
         }
     } else if (target.has_feature(Target::HVX_64)) {
-        vector_widths.push_back(64);
+        mul_vector_widths.push_back(64);
     } else if (target.has_feature(Target::HVX_128)) {
-        vector_widths.push_back(128);
+        mul_vector_widths.push_back(128);
     } else {
         for (int i = 2; i <= 16; i *= 2) {
-            vector_widths.push_back(i);
+            mul_vector_widths.push_back(i);
         }
-    }
-
-    for (int vector_width : vector_widths) {
-        // Non-widening multiplication.
-        success &= mul<uint8_t, uint8_t, uint8_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target);
-        success &= mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target);
-        success &= mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
-
-        // Widening multiplication.
-        success &= mul<uint8_t, uint8_t, uint16_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<uint16_t, uint16_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<int8_t, int8_t, int16_t, int64_t>(vector_width, scheduling, target);
-        success &= mul<int16_t, int16_t, int32_t, int64_t>(vector_width, scheduling, target);
-
-        // Mixed multiplication. This isn't all of the possible mixed
-        // multiplications, but it covers all of the special cases we
-        // have in Halide.
-        success &= mul<uint16_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<int16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
-        success &= mul<uint16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
     }
 
     // Test division.
+    std::vector<int> div_vector_widths = mul_vector_widths;
     if (scheduling == Hexagon) {
         // Vectorized division is not supported on Hexagon.
-        vector_widths.clear();
-        vector_widths.push_back(1);
+        div_vector_widths.clear();
+        div_vector_widths.push_back(1);
     }
 
-    for (int vector_width : vector_widths) {
-        success &= div_mod<uint8_t, uint64_t>(vector_width, scheduling, target);
-        success &= div_mod<uint16_t, uint64_t>(vector_width, scheduling, target);
-        success &= div_mod<uint32_t, uint64_t>(vector_width, scheduling, target);
-        success &= div_mod<int8_t, int64_t>(vector_width, scheduling, target);
-        success &= div_mod<int16_t, int64_t>(vector_width, scheduling, target);
-        success &= div_mod<int32_t, int64_t>(vector_width, scheduling, target);
+    Halide::Internal::ThreadPool<bool> pool;
+    std::vector<std::future<bool>> futures;
+    for (int vector_width : mul_vector_widths) {
+        std::cout << "Testing mul vector_width: " << vector_width << "\n";
+        auto f = pool.async(test_mul, vector_width, scheduling, target);
+        futures.push_back(std::move(f));
+    }
+
+    for (int vector_width : div_vector_widths) {
+        std::cout << "Testing div_mod vector_width: " << vector_width << "\n";
+        auto f = pool.async(test_div_mod, vector_width, scheduling, target);
+        futures.push_back(std::move(f));
+    }
+
+    futures.push_back(pool.async(f_mod<float, double>));
+
+    bool success = true;
+    for (auto &f : futures) {
+        success &= f.get();
     }
 
     if (!success) {

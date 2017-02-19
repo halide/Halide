@@ -1,11 +1,22 @@
 #include <algorithm>
+#include <future>
 #include <stdio.h>
+
 #include "Halide.h"
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
 
 Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+
+template <typename T>
+bool expect_eq(T actual, T expected) {
+    if (expected != actual) {
+        fprintf(stderr, "Failed: expected %d, actual %d\n", (int) expected, (int) actual);
+        return false;
+    }
+    return true;
+}
 
 void schedule_test(Func f, int vector_width, const Target &t) {
     if (vector_width != 1) {
@@ -20,10 +31,12 @@ void schedule_test(Func f, int vector_width, const Target &t) {
 }
 
 template <typename T>
-void check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
+bool check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
                              int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                              int vector_width,
-                             Target t = get_jit_target_from_environment()) {
+                             Target t) {
+    bool success = true;
+
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
@@ -34,19 +47,22 @@ void check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
     for (int32_t y = test_min_y; y < test_min_y + test_extent_y; y++) {
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
             if (x < 0 || y < 0 || x >= input.width() || y >= input.height()) {
-                assert(result(x, y) == exterior);
+                success &= expect_eq(result(x, y), exterior);
             } else {
-                assert(result(x, y) == input(x, y));
+                success &= expect_eq(result(x, y), input(x, y));
             }
         }
     }
+    return success;
 }
 
 template <typename T>
-void check_repeat_edge(const Buffer<T> &input, Func f,
+bool check_repeat_edge(const Buffer<T> &input, Func f,
                        int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                        int vector_width,
-                       Target t = get_jit_target_from_environment()) {
+                       Target t) {
+    bool success = true;
+
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
@@ -58,16 +74,19 @@ void check_repeat_edge(const Buffer<T> &input, Func f,
         for (int32_t x = test_min_x; x < test_min_x + test_extent_x; x++) {
             int32_t clamped_y = std::min(input.height() - 1, std::max(0, y));
             int32_t clamped_x = std::min(input.width() - 1, std::max(0, x));
-            assert(result(x, y) == input(clamped_x, clamped_y));
+            success &= expect_eq(result(x, y), input(clamped_x, clamped_y));
         }
     }
+    return success;
 }
 
 template <typename T>
-void check_repeat_image(const Buffer<T> &input, Func f,
+bool check_repeat_image(const Buffer<T> &input, Func f,
                         int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                         int vector_width,
-                        Target t = get_jit_target_from_environment()) {
+                        Target t) {
+    bool success = true;
+
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
@@ -83,16 +102,19 @@ void check_repeat_image(const Buffer<T> &input, Func f,
             while (mapped_x > input.width() - 1) mapped_x -= input.width();
             while (mapped_y < 0) mapped_y += input.height();
             while (mapped_y > input.height() - 1) mapped_y -= input.height();
-            assert(result(x, y) == input(mapped_x, mapped_y));
+            success &= expect_eq(result(x, y), input(mapped_x, mapped_y));
         }
     }
+    return success;
 }
 
 template <typename T>
-void check_mirror_image(const Buffer<T> &input, Func f,
+bool check_mirror_image(const Buffer<T> &input, Func f,
                         int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                         int vector_width,
-                        Target t = get_jit_target_from_environment()) {
+                        Target t) {
+    bool success = true;
+
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
@@ -112,16 +134,19 @@ void check_mirror_image(const Buffer<T> &input, Func f,
             if (mapped_y > (input.height() - 1)) {
                 mapped_y = (2 * input.height() - 1) - mapped_y;
             }
-            assert(result(x, y) == input(mapped_x, mapped_y));
+            success &= expect_eq(result(x, y), input(mapped_x, mapped_y));
         }
     }
+    return success;
 }
 
 template <typename T>
-void check_mirror_interior(const Buffer<T> &input, Func f,
+bool check_mirror_interior(const Buffer<T> &input, Func f,
                            int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
                            int vector_width,
-                           Target t = get_jit_target_from_environment()) {
+                           Target t) {
+    bool success = true;
+
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
@@ -140,12 +165,14 @@ void check_mirror_interior(const Buffer<T> &input, Func f,
                 mapped_y = input.height() * 2 - 2 - mapped_y;
             }
 
-            assert(result(x, y) == input(mapped_x, mapped_y));
+            success &= expect_eq(result(x, y), input(mapped_x, mapped_y));
         }
     }
+    return success;
 }
 
-int main(int argc, char **argv) {
+bool test_all(int vector_width, Target t) {
+    bool success = true;
 
     const int W = 32;
     const int H = 32;
@@ -159,194 +186,209 @@ int main(int argc, char **argv) {
     Func input_f("input_f");
     input_f(x, y) = input(x, y);
 
+    // repeat_edge:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 100;
+
+        // Func input.
+        success &= check_repeat_edge(
+            input,
+            repeat_edge(input_f, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Image input.
+        success &= check_repeat_edge(
+            input,
+            repeat_edge(input, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Undefined bounds.
+        success &= check_repeat_edge(
+            input,
+            repeat_edge(input, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent,
+            vector_width, t);
+        success &= check_repeat_edge(
+            input,
+            repeat_edge(input, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H,
+            vector_width, t);
+        // Implicitly determined bounds.
+        success &= check_repeat_edge(
+            input,
+            repeat_edge(input),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+    }
+
+    // constant_exterior:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 100;
+
+        const uint8_t exterior = 42;
+
+        // Func input.
+        success &= check_constant_exterior(
+            input, exterior,
+            constant_exterior(input_f, exterior, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Image input.
+        success &= check_constant_exterior(
+            input, exterior,
+            constant_exterior(input, exterior, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Undefined bounds.
+        success &= check_constant_exterior(
+            input, exterior,
+            constant_exterior(input, exterior, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent,
+            vector_width, t);
+        success &= check_constant_exterior(
+            input, exterior,
+            constant_exterior(input, exterior, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H,
+            vector_width, t);
+        // Implicitly determined bounds.
+        success &= check_constant_exterior(
+            input, exterior,
+            constant_exterior(input, exterior),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+    }
+
+    // repeat_image:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 100;
+
+        // Func input.
+        success &= check_repeat_image(
+            input,
+            repeat_image(input_f, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Image input.
+        success &= check_repeat_image(
+            input,
+            repeat_image(input, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Undefined bounds.
+        success &= check_repeat_image(
+            input,
+            repeat_image(input, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent,
+            vector_width, t);
+        success &= check_repeat_image(
+            input,
+            repeat_image(input, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H,
+            vector_width, t);
+        // Implicitly determined bounds.
+        success &= check_repeat_image(
+            input,
+            repeat_image(input),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+    }
+
+    // mirror_image:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 100;
+
+        // Func input.
+        success &= check_mirror_image(
+            input,
+            mirror_image(input_f, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Image input.
+        success &= check_mirror_image(
+            input,
+            mirror_image(input, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Undefined bounds.
+        success &= check_mirror_image(
+            input,
+            mirror_image(input, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent,
+            vector_width, t);
+        success &= check_mirror_image(
+            input,
+            mirror_image(input, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H,
+            vector_width, t);
+        // Implicitly determined bounds.
+        success &= check_mirror_image(
+            input,
+            mirror_image(input),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+    }
+
+    // mirror_interior:
+    {
+        const int32_t test_min = -25;
+        const int32_t test_extent = 100;
+
+        // Func input.
+        success &= check_mirror_interior(
+            input,
+            mirror_interior(input_f, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Image input.
+        success &= check_mirror_interior(
+            input,
+            mirror_interior(input, 0, W, 0, H),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+        // Undefined bounds.
+        success &= check_mirror_interior(
+            input,
+            mirror_interior(input, Expr(), Expr(), 0, H),
+            0, W, test_min, test_extent,
+            vector_width, t);
+        success &= check_mirror_interior(
+            input,
+            mirror_interior(input, 0, W, Expr(), Expr()),
+            test_min, test_extent, 0, H,
+            vector_width, t);
+        // Implicitly determined bounds.
+        success &= check_mirror_interior(
+            input,
+            mirror_interior(input),
+            test_min, test_extent, test_min, test_extent,
+            vector_width, t);
+    }
+
+    return success;
+}
+
+int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+
+    Halide::Internal::ThreadPool<bool> pool;
+    std::vector<std::future<bool>> futures;
     for (int vector_width = 1; vector_width <= 32; vector_width *= 2) {
-        std::cout << "Vector width: " << vector_width << "\n";
-        // repeat_edge:
-        std::cout << "repeat_edge\n";
-        {
-            const int32_t test_min = -25;
-            const int32_t test_extent = 100;
+        std::cout << "Testing vector_width: " << vector_width << "\n";
+        futures.push_back(pool.async(test_all, vector_width, target));
+    }
 
-            // Func input.
-            check_repeat_edge(
-                input,
-                repeat_edge(input_f, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Image input.
-            check_repeat_edge(
-                input,
-                repeat_edge(input, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Undefined bounds.
-            check_repeat_edge(
-                input,
-                repeat_edge(input, Expr(), Expr(), 0, H),
-                0, W, test_min, test_extent,
-                vector_width);
-            check_repeat_edge(
-                input,
-                repeat_edge(input, 0, W, Expr(), Expr()),
-                test_min, test_extent, 0, H,
-                vector_width);
-            // Implicitly determined bounds.
-            check_repeat_edge(
-                input,
-                repeat_edge(input),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-        }
+    bool success = true;
+    for (auto &f : futures) {
+        success &= f.get();
+    }
 
-        // constant_exterior:
-        std::cout << "constant_exterior\n";
-        {
-            const int32_t test_min = -25;
-            const int32_t test_extent = 100;
-
-            const uint8_t exterior = 42;
-
-            // Func input.
-            check_constant_exterior(
-                input, exterior,
-                constant_exterior(input_f, exterior, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Image input.
-            check_constant_exterior(
-                input, exterior,
-                constant_exterior(input, exterior, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Undefined bounds.
-            check_constant_exterior(
-                input, exterior,
-                constant_exterior(input, exterior, Expr(), Expr(), 0, H),
-                0, W, test_min, test_extent,
-                vector_width);
-            check_constant_exterior(
-                input, exterior,
-                constant_exterior(input, exterior, 0, W, Expr(), Expr()),
-                test_min, test_extent, 0, H,
-                vector_width);
-            // Implicitly determined bounds.
-            check_constant_exterior(
-                input, exterior,
-                constant_exterior(input, exterior),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-        }
-
-        // repeat_image:
-        std::cout << "repeat_image\n";
-        {
-            const int32_t test_min = -25;
-            const int32_t test_extent = 100;
-
-            // Func input.
-            check_repeat_image(
-                input,
-                repeat_image(input_f, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Image input.
-            check_repeat_image(
-                input,
-                repeat_image(input, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Undefined bounds.
-            check_repeat_image(
-                input,
-                repeat_image(input, Expr(), Expr(), 0, H),
-                0, W, test_min, test_extent,
-                vector_width);
-            check_repeat_image(
-                input,
-                repeat_image(input, 0, W, Expr(), Expr()),
-                test_min, test_extent, 0, H,
-                vector_width);
-            // Implicitly determined bounds.
-            check_repeat_image(
-                input,
-                repeat_image(input),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-        }
-
-        // mirror_image:
-        std::cout << "mirror_image\n";
-        {
-            const int32_t test_min = -25;
-            const int32_t test_extent = 100;
-
-            // Func input.
-            check_mirror_image(
-                input,
-                mirror_image(input_f, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Image input.
-            check_mirror_image(
-                input,
-                mirror_image(input, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Undefined bounds.
-            check_mirror_image(
-                input,
-                mirror_image(input, Expr(), Expr(), 0, H),
-                0, W, test_min, test_extent,
-                vector_width);
-            check_mirror_image(
-                input,
-                mirror_image(input, 0, W, Expr(), Expr()),
-                test_min, test_extent, 0, H,
-                vector_width);
-            // Implicitly determined bounds.
-            check_mirror_image(
-                input,
-                mirror_image(input),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-        }
-
-        // mirror_interior:
-        std::cout << "mirror_interior\n";
-        {
-            const int32_t test_min = -25;
-            const int32_t test_extent = 100;
-
-            // Func input.
-            check_mirror_interior(
-                input,
-                mirror_interior(input_f, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Image input.
-            check_mirror_interior(
-                input,
-                mirror_interior(input, 0, W, 0, H),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-            // Undefined bounds.
-            check_mirror_interior(
-                input,
-                mirror_interior(input, Expr(), Expr(), 0, H),
-                0, W, test_min, test_extent,
-                vector_width);
-            check_mirror_interior(
-                input,
-                mirror_interior(input, 0, W, Expr(), Expr()),
-                test_min, test_extent, 0, H,
-                vector_width);
-            // Implicitly determined bounds.
-            check_mirror_interior(
-                input,
-                mirror_interior(input),
-                test_min, test_extent, test_min, test_extent,
-                vector_width);
-        }
+    if (!success) {
+        fprintf(stderr, "Failed!\n");
+        return -1;
     }
 
     printf("Success!\n");

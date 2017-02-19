@@ -281,31 +281,28 @@ public:
     /** Get a pointer to the underlying Runtime::Buffer */
     // @{
     Runtime::Buffer<T> *get() {
-        return &contents->buf.as<T>();
+        // It's already type-checked, so no need to use as<T>.
+        return (Runtime::Buffer<T> *)(&contents->buf);
     }
     const Runtime::Buffer<T> *get() const {
-        return &contents->buf.as<T>();
+        return (const Runtime::Buffer<T> *)(&contents->buf);
     }
     // @}
 
-private:
-    // Helpers for decltypes used below
-    static const Runtime::Buffer<T> &dummy_const_runtime_buffer();
-    static Runtime::Buffer<T> &dummy_runtime_buffer();
 public:
 
     // We forward numerous methods from the underlying Buffer
 #define HALIDE_BUFFER_FORWARD_CONST(method)                             \
     template<typename ...Args>                                          \
     auto method(Args&&... args) const ->                                \
-        decltype(dummy_const_runtime_buffer().method(std::forward<Args>(args)...)) { \
+        decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
         return get()->method(std::forward<Args>(args)...);              \
     }
 
 #define HALIDE_BUFFER_FORWARD(method)                                   \
     template<typename ...Args>                                          \
     auto method(Args&&... args) ->                                      \
-        decltype(dummy_runtime_buffer().method(std::forward<Args>(args)...)) { \
+        decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
         return get()->method(std::forward<Args>(args)...);              \
     }
 
@@ -324,7 +321,7 @@ public:
     HALIDE_BUFFER_FORWARD_CONST(left)
     HALIDE_BUFFER_FORWARD_CONST(right)
     HALIDE_BUFFER_FORWARD_CONST(top)
-    HALIDE_BUFFER_FORWARD_CONST(bottom)    
+    HALIDE_BUFFER_FORWARD_CONST(bottom)
     HALIDE_BUFFER_FORWARD_CONST(number_of_elements)
     HALIDE_BUFFER_FORWARD_CONST(size_in_bytes)
     HALIDE_BUFFER_FORWARD_CONST(begin)
@@ -391,33 +388,33 @@ public:
 
     template<typename ...Args>
     auto operator()(int first, Args&&... args) ->
-        decltype(dummy_runtime_buffer()(first, std::forward<Args>(args)...)) {
+        decltype(std::declval<Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
     template<typename ...Args>
     auto operator()(int first, Args&&... args) const ->
-        decltype(dummy_const_runtime_buffer()(first, std::forward<Args>(args)...)) {
+        decltype(std::declval<const Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
     auto operator()(const int *pos) ->
-        decltype(dummy_runtime_buffer()(pos)) {
+        decltype(std::declval<Runtime::Buffer<T>>()(pos)) {
         return (*get())(pos);
     }
 
     auto operator()(const int *pos) const ->
-        decltype(dummy_const_runtime_buffer()(pos)) {
+        decltype(std::declval<const Runtime::Buffer<T>>()(pos)) {
         return (*get())(pos);
     }
 
     auto operator()() ->
-        decltype(dummy_runtime_buffer()()) {
+        decltype(std::declval<Runtime::Buffer<T>>()()) {
         return (*get())();
     }
 
     auto operator()() const ->
-        decltype(dummy_const_runtime_buffer()()) {
+        decltype(std::declval<const Runtime::Buffer<T>>()()) {
         return (*get())();
     }
     // @}

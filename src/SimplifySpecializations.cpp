@@ -1,9 +1,10 @@
 #include "SimplifySpecializations.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
+#include "IRMutator.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Definition.h"
+#include "IREquality.h"
 
 #include <set>
 
@@ -36,6 +37,42 @@ void substitute_value_in_var(const string &var, Expr value, vector<Definition> &
     }
 }
 
+class SimplifyUsingFact : public IRMutator {
+public:
+    using IRMutator::mutate;
+
+    Expr mutate(Expr e) {
+        if (e.type().is_bool()) {
+            if (equal(fact, e) ||
+                can_prove(!fact || e)) {
+                // fact implies e
+                return const_true();
+            }
+            if (equal(fact, !e) ||
+                equal(!fact, e) ||
+                can_prove(!fact || !e)) {
+                // fact implies !e
+                return const_false();
+            }
+        }
+        return IRMutator::mutate(e);
+    }
+
+    Expr fact;
+    SimplifyUsingFact(Expr f) : fact(f) {}
+};
+
+void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
+    for (Definition &def : definitions) {
+        for (auto &def_arg : def.all_args()) {
+            def_arg = simplify(SimplifyUsingFact(fact).mutate(def_arg));
+        }
+        for (auto &def_val : def.values()) {
+            def_val = simplify(SimplifyUsingFact(fact).mutate(def_val));
+        }
+    }
+}
+
 vector<Definition> propagate_specialization_in_definition(Definition &def) {
     vector<Definition> result;
 
@@ -64,6 +101,9 @@ vector<Definition> propagate_specialization_in_definition(Definition &def) {
 
             // Else case
             substitute_value_in_var(var->name, const_false(), result);
+        } else {
+            simplify_using_fact(c, s_result);
+            simplify_using_fact(!c, result);
         }
 
         result.insert(result.end(), s_result.begin(), s_result.end());

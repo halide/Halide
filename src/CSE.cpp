@@ -182,6 +182,34 @@ public:
         protect_loads_in_scope = old_protect_loads_in_scope;
     }
 
+    void visit(const Load *op) {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
+        }
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        }
+    }
+
+    void visit(const Store *op) {
+        Expr predicate = op->predicate;
+        // If the predicate is trivially true, there is no point to lift it out
+        if (!is_one(predicate)) {
+            predicate = mutate(op->predicate);
+        }
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index, op->param, predicate);
+        }
+    }
 };
 
 /** Fill in the use counts in a global value numbering. */
@@ -457,15 +485,14 @@ void cse_test() {
     {
         Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter());
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
         Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
-        Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
         e = select(x*y > 10, x*y + 2, x*y + 3 + load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter());
-        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
-        Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
+        Expr cse_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), const_true());
+        Expr cse_pred_load = Load::make(Int(32), "buf", t[3], Buffer<>(), Parameter(), t2);
         correct = ssa_block({x*y,
                              x*x + y*y,
                              t[1] > 0,
@@ -477,48 +504,14 @@ void cse_test() {
 
     {
         Expr pred = x*x + y*y > 0;
-        Expr load = Load::make(Int(32), "buf", select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10),
-                               Buffer<>(), Parameter());
-        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
-        Expr value = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
-        Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(value.type(), "out", x*x + y*y + 2, Buffer<>(), Parameter())},
-                               Call::Intrinsic);
-        e = Call::make(value.type(), Call::predicated_store,
-                       {dest, pred, value},
-                       Call::Intrinsic);
-
-        Expr t1 = Variable::make(Bool(), "t1");
-        Expr cse_load = Load::make(Int(32), "buf",
-                                   select(t1, t[0] + 2, t[0] + 10),
-                                   Buffer<>(), Parameter());
-        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
-        Expr cse_value = Call::make(load.type(), Call::predicated_load, {cse_src, t1}, Call::Intrinsic);
-        Expr cse_dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(value.type(), "out", t[0] + 2, Buffer<>(), Parameter())},
-                               Call::Intrinsic);
-        Expr cse_pred_store = Call::make(value.type(), Call::predicated_store,
-                                         {cse_dest, t1, cse_value},
-                                         Call::Intrinsic);
-        correct = ssa_block({x*x + y*y,
-                             t[0] > 0,
-                             cse_pred_store});
-
-        check(e, correct);
-    }
-
-    {
-        Expr pred = x*x + y*y > 0;
         Expr index = select(x*x + y*y > 0, x*x + y*y + 2, x*x + y*y + 10);
-        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter());
-        Expr src = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
-        Expr pred_load = Call::make(load.type(), Call::predicated_load, {src, pred}, Call::Intrinsic);
+        Expr load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), const_true());
+        Expr pred_load = Load::make(Int(32), "buf", index, Buffer<>(), Parameter(), pred);
         e = select(x*y > 10, x*y + 2, x*y + 3 + pred_load) + pred_load;
 
         Expr t2 = Variable::make(Bool(), "t2");
-        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter());
-        Expr cse_src = Call::make(Handle(), Call::address_of, {cse_load}, Call::Intrinsic);
-        Expr cse_pred_load = Call::make(load.type(), Call::predicated_load, {cse_src, t2}, Call::Intrinsic);
+        Expr cse_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), const_true());
+        Expr cse_pred_load = Load::make(Int(32), "buf", select(t2, t[1] + 2, t[1] + 10), Buffer<>(), Parameter(), t2);
         correct = ssa_block({x*y,
                              x*x + y*y,
                              t[1] > 0,
@@ -526,6 +519,19 @@ void cse_test() {
                              select(t[0] > 10, t[0] + 2, t[0] + 3 + t[3]) + t[3]});
 
         check(e, correct);
+    }
+
+    {
+        Expr handle_a = reinterpret(type_of<int *>(), make_zero(UInt(64)));
+        Expr handle_b = reinterpret(type_of<float *>(), make_zero(UInt(64)));
+        Expr handle_c = reinterpret(type_of<float *>(), make_zero(UInt(64)));
+        e = Call::make(Int(32), "dummy", {handle_a, handle_b, handle_c}, Call::Extern);
+
+        Expr t0 = Variable::make(handle_b.type(), "t0");
+        correct = Let::make("t0", handle_b,
+                            Call::make(Int(32), "dummy", {handle_a, t0, t0}, Call::Extern));
+        check(e, correct);
+
     }
 
     debug(0) << "common_subexpression_elimination test passed\n";

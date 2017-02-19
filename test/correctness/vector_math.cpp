@@ -4,6 +4,7 @@
 #include <string.h>
 #include <cmath>
 #include <algorithm>
+#include <future>
 
 using namespace Halide;
 
@@ -621,18 +622,23 @@ bool test(int lanes) {
 
 int main(int argc, char **argv) {
 
-    bool ok = true;
-
     // Only native vector widths - llvm doesn't handle others well
-    ok = ok && test<float>(4);
-    ok = ok && test<float>(8);
-    ok = ok && test<double>(2);
-    ok = ok && test<uint8_t>(16);
-    ok = ok && test<int8_t>(16);
-    ok = ok && test<uint16_t>(8);
-    ok = ok && test<int16_t>(8);
-    ok = ok && test<uint32_t>(4);
-    ok = ok && test<int32_t>(4);
+    Halide::Internal::ThreadPool<bool> pool;
+    std::vector<std::future<bool>> futures;
+    futures.push_back(pool.async(test<float>, 4));
+    futures.push_back(pool.async(test<float>, 8));
+    futures.push_back(pool.async(test<double>, 2));
+    futures.push_back(pool.async(test<uint8_t>, 16));
+    futures.push_back(pool.async(test<int8_t>, 16));
+    futures.push_back(pool.async(test<uint16_t>, 8));
+    futures.push_back(pool.async(test<int16_t>, 8));
+    futures.push_back(pool.async(test<uint32_t>, 4));
+    futures.push_back(pool.async(test<int32_t>, 4));
+
+    bool ok = true;
+    for (auto &f : futures) {
+        ok &= f.get();
+    }
 
     if (!ok) return -1;
     printf("Success!\n");

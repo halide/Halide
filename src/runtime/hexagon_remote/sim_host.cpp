@@ -2,6 +2,7 @@
 #include <sstream>
 #include <cassert>
 #include <memory>
+#include <mutex>
 
 #include <HalideRuntime.h>
 #include <HexagonWrapper.h>
@@ -197,7 +198,6 @@ int send_message(int msg, const std::vector<int> &arguments) {
         printf("HexagonWrapper::ReadSymbolValue(rpc_ret) failed: %d\n", status);
         return -1;
     }
-
     // Get the remote address of the current func. There's a remote
     // pointer to it, so we need to walk through a few levels of
     // indirection.
@@ -305,19 +305,27 @@ public:
     remote_buffer &operator=(const remote_buffer &) = delete;
 };
 
+// We need to only allow one thread at a time to interact with the runtime.
+// This is done by simply locking this mutex at the entry of each exported
+// runtime function. This is not very efficient, but the simulator is slow
+// anyways.
+std::mutex mutex;
+
 extern "C" {
 
-int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
-                                             handle_t *module_ptr) {
+int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
+                                                int use_shared_object,
+                                                handle_t *module_ptr) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     int ret = init_sim();
     if (ret != 0) return -1;
-
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_code(code, codeLen);
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, remote_module_ptr.data});
+    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_shared_object, remote_module_ptr.data});
     if (ret != 0) return ret;
 
     // Get the module ptr.
@@ -325,23 +333,26 @@ int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int code
 
     return ret;
 }
+int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t* sym) {
+    std::lock_guard<std::mutex> guard(mutex);
 
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
     assert(sim);
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_name(name, nameLen);
 
     // Run the init kernels command.
-    handle_t ret = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen});
+    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_shared_object});
 
-    return ret;
+    return *sym != 0 ? 0 : -1;
 }
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const host_buffer *input_buffersPtrs, int input_buffersLen,
                               host_buffer *output_buffersPtrs, int output_buffersLen,
                               const host_buffer *input_scalarsPtrs, int input_scalarsLen) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     assert(sim);
 
     std::vector<remote_buffer> remote_input_buffers;
@@ -393,6 +404,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
+    std::lock_guard<std::mutex> guard(mutex);
+
     if (!sim) {
         // Due to static destructor ordering issues, the simulator
         // might have been freed before this gets called.

@@ -680,18 +680,16 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // We need to infer the arguments again, because compiling (GPU
     // and offload targets) might have added new buffers we need to
     // embed.
-    infer_arguments(module.functions().back().body);
+    auto f = module.get_function_by_name(name);
+    infer_arguments(f.body);
 
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     // Compile to jit module
-    JITModule jit_module(module, module.functions().back(),
-                         make_externs_jit_module(target_arg, lowered_externs));
+    JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
 
     // Dump bitcode to a file if the environment variable
-    // HL_GENBITCODE is non-zero.
-    size_t gen;
-    get_env_variable("HL_GENBITCODE", gen);
-    if (gen) {
+    // HL_GENBITCODE is defined to a nonzero value.
+    if (atoi(get_env_variable("HL_GENBITCODE").c_str())) {
         string program_name = running_program_name();
         if (program_name.empty()) {
             program_name = "unknown" + unique_name('_').substr(1);
@@ -729,7 +727,7 @@ void Pipeline::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, in
     contents->jit_handlers.custom_do_task = cust_do_task;
 }
 
-void Pipeline::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
+void Pipeline::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
     contents->jit_handlers.custom_trace = trace_fn;
 }
@@ -1030,9 +1028,9 @@ Pipeline::make_externs_jit_module(const Target &target,
                 // TODO: it's not clear whether arg.arg.type is correct for
                 // the arg.is_buffer() case (AFAIK, is_buffer()==true isn't possible
                 // in current mtrunk Halide, but may be in some side branches that
-                // have not yet landed, e.g. JavaScript). Forcing it to be 
+                // have not yet landed, e.g. JavaScript). Forcing it to be
                 // the correct type here, just in case.
-                arg_types.push_back(arg.arg.is_buffer() ? 
+                arg_types.push_back(arg.arg.is_buffer() ?
                                     type_of<struct buffer_t *>() :
                                     arg.arg.type);
             }

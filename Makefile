@@ -54,14 +54,10 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 # value.
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
-ifeq ($(LLVM_VERSION_TIMES_10),39)
-WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
-else
-ifeq ($(LLVM_VERSION_TIMES_10),40)
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 39 40 50 60))
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
 else
 WITH_HEXAGON ?=
-endif
 endif
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
@@ -152,6 +148,14 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -f
 TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -L/usr/local/lib -lpng -I/usr/local/include
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide -lpthread $(LIBDL) -lz
 
+# gcc 4.8 fires a bogus warning on old versions of png.h
+CXX_VERSION = $(shell $(CXX) --version | head -n1)
+ifneq (,$(findstring g++,$(CXX_VERSION)))
+ifneq (,$(findstring 4.8,$(CXX_VERSION)))
+TEST_CXX_FLAGS += -Wno-literal-suffix
+endif
+endif
+
 ifeq ($(UNAME), Linux)
 TEST_LD_FLAGS += -rdynamic -Wl,--rpath=$(CURDIR)/$(BIN_DIR)
 endif
@@ -225,6 +229,16 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
+
+LIBJPEG_LIBS ?= -ljpeg
+
+# There's no libjpeg-config, unfortunately. We should look for
+# jpeglib.h one directory level up from png.h
+LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
+LIBJPEG_CXX_FLAGS ?= $(LIBPNG_INCLUDE_DIRS:=/..)
+
+IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
+IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 # We're building into the current directory $(CURDIR). Find the Halide
 # repo root directory (the location of the makefile)
@@ -485,6 +499,7 @@ HEADER_FILES = \
   StorageFolding.h \
   Substitute.h \
   Target.h \
+  ThreadPool.h \
   Tracing.h \
   TrimNoOps.h \
   Tuple.h \
@@ -631,6 +646,7 @@ $(BUILD_DIR)/llvm_objects/list: $(OBJECTS) $(INITIAL_MODULES)
 	if cmp -s list.new list; \
 	then \
 	echo "No changes in LLVM deps"; \
+	touch list; \
 	else \
 	rm -f llvm_*.o*; \
 	cat list.new | sed = | sed "N;s/[()]/ /g;s/\n /\n/;s/\([0-9]*\)\n\([^ ]*\) \([^ ]*\)/ar x \2 \3; mv \3 llvm_\1_\3/" | bash -; \
@@ -712,13 +728,13 @@ $(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll
 $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
 	$(LLVM_AS) $(BUILD_DIR)/initmod.$*.ll -o $(BUILD_DIR)/initmod.$*.bc
 
-$(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp $(BUILD_DIR)/initmod.%.bc
-	./$(BIN_DIR)/bitcode2cpp $* < $(BUILD_DIR)/initmod.$*.bc > $@
+$(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/binary2cpp $(BUILD_DIR)/initmod.%.bc
+	./$(BIN_DIR)/binary2cpp initmod_$* < $(BUILD_DIR)/initmod.$*.bc > $@
 
-$(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/bitcode2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
-	./$(BIN_DIR)/bitcode2cpp ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
+$(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
+	./$(BIN_DIR)/binary2cpp initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
 
-$(BIN_DIR)/bitcode2cpp: $(ROOT_DIR)/tools/bitcode2cpp.cpp
+$(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@-mkdir -p $(BIN_DIR)
 	$(CXX) $< -o $@
 
@@ -838,6 +854,11 @@ endif
 $(BIN_DIR)/correctness_halide_buffer: $(ROOT_DIR)/test/correctness/halide_buffer.cpp $(INCLUDE_DIR)/HalideBuffer.h $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(WEAK_BUFFER_LINKAGE_FLAGS) -o $@
 
+# The image_io test additionally needs to link to libpng and
+# libjpeg.
+$(BIN_DIR)/correctness_image_io: $(ROOT_DIR)/test/correctness/image_io.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
+	$(CXX) $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+
 $(BIN_DIR)/performance_%: $(ROOT_DIR)/test/performance/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(ROOT_DIR)/apps/support/benchmark.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
@@ -911,7 +932,8 @@ $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
-	semityped_input_buffer.dim=3 \
+	type_only_input_buffer.dim=3 \
+	dim_only_input_buffer.type=uint8 \
 	untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3 \
 	output.type=float32,float32 output.dim=3 \
 	input_not_nod.type=uint8 input_not_nod.dim=3 \
@@ -1048,16 +1070,16 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_
 		export TUTORIAL=$* ;\
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
-		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a -lpthread $(LIBDL) $(LIBPNG_LIBS) -lz -o $@; \
+		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
+		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a -lpthread $(LIBDL) $(IMAGE_IO_LIBS) -lz -o $@; \
 	else \
-		$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(LIBPNG_LIBS) -o $@;\
+		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
+		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@;\
 	fi
 
 $(BIN_DIR)/tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(BIN_DIR)/GenGen.o
-	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< $(BIN_DIR)/GenGen.o \
-	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(LIBPNG_LIBS) -o $@
+	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< $(BIN_DIR)/GenGen.o \
+	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators_usage.sh $(BIN_DIR)/tutorial_lesson_15_generators
 	@-mkdir -p $(TMP_DIR)
@@ -1067,8 +1089,8 @@ tutorial_lesson_15_generators: $(ROOT_DIR)/tutorial/lesson_15_generators_usage.s
 	@-echo
 
 $(BIN_DIR)/tutorial_lesson_16_rgb_generate: $(ROOT_DIR)/tutorial/lesson_16_rgb_generate.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(BIN_DIR)/GenGen.o
-	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< $(BIN_DIR)/GenGen.o \
-	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(LIBPNG_LIBS) -o $@
+	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< $(BIN_DIR)/GenGen.o \
+	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_lesson_16_rgb_run: $(ROOT_DIR)/tutorial/lesson_16_rgb_run.cpp $(BIN_DIR)/tutorial_lesson_16_rgb_generate
 	@-mkdir -p $(TMP_DIR)
@@ -1078,9 +1100,9 @@ $(BIN_DIR)/tutorial_lesson_16_rgb_run: $(ROOT_DIR)/tutorial/lesson_16_rgb_run.cp
 	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_either      target=host-no_runtime layout=either
 	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_specialized target=host-no_runtime layout=specialized
 	# Compile the runner
-	$(CXX) $(TUTORIAL_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
+	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/brighten_*.a \
-        -lHalide $(TEST_LD_FLAGS) -lpthread $(LIBDL) $(LIBPNG_LIBS) -lz -o $@
+        -lHalide $(TEST_LD_FLAGS) -lpthread $(LIBDL) $(IMAGE_IO_LIBS) -lz -o $@
 	@-echo
 
 test_internal: $(BIN_DIR)/test_internal
@@ -1200,16 +1222,8 @@ test_python: $(LIB_DIR)/libHalide.a
 	mkdir -p python_bindings
 	make -C python_bindings -f $(ROOT_DIR)/python_bindings/Makefile test
 
-# It's just for compiling the runtime, so Clang <3.5 *might* work,
+# It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
-ifneq (,$(findstring clang version 3.5,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
-ifneq (,$(findstring clang version 3.6,$(CLANG_VERSION)))
-CLANG_OK=yes
-endif
-
 ifneq (,$(findstring clang version 3.7,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1226,6 +1240,10 @@ ifneq (,$(findstring clang version 4.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 5.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -1237,7 +1255,7 @@ $(BUILD_DIR)/clang_ok:
 	touch $(BUILD_DIR)/clang_ok
 else
 $(BUILD_DIR)/clang_ok:
-	@echo "Can't find clang or version of clang too old (we need 3.5 or greater):"
+	@echo "Can't find clang or version of clang too old (we need 3.7 or greater):"
 	@echo "You can override this check by setting CLANG_OK=y"
 	echo '$(CLANG_VERSION)'
 	echo $(findstring version 3,$(CLANG_VERSION))
@@ -1246,7 +1264,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 37 38 39 40 41 42))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 37 38 39 40 50 60))
 LLVM_OK=yes
 endif
 
@@ -1257,7 +1275,7 @@ $(BUILD_DIR)/llvm_ok:
 	touch $(BUILD_DIR)/llvm_ok
 else
 $(BUILD_DIR)/llvm_ok:
-	@echo "Can't find llvm or version of llvm too old (we need 3.5 or greater):"
+	@echo "Can't find llvm or version of llvm too old (we need 3.7 or greater):"
 	@echo "You can override this check by setting LLVM_OK=y"
 	$(LLVM_CONFIG) --version
 	@exit 1
@@ -1320,5 +1338,5 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/halide.tgz
 
-$(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp
+$(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/HalideRuntime.h
 	$(CXX) $(OPTIMIZE) -std=c++11 $< -I$(INCLUDE_DIR) -L$(BIN_DIR) -o $@

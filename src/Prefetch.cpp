@@ -139,14 +139,14 @@ private:
             // The prefetch is only 1 dimensional, just emit a flat prefetch.
             prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch,
                                                  {prefetch_addr, extent_0_bytes},
-                                                 Call::PureIntrinsic));
+                                                 Call::Intrinsic));
         } else {
             // Make a 2D prefetch.
             Expr stride_1 = Variable::make(Int(32), buf_name + ".stride.1");
             Expr stride_1_bytes = stride_1 * type.bytes();
             prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_2d,
                                                  {prefetch_addr, extent_0_bytes, prefetch_extent[1], stride_1_bytes},
-                                                 Call::PureIntrinsic));
+                                                 Call::Intrinsic));
 
             // Make loops for the rest of the dimensions (possibly zero).
             for (size_t i = 2; i < box.size(); i++) {

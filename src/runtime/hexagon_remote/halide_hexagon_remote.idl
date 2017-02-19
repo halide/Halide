@@ -4,11 +4,12 @@ interface halide_hexagon_remote
     typedef unsigned long handle_t;
 
     // Routine to initialize a module on the remote side. Returns a pointer to the module.
-    long initialize_kernels(in buffer code, rout handle_t module_ptr);
+    long initialize_kernels_v2(in buffer code, in long use_shared_object,
+                               rout handle_t module_ptr);
 
     // Get a symbol from the module.
     // v2: return the result as an output parameter instead of a return value.
-    long get_symbol_v2(in handle_t module_ptr, in sequence<char> name, rout handle_t sym_ptr);
+    long get_symbol_v3(in handle_t module_ptr, in sequence<char> name, in long use_shared_object, rout handle_t sym_ptr);
 
     // If running many short-running pipelines will be executed, the
     // penalty for powering on HVX can be avoided by doing this
@@ -31,15 +32,15 @@ interface halide_hexagon_remote
     // Retrieve the current profiling Func ID
     long poll_profiler_state(rout long func, rout long threads);
 
-    // Two more ways for powering on HVX
-    long power_hvx_on_mode(in long mode);
-    long power_hvx_on_perf(in long set_mips,
-                           in unsigned long mipsPerThread,
-                           in unsigned long mipsTotal,
-                           in long set_bus_bw,
-                           in unsigned long bwMegabytesPerSec,
-                           in unsigned long busbwUsagePercentage,
-                           in long set_latency,
-                           in long latency);
+    // Set a performance target.
+    long set_performance_mode(in long mode);
+    long set_performance(in long set_mips,
+                         in unsigned long mipsPerThread,
+                         in unsigned long mipsTotal,
+                         in long set_bus_bw,
+                         in unsigned long bwMegabytesPerSec,
+                         in unsigned long busbwUsagePercentage,
+                         in long set_latency,
+                         in long latency);
 
 };

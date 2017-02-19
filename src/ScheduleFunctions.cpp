@@ -441,12 +441,11 @@ Stmt build_produce(Function f, const Target &target) {
         }
 
         // Make the extern call
-        Expr e = Call::make(Int(32), extern_name, extern_call_args,
-                            f.extern_definition_is_c_plus_plus() ? Call::ExternCPlusPlus
-                                                                 : Call::Extern);
+        Expr e = f.make_call_to_extern_definition(extern_call_args, target);
+
+        // Check if it succeeded
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
-        // Check if it succeeded
         Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
                                 {extern_name, result}, Call::Extern);
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
@@ -579,7 +578,7 @@ private:
 
     string producing;
 
-    Stmt build_pipeline(Stmt s) {
+    Stmt build_pipeline(Stmt consumer) {
         pair<Stmt, Stmt> realization = build_production(func, target);
 
         Stmt producer;
@@ -591,10 +590,20 @@ private:
             internal_assert(realization.second.defined());
             producer = realization.second;
         }
-        producer = ProducerConsumer::make(func.name(), true, producer);
-        Stmt consumer = ProducerConsumer::make(func.name(), false, s);
+        producer = ProducerConsumer::make_produce(func.name(), producer);
 
-        return Block::make(producer, consumer);
+        // Outputs don't have consume nodes
+        if (!is_output) {
+            consumer = ProducerConsumer::make_consume(func.name(), consumer);
+        }
+
+        if (is_no_op(consumer)) {
+            // For the very first output to be scheduled, the consumer
+            // Stmt will be a no-op. No point in preserving it.
+            return producer;
+        } else {
+            return Block::make(producer, consumer);
+        }
     }
 
     Stmt build_realize(Stmt s) {
@@ -730,15 +739,16 @@ public:
         LoopLevel loop_level;
     };
     vector<Site> sites_allowed;
+    bool found;
 
-    ComputeLegalSchedules(Function f, const map<string, Function> &env) : func(f), found(false), env(env) {}
+    ComputeLegalSchedules(Function f, const map<string, Function> &env) : found(false), func(f), env(env) {}
 
 private:
     using IRVisitor::visit;
 
     vector<Site> sites;
     Function func;
-    bool found;
+
     const map<string, Function> &env;
 
     void visit(const For *f) {
@@ -918,7 +928,11 @@ public:
     PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
 };
 
-void validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
+// Check a schedule is legal, throwing an error if it is not. Returns
+// whether or not a realization of the Func should be injected. Unused
+// intermediate Funcs that somehow made it into the Func DAG can be
+// discarded.
+bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -987,11 +1001,20 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // store_in_user_code, but store_root is close enough.
     if (is_output) {
         if (store_at.is_root() && compute_at.is_root()) {
-            return;
+            return true;
         } else {
-            user_error << "Func " << f.name() << " is the output, so must"
+            user_error << "Func " << f.name() << " is an output, so must"
                        << " be scheduled compute_root (which is the default).\n";
         }
+    }
+
+    // Otherwise inspect the uses to see what's ok.
+    ComputeLegalSchedules legal(f, env);
+    s.accept(&legal);
+
+    if (!is_output && !legal.found) {
+        // It's not an output, and it's not called anywhere. Skip it.
+        return false;
     }
 
     // Inlining is allowed only if there is no specialization.
@@ -1000,12 +1023,8 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
             << "Func " << f.name() << " is scheduled inline, so it"
             << " must not have any specializations. Specialize on the"
             << " scheduled Func instead.\n";
-        return;
+        return true;
     }
-
-    // Otherwise inspect the uses to see what's ok.
-    ComputeLegalSchedules legal(f, env);
-    s.accept(&legal);
 
     bool store_at_ok = false, compute_at_ok = false;
     const vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
@@ -1049,6 +1068,8 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
 
         user_error << err.str();
     }
+
+    return true;
 }
 
 class RemoveLoopsOverOutermost : public IRMutator {
@@ -1094,7 +1115,17 @@ Stmt schedule_functions(const vector<Function> &outputs,
             is_output |= o.same_as(f);
         }
 
-        validate_schedule(f, s, target, is_output, env);
+        bool necessary = validate_schedule(f, s, target, is_output, env);
+
+        if (!necessary) {
+            // The way in which the function was referred to in the
+            // function DAG must not actually result in a use in the
+            // code. This can happen if you inline a Tuple function,
+            // ignoring one of the Tuple elements, and that Tuple
+            // element is the sole call to a function with an update
+            // definition.
+            continue;
+        }
 
         if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {

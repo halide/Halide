@@ -2,7 +2,6 @@
 #include <memory.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <malloc.h>
 
 #include "../support/benchmark.h"
 
@@ -61,7 +60,8 @@ int main(int argc, char **argv) {
     });
 
     // To avoid the cost of powering HVX on in each call of the
-    // pipeline, power it on once now.
+    // pipeline, power it on once now. Also, set HVX performance to turbo.
+    halide_hexagon_set_performance_mode(NULL, halide_hvx_power_turbo);
     halide_hexagon_power_hvx_on(NULL);
 
     printf("Running pipeline...\n");
