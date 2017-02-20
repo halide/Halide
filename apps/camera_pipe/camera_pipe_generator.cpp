@@ -314,7 +314,7 @@ Func CameraPipe::build() {
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
 
-    int strip_size = 32;
+    int strip_size = 128;
     int vec = get_target().natural_vector_size(UInt(16));
     if (get_target().has_feature(Target::HVX_64)) {
         vec = 32;
