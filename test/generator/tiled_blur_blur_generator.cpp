@@ -52,11 +52,10 @@ public:
 
         // Note that other combinations (e.g. interleaved -> planar) will work
         // but be relatively unoptimized.
-
     }
 
 private:
-    Var x{"x"}, y{"y"}, c{"c"};
+    Var x{ "x" }, y{ "y" }, c{ "c" };
 };
 
 HALIDE_REGISTER_GENERATOR(TiledBlurBlur, "tiled_blur_blur")

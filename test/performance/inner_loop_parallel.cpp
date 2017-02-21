@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <cstdio>
 #include "benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
         std::ostringstream ss;
         ss << "HL_NUM_THREADS=" << t;
         std::string str = ss.str();
-        char buf[32] = {0};
+        char buf[32] = { 0 };
         memcpy(buf, str.c_str(), str.size());
         putenv(buf);
         Halide::Internal::JITSharedRuntime::release_all();

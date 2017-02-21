@@ -6,10 +6,10 @@
  * generated halide pipeline
  */
 
+#include "Buffer.h"
 #include "Error.h"
 #include "Expr.h"
 #include "Type.h"
-#include "Buffer.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -57,12 +57,14 @@ struct Argument {
      * By default, they are left unset, implying "no default, no min, no max". */
     Expr def, min, max;
 
-    Argument() : kind(InputScalar), dimensions(0) {}
+    Argument()
+        : kind(InputScalar), dimensions(0) {
+    }
     Argument(const std::string &_name, Kind _kind, const Type &_type, int _dimensions,
-                Expr _def = Expr(),
-                Expr _min = Expr(),
-                Expr _max = Expr()) :
-        name(_name), kind(_kind), dimensions((uint8_t) _dimensions), type(_type), def(_def), min(_min), max(_max) {
+             Expr _def = Expr(),
+             Expr _min = Expr(),
+             Expr _max = Expr())
+        : name(_name), kind(_kind), dimensions((uint8_t) _dimensions), type(_type), def(_def), min(_min), max(_max) {
         internal_assert(_dimensions >= 0 && _dimensions <= 255);
         user_assert(!(is_scalar() && dimensions != 0))
             << "Scalar Arguments must specify dimensions of 0";
@@ -75,19 +77,27 @@ struct Argument {
     }
 
     template<typename T>
-    Argument(Buffer<T> im) :
-        name(im.name()),
-        kind(InputBuffer),
-        dimensions(im.dimensions()),
-        type(im.type()) {}
+    Argument(Buffer<T> im)
+        : name(im.name()),
+          kind(InputBuffer),
+          dimensions(im.dimensions()),
+          type(im.type()) {
+    }
 
-    bool is_buffer() const { return kind == InputBuffer || kind == OutputBuffer; }
-    bool is_scalar() const { return kind == InputScalar; }
+    bool is_buffer() const {
+        return kind == InputBuffer || kind == OutputBuffer;
+    }
+    bool is_scalar() const {
+        return kind == InputScalar;
+    }
 
-    bool is_input() const { return kind == InputScalar || kind == InputBuffer; }
-    bool is_output() const { return kind == OutputBuffer; }
+    bool is_input() const {
+        return kind == InputScalar || kind == InputBuffer;
+    }
+    bool is_output() const {
+        return kind == OutputBuffer;
+    }
 };
-
 }
 
 #endif

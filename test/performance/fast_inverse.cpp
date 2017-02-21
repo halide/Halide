@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <cstdio>
 #include "benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 
@@ -15,8 +15,8 @@ int main(int argc, char **argv) {
     RDom r(0, N);
     slow(x) = 1.0f;
     fast(x) = 1.0f;
-    slow(x) = p / (slow(x) + 1) + 0*r;
-    fast(x) = fast_inverse((fast(x) + 1) + 0*r);
+    slow(x) = p / (slow(x) + 1) + 0 * r;
+    fast(x) = fast_inverse((fast(x) + 1) + 0 * r);
 
     slow.update().vectorize(x, 4);
     fast.update().vectorize(x, 4);

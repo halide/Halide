@@ -5,10 +5,10 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    halide_dimension_t shape[] = {{100, 10, 1},
-                                  {300, 10, 10},
-                                  {500, 10, 100},
-                                  {400, 10, 1000}};
+    halide_dimension_t shape[] = { { 100, 10, 1 },
+                                   { 300, 10, 10 },
+                                   { 500, 10, 100 },
+                                   { 400, 10, 1000 } };
     Buffer<int> buf(nullptr, 4, shape);
     buf.allocate();
 

@@ -8,7 +8,8 @@ int my_trace(void *user_context, const halide_trace_event_t *e) {
     if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] < 7) {
             printf("Bounds on realization were supposed to be = [0, 7]\n"
-                   "Instead they are: %d %d\n", e->coordinates[0], e->coordinates[1]);
+                   "Instead they are: %d %d\n",
+                   e->coordinates[0], e->coordinates[1]);
             exit(-1);
         }
     }
@@ -21,7 +22,7 @@ int main(int argc, char **argv) {
 
     f(x) = x;
     g(x) = f(x);
-    h(x) = g(x) + g(x+1);
+    h(x) = g(x) + g(x + 1);
 
     Var xo("xo"), xi("xi");
     f.split(x, xo, xi, 4);
@@ -41,5 +42,4 @@ int main(int argc, char **argv) {
     printf("Success!\n");
 
     return 0;
-
 }

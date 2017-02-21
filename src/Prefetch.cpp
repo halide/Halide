@@ -2,9 +2,9 @@
 #include <map>
 #include <string>
 
-#include "Prefetch.h"
-#include "IRMutator.h"
 #include "Bounds.h"
+#include "IRMutator.h"
+#include "Prefetch.h"
 #include "Scope.h"
 #include "Util.h"
 
@@ -28,7 +28,8 @@ public:
     Expr load;
 
     MakeSimilarLoad(const string &name, const vector<Expr> &args)
-        : buf_name(name), args(args) {}
+        : buf_name(name), args(args) {
+    }
 
 private:
     using IRVisitor::visit;
@@ -65,7 +66,9 @@ Box buffer_bounds(const string &buf_name, int dims) {
 
 class InjectPrefetch : public IRMutator {
 public:
-    InjectPrefetch(const map<string, Function> &e) : env(e) { }
+    InjectPrefetch(const map<string, Function> &e)
+        : env(e) {
+    }
 
 private:
     const map<string, Function> &env;
@@ -123,7 +126,7 @@ private:
         Expr prefetch_load = make_similar_load(body, buf_name, indices);
         internal_assert(prefetch_load.defined());
         Type type = prefetch_load.type();
-        Expr prefetch_addr = Call::make(Handle(), Call::address_of, {prefetch_load}, Call::Intrinsic);
+        Expr prefetch_addr = Call::make(Handle(), Call::address_of, { prefetch_load }, Call::Intrinsic);
 
         Stmt prefetch;
         Expr stride_0 = Variable::make(Int(32), buf_name + ".stride.0");
@@ -138,14 +141,14 @@ private:
         if (box.size() == 1) {
             // The prefetch is only 1 dimensional, just emit a flat prefetch.
             prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch,
-                                                 {prefetch_addr, extent_0_bytes},
+                                                 { prefetch_addr, extent_0_bytes },
                                                  Call::Intrinsic));
         } else {
             // Make a 2D prefetch.
             Expr stride_1 = Variable::make(Int(32), buf_name + ".stride.1");
             Expr stride_1_bytes = stride_1 * type.bytes();
             prefetch = Evaluate::make(Call::make(Int(32), Call::prefetch_2d,
-                                                 {prefetch_addr, extent_0_bytes, prefetch_extent[1], stride_1_bytes},
+                                                 { prefetch_addr, extent_0_bytes, prefetch_extent[1], stride_1_bytes },
                                                  Call::Intrinsic));
 
             // Make loops for the rest of the dimensions (possibly zero).
@@ -161,7 +164,7 @@ private:
             prefetch = IfThenElse::make(box.used, prefetch);
         }
 
-        return Block::make({prefetch, body});
+        return Block::make({ prefetch, body });
     }
 
     void visit(const For *op) {
@@ -221,14 +224,12 @@ private:
             stmt = op;
         }
     }
-
 };
 
-} // namespace
+}  // namespace
 
 Stmt inject_prefetch(Stmt s, const map<string, Function> &env) {
     return InjectPrefetch(env).mutate(s);
 }
-
 }
 }

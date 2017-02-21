@@ -5,14 +5,16 @@ extern "C" {
 void *dlopen(const char *, int);
 void *dlsym(void *, const char *);
 
-#define RTLD_DEFAULT ((void *)-2)
+#define RTLD_DEFAULT ((void *) -2)
 
 #define RTLD_LAZY 0x1
 #define RTLD_LOCAL 0x4
 
 }  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK void *halide_get_symbol_impl(const char *name) {
     return dlsym(RTLD_DEFAULT, name);
@@ -34,8 +36,9 @@ WEAK void *halide_get_library_symbol_impl(void *lib, const char *name) {
 WEAK halide_get_symbol_t custom_get_symbol = halide_get_symbol_impl;
 WEAK halide_load_library_t custom_load_library = halide_load_library_impl;
 WEAK halide_get_library_symbol_t custom_get_library_symbol = halide_get_library_symbol_impl;
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal
 
 extern "C" {
 

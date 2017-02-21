@@ -5,8 +5,8 @@ namespace Halide {
 
 using Internal::Dimension;
 
-OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k) :
-    param(p), kind(k) {
+OutputImageParam::OutputImageParam(const Internal::Parameter &p, Argument::Kind k)
+    : param(p), kind(k) {
 }
 
 const std::string &OutputImageParam::name() const {
@@ -88,5 +88,4 @@ OutputImageParam::operator Argument() const {
 OutputImageParam::operator ExternFuncArgument() const {
     return param;
 }
-
 }

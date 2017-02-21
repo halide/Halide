@@ -61,10 +61,10 @@ bool perform_test(const char *label, const Target target, Func f, int expected_n
     f.realize(out, target);
 
     // Check for the correct number of varying attributes
-    if ((int)varyings.size() != expected_nvarying) {
+    if ((int) varyings.size() != expected_nvarying) {
         fprintf(stderr,
                 "%s: Error: wrong number of varying attributes: %d should be %d\n",
-                label, (int)varyings.size(), expected_nvarying);
+                label, (int) varyings.size(), expected_nvarying);
         return false;
     }
 
@@ -110,7 +110,8 @@ struct CoordXform {
         s_th, c_th, 0.0f
     };
     Param<float> m0, m1, m2, m3, m4, m5;
-    CoordXform() : m0("m0"), m1("m1"), m2("m2"), m3("m3"), m4("m4"), m5("m5") {
+    CoordXform()
+        : m0("m0"), m1("m1"), m2("m2"), m3("m3"), m4("m4"), m5("m5") {
         m0.set(m[0]);
         m1.set(m[1]);
         m2.set(m[2]);

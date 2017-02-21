@@ -1,7 +1,7 @@
 #include "ModulusRemainder.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IR.h"
 #include "Simplify.h"
 
 // This file is largely a port of parts of src/analysis.ml
@@ -72,8 +72,6 @@ ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope)
     return mr.analyze(e);
 }
 
-
-
 bool reduce_expr_modulo(Expr expr, int modulus, int *remainder) {
     ModulusRemainder result = modulus_remainder(expr);
 
@@ -126,17 +124,16 @@ void modulus_remainder_test() {
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
 
-    check((30*x + 3) + (40*y + 2), 10, 5);
-    check((6*x + 3) * (4*y + 1), 2, 1);
-    check(max(30*x - 24, 40*y + 31), 5, 1);
-    check(10*x - 33*y, 1, 0);
-    check(10*x - 35*y, 5, 0);
+    check((30 * x + 3) + (40 * y + 2), 10, 5);
+    check((6 * x + 3) * (4 * y + 1), 2, 1);
+    check(max(30 * x - 24, 40 * y + 31), 5, 1);
+    check(10 * x - 33 * y, 1, 0);
+    check(10 * x - 35 * y, 5, 0);
     check(123, 0, 123);
-    check(Let::make("y", x*3 + 4, y*3 + 4), 9, 7);
+    check(Let::make("y", x * 3 + 4, y * 3 + 4), 9, 7);
 
     std::cout << "modulus_remainder test passed\n";
 }
-
 
 void ComputeModulusRemainder::visit(const IntImm *op) {
     // Equal to op->value modulo anything. We'll use zero as the
@@ -185,7 +182,7 @@ int gcd(int a, int b) {
 }
 
 int lcm(int a, int b) {
-    return (a*b)/gcd(a, b);
+    return (a * b) / gcd(a, b);
 }
 
 int mod(int a, int m) {
@@ -257,13 +254,13 @@ ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
 
     // Reduce them to the same modulus and the same remainder
     int modulus = gcd(a.modulus, b.modulus);
-    int64_t diff = (int64_t)a.remainder - (int64_t)b.remainder;
+    int64_t diff = (int64_t) a.remainder - (int64_t) b.remainder;
     if (!Int(32).can_represent(diff)) {
         // The difference overflows.
         return ModulusRemainder(0, 1);
     }
     if (diff < 0) diff = -diff;
-    modulus = gcd((int)diff, modulus);
+    modulus = gcd((int) diff, modulus);
 
     int ra = mod(a.remainder, modulus);
 
@@ -276,7 +273,6 @@ ModulusRemainder unify_alternatives(ModulusRemainder a, ModulusRemainder b) {
         << "diff              = " << diff << "\n"
         << "unified modulus   = " << modulus << "\n"
         << "unified remainder = " << ra << "\n";
-
 
     return ModulusRemainder(modulus, ra);
 }
@@ -443,6 +439,5 @@ void ComputeModulusRemainder::visit(const IfThenElse *) {
 void ComputeModulusRemainder::visit(const Evaluate *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
-
 }
 }

@@ -7,8 +7,8 @@
  * pointers.
  */
 
-#include <stdlib.h>
 #include <atomic>
+#include <stdlib.h>
 
 #include "Util.h"
 
@@ -18,11 +18,20 @@ namespace Internal {
 /** A class representing a reference count to be used with IntrusivePtr */
 class RefCount {
     std::atomic<int> count;
+
 public:
-    RefCount() : count(0) {}
-    int increment() {return ++count;} // Increment and return new value
-    int decrement() {return --count;} // Decrement and return new value
-    bool is_zero() const {return count == 0;}
+    RefCount()
+        : count(0) {
+    }
+    int increment() {
+        return ++count;
+    }  // Increment and return new value
+    int decrement() {
+        return --count;
+    }  // Decrement and return new value
+    bool is_zero() const {
+        return count == 0;
+    }
 };
 
 /**
@@ -40,8 +49,10 @@ public:
  * template<> void destroy<MyClass>(const MyClass *c) {delete c;}
  */
 // @{
-template<typename T> EXPORT RefCount &ref_count(const T *t);
-template<typename T> EXPORT void destroy(const T *t);
+template<typename T>
+EXPORT RefCount &ref_count(const T *t);
+template<typename T>
+EXPORT void destroy(const T *t);
 // @}
 
 /** Intrusive shared pointers have a reference count (a
@@ -56,7 +67,6 @@ template<typename T> EXPORT void destroy(const T *t);
 template<typename T>
 struct IntrusivePtr {
 private:
-
     void incref(T *p) {
         if (p) {
             ref_count(p).increment();
@@ -103,18 +113,22 @@ public:
         decref(ptr);
     }
 
-    IntrusivePtr() : ptr(nullptr) {
+    IntrusivePtr()
+        : ptr(nullptr) {
     }
 
-    IntrusivePtr(T *p) : ptr(p) {
+    IntrusivePtr(T *p)
+        : ptr(p) {
         incref(ptr);
     }
 
-    IntrusivePtr(const IntrusivePtr<T> &other) : ptr(other.ptr) {
+    IntrusivePtr(const IntrusivePtr<T> &other)
+        : ptr(other.ptr) {
         incref(ptr);
     }
 
-    IntrusivePtr(IntrusivePtr<T> &&other) : ptr(other.ptr) {
+    IntrusivePtr(IntrusivePtr<T> &&other)
+        : ptr(other.ptr) {
         other.ptr = nullptr;
     }
 
@@ -146,12 +160,10 @@ public:
         return ptr == other.ptr;
     }
 
-    bool operator <(const IntrusivePtr<T> &other) const {
+    bool operator<(const IntrusivePtr<T> &other) const {
         return ptr < other.ptr;
     }
-
 };
-
 }
 }
 

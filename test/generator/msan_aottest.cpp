@@ -6,8 +6,8 @@ int main(int argc, char **argv) {
     return 0;
 }
 #else
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include <iostream>
 #include <limits>
@@ -57,18 +57,18 @@ extern "C" void AnnotateMemoryIsInitialized(const char *file, int line,
 }
 
 enum {
-  expect_bounds_inference_buffer,
-  expect_intermediate_buffer,
-  expect_output_buffer,
-  expect_intermediate_contents,
-  expect_output_contents,
+    expect_bounds_inference_buffer,
+    expect_intermediate_buffer,
+    expect_output_buffer,
+    expect_intermediate_contents,
+    expect_output_contents,
 } annotate_stage = expect_bounds_inference_buffer;
-const void* output_base = nullptr;
-const void* output_previous = nullptr;
+const void *output_base = nullptr;
+const void *output_previous = nullptr;
 int bounds_inference_count = 0;
 bool expect_error = false;
 
-void reset_state(const void* base) {
+void reset_state(const void *base) {
     annotate_stage = expect_bounds_inference_buffer;
     output_base = base;
     output_previous = nullptr;
@@ -77,7 +77,7 @@ void reset_state(const void* base) {
 }
 
 extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
-    printf("%d:%p:%08x\n", (int)annotate_stage, ptr, (unsigned int) len);
+    printf("%d:%p:%08x\n", (int) annotate_stage, ptr, (unsigned int) len);
     if (annotate_stage == expect_bounds_inference_buffer) {
         if (output_previous != nullptr || len != sizeof(buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(buffer_t), saw %d\n", (unsigned int) len);
@@ -147,8 +147,7 @@ void verify(const T &image) {
 
 //-----------------------------------------------------------------------------
 
-int main()
-{
+int main() {
     printf("Testing interleaved...\n");
     {
         auto out = Buffer<int32_t>::make_interleaved(4, 4, 3);

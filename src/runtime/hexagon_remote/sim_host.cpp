@@ -1,8 +1,8 @@
-#include <vector>
-#include <sstream>
 #include <cassert>
 #include <memory>
 #include <mutex>
+#include <sstream>
+#include <vector>
 
 #include <HalideRuntime.h>
 #include <HexagonWrapper.h>
@@ -117,16 +117,16 @@ int write_memory(int dest, const void *src, int size) {
         HEX_8u_t src_chunk;
         int chunk_size;
         if (size >= 8) {
-            src_chunk = *reinterpret_cast<const HEX_8u_t*>(src);
+            src_chunk = *reinterpret_cast<const HEX_8u_t *>(src);
             chunk_size = 8;
         } else if (size >= 4) {
-            src_chunk = *reinterpret_cast<const HEX_4u_t*>(src);
+            src_chunk = *reinterpret_cast<const HEX_4u_t *>(src);
             chunk_size = 4;
         } else if (size >= 2) {
-            src_chunk = *reinterpret_cast<const HEX_2u_t*>(src);
+            src_chunk = *reinterpret_cast<const HEX_2u_t *>(src);
             chunk_size = 2;
         } else {
-            src_chunk = *reinterpret_cast<const HEX_1u_t*>(src);
+            src_chunk = *reinterpret_cast<const HEX_1u_t *>(src);
             chunk_size = 1;
         }
         HEXAPI_Status status = sim->WriteMemory(dest, chunk_size, src_chunk);
@@ -148,9 +148,12 @@ int read_memory(void *dest, int src, int size) {
     while (size > 0) {
         // This is the same logic as in write_memory above.
         int next = 1;
-        if (size >= 8) next = 8;
-        else if (size >= 4) next = 4;
-        else if (size >= 2) next = 2;
+        if (size >= 8)
+            next = 8;
+        else if (size >= 4)
+            next = 4;
+        else if (size >= 2)
+            next = 2;
         HEXAPI_Status status = sim->ReadMemory(src, next, dest);
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::ReadMemory failed: %d\n", status);
@@ -178,7 +181,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
         printf("HexagonWrapper::ReadSymbolValue(rpcmsg) failed: %d\n", status);
         return -1;
     }
-    if (write_memory(remote_msg, &msg, 4) != 0) { return -1; }
+    if (write_memory(remote_msg, &msg, 4) != 0) {
+        return -1;
+    }
 
     // The arguments are individual numbered variables.
     for (size_t i = 0; i < arguments.size(); i++) {
@@ -189,7 +194,9 @@ int send_message(int msg, const std::vector<int> &arguments) {
             printf("HexagonWrapper::ReadSymbolValue(%s) failed: %d\n", rpc_arg.c_str(), status);
             return -1;
         }
-        if (write_memory(remote_arg, &arguments[i], 4) != 0) { return -1; }
+        if (write_memory(remote_arg, &arguments[i], 4) != 0) {
+            return -1;
+        }
     }
 
     HEX_4u_t remote_ret = 0;
@@ -264,10 +271,13 @@ public:
     int data;
     int dataLen;
 
-    remote_buffer() : data(0), dataLen(0) {}
-    remote_buffer(int dataLen) : dataLen(dataLen) {
+    remote_buffer()
+        : data(0), dataLen(0) {
+    }
+    remote_buffer(int dataLen)
+        : dataLen(dataLen) {
         if (dataLen > 0) {
-            data = send_message(Message::Alloc, {dataLen});
+            data = send_message(Message::Alloc, { dataLen });
             if (data == 0) {
                 printf("Failed to allocate %d bytes in the Hexagon simulation.\n", dataLen);
             }
@@ -275,23 +285,27 @@ public:
             data = 0;
         }
     }
-    remote_buffer(const void *data, int dataLen) : remote_buffer(dataLen) {
+    remote_buffer(const void *data, int dataLen)
+        : remote_buffer(dataLen) {
         if (this->data != 0) {
             // Return value ignored, this is a constructor, we don't
             // have exceptions, and we already printed an error.
             write_memory(this->data, data, dataLen);
         }
     }
-    remote_buffer(const host_buffer &host_buf) : remote_buffer(host_buf.data, host_buf.dataLen) {}
+    remote_buffer(const host_buffer &host_buf)
+        : remote_buffer(host_buf.data, host_buf.dataLen) {
+    }
 
     ~remote_buffer() {
         if (data != 0) {
-            send_message(Message::Free, {data});
+            send_message(Message::Free, { data });
         }
     }
 
     // Enable usage with std::vector.
-    remote_buffer(remote_buffer &&move) : remote_buffer() {
+    remote_buffer(remote_buffer &&move)
+        : remote_buffer() {
         std::swap(data, move.data);
         std::swap(dataLen, move.dataLen);
     }
@@ -325,7 +339,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_shared_object, remote_module_ptr.data});
+    ret = send_message(Message::InitKernels, { remote_code.data, codeLen, use_shared_object, remote_module_ptr.data });
     if (ret != 0) return ret;
 
     // Get the module ptr.
@@ -333,7 +347,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
 
     return ret;
 }
-int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t* sym) {
+int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char *name, int nameLen, int use_shared_object, handle_t *sym) {
     std::lock_guard<std::mutex> guard(mutex);
 
     assert(sim);
@@ -342,7 +356,7 @@ int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, i
     remote_buffer remote_name(name, nameLen);
 
     // Run the init kernels command.
-    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_shared_object});
+    *sym = send_message(Message::GetSymbol, { static_cast<int>(module_ptr), remote_name.data, nameLen, use_shared_object });
 
     return *sym != 0 ? 0 : -1;
 }
@@ -380,10 +394,10 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     // Run the init kernels command.
     int ret = send_message(
         Message::Run,
-        {static_cast<int>(module_ptr), static_cast<int>(function),
-         remote_input_buffersPtrs.data, input_buffersLen,
-         remote_output_buffersPtrs.data, output_buffersLen,
-         remote_input_scalarsPtrs.data, input_scalarsLen});
+        { static_cast<int>(module_ptr), static_cast<int>(function),
+          remote_input_buffersPtrs.data, input_buffersLen,
+          remote_output_buffersPtrs.data, output_buffersLen,
+          remote_input_scalarsPtrs.data, input_scalarsLen });
     if (ret != 0) return ret;
 
     HEX_8u_t cycles_end = 0;
@@ -422,7 +436,7 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
             printf("%s\n", Buf);
         }
     }
-    return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), codeLen});
+    return send_message(Message::ReleaseKernels, { static_cast<int>(module_ptr), codeLen });
 }
 
 void halide_hexagon_host_malloc_init() {
@@ -440,13 +454,13 @@ void *halide_hexagon_host_malloc(size_t x) {
     }
 
     // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
-    ((void **)ptr)[-1] = orig;
+    void *ptr = (void *) (((size_t) orig + alignment + sizeof(void *) - 1) & ~(alignment - 1));
+    ((void **) ptr)[-1] = orig;
     return ptr;
 }
 
 void halide_hexagon_host_free(void *ptr) {
-    free(((void**)ptr)[-1]);
+    free(((void **) ptr)[-1]);
 }
 
 int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {

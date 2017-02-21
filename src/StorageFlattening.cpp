@@ -1,11 +1,11 @@
 #include <sstream>
 
-#include "StorageFlattening.h"
+#include "Bounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Bounds.h"
 #include "Parameter.h"
+#include "Scope.h"
+#include "StorageFlattening.h"
 
 namespace Halide {
 namespace Internal {
@@ -22,8 +22,10 @@ namespace {
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, pair<Function, int>> &e, const Target &t)
-        : env(e), target(t) {}
+        : env(e), target(t) {
+    }
     Scope<int> scope;
+
 private:
     const map<string, pair<Function, int>> &env;
     const Target &target;
@@ -110,14 +112,14 @@ private:
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j] == storage_dims[i].var) {
-                        storage_permutation.push_back((int)j);
+                        storage_permutation.push_back((int) j);
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
-                            extents[j] = ((extents[j] + alignment - 1)/alignment)*alignment;
+                            extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
                         }
                     }
                 }
-                internal_assert(storage_permutation.size() == i+1);
+                internal_assert(storage_permutation.size() == i + 1);
             }
         }
 
@@ -147,7 +149,7 @@ private:
             BufferBuilder builder;
             Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter(),
                                          const_true(op->types[0].lanes()));
-            builder.host = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
+            builder.host = Call::make(Handle(), Call::address_of, { first_elem }, Call::PureIntrinsic);
             builder.type = op->types[0];
             builder.dimensions = dims;
             for (int i = 0; i < dims; i++) {
@@ -162,8 +164,8 @@ private:
         stmt = Allocate::make(op->name, op->types[0], extents, condition, stmt);
 
         // Compute the strides
-        for (int i = (int)op->bounds.size()-1; i > 0; i--) {
-            int prev_j = storage_permutation[i-1];
+        for (int i = (int) op->bounds.size() - 1; i > 0; i--) {
+            int prev_j = storage_permutation[i - 1];
             int j = storage_permutation[i];
             Expr stride = stride_var[prev_j] * extent_var[prev_j];
             stmt = LetStmt::make(stride_name[j], stride, stmt);
@@ -177,8 +179,8 @@ private:
 
         // Assign the mins and extents stored
         for (size_t i = op->bounds.size(); i > 0; i--) {
-            stmt = LetStmt::make(min_name[i-1], op->bounds[i-1].min, stmt);
-            stmt = LetStmt::make(extent_name[i-1], extents[i-1], stmt);
+            stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
+            stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
         }
     }
 
@@ -223,7 +225,7 @@ class PromoteToMemoryType : public IRMutator {
     using IRMutator::visit;
 
     Type upgrade(Type t) {
-        return t.with_bits(((t.bits() + 7)/8)*8);
+        return t.with_bits(((t.bits() + 7) / 8) * 8);
     }
 
     void visit(const Call *op) {
@@ -232,7 +234,7 @@ class PromoteToMemoryType : public IRMutator {
             if (const Cast *cast = load.as<Cast>()) {
                 load = cast->value;
             }
-            expr = Call::make(op->type, op->name, {load}, op->call_type);
+            expr = Call::make(op->type, op->name, { load }, op->call_type);
         } else {
             IRMutator::visit(op);
         }
@@ -252,7 +254,7 @@ class PromoteToMemoryType : public IRMutator {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
             stmt = Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
-                                                    op->param, mutate(op->predicate));
+                               op->param, mutate(op->predicate));
         } else {
             IRMutator::visit(op);
         }
@@ -307,7 +309,8 @@ class ConnectOutputBuffers : public IRMutator {
 
 public:
     ConnectOutputBuffers(const std::map<string, pair<Function, int>> &e,
-                         const vector<Function> &o) : env(e) {
+                         const vector<Function> &o)
+        : env(e) {
         for (auto &f : o) {
             outputs.insert(f.name());
         }
@@ -327,10 +330,10 @@ Stmt storage_flattening(Stmt s,
     for (auto p : env) {
         if (p.second.outputs() > 1) {
             for (int i = 0; i < p.second.outputs(); i++) {
-                tuple_env[p.first + "." + std::to_string(i)] = {p.second, i};
+                tuple_env[p.first + "." + std::to_string(i)] = { p.second, i };
             }
         } else {
-            tuple_env[p.first] = {p.second, 0};
+            tuple_env[p.first] = { p.second, 0 };
         }
     }
 
@@ -339,6 +342,5 @@ Stmt storage_flattening(Stmt s,
     s = ConnectOutputBuffers(tuple_env, outputs).mutate(s);
     return s;
 }
-
 }
 }

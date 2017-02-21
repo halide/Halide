@@ -1,8 +1,8 @@
 #include "RemoveUndef.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "IROperator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "Scope.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -13,6 +13,7 @@ using std::vector;
 class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
+
 private:
     using IRMutator::visit;
 
@@ -51,32 +52,62 @@ private:
         }
     }
 
-    void visit(const Add *op)     {mutate_binary_operator(op);}
-    void visit(const Sub *op)     {mutate_binary_operator(op);}
-    void visit(const Mul *op)     {mutate_binary_operator(op);}
-    void visit(const Div *op)     {mutate_binary_operator(op);}
-    void visit(const Mod *op)     {mutate_binary_operator(op);}
-    void visit(const Min *op)     {mutate_binary_operator(op);}
-    void visit(const Max *op)     {mutate_binary_operator(op);}
-    void visit(const EQ *op)      {mutate_binary_operator(op);}
-    void visit(const NE *op)      {mutate_binary_operator(op);}
-    void visit(const LT *op)      {mutate_binary_operator(op);}
-    void visit(const LE *op)      {mutate_binary_operator(op);}
-    void visit(const GT *op)      {mutate_binary_operator(op);}
-    void visit(const GE *op)      {mutate_binary_operator(op);}
-    void visit(const And *op)     {mutate_binary_operator(op);}
-    void visit(const Or *op)      {mutate_binary_operator(op);}
+    void visit(const Add *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Sub *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Mul *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Div *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Mod *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Min *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Max *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const EQ *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const NE *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const LT *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const LE *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const GT *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const GE *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const And *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Or *op) {
+        mutate_binary_operator(op);
+    }
 
     void visit(const Not *op) {
         Expr a = mutate(op->a);
         if (!expr.defined()) return;
         if (a.same_as(op->a)) {
             expr = op;
-        }
-        else expr = Not::make(a);
+        } else
+            expr = Not::make(a);
     }
 
-    void visit(const Select *op)  {
+    void visit(const Select *op) {
         Expr cond = mutate(op->condition);
         Expr t = mutate(op->true_value);
         Expr f = mutate(op->false_value);
@@ -108,8 +139,8 @@ private:
             }
             expr = t;
         } else if (cond.same_as(op->condition) &&
-            t.same_as(op->true_value) &&
-            f.same_as(op->false_value)) {
+                   t.same_as(op->true_value) &&
+                   f.same_as(op->false_value)) {
             expr = op;
         } else {
             expr = Select::make(cond, t, f);
@@ -143,8 +174,10 @@ private:
     void visit(const Broadcast *op) {
         Expr value = mutate(op->value);
         if (!expr.defined()) return;
-        if (value.same_as(op->value)) expr = op;
-        else expr = Broadcast::make(value, op->lanes);
+        if (value.same_as(op->value))
+            expr = op;
+        else
+            expr = Broadcast::make(value, op->lanes);
     }
 
     void visit(const Call *op) {
@@ -319,9 +352,9 @@ private:
         }
 
         for (size_t i = 1; i < args_predicates.size(); i++) {
-            user_assert(equal(args_predicates[i-1], args_predicates[i]))
+            user_assert(equal(args_predicates[i - 1], args_predicates[i]))
                 << "Conditionally-undef args in a Tuple should have the same conditions\n"
-                << "  Condition " << i-1 << ": " << args_predicates[i-1] << "\n"
+                << "  Condition " << i - 1 << ": " << args_predicates[i - 1] << "\n"
                 << "  Condition " << i << ": " << args_predicates[i] << "\n";
         }
 
@@ -346,9 +379,9 @@ private:
         }
 
         for (size_t i = 1; i < values_predicates.size(); i++) {
-            user_assert(equal(values_predicates[i-1], values_predicates[i]))
+            user_assert(equal(values_predicates[i - 1], values_predicates[i]))
                 << "Conditionally-undef values in a Tuple should have the same conditions\n"
-                << "  Condition " << i-1 << ": " << values_predicates[i-1] << "\n"
+                << "  Condition " << i - 1 << ": " << values_predicates[i - 1] << "\n"
                 << "  Condition " << i << ": " << values_predicates[i] << "\n";
         }
 
@@ -404,9 +437,9 @@ private:
 
         // Mutate the bounds
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            Expr old_min    = op->bounds[i].min;
+            Expr old_min = op->bounds[i].min;
             Expr old_extent = op->bounds[i].extent;
-            Expr new_min    = mutate(old_min);
+            Expr new_min = mutate(old_min);
             if (!expr.defined()) {
                 stmt = Stmt();
                 return;
@@ -416,7 +449,7 @@ private:
                 stmt = Stmt();
                 return;
             }
-            if (!new_min.same_as(old_min))       bounds_changed = true;
+            if (!new_min.same_as(old_min)) bounds_changed = true;
             if (!new_extent.same_as(old_extent)) bounds_changed = true;
             new_bounds[i] = Range(new_min, new_extent);
         }
@@ -500,6 +533,5 @@ Stmt remove_undef(Stmt s) {
         << r.predicate << "\n";
     return s;
 }
-
 }
 }

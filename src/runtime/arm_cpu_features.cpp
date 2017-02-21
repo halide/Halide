@@ -1,6 +1,8 @@
 #include "HalideRuntime.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK CpuFeatures halide_get_cpu_features() {
     uint64_t known = 1ULL << halide_target_feature_no_neon;
@@ -17,8 +19,9 @@ WEAK CpuFeatures halide_get_cpu_features() {
     //    available |= 1ULL << halide_target_feature_armv7s;
     // }
 
-    CpuFeatures features = {known, available};
+    CpuFeatures features = { known, available };
     return features;
 }
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal

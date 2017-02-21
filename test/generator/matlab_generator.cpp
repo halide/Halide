@@ -6,9 +6,9 @@ namespace {
 
 class Matlab : public Halide::Generator<Matlab> {
 public:
-    ImageParam input{Float(32), 2, "input"};
-    Param<float> scale{"scale"};
-    Param<bool> negate{"negate"};
+    ImageParam input{ Float(32), 2, "input" };
+    Param<float> scale{ "scale" };
+    Param<bool> negate{ "negate" };
 
     Func build() {
         Var x, y;
@@ -18,6 +18,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<Matlab> register_matlab{"matlab"};
+Halide::RegisterGenerator<Matlab> register_matlab{ "matlab" };
 
 }  // namespace

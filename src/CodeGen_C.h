@@ -175,7 +175,6 @@ protected:
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 };
-
 }
 }
 

@@ -5,7 +5,6 @@
 
 using namespace Halide;
 
-
 int main(int argc, char **argv) {
     // Make sure it's possible to generate object files for lots of
     // targets. This provides early warning that you may have broken

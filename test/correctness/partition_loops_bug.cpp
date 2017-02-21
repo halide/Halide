@@ -11,14 +11,14 @@ Buffer<double> test(bool with_vectorize) {
 
     Func input_padded = BoundaryConditions::constant_exterior(input, 100);
 
-    RDom rk(-1,3,-1,3);
+    RDom rk(-1, 3, -1, 3);
 
     Var x("x"), y("y");
 
-    output(x,y) = sum(input_padded(x+rk.x,y+rk.y));
+    output(x, y) = sum(input_padded(x + rk.x, y + rk.y));
 
     if (with_vectorize) {
-        output.vectorize(y,4);
+        output.vectorize(y, 4);
     }
 
     Buffer<double> img = lambda(x, y, Expr(1.0)).realize(4, 4);
@@ -27,19 +27,22 @@ Buffer<double> test(bool with_vectorize) {
     Buffer<double> result(4, 4);
 
     input
-        .dim(0).set_bounds(0, 4)
-        .dim(1).set_bounds(0, 4);
+        .dim(0)
+        .set_bounds(0, 4)
+        .dim(1)
+        .set_bounds(0, 4);
     output.output_buffer()
-        .dim(0).set_bounds(0, 4)
-        .dim(1).set_bounds(0, 4);
+        .dim(0)
+        .set_bounds(0, 4)
+        .dim(1)
+        .set_bounds(0, 4);
 
     output.realize(result);
 
     return result;
 }
 
-
-int main (int argc, char const *argv[]) {
+int main(int argc, char const *argv[]) {
 
     if (sizeof(void *) == 4) {
         printf("Skipping this test. It triggers a bug in llvm 3.6.2 when run in 32-bit mode.\n");

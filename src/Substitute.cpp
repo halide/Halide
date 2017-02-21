@@ -1,7 +1,7 @@
 #include "Substitute.h"
-#include "Scope.h"
-#include "IRMutator.h"
 #include "IREquality.h"
+#include "IRMutator.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,7 +23,9 @@ class Substitute : public IRMutator {
     }
 
 public:
-    Substitute(const map<string, Expr> &m) : replace(m) {}
+    Substitute(const map<string, Expr> &m)
+        : replace(m) {
+    }
 
     using IRMutator::visit;
 
@@ -80,7 +82,6 @@ public:
             stmt = For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
         }
     }
-
 };
 
 Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
@@ -106,7 +107,6 @@ Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
     Substitute s(m);
     return s.mutate(stmt);
 }
-
 
 class SubstituteExpr : public IRMutator {
 public:
@@ -153,16 +153,17 @@ class GraphSubstitute : public IRGraphMutator {
     }
 
 public:
-
-    GraphSubstitute(const string &var, const Expr &value) : var(var), value(value) {}
+    GraphSubstitute(const string &var, const Expr &value)
+        : var(var), value(value) {
+    }
 };
 
 /** Substitute an Expr for another Expr in a graph. Unlike substitute,
  * this only checks for shallow equality. */
 class GraphSubstituteExpr : public IRGraphMutator {
     Expr find, replace;
-public:
 
+public:
     using IRGraphMutator::mutate;
 
     Expr mutate(Expr e) {
@@ -170,7 +171,9 @@ public:
         return IRGraphMutator::mutate(e);
     }
 
-    GraphSubstituteExpr(const Expr &find, const Expr &replace) : find(find), replace(replace) {}
+    GraphSubstituteExpr(const Expr &find, const Expr &replace)
+        : find(find), replace(replace) {
+    }
 };
 
 Expr graph_substitute(const string &name, const Expr &replacement, const Expr &expr) {
@@ -207,6 +210,5 @@ Expr substitute_in_all_lets(const Expr &expr) {
 Stmt substitute_in_all_lets(const Stmt &stmt) {
     return SubstituteInAllLets().mutate(stmt);
 }
-
 }
 }

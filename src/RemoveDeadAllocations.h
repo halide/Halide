@@ -16,7 +16,6 @@ namespace Internal {
  *  nodes and so must be called after storage_flattening.
  */
 Stmt remove_dead_allocations(Stmt s);
-
 }
 }
 

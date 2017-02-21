@@ -23,7 +23,7 @@ public:
         // halide_malloc to make it fail). The first allocation should
         // be cleaned up when the second one fails.
         Func g;
-        g(x) = f(2*x) + f(2*x+1);
+        g(x) = f(2 * x) + f(2 * x + 1);
 
         g.compute_root();
 
@@ -34,6 +34,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<CleanupOnError> register_my_gen{"cleanup_on_error"};
+Halide::RegisterGenerator<CleanupOnError> register_my_gen{ "cleanup_on_error" };
 
 }  // namespace

@@ -5,9 +5,9 @@
  * Defines the code-generator for producing CUDA host code
  */
 
-#include "CodeGen_LLVM.h"
-#include "CodeGen_GPU_Host.h"
 #include "CodeGen_GPU_Dev.h"
+#include "CodeGen_GPU_Host.h"
+#include "CodeGen_LLVM.h"
 
 namespace llvm {
 class BasicBlock;
@@ -39,7 +39,9 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() { return "cuda"; }
+    std::string api_unique_name() {
+        return "cuda";
+    }
 
 protected:
     using CodeGen_LLVM::visit;
@@ -66,13 +68,15 @@ protected:
     std::string mattrs() const;
     bool use_soft_float_abi() const;
     int native_vector_bits() const;
-    bool promote_indices() const {return false;}
+    bool promote_indices() const {
+        return false;
+    }
 
     /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
 };
-
-}}
+}
+}
 
 #endif

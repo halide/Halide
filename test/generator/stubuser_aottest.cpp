@@ -1,5 +1,5 @@
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 
 #include "stubuser.h"
 
@@ -38,7 +38,7 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, float 
                 const OutputType expected = static_cast<OutputType>(input(x, y, c) * float_arg + int_arg + offset);
                 const OutputType actual = output(x, y, c);
                 if (expected != actual) {
-                    fprintf(stderr, "img[%d, %d, %d] = %f, expected %f\n", x, y, c, (double)actual, (double)expected);
+                    fprintf(stderr, "img[%d, %d, %d] = %f, expected %f\n", x, y, c, (double) actual, (double) expected);
                     exit(-1);
                 }
             }
@@ -48,16 +48,16 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, float 
 
 int main(int argc, char **argv) {
 
-  Buffer<uint8_t> input = make_image<uint8_t>();
-  Buffer<uint8_t> calculated_output(kSize, kSize, 3);
-  Buffer<float> float32_buffer_output(kSize, kSize, 3);
-  Buffer<> int32_buffer_output(halide_type_t(halide_type_int, 32), kSize, kSize, 3);
+    Buffer<uint8_t> input = make_image<uint8_t>();
+    Buffer<uint8_t> calculated_output(kSize, kSize, 3);
+    Buffer<float> float32_buffer_output(kSize, kSize, 3);
+    Buffer<> int32_buffer_output(halide_type_t(halide_type_int, 32), kSize, kSize, 3);
 
-  stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output);
-  verify(input, kFloatArg, kIntArg, kOffset, calculated_output);
-  verify(input, 1.f, 0, 0.f, float32_buffer_output); 
-  verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output); 
+    stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output);
+    verify(input, kFloatArg, kIntArg, kOffset, calculated_output);
+    verify(input, 1.f, 0, 0.f, float32_buffer_output);
+    verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output);
 
-  printf("Success!\n");
-  return 0;
+    printf("Success!\n");
+    return 0;
 }

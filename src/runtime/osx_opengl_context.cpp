@@ -12,7 +12,10 @@ extern "C" unsigned char aglSetCurrentContext(void *);
 #endif
 
 #if !USE_AGL
-namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace OpenGL {
 
 WEAK halide_mutex cgl_functions_mutex;
 WEAK bool cgl_initialized = false;
@@ -20,8 +23,10 @@ WEAK int (*CGLChoosePixelFormat)(int *attributes, void **pixel_format_result, in
 WEAK int (*CGLCreateContext)(void *pixel_format, void *share_context, void **context_Result);
 WEAK int (*CGLDestroyPixelFormat)(void *);
 WEAK int (*CGLSetCurrentContext)(void *);
-
-}}}}
+}
+}
+}
+}
 
 using namespace Halide::Runtime::Internal::OpenGL;
 #endif
@@ -43,7 +48,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
 #if USE_AGL
     void *ctx = NULL;
 
-    int attrib[] = {4 /* AGL_RGBA */, 0 /* Sentinel */};
+    int attrib[] = { 4 /* AGL_RGBA */, 0 /* Sentinel */ };
     void *pf = aglChoosePixelFormat(NULL, 0, attrib);
     if (!pf) {
         halide_error(user_context, "Could not create pixel format\n");
@@ -60,24 +65,24 @@ WEAK int halide_opengl_create_context(void *user_context) {
         return -1;
     }
 #else
-    { // locking scope
+    {  // locking scope
         ScopedMutexLock lock(&cgl_functions_mutex);
 
         if (!cgl_initialized) {
             if ((CGLChoosePixelFormat =
-                 (int (*)(int *, void **, int *))halide_opengl_get_proc_address(user_context, "CGLChoosePixelFormat")) == NULL) {
+                     (int (*)(int *, void **, int *)) halide_opengl_get_proc_address(user_context, "CGLChoosePixelFormat")) == NULL) {
                 return -1;
             }
             if ((CGLCreateContext =
-                 (int (*)(void *, void *, void**))halide_opengl_get_proc_address(user_context, "CGLCreateContext")) == NULL) {
+                     (int (*)(void *, void *, void **)) halide_opengl_get_proc_address(user_context, "CGLCreateContext")) == NULL) {
                 return -1;
             }
             if ((CGLDestroyPixelFormat =
-                 (int (*)(void *))halide_opengl_get_proc_address(user_context, "CGLDestroyPixelFormat")) == NULL) {
+                     (int (*)(void *)) halide_opengl_get_proc_address(user_context, "CGLDestroyPixelFormat")) == NULL) {
                 return -1;
             }
             if ((CGLSetCurrentContext =
-                 (int (*)(void *))halide_opengl_get_proc_address(user_context, "CGLSetCurrentContext")) == NULL) {
+                     (int (*)(void *)) halide_opengl_get_proc_address(user_context, "CGLSetCurrentContext")) == NULL) {
                 return -1;
             }
         }
@@ -85,12 +90,13 @@ WEAK int halide_opengl_create_context(void *user_context) {
     }
 
     void *ctx = NULL;
-    int attribs[] = { /* 5 kCGLPFADoubleBuffer */
-        72, // kCGLPFANoRecovery
-        96, // kCGLPFAAllowOfflineRenderers
-        99, // kCGLPFAOpenGLProfile
-        0x1000, // kCGLOGLPVersion_Legacy -- 0x3200 is kCGLOGLPVersion_3_2_Core -- kCGLOGLPVersion_GL4_Core is 0x4100
-        0 // sentinel ending list
+    int attribs[] = {
+        /* 5 kCGLPFADoubleBuffer */
+        72,  // kCGLPFANoRecovery
+        96,  // kCGLPFAAllowOfflineRenderers
+        99,  // kCGLPFAOpenGLProfile
+        0x1000,  // kCGLOGLPVersion_Legacy -- 0x3200 is kCGLOGLPVersion_3_2_Core -- kCGLOGLPVersion_GL4_Core is 0x4100
+        0  // sentinel ending list
     };
 
     void *fmt;
@@ -106,5 +112,4 @@ WEAK int halide_opengl_create_context(void *user_context) {
 #endif
     return 0;
 }
-
 }

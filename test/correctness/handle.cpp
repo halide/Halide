@@ -11,8 +11,7 @@ using namespace Halide;
 
 // Make a custom strlen so that it always returns a 32-bit int,
 // instead of switching based on bit-width.
-extern "C" DLLEXPORT
-int my_strlen(const char *c) {
+extern "C" DLLEXPORT int my_strlen(const char *c) {
     int l = 0;
     while (*c) {
         c++;
@@ -63,7 +62,7 @@ int main(int argc, char **argv) {
         }
         // As another sanity check, the internal pointer to the string constant should be aligned.
         if (handle & 0x3) {
-            printf("Got handle: %llx. A handle should be aligned to at least four bytes\n", (long long)handle);
+            printf("Got handle: %llx. A handle should be aligned to at least four bytes\n", (long long) handle);
             return -1;
         }
 

@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -17,14 +17,13 @@ extern "C" DLLEXPORT int sort_buffer(buffer_t *in, buffer_t *out) {
         in->extent[0] = out->extent[0];
     } else {
         memcpy(out->host, in->host, out->extent[0] * out->elem_size);
-        float *out_start = (float *)out->host;
+        float *out_start = (float *) out->host;
         float *out_end = out_start + out->extent[0];
         std::sort(out_start, out_end);
         out->host_dirty = true;
     }
     return 0;
 }
-
 
 int main(int argc, char **argv) {
     Func data;

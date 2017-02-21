@@ -57,10 +57,11 @@ public:
         // Note that other combinations (e.g. interleaved -> planar) will work
         // but be relatively unoptimized.
     }
+
 private:
-    Var x{"x"}, y{"y"}, c{"c"};
-    Func tiled_blur{"tiled_blur"};
-    Func brighter1{"brighter1"};
+    Var x{ "x" }, y{ "y" }, c{ "c" };
+    Func tiled_blur{ "tiled_blur" };
+    Func brighter1{ "brighter1" };
 };
 
 HALIDE_REGISTER_GENERATOR(TiledBlur, "tiled_blur")

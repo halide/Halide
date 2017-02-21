@@ -16,7 +16,6 @@ namespace Internal {
  * that tells us if the reads occur. If the condition is non-trivial,
  * inject ifs that guard the production. */
 Stmt skip_stages(Stmt s, const std::vector<std::string> &order);
-
 }
 }
 

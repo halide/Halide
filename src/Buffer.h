@@ -1,15 +1,16 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
-#include "runtime/HalideBuffer.h"
-#include "IntrusivePtr.h"
-#include "Expr.h"
-#include "Util.h"
 #include "DeviceInterface.h"
+#include "Expr.h"
+#include "IntrusivePtr.h"
+#include "Util.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 
-template<typename T = void> class Buffer;
+template<typename T = void>
+class Buffer;
 
 namespace Internal {
 
@@ -21,23 +22,23 @@ struct BufferContents {
 
 EXPORT Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
 
-template<typename ...Args>
+template<typename... Args>
 struct all_ints_and_optional_name : std::false_type {};
 
-template<typename First, typename ...Rest>
-struct all_ints_and_optional_name<First, Rest...> :
-        meta_and<std::is_convertible<First, int>,
-                 all_ints_and_optional_name<Rest...>> {};
+template<typename First, typename... Rest>
+struct all_ints_and_optional_name<First, Rest...> : meta_and<std::is_convertible<First, int>,
+                                                             all_ints_and_optional_name<Rest...>> {};
 
-template<typename T> struct all_ints_and_optional_name<T> :
-        meta_or<std::is_convertible<T, std::string>,
-                std::is_convertible<T, int>> {};
+template<typename T>
+struct all_ints_and_optional_name<T> : meta_or<std::is_convertible<T, std::string>,
+                                               std::is_convertible<T, int>> {};
 
-template<> struct all_ints_and_optional_name<> : std::true_type {};
+template<>
+struct all_ints_and_optional_name<> : std::true_type {};
 
 template<typename T,
          typename = typename std::enable_if<!std::is_convertible<T, std::string>::value>::type>
-std::string get_name_from_end_of_parameter_pack(T&&) {
+std::string get_name_from_end_of_parameter_pack(T &&) {
     return "";
 }
 
@@ -51,8 +52,8 @@ inline std::string get_name_from_end_of_parameter_pack() {
 
 template<typename First,
          typename Second,
-         typename ...Args>
-std::string get_name_from_end_of_parameter_pack(First first, Second second, Args&&... rest) {
+         typename... Args>
+std::string get_name_from_end_of_parameter_pack(First first, Second second, Args &&... rest) {
     return get_name_from_end_of_parameter_pack(second, std::forward<Args>(rest)...);
 }
 
@@ -62,15 +63,14 @@ inline void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &, co
 inline void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &) {
 }
 
-template<typename ...Args>
-void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &result, int x, Args&&... rest) {
+template<typename... Args>
+void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &result, int x, Args &&... rest) {
     result.push_back(x);
     get_shape_from_start_of_parameter_pack_helper(result, std::forward<Args>(rest)...);
 }
 
-
-template<typename ...Args>
-std::vector<int> get_shape_from_start_of_parameter_pack(Args&&... args) {
+template<typename... Args>
+std::vector<int> get_shape_from_start_of_parameter_pack(Args &&... args) {
     std::vector<int> result;
     get_shape_from_start_of_parameter_pack_helper(result, std::forward<Args>(args)...);
     return result;
@@ -78,7 +78,6 @@ std::vector<int> get_shape_from_start_of_parameter_pack(Args&&... args) {
 
 template<typename T, typename T2>
 using add_const_if_T_is_const = typename std::conditional<std::is_const<T>::value, const T2, T2>::type;
-
 }
 
 /** A Halide::Buffer is a named shared reference to a
@@ -93,7 +92,8 @@ template<typename T>
 class Buffer {
     Internal::IntrusivePtr<Internal::BufferContents> contents;
 
-    template<typename T2> friend class Buffer;
+    template<typename T2>
+    friend class Buffer;
 
     template<typename T2>
     static void assert_can_convert_from(const Buffer<T2> &other) {
@@ -101,16 +101,16 @@ class Buffer {
     }
 
 public:
-
     typedef T ElemType;
 
     /** Make a null Buffer, which points to no Runtime::Buffer */
-    Buffer() {}
+    Buffer() {
+    }
 
     /** Make a Buffer from a Buffer of a different type */
     template<typename T2>
-    Buffer(const Buffer<T2> &other) :
-        contents(other.contents) {
+    Buffer(const Buffer<T2> &other)
+        : contents(other.contents) {
         assert_can_convert_from(other);
     }
 
@@ -123,8 +123,8 @@ public:
 
     /** Construct a Buffer that captures and owns an rvalue Runtime::Buffer */
     template<int D>
-    Buffer(Runtime::Buffer<T, D> &&buf, const std::string &name = "") :
-        contents(new Internal::BufferContents) {
+    Buffer(Runtime::Buffer<T, D> &&buf, const std::string &name = "")
+        : contents(new Internal::BufferContents) {
         contents->buf = std::move(buf);
         if (name.empty()) {
             contents->name = Internal::make_entity_name(this, "Halide::Buffer<?", 'b');
@@ -138,72 +138,82 @@ public:
      * 2) There is an optional last string argument that gives the buffer a specific name
      */
     // @{
-    template<typename ...Args,
+    template<typename... Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(Type t,
-                    int first, Args... rest) :
-        Buffer(Runtime::Buffer<T>(t, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
-               Internal::get_name_from_end_of_parameter_pack(rest...)) {}
+                    int first, Args... rest)
+        : Buffer(Runtime::Buffer<T>(t, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
+                 Internal::get_name_from_end_of_parameter_pack(rest...)) {
+    }
 
     explicit Buffer(const buffer_t &buf,
-                    const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(buf), name) {}
+                    const std::string &name = "")
+        : Buffer(Runtime::Buffer<T>(buf), name) {
+    }
 
-    template<typename ...Args,
+    template<typename... Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
-    explicit Buffer(int first, Args... rest) :
-        Buffer(Runtime::Buffer<T>(Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
-               Internal::get_name_from_end_of_parameter_pack(rest...)) {}
+    explicit Buffer(int first, Args... rest)
+        : Buffer(Runtime::Buffer<T>(Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
+                 Internal::get_name_from_end_of_parameter_pack(rest...)) {
+    }
 
     Buffer(Type t,
            const std::vector<int> &sizes,
-           const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(t, sizes), name) {}
+           const std::string &name = "")
+        : Buffer(Runtime::Buffer<T>(t, sizes), name) {
+    }
 
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N],
-                    const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(vals), name) {}
+                    const std::string &name = "")
+        : Buffer(Runtime::Buffer<T>(vals), name) {
+    }
 
-    template<typename ...Args,
+    template<typename... Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
-                    int first, Args&&... rest) :
-        Buffer(Runtime::Buffer<T>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
-               Internal::get_name_from_end_of_parameter_pack(rest...)) {}
+                    int first, Args &&... rest)
+        : Buffer(Runtime::Buffer<T>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
+                 Internal::get_name_from_end_of_parameter_pack(rest...)) {
+    }
 
-    template<typename ...Args,
+    template<typename... Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(T *data,
-                    int first, Args&&... rest) :
-        Buffer(Runtime::Buffer<T>(data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
-               Internal::get_name_from_end_of_parameter_pack(rest...)) {}
+                    int first, Args &&... rest)
+        : Buffer(Runtime::Buffer<T>(data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
+                 Internal::get_name_from_end_of_parameter_pack(rest...)) {
+    }
 
     explicit Buffer(T *data,
                     const std::vector<int> &sizes,
-                    const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(data, sizes), name) {}
+                    const std::string &name = "")
+        : Buffer(Runtime::Buffer<T>(data, sizes), name) {
+    }
 
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
                     const std::vector<int> &sizes,
-                    const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(t, data, sizes), name) {}
+                    const std::string &name = "")
+        : Buffer(Runtime::Buffer<T>(t, data, sizes), name) {
+    }
 
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
                     int d,
                     const halide_dimension_t *shape,
-                    const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(t, data, d, shape), name) {}
+                    const std::string &name = "")
+        : Buffer(Runtime::Buffer<T>(t, data, d, shape), name) {
+    }
 
     explicit Buffer(T *data,
                     int d,
                     const halide_dimension_t *shape,
-                    const std::string &name = "") :
-        Buffer(Runtime::Buffer<T>(data, d, shape), name) {}
-
+                    const std::string &name = "")
+        : Buffer(Runtime::Buffer<T>(data, d, shape), name) {
+    }
 
     static Buffer<T> make_scalar(const std::string &name = "") {
         return Buffer<T>(Runtime::Buffer<T>::make_scalar(), name);
@@ -215,7 +225,7 @@ public:
 
     static Buffer<T> make_interleaved(int width, int height, int channels, const std::string &name = "") {
         return Buffer<T>(Runtime::Buffer<T>::make_interleaved(width, height, channels),
-                        name);
+                         name);
     }
 
     static Buffer<> make_interleaved(Type t, int width, int height, int channels, const std::string &name = "") {
@@ -268,7 +278,7 @@ public:
     /** Check if two Buffer objects point to the same underlying Buffer */
     template<typename T2>
     bool same_as(const Buffer<T2> &other) {
-        return (const void *)(contents.get()) == (const void *)(other.contents.get());
+        return (const void *) (contents.get()) == (const void *) (other.contents.get());
     }
 
     /** Check if this Buffer refers to an existing
@@ -282,28 +292,25 @@ public:
     // @{
     Runtime::Buffer<T> *get() {
         // It's already type-checked, so no need to use as<T>.
-        return (Runtime::Buffer<T> *)(&contents->buf);
+        return (Runtime::Buffer<T> *) (&contents->buf);
     }
     const Runtime::Buffer<T> *get() const {
-        return (const Runtime::Buffer<T> *)(&contents->buf);
+        return (const Runtime::Buffer<T> *) (&contents->buf);
     }
     // @}
 
 public:
-
-    // We forward numerous methods from the underlying Buffer
-#define HALIDE_BUFFER_FORWARD_CONST(method)                             \
-    template<typename ...Args>                                          \
-    auto method(Args&&... args) const ->                                \
-        decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
-        return get()->method(std::forward<Args>(args)...);              \
+// We forward numerous methods from the underlying Buffer
+#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                      \
+    template<typename... Args>                                                                                                   \
+    auto method(Args &&... args) const->decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
+        return get()->method(std::forward<Args>(args)...);                                                                       \
     }
 
-#define HALIDE_BUFFER_FORWARD(method)                                   \
-    template<typename ...Args>                                          \
-    auto method(Args&&... args) ->                                      \
-        decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
-        return get()->method(std::forward<Args>(args)...);              \
+#define HALIDE_BUFFER_FORWARD(method)                                                                                \
+    template<typename... Args>                                                                                       \
+    auto method(Args &&... args)->decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
+        return get()->method(std::forward<Args>(args)...);                                                           \
     }
 
     /** Does the same thing as the equivalent Halide::Runtime::Buffer method */
@@ -386,53 +393,46 @@ public:
         contents->buf.copy_from(*other.get());
     }
 
-    template<typename ...Args>
-    auto operator()(int first, Args&&... args) ->
-        decltype(std::declval<Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
+    template<typename... Args>
+    auto operator()(int first, Args &&... args) -> decltype(std::declval<Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
-    template<typename ...Args>
-    auto operator()(int first, Args&&... args) const ->
-        decltype(std::declval<const Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
+    template<typename... Args>
+    auto operator()(int first, Args &&... args) const -> decltype(std::declval<const Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
-    auto operator()(const int *pos) ->
-        decltype(std::declval<Runtime::Buffer<T>>()(pos)) {
+    auto operator()(const int *pos) -> decltype(std::declval<Runtime::Buffer<T>>()(pos)) {
         return (*get())(pos);
     }
 
-    auto operator()(const int *pos) const ->
-        decltype(std::declval<const Runtime::Buffer<T>>()(pos)) {
+    auto operator()(const int *pos) const -> decltype(std::declval<const Runtime::Buffer<T>>()(pos)) {
         return (*get())(pos);
     }
 
-    auto operator()() ->
-        decltype(std::declval<Runtime::Buffer<T>>()()) {
+    auto operator()() -> decltype(std::declval<Runtime::Buffer<T>>()()) {
         return (*get())();
     }
 
-    auto operator()() const ->
-        decltype(std::declval<const Runtime::Buffer<T>>()()) {
+    auto operator()() const -> decltype(std::declval<const Runtime::Buffer<T>>()()) {
         return (*get())();
     }
     // @}
 
     /** Make an Expr that loads from this concrete buffer at a computed coordinate. */
     // @{
-    template<typename ...Args>
+    template<typename... Args>
     Expr operator()(Expr first, Args... rest) const {
-        std::vector<Expr> args = {first, rest...};
+        std::vector<Expr> args = { first, rest... };
         return (*this)(args);
     };
 
-    template<typename ...Args>
+    template<typename... Args>
     Expr operator()(const std::vector<Expr> &args) const {
         return buffer_accessor(Buffer<>(*this), args);
     };
     // @}
-
 
     /** Copy to the GPU, using the device API that is the default for the given Target. */
     int copy_to_device(const Target &t = get_jit_target_from_environment()) {
@@ -453,10 +453,7 @@ public:
     int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
         return contents->buf.device_malloc(get_device_interface_for_device_api(d, t));
     }
-
-
 };
-
 }
 
 #endif

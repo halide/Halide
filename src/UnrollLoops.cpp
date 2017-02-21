@@ -42,6 +42,5 @@ class UnrollLoops : public IRMutator {
 Stmt unroll_loops(Stmt s) {
     return UnrollLoops().mutate(s);
 }
-
 }
 }

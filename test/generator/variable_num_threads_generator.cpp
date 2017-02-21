@@ -9,13 +9,13 @@ public:
         Func f;
         Var x, y;
 
-        f(x, y) = sqrt(sqrt(x*y));
+        f(x, y) = sqrt(sqrt(x * y));
         f.parallel(x).parallel(y);
 
         return f;
     }
 };
 
-Halide::RegisterGenerator<VariableNumThreads> register_my_gen{"variable_num_threads"};
+Halide::RegisterGenerator<VariableNumThreads> register_my_gen{ "variable_num_threads" };
 
 }  // namespace

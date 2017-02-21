@@ -18,8 +18,6 @@ namespace Internal {
 /** Insert checks to make sure that all referenced parameters meet
  * their constraints. */
 Stmt add_parameter_checks(Stmt s, const Target &t);
-
-
 }
 }
 

@@ -1,9 +1,9 @@
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include <assert.h>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "user_context_insanity.h"
 
 using namespace Halide::Runtime;
@@ -13,7 +13,7 @@ const int num_launcher_tasks = 1000;
 static bool got_context[num_launcher_tasks];
 
 int32_t my_halide_trace(void *context, const halide_trace_event_t *e) {
-    bool *bool_ptr = (bool *)context;
+    bool *bool_ptr = (bool *) context;
     *bool_ptr = true;
     return 0;
 }
@@ -22,7 +22,7 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
     Buffer<float> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
-            input(x, y) = (float)(x * y);
+            input(x, y) = (float) (x * y);
         }
     }
     Buffer<float> output(10, 10);

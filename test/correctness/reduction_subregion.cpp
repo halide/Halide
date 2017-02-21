@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 // This test defines a reduction that writes to a large area, reads
 // from an even larger area, and then just realizes it over a smaller
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     Func f;
     RDom r(0, 20);
     f(x) = x;
-    f(r) = f(r-1) + f(r+1);
+    f(r) = f(r - 1) + f(r + 1);
 
     f.set_error_handler(&halide_error);
     Buffer<int> result = f.realize(10);

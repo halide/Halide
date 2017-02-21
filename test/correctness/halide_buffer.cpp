@@ -20,13 +20,11 @@ void check_equal(const Buffer<T1> &a, const Buffer<T2> &b) {
     a.for_each_element([&](const int *pos) {
         if (a(pos) != b(pos)) {
             printf("Mismatch: %f vs %f at %d %d %d\n",
-                   (float)(a(pos)), (float)(b(pos)), pos[0], pos[1], pos[2]);
+                   (float) (a(pos)), (float) (b(pos)), pos[0], pos[1], pos[2]);
             abort();
         }
     });
 }
-
-
 
 int main(int argc, char **argv) {
     {
@@ -71,11 +69,11 @@ int main(int argc, char **argv) {
     {
         // Check make a Buffer from a Buffer of a different type
         Buffer<float, 2> a(100, 80);
-        Buffer<const float, 3> b(a); // statically safe
+        Buffer<const float, 3> b(a);  // statically safe
         Buffer<const void, 4> c(b);  // statically safe
-        Buffer<const float, 3> d(c); // does runtime checks of actual dimensionality and type.
-        Buffer<void, 3> e(a);        // statically safe
-        Buffer<float, 2> f(e);       // runtime checks
+        Buffer<const float, 3> d(c);  // does runtime checks of actual dimensionality and type.
+        Buffer<void, 3> e(a);  // statically safe
+        Buffer<float, 2> f(e);  // runtime checks
     }
 
     {
@@ -86,7 +84,7 @@ int main(int argc, char **argv) {
         });
         Buffer<float> b(a);
         b.set_min(123, 456, 2);
-        b.translate({-123, -456, -2});
+        b.translate({ -123, -456, -2 });
         check_equal(a, b);
     }
 
@@ -101,8 +99,9 @@ int main(int argc, char **argv) {
             b = counter;
         });
         a.for_each_value([&](float &a, float b) {
-            a = 2*b;
-        }, b);
+            a = 2 * b;
+        },
+                         b);
 
         if (counter != W * H * C) {
             printf("for_each_value didn't hit every element\n");

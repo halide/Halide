@@ -1,22 +1,22 @@
-#include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <stdio.h>
 
-#include "Simplify.h"
-#include "IROperator.h"
-#include "IREquality.h"
-#include "IRPrinter.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "Var.h"
-#include "Debug.h"
-#include "ModulusRemainder.h"
-#include "Substitute.h"
 #include "Bounds.h"
+#include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "ModulusRemainder.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Substitute.h"
+#include "Var.h"
 
 #ifdef _MSC_VER
 #define snprintf _snprintf
@@ -52,7 +52,7 @@ bool is_simple_const(const Expr &e) {
 // If the Expr is (var relop const) or (const relop var),
 // fill in the var name and return true.
 template<typename RelOp>
-bool is_var_relop_simple_const(const Expr &e, string* name) {
+bool is_var_relop_simple_const(const Expr &e, string *name) {
     if (const RelOp *r = e.as<RelOp>()) {
         if (is_simple_const(r->b)) {
             const Variable *v = r->a.template as<Variable>();
@@ -60,8 +60,7 @@ bool is_var_relop_simple_const(const Expr &e, string* name) {
                 *name = v->name;
                 return true;
             }
-        }
-        else if (is_simple_const(r->a)) {
+        } else if (is_simple_const(r->a)) {
             const Variable *v = r->b.template as<Variable>();
             if (v) {
                 *name = v->name;
@@ -72,7 +71,7 @@ bool is_var_relop_simple_const(const Expr &e, string* name) {
     return false;
 }
 
-bool is_var_simple_const_comparison(const Expr &e, string* name) {
+bool is_var_simple_const_comparison(const Expr &e, string *name) {
     // It's not clear if GT, LT, etc would be useful
     // here; leaving them out until proven otherwise.
     return is_var_relop_simple_const<EQ>(e, name) ||
@@ -95,7 +94,7 @@ Expr signed_integer_overflow_error(Type t) {
     // Mark each call with an atomic counter, so that the errors can't
     // cancel against each other.
     static std::atomic<int> counter;
-    return Call::make(t, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+    return Call::make(t, Call::signed_integer_overflow, { counter++ }, Call::Intrinsic);
 }
 
 // Make a poison value used when integer div/mod-by-zero is detected during constant folding.
@@ -103,7 +102,7 @@ Expr indeterminate_expression_error(Type t) {
     // Mark each call with an atomic counter, so that the errors can't
     // cancel against each other.
     static std::atomic<int> counter;
-    return Call::make(t, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
+    return Call::make(t, Call::indeterminate_expression, { counter++ }, Call::Intrinsic);
 }
 
 // If 'e' is indeterminate_expression of type t,
@@ -155,6 +154,7 @@ class ExprIsPure : public IRVisitor {
             IRVisitor::visit(op);
         }
     }
+
 public:
     bool result = true;
 };
@@ -170,13 +170,12 @@ bool expr_is_pure(const Expr &e) {
 #if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
 static int debug_indent = 0;
 #endif
-
 }
 
 class Simplify : public IRMutator {
 public:
-    Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
-        simplify_lets(r) {
+    Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
+        : simplify_lets(r) {
         alignment_info.set_containing_scope(ai);
 
         // Only respect the constant bounds from the containing scope.
@@ -187,7 +186,6 @@ public:
                 bounds_info.push(iter.name(), { i_min, i_max });
             }
         }
-
     }
 
 #if LOG_EXPR_MUTATIONS
@@ -223,7 +221,6 @@ public:
 #endif
     using IRMutator::mutate;
 
-
 private:
     bool simplify_lets;
 
@@ -235,7 +232,6 @@ private:
     Scope<VarInfo> var_info;
     Scope<pair<int64_t, int64_t>> bounds_info;
     Scope<ModulusRemainder> alignment_info;
-
 
     using IRMutator::visit;
 
@@ -372,10 +368,10 @@ private:
             if (const_int_bounds(mul->a, &min_a, &max_a) &&
                 const_int_bounds(mul->b, &min_b, &max_b)) {
                 int64_t
-                    t0 = min_a*min_b,
-                    t1 = min_a*max_b,
-                    t2 = max_a*min_b,
-                    t3 = max_a*max_b;
+                    t0 = min_a * min_b,
+                    t1 = min_a * max_b,
+                    t2 = max_a * min_b,
+                    t3 = max_a * max_b;
                 *min_val = std::min(std::min(t0, t1), std::min(t2, t3));
                 *max_val = std::max(std::max(t0, t1), std::max(t2, t3));
                 return no_overflow_scalar_int(t.element_of()) ||
@@ -420,7 +416,6 @@ private:
         return false;
     }
 
-
     // Check if an Expr is integer-division-rounding-up by the given
     // factor. If so, return the core expression.
     Expr is_round_up_div(const Expr &e, int64_t factor) {
@@ -430,7 +425,7 @@ private:
         if (!is_const(div->b, factor)) return Expr();
         const Add *add = div->a.as<Add>();
         if (!add) return Expr();
-        if (!is_const(add->b, factor-1)) return Expr();
+        if (!is_const(add->b, factor - 1)) return Expr();
         return add->a;
     }
 
@@ -461,11 +456,11 @@ private:
         } else if (op->type.is_int() &&
                    const_float(value, &f)) {
             // float -> int
-            expr = IntImm::make(op->type, (int64_t)f);
+            expr = IntImm::make(op->type, (int64_t) f);
         } else if (op->type.is_uint() &&
                    const_float(value, &f)) {
             // float -> uint
-            expr = UIntImm::make(op->type, (uint64_t)f);
+            expr = UIntImm::make(op->type, (uint64_t) f);
         } else if (op->type.is_float() &&
                    const_float(value, &f)) {
             // float -> float
@@ -477,15 +472,15 @@ private:
         } else if (op->type.is_uint() &&
                    const_int(value, &i)) {
             // int -> uint
-            expr = UIntImm::make(op->type, (uint64_t)i);
+            expr = UIntImm::make(op->type, (uint64_t) i);
         } else if (op->type.is_float() &&
                    const_int(value, &i)) {
             // int -> float
-            expr = FloatImm::make(op->type, (double)i);
+            expr = FloatImm::make(op->type, (double) i);
         } else if (op->type.is_int() &&
                    const_uint(value, &u)) {
             // uint -> int
-            expr = IntImm::make(op->type, (int64_t)u);
+            expr = IntImm::make(op->type, (int64_t) u);
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint
@@ -493,7 +488,7 @@ private:
         } else if (op->type.is_float() &&
                    const_uint(value, &u)) {
             // uint -> float
-            expr = FloatImm::make(op->type, (double)u);
+            expr = FloatImm::make(op->type, (double) u);
         } else if (cast &&
                    op->type.code() == cast->type.code() &&
                    op->type.bits() < cast->type.bits()) {
@@ -544,7 +539,7 @@ private:
             // it's a var that has been hidden by a nested scope).
             if (info.replacement.defined()) {
                 internal_assert(info.replacement.type() == op->type) << "Cannot replace variable " << op->name
-                    << " of type " << op->type << " with expression of type " << info.replacement.type() << "\n";
+                                                                     << " of type " << op->type << " with expression of type " << info.replacement.type() << "\n";
                 expr = info.replacement;
                 info.new_uses++;
             } else {
@@ -605,10 +600,10 @@ private:
         const Mod *mod_a = a.as<Mod>();
         const Mod *mod_b = b.as<Mod>();
 
-        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>(): nullptr;
-        const Mod *mod_a_a = add_a ? add_a->a.as<Mod>(): nullptr;
-        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>(): nullptr;
-        const Mod *mod_a_b = add_a ? add_a->b.as<Mod>(): nullptr;
+        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>() : nullptr;
+        const Mod *mod_a_a = add_a ? add_a->a.as<Mod>() : nullptr;
+        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>() : nullptr;
+        const Mod *mod_a_b = add_a ? add_a->b.as<Mod>() : nullptr;
 
         const Max *max_b = b.as<Max>();
 
@@ -853,7 +848,7 @@ private:
                    const_int(div_a->b, &ib) && ib &&
                    const_int(b, &ic)) {
             // ((a + ia) / ib + ic) -> (a + (ia + ib*ic)) / ib
-            expr = mutate((add_a_a->a + IntImm::make(op->type, ia + ib*ic)) / div_a->b);
+            expr = mutate((add_a_a->a + IntImm::make(op->type, ia + ib * ic)) / div_a->b);
         } else if (mul_a &&
                    mul_b &&
                    equal(mul_a->a, mul_b->a)) {
@@ -1017,16 +1012,16 @@ private:
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
-                                   ramp_a->stride - ramp_b->stride, ramp_a->lanes));
+                                     ramp_a->stride - ramp_b->stride, ramp_a->lanes));
         } else if (ramp_a && broadcast_b) {
             // Ramp - Broadcast
             expr = mutate(Ramp::make(ramp_a->base - broadcast_b->value,
-                                   ramp_a->stride, ramp_a->lanes));
+                                     ramp_a->stride, ramp_a->lanes));
         } else if (broadcast_a && ramp_b) {
             // Broadcast - Ramp
             expr = mutate(Ramp::make(broadcast_a->value - ramp_b->base,
-                                   make_zero(ramp_b->stride.type())- ramp_b->stride,
-                                   ramp_b->lanes));
+                                     make_zero(ramp_b->stride.type()) - ramp_b->stride,
+                                     ramp_b->lanes));
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
@@ -1335,10 +1330,10 @@ private:
             Expr x = add_a_a->a, a = add_a_a->b, b = add_b_a->b, c = div_a->b;
             if (is_simple_const(b)) {
                 // Use the version that injects two copies of b
-                expr = mutate((((x + (b % c)) % c) + (a - b))/c);
+                expr = mutate((((x + (b % c)) % c) + (a - b)) / c);
             } else {
                 // Use the version that injects two copies of a
-                expr = mutate((((c + a - 1) - b) - ((x + (a % c)) % c))/c);
+                expr = mutate((((c + a - 1) - b) - ((x + (a % c)) % c)) / c);
             }
         } else if (div_a &&
                    div_b &&
@@ -1350,7 +1345,7 @@ private:
                    equal(div_a->a, add_b_a->a)) {
             // Same as above, where a == 0
             Expr x = div_a->a, b = add_b_a->b, c = div_a->b;
-            expr = mutate(((c - 1 - b) - (x % c))/c);
+            expr = mutate(((c - 1 - b) - (x % c)) / c);
         } else if (div_a &&
                    div_b &&
                    is_positive_const(div_a->b) &&
@@ -1361,7 +1356,7 @@ private:
                    equal(add_a_a->a, div_b->a)) {
             // Same as above, where b == 0
             Expr x = add_a_a->a, a = add_a_a->b, c = div_a->b;
-            expr = mutate(((x % c) + a)/c);
+            expr = mutate(((x % c) + a) / c);
         } else if (div_a &&
                    div_b &&
                    is_positive_const(div_a->b) &&
@@ -1372,7 +1367,7 @@ private:
                    equal(div_a->a, sub_b_a->a)) {
             // Same as above, where a == 0 and b is subtracted
             Expr x = div_a->a, b = sub_b_a->b, c = div_a->b;
-            expr = mutate(((c - 1 + b) - (x % c))/c);
+            expr = mutate(((c - 1 + b) - (x % c)) / c);
         } else if (div_a &&
                    div_b &&
                    is_positive_const(div_a->b) &&
@@ -1383,7 +1378,7 @@ private:
                    equal(sub_a_a->a, div_b->a)) {
             // Same as above, where b == 0, and a is subtracted
             Expr x = sub_a_a->a, a = sub_a_a->b, c = div_a->b;
-            expr = mutate(((x % c) - a)/c);
+            expr = mutate(((x % c) - a) / c);
         } else if (div_a &&
                    div_b &&
                    is_positive_const(div_a->b) &&
@@ -1397,7 +1392,7 @@ private:
             // Same as above, where a is subtracted and b is a constant
             // (x - a)/c - (x + b)/c -> ((x + b)%c - a - b)/c
             Expr x = sub_a_a->a, a = sub_a_a->b, b = add_b_a->b, c = div_a->b;
-            expr = mutate((((x + (b % c)) % c) - a - b)/c);
+            expr = mutate((((x + (b % c)) % c) - a - b) / c);
         } else if (div_a &&
                    div_b &&
                    is_positive_const(div_a->b) &&
@@ -1411,7 +1406,7 @@ private:
             // Same as above, where b is subtracted and a is a constant
             // (x + a)/c - (x - b)/c -> (b - (x + a)%c + (a + c - 1))/c
             Expr x = add_a_a->a, a = add_a_a->b, b = sub_b_a->b, c = div_a->b;
-            expr = mutate((b - (x + (a % c))%c + (a + c - 1))/c);
+            expr = mutate((b - (x + (a % c)) % c + (a + c - 1)) / c);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1483,7 +1478,7 @@ private:
             } else {
                 expr = hoist_slice_vector<Mul>(Mul::make(a, b));
             }
-        }else if (broadcast_a && broadcast_b) {
+        } else if (broadcast_a && broadcast_b) {
             expr = Broadcast::make(mutate(broadcast_a->value * broadcast_b->value), broadcast_a->lanes);
         } else if (ramp_a && broadcast_b) {
             Expr m = broadcast_b->value;
@@ -1648,7 +1643,7 @@ private:
                    const_int(broadcast_b->value, &ib) &&
                    ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
-                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ib)) {
+                   div_imp((int64_t) mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes - 1) * ia, ib)) {
             // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
             expr = mutate(Broadcast::make(ramp_a->base / broadcast_b->value, ramp_a->lanes));
         } else if (no_overflow(op->type) &&
@@ -1668,7 +1663,7 @@ private:
                    const_int(b, &ic) &&
                    ic >= 0) {
             // (x / ia + ib) / ic -> (x + ia*ib) / (ia*ic)
-            expr = mutate((div_a_a->a + make_const(op->type, ia*ib)) / make_const(op->type, ia*ic));
+            expr = mutate((div_a_a->a + make_const(op->type, ia * ib)) / make_const(op->type, ia * ic));
         } else if (no_overflow(op->type) &&
                    mul_a &&
                    const_int(mul_a->b, &ia) &&
@@ -1736,7 +1731,7 @@ private:
             // Pull terms that are a multiple of the divisor out
             // ((x*4 + y) + z) / 2 -> x*2 + (y + z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b  + add_a->b) / b);
+            expr = mutate((mul_a_a_a->a * ratio) + (add_a_a->b + add_a->b) / b);
         } else if (no_overflow(op->type) &&
                    add_a &&
                    sub_a_a &&
@@ -1769,7 +1764,7 @@ private:
                    (ia % ib == 0)) {
             // ((x*4 - y) - z) / 2 -> x*2 + (0 - y - z)/2
             Expr ratio = make_const(op->type, div_imp(ia, ib));
-            expr = mutate((mul_a_a_a->a * ratio) + (- sub_a_a->b - sub_a->b) / b);
+            expr = mutate((mul_a_a_a->a * ratio) + (-sub_a_a->b - sub_a->b) / b);
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_a_b &&
@@ -1825,54 +1820,52 @@ private:
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((add_a->a / b) + ratio);
 
-
         } else if (no_overflow(op->type) &&
                    add_a &&
                    equal(add_a->a, b)) {
             // (x + y)/x -> y/x + 1
-            expr = mutate(add_a->b/b + make_one(op->type));
+            expr = mutate(add_a->b / b + make_one(op->type));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    equal(add_a->b, b)) {
             // (y + x)/x -> y/x + 1
-            expr = mutate(add_a->a/b + make_one(op->type));
+            expr = mutate(add_a->a / b + make_one(op->type));
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    !is_zero(b) &&
                    equal(sub_a->a, b)) {
             // (x - y)/x -> (-y)/x + 1
-            expr = mutate((make_zero(op->type) - sub_a->b)/b + make_one(op->type));
+            expr = mutate((make_zero(op->type) - sub_a->b) / b + make_one(op->type));
         } else if (no_overflow(op->type) &&
                    sub_a &&
                    equal(sub_a->b, b)) {
             // (y - x)/x -> y/x - 1
-            expr = mutate(sub_a->a/b + make_const(op->type, -1));
-
+            expr = mutate(sub_a->a / b + make_const(op->type, -1));
 
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_a_a &&
                    equal(add_a_a->a, b)) {
             // ((x + y) + z)/x -> ((y + z) + x)/x -> (y+z)/x + 1
-            expr = mutate((add_a_a->b + add_a->b)/b + make_one(op->type));
+            expr = mutate((add_a_a->b + add_a->b) / b + make_one(op->type));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_a_a &&
                    equal(add_a_a->b, b)) {
             // ((y + x) + z)/x -> ((y + z) + x)/x -> (y+z)/x + 1
-            expr = mutate((add_a_a->a + add_a->b)/b + make_one(op->type));
+            expr = mutate((add_a_a->a + add_a->b) / b + make_one(op->type));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_a_b &&
                    equal(add_a_b->b, b)) {
             // (y + (z + x))/x -> ((y + z) + x)/x -> (y+z)/x + 1
-            expr = mutate((add_a->a + add_a_b->a)/b + make_one(op->type));
+            expr = mutate((add_a->a + add_a_b->a) / b + make_one(op->type));
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_a_b &&
                    equal(add_a_b->a, b)) {
             // (y + (x + z))/x -> ((y + z) + x)/x -> (y+z)/x + 1
-            expr = mutate((add_a->a + add_a_b->b)/b + make_one(op->type));
+            expr = mutate((add_a->a + add_a_b->b) / b + make_one(op->type));
 
         } else if (no_overflow(op->type) &&
                    mul_a &&
@@ -2042,7 +2035,7 @@ private:
                    ib &&
                    mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
-            expr = make_const(op->type, mod_imp((int64_t)mod_rem.remainder, ib));
+            expr = make_const(op->type, mod_imp((int64_t) mod_rem.remainder, ib));
         } else if (no_overflow(op->type) &&
                    ramp_a &&
                    const_int(ramp_a->stride, &ia) &&
@@ -2059,9 +2052,9 @@ private:
                    const_int(broadcast_b->value, &ib) &&
                    ib != 0 &&
                    mod_rem.modulus % ib == 0 &&
-                   div_imp((int64_t)mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes-1)*ia, ib)) {
+                   div_imp((int64_t) mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->lanes - 1) * ia, ib)) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) if x/z == (x + (w-1)*y)/z
-            Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t)mod_rem.remainder, ib));
+            Expr new_base = make_const(ramp_a->base.type(), mod_imp((int64_t) mod_rem.remainder, ib));
             expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->lanes));
         } else if (ramp_a &&
                    no_overflow_scalar_int(ramp_a->base.type()) &&
@@ -2073,7 +2066,7 @@ private:
                    mod_rem.modulus % ib == 0) {
             // ramp(k*z + x, y, w) % z = ramp(x, y, w) % z
             Type t = ramp_a->base.type();
-            Expr new_base = make_const(t, mod_imp((int64_t)mod_rem.remainder, ib));
+            Expr new_base = make_const(t, mod_imp((int64_t) mod_rem.remainder, ib));
             expr = mutate(Ramp::make(new_base, ramp_a->stride, ramp_a->lanes) % b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -2195,7 +2188,8 @@ private:
                 // ramp dominates
                 expr = a;
                 return;
-            } if (ramp_min >= ic && ramp_max >= ic) {
+            }
+            if (ramp_min >= ic && ramp_max >= ic) {
                 // broadcast dominates
                 expr = b;
                 return;
@@ -2293,7 +2287,7 @@ private:
             expr = b;
         } else if (min_a &&
                    broadcast_a_b &&
-                   broadcast_b ) {
+                   broadcast_b) {
             // min(min(x, broadcast(y, n)), broadcast(z, n))) -> min(x, broadcast(min(y, z), n))
             expr = mutate(Min::make(min_a->a, Broadcast::make(Min::make(broadcast_a_b->value, broadcast_b->value), broadcast_b->lanes)));
         } else if (min_a &&
@@ -2429,7 +2423,7 @@ private:
                    ia &&
                    (ib % ia == 0)) {
             // min(x*8, 24) -> min(x, 3)*8
-            Expr ratio  = make_const(op->type, ib / ia);
+            Expr ratio = make_const(op->type, ib / ia);
             Expr factor = make_const(op->type, ia);
             if (ia > 0) {
                 expr = mutate(min(mul_a->a, ratio) * factor);
@@ -2658,7 +2652,7 @@ private:
             expr = b;
         } else if (max_a &&
                    broadcast_a_b &&
-                   broadcast_b ) {
+                   broadcast_b) {
             // max(max(x, broadcast(y, n)), broadcast(z, n))) -> max(x, broadcast(max(y, z), n))
             expr = mutate(Max::make(max_a->a, Broadcast::make(Max::make(broadcast_a_b->value, broadcast_b->value), broadcast_b->lanes)));
         } else if (max_a &&
@@ -3106,7 +3100,7 @@ private:
                        is_const(a)) {
                 // c1 < b / c2 <=> (c1+1)*c2-1 < b
                 Expr one = make_one(a.type());
-                expr = mutate((a + one)*div_b->b - one < div_b->a);
+                expr = mutate((a + one) * div_b->b - one < div_b->a);
             } else if (min_a) {
                 // (min(a, b) < c) <=> (a < c || b < c)
                 // See if that would simplify usefully:
@@ -3224,7 +3218,7 @@ private:
                 expr = mutate(sub_b->b < div_a_a->a % div_a_a->b + make_const(a.type(), -ic));
             } else if (delta_ramp &&
                        is_positive_const(delta_ramp->stride) &&
-                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->lanes - 1) < 0))) {
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride * (delta_ramp->lanes - 1) < 0))) {
                 expr = const_true(delta_ramp->lanes);
             } else if (delta_ramp &&
                        is_positive_const(delta_ramp->stride) &&
@@ -3236,7 +3230,7 @@ private:
                 expr = const_true(delta_ramp->lanes);
             } else if (delta_ramp &&
                        is_negative_const(delta_ramp->stride) &&
-                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->lanes - 1) >= 0))) {
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride * (delta_ramp->lanes - 1) >= 0))) {
                 expr = const_false(delta_ramp->lanes);
             } else if (delta_ramp && mod_rem.modulus > 0 &&
                        const_int(delta_ramp->stride, &ia) &&
@@ -3619,7 +3613,7 @@ private:
         } else if (is_var_simple_const_comparison(b, &name_c) &&
                    and_a &&
                    ((is_var_simple_const_comparison(and_a->a, &name_a) && name_a == name_c) ||
-                   (is_var_simple_const_comparison(and_a->b, &name_b) && name_b == name_c))) {
+                    (is_var_simple_const_comparison(and_a->b, &name_b) && name_b == name_c))) {
             // (a && b) || (c) -> (a || c) && (b || c)
             // iff c and at least one of a or b is of the form
             //     (var == const) or (var != const)
@@ -3628,7 +3622,7 @@ private:
         } else if (is_var_simple_const_comparison(a, &name_c) &&
                    and_b &&
                    ((is_var_simple_const_comparison(and_b->a, &name_a) && name_a == name_c) ||
-                   (is_var_simple_const_comparison(and_b->b, &name_b) && name_b == name_c))) {
+                    (is_var_simple_const_comparison(and_b->b, &name_b) && name_b == name_c))) {
             // (c) || (a && b) -> (a || c) && (b || c)
             // iff c and at least one of a or b is of the form
             //     (var == const) or (var != const)
@@ -3779,7 +3773,7 @@ private:
                    sub_f &&
                    equal(sub_t->b, sub_f->b)) {
             // select(c, b-a, d-a) -> select(x, b, d) - a
-            expr = mutate(Select::make(condition, sub_t->a, sub_f->a) - sub_t->b);\
+            expr = mutate(Select::make(condition, sub_t->a, sub_f->a) - sub_t->b);
         } else if (add_t &&
                    sub_f &&
                    equal(add_t->a, sub_f->a)) {
@@ -3999,7 +3993,7 @@ private:
             }
 
             int64_t ib = 0;
-            if (const_int(b, &ib) || const_uint(b, (uint64_t *)(&ib))) {
+            if (const_int(b, &ib) || const_uint(b, (uint64_t *) (&ib))) {
                 Type t = op->type;
 
                 bool shift_left = op->is_intrinsic(Call::shift_left);
@@ -4102,7 +4096,7 @@ private:
             } else if (arg.same_as(op->args[0])) {
                 expr = op;
             } else {
-                expr = Call::make(op->type, op->name, {arg}, op->call_type);
+                expr = Call::make(op->type, op->name, { arg }, op->call_type);
             }
         } else if (op->is_intrinsic(Call::stringify)) {
             // Eagerly concat constant arguments to a stringify.
@@ -4115,17 +4109,17 @@ private:
                     changed = true;
                 }
                 const StringImm *string_imm = arg.as<StringImm>();
-                const IntImm    *int_imm    = arg.as<IntImm>();
-                const FloatImm  *float_imm  = arg.as<FloatImm>();
+                const IntImm *int_imm = arg.as<IntImm>();
+                const FloatImm *float_imm = arg.as<FloatImm>();
                 // We use snprintf here rather than stringstreams,
                 // because the runtime's float printing is guaranteed
                 // to match snprintf.
-                char buf[64]; // Large enough to hold the biggest float literal.
+                char buf[64];  // Large enough to hold the biggest float literal.
                 if (last && string_imm) {
                     new_args.back() = last->value + string_imm->value;
                     changed = true;
                 } else if (int_imm) {
-                    snprintf(buf, sizeof(buf), "%lld", (long long)int_imm->value);
+                    snprintf(buf, sizeof(buf), "%lld", (long long) int_imm->value);
                     if (last) {
                         new_args.back() = last->value + buf;
                     } else {
@@ -4163,7 +4157,7 @@ private:
             if (const double *f = as_const_float(arg)) {
                 expr = FloatImm::make(arg.type(), std::sqrt(*f));
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, {arg}, op->call_type);
+                expr = Call::make(op->type, op->name, { arg }, op->call_type);
             } else {
                 expr = op;
             }
@@ -4176,7 +4170,7 @@ private:
             if (const double *f = as_const_float(arg)) {
                 expr = FloatImm::make(arg.type(), std::log(*f));
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, {arg}, op->call_type);
+                expr = Call::make(op->type, op->name, { arg }, op->call_type);
             } else {
                 expr = op;
             }
@@ -4189,7 +4183,7 @@ private:
             if (const double *f = as_const_float(arg)) {
                 expr = FloatImm::make(arg.type(), std::exp(*f));
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, {arg}, op->call_type);
+                expr = Call::make(op->type, op->name, { arg }, op->call_type);
             } else {
                 expr = op;
             }
@@ -4205,7 +4199,7 @@ private:
             if (f0 && f1) {
                 expr = FloatImm::make(arg0.type(), std::pow(*f0, *f1));
             } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
-                expr = Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
+                expr = Call::make(op->type, op->name, { arg0, arg1 }, op->call_type);
             } else {
                 expr = op;
             }
@@ -4235,7 +4229,7 @@ private:
                 // discard the outer function. For example, floor(ceil(x)) == ceil(x).
                 expr = call;
             } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, {arg}, op->call_type);
+                expr = Call::make(op->type, op->name, { arg }, op->call_type);
             } else {
                 expr = op;
             }
@@ -4250,7 +4244,7 @@ private:
              op->vectors[0].as<Broadcast>())) {
             // Extracting a single lane of a ramp or broadcast
             if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-                expr = mutate(r->base + op->indices[0]*r->stride);
+                expr = mutate(r->base + op->indices[0] * r->stride);
             } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
                 expr = mutate(b->value);
             } else {
@@ -4338,7 +4332,7 @@ private:
         }
 
         if (op->is_interleave()) {
-            int terms = (int)new_vectors.size();
+            int terms = (int) new_vectors.size();
 
             // Try to collapse an interleave of ramps into a single ramp.
             const Ramp *r = new_vectors[0].as<Ramp>();
@@ -4351,7 +4345,7 @@ private:
                     // difference between two adjacent terms in the
                     // interleave needs to be a broadcast of the new
                     // stride.
-                    Expr diff = mutate(new_vectors[i] - new_vectors[i-1]);
+                    Expr diff = mutate(new_vectors[i] - new_vectors[i - 1]);
                     const Broadcast *b = diff.as<Broadcast>();
                     if (b) {
                         Expr check = mutate(b->value * terms - r->stride);
@@ -4381,7 +4375,7 @@ private:
                         }
 
                         // ... and that it is a slice in the right place...
-                        if (i_shuffle->slice_begin() != (int)i || i_shuffle->slice_stride() != terms) {
+                        if (i_shuffle->slice_begin() != (int) i || i_shuffle->slice_stride() != terms) {
                             can_collapse = false;
                             break;
                         }
@@ -4414,13 +4408,13 @@ private:
                 bool can_collapse = true;
                 for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
                     Expr diff;
-                    if (new_vectors[i].type().lanes() == new_vectors[i-1].type().lanes()) {
-                        diff = mutate(new_vectors[i] - new_vectors[i-1]);
+                    if (new_vectors[i].type().lanes() == new_vectors[i - 1].type().lanes()) {
+                        diff = mutate(new_vectors[i] - new_vectors[i - 1]);
                     }
 
                     const Broadcast *b = diff.as<Broadcast>();
                     if (b) {
-                        Expr check = mutate(b->value - r->stride * new_vectors[i-1].type().lanes());
+                        Expr check = mutate(b->value - r->stride * new_vectors[i - 1].type().lanes());
                         can_collapse &= is_zero(check);
                     } else {
                         can_collapse = false;
@@ -4462,7 +4456,7 @@ private:
         }
     }
 
-    template <typename T>
+    template<typename T>
     Expr hoist_slice_vector(Expr e) {
         const T *op = e.as<T>();
         internal_assert(op);
@@ -4593,13 +4587,13 @@ private:
                 std::vector<int> slice_indices = shuffle->indices;
                 new_value = Shuffle::make_concat(shuffle->vectors);
                 new_var = Variable::make(new_value.type(), new_name);
-                replacement = substitute(new_name, Shuffle::make({new_var}, slice_indices), replacement);
+                replacement = substitute(new_name, Shuffle::make({ new_var }, slice_indices), replacement);
             } else if (shuffle && shuffle->is_concat() &&
                        ((var_a && !var_b) || (!var_a && var_b))) {
                 new_var = Variable::make(var_a ? shuffle->vectors[1].type() : shuffle->vectors[0].type(), new_name);
                 Expr op_a = var_a ? shuffle->vectors[0] : new_var;
                 Expr op_b = var_a ? new_var : shuffle->vectors[1];
-                replacement = substitute(new_name, Shuffle::make_concat({op_a, op_b}), replacement);
+                replacement = substitute(new_name, Shuffle::make_concat({ op_a, op_b }), replacement);
                 new_value = var_a ? shuffle->vectors[1] : shuffle->vectors[0];
             } else {
                 break;
@@ -4635,7 +4629,8 @@ private:
                 new_value_bounds_tracked = true;
             }
         }
-        bool value_alignment_tracked = false, value_bounds_tracked = false;;
+        bool value_alignment_tracked = false, value_bounds_tracked = false;
+        ;
         if (no_overflow_scalar_int(value.type())) {
             ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
             if (mod_rem.modulus > 1) {
@@ -4690,9 +4685,7 @@ private:
         }
 
         return result;
-
     }
-
 
     void visit(const Let *op) {
         if (simplify_lets) {
@@ -4722,7 +4715,6 @@ private:
         }
     }
 
-
     void visit(const For *op) {
         Expr new_min = mutate(op->min);
         Expr new_extent = mutate(op->extent);
@@ -4745,8 +4737,8 @@ private:
         if (is_no_op(new_body)) {
             stmt = new_body;
         } else if (op->min.same_as(new_min) &&
-            op->extent.same_as(new_extent) &&
-            op->body.same_as(new_body)) {
+                   op->extent.same_as(new_extent) &&
+                   op->body.same_as(new_body)) {
             stmt = op;
         } else {
             stmt = For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
@@ -5047,8 +5039,8 @@ void check_casts() {
     check(cast(UInt(32), (int) 4000000000UL) / cast(UInt(32), 5), make_const(UInt(32), 800000000));
     check(cast(UInt(32), 800000000) * cast(UInt(32), 5), make_const(UInt(32), (int) 4000000000UL));
     check(cast(UInt(32), (int) 4000000023UL) % cast(UInt(32), 100), make_const(UInt(32), 23));
-    check(min(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), make_const(UInt(32), (int) 1000));
-    check(max(cast(UInt(32), (int) 4000000023UL) , cast(UInt(32), 1000)), make_const(UInt(32), (int) 4000000023UL));
+    check(min(cast(UInt(32), (int) 4000000023UL), cast(UInt(32), 1000)), make_const(UInt(32), (int) 1000));
+    check(max(cast(UInt(32), (int) 4000000023UL), cast(UInt(32), 1000)), make_const(UInt(32), (int) 4000000023UL));
     check(cast(UInt(32), (int) 4000000023UL) < cast(UInt(32), 1000), const_false());
     check(cast(UInt(32), (int) 4000000023UL) == cast(UInt(32), 1000), const_false());
 
@@ -5078,7 +5070,7 @@ void check_algebra() {
     check(3 + x, x + 3);
     check(x + 0, x);
     check(0 + x, x);
-    check(Expr(ramp(x, 2, 3)) + Expr(ramp(y, 4, 3)), ramp(x+y, 6, 3));
+    check(Expr(ramp(x, 2, 3)) + Expr(ramp(y, 4, 3)), ramp(x + y, 6, 3));
     check(Expr(broadcast(4.0f, 5)) + Expr(ramp(3.25f, 4.5f, 5)), ramp(7.25f, 4.5f, 5));
     check(Expr(ramp(3.25f, 4.5f, 5)) + Expr(broadcast(4.0f, 5)), ramp(7.25f, 4.5f, 5));
     check(Expr(broadcast(3, 3)) + Expr(broadcast(1, 3)), broadcast(4, 3));
@@ -5088,15 +5080,15 @@ void check_algebra() {
     check(y + (x + 3), (y + x) + 3);
     check((3 - x) + x, 3);
     check(x + (3 - x), 3);
-    check(x*y + x*z, x*(y+z));
-    check(x*y + z*x, x*(y+z));
-    check(y*x + x*z, x*(y+z));
-    check(y*x + z*x, x*(y+z));
+    check(x * y + x * z, x * (y + z));
+    check(x * y + z * x, x * (y + z));
+    check(y * x + x * z, x * (y + z));
+    check(y * x + z * x, x * (y + z));
 
     check(x - 0, x);
-    check((x/y) - (x/y), 0);
+    check((x / y) - (x / y), 0);
     check(x - 2, x + (-2));
-    check(Expr(ramp(x, 2, 3)) - Expr(ramp(y, 4, 3)), ramp(x-y, -2, 3));
+    check(Expr(ramp(x, 2, 3)) - Expr(ramp(y, 4, 3)), ramp(x - y, -2, 3));
     check(Expr(broadcast(4.0f, 5)) - Expr(ramp(3.25f, 4.5f, 5)), ramp(0.75f, -4.5f, 5));
     check(Expr(ramp(3.25f, 4.5f, 5)) - Expr(broadcast(4.0f, 5)), ramp(-0.75f, 4.5f, 5));
     check(Expr(broadcast(3, 3)) - Expr(broadcast(1, 3)), broadcast(2, 3));
@@ -5112,97 +5104,97 @@ void check_algebra() {
     check(x - (0 - y), x + y);
     check(x + (0 - y), x - y);
     check((0 - x) + y, y - x);
-    check(x*y - x*z, x*(y-z));
-    check(x*y - z*x, x*(y-z));
-    check(y*x - x*z, x*(y-z));
-    check(y*x - z*x, x*(y-z));
-    check(x - y*-2, x + y*2);
-    check(x + y*-2, x - y*2);
-    check(x*-2 + y, y - x*2);
-    check(xf - yf*-2.0f, xf + y*2.0f);
-    check(xf + yf*-2.0f, xf - y*2.0f);
-    check(xf*-2.0f + yf, yf - x*2.0f);
+    check(x * y - x * z, x * (y - z));
+    check(x * y - z * x, x * (y - z));
+    check(y * x - x * z, x * (y - z));
+    check(y * x - z * x, x * (y - z));
+    check(x - y * -2, x + y * 2);
+    check(x + y * -2, x - y * 2);
+    check(x * -2 + y, y - x * 2);
+    check(xf - yf * -2.0f, xf + y * 2.0f);
+    check(xf + yf * -2.0f, xf - y * 2.0f);
+    check(xf * -2.0f + yf, yf - x * 2.0f);
 
-    check(x - (x/8)*8, x % 8);
-    check((x/8)*8 - x, -(x % 8));
-    check((x/8)*8 < x + y, 0 < x%8 + y);
-    check((x/8)*8 < x - y, y < x%8);
-    check((x/8)*8 < x, 0 < x%8);
-    check(((x+3)/8)*8 < x + y, 3 < (x+3)%8 + y);
-    check(((x+3)/8)*8 < x - y, y < (x+3)%8 + (-3));
-    check(((x+3)/8)*8 < x, 3 < (x+3)%8);
+    check(x - (x / 8) * 8, x % 8);
+    check((x / 8) * 8 - x, -(x % 8));
+    check((x / 8) * 8 < x + y, 0 < x % 8 + y);
+    check((x / 8) * 8 < x - y, y < x % 8);
+    check((x / 8) * 8 < x, 0 < x % 8);
+    check(((x + 3) / 8) * 8 < x + y, 3 < (x + 3) % 8 + y);
+    check(((x + 3) / 8) * 8 < x - y, y < (x + 3) % 8 + (-3));
+    check(((x + 3) / 8) * 8 < x, 3 < (x + 3) % 8);
 
-    check(x*0, 0);
-    check(0*x, 0);
-    check(x*1, x);
-    check(1*x, x);
-    check(Expr(2.0f)*4.0f, 8.0f);
-    check(Expr(2)*4, 8);
-    check((3*x)*4, x*12);
-    check(4*(3+x), x*4 + 12);
+    check(x * 0, 0);
+    check(0 * x, 0);
+    check(x * 1, x);
+    check(1 * x, x);
+    check(Expr(2.0f) * 4.0f, 8.0f);
+    check(Expr(2) * 4, 8);
+    check((3 * x) * 4, x * 12);
+    check(4 * (3 + x), x * 4 + 12);
     check(Expr(broadcast(4.0f, 5)) * Expr(ramp(3.0f, 4.0f, 5)), ramp(12.0f, 16.0f, 5));
     check(Expr(ramp(3.0f, 4.0f, 5)) * Expr(broadcast(2.0f, 5)), ramp(6.0f, 8.0f, 5));
     check(Expr(broadcast(3, 3)) * Expr(broadcast(2, 3)), broadcast(6, 3));
 
-    check(x*y + x, x*(y + 1));
-    check(x*y - x, x*(y + -1));
-    check(x + x*y, x*(y + 1));
-    check(x - x*y, x*(1 - y));
-    check(x*y + y, (x + 1)*y);
-    check(x*y - y, (x + -1)*y);
-    check(y + x*y, (x + 1)*y);
-    check(y - x*y, (1 - x)*y);
+    check(x * y + x, x * (y + 1));
+    check(x * y - x, x * (y + -1));
+    check(x + x * y, x * (y + 1));
+    check(x - x * y, x * (1 - y));
+    check(x * y + y, (x + 1) * y);
+    check(x * y - y, (x + -1) * y);
+    check(y + x * y, (x + 1) * y);
+    check(y - x * y, (1 - x) * y);
 
-    check(0/x, 0);
-    check(x/1, x);
-    check(x/x, 1);
-    check((-1)/x, select(x < 0, 1, -1));
-    check(Expr(7)/3, 2);
-    check(Expr(6.0f)/2.0f, 3.0f);
+    check(0 / x, 0);
+    check(x / 1, x);
+    check(x / x, 1);
+    check((-1) / x, select(x < 0, 1, -1));
+    check(Expr(7) / 3, 2);
+    check(Expr(6.0f) / 2.0f, 3.0f);
     check((x / 3) / 4, x / 12);
-    check((x*4)/2, x*2);
-    check((x*2)/4, x/2);
-    check((x*4 + y)/2, x*2 + y/2);
-    check((y + x*4)/2, y/2 + x*2);
-    check((x*4 - y)/2, x*2 + (0 - y)/2);
-    check((y - x*4)/2, y/2 - x*2);
-    check((x + 3)/2 + 7, (x + 17)/2);
-    check((x/2 + 3)/5, (x + 6)/10);
-    check((x + 8)/2, x/2 + 4);
-    check((x - y)*-2, (y - x)*2);
-    check((xf - yf)*-2.0f, (yf - xf)*2.0f);
+    check((x * 4) / 2, x * 2);
+    check((x * 2) / 4, x / 2);
+    check((x * 4 + y) / 2, x * 2 + y / 2);
+    check((y + x * 4) / 2, y / 2 + x * 2);
+    check((x * 4 - y) / 2, x * 2 + (0 - y) / 2);
+    check((y - x * 4) / 2, y / 2 - x * 2);
+    check((x + 3) / 2 + 7, (x + 17) / 2);
+    check((x / 2 + 3) / 5, (x + 6) / 10);
+    check((x + 8) / 2, x / 2 + 4);
+    check((x - y) * -2, (y - x) * 2);
+    check((xf - yf) * -2.0f, (yf - xf) * 2.0f);
 
     // Pull terms that are a multiple of the divisor out of a ternary expression
-    check(((x*4 + y) + z) / 2, x*2 + (y + z)/2);
-    check(((x*4 - y) + z) / 2, x*2 + (z - y)/2);
-    check(((x*4 + y) - z) / 2, x*2 + (y - z)/2);
-    check(((x*4 - y) - z) / 2, x*2 + (0 - y - z)/2);
-    check((x + (y*4 + z)) / 2, y*2 + (x + z)/2);
-    check((x + (y*4 - z)) / 2, y*2 + (x - z)/2);
-    check((x - (y*4 + z)) / 2, (x - z)/2 - y*2);
-    check((x - (y*4 - z)) / 2, (x + z)/2 - y*2);
+    check(((x * 4 + y) + z) / 2, x * 2 + (y + z) / 2);
+    check(((x * 4 - y) + z) / 2, x * 2 + (z - y) / 2);
+    check(((x * 4 + y) - z) / 2, x * 2 + (y - z) / 2);
+    check(((x * 4 - y) - z) / 2, x * 2 + (0 - y - z) / 2);
+    check((x + (y * 4 + z)) / 2, y * 2 + (x + z) / 2);
+    check((x + (y * 4 - z)) / 2, y * 2 + (x - z) / 2);
+    check((x - (y * 4 + z)) / 2, (x - z) / 2 - y * 2);
+    check((x - (y * 4 - z)) / 2, (x + z) / 2 - y * 2);
 
     // Cancellations in non-const integer divisions
-    check((x*y)/x, y);
-    check((y*x)/x, y);
-    check((x*y + z)/x, y + z/x);
-    check((y*x + z)/x, y + z/x);
-    check((z + x*y)/x, z/x + y);
-    check((z + y*x)/x, z/x + y);
-    check((x*y - z)/x, y + (-z)/x);
-    check((y*x - z)/x, y + (-z)/x);
-    check((z - x*y)/x, z/x - y);
-    check((z - y*x)/x, z/x - y);
+    check((x * y) / x, y);
+    check((y * x) / x, y);
+    check((x * y + z) / x, y + z / x);
+    check((y * x + z) / x, y + z / x);
+    check((z + x * y) / x, z / x + y);
+    check((z + y * x) / x, z / x + y);
+    check((x * y - z) / x, y + (-z) / x);
+    check((y * x - z) / x, y + (-z) / x);
+    check((z - x * y) / x, z / x - y);
+    check((z - y * x) / x, z / x - y);
 
-    check((x + y)/x, y/x + 1);
-    check((y + x)/x, y/x + 1);
-    check((x - y)/x, (-y)/x + 1);
-    check((y - x)/x, y/x + (-1));
+    check((x + y) / x, y / x + 1);
+    check((y + x) / x, y / x + 1);
+    check((x - y) / x, (-y) / x + 1);
+    check((y - x) / x, y / x + (-1));
 
-    check(((x + y) + z)/x, (y + z)/x + 1);
-    check(((y + x) + z)/x, (y + z)/x + 1);
-    check((y + (x + z))/x, (y + z)/x + 1);
-    check((y + (z + x))/x, (y + z)/x + 1);
+    check(((x + y) + z) / x, (y + z) / x + 1);
+    check(((y + x) + z) / x, (y + z) / x + 1);
+    check((y + (x + z)) / x, (y + z) / x + 1);
+    check((y + (z + x)) / x, (y + z) / x + 1);
 
     check(xf / 4.0f, xf * 0.25f);
 
@@ -5215,37 +5207,37 @@ void check_algebra() {
     check((x - y) - (z - y), x - z);
     check((y - z) - (y - x), x - z);
 
-    check((x*8) % 4, 0);
-    check((x*8 + y) % 4, y % 4);
+    check((x * 8) % 4, 0);
+    check((x * 8 + y) % 4, y % 4);
     check((y + 8) % 4, y % 4);
-    check((y + x*8) % 4, y % 4);
-    check((y*16 + 13) % 2, 1);
+    check((y + x * 8) % 4, y % 4);
+    check((y * 16 + 13) % 2, 1);
 
     // Check an optimization important for fusing dimensions
-    check((x/3)*3 + x%3, x);
-    check(x%3 + (x/3)*3, x);
+    check((x / 3) * 3 + x % 3, x);
+    check(x % 3 + (x / 3) * 3, x);
 
-    check(((x/3)*3 + y) + x%3, x + y);
-    check((x%3 + y) + (x/3)*3, x + y);
+    check(((x / 3) * 3 + y) + x % 3, x + y);
+    check((x % 3 + y) + (x / 3) * 3, x + y);
 
-    check((y + x%3) + (x/3)*3, y + x);
-    check((y + (x/3*3)) + x%3, y + x);
+    check((y + x % 3) + (x / 3) * 3, y + x);
+    check((y + (x / 3 * 3)) + x % 3, y + x);
 
     // Almost-cancellations through integer divisions. These rules all
     // deduplicate x and wrap it in a modulo operator, neutering it
     // for the purposes of bounds inference. Patterns below look
     // confusing, but were brute-force tested.
-    check((x + 17)/3 - (x + 7)/3, ((x+1)%3 + 10)/3);
-    check((x + 17)/3 - (x + y)/3, (19 - y - (x+2)%3)/3);
-    check((x + y )/3 - (x + 7)/3, ((x+1)%3 + y + -7)/3);
-    check( x      /3 - (x + y)/3, (2 - y - x % 3)/3);
-    check((x + y )/3 -  x     /3, (x%3 + y)/3);
-    check( x      /3 - (x + 7)/3, (-5 - x%3)/3);
-    check((x + 17)/3 -  x     /3, (x%3 + 17)/3);
-    check((x + 17)/3 - (x - y)/3, (y - (x+2)%3 + 19)/3);
-    check((x - y )/3 - (x + 7)/3, ((x+1)%3 - y + (-7))/3);
-    check( x      /3 - (x - y)/3, (y - x%3 + 2)/3);
-    check((x - y )/3 -  x     /3, (x%3 - y)/3);
+    check((x + 17) / 3 - (x + 7) / 3, ((x + 1) % 3 + 10) / 3);
+    check((x + 17) / 3 - (x + y) / 3, (19 - y - (x + 2) % 3) / 3);
+    check((x + y) / 3 - (x + 7) / 3, ((x + 1) % 3 + y + -7) / 3);
+    check(x / 3 - (x + y) / 3, (2 - y - x % 3) / 3);
+    check((x + y) / 3 - x / 3, (x % 3 + y) / 3);
+    check(x / 3 - (x + 7) / 3, (-5 - x % 3) / 3);
+    check((x + 17) / 3 - x / 3, (x % 3 + 17) / 3);
+    check((x + 17) / 3 - (x - y) / 3, (y - (x + 2) % 3 + 19) / 3);
+    check((x - y) / 3 - (x + 7) / 3, ((x + 1) % 3 - y + (-7)) / 3);
+    check(x / 3 - (x - y) / 3, (y - x % 3 + 2) / 3);
+    check((x - y) / 3 - x / 3, (x % 3 - y) / 3);
 
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));
@@ -5273,30 +5265,29 @@ void check_vectors() {
     Expr x = Var("x"), y = Var("y"), z = Var("z");
 
     check(Expr(broadcast(y, 4)) / Expr(broadcast(x, 4)),
-          Expr(broadcast(y/x, 4)));
-    check(Expr(ramp(x, 4, 4)) / 2, ramp(x/2, 2, 4));
-    check(Expr(ramp(x, -4, 7)) / 2, ramp(x/2, -2, 7));
-    check(Expr(ramp(x, 4, 5)) / -2, ramp(x/-2, -2, 5));
-    check(Expr(ramp(x, -8, 5)) / -2, ramp(x/-2, 4, 5));
+          Expr(broadcast(y / x, 4)));
+    check(Expr(ramp(x, 4, 4)) / 2, ramp(x / 2, 2, 4));
+    check(Expr(ramp(x, -4, 7)) / 2, ramp(x / 2, -2, 7));
+    check(Expr(ramp(x, 4, 5)) / -2, ramp(x / -2, -2, 5));
+    check(Expr(ramp(x, -8, 5)) / -2, ramp(x / -2, 4, 5));
 
-    check(Expr(ramp(4*x, 1, 4)) / 4, broadcast(x, 4));
-    check(Expr(ramp(x*4, 1, 3)) / 4, broadcast(x, 3));
-    check(Expr(ramp(x*8, 2, 4)) / 8, broadcast(x, 4));
-    check(Expr(ramp(x*8, 3, 3)) / 8, broadcast(x, 3));
+    check(Expr(ramp(4 * x, 1, 4)) / 4, broadcast(x, 4));
+    check(Expr(ramp(x * 4, 1, 3)) / 4, broadcast(x, 3));
+    check(Expr(ramp(x * 8, 2, 4)) / 8, broadcast(x, 4));
+    check(Expr(ramp(x * 8, 3, 3)) / 8, broadcast(x, 3));
     check(Expr(ramp(0, 1, 8)) % 16, Expr(ramp(0, 1, 8)));
     check(Expr(ramp(8, 1, 8)) % 16, Expr(ramp(8, 1, 8)));
     check(Expr(ramp(9, 1, 8)) % 16, Expr(ramp(9, 1, 8)) % 16);
     check(Expr(ramp(16, 1, 8)) % 16, Expr(ramp(0, 1, 8)));
     check(Expr(ramp(0, 1, 8)) % 8, Expr(ramp(0, 1, 8)));
-    check(Expr(ramp(x*8+17, 1, 4)) % 8, Expr(ramp(1, 1, 4)));
-    check(Expr(ramp(x*8+17, 1, 8)) % 8, Expr(ramp(1, 1, 8) % 8));
-
+    check(Expr(ramp(x * 8 + 17, 1, 4)) % 8, Expr(ramp(1, 1, 4)));
+    check(Expr(ramp(x * 8 + 17, 1, 8)) % 8, Expr(ramp(1, 1, 8) % 8));
 
     check(Expr(broadcast(x, 4)) % Expr(broadcast(y, 4)),
           Expr(broadcast(x % y, 4)));
     check(Expr(ramp(x, 2, 4)) % (broadcast(2, 4)),
           broadcast(x % 2, 4));
-    check(Expr(ramp(2*x+1, 4, 4)) % (broadcast(2, 4)),
+    check(Expr(ramp(2 * x + 1, 4, 4)) % (broadcast(2, 4)),
           broadcast(1, 4));
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
@@ -5330,9 +5321,9 @@ void check_bounds() {
     check(min(Expr(4.25f), 1.25f), 1.25f);
     check(min(broadcast(x, 4), broadcast(y, 4)),
           broadcast(min(x, y), 4));
-    check(min(x, x+3), x);
-    check(min(x+4, x), x);
-    check(min(x-1, x+2), x+(-1));
+    check(min(x, x + 3), x);
+    check(min(x + 4, x), x);
+    check(min(x - 1, x + 2), x + (-1));
     check(min(7, min(x, 3)), min(x, 3));
     check(min(min(x, y), x), min(x, y));
     check(min(min(x, y), y), min(x, y));
@@ -5343,9 +5334,9 @@ void check_bounds() {
     check(max(Expr(4.25f), 1.25f), 4.25f);
     check(max(broadcast(x, 4), broadcast(y, 4)),
           broadcast(max(x, y), 4));
-    check(max(x, x+3), x+3);
-    check(max(x+4, x), x+4);
-    check(max(x-1, x+2), x+2);
+    check(max(x, x + 3), x + 3);
+    check(max(x + 4, x), x + 4);
+    check(max(x - 1, x + 2), x + 2);
     check(max(7, max(x, 3)), max(x, 7));
     check(max(max(x, y), x), max(x, y));
     check(max(max(x, y), y), max(x, y));
@@ -5377,17 +5368,17 @@ void check_bounds() {
     check((x - y) - (z - y), x - z);
     check((y - z) - (y - x), x - z);
 
-    check((x + 3) / 4 - (x + 2) / 4, ((x + 2) % 4 + 1)/4);
+    check((x + 3) / 4 - (x + 2) / 4, ((x + 2) % 4 + 1) / 4);
 
-    check(x - min(x + y, z), max(-y, x-z));
-    check(x - min(y + x, z), max(-y, x-z));
-    check(x - min(z, x + y), max(-y, x-z));
-    check(x - min(z, y + x), max(-y, x-z));
+    check(x - min(x + y, z), max(-y, x - z));
+    check(x - min(y + x, z), max(-y, x - z));
+    check(x - min(z, x + y), max(-y, x - z));
+    check(x - min(z, y + x), max(-y, x - z));
 
-    check(min(x + y, z) - x, min(y, z-x));
-    check(min(y + x, z) - x, min(y, z-x));
-    check(min(z, x + y) - x, min(y, z-x));
-    check(min(z, y + x) - x, min(y, z-x));
+    check(min(x + y, z) - x, min(y, z - x));
+    check(min(y + x, z) - x, min(y, z - x));
+    check(min(z, x + y) - x, min(y, z - x));
+    check(min(z, y + x) - x, min(y, z - x));
 
     check(min(x + y, z + y), min(x, z) + y);
     check(min(y + x, z + y), min(x, z) + y);
@@ -5400,30 +5391,30 @@ void check_bounds() {
     check(min(123 - x, 1 - x), 1 - x);
     check(max(123 - x, 1 - x), 123 - x);
 
-    check(min(x*43, y*43), min(x, y)*43);
-    check(max(x*43, y*43), max(x, y)*43);
-    check(min(x*-43, y*-43), max(x, y)*-43);
-    check(max(x*-43, y*-43), min(x, y)*-43);
+    check(min(x * 43, y * 43), min(x, y) * 43);
+    check(max(x * 43, y * 43), max(x, y) * 43);
+    check(min(x * -43, y * -43), max(x, y) * -43);
+    check(max(x * -43, y * -43), min(x, y) * -43);
 
     check(min(min(x, 4), y), min(min(x, y), 4));
     check(max(max(x, 4), y), max(max(x, y), 4));
 
-    check(min(x*8, 24), min(x, 3)*8);
-    check(max(x*8, 24), max(x, 3)*8);
-    check(min(x*-8, 24), max(x, -3)*-8);
-    check(max(x*-8, 24), min(x, -3)*-8);
+    check(min(x * 8, 24), min(x, 3) * 8);
+    check(max(x * 8, 24), max(x, 3) * 8);
+    check(min(x * -8, 24), max(x, -3) * -8);
+    check(max(x * -8, 24), min(x, -3) * -8);
 
     check(min(clamp(x, -10, 14), clamp(y, -10, 14)), clamp(min(x, y), -10, 14));
 
-    check(min(x/4, y/4), min(x, y)/4);
-    check(max(x/4, y/4), max(x, y)/4);
+    check(min(x / 4, y / 4), min(x, y) / 4);
+    check(max(x / 4, y / 4), max(x, y) / 4);
 
-    check(min(x/(-4), y/(-4)), max(x, y)/(-4));
-    check(max(x/(-4), y/(-4)), min(x, y)/(-4));
+    check(min(x / (-4), y / (-4)), max(x, y) / (-4));
+    check(max(x / (-4), y / (-4)), min(x, y) / (-4));
 
     // Min and max of clamped expressions
-    check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
-    check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
+    check(min(clamp(x + 1, y, z), clamp(x - 1, y, z)), clamp(x + (-1), y, z));
+    check(max(clamp(x + 1, y, z), clamp(x - 1, y, z)), clamp(x + 1, y, z));
 
     // Additions that cancel a term inside a min or max
     check(x + min(y - x, z), min(y, z + x));
@@ -5443,11 +5434,11 @@ void check_bounds() {
     check(max(min(x, y), min(x, z)), min(max(y, z), x));
 
     // Mins of expressions and rounded up versions of them
-    check(min(((x+7)/8)*8, x), x);
-    check(min(x, ((x+7)/8)*8), x);
+    check(min(((x + 7) / 8) * 8, x), x);
+    check(min(x, ((x + 7) / 8) * 8), x);
 
-    check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
-    check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
+    check(min(((x + 7) / 8) * 8, max(x, 8)), max(x, 8));
+    check(min(max(x, 8), ((x + 7) / 8) * 8), max(x, 8));
 
     check(min(x, likely(x)), likely(x));
     check(min(likely(x), x), likely(x));
@@ -5479,7 +5470,7 @@ void check_bounds() {
 
     check(min(8 - x, 2), 8 - max(x, 6));
     check(max(3, 77 - x), 77 - min(x, 74));
-    check(min(max(8-x, 0), 8), 8 - max(min(x, 8), 0));
+    check(min(max(8 - x, 0), 8), 8 - max(min(x, 8), 0));
 
     check(x - min(x, 2), max(x + -2, 0));
     check(x - max(x, 2), min(x + -2, 0));
@@ -5637,33 +5628,33 @@ void check_boolean() {
     Expr b2 = Variable::make(Bool(), "b2");
 
     check(x == x, t);
-    check(x == (x+1), f);
-    check(x-2 == y+3, (x-y) == 5);
-    check(x+y == y+z, x == z);
-    check(y+x == y+z, x == z);
-    check(x+y == z+y, x == z);
-    check(y+x == z+y, x == z);
-    check((y+x)*17 == (z+y)*17, x == z);
-    check(x*0 == y*0, t);
-    check(x == x+y, y == 0);
-    check(x+y == x, y == 0);
-    check(100 - x == 99 - y, (y-x) == -1);
+    check(x == (x + 1), f);
+    check(x - 2 == y + 3, (x - y) == 5);
+    check(x + y == y + z, x == z);
+    check(y + x == y + z, x == z);
+    check(x + y == z + y, x == z);
+    check(y + x == z + y, x == z);
+    check((y + x) * 17 == (z + y) * 17, x == z);
+    check(x * 0 == y * 0, t);
+    check(x == x + y, y == 0);
+    check(x + y == x, y == 0);
+    check(100 - x == 99 - y, (y - x) == -1);
 
     check(x < x, f);
-    check(x < (x+1), t);
-    check(x-2 < y+3, x < y+5);
-    check(x+y < y+z, x < z);
-    check(y+x < y+z, x < z);
-    check(x+y < z+y, x < z);
-    check(y+x < z+y, x < z);
-    check((y+x)*17 < (z+y)*17, x < z);
-    check(x*0 < y*0, f);
-    check(x < x+y, 0 < y);
-    check(x+y < x, y < 0);
+    check(x < (x + 1), t);
+    check(x - 2 < y + 3, x < y + 5);
+    check(x + y < y + z, x < z);
+    check(y + x < y + z, x < z);
+    check(x + y < z + y, x < z);
+    check(y + x < z + y, x < z);
+    check((y + x) * 17 < (z + y) * 17, x < z);
+    check(x * 0 < y * 0, f);
+    check(x < x + y, 0 < y);
+    check(x + y < x, y < 0);
 
     check(select(x < 3, 2, 2), 2);
-    check(select(x < (x+1), 9, 2), 9);
-    check(select(x > (x+1), 9, 2), 2);
+    check(select(x < (x + 1), 9, 2), 9);
+    check(select(x > (x + 1), 9, 2), 2);
     // Selects of comparisons should always become selects of LT or selects of EQ
     check(select(x != 5, 2, 3), select(x == 5, 3, 2));
     check(select(x >= 5, 2, 3), select(x < 5, 3, 2));
@@ -5673,7 +5664,7 @@ void check_boolean() {
     check(select(x > 5, 2, 3) + select(x > 5, 6, 2), select(5 < x, 8, 5));
     check(select(x > 5, 8, 3) - select(x > 5, 6, 2), select(5 < x, 2, 1));
 
-    check((1 - xf)*6 < 3, 0.5f < xf);
+    check((1 - xf) * 6 < 3, 0.5f < xf);
 
     check(!f, t);
     check(!t, f);
@@ -5752,8 +5743,8 @@ void check_boolean() {
 
     {
         Expr i = Variable::make(Int(32), "i");
-        check((i!=2 && (i!=4 && (i!=8 && i!=16))) || (i==16), (i!=2 && (i!=4 && (i!=8))));
-        check((i==16) || (i!=2 && (i!=4 && (i!=8 && i!=16))), (i!=2 && (i!=4 && (i!=8))));
+        check((i != 2 && (i != 4 && (i != 8 && i != 16))) || (i == 16), (i != 2 && (i != 4 && (i != 8))));
+        check((i == 16) || (i != 2 && (i != 4 && (i != 8 && i != 16))), (i != 2 && (i != 4 && (i != 8))));
     }
 
     check(t && (x < 0), x < 0);
@@ -5771,57 +5762,57 @@ void check_boolean() {
     check(x <= y && x > y, f);
 
     check(x <= max(x, y), t);
-    check(x <  min(x, y), f);
+    check(x < min(x, y), f);
     check(min(x, y) <= x, t);
-    check(max(x, y) <  x, f);
+    check(max(x, y) < x, f);
     check(max(x, y) <= y, x <= y);
     check(min(x, y) >= y, y <= x);
 
     check((1 < y) && (2 < y), 2 < y);
 
-    check(x*5 < 4, x < 1);
-    check(x*5 < 5, x < 1);
-    check(x*5 < 6, x < 2);
-    check(x*5 <= 4, x <= 0);
-    check(x*5 <= 5, x <= 1);
-    check(x*5 <= 6, x <= 1);
-    check(x*5 > 4, 0 < x);
-    check(x*5 > 5, 1 < x);
-    check(x*5 > 6, 1 < x);
-    check(x*5 >= 4, 1 <= x);
-    check(x*5 >= 5, 1 <= x);
-    check(x*5 >= 6, 2 <= x);
+    check(x * 5 < 4, x < 1);
+    check(x * 5 < 5, x < 1);
+    check(x * 5 < 6, x < 2);
+    check(x * 5 <= 4, x <= 0);
+    check(x * 5 <= 5, x <= 1);
+    check(x * 5 <= 6, x <= 1);
+    check(x * 5 > 4, 0 < x);
+    check(x * 5 > 5, 1 < x);
+    check(x * 5 > 6, 1 < x);
+    check(x * 5 >= 4, 1 <= x);
+    check(x * 5 >= 5, 1 <= x);
+    check(x * 5 >= 6, 2 <= x);
 
-    check(x/4 < 3, x < 12);
-    check(3 < x/4, 15 < x);
+    check(x / 4 < 3, x < 12);
+    check(3 < x / 4, 15 < x);
 
     check(4 - x <= 0, 4 <= x);
 
-    check((x/8)*8 < x - 8, f);
-    check((x/8)*8 < x - 9, f);
-    check((x/8)*8 < x - 7, f);
-    check((x/8)*8 < x - 6, 6 < x % 8);
-    check(ramp(x*4, 1, 4) < broadcast(y*4, 4), broadcast(x < y, 4));
-    check(ramp(x*8, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 1, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 4, 1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 8, 1, 4) < broadcast(y*8, 4), broadcast(x < y + (-1), 4));
-    check(ramp(x*8 + 5, 1, 4) < broadcast(y*8, 4), ramp(x*8 + 5, 1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8 - 1, 1, 4) < broadcast(y*8, 4), ramp(x*8 + (-1), 1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8, 1, 4) < broadcast(y*4, 4), broadcast(x*2 < y, 4));
-    check(ramp(x*8, 2, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 1, 2, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 2, 2, 4) < broadcast(y*8, 4), ramp(x*8 + 2, 2, 4) < broadcast(y*8, 4));
-    check(ramp(x*8, 3, 4) < broadcast(y*8, 4), ramp(x*8, 3, 4) < broadcast(y*8, 4));
-    check(select(ramp((x/16)*16, 1, 8) < broadcast((y/8)*8, 8), broadcast(1, 8), broadcast(3, 8)),
-          select((x/16)*2 < y/8, broadcast(1, 8), broadcast(3, 8)));
+    check((x / 8) * 8 < x - 8, f);
+    check((x / 8) * 8 < x - 9, f);
+    check((x / 8) * 8 < x - 7, f);
+    check((x / 8) * 8 < x - 6, 6 < x % 8);
+    check(ramp(x * 4, 1, 4) < broadcast(y * 4, 4), broadcast(x < y, 4));
+    check(ramp(x * 8, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 1, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 4, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 8, 1, 4) < broadcast(y * 8, 4), broadcast(x < y + (-1), 4));
+    check(ramp(x * 8 + 5, 1, 4) < broadcast(y * 8, 4), ramp(x * 8 + 5, 1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8 - 1, 1, 4) < broadcast(y * 8, 4), ramp(x * 8 + (-1), 1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8, 1, 4) < broadcast(y * 4, 4), broadcast(x * 2 < y, 4));
+    check(ramp(x * 8, 2, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 1, 2, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 2, 2, 4) < broadcast(y * 8, 4), ramp(x * 8 + 2, 2, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8, 3, 4) < broadcast(y * 8, 4), ramp(x * 8, 3, 4) < broadcast(y * 8, 4));
+    check(select(ramp((x / 16) * 16, 1, 8) < broadcast((y / 8) * 8, 8), broadcast(1, 8), broadcast(3, 8)),
+          select((x / 16) * 2 < y / 8, broadcast(1, 8), broadcast(3, 8)));
 
-    check(ramp(x*8, -1, 4) < broadcast(y*8, 4), ramp(x*8, -1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8 + 1, -1, 4) < broadcast(y*8, 4), ramp(x*8 + 1, -1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8 + 4, -1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 + 8, -1, 4) < broadcast(y*8, 4), ramp(x*8 + 8, -1, 4) < broadcast(y*8, 4));
-    check(ramp(x*8 + 5, -1, 4) < broadcast(y*8, 4), broadcast(x < y, 4));
-    check(ramp(x*8 - 1, -1, 4) < broadcast(y*8, 4), broadcast(x < y + 1, 4));
+    check(ramp(x * 8, -1, 4) < broadcast(y * 8, 4), ramp(x * 8, -1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8 + 1, -1, 4) < broadcast(y * 8, 4), ramp(x * 8 + 1, -1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8 + 4, -1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 + 8, -1, 4) < broadcast(y * 8, 4), ramp(x * 8 + 8, -1, 4) < broadcast(y * 8, 4));
+    check(ramp(x * 8 + 5, -1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
+    check(ramp(x * 8 - 1, -1, 4) < broadcast(y * 8, 4), broadcast(x < y + 1, 4));
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
@@ -5833,10 +5824,10 @@ void check_boolean() {
 
     // Check ored conditions apply to the else case only
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x+3, y+4) + select(b2, x+5, y+7)),
-                           Evaluate::make(select(b1, x+3, y+8) - select(b2, x+5, y+7))),
+                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
+                           Evaluate::make(select(b1, x + 3, y + 8) - select(b2, x + 5, y + 7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x+3, y+4) + select(b2, x+5, y+7)),
+                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
                            Evaluate::make(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
@@ -5854,44 +5845,44 @@ void check_boolean() {
                            Evaluate::make(y),
                            Evaluate::make(x)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
-                      IfThenElse::make(x < y, Evaluate::make(x+3), Evaluate::make(x+4))),
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                      IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
-                           Block::make(Evaluate::make(x+2), Evaluate::make(x+4))));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                           Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
-                      IfThenElse::make(x < y, Evaluate::make(x+2))),
-          IfThenElse::make(x < y, Block::make(Evaluate::make(x+1), Evaluate::make(x+2))));
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                      IfThenElse::make(x < y, Evaluate::make(x + 2))),
+          IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1), Evaluate::make(x+2)),
-                      IfThenElse::make(x < y, Evaluate::make(x+3))),
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                      IfThenElse::make(x < y, Evaluate::make(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+3)),
-                           Evaluate::make(x+2)));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
+                           Evaluate::make(x + 2)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x+1)),
-                      IfThenElse::make(x < y, Evaluate::make(x+2), Evaluate::make(x+3))),
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
+                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x+1), Evaluate::make(x+2)),
-                           Evaluate::make(x+3)));
+                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
+                           Evaluate::make(x + 3)));
 
     // Check conditions involving entire exprs
-    Expr foo = x + 3*y;
-    Expr foo_simple = x + y*3;
+    Expr foo = x + 3 * y;
+    Expr foo_simple = x + y * 3;
     check(IfThenElse::make(foo == 17,
-                           Evaluate::make(x+foo+1),
-                           Evaluate::make(x+foo+2)),
+                           Evaluate::make(x + foo + 1),
+                           Evaluate::make(x + foo + 2)),
           IfThenElse::make(foo_simple == 17,
-                           Evaluate::make(x+18),
-                           Evaluate::make(x+foo_simple+2)));
+                           Evaluate::make(x + 18),
+                           Evaluate::make(x + foo_simple + 2)));
 
     check(IfThenElse::make(foo != 17,
-                           Evaluate::make(x+foo+1),
-                           Evaluate::make(x+foo+2)),
+                           Evaluate::make(x + foo + 1),
+                           Evaluate::make(x + foo + 2)),
           IfThenElse::make(foo_simple != 17,
-                           Evaluate::make(x+foo_simple+1),
-                           Evaluate::make(x+19)));
+                           Evaluate::make(x + foo_simple + 1),
+                           Evaluate::make(x + 19)));
 
     // The construct
     //     if (var == expr) then a else b;
@@ -5916,29 +5907,28 @@ void check_boolean() {
     check(select(x == 3, y, 2) == 4, (x == 3) && (y == 4));
     check(select(x == 3, 2, y) == 4, (x != 3) && (y == 4));
 
-    check(min(select(x == 2, y*3, 8), select(x == 2, y+8, y*7)),
-          select(x == 2, min(y*3, y+8), min(y*7, 8)));
+    check(min(select(x == 2, y * 3, 8), select(x == 2, y + 8, y * 7)),
+          select(x == 2, min(y * 3, y + 8), min(y * 7, 8)));
 
-    check(max(select(x == 2, y*3, 8), select(x == 2, y+8, y*7)),
-          select(x == 2, max(y*3, y+8), max(y*7, 8)));
+    check(max(select(x == 2, y * 3, 8), select(x == 2, y + 8, y * 7)),
+          select(x == 2, max(y * 3, y + 8), max(y * 7, 8)));
 
-    check(select(x == 2, x+1, x+5), x + select(x == 2, 1, 5));
-    check(select(x == 2, x+y, x+z), x + select(x == 2, y, z));
-    check(select(x == 2, y+x, x+z), x + select(x == 2, y, z));
-    check(select(x == 2, y+x, z+x), select(x == 2, y, z) + x);
-    check(select(x == 2, x+y, z+x), x + select(x == 2, y, z));
-    check(select(x == 2, x*2, x*5), x * select(x == 2, 2, 5));
-    check(select(x == 2, x*y, x*z), x * select(x == 2, y, z));
-    check(select(x == 2, y*x, x*z), x * select(x == 2, y, z));
-    check(select(x == 2, y*x, z*x), select(x == 2, y, z) * x);
-    check(select(x == 2, x*y, z*x), x * select(x == 2, y, z));
-    check(select(x == 2, x-y, x-z), x - select(x == 2, y, z));
-    check(select(x == 2, y-x, z-x), select(x == 2, y, z) - x);
-    check(select(x == 2, x+y, x-z), x + select(x == 2, y, 0-z));
-    check(select(x == 2, y+x, x-z), x + select(x == 2, y, 0-z));
-    check(select(x == 2, x-z, x+y), x + select(x == 2, 0-z, y));
-    check(select(x == 2, x-z, y+x), x + select(x == 2, 0-z, y));
-
+    check(select(x == 2, x + 1, x + 5), x + select(x == 2, 1, 5));
+    check(select(x == 2, x + y, x + z), x + select(x == 2, y, z));
+    check(select(x == 2, y + x, x + z), x + select(x == 2, y, z));
+    check(select(x == 2, y + x, z + x), select(x == 2, y, z) + x);
+    check(select(x == 2, x + y, z + x), x + select(x == 2, y, z));
+    check(select(x == 2, x * 2, x * 5), x * select(x == 2, 2, 5));
+    check(select(x == 2, x * y, x * z), x * select(x == 2, y, z));
+    check(select(x == 2, y * x, x * z), x * select(x == 2, y, z));
+    check(select(x == 2, y * x, z * x), select(x == 2, y, z) * x);
+    check(select(x == 2, x * y, z * x), x * select(x == 2, y, z));
+    check(select(x == 2, x - y, x - z), x - select(x == 2, y, z));
+    check(select(x == 2, y - x, z - x), select(x == 2, y, z) - x);
+    check(select(x == 2, x + y, x - z), x + select(x == 2, y, 0 - z));
+    check(select(x == 2, y + x, x - z), x + select(x == 2, y, 0 - z));
+    check(select(x == 2, x - z, x + y), x + select(x == 2, 0 - z, y));
+    check(select(x == 2, x - z, y + x), x + select(x == 2, 0 - z, y));
 
     {
 
@@ -5980,7 +5970,7 @@ void check_math() {
     check(log(0.5f + 0.5f), 0.0f);
     check(exp(log(2.0f)), 2.0f);
     check(pow(4.0f, 0.5f), 2.0f);
-    check(round(1000.0f*pow(exp(1.0f), log(10.0f))), 10000.0f);
+    check(round(1000.0f * pow(exp(1.0f), log(10.0f))), 10000.0f);
 
     check(floor(0.98f), 0.0f);
     check(ceil(0.98f), 1.0f);
@@ -6002,15 +5992,15 @@ void check_overflow() {
          make_const(Int(32), 0x00ffffff)),
         make_const(Int(32), 0x80000000) - 1,
         0 - make_const(Int(32), 0x80000000),
-        make_const(Int(64), (int64_t)0x7fffffffffffffffLL) + 1,
-        make_const(Int(64), (int64_t)0x7ffffffffffffff0LL) + 16,
-        (make_const(Int(64), (int64_t)0x7fffffffffffffffLL) +
-         make_const(Int(64), (int64_t)0x7fffffffffffffffLL)),
-        make_const(Int(64), (int64_t)0x0800000000000000LL) * 16,
-        (make_const(Int(64), (int64_t)0x00ffffffffffffffLL) *
-         make_const(Int(64), (int64_t)0x00ffffffffffffffLL)),
-        make_const(Int(64), (int64_t)0x8000000000000000LL) - 1,
-        0 - make_const(Int(64), (int64_t)0x8000000000000000LL),
+        make_const(Int(64), (int64_t) 0x7fffffffffffffffLL) + 1,
+        make_const(Int(64), (int64_t) 0x7ffffffffffffff0LL) + 16,
+        (make_const(Int(64), (int64_t) 0x7fffffffffffffffLL) +
+         make_const(Int(64), (int64_t) 0x7fffffffffffffffLL)),
+        make_const(Int(64), (int64_t) 0x0800000000000000LL) * 16,
+        (make_const(Int(64), (int64_t) 0x00ffffffffffffffLL) *
+         make_const(Int(64), (int64_t) 0x00ffffffffffffffLL)),
+        make_const(Int(64), (int64_t) 0x8000000000000000LL) - 1,
+        0 - make_const(Int(64), (int64_t) 0x8000000000000000LL),
     };
     Expr not_overflowing[] = {
         make_const(Int(32), 0x7ffffffe) + 1,
@@ -6020,13 +6010,13 @@ void check_overflow() {
          make_const(Int(32), 0x00008000)),
         make_const(Int(32), 0x80000001) - 1,
         0 - make_const(Int(32), 0x7fffffff),
-        make_const(Int(64), (int64_t)0x7ffffffffffffffeLL) + 1,
-        make_const(Int(64), (int64_t)0x7fffffffffffffefLL) + 16,
-        make_const(Int(64), (int64_t)0x07ffffffffffffffLL) * 16,
-        (make_const(Int(64), (int64_t)0x00000000ffffffffLL) *
-         make_const(Int(64), (int64_t)0x0000000080000000LL)),
-        make_const(Int(64), (int64_t)0x8000000000000001LL) - 1,
-        0 - make_const(Int(64), (int64_t)0x7fffffffffffffffLL),
+        make_const(Int(64), (int64_t) 0x7ffffffffffffffeLL) + 1,
+        make_const(Int(64), (int64_t) 0x7fffffffffffffefLL) + 16,
+        make_const(Int(64), (int64_t) 0x07ffffffffffffffLL) * 16,
+        (make_const(Int(64), (int64_t) 0x00000000ffffffffLL) *
+         make_const(Int(64), (int64_t) 0x0000000080000000LL)),
+        make_const(Int(64), (int64_t) 0x8000000000000001LL) - 1,
+        0 - make_const(Int(64), (int64_t) 0x7fffffffffffffffLL),
     };
 
     for (Expr e : overflowing) {
@@ -6132,21 +6122,21 @@ void check_indeterminate() {
             {
                 Expr e1(i1), e2(i2);
                 Expr r = (e1 / e2);
-                bool r_is_zero = !i1 || (i2 != 0 && !div_imp((int64_t)i1, (int64_t)i2));  // avoid trap for -2147483648/-1
+                bool r_is_zero = !i1 || (i2 != 0 && !div_imp((int64_t) i1, (int64_t) i2));  // avoid trap for -2147483648/-1
                 bool r_is_ind = !i2;
                 check_indeterminate_ops(r, r_is_zero, r_is_ind);
 
                 // Expr::operator% asserts if denom is constant zero.
                 if (!is_zero(e2)) {
                     Expr m = (e1 % e2);
-                    bool m_is_zero = !i1 || (i2 != 0 && !mod_imp((int64_t)i1, (int64_t)i2));  // avoid trap for -2147483648/-1
+                    bool m_is_zero = !i1 || (i2 != 0 && !mod_imp((int64_t) i1, (int64_t) i2));  // avoid trap for -2147483648/-1
                     bool m_is_ind = !i2;
                     check_indeterminate_ops(m, m_is_zero, m_is_ind);
                 }
             }
             {
-                uint32_t u1 = (uint32_t)i1;
-                uint32_t u2 = (uint32_t)i2;
+                uint32_t u1 = (uint32_t) i1;
+                uint32_t u2 = (uint32_t) i2;
                 Expr e1(u1), e2(u2);
                 Expr r = (e1 / e2);
                 bool r_is_zero = !u1 || (u2 != 0 && !div_imp(u1, u2));
@@ -6201,36 +6191,36 @@ void simplify_test() {
 
     v = Variable::make(Int(32, 4), "v");
     // Check constants get pushed inwards
-    check(Let::make("x", 3, x+4), 7);
+    check(Let::make("x", 3, x + 4), 7);
 
     // Check ramps in lets get pushed inwards
-    check(Let::make("v", ramp(x*2+7, 3, 4), v + Expr(broadcast(2, 4))),
-          ramp(x*2+9, 3, 4));
+    check(Let::make("v", ramp(x * 2 + 7, 3, 4), v + Expr(broadcast(2, 4))),
+          ramp(x * 2 + 9, 3, 4));
 
     // Check broadcasts in lets get pushed inwards
     check(Let::make("v", broadcast(x, 4), v + Expr(broadcast(2, 4))),
-          broadcast(x+2, 4));
+          broadcast(x + 2, 4));
 
     // Check that dead lets get stripped
-    check(Let::make("x", 3*y*y*y, 4), 4);
+    check(Let::make("x", 3 * y * y * y, 4), 4);
     check(Let::make("x", 0, 0), 0);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
-    check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
-          ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+    check(((x * (int32_t) 0x80000000) + (y + z * (int32_t) 0x80000000)),
+          ((x * (int32_t) 0x80000000) + (y + z * (int32_t) 0x80000000)));
 
     // Check that constant args to a stringify get combined
-    check(Call::make(type_of<const char *>(), Call::stringify, {3, string(" "), 4}, Call::Intrinsic),
+    check(Call::make(type_of<const char *>(), Call::stringify, { 3, string(" "), 4 }, Call::Intrinsic),
           string("3 4"));
 
-    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
-          Call::make(type_of<const char *>(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
+    check(Call::make(type_of<const char *>(), Call::stringify, { 3, x, 4, string(", "), 3.4f }, Call::Intrinsic),
+          Call::make(type_of<const char *>(), Call::stringify, { string("3"), x, string("4, 3.400000") }, Call::Intrinsic));
 
     // Check min(x, y)*max(x, y) gets simplified into x*y
-    check(min(x, y)*max(x, y), x*y);
-    check(min(x, y)*max(y, x), x*y);
-    check(max(x, y)*min(x, y), x*y);
-    check(max(y, x)*min(x, y), x*y);
+    check(min(x, y) * max(x, y), x * y);
+    check(min(x, y) * max(y, x), x * y);
+    check(max(x, y) * min(x, y), x * y);
+    check(max(y, x) * min(x, y), x * y);
 
     // Check min(x, y) + max(x, y) gets simplified into x + y
     check(min(x, y) + max(x, y), x + y);
@@ -6252,70 +6242,70 @@ void simplify_test() {
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;
-    bounds_info.push("x", Interval(0,4));
-    check_in_bounds(ramp(x,  1, 4) < broadcast( 0, 4), const_false(4), bounds_info);
-    check_in_bounds(ramp(x,  1, 4) < broadcast( 8, 4), const_true(4),  bounds_info);
+    bounds_info.push("x", Interval(0, 4));
+    check_in_bounds(ramp(x, 1, 4) < broadcast(0, 4), const_false(4), bounds_info);
+    check_in_bounds(ramp(x, 1, 4) < broadcast(8, 4), const_true(4), bounds_info);
     check_in_bounds(ramp(x, -1, 4) < broadcast(-4, 4), const_false(4), bounds_info);
-    check_in_bounds(ramp(x, -1, 4) < broadcast( 5, 4), const_true(4),  bounds_info);
-    check_in_bounds(min(ramp(x,  1, 4), broadcast( 0, 4)), broadcast(0, 4),  bounds_info);
-    check_in_bounds(min(ramp(x,  1, 4), broadcast( 8, 4)), ramp(x, 1, 4),    bounds_info);
+    check_in_bounds(ramp(x, -1, 4) < broadcast(5, 4), const_true(4), bounds_info);
+    check_in_bounds(min(ramp(x, 1, 4), broadcast(0, 4)), broadcast(0, 4), bounds_info);
+    check_in_bounds(min(ramp(x, 1, 4), broadcast(8, 4)), ramp(x, 1, 4), bounds_info);
     check_in_bounds(min(ramp(x, -1, 4), broadcast(-4, 4)), broadcast(-4, 4), bounds_info);
-    check_in_bounds(min(ramp(x, -1, 4), broadcast( 5, 4)), ramp(x, -1, 4),   bounds_info);
-    check_in_bounds(max(ramp(x,  1, 4), broadcast( 0, 4)), ramp(x, 1, 4),    bounds_info);
-    check_in_bounds(max(ramp(x,  1, 4), broadcast( 8, 4)), broadcast(8, 4),  bounds_info);
-    check_in_bounds(max(ramp(x, -1, 4), broadcast(-4, 4)), ramp(x, -1, 4),   bounds_info);
-    check_in_bounds(max(ramp(x, -1, 4), broadcast( 5, 4)), broadcast(5, 4),  bounds_info);
+    check_in_bounds(min(ramp(x, -1, 4), broadcast(5, 4)), ramp(x, -1, 4), bounds_info);
+    check_in_bounds(max(ramp(x, 1, 4), broadcast(0, 4)), ramp(x, 1, 4), bounds_info);
+    check_in_bounds(max(ramp(x, 1, 4), broadcast(8, 4)), broadcast(8, 4), bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast(-4, 4)), ramp(x, -1, 4), bounds_info);
+    check_in_bounds(max(ramp(x, -1, 4), broadcast(5, 4)), broadcast(5, 4), bounds_info);
 
     // Collapse some vector interleaves
-    check(interleave_vectors({ramp(x, 2, 4), ramp(x+1, 2, 4)}), ramp(x, 1, 8));
-    check(interleave_vectors({ramp(x, 4, 4), ramp(x+2, 4, 4)}), ramp(x, 2, 8));
-    check(interleave_vectors({ramp(x-y, 2*y, 4), ramp(x, 2*y, 4)}), ramp(x-y, y, 8));
-    check(interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4), ramp(x+2, 3, 4)}), ramp(x, 1, 12));
+    check(interleave_vectors({ ramp(x, 2, 4), ramp(x + 1, 2, 4) }), ramp(x, 1, 8));
+    check(interleave_vectors({ ramp(x, 4, 4), ramp(x + 2, 4, 4) }), ramp(x, 2, 8));
+    check(interleave_vectors({ ramp(x - y, 2 * y, 4), ramp(x, 2 * y, 4) }), ramp(x - y, y, 8));
+    check(interleave_vectors({ ramp(x, 3, 4), ramp(x + 1, 3, 4), ramp(x + 2, 3, 4) }), ramp(x, 1, 12));
     {
         Expr vec = ramp(x, 1, 16);
-        check(interleave_vectors({slice(vec, 0, 2, 8), slice(vec, 1, 2, 8)}), vec);
-        check(interleave_vectors({slice(vec, 0, 4, 4), slice(vec, 1, 4, 4), slice(vec, 2, 4, 4), slice(vec, 3, 4, 4)}), vec);
+        check(interleave_vectors({ slice(vec, 0, 2, 8), slice(vec, 1, 2, 8) }), vec);
+        check(interleave_vectors({ slice(vec, 0, 4, 4), slice(vec, 1, 4, 4), slice(vec, 2, 4, 4), slice(vec, 3, 4, 4) }), vec);
     }
 
     // Collapse some vector concats
-    check(concat_vectors({ramp(x, 2, 4), ramp(x+8, 2, 4)}), ramp(x, 2, 8));
-    check(concat_vectors({ramp(x, 3, 2), ramp(x+6, 3, 2), ramp(x+12, 3, 2)}), ramp(x, 3, 6));
+    check(concat_vectors({ ramp(x, 2, 4), ramp(x + 8, 2, 4) }), ramp(x, 2, 8));
+    check(concat_vectors({ ramp(x, 3, 2), ramp(x + 6, 3, 2), ramp(x + 12, 3, 2) }), ramp(x, 3, 6));
 
     // Now some ones that can't work
     {
-        Expr e = interleave_vectors({ramp(x, 2, 4), ramp(x, 2, 4)});
+        Expr e = interleave_vectors({ ramp(x, 2, 4), ramp(x, 2, 4) });
         check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(x+2, 2, 4)});
+        e = interleave_vectors({ ramp(x, 2, 4), ramp(x + 2, 2, 4) });
         check(e, e);
-        e = interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4)});
+        e = interleave_vectors({ ramp(x, 3, 4), ramp(x + 1, 3, 4) });
         check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(y+1, 2, 4)});
+        e = interleave_vectors({ ramp(x, 2, 4), ramp(y + 1, 2, 4) });
         check(e, e);
-        e = interleave_vectors({ramp(x, 2, 4), ramp(x+1, 3, 4)});
+        e = interleave_vectors({ ramp(x, 2, 4), ramp(x + 1, 3, 4) });
         check(e, e);
 
-        e = concat_vectors({ramp(x, 1, 4), ramp(x+4, 2, 4)});
+        e = concat_vectors({ ramp(x, 1, 4), ramp(x + 4, 2, 4) });
         check(e, e);
-        e = concat_vectors({ramp(x, 1, 4), ramp(x+8, 1, 4)});
+        e = concat_vectors({ ramp(x, 1, 4), ramp(x + 8, 1, 4) });
         check(e, e);
-        e = concat_vectors({ramp(x, 1, 4), ramp(y+4, 1, 4)});
+        e = concat_vectors({ ramp(x, 1, 4), ramp(y + 4, 1, 4) });
         check(e, e);
     }
 
     // Now check that an interleave of some collapsible loads collapses into a single dense load
     {
         Expr load1 = Load::make(Float(32, 4), "buf", ramp(x, 2, 4), Buffer<>(), Parameter(), const_true(4));
-        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        Expr load2 = Load::make(Float(32, 4), "buf", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4));
         Expr load12 = Load::make(Float(32, 8), "buf", ramp(x, 1, 8), Buffer<>(), Parameter(), const_true(8));
-        check(interleave_vectors({load1, load2}), load12);
+        check(interleave_vectors({ load1, load2 }), load12);
 
         // They don't collapse in the other order
-        Expr e = interleave_vectors({load2, load1});
+        Expr e = interleave_vectors({ load2, load1 });
         check(e, e);
 
         // Or if the buffers are different
-        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
-        e = interleave_vectors({load1, load3});
+        Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x + 1, 2, 4), Buffer<>(), Parameter(), const_true(4));
+        e = interleave_vectors({ load1, load3 });
         check(e, e);
     }
 
@@ -6324,7 +6314,7 @@ void simplify_test() {
         int lanes = 4;
         std::vector<Expr> loads;
         for (int i = 0; i < lanes; i++) {
-            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true()));
+            loads.push_back(Load::make(Float(32), "buf", x + i, Buffer<>(), Parameter(), const_true()));
         }
 
         check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes)));
@@ -6335,7 +6325,7 @@ void simplify_test() {
     {
         Expr e = x;
         for (int i = 0; i < 100; i++) {
-            e = max(e, 1)/2;
+            e = max(e, 1) / 2;
         }
         check(e, e);
     }
@@ -6348,7 +6338,7 @@ void simplify_test() {
     }
 
     {
-        Expr pred = ramp(x*y + x*z, 2, 8) > 2;
+        Expr pred = ramp(x * y + x * z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);
         Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()));
         Stmt stmt = Store::make("f", value, index, Parameter(), pred);

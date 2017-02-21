@@ -205,8 +205,8 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, const std::string &name, 
-                            const Expr &index, Buffer<> image, 
+    EXPORT static Expr make(Type type, const std::string &name,
+                            const Expr &index, Buffer<> image,
                             Parameter param, const Expr &predicate);
 
     static const IRNodeType _type_info = IRNodeType::Load;
@@ -377,8 +377,10 @@ struct Free : public StmtNode<Free> {
  * (min + extent - 1) */
 struct Range {
     Expr min, extent;
-    Range() {}
-    Range(const Expr &min, const Expr &extent) : min(min), extent(extent) {
+    Range() {
+    }
+    Range(const Expr &min, const Expr &extent)
+        : min(min), extent(extent) {
         internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
     }
 };
@@ -401,7 +403,6 @@ struct Realize : public StmtNode<Realize> {
     EXPORT static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, const Expr &condition, const Stmt &body);
 
     static const IRNodeType _type_info = IRNodeType::Realize;
-
 };
 
 /** A sequence of statements to be executed in-order. 'rest' may be
@@ -443,13 +444,13 @@ struct Evaluate : public StmtNode<Evaluate> {
 struct Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
-    typedef enum {Image,        //< A load from an input image
-                  Extern,       //< A call to an external C-ABI function, possibly with side-effects
-                  ExternCPlusPlus, //< A call to an external C-ABI function, possibly with side-effects
-                  PureExtern,   //< A call to a guaranteed-side-effect-free external function
-                  Halide,       //< A call to a Func
-                  Intrinsic,    //< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
-                  PureIntrinsic //< A side-effect-free version of the above.
+    typedef enum { Image,  //< A load from an input image
+                   Extern,  //< A call to an external C-ABI function, possibly with side-effects
+                   ExternCPlusPlus,  //< A call to an external C-ABI function, possibly with side-effects
+                   PureExtern,  //< A call to a guaranteed-side-effect-free external function
+                   Halide,  //< A call to a Func
+                   Intrinsic,  //< A possibly-side-effecty compiler intrinsic, which has special handling during codegen
+                   PureIntrinsic  //< A side-effect-free version of the above.
     } CallType;
     CallType call_type;
 
@@ -459,7 +460,7 @@ struct Call : public ExprNode<Call> {
     // they can be referenced at static-initialization time without
     // risking ambiguous initalization order; we use a typedef to simplify
     // declaration.
-    typedef const char* const ConstString;
+    typedef const char *const ConstString;
     EXPORT static ConstString debug_to_file,
         reinterpret,
         bitwise_and,
@@ -565,10 +566,9 @@ struct Call : public ExprNode<Call> {
     }
 
     bool is_intrinsic(ConstString intrin_name) const {
-        return
-            ((call_type == Intrinsic ||
-              call_type == PureIntrinsic) &&
-             name == intrin_name);
+        return ((call_type == Intrinsic ||
+                 call_type == PureIntrinsic) &&
+                name == intrin_name);
     }
 
     static const IRNodeType _type_info = IRNodeType::Call;
@@ -684,8 +684,12 @@ struct Shuffle : public ExprNode<Shuffle> {
      * slice. */
     ///@{
     EXPORT bool is_slice() const;
-    int slice_begin() const { return indices[0]; }
-    int slice_stride() const { return indices.size() >= 2 ? indices[1] - indices[0] : 1; }
+    int slice_begin() const {
+        return indices[0];
+    }
+    int slice_stride() const {
+        return indices.size() >= 2 ? indices[1] - indices[0] : 1;
+    }
     ///@}
 
     /** Check if this shuffle is extracting a scalar from the vector
@@ -694,7 +698,6 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     static const IRNodeType _type_info = IRNodeType::Shuffle;
 };
-
 }
 }
 

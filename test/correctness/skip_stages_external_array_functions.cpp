@@ -35,7 +35,7 @@ void reset_counts() {
 }
 
 void check_queries(int a = 0, int b = 0, int c = 0, int d = 0) {
-    int correct[] = {a, b, c, d};
+    int correct[] = { a, b, c, d };
     for (int i = 0; i < 4; i++) {
         if (correct[i] != bounds_query_count[i]) {
             printf("bounds_query_count[%d] was supposed to be %d but instead is %d\n", i, correct[i], bounds_query_count[i]);
@@ -45,7 +45,7 @@ void check_queries(int a = 0, int b = 0, int c = 0, int d = 0) {
 }
 
 void check_counts(int a = 0, int b = 0, int c = 0, int d = 0) {
-    int correct[] = {a, b, c, d};
+    int correct[] = { a, b, c, d };
     for (int i = 0; i < 4; i++) {
         if (correct[i] != call_count[i]) {
             printf("call_count[%d] was supposed to be %d but instead is %d\n", i, correct[i], call_count[i]);
@@ -63,8 +63,8 @@ int main(int argc, char **argv) {
         // Side-lobes is used.
         Func f1, f2, f3, f4;
         f1(x) = cast<uint8_t>(x);
-        f2.define_extern("call_counter", {f1, 1, 0}, UInt(8), 1);
-        f3.define_extern("call_counter", {f1, 2, 1}, UInt(8), 1);
+        f2.define_extern("call_counter", { f1, 1, 0 }, UInt(8), 1);
+        f3.define_extern("call_counter", { f1, 2, 1 }, UInt(8), 1);
         f4(x) = select(toggle1, f2(x), f3(x));
 
         f1.compute_root();
@@ -101,16 +101,16 @@ int main(int argc, char **argv) {
         identity(x) = x;
 
         f1.define_extern("call_counter",
-                         {identity, 1, 0},
+                         { identity, 1, 0 },
                          UInt(8), 1);
         Func f1_plus_one;
         f1_plus_one(x) = f1(x) + 1;
 
         f2.define_extern("call_counter",
-                         {f1_plus_one, 1, 1},
+                         { f1_plus_one, 1, 1 },
                          UInt(8), 1);
         f3.define_extern("call_counter",
-                         {f1_plus_one, 1, 2},
+                         { f1_plus_one, 1, 2 },
                          UInt(8), 1);
         f4(x) = select(toggle1, f2(x), 0) + select(toggle2, f3(x), 0);
 
@@ -149,7 +149,6 @@ int main(int argc, char **argv) {
         f4.realize(10);
         check_queries(2, 2, 2);
         check_counts(0, 0, 0);
-
     }
 
     {
@@ -163,13 +162,13 @@ int main(int argc, char **argv) {
 
         Func extern1, extern2, f1, f2;
         extern1.define_extern("call_counter",
-                              {identity, 0, 0},
+                              { identity, 0, 0 },
                               UInt(8), 1);
         extern2.define_extern("call_counter",
-                              {identity, 1, 1},
+                              { identity, 1, 1 },
                               UInt(8), 1);
 
-        f1(x) = Tuple(extern1(x), extern2(x+1));
+        f1(x) = Tuple(extern1(x), extern2(x + 1));
         f2(x) = select(toggle1, f1(x)[0], 0) + f1(x)[1];
 
         identity.compute_root();
@@ -201,13 +200,13 @@ int main(int argc, char **argv) {
 
         Func extern1, extern2, f1, f2;
         extern1.define_extern("call_counter",
-                              {identity, 0, 0},
+                              { identity, 0, 0 },
                               UInt(8), 1);
         extern2.define_extern("call_counter",
-                              {identity, 1, 1},
+                              { identity, 1, 1 },
                               UInt(8), 1);
 
-        f1(x) = Tuple(extern1(x), extern2(x+1));
+        f1(x) = Tuple(extern1(x), extern2(x + 1));
         f2(x) = select(toggle1, f1(x)[0], 0);
 
         identity.compute_root();
@@ -239,13 +238,13 @@ int main(int argc, char **argv) {
 
         Func extern1, extern2, extern3, f1, f2, f3, f4;
         extern1.define_extern("call_counter",
-                              {identity, 0, 0},
+                              { identity, 0, 0 },
                               UInt(8), 1);
         extern2.define_extern("call_counter",
-                              {identity, 1, 1},
+                              { identity, 1, 1 },
                               UInt(8), 1);
         extern3.define_extern("call_counter",
-                              {identity, 1, 2},
+                              { identity, 1, 2 },
                               UInt(8), 1);
 
         f1(x) = extern1(x);
@@ -297,5 +296,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

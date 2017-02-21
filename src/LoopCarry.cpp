@@ -1,11 +1,11 @@
 #include "LoopCarry.h"
+#include "CSE.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
-#include "Substitute.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Substitute.h"
 
 #include <algorithm>
 
@@ -161,9 +161,10 @@ class StepForwards : public IRGraphMutator {
     }
 
 public:
-
     bool success = true;
-    StepForwards(const Scope<Expr> &s) : linear(s) {}
+    StepForwards(const Scope<Expr> &s)
+        : linear(s) {
+    }
 };
 
 Expr step_forwards(Expr e, const Scope<Expr> &linear) {
@@ -274,13 +275,13 @@ class LoopCarryOverLoop : public IRMutator {
                 }
             }
             if (!represented) {
-                loads.push_back({load});
+                loads.push_back({ load });
             }
         }
 
         // For each load, move the load index forwards by one loop iteration
         vector<Expr> indices, next_indices, predicates, next_predicates;
-        for (const vector<const Load *> &v: loads) {
+        for (const vector<const Load *> &v : loads) {
             indices.push_back(v[0]->index);
             next_indices.push_back(step_forwards(v[0]->index, linear));
             predicates.push_back(v[0]->predicate);
@@ -290,8 +291,8 @@ class LoopCarryOverLoop : public IRMutator {
         // Find loads done on this loop iteration that will be
         // reusable as some other Expr on the next loop iteration.
         vector<vector<int>> chains;
-        for (int i = 0; i < (int)indices.size(); i++) {
-            for (int j = 0; j < (int)indices.size(); j++) {
+        for (int i = 0; i < (int) indices.size(); i++) {
+            for (int j = 0; j < (int) indices.size(); j++) {
                 // Don't catch loop invariants here.
                 if (i == j) continue;
                 if (loads[i][0]->name == loads[j][0]->name &&
@@ -299,7 +300,7 @@ class LoopCarryOverLoop : public IRMutator {
                     graph_equal(indices[i], next_indices[j]) &&
                     next_predicates[j].defined() &&
                     graph_equal(predicates[i], next_predicates[j])) {
-                    chains.push_back({j, i});
+                    chains.push_back({ j, i });
                     debug(3) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
                              << j << ":  -> " << Expr(loads[j][0]) << "\n";
@@ -320,7 +321,7 @@ class LoopCarryOverLoop : public IRMutator {
                 for (size_t j = 0; j < chains.size(); j++) {
                     if (chains[j].empty()) continue;
                     if (chains[i].back() == chains[j].front()) {
-                        chains[i].insert(chains[i].end(), chains[j].begin()+1, chains[j].end());
+                        chains[i].insert(chains[i].end(), chains[j].begin() + 1, chains[j].end());
                         chains[j].clear();
                         done = false;
                     }
@@ -338,7 +339,7 @@ class LoopCarryOverLoop : public IRMutator {
         // Sort the carry chains by decreasing order of size. The
         // longest ones get the most reuse of each value.
         std::sort(chains.begin(), chains.end(),
-                  [&](const vector<int> &c1, const vector<int> &c2){return c1.size() > c2.size();});
+                  [&](const vector<int> &c1, const vector<int> &c2) { return c1.size() > c2.size(); });
 
         for (const vector<int> &c : chains) {
             debug(3) << "Found chain of carried values:\n";
@@ -353,8 +354,8 @@ class LoopCarryOverLoop : public IRMutator {
         vector<vector<int>> trimmed;
         size_t sz = 0;
         for (const vector<int> &c : chains) {
-            if (sz + c.size() > (size_t)max_carried_values) {
-                if (sz < (size_t)max_carried_values - 1) {
+            if (sz + c.size() > (size_t) max_carried_values) {
+                if (sz < (size_t) max_carried_values - 1) {
                     // Take a partial chain
                     trimmed.emplace_back(c.begin(), c.begin() + max_carried_values - sz);
                 }
@@ -404,12 +405,10 @@ class LoopCarryOverLoop : public IRMutator {
                 }
                 if (i > 0) {
                     Stmt shuffle = Store::make(scratch, load_from_scratch,
-                                               scratch_index(i-1, orig_load->type),
+                                               scratch_index(i - 1, orig_load->type),
                                                Parameter(), const_true(orig_load->type.lanes()));
                     scratch_shuffles.push_back(shuffle);
                 }
-
-
             }
 
             // Do joint CSE on the initial scratch values instead of
@@ -442,22 +441,22 @@ class LoopCarryOverLoop : public IRMutator {
 
             // Wrap them in the appropriate lets
             for (size_t i = initial_lets.size(); i > 0; i--) {
-                auto l = initial_lets[i-1];
+                auto l = initial_lets[i - 1];
                 initial_stores = LetStmt::make(l.first, l.second, initial_stores);
             }
             // We may be lifting the initial stores out of let stmts,
             // so rewrap them in the necessary ones.
             for (size_t i = containing_lets.size(); i > 0; i--) {
-                auto l = containing_lets[i-1];
+                auto l = containing_lets[i - 1];
                 if (stmt_uses_var(initial_stores, l.first)) {
                     initial_stores = LetStmt::make(l.first, l.second, initial_stores);
                 }
             }
 
-            allocs.push_back({scratch,
-                        loads[c.front()][0]->type.element_of(),
-                        (int)c.size() * loads[c.front()][0]->type.lanes(),
-                        initial_stores});
+            allocs.push_back({ scratch,
+                               loads[c.front()][0]->type.element_of(),
+                               (int) c.size() * loads[c.front()][0]->type.lanes(),
+                               initial_stores });
         }
 
         Stmt s = Block::make(not_first_iteration_scratch_stores);
@@ -526,7 +525,7 @@ class LoopCarry : public IRMutator {
             // Inject the scratch buffer allocations.
             for (const auto &alloc : carry.allocs) {
                 stmt = Block::make(substitute(op->name, op->min, alloc.initial_stores), stmt);
-                stmt = Allocate::make(alloc.name, alloc.type, {alloc.size}, const_true(), stmt);
+                stmt = Allocate::make(alloc.name, alloc.type, { alloc.size }, const_true(), stmt);
             }
             if (!carry.allocs.empty()) {
                 stmt = IfThenElse::make(op->extent > 0, stmt);
@@ -538,17 +537,15 @@ class LoopCarry : public IRMutator {
     }
 
 public:
-    LoopCarry(int max_carried_values) : max_carried_values(max_carried_values) {}
+    LoopCarry(int max_carried_values)
+        : max_carried_values(max_carried_values) {
+    }
 };
-
 }
-
 
 Stmt loop_carry(Stmt s, int max_carried_values) {
     s = LoopCarry(max_carried_values).mutate(s);
     return s;
 }
-
-
 }
 }

@@ -7,10 +7,10 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
+#include "IROperator.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
-#include "IROperator.h"
 #include "Outputs.h"
 #include "StmtToHtml.h"
 #include "ThreadPool.h"
@@ -24,7 +24,9 @@ namespace {
 
 class TemporaryObjectFileDir final {
 public:
-    TemporaryObjectFileDir() : dir_path(dir_make_temp()) {}
+    TemporaryObjectFileDir()
+        : dir_path(dir_make_temp()) {
+    }
     ~TemporaryObjectFileDir() {
         for (const auto &f : dir_files) {
             debug(1) << "file_unlink: " << f << "\n";
@@ -37,7 +39,7 @@ public:
                                      const std::string &suffix,
                                      const Target &target,
                                      bool in_front = false) {
-        const char* ext = (target.os == Target::Windows && !target.has_feature(Target::MinGW)) ? ".obj" : ".o";
+        const char *ext = (target.os == Target::Windows && !target.has_feature(Target::MinGW)) ? ".obj" : ".o";
         size_t slash_idx = base_path_name.rfind('/');
         size_t backslash_idx = base_path_name.rfind('\\');
         if (slash_idx == std::string::npos) {
@@ -61,14 +63,16 @@ public:
         return name;
     }
 
-    const std::vector<std::string> &files() { return dir_files; }
+    const std::vector<std::string> &files() {
+        return dir_files;
+    }
+
 private:
     const std::string dir_path;
     std::vector<std::string> dir_files;
     TemporaryObjectFileDir(const TemporaryObjectFileDir &) = delete;
     void operator=(const TemporaryObjectFileDir &) = delete;
 };
-
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
 std::string add_suffix(const std::string &path, const std::string &suffix) {
@@ -92,7 +96,7 @@ Outputs add_suffixes(const Outputs &in, const std::string &suffix) {
 }
 
 uint64_t target_feature_mask(const Target &target) {
-    static_assert(sizeof(uint64_t)*8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
+    static_assert(sizeof(uint64_t) * 8 >= Target::FeatureEnd, "Features will not fit in uint64_t");
     uint64_t feature_mask = 0;
     for (int i = 0; i < Target::FeatureEnd; ++i) {
         if (target.has_feature((Target::Feature) i)) {
@@ -123,7 +127,8 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
 }
 
 LoweredFunc::LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
-    : name(name), args(args), body(body), linkage(linkage) {}
+    : name(name), args(args), body(body), linkage(linkage) {
+}
 
 LoweredFunc::LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
     : name(name), body(body), linkage(linkage) {
@@ -136,8 +141,8 @@ LoweredFunc::LoweredFunc(const std::string &name, const std::vector<Argument> &a
 
 using namespace Halide::Internal;
 
-Module::Module(const std::string &name, const Target &target) :
-    contents(new Internal::ModuleContents) {
+Module::Module(const std::string &name, const Target &target)
+    : contents(new Internal::ModuleContents) {
     contents->name = name;
     contents->target = target;
 }
@@ -218,7 +223,7 @@ void Module::compile(const Outputs &output_files) const {
             // To simplify the code, we always create a temporary object output
             // here, even if output_files.object_name was also set: in practice,
             // no real-world code ever sets both object_name and static_library_name
-            // at the same time, so there is no meaningful performance advantage 
+            // at the same time, so there is no meaningful performance advantage
             // to be had.
             TemporaryObjectFileDir temp_dir;
             {
@@ -252,8 +257,7 @@ void Module::compile(const Outputs &output_files) const {
         debug(1) << "Module.compile(): c_header_name " << output_files.c_header_name << "\n";
         std::ofstream file(output_files.c_header_name);
         Internal::CodeGen_C cg(file,
-                               target().has_feature(Target::CPlusPlusMangling) ?
-                               Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
+                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
                                output_files.c_header_name);
         cg.compile(*this);
     }
@@ -261,8 +265,7 @@ void Module::compile(const Outputs &output_files) const {
         debug(1) << "Module.compile(): c_source_name " << output_files.c_source_name << "\n";
         std::ofstream file(output_files.c_source_name);
         Internal::CodeGen_C cg(file,
-                               target().has_feature(Target::CPlusPlusMangling) ?
-                               Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
     }
     if (!output_files.stmt_name.empty()) {
@@ -328,13 +331,13 @@ void compile_multitarget(const std::string &fn_name,
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like
     //
-    //     x86-64-linux,x86-64-sse41 
+    //     x86-64-linux,x86-64-sse41
     //
     // we should still always be *correct*: this ordering would never select sse41
     // (since x86-64-linux would be selected first due to ordering), but could
     // crash on non-sse41 machines (if we generated a runtime with sse41 instructions
     // included). So we'll keep track of the common features as we walk thru the targets.
-    uint64_t runtime_features_mask = (uint64_t)-1LL;
+    uint64_t runtime_features_mask = (uint64_t) -1LL;
 
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
@@ -347,14 +350,14 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 6> must_match_features = {{
+        static const std::array<Target::Feature, 6> must_match_features = { {
             Target::CPlusPlusMangling,
             Target::JIT,
             Target::Matlab,
             Target::MSAN,
             Target::NoRuntime,
             Target::UserContext,
-        }};
+        } };
         for (auto f : must_match_features) {
             if (target.has_feature(f) != base_target.has_feature(f)) {
                 user_error << "All Targets must have feature " << f << " set identically for compile_multitarget.\n";
@@ -367,7 +370,7 @@ void compile_multitarget(const std::string &fn_name,
         std::string suffix = replace_all(target.to_string(), "-", "_");
         auto it = suffixes.find(suffix);
         if (it != suffixes.end()) {
-          suffix = it->second;
+            suffix = it->second;
         }
         suffix = "_" + suffix;
         std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
@@ -390,14 +393,13 @@ void compile_multitarget(const std::string &fn_name,
         futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: compile_sub_target " << o.object_name << "\n";
             m.compile(o);
-        }, std::move(sub_module), std::move(sub_out)));
+        },
+                                        std::move(sub_module), std::move(sub_out)));
 
         const uint64_t cur_target_mask = target_feature_mask(target);
-        Expr can_use = (target == base_target) ?
-                        IntImm::make(Int(32), 1) :
-                        Call::make(Int(32), "halide_can_use_target_features", 
-                                   {UIntImm::make(UInt(64), cur_target_mask)}, 
-                                   Call::Extern);
+        Expr can_use = (target == base_target) ? IntImm::make(Int(32), 1) : Call::make(Int(32), "halide_can_use_target_features",
+                                                                                       { UIntImm::make(UInt(64), cur_target_mask) },
+                                                                                       Call::Extern);
 
         runtime_features_mask &= cur_target_mask;
 
@@ -424,7 +426,8 @@ void compile_multitarget(const std::string &fn_name,
         futures.emplace_back(pool.async([](Target t, Outputs o) {
             debug(1) << "compile_multitarget: compile_standalone_runtime " << o.static_library_name << "\n";
             compile_standalone_runtime(o, t);
-        }, std::move(runtime_target), std::move(runtime_out)));
+        },
+                                        std::move(runtime_target), std::move(runtime_out)));
     }
 
     if (needs_wrapper) {
@@ -444,9 +447,9 @@ void compile_multitarget(const std::string &fn_name,
         // arguments; this is regrettable but fairly minor in terms of both code size and speed,
         // at least for real-world code.)
         Target wrapper_target = base_target
-            .with_feature(Target::NoRuntime)
-            .with_feature(Target::NoBoundsQuery)
-            .without_feature(Target::NoAsserts);
+                                    .with_feature(Target::NoRuntime)
+                                    .with_feature(Target::NoBoundsQuery)
+                                    .without_feature(Target::NoAsserts);
 
         // If the base target specified the Matlab target, we want the Matlab target
         // on the wrapper instead.
@@ -461,7 +464,8 @@ void compile_multitarget(const std::string &fn_name,
         futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: wrapper " << o.object_name << "\n";
             m.compile(o);
-        }, std::move(wrapper_module), std::move(wrapper_out)));
+        },
+                                        std::move(wrapper_module), std::move(wrapper_out)));
     }
 
     if (!output_files.c_header_name.empty()) {
@@ -471,7 +475,8 @@ void compile_multitarget(const std::string &fn_name,
         futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";
             m.compile(o);
-        }, std::move(header_module), std::move(header_out)));
+        },
+                                        std::move(header_module), std::move(header_out)));
     }
 
     // Must wait for everything to finish before we create the static library

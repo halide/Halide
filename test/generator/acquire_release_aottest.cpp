@@ -3,19 +3,18 @@
 #ifdef _WIN32
 // This test requires weak linkage
 int main(int argc, char **argv) {
-  printf("Skipping test on windows\n");
-  return 0;
+    printf("Skipping test on windows\n");
+    return 0;
 }
 #else
 
-#include <math.h>
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include <assert.h>
+#include <math.h>
 #include <string.h>
 
 #include "acquire_release.h"
-
 
 using namespace Halide::Runtime;
 
@@ -77,7 +76,7 @@ int init_context() {
     cl_device_id dev = devices[deviceCount - 1];
 
     // Create context and command queue.
-    cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform,
+    cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties) platform,
                                            0 };
     cl_ctx = clCreateContext(properties, 1, &dev, nullptr, nullptr, &err);
     if (err != CL_SUCCESS) {
@@ -194,7 +193,8 @@ int init_context() {
     printf("Using default implementation of acquire/release\n");
     return 0;
 }
-void destroy_context() {}
+void destroy_context() {
+}
 #endif
 
 int main(int argc, char **argv) {
@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
     Buffer<float> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
-            input(x, y) = (float)(x * y);
+            input(x, y) = (float) (x * y);
         }
     }
 

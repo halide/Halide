@@ -16,8 +16,8 @@ int main(int argc, char **argv) {
         Param<bool> use_gpu;
 
         f(x, y) = x + y;
-        g(x, y) = f(x-1, y+1) + f(x+1, y-1) + x;
-        h(x, y) = g(x+1, y-1) + g(x-1, y+1) + y;
+        g(x, y) = f(x - 1, y + 1) + f(x + 1, y - 1) + x;
+        h(x, y) = g(x + 1, y - 1) + g(x - 1, y + 1) + y;
 
         // Specialize is a little tricky for producer-consumer pairs: the
         // compute_at must be the same in either case, which means you
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 
         for (int y = 0; y < out1.height(); y++) {
             for (int x = 0; x < out1.width(); x++) {
-                int correct = 6*x + 5*y;
+                int correct = 6 * x + 5 * y;
                 if (out1(x, y) != correct) {
                     printf("out1(%d, %d) = %d instead of %d\n",
                            x, y, out1(x, y), correct);
@@ -67,7 +67,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-
 
     {
         Func f("f"), g("g"), h("h");
@@ -90,7 +89,7 @@ int main(int argc, char **argv) {
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
-                int correct = 2*x + y;
+                int correct = 2 * x + y;
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
@@ -102,5 +101,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

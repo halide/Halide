@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -16,20 +16,20 @@ using namespace Halide;
 int call_counter = 0;
 extern "C" DLLEXPORT float my_func(int x, float y) {
     call_counter++;
-    return x*y;
+    return x * y;
 }
 HalideExtern_2(float, my_func, int, float);
 
 int call_counter2 = 0;
 extern "C" DLLEXPORT float my_func2(int x, float y) {
     call_counter2++;
-    return x*y;
+    return x * y;
 }
 
 int call_counter3 = 0;
 extern "C" DLLEXPORT float my_func3(int x, float y) {
     call_counter3++;
-    return x*y;
+    return x * y;
 }
 
 int main(int argc, char **argv) {
@@ -43,8 +43,8 @@ int main(int argc, char **argv) {
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
-            float correct = (float)(i*j);
-	    float delta = imf(i, j) - correct;
+            float correct = (float) (i * j);
+            float delta = imf(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
                 return -1;
@@ -52,8 +52,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (call_counter != 32*32) {
-        printf("C function my_func was called %d times instead of %d\n", call_counter, 32*32);
+    if (call_counter != 32 * 32) {
+        printf("C function my_func was called %d times instead of %d\n", call_counter, 32 * 32);
         return -1;
     }
 
@@ -67,8 +67,8 @@ int main(int argc, char **argv) {
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
-            float correct = (float)(i*j);
-	    float delta = imf2(i, j) - correct;
+            float correct = (float) (i * j);
+            float delta = imf2(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf2[%d, %d] = %f instead of %f\n", i, j, imf2(i, j), correct);
                 return -1;
@@ -76,8 +76,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (call_counter2 != 32*32) {
-        printf("C function my_func2 was called %d times instead of %d\n", call_counter, 32*32);
+    if (call_counter2 != 32 * 32) {
+        printf("C function my_func2 was called %d times instead of %d\n", call_counter, 32 * 32);
         return -1;
     }
 
@@ -88,8 +88,8 @@ int main(int argc, char **argv) {
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
-            float correct = (float)(i*j);
-	    float delta = imf3(i, j) - correct;
+            float correct = (float) (i * j);
+            float delta = imf3(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf3[%d, %d] = %f instead of %f\n", i, j, imf3(i, j), correct);
                 return -1;
@@ -97,8 +97,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (call_counter3 != 32*32) {
-        printf("C function my_func3 was called %d times instead of %d\n", call_counter3, 32*32);
+    if (call_counter3 != 32 * 32) {
+        printf("C function my_func3 was called %d times instead of %d\n", call_counter3, 32 * 32);
         return -1;
     }
 

@@ -28,7 +28,7 @@ using namespace Halide::Internal;
 
 namespace {
 
-template <typename fn_type>
+template<typename fn_type>
 bool lookup_runtime_routine(const std::string &name,
                             const Target &target,
                             fn_type &result) {
@@ -37,7 +37,7 @@ bool lookup_runtime_routine(const std::string &name,
 
     for (size_t i = 0; i < runtime.size(); i++) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
-          runtime[i].exports().find(name);
+            runtime[i].exports().find(name);
         if (f != runtime[i].exports().end()) {
             result = reinterpret_bits<fn_type>(f->second.address);
             return true;
@@ -45,7 +45,6 @@ bool lookup_runtime_routine(const std::string &name,
     }
     return false;
 }
-
 }
 
 namespace Halide {
@@ -248,5 +247,4 @@ const struct halide_device_interface_t *halide_metal_device_interface() {
     return get_device_interface_for_device_api(DeviceAPI::Metal, t);
 }
 EXPORT_SYM(halide_metal_device_interface)
-
 }

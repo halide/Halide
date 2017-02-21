@@ -9,13 +9,13 @@
 
 namespace Testing {
 
-template <typename T>
+template<typename T>
 bool neq(T a, T b, T tol) {
     return std::abs(a - b) > tol;
 }
 
 // Check 3-dimension buffer
-template <typename T>
+template<typename T>
 bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, int y, int c)> f) {
     class err : std::exception {
     public:
@@ -54,7 +54,7 @@ bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, in
 }
 
 // Check 2-dimension buffer
-template <typename T>
+template<typename T>
 bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, int y)> f) {
     class err : std::exception {};
     try {
@@ -77,7 +77,7 @@ bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, in
 }
 
 // Shorthand to check with tolerance=0
-template <typename T, typename Func>
+template<typename T, typename Func>
 bool check_result(const Halide::Buffer<T> &buf, Func f) {
     return check_result<T>(buf, 0, f);
 }

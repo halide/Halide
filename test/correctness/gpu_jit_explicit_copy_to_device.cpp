@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     // We'll have two input buffers. For one we'll copy to the device
     // explicitly. For the other we'll do a device malloc and set
     // host_dirty.
-    for (DeviceAPI d : {DeviceAPI::Default_GPU, DeviceAPI::CUDA, DeviceAPI::OpenCL}) {
+    for (DeviceAPI d : { DeviceAPI::Default_GPU, DeviceAPI::CUDA, DeviceAPI::OpenCL }) {
         if (!get_device_interface_for_device_api(d)) continue;
 
         Buffer<float> a(100, 100), b(100, 100);

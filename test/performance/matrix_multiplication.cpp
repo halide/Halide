@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <cstdio>
 #include "benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 
-void simple_version(float* A, float *B, float *C, int width, int stride) {
+void simple_version(float *A, float *B, float *C, int width, int stride) {
     for (int iy = 0; iy < width; iy++) {
         for (int ix = 0; ix < width; ix++) {
             float *cc = C + iy * stride + ix;
@@ -16,7 +16,6 @@ void simple_version(float* A, float *B, float *C, int width, int stride) {
         }
     }
 }
-
 
 int main(int argc, char **argv) {
     const int matrix_size = 992, block_size = 32;
@@ -36,11 +35,16 @@ int main(int argc, char **argv) {
     matrix_mul.vectorize(x, 8);
 
     matrix_mul.update(0)
-        .split(x, x, xi, block_size).split(xi, xi, xii, 8)
-        .split(y, y, yi, block_size).split(yi, yi, yii, 4)
+        .split(x, x, xi, block_size)
+        .split(xi, xi, xii, 8)
+        .split(y, y, yi, block_size)
+        .split(yi, yi, yii, 4)
         .split(k, k, ki, block_size)
         .reorder(xii, yii, xi, ki, yi, k, x, y)
-        .parallel(y).vectorize(xii).unroll(xi).unroll(yii);
+        .parallel(y)
+        .vectorize(xii)
+        .unroll(xi)
+        .unroll(yii);
 
     matrix_mul
         .bound(x, 0, matrix_size)

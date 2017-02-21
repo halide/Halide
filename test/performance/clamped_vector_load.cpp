@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <cstdio>
-#include <algorithm>
 #include "benchmark.h"
+#include <algorithm>
+#include <cstdio>
 
 using namespace Halide;
 
@@ -12,7 +12,7 @@ Buffer<uint16_t> output;
 #define MAX 1020
 
 double test(Func f, bool test_correctness = true) {
-    f.compile_to_assembly(f.name() + ".s", {input}, f.name());
+    f.compile_to_assembly(f.name() + ".s", { input }, f.name());
     f.compile_jit();
     f.realize(output);
 
@@ -20,7 +20,7 @@ double test(Func f, bool test_correctness = true) {
         for (int y = 0; y < output.height(); y++) {
             for (int x = 0; x < output.width(); x++) {
                 int ix1 = std::max(std::min(x, MAX), MIN);
-                int ix2 = std::max(std::min(x+1, MAX), MIN);
+                int ix2 = std::max(std::min(x + 1, MAX), MIN);
                 uint16_t correct = input(ix1, y) * 3 + input(ix2, y);
                 if (output(x, y) != correct) {
                     printf("output(%d, %d) = %d instead of %d\n",
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     // Try doing vector loads with a boundary condition in various
     // ways and compare the performance.
 
-    input = Buffer<uint16_t>(1024+8, 320);
+    input = Buffer<uint16_t>(1024 + 8, 320);
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     {
         // Do an unclamped load to get a reference number
         Func f;
-        f(x, y) = input(x, y) * 3 + input(x+1, y);
+        f(x, y) = input(x, y) * 3 + input(x + 1, y);
 
         f.vectorize(x, 8);
 
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
         g(x, y) = input(clamp(x, MIN, MAX), y);
 
         Func f;
-        f(x, y) = g(x, y) * 3 + g(x+1, y);
+        f(x, y) = g(x, y) * 3 + g(x + 1, y);
 
         f.vectorize(x, 8);
         f.compile_to_lowered_stmt("debug_clamped_vector_load.stmt", f.infer_arguments());
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
         g(x, y) = input(clamp(x, MIN, MAX), y);
 
         Func f;
-        f(x, y) = g(x, y) * 3 + g(x+1, y);
+        f(x, y) = g(x, y) * 3 + g(x + 1, y);
 
         f.vectorize(x, 8);
         g.compute_at(f, x);
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
         g(x, y) = input(clamp(x, MIN, MAX), y);
 
         Func f;
-        f(x, y) = g(x, y) * 3 + g(x+1, y);
+        f(x, y) = g(x, y) * 3 + g(x + 1, y);
 
         f.vectorize(x, 8);
         g.compute_at(f, y);

@@ -12,8 +12,8 @@
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
-#include "Tuple.h"
 #include "Target.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -30,8 +30,8 @@ class IRMutator;
  * Used to determine if the output printed to file should be as a normal string
  * or as an HTML file which can be opened in a browerser and manipulated via JS and CSS.*/
 enum StmtOutputFormat {
-     Text,
-     HTML
+    Text,
+    HTML
 };
 
 namespace {
@@ -101,9 +101,9 @@ public:
      * and C function name. If you're compiling a pipeline with a
      * single output Func, see also Func::compile_to_llvm_assembly. */
     EXPORT void compile_to_llvm_assembly(const std::string &filename,
-                                   const std::vector<Argument> &args,
-                                   const std::string &fn_name,
-                                   const Target &target = get_target_from_environment());
+                                         const std::vector<Argument> &args,
+                                         const std::string &fn_name,
+                                         const Target &target = get_target_from_environment());
 
     /** Statically compile a pipeline with multiple output functions to an
      * object file, with the given filename (which should probably end in
@@ -190,7 +190,7 @@ public:
                                     const Target &target = get_target_from_environment(),
                                     const Internal::LoweredFunc::LinkageType linkage_type = Internal::LoweredFunc::External);
 
-   /** Eagerly jit compile the function to machine code. This
+    /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
      * running your halide pipeline inside time-sensitive code and
      * wish to avoid including the time taken to compile a pipeline,
@@ -198,7 +198,7 @@ public:
      * pointer to the compiled pipeline. Default is to use the Target
      * returned from Halide::get_jit_target_from_environment()
      */
-     EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
+    EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
@@ -396,13 +396,12 @@ public:
 private:
     std::string generate_function_name() const;
     std::vector<Argument> build_public_args(const std::vector<Argument> &args, const Target &target) const;
-
 };
 
 struct ExternSignature {
 private:
-    Type ret_type_;       // Only meaningful if is_void_return is false; must be default value otherwise
-    bool is_void_return_{false};
+    Type ret_type_;  // Only meaningful if is_void_return is false; must be default value otherwise
+    bool is_void_return_{ false };
     std::vector<Type> arg_types_;
 
 public:
@@ -415,11 +414,11 @@ public:
         internal_assert(!(is_void_return && ret_type != Type()));
     }
 
-    template <typename RT, typename... Args>
+    template<typename RT, typename... Args>
     ExternSignature(RT (*f)(Args... args))
         : ret_type_(type_of<RT>()),
           is_void_return_(std::is_void<RT>::value),
-          arg_types_({type_of<Args>()...}) {
+          arg_types_({ type_of<Args>()... }) {
     }
 
     const Type &ret_type() const {
@@ -438,20 +437,27 @@ public:
 
 struct ExternCFunction {
 private:
-    void *address_{nullptr};
+    void *address_{ nullptr };
     ExternSignature signature_;
 
 public:
     ExternCFunction() = default;
 
     ExternCFunction(void *address, const ExternSignature &signature)
-        : address_(address), signature_(signature) {}
+        : address_(address), signature_(signature) {
+    }
 
-    template <typename RT, typename... Args>
-    ExternCFunction(RT (*f)(Args... args)) : ExternCFunction((void *)f, ExternSignature(f)) {}
+    template<typename RT, typename... Args>
+    ExternCFunction(RT (*f)(Args... args))
+        : ExternCFunction((void *) f, ExternSignature(f)) {
+    }
 
-    void *address() const { return address_; }
-    const ExternSignature &signature() const { return signature_; }
+    void *address() const {
+        return address_;
+    }
+    const ExternSignature &signature() const {
+        return signature_;
+    }
 };
 
 struct JITExtern {
@@ -466,11 +472,17 @@ public:
     EXPORT JITExtern(Func func);
     EXPORT JITExtern(const ExternCFunction &extern_c_function);
 
-    template <typename RT, typename... Args>
-    JITExtern(RT (*f)(Args... args)) : JITExtern(ExternCFunction(f)) {}
+    template<typename RT, typename... Args>
+    JITExtern(RT (*f)(Args... args))
+        : JITExtern(ExternCFunction(f)) {
+    }
 
-    const Pipeline &pipeline() const { return pipeline_; }
-    const ExternCFunction &extern_c_function() const { return extern_c_function_; }
+    const Pipeline &pipeline() const {
+        return pipeline_;
+    }
+    const ExternCFunction &extern_c_function() const {
+        return extern_c_function_;
+    }
 };
 
 }  // namespace Halide

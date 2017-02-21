@@ -1,9 +1,9 @@
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include "multitarget.h"
 #include <atomic>
 #include <string>
 #include <tuple>
-#include "HalideRuntime.h"
-#include "multitarget.h"
-#include "HalideBuffer.h"
 
 using namespace Halide::Runtime;
 
@@ -14,18 +14,18 @@ void my_error_handler(void *user_context, const char *message) {
 std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
     if (env_var_name) {
         size_t read = 0;
-        #ifdef _MSC_VER
+#ifdef _MSC_VER
         char lvl[32];
         if (getenv_s(&read, lvl, env_var_name) != 0) read = 0;
-        #else
+#else
         char *lvl = getenv(env_var_name);
-        read = (lvl)?1:0;
-        #endif
+        read = (lvl) ? 1 : 0;
+#endif
         if (read) {
-            return {std::string(lvl), true};
+            return { std::string(lvl), true };
         }
     }
-    return {"", false};
+    return { "", false };
 }
 
 bool use_debug_feature() {

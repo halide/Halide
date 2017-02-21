@@ -39,8 +39,8 @@ struct SomeStruct {
 } global_struct;
 
 float SomeStruct::static_float = 3.0f;
-double SomeStruct::static_member_double_array[17] = {0};
-SomeStruct::SubStruct SomeStruct::substruct = {0};
+double SomeStruct::static_member_double_array[17] = { 0 };
+SomeStruct::SubStruct SomeStruct::substruct = { 0 };
 
 float global_array[7];
 
@@ -52,8 +52,11 @@ namespace {
 struct Bar {
     typedef int bint;
     bint bar_int;
-    Bar(int x) : bar_int(x) {}
-    ~Bar() {}
+    Bar(int x)
+        : bar_int(x) {
+    }
+    ~Bar() {
+    }
     void check_bar() {
         check(this, "Foo::{anonymous}::Bar", "b", __FILE__, __LINE__);
         check(&bar_int, "Foo::{anonymous}::Bar::bint", "b.bar_int", __FILE__, __LINE__);
@@ -64,21 +67,19 @@ struct Bar {
 };
 
 int g(int x) {
-    Bar b(x*7);
+    Bar b(x * 7);
     b.check_bar();
     return b.get();
 }
-
 }
 
 int f(int x) {
     static float static_float_in_f = 0.3f;
-    int y = g(x) + g(x-1);
+    int y = g(x) + g(x - 1);
     check(&y, "int", "y", __FILE__, __LINE__);
     check(&static_float_in_f, "float", "static_float_in_f", __FILE__, __LINE__);
     return y - 1;
 }
-
 }
 
 typedef float fancy_float;
@@ -87,7 +88,7 @@ struct HeapObject {
     float f;
     fancy_float f2;
     int i;
-    struct  {
+    struct {
         char c;
         double d;
         int i_array[20];
@@ -148,19 +149,19 @@ int main(int argc, char **argv) {
     // Check what happens with lexical blocks which may reuse stack positions
     {
         int block_a = 3;
-        (void)block_a;
+        (void) block_a;
         check(&block_a, "int", "block_a", __FILE__, __LINE__);
     }
 
     {
         int block_b = 3;
-        (void)block_b;
+        (void) block_b;
         check(&block_b, "int", "block_b", __FILE__, __LINE__);
     }
 
     {
         int block_c = 3;
-        (void)block_c;
+        (void) block_c;
         check(&block_c, "int", "block_c", __FILE__, __LINE__);
     }
 

@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -11,8 +11,7 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
-
-int call_counter[4] = {0, 0, 0, 0};
+int call_counter[4] = { 0, 0, 0, 0 };
 extern "C" DLLEXPORT int my_func(int counter, int x) {
     call_counter[counter]++;
     return x;
@@ -51,10 +50,10 @@ int main(int argc, char **argv) {
     }
 
     // Check the call counters
-    if (call_counter[0] != 1 || call_counter[1] != 32 || call_counter[2] != 32*32) {
+    if (call_counter[0] != 1 || call_counter[1] != 32 || call_counter[2] != 32 * 32) {
         printf("Call counters were %d %d %d instead of %d %d %d\n",
                call_counter[0], call_counter[1], call_counter[2],
-               1, 32, 32*32);
+               1, 32, 32 * 32);
         return -1;
     }
 

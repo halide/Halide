@@ -10,6 +10,5 @@ int debug::debug_level() {
     })();
     return cached_debug_level;
 }
-
 }
 }

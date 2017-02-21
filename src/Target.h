@@ -5,14 +5,14 @@
  * Defines the structure that describes a Halide target.
  */
 
-#include <stdint.h>
 #include <bitset>
+#include <stdint.h>
 #include <string>
 
 #include "Error.h"
+#include "Expr.h"
 #include "Type.h"
 #include "Util.h"
-#include "Expr.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -22,12 +22,24 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, QuRT, NoOS} os;
+    enum OS { OSUnknown = 0,
+              Linux,
+              Windows,
+              OSX,
+              Android,
+              IOS,
+              QuRT,
+              NoOS } os;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, MIPS, Hexagon, POWERPC} arch;
+    enum Arch { ArchUnknown = 0,
+                X86,
+                ARM,
+                MIPS,
+                Hexagon,
+                POWERPC } arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -81,7 +93,9 @@ struct Target {
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
         FeatureEnd = halide_target_feature_end
     };
-    Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
+    Target()
+        : os(OSUnknown), arch(ArchUnknown), bits(0) {
+    }
     Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
         for (size_t i = 0; i < initial_features.size(); i++) {
@@ -194,14 +208,14 @@ struct Target {
     bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
-      return os == other.os &&
-          arch == other.arch &&
-          bits == other.bits &&
-          features == other.features;
+        return os == other.os &&
+               arch == other.arch &&
+               bits == other.bits &&
+               features == other.features;
     }
 
     bool operator!=(const Target &other) const {
-      return !(*this == other);
+        return !(*this == other);
     }
 
     /** Convert the Target into a string form that can be reconstituted
@@ -271,7 +285,7 @@ struct Target {
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
-    template <typename data_t>
+    template<typename data_t>
     int natural_vector_size() const {
         return natural_vector_size(type_of<data_t>());
     }
@@ -281,9 +295,9 @@ struct Target {
      * is enabled, which expands the maximum to 2^63 - 1. */
     int64_t maximum_buffer_size() const {
         if (bits == 64 && has_feature(LargeBuffers)) {
-            return (((uint64_t)1) << 63) - 1;
+            return (((uint64_t) 1) << 63) - 1;
         } else {
-            return (((uint64_t)1) << 31) - 1;
+            return (((uint64_t) 1) << 31) - 1;
         }
     }
 
@@ -317,9 +331,7 @@ EXPORT Target::Feature target_feature_for_device_api(DeviceAPI api);
 namespace Internal {
 
 EXPORT void target_test();
-
 }
-
 }
 
 #endif

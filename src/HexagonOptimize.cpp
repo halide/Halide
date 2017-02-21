@@ -1,16 +1,16 @@
 #include "HexagonOptimize.h"
+#include "Bounds.h"
+#include "CSE.h"
 #include "ConciseCasts.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRMatch.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
-#include "CSE.h"
+#include "Lerp.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Scope.h"
-#include "Bounds.h"
-#include "Lerp.h"
 
 namespace Halide {
 namespace Internal {
@@ -25,23 +25,37 @@ using namespace Halide::ConciseCasts;
 Expr native_interleave(Expr x) {
     string fn;
     switch (x.type().bits()) {
-    case 8: fn = "halide.hexagon.interleave.vb"; break;
-    case 16: fn = "halide.hexagon.interleave.vh"; break;
-    case 32: fn = "halide.hexagon.interleave.vw"; break;
-    default: internal_error << "Cannot interleave native vectors of type " << x.type() << "\n";
+    case 8:
+        fn = "halide.hexagon.interleave.vb";
+        break;
+    case 16:
+        fn = "halide.hexagon.interleave.vh";
+        break;
+    case 32:
+        fn = "halide.hexagon.interleave.vw";
+        break;
+    default:
+        internal_error << "Cannot interleave native vectors of type " << x.type() << "\n";
     }
-    return Call::make(x.type(), fn, {x}, Call::PureExtern);
+    return Call::make(x.type(), fn, { x }, Call::PureExtern);
 }
 
 Expr native_deinterleave(Expr x) {
     string fn;
     switch (x.type().bits()) {
-    case 8: fn = "halide.hexagon.deinterleave.vb"; break;
-    case 16: fn = "halide.hexagon.deinterleave.vh"; break;
-    case 32: fn = "halide.hexagon.deinterleave.vw"; break;
-    default: internal_error << "Cannot deinterleave native vectors of type " << x.type() << "\n";
+    case 8:
+        fn = "halide.hexagon.deinterleave.vb";
+        break;
+    case 16:
+        fn = "halide.hexagon.deinterleave.vh";
+        break;
+    case 32:
+        fn = "halide.hexagon.deinterleave.vw";
+        break;
+    default:
+        internal_error << "Cannot deinterleave native vectors of type " << x.type() << "\n";
     }
-    return Call::make(x.type(), fn, {x}, Call::PureExtern);
+    return Call::make(x.type(), fn, { x }, Call::PureExtern);
 }
 
 bool is_native_interleave_op(Expr x, const char *name) {
@@ -61,7 +75,9 @@ bool is_native_deinterleave(Expr x) {
 namespace {
 
 // Broadcast to an unknown number of lanes, for making patterns.
-Expr bc(Expr x) { return Broadcast::make(x, 0); }
+Expr bc(Expr x) {
+    return Broadcast::make(x, 0);
+}
 
 // This mutator rewrites patterns with an unknown number of lanes to
 // have the specified number of lanes.
@@ -70,7 +86,9 @@ class WithLanes : public IRMutator {
 
     int lanes;
 
-    Type with_lanes(Type t) { return t.with_lanes(lanes); }
+    Type with_lanes(Type t) {
+        return t.with_lanes(lanes);
+    }
 
     void visit(const Cast *op) {
         if (op->type.lanes() != lanes) {
@@ -97,7 +115,9 @@ class WithLanes : public IRMutator {
     }
 
 public:
-    WithLanes(int lanes) : lanes(lanes) {}
+    WithLanes(int lanes)
+        : lanes(lanes) {
+    }
 };
 
 Expr with_lanes(Expr x, int lanes) {
@@ -109,19 +129,19 @@ struct Pattern {
         InterleaveResult = 1 << 0,  // After evaluating the pattern, interleave native vectors of the result.
         SwapOps01 = 1 << 1,  // Swap operands 0 and 1 prior to substitution.
         SwapOps12 = 1 << 2,  // Swap operands 1 and 2 prior to substitution.
-        ExactLog2Op1 = 1 << 3, // Replace operand 1 with its log base 2, if the log base 2 is exact.
-        ExactLog2Op2 = 1 << 4, // Save as above, but for operand 2.
+        ExactLog2Op1 = 1 << 3,  // Replace operand 1 with its log base 2, if the log base 2 is exact.
+        ExactLog2Op2 = 1 << 4,  // Save as above, but for operand 2.
 
-        BeginExactLog2Op = 1,   // BeginExactLog2Op and EndExactLog2Op ensure that we check only op1 and op2
-        EndExactLog2Op = 3,     // for ExactLog2Op
+        BeginExactLog2Op = 1,  // BeginExactLog2Op and EndExactLog2Op ensure that we check only op1 and op2
+        EndExactLog2Op = 3,  // for ExactLog2Op
 
         DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
         DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
         DeinterleaveOp2 = 1 << 7,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
 
-        BeginDeinterleaveOp = 0, // BeginDeinterleaveOp and EndDeinterleaveOp ensure that we check only three
-        EndDeinterleaveOp = 3,   // deinterleave Op0, 1 and 2.
+        BeginDeinterleaveOp = 0,  // BeginDeinterleaveOp and EndDeinterleaveOp ensure that we check only three
+        EndDeinterleaveOp = 3,  // deinterleave Op0, 1 and 2.
         // Many patterns are instructions that widen only
         // operand 0, which need to both deinterleave operand 0, and then
         // re-interleave the result.
@@ -138,15 +158,17 @@ struct Pattern {
         NarrowUnsignedOp2 = 1 << 17,
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
 
-   };
+    };
 
-    string intrin;        // Name of the intrinsic
-    Expr pattern;         // The pattern to match against
+    string intrin;  // Name of the intrinsic
+    Expr pattern;  // The pattern to match against
     int flags;
 
-    Pattern() {}
+    Pattern() {
+    }
     Pattern(const string &intrin, Expr p, int flags = 0)
-        : intrin(intrin), pattern(p), flags(flags) {}
+        : intrin(intrin), pattern(p), flags(flags) {
+    }
 };
 
 Expr wild_u8 = Variable::make(UInt(8), "*");
@@ -189,7 +211,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             bool is_match = true;
             for (size_t i = 0; i < matches.size() && is_match; i++) {
                 Type t = matches[i].type();
-                Type target_t = t.with_bits(t.bits()/2);
+                Type target_t = t.with_bits(t.bits() / 2);
                 if (p.flags & (Pattern::NarrowOp0 << i)) {
                     matches[i] = lossless_cast(target_t, matches[i]);
                 } else if (p.flags & (Pattern::NarrowUnsignedOp0 << i)) {
@@ -265,7 +287,7 @@ Expr lossless_negate(Expr x) {
     return Expr();
 }
 
-template <typename T>
+template<typename T>
 Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IRMutator *mutator) {
     Expr ret = apply_patterns(op, patterns, mutator);
     if (!ret.same_as(op)) return ret;
@@ -287,22 +309,22 @@ private:
     void visit(const Mul *op) {
         static vector<Pattern> scalar_muls = {
             // Vector by scalar widening multiplies.
-            { "halide.hexagon.mpy.vub.ub", wild_u16x*bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
-            { "halide.hexagon.mpy.vub.b",  wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
-            { "halide.hexagon.mpy.vuh.uh", wild_u32x*bc(wild_u32), Pattern::InterleaveResult | Pattern::NarrowOps },
-            { "halide.hexagon.mpy.vh.h",   wild_i32x*bc(wild_i32), Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vub.ub", wild_u16x * bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vub.b", wild_i16x * bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
+            { "halide.hexagon.mpy.vuh.uh", wild_u32x * bc(wild_u32), Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vh.h", wild_i32x * bc(wild_i32), Pattern::InterleaveResult | Pattern::NarrowOps },
 
             // Multiplication by powers of 2.
-            { "halide.hexagon.shl.vub.ub", wild_u8x*bc(wild_u8), Pattern::ExactLog2Op1 },
-            { "halide.hexagon.shl.vuh.uh", wild_u16x*bc(wild_u16), Pattern::ExactLog2Op1 },
-            { "halide.hexagon.shl.vuw.uw", wild_u32x*bc(wild_u32), Pattern::ExactLog2Op1 },
-            { "halide.hexagon.shl.vb.b", wild_i8x*bc(wild_i8), Pattern::ExactLog2Op1 },
-            { "halide.hexagon.shl.vh.h", wild_i16x*bc(wild_i16), Pattern::ExactLog2Op1 },
-            { "halide.hexagon.shl.vw.w", wild_i32x*bc(wild_i32), Pattern::ExactLog2Op1 },
+            { "halide.hexagon.shl.vub.ub", wild_u8x * bc(wild_u8), Pattern::ExactLog2Op1 },
+            { "halide.hexagon.shl.vuh.uh", wild_u16x * bc(wild_u16), Pattern::ExactLog2Op1 },
+            { "halide.hexagon.shl.vuw.uw", wild_u32x * bc(wild_u32), Pattern::ExactLog2Op1 },
+            { "halide.hexagon.shl.vb.b", wild_i8x * bc(wild_i8), Pattern::ExactLog2Op1 },
+            { "halide.hexagon.shl.vh.h", wild_i16x * bc(wild_i16), Pattern::ExactLog2Op1 },
+            { "halide.hexagon.shl.vw.w", wild_i32x * bc(wild_i32), Pattern::ExactLog2Op1 },
 
             // Non-widening scalar multiplication.
-            { "halide.hexagon.mul.vh.b", wild_i16x*bc(wild_i16), Pattern::NarrowOp1 },
-            { "halide.hexagon.mul.vw.h", wild_i32x*bc(wild_i32), Pattern::NarrowOp1 },
+            { "halide.hexagon.mul.vh.b", wild_i16x * bc(wild_i16), Pattern::NarrowOp1 },
+            { "halide.hexagon.mul.vw.h", wild_i32x * bc(wild_i32), Pattern::NarrowOp1 },
             // TODO: There's also mul.vw.b. We currently generate mul.vw.h
             // instead. I'm not sure mul.vw.b is faster, it might even be
             // slower due to the extra step in broadcasting the scalar up to
@@ -311,25 +333,25 @@ private:
 
         static vector<Pattern> muls = {
             // Widening multiplication
-            { "halide.hexagon.mpy.vub.vub", wild_u16x*wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
-            { "halide.hexagon.mpy.vuh.vuh", wild_u32x*wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
-            { "halide.hexagon.mpy.vb.vb",   wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowOps },
-            { "halide.hexagon.mpy.vh.vh",   wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vub.vub", wild_u16x * wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vuh.vuh", wild_u32x * wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vb.vb", wild_i16x * wild_i16x, Pattern::InterleaveResult | Pattern::NarrowOps },
+            { "halide.hexagon.mpy.vh.vh", wild_i32x * wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
 
-            { "halide.hexagon.mpy.vub.vb",  wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
-            { "halide.hexagon.mpy.vh.vuh",  wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 },
+            { "halide.hexagon.mpy.vub.vb", wild_i16x * wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
+            { "halide.hexagon.mpy.vh.vuh", wild_i32x * wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 },
             // We need to check for the commuted versions of these patterns
             // before the more general patterns below catch these ops. The
             // other fix for this would be to break this into a third group of
             // multiply patterns, so the commuted versions of these would get
             // matched first.
-            { "halide.hexagon.mpy.vub.vb",  wild_i16x*wild_i16x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::SwapOps01 },
-            { "halide.hexagon.mpy.vh.vuh",  wild_i32x*wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 | Pattern::SwapOps01 },
+            { "halide.hexagon.mpy.vub.vb", wild_i16x * wild_i16x, Pattern::InterleaveResult | Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::SwapOps01 },
+            { "halide.hexagon.mpy.vh.vuh", wild_i32x * wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 | Pattern::SwapOps01 },
 
             // One operand widening multiplication.
-            { "halide.hexagon.mul.vw.vh", wild_i32x*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 },
-            { "halide.hexagon.mul.vw.vuh", wild_i32x*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 },
-            { "halide.hexagon.mul.vuw.vuh", wild_u32x*wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 },
+            { "halide.hexagon.mul.vw.vh", wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 },
+            { "halide.hexagon.mul.vw.vuh", wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 },
+            { "halide.hexagon.mul.vuw.vuh", wild_u32x * wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 },
         };
 
         if (op->type.is_vector()) {
@@ -350,16 +372,16 @@ private:
 
     // Helpers to generate horizontally reducing multiply operations.
     static Expr halide_hexagon_add_2mpy(Type result_type, string suffix, Expr v0, Expr v1, Expr c0, Expr c1) {
-        Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v0, v1, c0, c1}, Call::PureExtern);
+        Expr call = Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, { v0, v1, c0, c1 }, Call::PureExtern);
         return native_interleave(call);
     }
 
     static Expr halide_hexagon_add_2mpy(Type result_type, string suffix, Expr v01, Expr c01) {
-        return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, {v01, c01}, Call::PureExtern);
+        return Call::make(result_type, "halide.hexagon.add_2mpy" + suffix, { v01, c01 }, Call::PureExtern);
     }
 
     static Expr halide_hexagon_add_4mpy(Type result_type, string suffix, Expr v01, Expr c01) {
-        return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
+        return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, { v01, c01 }, Call::PureExtern);
     }
 
     typedef pair<Expr, Expr> MulExpr;
@@ -383,15 +405,15 @@ private:
     // multiplies in 'mpys', added to 'rest'.
     static int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
                             vector<MulExpr> &mpys, Expr &rest) {
-        if ((int)mpys.size() >= max_mpy_count) {
+        if ((int) mpys.size() >= max_mpy_count) {
             rest = rest.defined() ? Add::make(rest, op) : op;
             return 0;
         }
 
         // If the add is also widening, remove the cast.
-        int mpy_bits = std::max(a_ty.bits(), b_ty.bits())*2;
+        int mpy_bits = std::max(a_ty.bits(), b_ty.bits()) * 2;
         Expr maybe_mul = op;
-        if (op.type().bits() == mpy_bits*2) {
+        if (op.type().bits() == mpy_bits * 2) {
             if (const Cast *cast = op.as<Cast>()) {
                 if (cast->value.type().bits() == mpy_bits) {
                     maybe_mul = cast->value;
@@ -477,13 +499,13 @@ private:
             if (mpy_count > 0 && mpys.size() == 4) {
                 // TODO: It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
-                Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
+                Expr a0123 = Shuffle::make_interleave({ mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first });
                 a0123 = simplify(a0123);
 
                 // We can generate this op for 16 bits, but, it's only
                 // faster to do so if the interleave simplifies away.
                 if (op->type.bits() == 32 || !a0123.as<Shuffle>()) {
-                    Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
+                    Expr b0123 = Shuffle::make_interleave({ mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second });
                     b0123 = simplify(b0123);
                     b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
                     Expr new_expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
@@ -493,7 +515,7 @@ private:
                         // result. Overflow can occur, but will still
                         // produce the same result thanks to 2's
                         // complement arithmetic.
-                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
+                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw", { new_expr }, Call::PureExtern);
                     }
                     if (rest.defined()) {
                         new_expr = Add::make(new_expr, rest);
@@ -518,8 +540,8 @@ private:
             if (mpy_count > 0 && mpys.size() == 4) {
                 // TODO: It's possible that permuting the order of the
                 // multiply operands can simplify the shuffle away.
-                Expr a0123 = Shuffle::make_interleave({mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first});
-                Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
+                Expr a0123 = Shuffle::make_interleave({ mpys[0].first, mpys[1].first, mpys[2].first, mpys[3].first });
+                Expr b0123 = Shuffle::make_interleave({ mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second });
                 a0123 = simplify(a0123);
                 b0123 = simplify(b0123);
                 // We can generate this op for 16 bits, but, it's only
@@ -532,7 +554,7 @@ private:
                         // result. Overflow can occur, but will still
                         // produce the same result thanks to 2's
                         // complement arithmetic.
-                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw", {new_expr}, Call::PureExtern);
+                        new_expr = Call::make(op->type, "halide.hexagon.pack.vw", { new_expr }, Call::PureExtern);
                     }
                     if (rest.defined()) {
                         new_expr = Add::make(new_expr, rest);
@@ -564,7 +586,7 @@ private:
                 vdmpy_suffix = ".vh.b";
             }
             if (mpy_count > 0 && mpys.size() == 2) {
-                Expr a01 = Shuffle::make_interleave({mpys[0].first, mpys[1].first});
+                Expr a01 = Shuffle::make_interleave({ mpys[0].first, mpys[1].first });
                 a01 = simplify(a01);
                 // TODO: This requires the operands to be in a
                 // particular order. It should be more robust... but
@@ -572,7 +594,7 @@ private:
                 // trying all permutations.
                 Expr new_expr;
                 if (!a01.as<Shuffle>() || vmpa_suffix.empty()) {
-                    Expr b01 = Shuffle::make_interleave({mpys[0].second, mpys[1].second});
+                    Expr b01 = Shuffle::make_interleave({ mpys[0].second, mpys[1].second });
                     b01 = simplify(b01);
                     b01 = reinterpret(Type(b01.type().code(), 16, 1), b01);
                     new_expr = halide_hexagon_add_2mpy(op->type, vdmpy_suffix, a01, b01);
@@ -589,15 +611,15 @@ private:
 
         static vector<Pattern> adds = {
             // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
-            { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0),  ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b",   wild_i32x + halide_hexagon_add_2mpy(Int(32, 0),  ".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
-            { "halide.hexagon.acc_add_2mpy.vh.vub.b",       wild_i16x + halide_hexagon_add_2mpy(Int(16, 0),  ".vub.b", wild_u8x, wild_i16) },
-            { "halide.hexagon.acc_add_2mpy.vw.vh.b",        wild_i32x + halide_hexagon_add_2mpy(Int(32, 0),  ".vh.b", wild_i16x, wild_i16) },
-            { "halide.hexagon.acc_add_4mpy.vw.vub.b",       wild_i32x + halide_hexagon_add_4mpy(Int(32, 0),  ".vub.b", wild_u8x, wild_i32) },
-            { "halide.hexagon.acc_add_4mpy.vuw.vub.ub",     wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32) },
-            { "halide.hexagon.acc_add_4mpy.vuw.vub.vub",    wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x) },
-            { "halide.hexagon.acc_add_4mpy.vw.vub.vb",      wild_i32x + halide_hexagon_add_4mpy(Int(32, 0),  ".vub.vb", wild_u8x, wild_i8x) },
-            { "halide.hexagon.acc_add_4mpy.vw.vb.vb",       wild_i32x + halide_hexagon_add_4mpy(Int(32, 0),  ".vb.vb", wild_i8x, wild_i8x) },
+            { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
+            { "halide.hexagon.acc_add_2mpy.vh.vub.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.b", wild_u8x, wild_i16) },
+            { "halide.hexagon.acc_add_2mpy.vw.vh.b", wild_i32x + halide_hexagon_add_2mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i16) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.b", wild_u8x, wild_i32) },
+            { "halide.hexagon.acc_add_4mpy.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32) },
+            { "halide.hexagon.acc_add_4mpy.vuw.vub.vub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x) },
+            { "halide.hexagon.acc_add_4mpy.vw.vub.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.vb", wild_u8x, wild_i8x) },
+            { "halide.hexagon.acc_add_4mpy.vw.vb.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vb.vb", wild_i8x, wild_i8x) },
 
             // Widening adds. There are other instructions that add two vub and two vuh but do not widen.
             // To differentiate those from the widening ones, we encode the return type in the name here.
@@ -606,51 +628,51 @@ private:
             { "halide.hexagon.add_vw.vh.vh", wild_i32x + wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
 
             // Widening multiply-accumulates with a scalar.
-            { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x*bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mpy.vh.vub.b",   wild_i16x + wild_i16x*bc(wild_i16), Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + wild_u32x*bc(wild_u32), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + bc(wild_u16)*wild_u16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
-            { "halide.hexagon.add_mpy.vh.vub.b",   wild_i16x + bc(wild_i16)*wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12 },
-            { "halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + bc(wild_u32)*wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + wild_u16x * bc(wild_u16), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mpy.vh.vub.b", wild_i16x + wild_i16x * bc(wild_i16), Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + wild_u32x * bc(wild_u32), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mpy.vuh.vub.ub", wild_u16x + bc(wild_u16) * wild_u16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_mpy.vh.vub.b", wild_i16x + bc(wild_i16) * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_mpy.vuw.vuh.uh", wild_u32x + bc(wild_u32) * wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
 
             // These patterns aren't exactly right because the instruction
             // saturates the result. However, this is really the instruction
             // that we want to use in most cases, and we can exploit the fact
             // that 32 bit signed arithmetic overflow is undefined to argue
             // that these patterns are not completely incorrect.
-            { "halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + wild_i32x*bc(wild_i32), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
-            { "halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + bc(wild_i32)*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
+            { "halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + wild_i32x * bc(wild_i32), Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.satw_add_mpy.vw.vh.h", wild_i32x + bc(wild_i32) * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
 
             // Widening multiply-accumulates.
-            { "halide.hexagon.add_mpy.vuh.vub.vub", wild_u16x + wild_u16x*wild_u16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mpy.vuw.vuh.vuh", wild_u32x + wild_u32x*wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mpy.vh.vb.vb",    wild_i16x + wild_i16x*wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mpy.vw.vh.vh",    wild_i32x + wild_i32x*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mpy.vuh.vub.vub", wild_u16x + wild_u16x * wild_u16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mpy.vuw.vuh.vuh", wild_u32x + wild_u32x * wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mpy.vh.vb.vb", wild_i16x + wild_i16x * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mpy.vw.vh.vh", wild_i32x + wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowOp2 },
 
-            { "halide.hexagon.add_mpy.vh.vub.vb",   wild_i16x + wild_i16x*wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mpy.vw.vh.vuh",   wild_i32x + wild_i32x*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 },
-            { "halide.hexagon.add_mpy.vh.vub.vb",   wild_i16x + wild_i16x*wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12 },
-            { "halide.hexagon.add_mpy.vw.vh.vuh",   wild_i32x + wild_i32x*wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_mpy.vh.vub.vb", wild_i16x + wild_i16x * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mpy.vw.vh.vuh", wild_i32x + wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 },
+            { "halide.hexagon.add_mpy.vh.vub.vb", wild_i16x + wild_i16x * wild_i16x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1 | Pattern::NarrowUnsignedOp2 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_mpy.vw.vh.vuh", wild_i32x + wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1 | Pattern::NarrowOp2 | Pattern::SwapOps12 },
 
             // Shift-accumulates.
             { "halide.hexagon.add_shr.vw.vw.w", wild_i32x + (wild_i32x >> bc(wild_i32)) },
             { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (wild_i32x << bc(wild_i32)) },
             { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (wild_u32x << bc(wild_u32)) },
-            { "halide.hexagon.add_shr.vw.vw.w", wild_i32x + (wild_i32x/bc(wild_i32)), Pattern::ExactLog2Op2 },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (wild_i32x*bc(wild_i32)), Pattern::ExactLog2Op2 },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (wild_u32x*bc(wild_u32)), Pattern::ExactLog2Op2 },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (bc(wild_i32)*wild_i32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
-            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (bc(wild_u32)*wild_u32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_shr.vw.vw.w", wild_i32x + (wild_i32x / bc(wild_i32)), Pattern::ExactLog2Op2 },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (wild_i32x * bc(wild_i32)), Pattern::ExactLog2Op2 },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (wild_u32x * bc(wild_u32)), Pattern::ExactLog2Op2 },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_i32x + (bc(wild_i32) * wild_i32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_shl.vw.vw.w", wild_u32x + (bc(wild_u32) * wild_u32x), Pattern::ExactLog2Op1 | Pattern::SwapOps12 },
 
             // Non-widening multiply-accumulates with a scalar.
-            { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + wild_i16x*bc(wild_i16), Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mul.vw.vw.h", wild_i32x + wild_i32x*bc(wild_i32), Pattern::NarrowOp2 },
-            { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + bc(wild_i16)*wild_i16x, Pattern::NarrowOp1 | Pattern::SwapOps12 },
-            { "halide.hexagon.add_mul.vw.vw.h", wild_i32x + bc(wild_i32)*wild_i32x, Pattern::NarrowOp1 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + wild_i16x * bc(wild_i16), Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mul.vw.vw.h", wild_i32x + wild_i32x * bc(wild_i32), Pattern::NarrowOp2 },
+            { "halide.hexagon.add_mul.vh.vh.b", wild_i16x + bc(wild_i16) * wild_i16x, Pattern::NarrowOp1 | Pattern::SwapOps12 },
+            { "halide.hexagon.add_mul.vw.vw.h", wild_i32x + bc(wild_i32) * wild_i32x, Pattern::NarrowOp1 | Pattern::SwapOps12 },
             // TODO: There's also a add_mul.vw.vw.b
 
             // This pattern is very general, so it must come last.
-            { "halide.hexagon.add_mul.vh.vh.vh", wild_i16x + wild_i16x*wild_i16x },
+            { "halide.hexagon.add_mul.vh.vh.vh", wild_i16x + wild_i16x * wild_i16x },
         };
 
         if (op->type.is_vector()) {
@@ -703,7 +725,7 @@ private:
             vector<Expr> matches;
             for (const auto &i : cl) {
                 if (expr_match(i.second, expr, matches) && equal(matches[0], matches[1])) {
-                    expr = Call::make(op->type, i.first, {matches[0]}, Call::PureExtern) + 1;
+                    expr = Call::make(op->type, i.first, { matches[0] }, Call::PureExtern) + 1;
                     return;
                 }
             }
@@ -714,19 +736,19 @@ private:
 
         static vector<Pattern> casts = {
             // Averaging
-            { "halide.hexagon.avg.vub.vub", u8((wild_u16x + wild_u16x)/2), Pattern::NarrowOps },
-            { "halide.hexagon.avg.vuh.vuh", u16((wild_u32x + wild_u32x)/2), Pattern::NarrowOps },
-            { "halide.hexagon.avg.vh.vh", i16((wild_i32x + wild_i32x)/2), Pattern::NarrowOps },
-            { "halide.hexagon.avg.vw.vw", i32((wild_i64x + wild_i64x)/2), Pattern::NarrowOps },
+            { "halide.hexagon.avg.vub.vub", u8((wild_u16x + wild_u16x) / 2), Pattern::NarrowOps },
+            { "halide.hexagon.avg.vuh.vuh", u16((wild_u32x + wild_u32x) / 2), Pattern::NarrowOps },
+            { "halide.hexagon.avg.vh.vh", i16((wild_i32x + wild_i32x) / 2), Pattern::NarrowOps },
+            { "halide.hexagon.avg.vw.vw", i32((wild_i64x + wild_i64x) / 2), Pattern::NarrowOps },
 
-            { "halide.hexagon.avg_rnd.vub.vub", u8((wild_u16x + wild_u16x + 1)/2), Pattern::NarrowOps },
-            { "halide.hexagon.avg_rnd.vuh.vuh", u16((wild_u32x + wild_u32x + 1)/2), Pattern::NarrowOps },
-            { "halide.hexagon.avg_rnd.vh.vh", i16((wild_i32x + wild_i32x + 1)/2), Pattern::NarrowOps },
-            { "halide.hexagon.avg_rnd.vw.vw", i32((wild_i64x + wild_i64x + 1)/2), Pattern::NarrowOps },
+            { "halide.hexagon.avg_rnd.vub.vub", u8((wild_u16x + wild_u16x + 1) / 2), Pattern::NarrowOps },
+            { "halide.hexagon.avg_rnd.vuh.vuh", u16((wild_u32x + wild_u32x + 1) / 2), Pattern::NarrowOps },
+            { "halide.hexagon.avg_rnd.vh.vh", i16((wild_i32x + wild_i32x + 1) / 2), Pattern::NarrowOps },
+            { "halide.hexagon.avg_rnd.vw.vw", i32((wild_i64x + wild_i64x + 1) / 2), Pattern::NarrowOps },
 
-            { "halide.hexagon.navg.vub.vub", i8_sat((wild_i16x - wild_i16x)/2), Pattern::NarrowUnsignedOps },
-            { "halide.hexagon.navg.vh.vh", i16_sat((wild_i32x - wild_i32x)/2), Pattern::NarrowOps },
-            { "halide.hexagon.navg.vw.vw", i32_sat((wild_i64x - wild_i64x)/2), Pattern::NarrowOps },
+            { "halide.hexagon.navg.vub.vub", i8_sat((wild_i16x - wild_i16x) / 2), Pattern::NarrowUnsignedOps },
+            { "halide.hexagon.navg.vh.vh", i16_sat((wild_i32x - wild_i32x) / 2), Pattern::NarrowOps },
+            { "halide.hexagon.navg.vw.vw", i32_sat((wild_i64x - wild_i64x) / 2), Pattern::NarrowOps },
             // vnavg.uw doesn't exist.
 
             // Saturating add/subtract
@@ -741,32 +763,32 @@ private:
             { "halide.hexagon.satw_sub.vw.vw", i32_sat(wild_i64x - wild_i64x), Pattern::NarrowOps },
 
             // Saturating narrowing casts with rounding
-            { "halide.hexagon.trunc_satub_rnd.vh", u8_sat((wild_i32x + 128)/256), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
-            { "halide.hexagon.trunc_satb_rnd.vh",  i8_sat((wild_i32x + 128)/256), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
-            { "halide.hexagon.trunc_satuh_rnd.vw", u16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
-            { "halide.hexagon.trunc_sath_rnd.vw",  i16_sat((wild_i64x + 32768)/65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
+            { "halide.hexagon.trunc_satub_rnd.vh", u8_sat((wild_i32x + 128) / 256), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
+            { "halide.hexagon.trunc_satb_rnd.vh", i8_sat((wild_i32x + 128) / 256), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
+            { "halide.hexagon.trunc_satuh_rnd.vw", u16_sat((wild_i64x + 32768) / 65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
+            { "halide.hexagon.trunc_sath_rnd.vw", i16_sat((wild_i64x + 32768) / 65536), Pattern::DeinterleaveOp0 | Pattern::NarrowOp0 },
 
             // Multiply keep high half
-            { "halide.hexagon.trunc_mpy.vw.vw", i32((wild_i64x*wild_i64x)/Expr(static_cast<int64_t>(1) << 32)), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_mpy.vw.vw", i32((wild_i64x * wild_i64x) / Expr(static_cast<int64_t>(1) << 32)), Pattern::NarrowOps },
 
             // Scalar multiply keep high half, with multiplication by 2.
-            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((wild_i32x*bc(wild_i32))/32768), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((bc(wild_i32)*wild_i32x)/32768), Pattern::NarrowOps | Pattern::SwapOps01 },
-            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((wild_i32x*bc(wild_i32) + 16384)/32768), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((bc(wild_i32)*wild_i32x + 16384)/32768), Pattern::NarrowOps | Pattern::SwapOps01 },
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((wild_i32x * bc(wild_i32)) / 32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat((bc(wild_i32) * wild_i32x) / 32768), Pattern::NarrowOps | Pattern::SwapOps01 },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((wild_i32x * bc(wild_i32) + 16384) / 32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat((bc(wild_i32) * wild_i32x + 16384) / 32768), Pattern::NarrowOps | Pattern::SwapOps01 },
 
             // Vector multiply keep high half, with multiplication by 2.
-            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat((wild_i32x*wild_i32x + 16384)/32768), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satdw_mpy2.vw.vw", i32_sat((wild_i64x*wild_i64x)/Expr(static_cast<int64_t>(1) << 31)), Pattern::NarrowOps },
-            { "halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32_sat((wild_i64x*wild_i64x + (1 << 30))/Expr(static_cast<int64_t>(1) << 31)), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat((wild_i32x * wild_i32x + 16384) / 32768), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satdw_mpy2.vw.vw", i32_sat((wild_i64x * wild_i64x) / Expr(static_cast<int64_t>(1) << 31)), Pattern::NarrowOps },
+            { "halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32_sat((wild_i64x * wild_i64x + (1 << 30)) / Expr(static_cast<int64_t>(1) << 31)), Pattern::NarrowOps },
 
             // Saturating narrowing casts
             { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x >> wild_i16), Pattern::DeinterleaveOp0 },
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunc_sath_shr.vw.w",  i16_sat(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
-            { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
-            { "halide.hexagon.trunc_sath_shr.vw.w",  i16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
+            { "halide.hexagon.trunc_sath_shr.vw.w", i16_sat(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
+            { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x / wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
+            { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x / wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
+            { "halide.hexagon.trunc_sath_shr.vw.w", i16_sat(wild_i32x / wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
             // For some of the following narrowing casts, we have the choice of
             // non-interleaving or interleaving instructions. Because we don't
@@ -781,18 +803,18 @@ private:
             { "halide.hexagon.pack_sath.vw", i16_sat(wild_i32x) },
 
             // Narrowing casts. These may interleave later with trunclo.
-            { "halide.hexagon.packhi.vh", u8(wild_u16x/256) },
-            { "halide.hexagon.packhi.vh", u8(wild_i16x/256) },
-            { "halide.hexagon.packhi.vh", i8(wild_u16x/256) },
-            { "halide.hexagon.packhi.vh", i8(wild_i16x/256) },
-            { "halide.hexagon.packhi.vw", u16(wild_u32x/65536) },
-            { "halide.hexagon.packhi.vw", u16(wild_i32x/65536) },
-            { "halide.hexagon.packhi.vw", i16(wild_u32x/65536) },
-            { "halide.hexagon.packhi.vw", i16(wild_i32x/65536) },
+            { "halide.hexagon.packhi.vh", u8(wild_u16x / 256) },
+            { "halide.hexagon.packhi.vh", u8(wild_i16x / 256) },
+            { "halide.hexagon.packhi.vh", i8(wild_u16x / 256) },
+            { "halide.hexagon.packhi.vh", i8(wild_i16x / 256) },
+            { "halide.hexagon.packhi.vw", u16(wild_u32x / 65536) },
+            { "halide.hexagon.packhi.vw", u16(wild_i32x / 65536) },
+            { "halide.hexagon.packhi.vw", i16(wild_u32x / 65536) },
+            { "halide.hexagon.packhi.vw", i16(wild_i32x / 65536) },
 
             // Narrowing with shifting.
-            { "halide.hexagon.trunc_shr.vw.w",  i16(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
-            { "halide.hexagon.trunc_shr.vw.w",  i16(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
+            { "halide.hexagon.trunc_shr.vw.w", i16(wild_i32x >> wild_i32), Pattern::DeinterleaveOp0 },
+            { "halide.hexagon.trunc_shr.vw.w", i16(wild_i32x / wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
             // Narrowing casts. These may interleave later with trunc.
             { "halide.hexagon.pack.vh", u8(wild_u16x) },
@@ -814,7 +836,6 @@ private:
             { "halide.hexagon.sxt.vh", u32(wild_i16x), Pattern::InterleaveResult },
             { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
         };
-
 
         // To hit more of the patterns we want, rewrite "double casts"
         // as two stage casts. This also avoids letting vector casts
@@ -883,8 +904,8 @@ private:
                 // so duplicate each lane until we're wide enough.
                 Expr e = op->args[0];
                 while (src_type.bits() < dst_type.bits()) {
-                    e = Shuffle::make_interleave({e, e});
-                    src_type = src_type.with_bits(src_type.bits()*2);
+                    e = Shuffle::make_interleave({ e, e });
+                    src_type = src_type.with_bits(src_type.bits() * 2);
                     e = reinterpret(src_type, e);
                 }
                 expr = mutate(e);
@@ -895,7 +916,8 @@ private:
     }
 
 public:
-    OptimizePatterns() {}
+    OptimizePatterns() {
+    }
 };
 
 // Attempt to cancel out redundant interleave/deinterleave pairs. The
@@ -1002,11 +1024,11 @@ class EliminateInterleaves : public IRMutator {
         return x;
     }
 
-    template <typename T>
-    void visit_binary(const T* op) {
+    template<typename T>
+    void visit_binary(const T *op) {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
-        if (yields_removable_interleave({a, b})) {
+        if (yields_removable_interleave({ a, b })) {
             a = remove_interleave(a);
             b = remove_interleave(b);
             expr = T::make(a, b);
@@ -1023,19 +1045,45 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    void visit(const Add *op) { visit_binary(op); }
-    void visit(const Sub *op) { visit_binary(op); }
-    void visit(const Mul *op) { visit_binary(op); }
-    void visit(const Div *op) { visit_binary(op); }
-    void visit(const Mod *op) { visit_binary(op); }
-    void visit(const Min *op) { visit_binary(op); }
-    void visit(const Max *op) { visit_binary(op); }
-    void visit(const EQ *op) { visit_binary(op); }
-    void visit(const NE *op) { visit_binary(op); }
-    void visit(const LT *op) { visit_binary(op); }
-    void visit(const LE *op) { visit_binary(op); }
-    void visit(const GT *op) { visit_binary(op); }
-    void visit(const GE *op) { visit_binary(op); }
+    void visit(const Add *op) {
+        visit_binary(op);
+    }
+    void visit(const Sub *op) {
+        visit_binary(op);
+    }
+    void visit(const Mul *op) {
+        visit_binary(op);
+    }
+    void visit(const Div *op) {
+        visit_binary(op);
+    }
+    void visit(const Mod *op) {
+        visit_binary(op);
+    }
+    void visit(const Min *op) {
+        visit_binary(op);
+    }
+    void visit(const Max *op) {
+        visit_binary(op);
+    }
+    void visit(const EQ *op) {
+        visit_binary(op);
+    }
+    void visit(const NE *op) {
+        visit_binary(op);
+    }
+    void visit(const LT *op) {
+        visit_binary(op);
+    }
+    void visit(const LE *op) {
+        visit_binary(op);
+    }
+    void visit(const GT *op) {
+        visit_binary(op);
+    }
+    void visit(const GE *op) {
+        visit_binary(op);
+    }
 
     // These next 3 nodes should not exist if we're vectorized, they
     // should have been replaced with bitwise operations.
@@ -1062,7 +1110,7 @@ class EliminateInterleaves : public IRMutator {
 
         // The condition isn't a vector, so we can just check if we
         // should move an interleave from the true/false values.
-        if (yields_removable_interleave({true_value, false_value})) {
+        if (yields_removable_interleave({ true_value, false_value })) {
             true_value = remove_interleave(true_value);
             false_value = remove_interleave(false_value);
             expr = native_interleave(Select::make(cond, true_value, false_value));
@@ -1083,7 +1131,7 @@ class EliminateInterleaves : public IRMutator {
         return expr_uses_var(e, var);
     }
 
-    template <typename NodeType, typename LetType>
+    template<typename NodeType, typename LetType>
     void visit_let(NodeType &result, const LetType *op) {
         Expr value = mutate(op->value);
         string deinterleaved_name;
@@ -1160,7 +1208,9 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    void visit(const LetStmt *op) { visit_let(stmt, op); }
+    void visit(const LetStmt *op) {
+        visit_let(stmt, op);
+    }
 
     void visit(const Cast *op) {
         if (op->type.bits() == op->value.type().bits()) {
@@ -1229,7 +1279,7 @@ class EliminateInterleaves : public IRMutator {
 
         Expr arg = mutate(op->args[0]);
         if (!arg.same_as(op->args[0]) || interleave_mask) {
-            expr = Call::make(op->type, Call::bool_to_mask, {arg}, Call::PureIntrinsic);
+            expr = Call::make(op->type, Call::bool_to_mask, { arg }, Call::PureIntrinsic);
             if (interleave_mask) {
                 expr = native_interleave(expr);
                 interleave_mask = false;
@@ -1325,8 +1375,8 @@ class EliminateInterleaves : public IRMutator {
 
     // Track whether buffers are interleaved or not.
     enum class BufferState {
-        Unknown,         // We don't know if this buffer is interleaved or not.
-        Interleaved,     // We know the buffer is interleaved.
+        Unknown,  // We don't know if this buffer is interleaved or not.
+        Interleaved,  // We know the buffer is interleaved.
         NotInterleaved,  // We know the buffer is not interleaved.
     };
     Scope<BufferState> buffers;
@@ -1523,13 +1573,13 @@ Expr span_of_bounds(Interval bounds) {
     const Sub *max_sub = bounds.max.as<Sub>();
 
     if (min_min && max_min && equal(min_min->b, max_min->b)) {
-        return span_of_bounds({min_min->a, max_min->a});
+        return span_of_bounds({ min_min->a, max_min->a });
     } else if (min_max && max_max && equal(min_max->b, max_max->b)) {
-        return span_of_bounds({min_max->a, max_max->a});
+        return span_of_bounds({ min_max->a, max_max->a });
     } else if (min_add && max_add && equal(min_add->b, max_add->b)) {
-        return span_of_bounds({min_add->a, max_add->a});
+        return span_of_bounds({ min_add->a, max_add->a });
     } else if (min_sub && max_sub && equal(min_sub->b, max_sub->b)) {
-        return span_of_bounds({min_sub->a, max_sub->a});
+        return span_of_bounds({ min_sub->a, max_sub->a });
     } else {
         return bounds.max - bounds.min;
     }
@@ -1554,7 +1604,7 @@ class OptimizeShuffles : public IRMutator {
         inside_address_of = old_inside_address_of;
     }
 
-    template <typename T>
+    template<typename T>
     void visit_let(const T *op) {
         // We only care about vector lets.
         if (op->value.type().is_vector()) {
@@ -1567,11 +1617,13 @@ class OptimizeShuffles : public IRMutator {
     }
 
     void visit(const Let *op) {
-        lets.push_back({op->name, op->value});
+        lets.push_back({ op->name, op->value });
         visit_let(op);
         lets.pop_back();
     }
-    void visit(const LetStmt *op) { visit_let(op); }
+    void visit(const LetStmt *op) {
+        visit_let(op);
+    }
 
     void visit(const Load *op) {
         if (inside_address_of) {
@@ -1602,7 +1654,7 @@ class OptimizeShuffles : public IRMutator {
                 ((unaligned_index_bounds.max + align) / align) * align - 1
             };
 
-            for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
+            for (Interval index_bounds : { aligned_index_bounds, unaligned_index_bounds }) {
                 Expr index_span = span_of_bounds(index_bounds);
                 index_span = common_subexpression_elimination(index_span);
                 index_span = simplify(index_span);
@@ -1626,7 +1678,7 @@ class OptimizeShuffles : public IRMutator {
                     // dynamic_shuffle requires.
                     index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
 
-                    expr = Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
+                    expr = Call::make(op->type, "dynamic_shuffle", { lut, index, 0, const_extent - 1 }, Call::PureIntrinsic);
                     return;
                 }
             }
@@ -1639,7 +1691,9 @@ class OptimizeShuffles : public IRMutator {
     }
 
 public:
-    OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
+    OptimizeShuffles(int lut_alignment)
+        : lut_alignment(lut_alignment) {
+    }
 };
 }  // namespace
 

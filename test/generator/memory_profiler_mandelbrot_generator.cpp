@@ -8,13 +8,25 @@ class Complex {
     Tuple t;
 
 public:
-    Complex(Expr real, Expr imag) : t(real, imag) {}
-    Complex(Tuple tup) : t(tup) {}
-    Complex(FuncRef f) : t(Tuple(f)) {}
-    Expr real() const { return t[0]; }
-    Expr imag() const { return t[1]; }
+    Complex(Expr real, Expr imag)
+        : t(real, imag) {
+    }
+    Complex(Tuple tup)
+        : t(tup) {
+    }
+    Complex(FuncRef f)
+        : t(Tuple(f)) {
+    }
+    Expr real() const {
+        return t[0];
+    }
+    Expr imag() const {
+        return t[1];
+    }
 
-    operator Tuple() const { return t; }
+    operator Tuple() const {
+        return t;
+    }
 };
 
 // Define the usual complex arithmetic
@@ -27,21 +39,25 @@ Complex operator*(const Complex &a, const Complex &b) {
                    a.real() * b.imag() + a.imag() * b.real());
 }
 
-Complex conjugate(const Complex &a) { return Complex(a.real(), -a.imag()); }
+Complex conjugate(const Complex &a) {
+    return Complex(a.real(), -a.imag());
+}
 
-Expr magnitude(Complex a) { return (a * conjugate(a)).real(); }
+Expr magnitude(Complex a) {
+    return (a * conjugate(a)).real();
+}
 
 class Mandelbrot : public Generator<Mandelbrot> {
 public:
-    Param<float> x_min{"x_min"};
-    Param<float> x_max{"x_max"};
-    Param<float> y_min{"y_min"};
-    Param<float> y_max{"y_max"};
-    Param<float> c_real{"c_real"};
-    Param<float> c_imag{"c_imag"};
-    Param<int> iters{"iters"};
-    Param<int> w{"w"};
-    Param<int> h{"h"};
+    Param<float> x_min{ "x_min" };
+    Param<float> x_max{ "x_max" };
+    Param<float> y_min{ "y_min" };
+    Param<float> y_max{ "y_max" };
+    Param<float> c_real{ "c_real" };
+    Param<float> c_imag{ "c_imag" };
+    Param<int> iters{ "iters" };
+    Param<int> w{ "w" };
+    Param<int> h{ "h" };
 
     Func build() {
         target.set(get_target().with_feature(Target::Profile));
@@ -74,6 +90,6 @@ public:
     }
 };
 
-RegisterGenerator<Mandelbrot> register_my_gen{"memory_profiler_mandelbrot"};
+RegisterGenerator<Mandelbrot> register_my_gen{ "memory_profiler_mandelbrot" };
 
 }  // namespace

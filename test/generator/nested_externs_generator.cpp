@@ -6,16 +6,15 @@ namespace {
 
 template<typename T>
 void set_interleaved(T &t) {
-    t.dim(0).set_stride(3)
-     .dim(2).set_min(0).set_extent(3).set_stride(1);
+    t.dim(0).set_stride(3).dim(2).set_min(0).set_extent(3).set_stride(1);
 }
 
 // Add two inputs
 class NestedExternsCombine : public Generator<NestedExternsCombine> {
 public:
-    Input<Buffer<float>>  input_a{ "input_a", 3 };
-    Input<Buffer<float>>  input_b{ "input_b", 3 };
-    Output<Buffer<>>      combine{ "combine" };  // unspecified type-and-dim will be inferred
+    Input<Buffer<float>> input_a{ "input_a", 3 };
+    Input<Buffer<float>> input_b{ "input_b", 3 };
+    Output<Buffer<>> combine{ "combine" };  // unspecified type-and-dim will be inferred
 
     void generate() {
         Var x, y, c;
@@ -32,14 +31,14 @@ public:
 // Call two extern stages then pass the two results to another extern stage.
 class NestedExternsInner : public Generator<NestedExternsInner> {
 public:
-    Input<float>            value{ "value", 1.0f };
-    Output<Buffer<float>>   inner{ "inner", 3 };
+    Input<float> value{ "value", 1.0f };
+    Output<Buffer<float>> inner{ "inner", 3 };
 
     void generate() {
-        extern_stage_1.define_extern("nested_externs_leaf", {value}, Float(32), 3);
-        extern_stage_2.define_extern("nested_externs_leaf", {value+1}, Float(32), 3);
-        extern_stage_combine.define_extern("nested_externs_combine", 
-            {extern_stage_1, extern_stage_2}, Float(32), 3);
+        extern_stage_1.define_extern("nested_externs_leaf", { value }, Float(32), 3);
+        extern_stage_2.define_extern("nested_externs_leaf", { value + 1 }, Float(32), 3);
+        extern_stage_combine.define_extern("nested_externs_combine",
+                                           { extern_stage_1, extern_stage_2 }, Float(32), 3);
         inner(x, y, c) = extern_stage_combine(x, y, c);
     }
 
@@ -59,8 +58,8 @@ private:
 // Basically a memset.
 class NestedExternsLeaf : public Generator<NestedExternsLeaf> {
 public:
-    Input<float>            value{ "value", 1.0f };
-    Output<Buffer<float>>   leaf{ "leaf", 3 };
+    Input<float> value{ "value", 1.0f };
+    Output<Buffer<float>> leaf{ "leaf", 3 };
 
     void generate() {
         Var x, y, c;
@@ -75,14 +74,14 @@ public:
 // Call two extern stages then pass the two results to another extern stage.
 class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
-    Input<float>           value{ "value", 1.0f };
-    Output<Buffer<float>>  root{ "root", 3 };
+    Input<float> value{ "value", 1.0f };
+    Output<Buffer<float>> root{ "root", 3 };
 
     void generate() {
-        extern_stage_1.define_extern("nested_externs_inner", {value}, Float(32), 3);
-        extern_stage_2.define_extern("nested_externs_inner", {value+1}, Float(32), 3);
-        extern_stage_combine.define_extern("nested_externs_combine", 
-            {extern_stage_1, extern_stage_2}, Float(32), 3);
+        extern_stage_1.define_extern("nested_externs_inner", { value }, Float(32), 3);
+        extern_stage_2.define_extern("nested_externs_inner", { value + 1 }, Float(32), 3);
+        extern_stage_combine.define_extern("nested_externs_combine",
+                                           { extern_stage_1, extern_stage_2 }, Float(32), 3);
         root(x, y, c) = extern_stage_combine(x, y, c);
     }
 

@@ -1,8 +1,8 @@
 #include "CodeGen_Internal.h"
-#include "IROperator.h"
-#include "IRMutator.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,7 +16,7 @@ using namespace llvm;
 
 namespace {
 
-vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_t, LLVMContext &context) {
+vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *buffer_t, LLVMContext &context) {
     vector<llvm::Type *> res;
     for (const pair<string, Type> &i : closure.vars) {
         res.push_back(llvm_type_of(&context, i.second));
@@ -30,7 +30,7 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
 
 }  // namespace
 
-StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_t, LLVMContext *context) {
+StructType *build_closure_type(const Closure &closure, llvm::StructType *buffer_t, LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
     struct_t->setBody(llvm_types(closure, buffer_t, *context), false);
     return struct_t;
@@ -38,7 +38,7 @@ StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_
 
 void pack_closure(llvm::Type *type,
                   Value *dst,
-                  const Closure& closure,
+                  const Closure &closure,
                   const Scope<Value *> &src,
                   llvm::StructType *buffer_t,
                   IRBuilder<> *builder) {
@@ -46,7 +46,7 @@ void pack_closure(llvm::Type *type,
     int idx = 0;
     LLVMContext &context = builder->getContext();
     vector<string> nm = closure.names();
-    vector<llvm::Type*> ty = llvm_types(closure, buffer_t, context);
+    vector<llvm::Type *> ty = llvm_types(closure, buffer_t, context);
     for (size_t i = 0; i < nm.size(); i++) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
         Value *val;
@@ -64,7 +64,7 @@ void pack_closure(llvm::Type *type,
     }
 }
 
-void unpack_closure(const Closure& closure,
+void unpack_closure(const Closure &closure,
                     Scope<Value *> &dst,
                     llvm::Type *type,
                     Value *src,
@@ -167,7 +167,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_get_gpu_device",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
-        sizeof(user_context_runtime_funcs[0]);
+                          sizeof(user_context_runtime_funcs[0]);
     for (int i = 0; i < num_funcs; ++i) {
         if (name == user_context_runtime_funcs[i]) {
             return true;
@@ -186,7 +186,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
     // IROperator's div_round_to_zero will replace this with a / b for
     // unsigned ops, so create the intrinsic directly.
-    Expr q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
+    Expr q = Call::make(a.type(), Call::div_round_to_zero, { a, b }, Call::PureIntrinsic);
     if (a.type().is_int()) {
         // Signed integer division sucks. It should be defined such
         // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
@@ -203,7 +203,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
            return q - (rs & bs) + (rs & ~bs);
         */
 
-        Expr r = a - q*b;
+        Expr r = a - q * b;
         Expr bs = b >> (a.type().bits() - 1);
         Expr rs = r >> (a.type().bits() - 1);
         q = q - (rs & bs) + (rs & ~bs);
@@ -217,7 +217,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
     // IROperator's mod_round_to_zero will replace this with a % b for
     // unsigned ops, so create the intrinsic directly.
-    Expr r = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
+    Expr r = Call::make(a.type(), Call::mod_round_to_zero, { a, b }, Call::PureIntrinsic);
     if (a.type().is_int()) {
         // Match this non-overflowing C code
         /*
@@ -226,7 +226,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
           r = r + sign_mask & abs(b);
         */
 
-        Expr sign_mask = r >> (a.type().bits()-1);
+        Expr sign_mask = r >> (a.type().bits() - 1);
         r += sign_mask & abs(b);
         return common_subexpression_elimination(r);
     } else {
@@ -252,7 +252,7 @@ class UnpredicateLoadsStores : public IRMutator {
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
                                                 const_true(op->type.lanes()));
-            expr = Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
+            expr = Call::make(op->type, Call::if_then_else, { scalar_pred->value, unpredicated_load, make_zero(op->type) },
                               Call::PureIntrinsic);
         } else {
             string index_name = "scalarized_load_index";
@@ -263,12 +263,13 @@ class UnpredicateLoadsStores : public IRMutator {
             vector<Expr> lanes;
             vector<int> ramp;
             for (int i = 0; i < op->type.lanes(); i++) {
-                Expr idx_i = Shuffle::make({index_var}, {i});
-                Expr pred_i = Shuffle::make({predicate_var}, {i});
+                Expr idx_i = Shuffle::make({ index_var }, { i });
+                Expr pred_i = Shuffle::make({ predicate_var }, { i });
                 Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
                                                     const_true());
-                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load,
-                                make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
+                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, { pred_i, unpredicated_load,
+                                                                                        make_zero(unpredicated_load.type()) },
+                                           Call::PureIntrinsic));
                 ramp.push_back(i);
             }
             expr = Shuffle::make(lanes, ramp);
@@ -300,9 +301,9 @@ class UnpredicateLoadsStores : public IRMutator {
 
             vector<Stmt> lanes;
             for (int i = 0; i < predicate.type().lanes(); i++) {
-                Expr pred_i = Shuffle::make({predicate_var}, {i});
-                Expr value_i = Shuffle::make({value_var}, {i});
-                Expr index_i = Shuffle::make({index_var}, {i});
+                Expr pred_i = Shuffle::make({ predicate_var }, { i });
+                Expr value_i = Shuffle::make({ value_var }, { i });
+                Expr index_i = Shuffle::make({ index_var }, { i });
                 Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true()));
                 lanes.push_back(lane);
             }
@@ -310,7 +311,7 @@ class UnpredicateLoadsStores : public IRMutator {
             stmt = LetStmt::make(predicate_name, predicate, stmt);
             stmt = LetStmt::make(value_name, value, stmt);
             stmt = LetStmt::make(index_name, index, stmt);
-       }
+        }
     }
 
     using IRMutator::visit;
@@ -362,12 +363,12 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
 
-    #if LLVM_VERSION < 40
+#if LLVM_VERSION < 40
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us. In LLVM 4.0+ this moved to be a
     // function attribute.
     options.Reciprocals.setDefaults("all", false, 0);
-    #endif
+#endif
 
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
@@ -379,12 +380,11 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = false;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-    #if LLVM_VERSION >= 39
+#if LLVM_VERSION >= 39
     // Not supported by older linkers
     options.RelaxELFRelocations = false;
-    #endif
+#endif
 }
-
 
 void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     to.setTargetTriple(from.getTargetTriple());
@@ -423,20 +423,19 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     get_target_options(module, options, mcpu, mattrs);
 
     return std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(module.getTargetTriple(),
-                                                mcpu, mattrs,
-                                                options,
-                                                llvm::Reloc::PIC_,
-                                                llvm::CodeModel::Default,
-                                                llvm::CodeGenOpt::Aggressive));
+                                                                            mcpu, mattrs,
+                                                                            options,
+                                                                            llvm::Reloc::PIC_,
+                                                                            llvm::CodeModel::Default,
+                                                                            llvm::CodeGenOpt::Aggressive));
 }
 
 void set_function_attributes_for_target(llvm::Function *fn, Target t) {
-    #if LLVM_VERSION >= 40
+#if LLVM_VERSION >= 40
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn->addFnAttr("reciprocal-estimates", "none");
-    #endif
+#endif
 }
-
 }
 }

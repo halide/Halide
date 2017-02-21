@@ -26,39 +26,39 @@ int main(int argc, char **argv) {
 
     // bitwise xor
     Func f2;
-    f2(x) = input(x) ^ input(x+1);
+    f2(x) = input(x) ^ input(x + 1);
     Buffer<uint32_t> im2 = f2.realize(128);
     for (int x = 0; x < 128; x++) {
-        uint32_t correct = input(x) ^ input(x+1);
+        uint32_t correct = input(x) ^ input(x + 1);
         if (im2(x) != correct) {
             printf("%x ^ %x -> %x instead of %x\n",
-                   input(x), input(x+1), im2(x), correct);
+                   input(x), input(x + 1), im2(x), correct);
             return -1;
         }
     }
 
     // bitwise and
     Func f3;
-    f3(x) = input(x) & input(x+1);
+    f3(x) = input(x) & input(x + 1);
     Buffer<uint32_t> im3 = f3.realize(128);
     for (int x = 0; x < 128; x++) {
-        uint32_t correct = input(x) & input(x+1);
+        uint32_t correct = input(x) & input(x + 1);
         if (im3(x) != correct) {
             printf("%x & %x -> %x instead of %x\n",
-                   input(x), input(x+1), im3(x), correct);
+                   input(x), input(x + 1), im3(x), correct);
             return -1;
         }
     }
 
     // bitwise or
     Func f4;
-    f4(x) = input(x) | input(x+1);
+    f4(x) = input(x) | input(x + 1);
     Buffer<uint32_t> im4 = f4.realize(128);
     for (int x = 0; x < 128; x++) {
-        uint32_t correct = input(x) | input(x+1);
+        uint32_t correct = input(x) | input(x + 1);
         if (im4(x) != correct) {
             printf("%x | %x -> %x instead of %x\n",
-                   input(x), input(x+1), im4(x), correct);
+                   input(x), input(x + 1), im4(x), correct);
             return -1;
         }
     }
@@ -78,26 +78,26 @@ int main(int argc, char **argv) {
 
     // shift left combined with masking
     Func f6;
-    f6(x) = input(x) << (input(x+1) & 0xf);
+    f6(x) = input(x) << (input(x + 1) & 0xf);
     Buffer<uint32_t> im6 = f6.realize(128);
     for (int x = 0; x < 128; x++) {
-        uint32_t correct = input(x) << (input(x+1) & 0xf);
+        uint32_t correct = input(x) << (input(x + 1) & 0xf);
         if (im6(x) != correct) {
             printf("%x << (%x & 0xf) -> %x instead of %x\n",
-                   input(x), input(x+1), im6(x), correct);
+                   input(x), input(x + 1), im6(x), correct);
             return -1;
         }
     }
 
     // logical shift right
     Func f7;
-    f7(x) = input(x) >> (input(x+1) & 0xf);
+    f7(x) = input(x) >> (input(x + 1) & 0xf);
     Buffer<uint32_t> im7 = f7.realize(128);
     for (int x = 0; x < 128; x++) {
-        uint32_t correct = input(x) >> (input(x+1) & 0xf);
+        uint32_t correct = input(x) >> (input(x + 1) & 0xf);
         if (im7(x) != correct) {
             printf("%x >> (%x & 0xf) -> %x instead of %x\n",
-                   input(x), input(x+1), im7(x), correct);
+                   input(x), input(x + 1), im7(x), correct);
             return -1;
         }
     }
@@ -105,33 +105,32 @@ int main(int argc, char **argv) {
     // arithmetic shift right
     Func f8;
     Expr a = reinterpret<int>(input(x));
-    Expr b = reinterpret<int>(input(x+1));
+    Expr b = reinterpret<int>(input(x + 1));
     f8(x) = a >> (b & 0xf);
     Buffer<int> im8 = f8.realize(128);
     for (int x = 0; x < 128; x++) {
-        int correct = ((int)(input(x))) >> (((int)(input(x+1))) & 0xf);
+        int correct = ((int) (input(x))) >> (((int) (input(x + 1))) & 0xf);
         if (im8(x) != correct) {
             printf("%x >> (%x & 0xf) -> %x instead of %x\n",
-                   input(x), input(x+1), im8(x), correct);
+                   input(x), input(x + 1), im8(x), correct);
             return -1;
         }
     }
 
-
     // bit shift on mixed types
     Func f9;
     Expr a32 = cast<int32_t>(input(x));
-    Expr b8  = min(31, cast<uint8_t>(input(x+1)));
+    Expr b8 = min(31, cast<uint8_t>(input(x + 1)));
     f9(x) = a32 >> b8;
     Buffer<int> im9 = f9.realize(128);
     for (int x = 0; x < 128; x++) {
-        int lhs = (int)input(x);
-        int shift_amount = (uint8_t)(input(x+1));
+        int lhs = (int) input(x);
+        int shift_amount = (uint8_t)(input(x + 1));
         shift_amount = std::min(31, shift_amount);
         int correct = lhs >> shift_amount;
         if (im9(x) != correct) {
             printf("%x >> (uint8_t)%x -> %x instead of %x\n",
-                   input(x), input(x+1), im9(x), correct);
+                   input(x), input(x + 1), im9(x), correct);
             return -1;
         }
     }
@@ -152,5 +151,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

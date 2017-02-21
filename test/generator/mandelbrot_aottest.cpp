@@ -1,9 +1,9 @@
 #include <math.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
-#include "mandelbrot.h"
 #include "HalideBuffer.h"
+#include "mandelbrot.h"
 
 using namespace Halide::Runtime;
 

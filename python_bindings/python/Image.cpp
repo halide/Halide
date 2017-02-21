@@ -38,12 +38,12 @@ namespace bn = Halide::numpy;
 #endif
 #endif  // USE_NUMPY
 
-template <typename Ret, typename T, typename... Args>
+template<typename Ret, typename T, typename... Args>
 Ret buffer_call_operator(h::Buffer<T> &that, Args... args) {
     return that(args...);
 }
 
-template <typename T>
+template<typename T>
 h::Expr buffer_call_operator_tuple(h::Buffer<T> &that, p::tuple &args_passed) {
     std::vector<h::Expr> expr_args;
     for (ssize_t i = 0; i < p::len(args_passed); i++) {
@@ -52,27 +52,27 @@ h::Expr buffer_call_operator_tuple(h::Buffer<T> &that, p::tuple &args_passed) {
     return that(expr_args);
 }
 
-template <typename T>
+template<typename T>
 T buffer_to_setitem_operator0(h::Buffer<T> &that, int x, T value) {
     return that(x) = value;
 }
 
-template <typename T>
+template<typename T>
 T buffer_to_setitem_operator1(h::Buffer<T> &that, int x, int y, T value) {
     return that(x, y) = value;
 }
 
-template <typename T>
+template<typename T>
 T buffer_to_setitem_operator2(h::Buffer<T> &that, int x, int y, int z, T value) {
     return that(x, y, z) = value;
 }
 
-template <typename T>
+template<typename T>
 T buffer_to_setitem_operator3(h::Buffer<T> &that, int x, int y, int z, int w, T value) {
     return that(x, y, z, w) = value;
 }
 
-template <typename T>
+template<typename T>
 T buffer_to_setitem_operator4(h::Buffer<T> &that, p::tuple &args_passed, T value) {
     std::vector<int> int_args;
     const size_t args_len = p::len(args_passed);
@@ -112,32 +112,32 @@ T buffer_to_setitem_operator4(h::Buffer<T> &that, p::tuple &args_passed, T value
     return 0;  // this line should never be reached
 }
 
-template <typename T>
+template<typename T>
 const T *buffer_data(const h::Buffer<T> &buffer) {
     return buffer.data();
 }
 
-template <typename T>
+template<typename T>
 void buffer_set_min1(h::Buffer<T> &im, int m0) {
     im.set_min(m0);
 }
 
-template <typename T>
+template<typename T>
 void buffer_set_min2(h::Buffer<T> &im, int m0, int m1) {
     im.set_min(m0, m1);
 }
 
-template <typename T>
+template<typename T>
 void buffer_set_min3(h::Buffer<T> &im, int m0, int m1, int m2) {
     im.set_min(m0, m1, m2);
 }
 
-template <typename T>
+template<typename T>
 void buffer_set_min4(h::Buffer<T> &im, int m0, int m1, int m2, int m3) {
     im.set_min(m0, m1, m2, m3);
 }
 
-template <typename T>
+template<typename T>
 std::string buffer_repr(const h::Buffer<T> &buffer) {
     std::string repr;
 
@@ -163,7 +163,7 @@ std::string buffer_repr(const h::Buffer<T> &buffer) {
     return repr;
 }
 
-template <typename T>
+template<typename T>
 boost::python::object get_type_function_wrapper() {
     std::function<h::Type(h::Buffer<T> &)> return_type_func =
         [&](h::Buffer<T> &that) -> h::Type { return halide_type_of<T>(); };
@@ -172,74 +172,72 @@ boost::python::object get_type_function_wrapper() {
     return p::make_function(return_type_func, call_policies, p::arg("self"), func_sig());
 }
 
-template <typename T>
+template<typename T>
 void buffer_copy_to_host(h::Buffer<T> &im) {
     im.copy_to_host();
 }
 
-template <typename T>
+template<typename T>
 void buffer_set_host_dirty(h::Buffer<T> &im, bool value) {
     im.set_host_dirty(value);
 }
 
-template <typename T>
+template<typename T>
 int buffer_channels(h::Buffer<T> &im) {
     return im.channels();
 }
 
-template <typename T>
+template<typename T>
 int buffer_width(h::Buffer<T> &im) {
     return im.width();
 }
 
-template <typename T>
+template<typename T>
 int buffer_height(h::Buffer<T> &im) {
     return im.height();
 }
 
-template <typename T>
+template<typename T>
 int buffer_dimensions(h::Buffer<T> &im) {
     return im.dimensions();
 }
 
-template <typename T>
+template<typename T>
 int buffer_left(h::Buffer<T> &im) {
     return im.left();
 }
 
-template <typename T>
+template<typename T>
 int buffer_right(h::Buffer<T> &im) {
     return im.right();
 }
 
-template <typename T>
+template<typename T>
 int buffer_top(h::Buffer<T> &im) {
     return im.top();
 }
 
-template <typename T>
+template<typename T>
 int buffer_bottom(h::Buffer<T> &im) {
     return im.bottom();
 }
 
-template <typename T>
+template<typename T>
 int buffer_stride(h::Buffer<T> &im, int d) {
     return im.stride(d);
 }
 
-template <typename T>
+template<typename T>
 int buffer_min(h::Buffer<T> &im, int d) {
     return im.min(d);
 }
 
-template <typename T>
+template<typename T>
 int buffer_extent(h::Buffer<T> &im, int d) {
     return im.extent(d);
 }
 
-
-
-template <typename T>
+template<typename T>
 void defineBuffer_impl(const std::string suffix, const h::Type type) {
     using h::Buffer;
     using h::Expr;
@@ -543,7 +541,7 @@ bn::ndarray buffer_to_ndarray(p::object buffer_object) {
 
 struct BufferFactory {
 
-    template <typename T, typename... Args>
+    template<typename T, typename... Args>
     static p::object create_buffer_object(Args... args) {
         typedef h::Buffer<T> BufferType;
         typedef typename p::manage_new_object::apply<BufferType *>::type converter_t;
@@ -552,7 +550,7 @@ struct BufferFactory {
         return p::object(p::handle<>(obj));
     }
 
-    template <typename... Args>
+    template<typename... Args>
     static p::object create_buffer_impl(h::Type t, Args... args) {
         if (t == h::UInt(8)) return create_buffer_object<uint8_t>(args...);
         if (t == h::UInt(16)) return create_buffer_object<uint16_t>(args...);

@@ -19,7 +19,6 @@ namespace Internal {
  * have provably already been computed by a previous iteration.
  */
 Stmt sliding_window(Stmt s, const std::map<std::string, Function> &env);
-
 }
 }
 

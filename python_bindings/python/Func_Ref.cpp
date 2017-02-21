@@ -13,7 +13,7 @@
 namespace h = Halide;
 namespace p = boost::python;
 
-template <typename A, typename B>
+template<typename A, typename B>
 A &iadd_func(A a, B b) {
     a += b;
     // for FuncRef this will create a stage,
@@ -22,19 +22,19 @@ A &iadd_func(A a, B b) {
     return a;
 }
 
-template <typename A, typename B>
+template<typename A, typename B>
 A &isub_func(A a, B b) {
     a -= b;
     return a;
 }
 
-template <typename A, typename B>
+template<typename A, typename B>
 A &imul_func(A a, B b) {
     a *= b;
     return a;
 }
 
-template <typename A, typename B>
+template<typename A, typename B>
 A &idiv_func(A a, B b) {
     a /= b;
     return a;

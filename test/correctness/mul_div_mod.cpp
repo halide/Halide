@@ -1,9 +1,9 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
-#include <math.h>
 #include <algorithm>
 #include <future>
+#include <math.h>
 
 using namespace Halide;
 using Halide::Internal::Call;
@@ -21,8 +21,8 @@ using Halide::Internal::Call;
 #define HEIGHT 1024
 #define SALTRATE 50
 // Portion of the test data to use for testing the simplifier
-# define SWIDTH 32
-# define SHEIGHT HEIGHT
+#define SWIDTH 32
+#define SHEIGHT HEIGHT
 
 // Generate poor quality pseudo random numbers.
 // For reproducibility, the array indices are used as the seed for each
@@ -35,11 +35,11 @@ using Halide::Internal::Call;
 // i, j: Coordinates for which the value is being generated.
 uint64_t ubits(int unique, int i, int j) {
     uint64_t bits, mi, mj, mk, ml, mu;
-    mi = 982451653; // 50 M'th prime
-    mj = 776531491; // 40 M'th prime
-    mk = 573259391; // 30 M'th prime
-    ml = 373587883; // 20 M'th prime
-    mu = 275604541; // 15 M'th prime
+    mi = 982451653;  // 50 M'th prime
+    mj = 776531491;  // 40 M'th prime
+    mk = 573259391;  // 30 M'th prime
+    ml = 373587883;  // 20 M'th prime
+    mu = 275604541;  // 15 M'th prime
     // Each of the above primes is at least 10^8 i.e. at least 24 bits
     // so we are assured that the initial value computed below occupies 64 bits
     // and then the subsequent operations help ensure that every bit is affected by
@@ -54,32 +54,32 @@ uint64_t ubits(int unique, int i, int j) {
 }
 
 // Template to avoid autological comparison errors when comparing unsigned values for < 0
-template <typename T>
+template<typename T>
 bool less_than_zero(T val) {
     return (val < 0);
 }
 
-template <>
+template<>
 bool less_than_zero<unsigned long long>(unsigned long long val) {
     return false;
 }
 
-template <>
+template<>
 bool less_than_zero<unsigned long>(unsigned long val) {
     return false;
 }
 
-template <>
+template<>
 bool less_than_zero<unsigned int>(unsigned int val) {
     return false;
 }
 
-template <>
+template<>
 bool less_than_zero<unsigned short>(unsigned short val) {
     return false;
 }
 
-template <>
+template<>
 bool less_than_zero<unsigned char>(unsigned char val) {
     return false;
 }
@@ -113,7 +113,6 @@ template<>
 bool is_negative_one(unsigned char val) {
     return false;
 }
-
 
 template<typename T, typename BIG>
 BIG maximum() {
@@ -183,13 +182,13 @@ Buffer<T> init(Type t, int unique, int width, int height) {
         neg = (~((int64_t) 0)) ^ max;  // The bits that should all be 1 for negative numbers.
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
-                v = (int64_t) (ubits(unique,i,j));
+                v = (int64_t)(ubits(unique, i, j));
                 if (v < 0)
-                    v |= neg; // Make all the high bits one
+                    v |= neg;  // Make all the high bits one
                 else
                     v &= max;
                 // Salting with extreme values
-                vsalt = (int64_t) (ubits(unique|0x100,i,j));
+                vsalt = (int64_t)(ubits(unique | 0x100, i, j));
                 if (vsalt % SALTRATE == 0) {
                     if (vsalt & 0x1000000) {
                         v = max;
@@ -197,22 +196,21 @@ Buffer<T> init(Type t, int unique, int width, int height) {
                         v = min;
                     }
                 }
-                result(i,j) = (T)v;
+                result(i, j) = (T) v;
             }
         }
-        result(0,0) = (T)min;
-        result(1,0) = (T)max;
-        result(0,1) = (T)((unique & 1) ? min : max);
-        result(1,1) = (T)((unique & 1) ? max : min);
-    }
-    else if (t.is_uint()) {
+        result(0, 0) = (T) min;
+        result(1, 0) = (T) max;
+        result(0, 1) = (T)((unique & 1) ? min : max);
+        result(1, 1) = (T)((unique & 1) ? max : min);
+    } else if (t.is_uint()) {
         uint64_t max, v, vsalt;
         max = maximum<T, BIG>();
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
-                v = ubits(unique,i,j) & max;
+                v = ubits(unique, i, j) & max;
                 // Salting with extreme values
-                vsalt = (int64_t) (ubits(unique|0x100,i,j));
+                vsalt = (int64_t)(ubits(unique | 0x100, i, j));
                 if (vsalt % SALTRATE == 0) {
                     if (vsalt & 0x1000000) {
                         v = max;
@@ -220,24 +218,23 @@ Buffer<T> init(Type t, int unique, int width, int height) {
                         v = 0;
                     }
                 }
-                result(i,j) = (T)v;
+                result(i, j) = (T) v;
             }
         }
-        result(0,0) = (T)0;
-        result(1,0) = (T)max;
-        result(0,1) = (T)((unique & 1) ? 0 : max);
-        result(1,1) = (T)((unique & 1) ? max : 0);
-    }
-    else if (t.is_float()) {
+        result(0, 0) = (T) 0;
+        result(1, 0) = (T) max;
+        result(0, 1) = (T)((unique & 1) ? 0 : max);
+        result(1, 1) = (T)((unique & 1) ? max : 0);
+    } else if (t.is_float()) {
         uint64_t uv, vsalt;
         uint64_t max = (uint64_t)(-1);
         double v;
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {
-                uv = ubits(unique,i,j);
+                uv = ubits(unique, i, j);
                 v = (((double) uv) / ((double) (max))) * 2.0 - 1.0;
                 // Salting with extreme values
-                vsalt = (int64_t) (ubits(unique|0x100,i,j));
+                vsalt = (int64_t)(ubits(unique | 0x100, i, j));
                 if (vsalt % SALTRATE == 0) {
                     if (vsalt & 0x1000000) {
                         v = 1.0;
@@ -245,25 +242,24 @@ Buffer<T> init(Type t, int unique, int width, int height) {
                         v = 0.0;
                     }
                 }
-                result(i,j) = (T)v;
+                result(i, j) = (T) v;
             }
         }
-        result(0,0) = (T)(0.0);
-        result(1,0) = (T)(1.0);
-        result(0,1) = (T)((unique & 1) ? 0.0 : 1.0);
-        result(1,1) = (T)((unique & 1) ? 1.0 : 0.0);
-    }
-    else {
-        printf ("Unknown data type in init.\n");
+        result(0, 0) = (T)(0.0);
+        result(1, 0) = (T)(1.0);
+        result(0, 1) = (T)((unique & 1) ? 0.0 : 1.0);
+        result(1, 1) = (T)((unique & 1) ? 1.0 : 0.0);
+    } else {
+        printf("Unknown data type in init.\n");
     }
 
     return result;
 }
 
 enum ScheduleVariant {
-  CPU,
-  TiledGPU,
-  Hexagon
+    CPU,
+    TiledGPU,
+    Hexagon
 };
 
 // Test multiplication of T1 x T2 -> RT
@@ -292,14 +288,14 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
         f.vectorize(x, vector_width);
     }
     switch (scheduling) {
-        case CPU:
-            break;
-        case TiledGPU:
-            f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
-            break;
-        case Hexagon:
-            f.compute_root().hexagon();
-            break;
+    case CPU:
+        break;
+    case TiledGPU:
+        f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
+        break;
+    case Hexagon:
+        f.compute_root().hexagon();
+        break;
     };
 
     Buffer<RT> r = f.realize(WIDTH, HEIGHT, target);
@@ -310,7 +306,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
             T1 ai = a(i, j);
             T2 bi = b(i, j);
             RT ri = r(i, j);
-            RT correct = RT(ai)*RT(bi);
+            RT correct = RT(ai) * RT(bi);
             if (correct != ri && (ecount++) < 10) {
                 std::cerr << ai << "*" << bi << " -> " << ri << " != " << correct << "\n";
                 success = false;
@@ -319,15 +315,15 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
             if (i < SWIDTH && j < SHEIGHT) {
                 Expr ae = cast<RT>(Expr(ai));
                 Expr be = cast<RT>(Expr(bi));
-                Expr re = simplify(ae*be);
+                Expr re = simplify(ae * be);
 
                 if (re.as<Call>() && re.as<Call>()->is_intrinsic(Call::signed_integer_overflow)) {
                     // Don't check correctness of signed integer overflow.
                 } else {
                     if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
-                        std::cerr << "Compiled a*b != simplified a*b: " << (int64_t)ai
-                                  << "*" << (int64_t)bi
-                                  << " = " << (int64_t)ri
+                        std::cerr << "Compiled a*b != simplified a*b: " << (int64_t) ai
+                                  << "*" << (int64_t) bi
+                                  << " = " << (int64_t) ri
                                   << " != " << re << "\n";
                         success = false;
                     }
@@ -360,11 +356,11 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
     // Also, cannot divide the most negative number by -1.
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
-            if (b(i,j) == 0) {
-                b(i,j) = 1; // Replace zero with one
+            if (b(i, j) == 0) {
+                b(i, j) = 1;  // Replace zero with one
             }
-            if (a(i,j) == minval && less_than_zero(minval) && is_negative_one(b(i,j))) {
-                a(i,j) = a(i,j) + 1; // Fix it into range.
+            if (a(i, j) == minval && less_than_zero(minval) && is_negative_one(b(i, j))) {
+                a(i, j) = a(i, j) + 1;  // Fix it into range.
             }
         }
     }
@@ -377,14 +373,14 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
         f.vectorize(x, vector_width);
     }
     switch (scheduling) {
-        case CPU:
-            break;
-        case TiledGPU:
-            f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
-            break;
-        case Hexagon:
-            f.compute_root().hexagon();
-            break;
+    case CPU:
+        break;
+    case TiledGPU:
+        f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
+        break;
+    case Hexagon:
+        f.compute_root().hexagon();
+        break;
     };
 
     Realization R = f.realize(WIDTH, HEIGHT, target);
@@ -399,38 +395,38 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             T qi = q(i, j);
             T ri = r(i, j);
 
-            if (qi*bi + ri != ai && (ecount++) < 10) {
-                std::cerr << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
-                          << ", " << (int64_t)bi
-                          << "; q, r = " << (int64_t)qi
-                          << ", " << (int64_t)ri << "\n";
+            if (qi * bi + ri != ai && (ecount++) < 10) {
+                std::cerr << "(a/b)*b + a%b != a; a, b = " << (int64_t) ai
+                          << ", " << (int64_t) bi
+                          << "; q, r = " << (int64_t) qi
+                          << ", " << (int64_t) ri << "\n";
                 success = false;
             } else if (!(0 <= ri &&
-                         (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
+                         (t.is_min((int64_t) bi) || ri < (T) std::abs((int64_t) bi))) &&
                        (ecount++) < 10) {
-                std::cerr << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
-                          << ", " << (int64_t)bi
-                          << "; q, r = " << (int64_t)qi
-                          << ", " << (int64_t)ri << "\n";
+                std::cerr << "ri is not in the range [0, |b|); a, b = " << (int64_t) ai
+                          << ", " << (int64_t) bi
+                          << "; q, r = " << (int64_t) qi
+                          << ", " << (int64_t) ri << "\n";
                 success = false;
             }
 
             if (i < SWIDTH && j < SHEIGHT) {
                 Expr ae = Expr(ai);
                 Expr be = Expr(bi);
-                Expr qe = simplify(ae/be);
-                Expr re = simplify(ae%be);
+                Expr qe = simplify(ae / be);
+                Expr re = simplify(ae % be);
 
                 if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
-                    std::cerr << "Compiled a/b != simplified a/b: " << (int64_t)ai
-                              << "/" << (int64_t)bi
-                              << " = " << (int64_t)qi
+                    std::cerr << "Compiled a/b != simplified a/b: " << (int64_t) ai
+                              << "/" << (int64_t) bi
+                              << " = " << (int64_t) qi
                               << " != " << qe << "\n";
                     success = false;
                 } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
-                    std::cerr << "Compiled a%b != simplified a%b: " << (int64_t)ai
-                              << "/" << (int64_t)bi
-                              << " = " << (int64_t)ri
+                    std::cerr << "Compiled a%b != simplified a%b: " << (int64_t) ai
+                              << "/" << (int64_t) bi
+                              << " = " << (int64_t) ri
                               << " != " << re << "\n";
                     success = false;
                 }
@@ -454,14 +450,14 @@ bool f_mod() {
 
     Buffer<T> a = init<T, BIG>(t, 1, WIDTH, HEIGHT);
     Buffer<T> b = init<T, BIG>(t, 2, WIDTH, HEIGHT);
-    Buffer<T> out(WIDTH,HEIGHT);
+    Buffer<T> out(WIDTH, HEIGHT);
 
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
-            if (b(i,j) == 0.0) {
-                b(i,j) = 1.0; // Replace zero with one.
+            if (b(i, j) == 0.0) {
+                b(i, j) = 1.0;  // Replace zero with one.
             }
         }
     }
@@ -473,18 +469,18 @@ bool f_mod() {
 
     // Explicit checks of the simplifier for consistency with runtime computation
     int ecount = 0;
-    for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
+    for (i = 0; i < std::min(SWIDTH, WIDTH); i++) {
         for (j = 0; j < std::min(SHEIGHT, HEIGHT); j++) {
-            T arg_a = a(i,j);
-            T arg_b = b(i,j);
-            T v = out(i,j);
+            T arg_a = a(i, j);
+            T arg_b = b(i, j);
+            T v = out(i, j);
             Expr in_e = cast<T>((float) arg_a) % cast<T>((float) arg_b);
             Expr e = simplify(in_e);
             Expr eout = cast<T>((float) v);
-            if (! Internal::equal(e, eout) && (ecount++) < 10) {
+            if (!Internal::equal(e, eout) && (ecount++) < 10) {
                 Expr diff = simplify(e - eout);
                 Expr smalldiff = simplify(diff < (float) (0.000001) && diff > (float) (-0.000001));
-                if (! Internal::is_one(smalldiff)) {
+                if (!Internal::is_one(smalldiff)) {
                     std::cerr << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
                     std::cerr << "          difference=" << diff << "\n";
                     success = false;
@@ -542,7 +538,7 @@ int main(int argc, char **argv) {
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
         scheduling = TiledGPU;
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (target.features_any_of({ Target::HVX_64, Target::HVX_128 })) {
         scheduling = Hexagon;
     }
 
@@ -592,7 +588,7 @@ int main(int argc, char **argv) {
     }
 
     if (!success) {
-        printf ("Failure!\n");
+        printf("Failure!\n");
         return -1;
     }
     printf("Success!\n");

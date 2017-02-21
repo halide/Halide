@@ -41,7 +41,7 @@ struct MultiDevicePipeline {
         stage[current_stage - 1].realize(result);
     }
 
-    bool verify(const Buffer<float> &result, size_t stages, const char * test_case) {
+    bool verify(const Buffer<float> &result, size_t stages, const char *test_case) {
         for (int i = 0; i < 100; i++) {
             for (int j = 0; j < 100; j++) {
                 for (int k = 0; k < 3; k++) {

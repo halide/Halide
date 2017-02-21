@@ -1,18 +1,18 @@
 #include <iostream>
 
 #include "Bounds.h"
-#include "IRVisitor.h"
-#include "IR.h"
-#include "IROperator.h"
-#include "IREquality.h"
-#include "Simplify.h"
-#include "IRPrinter.h"
-#include "Util.h"
-#include "Var.h"
+#include "CSE.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
+#include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
-#include "CSE.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Simplify.h"
+#include "Util.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -75,19 +75,18 @@ Expr find_constant_bound(Expr e, Direction d) {
     return Expr();
 }
 
-
 class Bounds : public IRVisitor {
 public:
     Interval interval;
     Scope<Interval> scope;
     const FuncValueBounds &func_bounds;
 
-    Bounds(const Scope<Interval> *s, const FuncValueBounds &fb) :
-        func_bounds(fb) {
+    Bounds(const Scope<Interval> *s, const FuncValueBounds &fb)
+        : func_bounds(fb) {
         scope.set_containing_scope(s);
     }
-private:
 
+private:
     // Compute the intrinsic bounds of a function.
     void bounds_of_func(string name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
@@ -350,7 +349,6 @@ private:
                 bounds_of_type(op->type);
             }
         }
-
     }
 
     void visit(const Div *op) {
@@ -453,7 +451,6 @@ private:
                                 Interval::make_min(a.max, b.max));
         }
     }
-
 
     void visit(const Max *op) {
         op->a.accept(this);
@@ -560,7 +557,7 @@ private:
         Expr var = Variable::make(op->base.type(), var_name);
         Expr lane = op->base + var * op->stride;
         scope.push(var_name, Interval(make_const(var.type(), 0),
-                                      make_const(var.type(), op->lanes-1)));
+                                      make_const(var.type(), op->lanes - 1)));
         lane.accept(this);
         scope.pop(var_name);
     }
@@ -604,12 +601,12 @@ private:
             interval.min = make_zero(t);
             if (a.is_bounded()) {
                 if (equal(a.min, a.max)) {
-                    interval = Interval::single_point(Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic));
+                    interval = Interval::single_point(Call::make(t, Call::abs, { a.max }, Call::PureIntrinsic));
                 } else if (op->args[0].type().is_int() && op->args[0].type().bits() >= 32) {
                     interval.max = Max::make(Cast::make(t, -a.min), Cast::make(t, a.max));
                 } else {
-                    a.min = Call::make(t, Call::abs, {a.min}, Call::PureIntrinsic);
-                    a.max = Call::make(t, Call::abs, {a.max}, Call::PureIntrinsic);
+                    a.min = Call::make(t, Call::abs, { a.min }, Call::PureIntrinsic);
+                    a.max = Call::make(t, Call::abs, { a.max }, Call::PureIntrinsic);
                     interval.max = Max::make(a.min, a.max);
                 }
             } else {
@@ -647,9 +644,9 @@ private:
             // For monotonic, pure, single-argument functions, we can
             // make two calls for the min and the max.
             interval = Interval(
-                Call::make(t, op->name, {interval.min}, op->call_type,
+                Call::make(t, op->name, { interval.min }, op->call_type,
                            op->func, op->value_index, op->image, op->param),
-                Call::make(t, op->name, {interval.max}, op->call_type,
+                Call::make(t, op->name, { interval.max }, op->call_type,
                            op->func, op->value_index, op->image, op->param));
 
         } else if (op->name == Call::buffer_get_min ||
@@ -824,7 +821,7 @@ void merge_boxes(Box &a, const Box &b) {
     bool b_maybe_unused = b.maybe_unused();
 
     bool complementary = a_maybe_unused && b_maybe_unused &&
-        (equal(a.used, !b.used) || equal(!a.used, b.used));
+                         (equal(a.used, !b.used) || equal(!a.used, b.used));
 
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
@@ -974,15 +971,14 @@ bool box_contains(const Box &outer, const Box &inner) {
 class BoxesTouched : public IRGraphVisitor {
 
 public:
-    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb) :
-        func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
+    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb)
+        : func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
         scope.set_containing_scope(s);
     }
 
     map<string, Box> boxes;
 
 private:
-
     string func;
     bool consider_calls, consider_provides;
     Scope<Interval> scope;
@@ -1049,9 +1045,12 @@ private:
         void visit(const Variable *var) {
             count++;
         }
+
     public:
         int count;
-        CountVars() : count(0) {}
+        CountVars()
+            : count(0) {
+        }
     };
 
     // We get better simplification if we directly substitute mins
@@ -1141,11 +1140,26 @@ private:
                 const GE *ge = c.as<GE>();
                 const EQ *eq = c.as<EQ>();
                 Expr a, b;
-                if (lt) {a = lt->a; b = lt->b;}
-                if (le) {a = le->a; b = le->b;}
-                if (gt) {a = gt->a; b = gt->b;}
-                if (ge) {a = ge->a; b = ge->b;}
-                if (eq) {a = eq->a; b = eq->b;}
+                if (lt) {
+                    a = lt->a;
+                    b = lt->b;
+                }
+                if (le) {
+                    a = le->a;
+                    b = le->b;
+                }
+                if (gt) {
+                    a = gt->a;
+                    b = gt->b;
+                }
+                if (ge) {
+                    a = ge->a;
+                    b = ge->b;
+                }
+                if (eq) {
+                    a = eq->a;
+                    b = eq->b;
+                }
                 const Variable *var_a = a.as<Variable>();
                 const Variable *var_b = b.as<Variable>();
 
@@ -1418,7 +1432,7 @@ Box box_touched(Stmt s, string fn, const Scope<Interval> &scope, const FuncValue
 
 // Compute interval of all possible function's values (default + specialized values)
 Interval compute_pure_function_definition_value_bounds(
-        const Definition &def, const Scope<Interval>& scope, const FuncValueBounds &fb, int dim) {
+    const Definition &def, const Scope<Interval> &scope, const FuncValueBounds &fb, int dim) {
 
     Interval result = bounds_of_expr_in_scope(def.values()[dim], scope, fb);
 
@@ -1497,74 +1511,74 @@ void bounds_test() {
     scope.push("x", Interval(Expr(0), Expr(10)));
 
     check(scope, x, 0, 10);
-    check(scope, x+1, 1, 11);
-    check(scope, (x+1)*2, 2, 22);
-    check(scope, x*x, 0, 100);
-    check(scope, 5-x, -5, 5);
-    check(scope, x*(5-x), -50, 50); // We don't expect bounds analysis to understand correlated terms
-    check(scope, Select::make(x < 4, x, x+100), 0, 110);
-    check(scope, x+y, y, y+10);
-    check(scope, x*y, select(y < 0, y*10, 0), select(y < 0, 0, y*10));
-    check(scope, x/(x+y), Interval::neg_inf, Interval::pos_inf);
-    check(scope, 11/(x+1), 1, 11);
+    check(scope, x + 1, 1, 11);
+    check(scope, (x + 1) * 2, 2, 22);
+    check(scope, x * x, 0, 100);
+    check(scope, 5 - x, -5, 5);
+    check(scope, x * (5 - x), -50, 50);  // We don't expect bounds analysis to understand correlated terms
+    check(scope, Select::make(x < 4, x, x + 100), 0, 110);
+    check(scope, x + y, y, y + 10);
+    check(scope, x * y, select(y < 0, y * 10, 0), select(y < 0, 0, y * 10));
+    check(scope, x / (x + y), Interval::neg_inf, Interval::pos_inf);
+    check(scope, 11 / (x + 1), 1, 11);
     check(scope, Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()),
-                 make_const(Int(8), -128), make_const(Int(8), 127));
-    check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
-    check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
+          make_const(Int(8), -128), make_const(Int(8), 127));
+    check(scope, y + (Let::make("y", x + 3, y - x + 10)), y + 3, y + 23);  // Once again, we don't know that y is correlated with x
+    check(scope, clamp(1 / (x - 2), x - 10, x + 10), -10, 20);
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
 
     check(scope, select(y == 5, 0, 3), select(y == 5, 0, 3), select(y == 5, 0, 3));
-    check(scope, select(y == 5, x, -3*x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
-    check(scope, select(y == x, x, -3*x + 8), -22, 10);
+    check(scope, select(y == 5, x, -3 * x + 8), select(y == 5, 0, -22), select(y == 5, 10, 8));
+    check(scope, select(y == x, x, -3 * x + 8), -22, 10);
 
-    check(scope, cast<int32_t>(abs(cast<int16_t>(x/y))), 0, 32768);
+    check(scope, cast<int32_t>(abs(cast<int16_t>(x / y))), 0, 32768);
     check(scope, cast<float>(x), 0.0f, 10.0f);
 
     check(scope, cast<int32_t>(abs(cast<float>(x))), 0, 10);
 
     // Check some vectors
-    check(scope, Ramp::make(x*2, 5, 5), 0, 40);
-    check(scope, Broadcast::make(x*2, 5), 0, 20);
+    check(scope, Ramp::make(x * 2, 5, 5), 0, 40);
+    check(scope, Broadcast::make(x * 2, 5), 0, 20);
     check(scope, Broadcast::make(3, 4), 3, 3);
 
     // Check some operations that may overflow
-    check(scope, (cast<uint8_t>(x)+250), make_const(UInt(8), 0), make_const(UInt(8), 255));
-    check(scope, (cast<uint8_t>(x)+10)*20, make_const(UInt(8), 0), make_const(UInt(8), 255));
-    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)+5), make_const(UInt(8), 0), make_const(UInt(8), 255));
-    check(scope, (cast<uint8_t>(x)+10)-(cast<uint8_t>(x)+5), make_const(UInt(8), 0), make_const(UInt(8), 255));
+    check(scope, (cast<uint8_t>(x) + 250), make_const(UInt(8), 0), make_const(UInt(8), 255));
+    check(scope, (cast<uint8_t>(x) + 10) * 20, make_const(UInt(8), 0), make_const(UInt(8), 255));
+    check(scope, (cast<uint8_t>(x) + 10) * (cast<uint8_t>(x) + 5), make_const(UInt(8), 0), make_const(UInt(8), 255));
+    check(scope, (cast<uint8_t>(x) + 10) - (cast<uint8_t>(x) + 5), make_const(UInt(8), 0), make_const(UInt(8), 255));
 
     // Check some operations that we should be able to prove do not overflow
-    check(scope, (cast<uint8_t>(x)+240), make_const(UInt(8), 240), make_const(UInt(8), 250));
-    check(scope, (cast<uint8_t>(x)+10)*10, make_const(UInt(8), 100), make_const(UInt(8), 200));
-    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), make_const(UInt(8), 0), make_const(UInt(8), 200));
-    check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), make_const(UInt(8), 5), make_const(UInt(8), 25));
+    check(scope, (cast<uint8_t>(x) + 240), make_const(UInt(8), 240), make_const(UInt(8), 250));
+    check(scope, (cast<uint8_t>(x) + 10) * 10, make_const(UInt(8), 100), make_const(UInt(8), 200));
+    check(scope, (cast<uint8_t>(x) + 10) * (cast<uint8_t>(x)), make_const(UInt(8), 0), make_const(UInt(8), 200));
+    check(scope, (cast<uint8_t>(x) + 20) - (cast<uint8_t>(x) + 5), make_const(UInt(8), 5), make_const(UInt(8), 25));
 
     check(scope,
-          cast<uint16_t>(clamp(cast<float>(x/y), 0.0f, 4095.0f)),
+          cast<uint16_t>(clamp(cast<float>(x / y), 0.0f, 4095.0f)),
           make_const(UInt(16), 0), make_const(UInt(16), 4095));
 
     check(scope,
-          cast<uint8_t>(clamp(cast<uint16_t>(x/y), cast<uint16_t>(0), cast<uint16_t>(128))),
+          cast<uint8_t>(clamp(cast<uint16_t>(x / y), cast<uint16_t>(0), cast<uint16_t>(128))),
           make_const(UInt(8), 0), make_const(UInt(8), 128));
 
     Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer<>(), Parameter(), const_true()));
     Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
-          make_const(UInt(16), 0), make_const(UInt(16), 255*2));
+          make_const(UInt(16), 0), make_const(UInt(16), 255 * 2));
 
-    vector<Expr> input_site_1 = {2*x};
-    vector<Expr> input_site_2 = {2*x+1};
-    vector<Expr> output_site = {x+1};
+    vector<Expr> input_site_1 = { 2 * x };
+    vector<Expr> input_site_2 = { 2 * x + 1 };
+    vector<Expr> output_site = { x + 1 };
 
     Buffer<int32_t> in(10);
     in.set_name("input");
 
     Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
                           Provide::make("output",
-                                        {Add::make(Call::make(in, input_site_1),
-                                                   Call::make(in, input_site_2))},
+                                        { Add::make(Call::make(in, input_site_1),
+                                                    Call::make(in, input_site_2)) },
                                         output_site));
 
     map<string, Box> r;
@@ -1578,13 +1592,12 @@ void bounds_test() {
     internal_assert(equal(simplify(r["output"][0].min), 4));
     internal_assert(equal(simplify(r["output"][0].max), 13));
 
-    Box r2({Interval(Expr(5), Expr(19))});
+    Box r2({ Interval(Expr(5), Expr(19)) });
     merge_boxes(r2, r["output"]);
     internal_assert(equal(simplify(r2[0].min), 4));
     internal_assert(equal(simplify(r2[0].max), 19));
 
     std::cout << "Bounds test passed" << std::endl;
 }
-
 }
 }

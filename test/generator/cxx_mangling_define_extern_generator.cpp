@@ -1,16 +1,15 @@
 #include "Halide.h"
 
-class CPlusPlusNameManglingDefineExternGenerator :
-    public Halide::Generator<CPlusPlusNameManglingDefineExternGenerator> {
+class CPlusPlusNameManglingDefineExternGenerator : public Halide::Generator<CPlusPlusNameManglingDefineExternGenerator> {
 public:
     // Use all the parameter types to make sure mangling works for each of them.
-    ImageParam input{UInt(8), 1, "input"};
-    Param<int32_t *> int_ptr{"int_ptr", 0};
-    Param<int32_t const *> const_int_ptr{"const_int_ptr", 0};
-    Param<void *> void_ptr{"void_ptr", 0};
-    Param<void const *> const_void_ptr{"const_void_ptr", 0};
-    Param<std::string *> string_ptr{"string_ptr", 0};
-    Param<std::string const *> const_string_ptr{"const_string_ptr", 0};
+    ImageParam input{ UInt(8), 1, "input" };
+    Param<int32_t *> int_ptr{ "int_ptr", 0 };
+    Param<int32_t const *> const_int_ptr{ "const_int_ptr", 0 };
+    Param<void *> void_ptr{ "void_ptr", 0 };
+    Param<void const *> const_void_ptr{ "const_void_ptr", 0 };
+    Param<std::string *> string_ptr{ "string_ptr", 0 };
+    Param<std::string const *> const_string_ptr{ "const_string_ptr", 0 };
 
     Pipeline build() {
         assert(get_target().has_feature(Target::CPlusPlusMangling));
@@ -50,9 +49,9 @@ public:
 
         g.compute_root();
 
-        return Pipeline({f1, f2, f3});
+        return Pipeline({ f1, f2, f3 });
     }
 };
 
 Halide::RegisterGenerator<CPlusPlusNameManglingDefineExternGenerator>
-    register_my_gen{"cxx_mangling_define_extern"};
+    register_my_gen{ "cxx_mangling_define_extern" };

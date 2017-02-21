@@ -26,8 +26,10 @@ class ExprUsesVars : public IRGraphVisitor {
             include(scope.get(v->name));
         }
     }
+
 public:
-    ExprUsesVars(const Scope<T> &v, const Scope<Expr> *s = nullptr) : vars(v), result(false) {
+    ExprUsesVars(const Scope<T> &v, const Scope<Expr> *s = nullptr)
+        : vars(v), result(false) {
         scope.set_containing_scope(s);
     }
     bool result;
@@ -84,7 +86,6 @@ inline bool stmt_uses_vars(Stmt e, const Scope<T> &v,
                            const Scope<Expr> &s = Scope<Expr>::empty_scope()) {
     return stmt_or_expr_uses_vars(e, v, s);
 }
-
 }
 }
 

@@ -25,7 +25,6 @@ namespace Internal {
  * allocating space for all of it.
  */
 Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env);
-
 }
 }
 

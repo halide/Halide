@@ -6,9 +6,9 @@
  * A simple function to get a C++ mangled function name for a function.
  */
 
-#include <string>
 #include "IR.h"
 #include "Target.h"
+#include <string>
 
 namespace Halide {
 namespace Internal {
@@ -22,9 +22,7 @@ EXPORT std::string cplusplus_function_mangled_name(const std::string &name, cons
                                                    const Target &target);
 
 EXPORT void cplusplus_mangle_test();
-
 }
-
 }
 
 #endif

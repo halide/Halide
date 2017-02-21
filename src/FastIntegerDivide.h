@@ -18,7 +18,6 @@ EXPORT Buffer<uint32_t> integer_divide_table_u32();
 EXPORT Buffer<uint32_t> integer_divide_table_s32();
 }
 
-
 /** Integer division by small values can be done exactly as multiplies
  * and shifts. This function does integer division for numerators of
  * various integer types (8, 16, 32 bit signed and unsigned)
@@ -45,7 +44,6 @@ EXPORT Expr fast_integer_divide(Expr numerator, Expr denominator);
  * operation via the Euclidean identity: a%b = a - (a/b)*b
  */
 EXPORT Expr fast_integer_modulo(Expr numerator, Expr denominator);
-
 }
 
 #endif

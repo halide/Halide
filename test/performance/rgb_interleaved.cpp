@@ -1,7 +1,7 @@
 #include "Halide.h"
+#include "benchmark.h"
 #include <cstdio>
 #include <memory>
-#include "benchmark.h"
 
 using namespace Halide;
 
@@ -12,17 +12,17 @@ void test_deinterleave() {
 
     dst(x, y, c) = src(x, y, c);
 
-    src.dim(0).set_stride(3)
-        .dim(2).set_stride(1).set_bounds(0, 3);
+    src.dim(0).set_stride(3).dim(2).set_stride(1).set_bounds(0, 3);
 
     // This is the default format for Halide, but made explicit for illustration.
     dst.output_buffer()
-        .dim(0).set_stride(1)
-        .dim(2).set_extent(3);
+        .dim(0)
+        .set_stride(1)
+        .dim(2)
+        .set_extent(3);
 
     dst.reorder(c, x, y).unroll(c);
     dst.vectorize(x, 16);
-
 
     // Allocate two 16 megapixel, 3 channel, 8-bit images -- input and output
 
@@ -33,10 +33,10 @@ void test_deinterleave() {
     Buffer<uint8_t> dst_image(1 << 12, 1 << 12, 3);
 
     src_image.for_each_element([&](int x, int y) {
-            src_image(x, y, 0) = 0;
-            src_image(x, y, 1) = 128;
-            src_image(x, y, 2) = 255;
-        });
+        src_image(x, y, 0) = 0;
+        src_image(x, y, 1) = 128;
+        src_image(x, y, 2) = 255;
+    });
     dst_image.fill(0);
 
     src.set(src_image);
@@ -54,10 +54,10 @@ void test_deinterleave() {
            dst_image.number_of_elements() / t1);
 
     dst_image.for_each_element([&](int x, int y) {
-            assert(dst_image(x, y, 0) == 0);
-            assert(dst_image(x, y, 1) == 128);
-            assert(dst_image(x, y, 2) == 255);
-        });
+        assert(dst_image(x, y, 0) == 0);
+        assert(dst_image(x, y, 1) == 128);
+        assert(dst_image(x, y, 2) == 255);
+    });
 
     // Setup a semi-planar output case.
     dst_image = Buffer<uint8_t>(1 << 12, 3, 1 << 12);
@@ -69,10 +69,10 @@ void test_deinterleave() {
     });
 
     dst_image.for_each_element([&](int x, int y) {
-            assert(dst_image(x, y, 0) == 0);
-            assert(dst_image(x, y, 1) == 128);
-            assert(dst_image(x, y, 2) == 255);
-        });
+        assert(dst_image(x, y, 0) == 0);
+        assert(dst_image(x, y, 1) == 128);
+        assert(dst_image(x, y, 2) == 255);
+    });
 
     printf("Interleaved to semi-planar bandwidth %.3e byte/s.\n",
            dst_image.number_of_elements() / t2);
@@ -89,10 +89,13 @@ void test_interleave(bool fast) {
     src.dim(0).set_stride(1).dim(2).set_extent(3);
 
     dst.output_buffer()
-        .dim(0).set_stride(3)
-        .dim(2).set_stride(1).set_bounds(0, 3);
+        .dim(0)
+        .set_stride(3)
+        .dim(2)
+        .set_stride(1)
+        .set_bounds(0, 3);
 
-    if( fast ) {
+    if (fast) {
         dst.reorder(c, x, y).bound(c, 0, 3).unroll(c);
         dst.vectorize(x, 16);
     } else {
@@ -108,10 +111,10 @@ void test_interleave(bool fast) {
     Buffer<uint8_t> dst_image = Buffer<uint8_t>::make_interleaved(1 << 12, 1 << 12, 3);
 
     src_image.for_each_element([&](int x, int y) {
-            src_image(x, y, 0) = 0;
-            src_image(x, y, 1) = 128;
-            src_image(x, y, 2) = 255;
-        });
+        src_image(x, y, 0) = 0;
+        src_image(x, y, 1) = 128;
+        src_image(x, y, 2) = 255;
+    });
     dst_image.fill(0);
 
     src.set(src_image);
@@ -133,10 +136,10 @@ void test_interleave(bool fast) {
            dst_image.number_of_elements() / t);
 
     dst_image.for_each_element([&](int x, int y) {
-            assert(dst_image(x, y, 0) == 0);
-            assert(dst_image(x, y, 1) == 128);
-            assert(dst_image(x, y, 2) == 255);
-        });
+        assert(dst_image(x, y, 0) == 0);
+        assert(dst_image(x, y, 1) == 128);
+        assert(dst_image(x, y, 2) == 255);
+    });
 }
 
 int main(int argc, char **argv) {

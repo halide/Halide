@@ -15,7 +15,6 @@ namespace Internal {
 /** Pull loops marked with the Hexagon device API to a separate
  * module, and call them through the Hexagon host runtime module. */
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target);
-
 }
 }
 

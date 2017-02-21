@@ -1,11 +1,11 @@
 #include "BoundsInference.h"
-#include "IRMutator.h"
-#include "Scope.h"
 #include "Bounds.h"
+#include "IREquality.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "Inline.h"
+#include "Scope.h"
 #include "Simplify.h"
-#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {
@@ -38,7 +38,9 @@ class DependsOnBoundsInference : public IRVisitor {
 
 public:
     bool result;
-    DependsOnBoundsInference() : result(false) {}
+    DependsOnBoundsInference()
+        : result(false) {
+    }
 };
 
 bool depends_on_bounds_inference(Expr e) {
@@ -46,7 +48,6 @@ bool depends_on_bounds_inference(Expr e) {
     e.accept(&d);
     return d.result;
 }
-
 
 /** Compute the bounds of the value of some variable defined by an
  * inner let stmt or for loop. E.g. for the stmt:
@@ -61,7 +62,9 @@ bool depends_on_bounds_inference(Expr e) {
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
-    BoundsOfInnerVar(const string &v) : var(v) {}
+    BoundsOfInnerVar(const string &v)
+        : var(v) {
+    }
 
 private:
     string var;
@@ -101,7 +104,6 @@ Interval bounds_of_inner_var(string var, Stmt s) {
     s.accept(&b);
     return b.result;
 }
-
 }
 
 class BoundsInference : public IRMutator {
@@ -113,15 +115,17 @@ public:
     const Target target;
 
     struct CondValue {
-        Expr cond; // Condition on params only (can't depend on loop variable)
+        Expr cond;  // Condition on params only (can't depend on loop variable)
         Expr value;
 
-        CondValue(const Expr &c, const Expr &v) : cond(c), value(v) {}
+        CondValue(const Expr &c, const Expr &v)
+            : cond(c), value(v) {
+        }
     };
 
     struct Stage {
         Function func;
-        size_t stage; // 0 is the pure definition, 1 is the first update
+        size_t stage;  // 0 is the pure definition, 1 is the first update
         string name;
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
@@ -135,8 +139,8 @@ public:
         // of an init definition should have the same LHS.
         // This also pushes all the reduction domains it encounters into the 'rvars'
         // set for later use.
-        vector<vector<CondValue>> compute_exprs_helper(const Definition& def, bool is_update) {
-            vector<vector<CondValue>> result(2); // <args, values>
+        vector<vector<CondValue>> compute_exprs_helper(const Definition &def, bool is_update) {
+            vector<vector<CondValue>> result(2);  // <args, values>
 
             // Default case (no specialization)
             vector<Expr> predicates = def.split_predicate();
@@ -155,12 +159,12 @@ public:
                     if (!predicates.empty()) {
                         Expr cond_val = Call::make(val.type(),
                                                    Internal::Call::if_then_else,
-                                                   {likely(predicates[0]), val, make_zero(val.type())},
+                                                   { likely(predicates[0]), val, make_zero(val.type()) },
                                                    Internal::Call::PureIntrinsic);
                         for (size_t i = 1; i < predicates.size(); ++i) {
                             cond_val = Call::make(cond_val.type(),
                                                   Internal::Call::if_then_else,
-                                                  {likely(predicates[i]), cond_val, make_zero(cond_val.type())},
+                                                  { likely(predicates[i]), cond_val, make_zero(cond_val.type()) },
                                                   Internal::Call::PureIntrinsic);
                         }
                         result[i].push_back(CondValue(const_true(), cond_val));
@@ -172,8 +176,8 @@ public:
 
             const vector<Specialization> &specializations = def.specializations();
             for (size_t i = specializations.size(); i > 0; i--) {
-                Expr s_cond = specializations[i-1].condition;
-                const Definition &s_def = specializations[i-1].definition;
+                Expr s_cond = specializations[i - 1].condition;
+                const Definition &s_def = specializations[i - 1].definition;
 
                 // Else case (i.e. specialization condition is false)
                 for (auto &vec : result) {
@@ -244,7 +248,7 @@ public:
 
         // Check if the dimension at index 'dim_idx' is always pure (i.e. equal to 'dim')
         // in the definition (including in its specializations)
-        bool is_dim_always_pure(const Definition &def, const string& dim, int dim_idx) {
+        bool is_dim_always_pure(const Definition &def, const string &dim, int dim_idx) {
             const Variable *var = def.args()[dim_idx].as<Variable>();
             if ((!var) || (var->name != dim)) {
                 return false;
@@ -335,7 +339,6 @@ public:
                 // 4)
                 s = do_bounds_query(s, in_pipeline, target);
 
-
                 if (!in_pipeline.empty()) {
                     // 3)
                     string outer_query_name = func.name() + ".outer_bounds_query";
@@ -344,14 +347,14 @@ public:
                     Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::buffer_get_min,
-                                                    {outer_query, i}, Call::Extern);
+                                                    { outer_query, i }, Call::Extern);
                         Expr outer_max = Call::make(Int(32), Call::buffer_get_max,
-                                                    {outer_query, i}, Call::Extern);
+                                                    { outer_query, i }, Call::Extern);
 
                         Expr inner_min = Call::make(Int(32), Call::buffer_get_min,
-                                                    {inner_query, i}, Call::Extern);
+                                                    { inner_query, i }, Call::Extern);
                         Expr inner_max = Call::make(Int(32), Call::buffer_get_max,
-                                                    {inner_query, i}, Call::Extern);
+                                                    { inner_query, i }, Call::Extern);
 
                         // Push 'inner' inside of 'outer'
                         Expr shift = Min::make(0, outer_max - inner_max);
@@ -382,18 +385,16 @@ public:
                     Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr new_min = Call::make(Int(32), Call::buffer_get_min,
-                                                  {inner_query, i}, Call::Extern);
+                                                  { inner_query, i }, Call::Extern);
                         Expr new_max = Call::make(Int(32), Call::buffer_get_max,
-                                                  {inner_query, i}, Call::Extern);
+                                                  { inner_query, i }, Call::Extern);
 
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".max", new_max, s);
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
                     }
 
                     s = do_bounds_query(s, in_pipeline, target);
-
                 }
-
             }
 
             if (in_pipeline.count(name) == 0) {
@@ -515,9 +516,9 @@ public:
                     string query_name = name + ".bounds_query." + func.name();
 
                     Expr query_buf = Call::make(type_of<struct buffer_t *>(), Call::alloca,
-                                                {(int)sizeof(buffer_t)}, Call::Intrinsic);
+                                                { (int) sizeof(buffer_t) }, Call::Intrinsic);
                     query_buf = Call::make(type_of<struct buffer_t *>(), Call::copy_memory,
-                                           {query_buf, in_buf, (int)sizeof(buffer_t)}, Call::Intrinsic);
+                                           { query_buf, in_buf, (int) sizeof(buffer_t) }, Call::Intrinsic);
                     lets.push_back({ query_name, query_buf });
                     Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
@@ -556,11 +557,11 @@ public:
             Stmt annotate;
             if (target.has_feature(Target::MSAN)) {
                 // Mark the buffers as initialized before calling out.
-                for (const auto &buffer: buffers_to_annotate) {
+                for (const auto &buffer : buffers_to_annotate) {
                     // Return type is really 'void', but no way to represent that in our IR.
                     // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
                     Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
-                    Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                    Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", { buffer, sizeof_buffer_t }, Call::Extern));
                     if (annotate.defined()) {
                         annotate = Block::make(annotate, mark_buffer);
                     } else {
@@ -576,7 +577,7 @@ public:
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
             Expr error = Call::make(Int(32), "halide_error_bounds_inference_call_failed",
-                                    {extern_name, result}, Call::Extern);
+                                    { extern_name, result }, Call::Extern);
             Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
             check = LetStmt::make(result_name, e, check);
@@ -610,7 +611,7 @@ public:
                 for (const ReductionVariable &rv : rvars) {
                     string arg = name + ".s" + std::to_string(stage) + "." + rv.var;
                     result.push(rv.var, Interval(Variable::make(Int(32), arg + ".min"),
-                                                   Variable::make(Int(32), arg + ".max")));
+                                                 Variable::make(Int(32), arg + ".max")));
                 }
             }
 
@@ -618,17 +619,15 @@ public:
                 const Bound &b = func.definition().schedule().bounds()[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
             }*/
-
         }
-
     };
     vector<Stage> stages;
 
     BoundsInference(const vector<Function> &f,
                     const vector<Function> &outputs,
                     const FuncValueBounds &fb,
-                    const Target &target) :
-        funcs(f), func_bounds(fb), target(target) {
+                    const Target &target)
+        : funcs(f), func_bounds(fb), target(target) {
         internal_assert(!f.empty());
 
         // Compute the intrinsic relationships between the stages of
@@ -662,18 +661,17 @@ public:
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
-                s.stage = (int)(j+1);
+                s.stage = (int) (j + 1);
                 s.stage_prefix = s.name + ".s" + std::to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
             }
-
         }
 
         // Do any pure inlining (TODO: This is currently slow)
         for (size_t i = f.size(); i > 0; i--) {
-            Function func = f[i-1];
-            if (inlined[i-1]) {
+            Function func = f[i - 1];
+            if (inlined[i - 1]) {
                 for (size_t j = 0; j < stages.size(); j++) {
                     Stage &s = stages[j];
                     for (size_t k = 0; k < s.exprs.size(); k++) {
@@ -731,9 +729,9 @@ public:
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::buffer_get_min,
-                                                  {buf, d}, Call::Extern);
+                                                  { buf, d }, Call::Extern);
                             Expr max = Call::make(Int(32), Call::buffer_get_max,
-                                                  {buf, d}, Call::Extern);
+                                                  { buf, d }, Call::Extern);
                             b[d] = Interval(min, max);
                         }
                         merge_boxes(boxes[f.name()], b);
@@ -767,7 +765,7 @@ public:
                             if (consumer.stage == 0) {
                                 err << "The pure definition ";
                             } else {
-                                err << "Update definition number " << (consumer.stage-1);
+                                err << "Update definition number " << (consumer.stage - 1);
                             }
                             err << " of Function " << consumer.name
                                 << " calls function " << producer.name
@@ -788,9 +786,8 @@ public:
                     debug(0) << "\n";
                     */
 
-
                     producer.bounds[{ consumer.name, consumer.stage }] = b;
-                    producer.consumers.push_back((int)i);
+                    producer.consumers.push_back((int) i);
                 }
             }
         }
@@ -872,7 +869,7 @@ public:
         if (!no_pipelines && producing >= 0) {
             Scope<Interval> empty_scope;
             box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
-            internal_assert((int)box.size() == f.dimensions());
+            internal_assert((int) box.size() == f.dimensions());
         }
 
         // Recurse.
@@ -910,7 +907,7 @@ public:
                     internal_assert(box[i].is_bounded());
                     string var = stage_name + "." + f_args[i];
 
-                    if (box[i].is_single_point()){
+                    if (box[i].is_single_point()) {
                         body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
                     } else {
                         body = LetStmt::make(var + ".max", box[i].max, body);
@@ -961,7 +958,7 @@ public:
 
         // Rewrap the let statements
         for (size_t i = lets.size(); i > 0; i--) {
-            body = LetStmt::make(lets[i-1].first, lets[i-1].second, body);
+            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
         }
 
         in_stages.pop(stage_name);
@@ -976,8 +973,6 @@ public:
         inner_productions.insert(p->name);
     }
 };
-
-
 
 Stmt bounds_inference(Stmt s,
                       const vector<Function> &outputs,
@@ -996,8 +991,5 @@ Stmt bounds_inference(Stmt s,
     s = BoundsInference(funcs, outputs, func_bounds, target).mutate(s);
     return s.as<For>()->body;
 }
-
-
-
 }
 }

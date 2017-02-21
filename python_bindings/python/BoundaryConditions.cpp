@@ -17,12 +17,12 @@ namespace h = Halide;
 namespace hb = Halide::BoundaryConditions;
 namespace p = boost::python;
 
-template <typename T, typename S>
+template<typename T, typename S>
 inline std::pair<T, S> to_pair(const p::object &iterable) {
     return std::pair<T, S>(p::extract<T>(iterable[0]), p::extract<T>(iterable[1]));
 }
 
-template <typename T>
+template<typename T>
 inline std::vector<T> to_vector(const p::object &iterable) {
     return std::vector<T>(p::stl_input_iterator<T>(iterable), p::stl_input_iterator<T>());
 }
@@ -36,7 +36,7 @@ std::vector<std::pair<h::Expr, h::Expr>> inline pyobject_to_bounds(const p::obje
 
 namespace {
 
-template <typename T>
+template<typename T>
 h::Func constant_exterior0(T func_like, h::Expr value) {
     return hb::constant_exterior(func_like, value);
 }
@@ -46,14 +46,14 @@ h::Func constant_exterior_bounds(h::Func func, h::Expr value, p::object bounds_)
 }
 
 // C++ fun, variadic template recursive function !
-template <typename T = void, typename... Types>
+template<typename T = void, typename... Types>
 void def_constant_exterior_for_image() {
     p::def("constant_exterior", &constant_exterior0<h::Buffer<T>>, p::args("source", "value"));
     def_constant_exterior_for_image<Types...>();  // recursive call
     return;
 }
 
-template <>
+template<>
 void def_constant_exterior_for_image<void>() {  // end of recursion
     return;
 }
@@ -62,7 +62,7 @@ void def_constant_exterior_for_image<void>() {  // end of recursion
 
 namespace {
 
-template <typename T>
+template<typename T>
 h::Func repeat_edge0(T func_like) {
     return hb::repeat_edge(func_like);
 }
@@ -72,14 +72,14 @@ h::Func repeat_edge_bounds(h::Func func, p::object bounds_) {
 }
 
 // C++ fun, variadic template recursive function !
-template <typename T = void, typename... Types>
+template<typename T = void, typename... Types>
 void def_repeat_edge_for_image() {
     p::def("repeat_edge", &repeat_edge0<h::Buffer<T>>, p::args("source"));
     def_repeat_edge_for_image<Types...>();  // recursive call
     return;
 }
 
-template <>
+template<>
 void def_repeat_edge_for_image<void>() {  // end of recursion
     return;
 }
@@ -88,7 +88,7 @@ void def_repeat_edge_for_image<void>() {  // end of recursion
 
 namespace {
 
-template <typename T>
+template<typename T>
 h::Func repeat_image0(T func_like) {
     return hb::repeat_image(func_like);
 }
@@ -98,14 +98,14 @@ h::Func repeat_image_bounds(h::Func func, p::object bounds_) {
 }
 
 // C++ fun, variadic template recursive function !
-template <typename T = void, typename... Types>
+template<typename T = void, typename... Types>
 void def_repeat_image_for_image() {
     p::def("repeat_image", &repeat_image0<h::Buffer<T>>, p::args("source"));
     def_repeat_image_for_image<Types...>();  // recursive call
     return;
 }
 
-template <>
+template<>
 void def_repeat_image_for_image<void>() {  // end of recursion
     return;
 }
@@ -114,7 +114,7 @@ void def_repeat_image_for_image<void>() {  // end of recursion
 
 namespace {
 
-template <typename T>
+template<typename T>
 h::Func mirror_image0(T func_like) {
     return hb::mirror_image(func_like);
 }
@@ -124,14 +124,14 @@ h::Func mirror_image_bounds(h::Func func, p::object bounds_) {
 }
 
 // C++ fun, variadic template recursive function !
-template <typename T = void, typename... Types>
+template<typename T = void, typename... Types>
 void def_mirror_image_for_image() {
     p::def("mirror_image", &mirror_image0<h::Buffer<T>>, p::args("source"));
     def_mirror_image_for_image<Types...>();  // recursive call
     return;
 }
 
-template <>
+template<>
 void def_mirror_image_for_image<void>() {  // end of recursion
     return;
 }
@@ -140,7 +140,7 @@ void def_mirror_image_for_image<void>() {  // end of recursion
 
 namespace {
 
-template <typename T>
+template<typename T>
 h::Func mirror_interior0(T func_like) {
     return hb::mirror_interior(func_like);
 }
@@ -150,14 +150,14 @@ h::Func mirror_interior_bounds(h::Func func, p::object bounds_) {
 }
 
 // C++ fun, variadic template recursive function !
-template <typename T = void, typename... Types>
+template<typename T = void, typename... Types>
 void def_mirror_interior_for_image() {
     p::def("mirror_interior", &mirror_interior0<h::Buffer<T>>, p::args("source"));
     def_mirror_interior_for_image<Types...>();  // recursive call
     return;
 }
 
-template <>
+template<>
 void def_mirror_interior_for_image<void>() {  // end of recursion
     return;
 }

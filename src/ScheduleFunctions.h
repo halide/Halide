@@ -27,8 +27,6 @@ Stmt schedule_functions(const std::vector<Function> &outputs,
                         const std::map<std::string, Function> &env,
                         const Target &target,
                         bool &any_memoized);
-
-
 }
 }
 

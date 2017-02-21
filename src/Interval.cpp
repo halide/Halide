@@ -1,6 +1,6 @@
 #include "Interval.h"
-#include "IROperator.h"
 #include "IREquality.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -116,7 +116,6 @@ Interval Interval::make_intersection(const Interval &a, const Interval &b) {
 Expr Interval::pos_inf = Variable::make(Handle(), "pos_inf");
 Expr Interval::neg_inf = Variable::make(Handle(), "neg_inf");
 
-
 namespace {
 void check(Interval result, Interval expected, int line) {
     internal_assert(equal(result.min, expected.min) &&
@@ -131,9 +130,9 @@ void interval_test() {
     Interval e = Interval::everything();
     Interval n = Interval::nothing();
     Expr x = Variable::make(Int(32), "x");
-    Interval xp{x, Interval::pos_inf};
-    Interval xn{Interval::neg_inf, x};
-    Interval xx{x, x};
+    Interval xp{ x, Interval::pos_inf };
+    Interval xn{ Interval::neg_inf, x };
+    Interval xx{ x, x };
 
     internal_assert(e.is_everything());
     internal_assert(!e.has_upper_bound());
@@ -184,21 +183,19 @@ void interval_test() {
     check(Interval::make_intersection(n, xp), n, __LINE__);
     check(Interval::make_intersection(xp, xp), xp, __LINE__);
 
-    check(Interval::make_union({3, Interval::pos_inf}, {5, Interval::pos_inf}), {3, Interval::pos_inf}, __LINE__);
-    check(Interval::make_intersection({3, Interval::pos_inf}, {5, Interval::pos_inf}), {5, Interval::pos_inf}, __LINE__);
+    check(Interval::make_union({ 3, Interval::pos_inf }, { 5, Interval::pos_inf }), { 3, Interval::pos_inf }, __LINE__);
+    check(Interval::make_intersection({ 3, Interval::pos_inf }, { 5, Interval::pos_inf }), { 5, Interval::pos_inf }, __LINE__);
 
-    check(Interval::make_union({Interval::neg_inf, 3}, {Interval::neg_inf, 5}), {Interval::neg_inf, 5}, __LINE__);
-    check(Interval::make_intersection({Interval::neg_inf, 3}, {Interval::neg_inf, 5}), {Interval::neg_inf, 3}, __LINE__);
+    check(Interval::make_union({ Interval::neg_inf, 3 }, { Interval::neg_inf, 5 }), { Interval::neg_inf, 5 }, __LINE__);
+    check(Interval::make_intersection({ Interval::neg_inf, 3 }, { Interval::neg_inf, 5 }), { Interval::neg_inf, 3 }, __LINE__);
 
-    check(Interval::make_union({3, 4}, {9, 10}), {3, 10}, __LINE__);
-    check(Interval::make_intersection({3, 4}, {9, 10}), {9, 4}, __LINE__);
+    check(Interval::make_union({ 3, 4 }, { 9, 10 }), { 3, 10 }, __LINE__);
+    check(Interval::make_intersection({ 3, 4 }, { 9, 10 }), { 9, 4 }, __LINE__);
 
-    check(Interval::make_union({3, 9}, {4, 10}), {3, 10}, __LINE__);
-    check(Interval::make_intersection({3, 9}, {4, 10}), {4, 9}, __LINE__);
+    check(Interval::make_union({ 3, 9 }, { 4, 10 }), { 3, 10 }, __LINE__);
+    check(Interval::make_intersection({ 3, 9 }, { 4, 10 }), { 4, 9 }, __LINE__);
 
     std::cout << "Interval test passed" << std::endl;
 }
-
-
 }
 }

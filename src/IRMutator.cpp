@@ -40,11 +40,21 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
 }
 }
 
-void IRMutator::visit(const IntImm *op)   {expr = op;}
-void IRMutator::visit(const UIntImm *op)   {expr = op;}
-void IRMutator::visit(const FloatImm *op) {expr = op;}
-void IRMutator::visit(const StringImm *op) {expr = op;}
-void IRMutator::visit(const Variable *op) {expr = op;}
+void IRMutator::visit(const IntImm *op) {
+    expr = op;
+}
+void IRMutator::visit(const UIntImm *op) {
+    expr = op;
+}
+void IRMutator::visit(const FloatImm *op) {
+    expr = op;
+}
+void IRMutator::visit(const StringImm *op) {
+    expr = op;
+}
+void IRMutator::visit(const Variable *op) {
+    expr = op;
+}
 
 void IRMutator::visit(const Cast *op) {
     Expr value = mutate(op->value);
@@ -55,29 +65,61 @@ void IRMutator::visit(const Cast *op) {
     }
 }
 
-void IRMutator::visit(const Add *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const Sub *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const Mul *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const Div *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const Mod *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const Min *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const Max *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const EQ *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const NE *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const LT *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const LE *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const GT *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const GE *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const And *op)     {mutate_binary_operator(this, op, &expr, &stmt);}
-void IRMutator::visit(const Or *op)      {mutate_binary_operator(this, op, &expr, &stmt);}
+void IRMutator::visit(const Add *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const Sub *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const Mul *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const Div *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const Mod *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const Min *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const Max *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const EQ *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const NE *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const LT *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const LE *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const GT *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const GE *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const And *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
+void IRMutator::visit(const Or *op) {
+    mutate_binary_operator(this, op, &expr, &stmt);
+}
 
 void IRMutator::visit(const Not *op) {
     Expr a = mutate(op->a);
-    if (a.same_as(op->a)) expr = op;
-    else expr = Not::make(a);
+    if (a.same_as(op->a))
+        expr = op;
+    else
+        expr = Not::make(a);
 }
 
-void IRMutator::visit(const Select *op)  {
+void IRMutator::visit(const Select *op) {
     Expr cond = mutate(op->condition);
     Expr t = mutate(op->true_value);
     Expr f = mutate(op->false_value);
@@ -113,12 +155,14 @@ void IRMutator::visit(const Ramp *op) {
 
 void IRMutator::visit(const Broadcast *op) {
     Expr value = mutate(op->value);
-    if (value.same_as(op->value)) expr = op;
-    else expr = Broadcast::make(value, op->lanes);
+    if (value.same_as(op->value))
+        expr = op;
+    else
+        expr = Broadcast::make(value, op->lanes);
 }
 
 void IRMutator::visit(const Call *op) {
-    vector<Expr > new_args(op->args.size());
+    vector<Expr> new_args(op->args.size());
     bool changed = false;
 
     // Mutate the args
@@ -263,11 +307,11 @@ void IRMutator::visit(const Realize *op) {
 
     // Mutate the bounds
     for (size_t i = 0; i < op->bounds.size(); i++) {
-        Expr old_min    = op->bounds[i].min;
+        Expr old_min = op->bounds[i].min;
         Expr old_extent = op->bounds[i].extent;
-        Expr new_min    = mutate(old_min);
+        Expr new_min = mutate(old_min);
         Expr new_extent = mutate(old_extent);
-        if (!new_min.same_as(old_min))       bounds_changed = true;
+        if (!new_min.same_as(old_min)) bounds_changed = true;
         if (!new_extent.same_as(old_extent)) bounds_changed = true;
         new_bounds[i] = Range(new_min, new_extent);
     }
@@ -318,7 +362,7 @@ void IRMutator::visit(const Evaluate *op) {
 }
 
 void IRMutator::visit(const Shuffle *op) {
-    vector<Expr > new_vectors(op->vectors.size());
+    vector<Expr> new_vectors(op->vectors.size());
     bool changed = false;
 
     for (size_t i = 0; i < op->vectors.size(); i++) {
@@ -334,7 +378,6 @@ void IRMutator::visit(const Shuffle *op) {
         expr = Shuffle::make(new_vectors, op->indices);
     }
 }
-
 
 Stmt IRGraphMutator::mutate(Stmt s) {
     auto iter = stmt_replacements.find(s);
@@ -355,6 +398,5 @@ Expr IRGraphMutator::mutate(Expr e) {
     expr_replacements[e] = new_e;
     return new_e;
 }
-
 }
 }

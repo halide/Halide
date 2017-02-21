@@ -25,12 +25,17 @@ struct LoweredArgument : public Argument {
      * argument. */
     ModulusRemainder alignment;
 
-    LoweredArgument() {}
-    LoweredArgument(const Argument &arg) : Argument(arg) {}
+    LoweredArgument() {
+    }
+    LoweredArgument(const Argument &arg)
+        : Argument(arg) {
+    }
     LoweredArgument(const std::string &_name, Kind _kind, const Type &_type, uint8_t _dimensions,
                     Expr _def = Expr(),
                     Expr _min = Expr(),
-                    Expr _max = Expr()) : Argument(_name, _kind, _type, _dimensions, _def, _min, _max) {}
+                    Expr _max = Expr())
+        : Argument(_name, _kind, _type, _dimensions, _def, _min, _max) {
+    }
 };
 
 /** Definition of a lowered function. This object provides a concrete
@@ -47,8 +52,8 @@ struct LoweredFunc {
 
     /** Type of linkage a function can have. */
     enum LinkageType {
-        External, ///< Visible externally.
-        Internal, ///< Not visible externally, similar to 'static' linkage in C.
+        External,  ///< Visible externally.
+        Internal,  ///< Not visible externally, similar to 'static' linkage in C.
     };
 
     /** The linkage of this function. */
@@ -57,7 +62,6 @@ struct LoweredFunc {
     LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage);
     LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage);
 };
-
 }
 
 namespace Internal {
@@ -68,6 +72,7 @@ struct ModuleContents;
  * definitions and buffers. */
 class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
+
 public:
     EXPORT Module(const std::string &name, const Target &target);
 
@@ -119,7 +124,6 @@ EXPORT void compile_multitarget(const std::string &fn_name,
                                 const std::vector<Target> &targets,
                                 ModuleProducer module_producer,
                                 const std::map<std::string, std::string> &suffixes = {});
-
 }
 
 #endif

@@ -1,6 +1,6 @@
+#include "device_interface.h"
 #include "HalideRuntime.h"
 #include "device_buffer_utils.h"
-#include "device_interface.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
@@ -8,10 +8,11 @@ extern "C" {
 
 extern void *malloc(size_t);
 extern void free(void *);
-
 }
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 struct device_handle_wrapper {
     uint64_t device_handle;
@@ -51,14 +52,15 @@ WEAK int copy_to_host_already_locked(void *user_context, struct buffer_t *buf) {
 
     return 0;
 }
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal
 
 extern "C" {
 
 WEAK uint64_t halide_new_device_wrapper(uint64_t handle, const struct halide_device_interface_t *device_interface) {
     // Using malloc instead of halide_malloc avoids alignment overhead.
-    device_handle_wrapper *wrapper = (device_handle_wrapper *)malloc(sizeof(device_handle_wrapper));
+    device_handle_wrapper *wrapper = (device_handle_wrapper *) malloc(sizeof(device_handle_wrapper));
     if (wrapper == NULL) {
         return 0;
     }
@@ -67,25 +69,24 @@ WEAK uint64_t halide_new_device_wrapper(uint64_t handle, const struct halide_dev
 
     device_interface->use_module();
 
-    debug(NULL) << "Creating device wrapper for interface " << device_interface << " handle " << (void *)handle << " wrapper " << wrapper << "\n";
-    return (uint64_t)wrapper;
+    debug(NULL) << "Creating device wrapper for interface " << device_interface << " handle " << (void *) handle << " wrapper " << wrapper << "\n";
+    return (uint64_t) wrapper;
 }
 
 WEAK void halide_delete_device_wrapper(uint64_t wrapper) {
-    device_handle_wrapper *wrapper_ptr = (device_handle_wrapper *)wrapper;
+    device_handle_wrapper *wrapper_ptr = (device_handle_wrapper *) wrapper;
     wrapper_ptr->interface->release_module();
-    debug(NULL) << "Deleting device wrapper for interface " << wrapper_ptr->interface << " device_handle " << (void *)wrapper_ptr->device_handle << " at addr " << wrapper_ptr << "\n";
+    debug(NULL) << "Deleting device wrapper for interface " << wrapper_ptr->interface << " device_handle " << (void *) wrapper_ptr->device_handle << " at addr " << wrapper_ptr << "\n";
     free(wrapper_ptr);
 }
 
 WEAK uint64_t halide_get_device_handle(uint64_t dev_field) {
-    const device_handle_wrapper *wrapper = (const device_handle_wrapper *)dev_field;
+    const device_handle_wrapper *wrapper = (const device_handle_wrapper *) dev_field;
     if (wrapper == NULL) {
         debug(NULL) << "Getting device handle for NULL wrapper\n";
         return 0;
     }
-    debug(NULL) << "Getting device handle for interface " << wrapper->interface
-                << " device_handle " << (void *)wrapper->device_handle
+    debug(NULL) << "Getting device handle for interface " << wrapper->interface << " device_handle " << (void *) wrapper->device_handle
                 << " at addr " << wrapper << "\n";
     return wrapper->device_handle;
 }
@@ -94,7 +95,7 @@ WEAK const halide_device_interface_t *halide_get_device_interface(uint64_t dev_f
     if (dev_field == 0) {
         return NULL;
     }
-    return ((device_handle_wrapper *)dev_field)->interface;
+    return ((device_handle_wrapper *) dev_field)->interface;
 }
 
 /** Release all data associated with the current GPU backend, in particular
@@ -147,7 +148,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
             debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer halide_device_free failed\n";
             return result;
         }
-        buf->host_dirty = true; // force copy back to new device below.
+        buf->host_dirty = true;  // force copy back to new device below.
     }
 
     if (buf->dev == 0) {
@@ -264,7 +265,7 @@ WEAK int halide_weak_device_free(void *user_context, struct buffer_t *buf) {
 /** Free any device memory associated with a buffer_t and ignore any
  * error. Used when freeing as a destructor on an error. */
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj) {
-    struct buffer_t *buf = (struct buffer_t *)obj;
+    struct buffer_t *buf = (struct buffer_t *) obj;
     halide_device_free(user_context, buf);
 }
 
@@ -332,7 +333,7 @@ WEAK int halide_device_and_host_free(void *user_context, struct buffer_t *buf) {
 
 WEAK int halide_default_device_and_host_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface_t *device_interface) {
     size_t size = buf_size(buf);
-    buf->host = (uint8_t *)halide_malloc(user_context, size);
+    buf->host = (uint8_t *) halide_malloc(user_context, size);
     if (buf->host == NULL) {
         return -1;
     }
@@ -356,7 +357,7 @@ WEAK int halide_default_device_and_host_free(void *user_context, struct buffer_t
 /** Free any host and device memory associated with a buffer_t and ignore any
  * error. Used when freeing as a destructor on an error. */
 WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj) {
-    struct buffer_t *buf = (struct buffer_t *)obj;
+    struct buffer_t *buf = (struct buffer_t *) obj;
     halide_device_and_host_free(user_context, buf);
 }
 
@@ -364,4 +365,4 @@ WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *ob
 WEAK void halide_device_host_nop_free(void *user_context, void *obj) {
 }
 
-} // extern "C" linkage
+}  // extern "C" linkage

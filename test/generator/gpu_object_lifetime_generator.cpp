@@ -21,6 +21,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<GpuObjectLifetime> register_my_gen{"gpu_object_lifetime"};
+Halide::RegisterGenerator<GpuObjectLifetime> register_my_gen{ "gpu_object_lifetime" };
 
 }  // namespace

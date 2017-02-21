@@ -21,42 +21,42 @@ namespace func_and_stage_implementation_details {
 namespace hh = Halide;
 namespace bp = boost::python;
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_parallel0(FuncOrStage &that, hh::VarOrRVar var) {
     return that.parallel(var);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_parallel1(FuncOrStage &that, hh::VarOrRVar var, int factor) {
     return that.parallel(var, factor);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_split(FuncOrStage &that, hh::VarOrRVar var, hh::VarOrRVar outer, hh::VarOrRVar inner, int factor) {
     return that.split(var, outer, inner, factor);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_vectorize0(FuncOrStage &that, hh::VarOrRVar var) {
     return that.vectorize(var);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_vectorize1(FuncOrStage &that, hh::VarOrRVar var, int factor) {
     return that.vectorize(var, factor);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_unroll0(FuncOrStage &that, hh::VarOrRVar var) {
     return that.unroll(var);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_unroll1(FuncOrStage &that, hh::VarOrRVar var, int factor) {
     return that.unroll(var, factor);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_tile0(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                         hh::VarOrRVar xo, hh::VarOrRVar yo,
                         hh::VarOrRVar xi, hh::VarOrRVar yi,
@@ -64,14 +64,14 @@ FuncOrStage &func_tile0(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
     return that.tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_tile1(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                         hh::VarOrRVar xi, hh::VarOrRVar yi,
                         hh::Expr xfactor, hh::Expr yfactor) {
     return that.tile(x, y, xi, yi, xfactor, yfactor);
 }
 
-template <typename FuncOrStage, typename PythonIterable>
+template<typename FuncOrStage, typename PythonIterable>
 FuncOrStage &func_reorder0(FuncOrStage &that, PythonIterable args_passed) {
     std::vector<hh::VarOrRVar> var_or_rvar_args;
 
@@ -95,7 +95,7 @@ FuncOrStage &func_reorder0(FuncOrStage &that, PythonIterable args_passed) {
     return that.reorder(var_or_rvar_args);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_reorder1(FuncOrStage &that, bp::object v0,
                            bp::object v1, bp::object v2, bp::object v3, bp::object v4, bp::object v5) {
     bp::list args_list;
@@ -108,7 +108,7 @@ FuncOrStage &func_reorder1(FuncOrStage &that, bp::object v0,
     return func_reorder0<FuncOrStage, bp::list>(that, args_list);
 }
 
-template <typename FuncOrStage, typename PythonIterable>
+template<typename FuncOrStage, typename PythonIterable>
 FuncOrStage &func_reorder_storage0(FuncOrStage &that, PythonIterable args_passed) {
     std::vector<hh::Var> var_args;
 
@@ -132,7 +132,7 @@ FuncOrStage &func_reorder_storage0(FuncOrStage &that, PythonIterable args_passed
     return that.reorder_storage(var_args);
 }
 
-template <typename FuncOrStage>
+template<typename FuncOrStage>
 FuncOrStage &func_reorder_storage1(FuncOrStage &that, bp::object v0,
                                    bp::object v1, bp::object v2,
                                    bp::object v3, bp::object v4, bp::object v5) {

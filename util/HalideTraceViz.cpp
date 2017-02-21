@@ -1,16 +1,16 @@
-#include <stdio.h>
-#include <stdint.h>
 #include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <map>
-#include <vector>
-#include <array>
-#include <string>
-#include <queue>
-#include <iostream>
 #include <algorithm>
+#include <array>
+#include <iostream>
+#include <map>
+#include <queue>
+#include <string>
+#include <vector>
 #ifdef _MSC_VER
 #include <io.h>
 typedef int64_t ssize_t;
@@ -19,8 +19,8 @@ typedef int64_t ssize_t;
 #endif
 #include <string.h>
 
-#include "inconsolata.h"
 #include "HalideRuntime.h"
+#include "inconsolata.h"
 
 namespace {
 
@@ -47,13 +47,13 @@ struct Packet : public halide_trace_packet_t {
         case halide_type_int:
             switch (type.bits) {
             case 8:
-                return (T)(((const int8_t *)value())[idx]);
+                return (T)(((const int8_t *) value())[idx]);
             case 16:
-                return (T)(((const int16_t *)value())[idx]);
+                return (T)(((const int16_t *) value())[idx]);
             case 32:
-                return (T)(((const int32_t *)value())[idx]);
+                return (T)(((const int32_t *) value())[idx]);
             case 64:
-                return (T)(((const int64_t *)value())[idx]);
+                return (T)(((const int64_t *) value())[idx]);
             default:
                 bad_type_error();
             }
@@ -61,13 +61,13 @@ struct Packet : public halide_trace_packet_t {
         case halide_type_uint:
             switch (type.bits) {
             case 8:
-                return (T)(((const uint8_t *)value())[idx]);
+                return (T)(((const uint8_t *) value())[idx]);
             case 16:
-                return (T)(((const uint16_t *)value())[idx]);
+                return (T)(((const uint16_t *) value())[idx]);
             case 32:
-                return (T)(((const uint32_t *)value())[idx]);
+                return (T)(((const uint32_t *) value())[idx]);
             case 64:
-                return (T)(((const uint64_t *)value())[idx]);
+                return (T)(((const uint64_t *) value())[idx]);
             default:
                 bad_type_error();
             }
@@ -75,9 +75,9 @@ struct Packet : public halide_trace_packet_t {
         case halide_type_float:
             switch (type.bits) {
             case 32:
-                return (T)(((const float *)value())[idx]);
+                return (T)(((const float *) value())[idx]);
             case 64:
-                return (T)(((const double *)value())[idx]);
+                return (T)(((const double *) value())[idx]);
             default:
                 bad_type_error();
             }
@@ -85,18 +85,18 @@ struct Packet : public halide_trace_packet_t {
         default:
             bad_type_error();
         }
-        return (T)0;
+        return (T) 0;
     }
 
     // Grab a packet from stdin. Returns false when stdin closes.
     bool read_from_stdin() {
-        uint32_t header_size = (uint32_t)sizeof(halide_trace_packet_t);
+        uint32_t header_size = (uint32_t) sizeof(halide_trace_packet_t);
         if (!read_stdin(this, header_size)) {
             return false;
         }
         uint32_t payload_size = size - header_size;
-        if (payload_size > (uint32_t)sizeof(payload)) {
-            fprintf(stderr, "Payload larger than %d bytes in trace stream (%d)\n", (int)sizeof(payload), (int)payload_size);
+        if (payload_size > (uint32_t) sizeof(payload)) {
+            fprintf(stderr, "Payload larger than %d bytes in trace stream (%d)\n", (int) sizeof(payload), (int) payload_size);
             abort();
             return false;
         }
@@ -110,7 +110,7 @@ struct Packet : public halide_trace_packet_t {
 private:
     // Do a blocking read of some number of bytes from stdin.
     bool read_stdin(void *d, ssize_t size) {
-        uint8_t *dst = (uint8_t *)d;
+        uint8_t *dst = (uint8_t *) d;
         if (!size) return true;
         for (;;) {
             ssize_t s = read(0, dst, size);
@@ -211,7 +211,7 @@ struct FuncInfo {
         void observe_load_or_store(const Packet &p) {
             for (int i = 0; i < std::min(16, p.dimensions / p.type.lanes); i++) {
                 for (int lane = 0; lane < p.type.lanes; lane++) {
-                    int coord = p.get_coord(i*p.type.lanes + lane);
+                    int coord = p.get_coord(i * p.type.lanes + lane);
                     if (loads + stores == 0 && lane == 0) {
                         min_coord[i] = coord;
                         max_coord[i] = coord + 1;
@@ -237,7 +237,8 @@ struct FuncInfo {
         void report() {
             fprintf(stderr,
                     "Func %s:\n"
-                    " bounds of domain: ", qualified_name.c_str());
+                    " bounds of domain: ",
+                    qualified_name.c_str());
             for (int i = 0; i < 16; i++) {
                 if (min_coord[i] == 0 && max_coord[i] == 0) break;
                 if (i > 0) {
@@ -257,8 +258,8 @@ struct FuncInfo {
                     " number of stores: %g\n",
                     min_value, max_value,
                     num_realizations, num_productions,
-                    (double)loads,
-                    (double)stores);
+                    (double) loads,
+                    (double) stores);
         }
 
     } stats;
@@ -282,7 +283,7 @@ void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, in
     // Drop any alpha component of color
     color &= 0xffffff;
 
-    for (int c = 0; ; c++) {
+    for (int c = 0;; c++) {
         int chr = text[c];
         if (chr == 0) return;
 
@@ -293,7 +294,7 @@ void draw_text(const char *text, int x, int y, uint32_t color, uint32_t *dst, in
         uint8_t *font_ptr = inconsolata_raw + chr * (FONT_W * FONT_H);
         for (int fy = 0; fy < FONT_H; fy++) {
             for (int fx = 0; fx < FONT_W; fx++) {
-                int px = x + FONT_W*c + fx;
+                int px = x + FONT_W * c + fx;
                 int py = y - FONT_H + fy + 1;
                 if (px < 0 || px >= dst_width ||
                     py < 0 || py >= dst_height) continue;
@@ -367,9 +368,7 @@ void usage() {
             "    specifies that the Func has three dimensions where the\n"
             "    first one maps to screen-space x coordinates, the second\n"
             "    one maps to screen-space y coordinates, and the third one\n"
-            "    does not affect screen-space coordinates.\n"
-        );
-
+            "    does not affect screen-space coordinates.\n");
 }
 
 int run(int argc, char **argv) {
@@ -408,7 +407,7 @@ int run(int argc, char **argv) {
             fi.config.x = atoi(argv[++i]);
             fi.config.y = atoi(argv[++i]);
             int d = 0;
-            for (; i+1 < argc && argv[i+1][0] != '-' && d < 16; d++) {
+            for (; i + 1 < argc && argv[i + 1][0] != '-' && d < 16; d++) {
                 fi.config.x_stride[d] = atoi(argv[++i]);
                 fi.config.y_stride[d] = atoi(argv[++i]);
             }
@@ -425,7 +424,7 @@ int run(int argc, char **argv) {
             int x = atoi(argv[++i]);
             int y = atoi(argv[++i]);
             int n = atoi(argv[++i]);
-            Label l = {text, x, y, n};
+            Label l = { text, x, y, n };
             fprintf(stderr, "Adding label %s to func %s\n",
                     text, func);
             func_info[func].config.labels.push_back(l);
@@ -489,7 +488,7 @@ int run(int argc, char **argv) {
         // Hold for some number of frames once the trace has finished.
         if (end_counter) {
             halide_clock += timestep;
-            if (end_counter == (size_t)hold_frames) {
+            if (end_counter == (size_t) hold_frames) {
                 break;
             }
         }
@@ -497,10 +496,10 @@ int run(int argc, char **argv) {
         while (halide_clock >= video_clock) {
             // Composite text over anim over image
             for (int i = 0; i < frame_width * frame_height; i++) {
-                uint8_t *anim_px  = (uint8_t *)(anim + i);
-                uint8_t *image_px = (uint8_t *)(image + i);
-                uint8_t *text_px  = (uint8_t *)(text + i);
-                uint8_t *blend_px = (uint8_t *)(blend + i);
+                uint8_t *anim_px = (uint8_t *) (anim + i);
+                uint8_t *image_px = (uint8_t *) (image + i);
+                uint8_t *text_px = (uint8_t *) (text + i);
+                uint8_t *blend_px = (uint8_t *) (blend + i);
                 composite(image_px, anim_px, blend_px);
                 composite(blend_px, text_px, blend_px);
             }
@@ -535,7 +534,7 @@ int run(int argc, char **argv) {
 
         // It's a pipeline begin/end event
         if (p.event == halide_trace_begin_pipeline) {
-            pipeline_info[p.id] = {p.func(), p.id};
+            pipeline_info[p.id] = { p.func(), p.id };
             continue;
         } else if (p.event == halide_trace_end_pipeline) {
             pipeline_info.erase(p.parent_id);
@@ -569,8 +568,7 @@ int run(int argc, char **argv) {
 
         switch (p.event) {
         case halide_trace_load:
-        case halide_trace_store:
-        {
+        case halide_trace_store: {
             int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
 
             for (size_t i = 0; i < fi.config.labels.size(); i++) {
@@ -633,7 +631,7 @@ int run(int argc, char **argv) {
                         if (value > 255) value = 255;
 
                         // Convert to 8-bit color.
-                        uint8_t int_value = (uint8_t)value;
+                        uint8_t int_value = (uint8_t) value;
 
                         if (fi.config.color_dim < 0) {
                             // Grayscale
@@ -711,13 +709,12 @@ int run(int argc, char **argv) {
             fprintf(stderr, "Unknown tracing event code: %d\n", p.event);
             exit(-1);
         }
-
     }
 
-    fprintf(stderr, "Total number of Funcs: %d\n", (int)func_info.size());
+    fprintf(stderr, "Total number of Funcs: %d\n", (int) func_info.size());
 
     // Print stats about the Func gleaned from the trace.
-    vector<std::pair<std::string, FuncInfo> > funcs;
+    vector<std::pair<std::string, FuncInfo>> funcs;
     for (std::pair<std::string, FuncInfo> p : func_info) {
         funcs.push_back(p);
     }

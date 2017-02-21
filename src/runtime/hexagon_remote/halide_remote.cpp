@@ -2,10 +2,10 @@
 #include <HalideRuntime.h>
 #include <HalideRuntimeHexagonHost.h>
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <dlfcn.h>
 #include <qurt.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 extern "C" {
 #include "HAP_farf.h"
@@ -13,8 +13,8 @@ extern "C" {
 }
 
 #include "elf.h"
-#include "pipeline_context.h"
 #include "log.h"
+#include "pipeline_context.h"
 
 const int stack_alignment = 128;
 const int stack_size = 1024 * 1024;
@@ -56,13 +56,12 @@ const int buffer_size = 1024 * 64;
 int buf_is_used[num_buffers];
 char mem_buf[num_buffers][buffer_size]
     __attribute__((aligned(128))); /* Hexagon requires 128-byte alignment. */
-
 }
 
 void *halide_malloc(void *user_context, size_t x) {
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
-            if (__sync_val_compare_and_swap(buf_is_used+i, 0, 1) == 0) {
+            if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
                 return mem_buf[i];
             }
         }
@@ -106,13 +105,13 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              halide_error_handler_t error_handler,
                              halide_do_par_for_t do_par_for,
                              halide_do_task_t do_task,
-                             void *(*)(const char *),
-                             void *(*)(const char *),
-                             void *(*)(void *, const char *));
+                             void *(*) (const char *),
+                             void *(*) (const char *),
+                             void *(*) (void *, const char *) );
 
 PipelineContext run_context(stack_alignment, stack_size);
 
-__attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
+__attribute__((weak)) void *dlopenbuf(const char *filename, const char *data, int size, int perms);
 
 int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
                                                 int use_shared_object,
@@ -120,7 +119,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     void *lib = NULL;
     elf_t *elib = NULL;
     if (use_shared_object) {
-        lib = dlopenbuf( "libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
+        lib = dlopenbuf("libhalide_hexagon_host_dlbuf.so", (const char *) code, codeLen, RTLD_LOCAL | RTLD_LAZY);
         if (!lib) {
             log_printf("dlopenbuf failed");
             return -1;
@@ -138,9 +137,9 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     // to them in here.
     set_runtime_t set_runtime;
     if (use_shared_object) {
-        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
+        set_runtime = (set_runtime_t) dlsym(lib, "halide_noos_set_runtime");
     } else {
-        set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
+        set_runtime = (set_runtime_t) obj_dlsym(elib, "halide_noos_set_runtime");
     }
     if (!set_runtime) {
         if (use_shared_object) {
@@ -178,8 +177,8 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     return 0;
 }
 
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char *name, int nameLen) {
+    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t *>(module_ptr), name));
 }
 
 volatile int power_ref_count = 0;
@@ -236,14 +235,14 @@ int halide_hexagon_remote_set_performance(
     }
 
     request.type = HAP_power_set_mips_bw;
-    request.mips_bw.set_mips        = set_mips;
-    request.mips_bw.mipsPerThread   = mipsPerThread;
-    request.mips_bw.mipsTotal       = mipsTotal;
-    request.mips_bw.set_bus_bw      = set_bus_bw;
-    request.mips_bw.bwBytePerSec    = ((uint64_t) bwMegabytesPerSec) << 20;
+    request.mips_bw.set_mips = set_mips;
+    request.mips_bw.mipsPerThread = mipsPerThread;
+    request.mips_bw.mipsTotal = mipsTotal;
+    request.mips_bw.set_bus_bw = set_bus_bw;
+    request.mips_bw.bwBytePerSec = ((uint64_t) bwMegabytesPerSec) << 20;
     request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
-    request.mips_bw.set_latency     = set_latency;
-    request.mips_bw.latency         = latency;
+    request.mips_bw.set_latency = set_latency;
+    request.mips_bw.latency = latency;
     retval = HAP_power_set(NULL, &request);
     if (0 != retval) {
         log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
@@ -303,28 +302,28 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
         }
     }
 
-    set_mips    = TRUE;
-    set_bus_bw  = TRUE;
+    set_mips = TRUE;
+    set_bus_bw = TRUE;
     set_latency = TRUE;
     switch (mode) {
     case halide_hvx_power_low:
-        mipsPerThread          = max_mips / 4;
-        bwBytePerSec           = max_bus_bw / 2;
-        busbwUsagePercentage   = 25;
-        latency                = 1000;
+        mipsPerThread = max_mips / 4;
+        bwBytePerSec = max_bus_bw / 2;
+        busbwUsagePercentage = 25;
+        latency = 1000;
         break;
     case halide_hvx_power_nominal:
-        mipsPerThread          = (3 * max_mips) / 8;
-        bwBytePerSec           = max_bus_bw;
-        busbwUsagePercentage   = 50;
-        latency                = 100;
+        mipsPerThread = (3 * max_mips) / 8;
+        bwBytePerSec = max_bus_bw;
+        busbwUsagePercentage = 50;
+        latency = 100;
         break;
     case halide_hvx_power_turbo:
     default:
-        mipsPerThread          = max_mips;
-        bwBytePerSec           = max_bus_bw * 4;
-        busbwUsagePercentage   = 100;
-        latency                = 10;
+        mipsPerThread = max_mips;
+        bwBytePerSec = max_bus_bw * 4;
+        busbwUsagePercentage = 100;
+        latency = 10;
         break;
     }
     mipsTotal = mipsPerThread * 2;
@@ -340,15 +339,14 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
                                                  latency);
 }
 
-int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
+int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char *name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
     if (use_shared_object) {
-       *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+        *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t *>(module_ptr), name));
     } else {
-        *sym_ptr= reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+        *sym_ptr = reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t *>(module_ptr), name));
     }
     return *sym_ptr != 0 ? 0 : -1;
 }
-
 
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const buffer *input_buffersPtrs, int input_buffersLen,
@@ -365,10 +363,10 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     // can just make this dummy buffer_t type.
     struct buffer_t {
         uint64_t dev;
-        uint8_t* host;
+        uint8_t *host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
-    buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
+    void **args = (void **) __builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
+    buffer_t *buffers = (buffer_t *) __builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
 
     void **next_arg = &args[0];
     buffer_t *next_buffer_t = &buffers[0];
@@ -403,7 +401,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
-    obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
+    obj_dlclose(reinterpret_cast<elf_t *>(module_ptr));
     return 0;
 }
 

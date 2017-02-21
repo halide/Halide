@@ -33,11 +33,11 @@ struct TraceEventBuilder {
             idx = 0;
         }
 
-        vector<Expr> args = {Expr(func),
-                             values, coords,
-                             (int)type.code(), (int)type.bits(), (int)type.lanes(),
-                             (int)event,
-                             parent_id, idx, (int)coordinates.size()};
+        vector<Expr> args = { Expr(func),
+                              values, coords,
+                              (int) type.code(), (int) type.bits(), (int) type.lanes(),
+                              (int) event,
+                              parent_id, idx, (int) coordinates.size() };
         return Call::make(Int(32), Call::trace, args, Call::Extern);
     }
 };
@@ -49,7 +49,8 @@ public:
 
     InjectTracing(const map<string, Function> &e)
         : env(e),
-          global_level(tracing_level()) {}
+          global_level(tracing_level()) {
+    }
 
 private:
     using IRMutator::visit;
@@ -90,12 +91,10 @@ private:
                 } else {
                     Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param, l->predicate);
                 }
-                expr = Call::make(op->type, Call::address_of, {inner}, Call::Intrinsic);
+                expr = Call::make(op->type, Call::address_of, { inner }, Call::Intrinsic);
                 return;
             }
         }
-
-
 
         IRMutator::visit(op);
         op = expr.as<Call>();
@@ -120,7 +119,7 @@ private:
 
             TraceEventBuilder builder;
             builder.func = op->name;
-            builder.value = {value_var};
+            builder.value = { value_var };
             builder.coordinates = op->args;
             builder.type = op->type;
             builder.event = halide_trace_load;
@@ -130,9 +129,8 @@ private:
 
             expr = Let::make(value_var_name, op,
                              Call::make(op->type, Call::return_second,
-                                        {trace, value_var}, Call::PureIntrinsic));
+                                        { trace, value_var }, Call::PureIntrinsic));
         }
-
     }
 
     void visit(const Provide *op) {
@@ -162,13 +160,13 @@ private:
                 Expr value_var = Variable::make(t, value_var_name);
 
                 builder.type = t;
-                builder.value_index = (int)i;
-                builder.value = {value_var};
+                builder.value_index = (int) i;
+                builder.value = { value_var };
                 Expr trace = builder.build();
 
                 traces[i] = Let::make(value_var_name, values[i],
                                       Call::make(t, Call::return_second,
-                                                 {trace, value_var}, Call::PureIntrinsic));
+                                                 { trace, value_var }, Call::PureIntrinsic));
             }
 
             stmt = Provide::make(op->name, traces, op->args);
@@ -210,7 +208,6 @@ private:
             new_body = LetStmt::make(op->name + ".trace_id", 0, new_body);
             stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
         }
-
     }
 
     void visit(const ProducerConsumer *op) {
@@ -236,20 +233,15 @@ private:
                 builder.coordinates.push_back(extent);
             }
 
-            builder.event = (op->is_producer ?
-                             halide_trace_produce :
-                             halide_trace_consume);
+            builder.event = (op->is_producer ? halide_trace_produce : halide_trace_consume);
             Expr begin_op_call = builder.build();
 
-            builder.event = (op->is_producer ?
-                             halide_trace_end_produce :
-                             halide_trace_end_consume);
+            builder.event = (op->is_producer ? halide_trace_end_produce : halide_trace_end_consume);
             Expr end_op_call = builder.build();
-
 
             Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
 
-            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call, 
+            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call,
                                  ProducerConsumer::make(op->name, op->is_producer, new_body));
         }
     }
@@ -270,7 +262,9 @@ class RemoveRealizeOverOutput : public IRMutator {
     }
 
 public:
-    RemoveRealizeOverOutput(const vector<Function> &o) : outputs(o) {}
+    RemoveRealizeOverOutput(const vector<Function> &o)
+        : outputs(o) {
+    }
 };
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name,
@@ -317,6 +311,5 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name,
 
     return s;
 }
-
 }
 }

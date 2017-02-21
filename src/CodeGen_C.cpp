@@ -3,12 +3,12 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
-#include "Substitute.h"
 #include "IROperator.h"
-#include "Param.h"
-#include "Var.h"
 #include "Lerp.h"
+#include "Param.h"
 #include "Simplify.h"
+#include "Substitute.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -168,7 +168,8 @@ const string globals =
     "\n";
 }
 
-CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind), extern_c_open(false) {
+CodeGen_C::CodeGen_C(ostream &s, OutputKind output_kind, const std::string &guard)
+    : IRPrinter(s), id("$$ BAD ID $$"), output_kind(output_kind), extern_c_open(false) {
     if (is_header()) {
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
@@ -272,7 +273,10 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
         case 1:
             oss << "bool";
             break;
-        case 8: case 16: case 32: case 64:
+        case 8:
+        case 16:
+        case 32:
+        case 64:
             if (type.is_uint()) oss << 'u';
             oss << "int" << type.bits() << "_t";
             break;
@@ -325,8 +329,8 @@ string CodeGen_C::print_name(const string &name) {
             oss << "__";
         } else if (name[i] != '_' && !isalnum(name[i])) {
             oss << "___";
-        }
-        else oss << name[i];
+        } else
+            oss << name[i];
     }
     return oss.str();
 }
@@ -334,9 +338,11 @@ string CodeGen_C::print_name(const string &name) {
 namespace {
 class ExternCallPrototypes : public IRGraphVisitor {
     struct NamespaceOrCall {
-        const Call *call; // nullptr if this is a subnamespace
+        const Call *call;  // nullptr if this is a subnamespace
         std::map<string, NamespaceOrCall> names;
-        NamespaceOrCall(const Call *call = nullptr) : call(call) { }
+        NamespaceOrCall(const Call *call = nullptr)
+            : call(call) {
+        }
     };
     std::map<string, NamespaceOrCall> c_plus_plus_externs;
     std::map<string, const Call *> c_externs;
@@ -349,16 +355,16 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
         if (!emitted.count(op->name)) {
             if (op->call_type == Call::Extern) {
-                c_externs.insert({op->name, op});
+                c_externs.insert({ op->name, op });
             } else if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
                 std::string name = extract_namespaces(op->name, namespaces);
                 std::map<string, NamespaceOrCall> *namespace_map(&c_plus_plus_externs);
                 for (const auto &ns : namespaces) {
-                    auto insertion = namespace_map->insert({ns, NamespaceOrCall()});
+                    auto insertion = namespace_map->insert({ ns, NamespaceOrCall() });
                     namespace_map = &insertion.first->second.names;
                 }
-                namespace_map->insert({name, NamespaceOrCall(op)});
+                namespace_map->insert({ name, NamespaceOrCall(op) });
             }
             emitted.insert(op->name);
         }
@@ -379,7 +385,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (op->args[i].as<StringImm>()) {
                 stream << "const char *";
             } else {
-              stream << type_to_c_type(op->args[i].type(), true);
+                stream << type_to_c_type(op->args[i].type(), true);
             }
         }
         stream << ");\n";
@@ -398,15 +404,15 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
 public:
-  ExternCallPrototypes(std::set<string> &emitted, bool in_c_plus_plus)
-      : emitted(emitted) {
+    ExternCallPrototypes(std::set<string> &emitted, bool in_c_plus_plus)
+        : emitted(emitted) {
         size_t j = 0;
         // Make sure we don't catch calls that are already in the global declarations
         for (size_t i = 0; i < globals.size(); i++) {
             char c = globals[i];
-            if (c == '(' && i > j+1) {
+            if (c == '(' && i > j + 1) {
                 // Could be the end of a function_name.
-                emitted.insert(globals.substr(j+1, i-j-1));
+                emitted.insert(globals.substr(j + 1, i - j - 1));
             }
 
             if (('A' <= c && c <= 'Z') ||
@@ -417,7 +423,6 @@ public:
             } else {
                 j = i;
             }
-
         }
     }
 
@@ -470,7 +475,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         auto handle_type = args[i].type.handle_type;
         if (!handle_type) continue;
         auto type_type = handle_type->inner_name.cpp_type_type;
-        for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
+        for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++) {
             stream << "namespace " << handle_type->namespaces[ns] << " {\n";
         }
         if (type_type == halide_cplusplus_type_name::Struct) {
@@ -482,7 +487,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         } else if (type_type == halide_cplusplus_type_name::Enum) {
             internal_error << "Passing pointers to enums is unsupported\n";
         }
-        for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
+        for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++) {
             stream << "}\n";
         }
     }
@@ -516,8 +521,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     std::vector<std::string> namespaces;
     std::string simple_name = extract_namespaces(f.name, namespaces);
     if (!is_c_plus_plus_interface()) {
-        user_assert(namespaces.empty()) <<
-            "Namespace qualifiers not allowed on function name if not compiling with Target::CPlusPlusNameMangling.\n";
+        user_assert(namespaces.empty()) << "Namespace qualifiers not allowed on function name if not compiling with Target::CPlusPlusNameMangling.\n";
     }
 
     if (!namespaces.empty()) {
@@ -545,7 +549,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << print_name(args[i].name);
         }
 
-        if (i < args.size()-1) stream << ", ";
+        if (i < args.size() - 1) stream << ", ";
     }
 
     if (is_header()) {
@@ -624,7 +628,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
     for (size_t i = 0; i < num_elems * b.elem_size; i++) {
         if (i > 0) stream << ", ";
-        stream << (int)(b.host[i]);
+        stream << (int) (b.host[i]);
     }
     stream << "};\n";
 
@@ -632,14 +636,14 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
     user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
     stream << "static buffer_t " << name << "_buffer = {"
-           << "0, " // dev
-           << "&" << name << "_data[0], " // host
+           << "0, "  // dev
+           << "&" << name << "_data[0], "  // host
            << "{" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "}, "
            << "{" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "}, "
            << "{" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "}, "
            << b.elem_size << ", "
-           << "0, " // host_dirty
-           << "0};\n"; //dev_dirty
+           << "0, "  // host_dirty
+           << "0};\n";  //dev_dirty
 
     // Make a global pointer to it
     stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
@@ -774,7 +778,7 @@ void CodeGen_C::visit(const Cast *op) {
     print_assignment(op->type, "(" + print_type(op->type) + ")(" + print_expr(op->value) + ")");
 }
 
-void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char * op) {
+void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char *op) {
     string sa = print_expr(a);
     string sb = print_expr(b);
     print_assignment(t, sa + " " + op + " " + sb);
@@ -809,7 +813,7 @@ void CodeGen_C::visit(const Mod *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
+        oss << print_expr(op->a) << " & " << ((1 << bits) - 1);
         print_assignment(op->type, oss.str());
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
@@ -819,11 +823,11 @@ void CodeGen_C::visit(const Mod *op) {
 }
 
 void CodeGen_C::visit(const Max *op) {
-    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+    print_expr(Call::make(op->type, "max", { op->a, op->b }, Call::Extern));
 }
 
 void CodeGen_C::visit(const Min *op) {
-    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+    print_expr(Call::make(op->type, "min", { op->a, op->b }, Call::Extern));
 }
 
 void CodeGen_C::visit(const EQ *op) {
@@ -883,15 +887,15 @@ void CodeGen_C::visit(const StringImm *op) {
 // NaN is the only float/double for which this is true... and
 // surprisingly, there doesn't seem to be a portable isnan function
 // (dsharlet).
-template <typename T>
-static bool isnan(T x) { return x != x; }
+template<typename T>
+static bool isnan(T x) {
+    return x != x;
+}
 
-template <typename T>
-static bool isinf(T x)
-{
-    return std::numeric_limits<T>::has_infinity && (
-        x == std::numeric_limits<T>::infinity() ||
-        x == -std::numeric_limits<T>::infinity());
+template<typename T>
+static bool isinf(T x) {
+    return std::numeric_limits<T>::has_infinity && (x == std::numeric_limits<T>::infinity() ||
+                                                    x == -std::numeric_limits<T>::infinity());
 }
 
 void CodeGen_C::visit(const FloatImm *op) {
@@ -987,7 +991,7 @@ void CodeGen_C::visit(const Call *op) {
         const Load *l = op->args[0].as<Load>();
         internal_assert(op->args.size() == 1 && l);
         rhs << "(("
-            << print_type(l->type.element_of()) // index is in elements, not vectors.
+            << print_type(l->type.element_of())  // index is in elements, not vectors.
             << " *)"
             << print_name(l->name)
             << " + "
@@ -1037,14 +1041,14 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->type.is_handle());
         if (op->type == type_of<struct buffer_t *>() &&
-            is_const(op->args[0], (int)sizeof(buffer_t))) {
+            is_const(op->args[0], (int) sizeof(buffer_t))) {
             do_indent();
             string buf_name = unique_name('b');
             stream << "buffer_t " << buf_name << ";";
             rhs << "&" << buf_name;
         } else {
             // Make a stack of uint64_ts
-            string size = print_expr(simplify((op->args[0] + 7)/8));
+            string size = print_expr(simplify((op->args[0] + 7) / 8));
             do_indent();
             string array_name = unique_name('a');
             stream << "uint64_t " << array_name << "[" << size << "];";
@@ -1110,7 +1114,6 @@ void CodeGen_C::visit(const Call *op) {
                 internal_assert(t.is_handle());
                 format_string += "%p";
             }
-
         }
         string buf_name = unique_name('b');
         do_indent();
@@ -1131,8 +1134,7 @@ void CodeGen_C::visit(const Call *op) {
 
         string call =
             fn->value + "(" +
-            (have_user_context ? "__user_context_, " : "nullptr, ")
-            + "arg);";
+            (have_user_context ? "__user_context_, " : "nullptr, ") + "arg);";
 
         do_indent();
         // Make a struct on the stack that calls the given function as a destructor
@@ -1150,8 +1152,8 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
-            " integer overflow for int32 and int64 is undefined behavior in"
-            " Halide.\n";
+                      " integer overflow for int32 and int64 is undefined behavior in"
+                      " Halide.\n";
     } else if (op->is_intrinsic(Call::indeterminate_expression)) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->call_type == Call::Intrinsic ||
@@ -1316,7 +1318,6 @@ void CodeGen_C::visit(const For *op) {
     open_scope();
     op->body.accept(this);
     close_scope("for " + print_name(op->name));
-
 }
 
 void CodeGen_C::visit(const Provide *op) {
@@ -1363,15 +1364,14 @@ void CodeGen_C::visit(const Allocate *op) {
                 string new_size_id_rhs;
                 string next_extent = print_expr(op->extents[i]);
                 if (i > 1) {
-                    new_size_id_rhs =  "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
+                    new_size_id_rhs = "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
                 } else {
                     new_size_id_rhs = size_id + " * " + next_extent;
                 }
                 size_id = print_assignment(Int(64), new_size_id_rhs);
             }
             do_indent();
-            stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id <<
-              " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
+            stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id << " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
             open_scope();
             do_indent();
             stream << "halide_error("
@@ -1481,18 +1481,18 @@ void CodeGen_C::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3);
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0);
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0);
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
+    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void *>(), 0);
     vector<LoweredArgument> args = { buffer_arg, float_arg, int_arg, user_context_arg };
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
     Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
     Stmt s = Store::make("buf", e, x, Parameter(), const_true());
-    s = LetStmt::make("x", beta+1, s);
+    s = LetStmt::make("x", beta + 1, s);
     s = Block::make(s, Free::make("tmp.stack"));
-    s = Allocate::make("tmp.stack", Int(32), {127}, const_true(), s);
+    s = Allocate::make("tmp.stack", Int(32), { 127 }, const_true(), s);
     s = Block::make(s, Free::make("tmp.heap"));
-    s = Allocate::make("tmp.heap", Int(32), {43, beta}, const_true(), s);
+    s = Allocate::make("tmp.heap", Int(32), { 43, beta }, const_true(), s);
 
     Module m("", get_host_target());
     m.append(LoweredFunc("test1", args, s, LoweredFunc::External));
@@ -1591,27 +1591,28 @@ void CodeGen_C::test() {
         "#ifdef __cplusplus\n"
         "}  // extern \"C\"\n"
         "#endif\n";
-;
+    ;
     if (src != correct_source) {
         int diff = 0;
-        while (src[diff] == correct_source[diff]) diff++;
+        while (src[diff] == correct_source[diff])
+            diff++;
         int diff_end = diff + 1;
-        while (diff > 0 && src[diff] != '\n') diff--;
-        while (diff_end < (int)src.size() && src[diff_end] != '\n') diff_end++;
+        while (diff > 0 && src[diff] != '\n')
+            diff--;
+        while (diff_end < (int) src.size() && src[diff_end] != '\n')
+            diff_end++;
 
         internal_error
-            << "Correct source code:\n" << correct_source
-            << "Actual source code:\n" << src
+            << "Correct source code:\n"
+            << correct_source
+            << "Actual source code:\n"
+            << src
             << "Difference starts at:\n"
             << "Correct: " << correct_source.substr(diff, diff_end - diff) << "\n"
             << "Actual: " << src.substr(diff, diff_end - diff) << "\n";
-
-
     }
-
 
     std::cout << "CodeGen_C test passed\n";
 }
-
 }
 }

@@ -7,8 +7,8 @@
 
 #include <map>
 
-#include "IR.h"
 #include "Bounds.h"
+#include "IR.h"
 #include "Target.h"
 
 namespace Halide {
@@ -24,7 +24,6 @@ Stmt bounds_inference(Stmt,
                       const std::map<std::string, Function> &environment,
                       const std::map<std::pair<std::string, int>, Interval> &func_bounds,
                       const Target &target);
-
 }
 }
 

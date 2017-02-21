@@ -23,8 +23,8 @@ int main(int argc, char **argv) {
 
     const int w = 100, v = 8;
     f.vectorize(x, v, TailStrategy::GuardWithIf);
-    const int expected_vector_stores = w/v;
-    const int expected_scalar_stores = w%v;
+    const int expected_vector_stores = w / v;
+    const int expected_scalar_stores = w % v;
 
     f.set_custom_trace(&my_trace);
     f.trace_stores();
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
 
     if (num_scalar_stores != expected_scalar_stores) {
         printf("There were %d scalar stores instead of %d\n",
-               num_vector_stores, w%8);
+               num_vector_stores, w % 8);
         return -1;
     }
 

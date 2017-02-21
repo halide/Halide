@@ -1,9 +1,9 @@
+#include <assert.h>
 #include <cstdlib>
+#include <set>
 #include <stdio.h>
 #include <string.h>
-#include <set>
 #include <string>
-#include <assert.h>
 
 std::set<std::string> done;
 
@@ -19,8 +19,8 @@ void dump_header(std::string header) {
     FILE *f = fopen(header.c_str(), "r");
 
     if (f == NULL) {
-      fprintf(stderr, "Could not open header %s.\n", header.c_str());
-      exit(1);
+        fprintf(stderr, "Could not open header %s.\n", header.c_str());
+        exit(1);
     }
 
     char line[1024];
@@ -46,16 +46,15 @@ void dump_header(std::string header) {
 
 int main(int argc, char **headers) {
 
-    // If we're building on visual studio and Halide_SHARED is defined, we'd better
-    // also define it for clients so that dllimport gets used.
-    #if defined(_MSC_VER) && defined(Halide_SHARED)
+// If we're building on visual studio and Halide_SHARED is defined, we'd better
+// also define it for clients so that dllimport gets used.
+#if defined(_MSC_VER) && defined(Halide_SHARED)
     printf("#define Halide_SHARED\n");
-    #endif
+#endif
 
     for (int i = 1; i < argc; i++) {
         dump_header(headers[i]);
     }
-
 
     return 0;
 }

@@ -5,10 +5,11 @@
 extern "C" {
 
 typedef int32_t (*trace_fn)(void *, const halide_trace_event_t *);
-
 }
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK int halide_trace_file = 0;
 WEAK int halide_trace_file_lock = 0;
@@ -25,8 +26,8 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
     if (fd > 0) {
         // Compute the total packet size
         uint32_t value_bytes = (uint32_t)(e->type.lanes * e->type.bytes());
-        uint32_t header_bytes = (uint32_t)sizeof(halide_trace_packet_t);
-        uint32_t coords_bytes = e->dimensions * (uint32_t)sizeof(int32_t);
+        uint32_t header_bytes = (uint32_t) sizeof(halide_trace_packet_t);
+        uint32_t coords_bytes = e->dimensions * (uint32_t) sizeof(int32_t);
         uint32_t name_bytes = strlen(e->func) + 1;
         uint32_t total_size_without_padding = header_bytes + value_bytes + coords_bytes + name_bytes;
         uint32_t total_size = (total_size_without_padding + 3) & ~3;
@@ -60,24 +61,25 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
 
     } else {
         uint8_t buffer[4096];
-        Printer<StringStreamPrinter, sizeof(buffer)> ss(user_context, (char *)buffer);
+        Printer<StringStreamPrinter, sizeof(buffer)> ss(user_context, (char *) buffer);
 
         // Round up bits to 8, 16, 32, or 64
         int print_bits = 8;
-        while (print_bits < e->type.bits) print_bits <<= 1;
+        while (print_bits < e->type.bits)
+            print_bits <<= 1;
         halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
 
         // Otherwise, use halide_print and a plain-text format
-        const char *event_types[] = {"Load",
-                                     "Store",
-                                     "Begin realization",
-                                     "End realization",
-                                     "Produce",
-                                     "End produce",
-                                     "Consume",
-                                     "End consume",
-                                     "Begin pipeline",
-                                     "End pipeline"};
+        const char *event_types[] = { "Load",
+                                      "Store",
+                                      "Begin realization",
+                                      "End realization",
+                                      "Produce",
+                                      "End produce",
+                                      "Consume",
+                                      "End consume",
+                                      "Begin pipeline",
+                                      "End pipeline" };
 
         // Only print out the value on stores and loads.
         bool print_value = (e->event < 2);
@@ -114,35 +116,35 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
                 }
                 if (e->type.code == 0) {
                     if (print_bits == 8) {
-                        ss << ((int8_t *)(e->value))[i];
+                        ss << ((int8_t *) (e->value))[i];
                     } else if (print_bits == 16) {
-                        ss << ((int16_t *)(e->value))[i];
+                        ss << ((int16_t *) (e->value))[i];
                     } else if (print_bits == 32) {
-                        ss << ((int32_t *)(e->value))[i];
+                        ss << ((int32_t *) (e->value))[i];
                     } else {
-                        ss << ((int64_t *)(e->value))[i];
+                        ss << ((int64_t *) (e->value))[i];
                     }
                 } else if (e->type.code == 1) {
                     if (print_bits == 8) {
-                        ss << ((uint8_t *)(e->value))[i];
+                        ss << ((uint8_t *) (e->value))[i];
                     } else if (print_bits == 16) {
-                        ss << ((uint16_t *)(e->value))[i];
+                        ss << ((uint16_t *) (e->value))[i];
                     } else if (print_bits == 32) {
-                        ss << ((uint32_t *)(e->value))[i];
+                        ss << ((uint32_t *) (e->value))[i];
                     } else {
-                        ss << ((uint64_t *)(e->value))[i];
+                        ss << ((uint64_t *) (e->value))[i];
                     }
                 } else if (e->type.code == 2) {
                     halide_assert(user_context, print_bits >= 16 && "Tracing a bad type");
                     if (print_bits == 32) {
-                        ss << ((float *)(e->value))[i];
+                        ss << ((float *) (e->value))[i];
                     } else if (print_bits == 16) {
-                        ss.write_float16_from_bits( ((uint16_t *)(e->value))[i]);
+                        ss.write_float16_from_bits(((uint16_t *) (e->value))[i]);
                     } else {
-                        ss << ((double *)(e->value))[i];
+                        ss << ((double *) (e->value))[i];
                     }
                 } else if (e->type.code == 3) {
-                    ss << ((void **)(e->value))[i];
+                    ss << ((void **) (e->value))[i];
                 }
             }
             if (e->type.lanes > 1) {
@@ -154,7 +156,7 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
 
         {
             ScopedSpinLock lock(&halide_trace_file_lock);
-            halide_print(user_context, (const char *)buffer);
+            halide_print(user_context, (const char *) buffer);
         }
     }
 
@@ -162,8 +164,9 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
 }
 
 WEAK trace_fn halide_custom_trace = default_trace;
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal
 
 extern "C" {
 
@@ -219,7 +222,8 @@ WEAK int halide_shutdown_trace() {
 
 namespace {
 __attribute__((destructor))
-WEAK void halide_trace_cleanup() {
+WEAK void
+halide_trace_cleanup() {
     halide_shutdown_trace();
 }
 }
@@ -236,10 +240,10 @@ WEAK int halide_trace_helper(void *user_context,
     event.func = func;
     event.coordinates = coords;
     event.value = value;
-    event.type.code = (halide_type_code_t)type_code;
-    event.type.bits = (uint8_t)type_bits;
-    event.type.lanes = (uint16_t)type_lanes;
-    event.event = (halide_trace_event_code_t)code;
+    event.type.code = (halide_type_code_t) type_code;
+    event.type.bits = (uint8_t) type_bits;
+    event.type.lanes = (uint16_t) type_lanes;
+    event.event = (halide_trace_event_code_t) code;
     event.parent_id = parent_id;
     event.value_index = value_index;
     if (event.type.lanes > 1) {
@@ -248,5 +252,4 @@ WEAK int halide_trace_helper(void *user_context,
     event.dimensions = dimensions;
     return halide_trace(user_context, &event);
 }
-
 }

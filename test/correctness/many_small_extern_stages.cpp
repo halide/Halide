@@ -67,10 +67,10 @@ int main(int argc, char **argv) {
     Func f, g, h;
     Var x, y;
 
-    f(x, y) = x*x + y;
+    f(x, y) = x * x + y;
 
     // Name of the function and the args, then types of the outputs, then dimensionality
-    g.define_extern("copy", {f}, Int(32), 2);
+    g.define_extern("copy", { f }, Int(32), 2);
 
     RDom r(0, 100);
     h(x, y) += r * (g(x, y) - f(x, y));

@@ -7,8 +7,8 @@
  * input and output buffers.
  */
 
-#include "IR.h"
 #include "Bounds.h"
+#include "IR.h"
 
 #include <map>
 
@@ -28,8 +28,6 @@ Stmt add_image_checks(Stmt s,
                       const std::vector<std::string> &order,
                       const std::map<std::string, Function> &env,
                       const FuncValueBounds &fb);
-
-
 }
 }
 

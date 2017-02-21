@@ -1,17 +1,17 @@
 #include "ScheduleFunctions.h"
+#include "ApplySplit.h"
+#include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "Func.h"
+#include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "Inline.h"
+#include "Qualify.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "ExprUsesVar.h"
-#include "Var.h"
-#include "Qualify.h"
-#include "IRMutator.h"
 #include "Target.h"
-#include "Inline.h"
-#include "CodeGen_GPU_Dev.h"
-#include "IRPrinter.h"
-#include "Func.h"
-#include "ApplySplit.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -26,7 +26,9 @@ namespace {
 // A structure representing a containing LetStmt, IfThenElse, or For
 // loop. Used in build_provide_loop_nest below.
 struct Container {
-    enum Type {For, Let, If};
+    enum Type { For,
+                Let,
+                If };
     Type type;
     // If it's a for loop, the index in the dims list.
     int dim_idx;
@@ -48,7 +50,8 @@ class ContainsImpureCall : public IRVisitor {
 
 public:
     bool result = false;
-    ContainsImpureCall() {}
+    ContainsImpureCall() {
+    }
 };
 
 bool contains_impure_call(const Expr &expr) {
@@ -66,7 +69,6 @@ Stmt build_provide_loop_nest_helper(string func_name,
                                     const vector<Expr> &predicates,
                                     const Schedule &s,
                                     bool is_update) {
-
 
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
@@ -116,15 +118,15 @@ Stmt build_provide_loop_nest_helper(string func_name,
     vector<Container> nest;
 
     // Put the desired loop nest into the containers vector.
-    for (int i = (int)s.dims().size() - 1; i >= 0; i--) {
+    for (int i = (int) s.dims().size() - 1; i >= 0; i--) {
         const Dim &dim = s.dims()[i];
-        Container c = {Container::For, i, prefix + dim.var, Expr()};
+        Container c = { Container::For, i, prefix + dim.var, Expr() };
         nest.push_back(c);
     }
 
     // Strip off the lets into the containers vector.
     while (const LetStmt *let = stmt.as<LetStmt>()) {
-        Container c = {Container::Let, 0, let->name, let->value};
+        Container c = { Container::Let, 0, let->name, let->value };
         nest.push_back(c);
         stmt = let->body;
     }
@@ -133,22 +135,22 @@ Stmt build_provide_loop_nest_helper(string func_name,
     int n_predicates = predicates.size();
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
-        Container c = {Container::If, 0, "", likely(pred)};
+        Container c = { Container::If, 0, "", likely(pred) };
         nest.push_back(c);
     }
 
     // Resort the containers vector so that lets are as far outwards
     // as possible. Use reverse insertion sort. Start at the first letstmt.
-    for (int i = (int)s.dims().size(); i < (int)nest.size() - n_predicates; i++) {
+    for (int i = (int) s.dims().size(); i < (int) nest.size() - n_predicates; i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].type == Container::Let);
 
-        for (int j = i-1; j >= 0; j--) {
+        for (int j = i - 1; j >= 0; j--) {
             // Try to push it up by one.
-            internal_assert(nest[j+1].value.defined());
-            if (!expr_uses_var(nest[j+1].value, nest[j].name)) {
-                std::swap(nest[j+1], nest[j]);
+            internal_assert(nest[j + 1].value.defined());
+            if (!expr_uses_var(nest[j + 1].value, nest[j].name)) {
+                std::swap(nest[j + 1], nest[j]);
             } else {
                 break;
             }
@@ -156,7 +158,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
     }
 
     // Sort the predicate guards so they are as far outwards as possible.
-    for (int i = (int)nest.size() - n_predicates; i < (int)nest.size(); i++) {
+    for (int i = (int) nest.size() - n_predicates; i < (int) nest.size(); i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].type == Container::If);
@@ -166,11 +168,11 @@ Stmt build_provide_loop_nest_helper(string func_name,
             continue;
         }
 
-        for (int j = i-1; j >= 0; j--) {
+        for (int j = i - 1; j >= 0; j--) {
             // Try to push it up by one.
-            internal_assert(nest[j+1].value.defined());
-            if (!expr_uses_var(nest[j+1].value, nest[j].name)) {
-                std::swap(nest[j+1], nest[j]);
+            internal_assert(nest[j + 1].value.defined());
+            if (!expr_uses_var(nest[j + 1].value, nest[j].name)) {
+                std::swap(nest[j + 1], nest[j]);
             } else {
                 break;
             }
@@ -178,7 +180,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
     }
 
     // Rewrap the statement in the containing lets and fors.
-    for (int i = (int)nest.size() - 1; i >= 0; i--) {
+    for (int i = (int) nest.size() - 1; i >= 0; i--) {
         if (nest[i].type == Container::Let) {
             internal_assert(nest[i].value.defined());
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
@@ -198,7 +200,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
     // on the function args. If it is a purify, we should use the bounds
     // from the dims instead.
     for (size_t i = splits.size(); i > 0; i--) {
-        const Split &split = splits[i-1];
+        const Split &split = splits[i - 1];
 
         vector<std::pair<string, Expr>> let_stmts = compute_loop_bounds_after_split(split, prefix);
         for (size_t j = 0; j < let_stmts.size(); j++) {
@@ -218,7 +220,7 @@ Stmt build_provide_loop_nest_helper(string func_name,
     for (const std::string &i : dims) {
         string var = prefix + i;
         Expr max = Variable::make(Int(32), var + ".max");
-        Expr min = Variable::make(Int(32), var + ".min"); // Inject instance name here? (compute instance names during lowering)
+        Expr min = Variable::make(Int(32), var + ".min");  // Inject instance name here? (compute instance names during lowering)
         stmt = LetStmt::make(var + ".loop_extent",
                              (max + 1) - min,
                              stmt);
@@ -274,8 +276,8 @@ Stmt build_provide_loop_nest(string func_name,
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();
     for (size_t i = specializations.size(); i > 0; i--) {
-        Expr c = specializations[i-1].condition;
-        const Definition &s_def = specializations[i-1].definition;
+        Expr c = specializations[i - 1].condition;
+        const Definition &s_def = specializations[i - 1].definition;
 
         Stmt then_case =
             build_provide_loop_nest(func_name, prefix, dims, s_def, is_update);
@@ -385,7 +387,7 @@ Stmt build_produce(Function f, const Target &target) {
                     top_left.push_back(Variable::make(Int(32), var + ".min"));
                 }
                 Expr host_ptr = Call::make(f, top_left, j);
-                host_ptr = Call::make(Handle(), Call::address_of, {host_ptr}, Call::Intrinsic);
+                host_ptr = Call::make(Handle(), Call::address_of, { host_ptr }, Call::Intrinsic);
 
                 BufferBuilder builder;
                 builder.host = host_ptr;
@@ -415,21 +417,21 @@ Stmt build_produce(Function f, const Target &target) {
         Stmt annotate;
         if (target.has_feature(Target::MSAN)) {
             // Mark the buffers as initialized before calling out.
-            for (const auto &buffer: buffers_to_annotate) {
+            for (const auto &buffer : buffers_to_annotate) {
                 // Return type is really 'void', but no way to represent that in our IR.
                 // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
                 Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
-                Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", { buffer, sizeof_buffer_t }, Call::Extern));
                 if (annotate.defined()) {
                     annotate = Block::make(annotate, mark_buffer);
                 } else {
                     annotate = mark_buffer;
                 }
             }
-            for (const auto &buffer: buffers_contents_to_annotate) {
+            for (const auto &buffer : buffers_contents_to_annotate) {
                 // Return type is really 'void', but no way to represent that in our IR.
                 // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Stmt mark_contents = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", {buffer}, Call::Extern));
+                Stmt mark_contents = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_buffer_is_initialized", { buffer }, Call::Extern));
                 if (annotate.defined()) {
                     annotate = Block::make(annotate, mark_contents);
                 } else {
@@ -445,7 +447,7 @@ Stmt build_produce(Function f, const Target &target) {
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
         Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
-                                {extern_name, result}, Call::Extern);
+                                { extern_name, result }, Call::Extern);
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
         check = LetStmt::make(result_name, e, check);
 
@@ -473,7 +475,7 @@ vector<Stmt> build_update(Function f) {
     for (size_t i = 0; i < f.updates().size(); i++) {
         const Definition &def = f.update(i);
 
-        string prefix = f.name() + ".s" + std::to_string(i+1) + ".";
+        string prefix = f.name() + ".s" + std::to_string(i + 1) + ".";
 
         vector<string> dims = f.args();
         Stmt loop = build_provide_loop_nest(f.name(), prefix, dims, def, true);
@@ -518,7 +520,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
 
             Expr check = (min_val <= min_var) && (max_val >= max_var);
             Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
-                                        {b.var, func.name(), min_val, max_val, min_var, max_var},
+                                        { b.var, func.name(), min_val, max_val, min_var, max_var },
                                         Call::Extern);
             body = Block::make(AssertStmt::make(check, error_msg), body);
         }
@@ -548,9 +550,9 @@ class IsUsedInStmt : public IRVisitor {
 
 public:
     bool result;
-    IsUsedInStmt(Function f) : func(f.name()), result(false) {
+    IsUsedInStmt(Function f)
+        : func(f.name()), result(false) {
     }
-
 };
 
 bool function_is_used_in_stmt(Function f, Stmt s) {
@@ -567,13 +569,13 @@ public:
     bool is_output, found_store_level, found_compute_level;
     const Target &target;
 
-    InjectRealization(const Function &f, bool o, const Target &t) :
-        func(f), is_output(o),
-        found_store_level(false), found_compute_level(false),
-        target(t) {}
+    InjectRealization(const Function &f, bool o, const Target &t)
+        : func(f), is_output(o),
+          found_store_level(false), found_compute_level(false),
+          target(t) {
+    }
 
 private:
-
     string producing;
 
     Stmt build_pipeline(Stmt consumer) {
@@ -729,7 +731,6 @@ private:
     }
 };
 
-
 class ComputeLegalSchedules : public IRVisitor {
 public:
     struct Site {
@@ -739,7 +740,9 @@ public:
     vector<Site> sites_allowed;
     bool found;
 
-    ComputeLegalSchedules(Function f, const map<string, Function> &env) : found(false), func(f), env(env) {}
+    ComputeLegalSchedules(Function f, const map<string, Function> &env)
+        : found(false), func(f), env(env) {
+    }
 
 private:
     using IRVisitor::visit;
@@ -766,9 +769,9 @@ private:
             internal_assert(it != env.end()) << "Unable to find Function " << func << " in env (Var = " << var << ")\n";
             loop_level = LoopLevel(it->second, Var(var));
         }
-        Site s = {f->is_parallel() ||
-                  f->for_type == ForType::Vectorized,
-                  loop_level};
+        Site s = { f->is_parallel() ||
+                       f->for_type == ForType::Vectorized,
+                   loop_level };
         sites.push_back(s);
         f->body.accept(this);
         sites.pop_back();
@@ -854,9 +857,12 @@ class StmtUsesFunc : public IRVisitor {
         }
         IRVisitor::visit(op);
     }
+
 public:
     bool result = false;
-    StmtUsesFunc(string f) : func(f) {}
+    StmtUsesFunc(string f)
+        : func(f) {
+    }
 };
 
 class PrintUsesOfFunc : public IRVisitor {
@@ -923,7 +929,9 @@ class PrintUsesOfFunc : public IRVisitor {
     }
 
 public:
-    PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
+    PrintUsesOfFunc(string f, std::ostream &s)
+        : func(f), stream(s) {
+    }
 };
 
 // Check a schedule is legal, throwing an error if it is not. Returns
@@ -1106,7 +1114,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
     any_memoized = false;
 
     for (size_t i = order.size(); i > 0; i--) {
-        Function f = env.find(order[i-1])->second;
+        Function f = env.find(order[i - 1])->second;
 
         bool is_output = false;
         for (Function o : outputs) {
@@ -1127,10 +1135,10 @@ Stmt schedule_functions(const vector<Function> &outputs,
 
         if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {
-            debug(1) << "Inlining " << order[i-1] << '\n';
+            debug(1) << "Inlining " << order[i - 1] << '\n';
             s = inline_function(s, f);
         } else {
-            debug(1) << "Injecting realization of " << order[i-1] << '\n';
+            debug(1) << "Injecting realization of " << order[i - 1] << '\n';
             InjectRealization injector(f, is_output, target);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level && injector.found_compute_level);
@@ -1148,8 +1156,6 @@ Stmt schedule_functions(const vector<Function> &outputs,
     s = RemoveLoopsOverOutermost().mutate(s);
 
     return s;
-
 }
-
 }
 }

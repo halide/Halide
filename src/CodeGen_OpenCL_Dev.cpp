@@ -1,12 +1,12 @@
-#include <sstream>
 #include <algorithm>
+#include <sstream>
 
-#include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
-#include "IROperator.h"
-#include "IRMutator.h"
 #include "EliminateBoolVectors.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,8 +16,8 @@ using std::string;
 using std::vector;
 using std::sort;
 
-CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
-    clc(src_stream), target(t) {
+CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t)
+    : clc(src_stream), target(t) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIfNeeded space) {
@@ -41,7 +41,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
             oss << "bool";
             break;
         case 8:
-          oss << "char";
+            oss << "char";
             break;
         case 16:
             oss << "short";
@@ -66,7 +66,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
             oss << type.lanes();
             break;
         default:
-            user_error <<  "Unsupported vector width in OpenCL C: " << type << "\n";
+            user_error << "Unsupported vector width in OpenCL C: " << type << "\n";
         }
     }
     if (space == AppendSpace) {
@@ -80,8 +80,6 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e
     oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
     return oss.str();
 }
-
-
 
 namespace {
 string simt_intrinsic(const string &name) {
@@ -149,7 +147,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
 
 namespace {
 // Mapping of integer vector indices to OpenCL ".s" syntax.
-const char * vector_elements = "0123456789ABCDEF";
+const char *vector_elements = "0123456789ABCDEF";
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
 Expr is_ramp1(Expr e) {
@@ -166,7 +164,6 @@ Expr is_ramp1(Expr e) {
     return Expr();
 }
 }
-
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf) {
     return "__address_space_" + print_name(buf);
@@ -386,8 +383,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
-    user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n" <<
-        "(Memoization is not supported inside GPU kernels at present.)\n";
+    user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n"
+                                         << "(Memoization is not supported inside GPU kernels at present.)\n";
 
     if (op->name == "__shared") {
         // Already handled
@@ -437,7 +434,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
         stream << "#undef " << get_memory_space(op->name) << "\n";
     }
 }
-
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const AssertStmt *op) {
     user_warning << "Ignoring assertion inside OpenCL kernel: " << op->condition << "\n";
@@ -513,10 +509,14 @@ struct BufferSize {
     string name;
     size_t size;
 
-    BufferSize() : size(0) {}
-    BufferSize(string name, size_t size) : name(name), size(size) {}
+    BufferSize()
+        : size(0) {
+    }
+    BufferSize(string name, size_t size)
+        : name(name), size(size) {
+    }
 
-    bool operator < (const BufferSize &r) const {
+    bool operator<(const BufferSize &r) const {
         return size < r.size;
     }
 };
@@ -530,7 +530,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
     debug(2) << "Eliminating bool vectors\n";
     s = eliminate_bool_vectors(s);
-    debug(2) << "After eliminating bool vectors:\n" << s << "\n";
+    debug(2) << "After eliminating bool vectors:\n"
+             << s << "\n";
 
     // Figure out which arguments should be passed in __constant.
     // Such arguments should be:
@@ -606,9 +607,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                    << print_name(args[i].name);
         }
 
-        if (i < args.size()-1) stream << ",\n";
+        if (i < args.size() - 1) stream << ",\n";
     }
-    stream << ",\n" << " __address_space___shared int16* __shared";
+    stream << ",\n"
+           << " __address_space___shared int16* __shared";
 
     stream << ")\n";
 
@@ -673,7 +675,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define fast_inverse_f32 native_recip \n"
                << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
                << "int halide_gpu_thread_barrier() {\n"
-               << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
+               << "  barrier(CLK_LOCAL_MEM_FENCE);\n"  // Halide only ever needs local memory fences.
                << "  return 0;\n"
                << "}\n";
 
@@ -718,7 +720,8 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "OpenCL kernel:\n" << str << "\n";
+    debug(1) << "OpenCL kernel:\n"
+             << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -735,5 +738,5 @@ void CodeGen_OpenCL_Dev::dump() {
 std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
     return name;
 }
-
-}}
+}
+}

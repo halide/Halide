@@ -19,4 +19,3 @@ int main(int argc, char **argv) {
     printf("There should have been an error\n");
     return 0;
 }
-

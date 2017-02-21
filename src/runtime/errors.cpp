@@ -207,5 +207,4 @@ WEAK int halide_error_requirement_failed(void *user_context, const char *conditi
     return halide_error_code_requirement_failed;
 }
 
-
 }  // extern "C"

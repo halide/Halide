@@ -22,7 +22,7 @@ extern "C" DLLEXPORT int extern_stage(buffer_t *in, buffer_t *out) {
         */
 
         if (out->host == nullptr) {
-            out->extent[0] = ((out->extent[0] + 16)/17)*17;
+            out->extent[0] = ((out->extent[0] + 16) / 17) * 17;
         }
         if (in->host == nullptr) {
             in->extent[0] = out->extent[0];
@@ -39,8 +39,8 @@ extern "C" DLLEXPORT int extern_stage(buffer_t *in, buffer_t *out) {
         printf("in: %d %d, out: %d %d\n",
                in->min[0], in->extent[0],
                out->min[0], out->extent[0]);
-        int32_t *in_origin = (int32_t *)in->host - in->min[0];
-        int32_t *out_origin = (int32_t *)out->host - out->min[0];
+        int32_t *in_origin = (int32_t *) in->host - in->min[0];
+        int32_t *out_origin = (int32_t *) out->host - out->min[0];
         for (int i = out->min[0]; i < out->min[0] + out->extent[0]; i++) {
             out_origin[i] = in_origin[i] * i;
         }
@@ -56,9 +56,9 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 2; i++) {
         Func f, g, h;
         Var x;
-        f(x) = x*x;
+        f(x) = x * x;
 
-        g.define_extern("extern_stage", {f}, Int(32), 1);
+        g.define_extern("extern_stage", { f }, Int(32), 1);
 
         h(x) = g(x) * 2;
 
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         Buffer<int32_t> result = h.realize(100);
 
         for (int i = 0; i < 100; i++) {
-            int32_t correct = i*i*i*2;
+            int32_t correct = i * i * i * 2;
             if (result(i) != correct) {
                 printf("result(%d) = %d instead of %d\n", i, result(i), correct);
                 return -1;

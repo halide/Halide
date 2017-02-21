@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     ImageParam input(Float(32), 2);
 
     Var x, y, z;
-    RDom dom(0, input.width()*8);
+    RDom dom(0, input.width() * 8);
     Func f;
     Expr hard_to_reason_about = cast<int>(hypot(input.width(), input.height()));
     f(x, y, z) = 1;

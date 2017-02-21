@@ -40,7 +40,7 @@ int main(int arch, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, 16, 16);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.features_any_of({ Target::HVX_64, Target::HVX_128 })) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, target.natural_vector_size<uint8_t>());
@@ -49,8 +49,8 @@ int main(int arch, char **argv) {
         // Run the pipeline and verify the results are correct.
         Buffer<uint8_t> out = f.realize(W, H, target);
 
-        for (int y = 1; y < H-1; y++) {
-            for (int x = 1; x < W-1; x++) {
+        for (int y = 1; y < H - 1; y++) {
+            for (int x = 1; x < W - 1; x++) {
                 int16_t correct = 0;
                 for (int ry = -1; ry <= 1; ry++) {
                     for (int rx = -1; rx <= 1; rx++) {
@@ -59,7 +59,7 @@ int main(int arch, char **argv) {
                 }
                 correct = std::min(std::max(correct / 16, 0), 255);
                 if (correct != out(x, y)) {
-                    std::cout << "out(" << x << ", " << y << ") = " << (int)out(x, y) << " instead of " << correct << "\n";
+                    std::cout << "out(" << x << ", " << y << ") = " << (int) out(x, y) << " instead of " << correct << "\n";
                     return -1;
                 }
             }
@@ -82,7 +82,7 @@ int main(int arch, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             g.gpu_tile(x, y, 16, 16);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.features_any_of({ Target::HVX_64, Target::HVX_128 })) {
             g.hexagon().vectorize(x, 128);
         } else {
             g.vectorize(x, target.natural_vector_size<uint8_t>());
@@ -91,8 +91,8 @@ int main(int arch, char **argv) {
         // Run the pipeline and verify the results are correct.
         Buffer<uint8_t> out = g.realize(W, H, target);
 
-        for (int y = 1; y < H-1; y++) {
-            for (int x = 1; x < W-1; x++) {
+        for (int y = 1; y < H - 1; y++) {
+            for (int x = 1; x < W - 1; x++) {
                 int16_t correct = 0;
                 for (int ry = -1; ry <= 1; ry++) {
                     for (int rx = -1; rx <= 1; rx++) {
@@ -102,7 +102,7 @@ int main(int arch, char **argv) {
                 }
                 correct = std::min(std::max(correct / 16, 0), 255);
                 if (correct != out(x, y)) {
-                    std::cout << "out(" << x << ", " << y << ") = " << (int)out(x, y) << " instead of " << correct << "\n";
+                    std::cout << "out(" << x << ", " << y << ") = " << (int) out(x, y) << " instead of " << correct << "\n";
                     return -1;
                 }
             }

@@ -1,13 +1,13 @@
 #include "Halide.h"
+#include <cmath>
 #include <stdint.h>
 #include <stdio.h>
-#include <cmath>
 
 using namespace Halide;
 
 // FIXME: Why aren't we using a unit test framework for this?
 // See Issue #898
-void h_assert(bool condition, const char* msg) {
+void h_assert(bool condition, const char *msg) {
     if (!condition) {
         printf("FAIL: %s\n", msg);
         abort();

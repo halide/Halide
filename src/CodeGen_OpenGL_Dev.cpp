@@ -1,14 +1,14 @@
 #include "CodeGen_OpenGL_Dev.h"
+#include "Debug.h"
+#include "Deinterleave.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Debug.h"
-#include "Deinterleave.h"
 #include "Simplify.h"
 #include "VaryingAttributes.h"
 #include <iomanip>
-#include <map>
 #include <limits>
+#include <map>
 
 namespace Halide {
 namespace Internal {
@@ -49,13 +49,13 @@ Type map_type(const Type &type) {
             // valid for uint16 on systems with low float precision.
             result = Float(32);
         } else {
-            user_error << "GLSL: Can't represent type '"<< type << "'.\n";
+            user_error << "GLSL: Can't represent type '" << type << "'.\n";
         }
     } else {
         user_assert(type.lanes() <= 4)
             << "GLSL: vector types wider than 4 aren't supported\n";
         user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
-            << "GLSL: Can't represent vector type '"<< type << "'.\n";
+            << "GLSL: Can't represent vector type '" << type << "'.\n";
         Type scalar_type = type.element_of();
         result = map_type(scalar_type).with_lanes(type.lanes());
     }
@@ -83,7 +83,6 @@ Expr call_builtin(const Type &result_type, const string &func,
     Expr val = Call::make(float_type, func, new_args, Call::Extern);
     return simplify(Cast::make(result_type, val));
 }
-
 }
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
@@ -110,7 +109,8 @@ void CodeGen_OpenGL_Dev::init_module() {
 
 vector<char> CodeGen_OpenGL_Dev::compile_to_src() {
     string str = src_stream.str();
-    debug(1) << "GLSL source:\n" << str << '\n';
+    debug(1) << "GLSL source:\n"
+             << str << '\n';
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
@@ -131,7 +131,8 @@ string CodeGen_OpenGL_Dev::print_gpu_name(const string &name) {
 //
 // CodeGen_GLSLBase
 //
-CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s) : CodeGen_C(s) {
+CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s)
+    : CodeGen_C(s) {
     builtin["sin_f32"] = "sin";
     builtin["sqrt_f32"] = "sqrt";
     builtin["cos_f32"] = "cos";
@@ -145,7 +146,7 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s) : CodeGen_C(s) {
     builtin["acos_f32"] = "acos";
     builtin["tan_f32"] = "tan";
     builtin["atan_f32"] = "atan";
-    builtin["atan2_f32"] = "atan"; // also called atan in GLSL
+    builtin["atan2_f32"] = "atan";  // also called atan in GLSL
     builtin["min"] = "min";
     builtin["max"] = "max";
     builtin["mix"] = "mix";
@@ -165,11 +166,11 @@ CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s) : CodeGen_C(s) {
 }
 
 void CodeGen_GLSLBase::visit(const Max *op) {
-    print_expr(call_builtin(op->type, "max", {op->a, op->b}));
+    print_expr(call_builtin(op->type, "max", { op->a, op->b }));
 }
 
 void CodeGen_GLSLBase::visit(const Min *op) {
-    print_expr(call_builtin(op->type, "min", {op->a, op->b}));
+    print_expr(call_builtin(op->type, "min", { op->a, op->b }));
 }
 
 void CodeGen_GLSLBase::visit(const Div *op) {
@@ -179,14 +180,14 @@ void CodeGen_GLSLBase::visit(const Div *op) {
         // the correct behavior using floating point arithmetic.
         Type float_type = Float(32, op->type.lanes());
         Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
-        print_expr(call_builtin(op->type, "floor_f32", {val}));
+        print_expr(call_builtin(op->type, "floor_f32", { val }));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
 }
 
 void CodeGen_GLSLBase::visit(const Mod *op) {
-    print_expr(call_builtin(op->type, "mod", {op->a, op->b}));
+    print_expr(call_builtin(op->type, "mod", { op->a, op->b }));
 }
 
 void CodeGen_GLSLBase::visit(const Call *op) {
@@ -241,7 +242,7 @@ string CodeGen_GLSLBase::print_type(Type type, AppendSpaceIfNeeded space_option)
 // types, so we don't use call_builtin
 void CodeGen_GLSLBase::visit(const EQ *op) {
     if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "equal", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "equal", { op->a, op->b }, Call::Extern));
     } else {
         CodeGen_C::visit(op);
     }
@@ -249,7 +250,7 @@ void CodeGen_GLSLBase::visit(const EQ *op) {
 
 void CodeGen_GLSLBase::visit(const NE *op) {
     if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "notEqual", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "notEqual", { op->a, op->b }, Call::Extern));
     } else {
         CodeGen_C::visit(op);
     }
@@ -257,7 +258,7 @@ void CodeGen_GLSLBase::visit(const NE *op) {
 
 void CodeGen_GLSLBase::visit(const LT *op) {
     if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "lessThan", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "lessThan", { op->a, op->b }, Call::Extern));
     } else {
         CodeGen_C::visit(op);
     }
@@ -265,7 +266,7 @@ void CodeGen_GLSLBase::visit(const LT *op) {
 
 void CodeGen_GLSLBase::visit(const LE *op) {
     if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "lessThanEqual", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "lessThanEqual", { op->a, op->b }, Call::Extern));
     } else {
         CodeGen_C::visit(op);
     }
@@ -273,7 +274,7 @@ void CodeGen_GLSLBase::visit(const LE *op) {
 
 void CodeGen_GLSLBase::visit(const GT *op) {
     if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "greaterThan", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "greaterThan", { op->a, op->b }, Call::Extern));
     } else {
         CodeGen_C::visit(op);
     }
@@ -281,7 +282,7 @@ void CodeGen_GLSLBase::visit(const GT *op) {
 
 void CodeGen_GLSLBase::visit(const GE *op) {
     if (op->type.is_vector()) {
-        print_expr(Call::make(op->type, "greaterThanEqual", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "greaterThanEqual", { op->a, op->b }, Call::Extern));
     } else {
         CodeGen_C::visit(op);
     }
@@ -326,7 +327,7 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
     // precision of 9 digits, which should be enough to recover the binary
     // float unambiguously from the decimal representation (if iostreams
     // implements correct rounding).
-    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value) );
+    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value));
     if (truncated == op->value) {
         oss << std::fixed << std::setprecision(1) << op->value;
     } else {
@@ -448,7 +449,7 @@ void CodeGen_GLSL::visit(const Select *op) {
         {
             string false_val = print_expr(op->false_value);
             do_indent();
-            stream << id_value << " = " << false_val<< ";\n";
+            stream << id_value << " = " << false_val << ";\n";
         }
         close_scope("");
     } else {
@@ -575,7 +576,6 @@ void CodeGen_GLSL::visit(const Store *op) {
     }
 }
 
-
 void CodeGen_GLSL::visit(const Evaluate *op) {
     print_expr(op->value);
 }
@@ -662,7 +662,6 @@ void CodeGen_GLSL::visit(const Call *op) {
                 << print_expr(op->args[2]) << ", "
                 << print_expr(op->args[3]) << "))["
                 << print_expr(op->args[4]) << "]";
-
         }
 
         if (op->type.is_uint()) {
@@ -713,7 +712,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         }
 
         Type result_type = Float(32, op->type.lanes());
-        Expr e = call_builtin(result_type, "mix", {zero_val, one_val, weight});
+        Expr e = call_builtin(result_type, "mix", { zero_val, one_val, weight });
 
         if (!op->type.is_float()) {
             // Mirror rounding implementation of Halide's integer lerp.
@@ -849,8 +848,7 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
         if (args[i].is_buffer) {
             Type t = args[i].type.element_of();
 
-            user_assert(args[i].read != args[i].write) <<
-                "GLSL: buffers may only be read OR written inside a kernel loop.\n";
+            user_assert(args[i].read != args[i].write) << "GLSL: buffers may only be read OR written inside a kernel loop.\n";
             string type_name;
             if (t == UInt(8)) {
                 type_name = "uint8_t";
@@ -865,20 +863,20 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
                    << type_name << " " << print_name(args[i].name) << "\n";
         } else if (ends_with(args[i].name, ".varying")) {
             header << "/// VARYING "
-            // GLSL requires that varying attributes are float. Integer
-            // expressions for vertex attributes are cast to float during
-            // host codegen
-            << "float " << print_name(args[i].name) << " varyingf" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+                   // GLSL requires that varying attributes are float. Integer
+                   // expressions for vertex attributes are cast to float during
+                   // host codegen
+                   << "float " << print_name(args[i].name) << " varyingf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_varying_floats;
         } else if (args[i].type.is_float()) {
             header << "/// UNIFORM "
-            << CodeGen_C::print_type(args[i].type) << " "
-            << print_name(args[i].name) << " uniformf" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+                   << CodeGen_C::print_type(args[i].type) << " "
+                   << print_name(args[i].name) << " uniformf" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_floats;
         } else if (args[i].type.is_int()) {
             header << "/// UNIFORM "
-            << CodeGen_C::print_type(args[i].type) << " "
-            << print_name(args[i].name) << " uniformi" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+                   << CodeGen_C::print_type(args[i].type) << " "
+                   << print_name(args[i].name) << " uniformi" << args[i].packed_index / 4 << "[" << args[i].packed_index % 4 << "]\n";
             ++num_uniform_ints;
         }
     }
@@ -886,7 +884,7 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
     // Compute the number of vec4's needed to pack the arguments
     num_varying_floats = (num_varying_floats + 3) / 4;
     num_uniform_floats = (num_uniform_floats + 3) / 4;
-    num_uniform_ints   = (num_uniform_ints + 3) / 4;
+    num_uniform_ints = (num_uniform_ints + 3) / 4;
 
     stream << header.str();
 
@@ -918,10 +916,9 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
     }
 
     // Output additional builtin functions.
-    stream <<
-        "float _trunc_f32(float x) {\n"
-        "  return floor(abs(x)) * sign(x);\n"
-        "}\n";
+    stream << "float _trunc_f32(float x) {\n"
+              "  return floor(abs(x)) * sign(x);\n"
+              "}\n";
 
     stream << "void main() {\n";
     indent += 2;
@@ -933,20 +930,20 @@ void CodeGen_GLSL::add_kernel(Stmt stmt, string name,
         } else if (ends_with(args[i].name, ".varying")) {
             do_indent();
             stream << "float " << print_name(args[i].name)
-                   << " = _varyingf" << args[i].packed_index/4
-                   << "[" << args[i].packed_index%4 << "];\n";
+                   << " = _varyingf" << args[i].packed_index / 4
+                   << "[" << args[i].packed_index % 4 << "];\n";
         } else if (args[i].type.is_float()) {
             do_indent();
             stream << print_type(args[i].type) << " "
                    << print_name(args[i].name)
-                   << " = _uniformf" << args[i].packed_index/4
-                   << "[" << args[i].packed_index%4 << "];\n";
+                   << " = _uniformf" << args[i].packed_index / 4
+                   << "[" << args[i].packed_index % 4 << "];\n";
         } else if (args[i].type.is_int()) {
             do_indent();
             stream << print_type(args[i].type) << " "
                    << print_name(args[i].name)
-                   << " = _uniformi" << args[i].packed_index/4
-                   << "[" << args[i].packed_index%4 << "];\n";
+                   << " = _uniformi" << args[i].packed_index / 4
+                   << "[" << args[i].packed_index % 4 << "];\n";
         }
     }
 
@@ -960,7 +957,7 @@ namespace {
 // make the individual tests below self-contained.
 string normalize_temporaries(const string &s) {
     string result;
-    for (size_t i = 0; i < s.size(); ) {
+    for (size_t i = 0; i < s.size();) {
         if (s[i] == '_') {
             result += '$';
             for (i++; i < s.size() && isdigit(s[i]); i++) {
@@ -985,8 +982,10 @@ void check(Expr e, const string &result) {
     if (!ends_with(src, result)) {
         internal_error
             << "Codegen failed for " << e << "\n"
-            << "  Correct source code:\n" << result
-            << "  Actual source code:\n" << src;
+            << "  Correct source code:\n"
+            << result
+            << "  Actual source code:\n"
+            << src;
     }
 }
 
@@ -1063,7 +1062,7 @@ void CodeGen_GLSL::test() {
     check(sin(3.0f), "float $ = sin(3.0);\n");
 
     // Sin with vector arg
-    check(Call::make(Float(32, 4), "sin_f32", {Broadcast::make(1.f, 4)}, Internal::Call::Extern),
+    check(Call::make(Float(32, 4), "sin_f32", { Broadcast::make(1.f, 4) }, Internal::Call::Extern),
           "vec4 $ = vec4(1.0);\n"
           "vec4 $ = sin($);\n");
 
@@ -1105,11 +1104,11 @@ void CodeGen_GLSL::test() {
 
     // Test codegen for texture loads
     Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
-                            {string("buf"),
-                             0,
-                             Broadcast::make(0, 4),
-                             Broadcast::make(0, 4),
-                             Ramp::make(0, 1, 4)},
+                            { string("buf"),
+                              0,
+                              Broadcast::make(0, 4),
+                              Broadcast::make(0, 4),
+                              Ramp::make(0, 1, 4) },
                             Call::Intrinsic);
     check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
 
@@ -1122,5 +1121,5 @@ void CodeGen_GLSL::test() {
 
     std::cout << "CodeGen_GLSL test passed\n";
 }
-
-}}
+}
+}

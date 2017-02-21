@@ -1,10 +1,10 @@
+#include <android/log.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <fcntl.h>
-#include <android/log.h>
+#include <unistd.h>
 
 #include "bin/src/halide_hexagon_remote.h"
 
@@ -74,7 +74,7 @@ int ion_map(int ion_fd, ion_user_handle_t handle) {
 }
 
 int ion_free(int ion_fd, ion_user_handle_t ion_handle) {
-    if(ioctl(ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
+    if (ioctl(ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
         return -1;
     }
     return 0;
@@ -93,7 +93,9 @@ struct allocation_record {
 
 // Make a dummy allocation so we don't need a special case for the
 // head list node.
-allocation_record allocations = { NULL, };
+allocation_record allocations = {
+    NULL,
+};
 pthread_mutex_t allocations_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int ion_fd = -1;
@@ -105,7 +107,7 @@ extern "C" {
 // If this symbol is defined in the stub library we are going to link
 // to, we need to call this in order to actually get zero copy
 // behavior from our buffers.
-__attribute__((weak)) void remote_register_buf(void* buf, int size, int fd);
+__attribute__((weak)) void remote_register_buf(void *buf, int size, int fd);
 
 void halide_hexagon_host_malloc_init() {
     pthread_mutex_init(&allocations_mutex, NULL);
@@ -173,7 +175,7 @@ void *halide_hexagon_host_malloc(size_t size) {
     }
 
     // Build a record for this allocation.
-    allocation_record *rec = (allocation_record *)malloc(sizeof(allocation_record));
+    allocation_record *rec = (allocation_record *) malloc(sizeof(allocation_record));
     if (!rec) {
         __android_log_print(ANDROID_LOG_ERROR, "halide", "malloc failed");
         munmap(buf, size);
@@ -239,7 +241,7 @@ void halide_hexagon_host_free(void *ptr) {
 }
 // This is a shim for calling v2 from v1.
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr,
-                                          const char* name, int nameLen) {
+                                          const char *name, int nameLen) {
     handle_t sym = 0;
     int result = halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, false, &sym);
     return result == 0 ? sym : 0;
@@ -247,7 +249,7 @@ handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr,
 
 int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
                                              handle_t *module_ptr) {
-   return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, module_ptr);
+    return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
 
 }  // extern "C"

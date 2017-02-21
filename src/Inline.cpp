@@ -1,11 +1,11 @@
 #include <set>
 
-#include "Inline.h"
 #include "CSE.h"
-#include "IRPrinter.h"
-#include "IRMutator.h"
-#include "Qualify.h"
 #include "Debug.h"
+#include "IRMutator.h"
+#include "IRPrinter.h"
+#include "Inline.h"
+#include "Qualify.h"
 
 namespace Halide {
 namespace Internal {
@@ -137,10 +137,10 @@ class Inliner : public IRMutator {
 public:
     bool found;
 
-    Inliner(Function f) : func(f), found(false) {
+    Inliner(Function f)
+        : func(f), found(false) {
         check(func);
     }
-
 };
 
 Stmt inline_function(Stmt s, Function f) {
@@ -157,6 +157,5 @@ Expr inline_function(Expr e, Function f) {
     }
     return e;
 }
-
 }
 }

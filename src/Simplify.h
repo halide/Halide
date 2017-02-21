@@ -7,8 +7,8 @@
 
 #include <cmath>
 
-#include "IR.h"
 #include "Bounds.h"
+#include "IR.h"
 #include "ModulusRemainder.h"
 
 namespace Halide {
@@ -55,7 +55,7 @@ inline T mod_imp(T a, T b) {
     Type t = type_of<T>();
     if (t.is_int()) {
         T r = a % b;
-        r = r + (r < 0 ? (T)std::abs((int64_t)b) : 0);
+        r = r + (r < 0 ? (T) std::abs((int64_t) b) : 0);
         return r;
     } else {
         return a % b;
@@ -78,26 +78,28 @@ inline T div_imp(T a, T b) {
 // @}
 
 // Special cases for float, double.
-template<> inline float mod_imp<float>(float a, float b) {
+template<>
+inline float mod_imp<float>(float a, float b) {
     float f = a - b * (floorf(a / b));
     // The remainder has the same sign as b.
     return f;
 }
-template<> inline double mod_imp<double>(double a, double b) {
+template<>
+inline double mod_imp<double>(double a, double b) {
     double f = a - b * (std::floor(a / b));
     return f;
 }
 
-template<> inline float div_imp<float>(float a, float b) {
-    return a/b;
+template<>
+inline float div_imp<float>(float a, float b) {
+    return a / b;
 }
-template<> inline double div_imp<double>(double a, double b) {
-    return a/b;
+template<>
+inline double div_imp<double>(double a, double b) {
+    return a / b;
 }
-
 
 EXPORT void simplify_test();
-
 }
 }
 

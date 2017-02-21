@@ -1,18 +1,18 @@
 #include <algorithm>
 
-#include "VectorizeLoops.h"
-#include "IRMutator.h"
-#include "Scope.h"
-#include "IRPrinter.h"
-#include "Deinterleave.h"
-#include "Substitute.h"
-#include "IROperator.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
-#include "Solve.h"
-#include "Simplify.h"
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Deinterleave.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
+#include "IRMutator.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Scope.h"
+#include "Simplify.h"
+#include "Solve.h"
+#include "Substitute.h"
+#include "VectorizeLoops.h"
 
 namespace Halide {
 namespace Internal {
@@ -40,11 +40,12 @@ class ReplaceShuffleVectors : public IRMutator {
             IRMutator::visit(op);
         }
     }
+
 public:
-    ReplaceShuffleVectors(const string &v) : var(v) {}
+    ReplaceShuffleVectors(const string &v)
+        : var(v) {
+    }
 };
-
-
 
 /** Find the exact max and min lanes of a vector expression. Not
  * conservative like bounds_of_expr, but uses similar rules for some
@@ -55,94 +56,94 @@ Interval bounds_of_lanes(Expr e) {
     if (const Add *add = e.as<Add>()) {
         if (const Broadcast *b = add->b.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(add->a);
-            return {ia.min + b->value, ia.max + b->value};
+            return { ia.min + b->value, ia.max + b->value };
         } else if (const Broadcast *b = add->a.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(add->b);
-            return {b->value + ia.min, b->value + ia.max};
+            return { b->value + ia.min, b->value + ia.max };
         }
     } else if (const Sub *sub = e.as<Sub>()) {
         if (const Broadcast *b = sub->b.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(sub->a);
-            return {ia.min - b->value, ia.max - b->value};
+            return { ia.min - b->value, ia.max - b->value };
         } else if (const Broadcast *b = sub->a.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(sub->b);
-            return {b->value - ia.max, b->value - ia.max};
+            return { b->value - ia.max, b->value - ia.max };
         }
     } else if (const Mul *mul = e.as<Mul>()) {
         if (const Broadcast *b = mul->b.as<Broadcast>()) {
             if (is_positive_const(b->value)) {
                 Interval ia = bounds_of_lanes(mul->a);
-                return {ia.min * b->value, ia.max * b->value};
+                return { ia.min * b->value, ia.max * b->value };
             } else if (is_negative_const(b->value)) {
                 Interval ia = bounds_of_lanes(mul->a);
-                return {ia.max * b->value, ia.min * b->value};
+                return { ia.max * b->value, ia.min * b->value };
             }
         } else if (const Broadcast *b = mul->a.as<Broadcast>()) {
             if (is_positive_const(b->value)) {
                 Interval ia = bounds_of_lanes(mul->b);
-                return {b->value * ia.min, b->value * ia.max};
+                return { b->value * ia.min, b->value * ia.max };
             } else if (is_negative_const(b->value)) {
                 Interval ia = bounds_of_lanes(mul->b);
-                return {b->value * ia.max, b->value * ia.min};
+                return { b->value * ia.max, b->value * ia.min };
             }
         }
     } else if (const Div *div = e.as<Div>()) {
         if (const Broadcast *b = div->b.as<Broadcast>()) {
             if (is_positive_const(b->value)) {
                 Interval ia = bounds_of_lanes(div->a);
-                return {ia.min / b->value, ia.max / b->value};
+                return { ia.min / b->value, ia.max / b->value };
             } else if (is_negative_const(b->value)) {
                 Interval ia = bounds_of_lanes(div->a);
-                return {ia.max / b->value, ia.min / b->value};
+                return { ia.max / b->value, ia.min / b->value };
             }
         }
     } else if (const And *and_ = e.as<And>()) {
         if (const Broadcast *b = and_->b.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(and_->a);
-            return {ia.min && b->value, ia.max && b->value};
+            return { ia.min && b->value, ia.max && b->value };
         } else if (const Broadcast *b = and_->a.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(and_->b);
-            return {ia.min && b->value, ia.max && b->value};
+            return { ia.min && b->value, ia.max && b->value };
         }
     } else if (const Or *or_ = e.as<Or>()) {
         if (const Broadcast *b = or_->b.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(or_->a);
-            return {ia.min && b->value, ia.max && b->value};
+            return { ia.min && b->value, ia.max && b->value };
         } else if (const Broadcast *b = or_->a.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(or_->b);
-            return {ia.min && b->value, ia.max && b->value};
+            return { ia.min && b->value, ia.max && b->value };
         }
     } else if (const Min *min = e.as<Min>()) {
         if (const Broadcast *b = min->b.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(min->a);
-            return {Min::make(ia.min, b->value), Min::make(ia.max, b->value)};
+            return { Min::make(ia.min, b->value), Min::make(ia.max, b->value) };
         } else if (const Broadcast *b = min->a.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(min->b);
-            return {Min::make(ia.min, b->value), Min::make(ia.max, b->value)};
+            return { Min::make(ia.min, b->value), Min::make(ia.max, b->value) };
         }
     } else if (const Max *max = e.as<Max>()) {
         if (const Broadcast *b = max->b.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(max->a);
-            return {Max::make(ia.min, b->value), Max::make(ia.max, b->value)};
+            return { Max::make(ia.min, b->value), Max::make(ia.max, b->value) };
         } else if (const Broadcast *b = max->a.as<Broadcast>()) {
             Interval ia = bounds_of_lanes(max->b);
-            return {Max::make(ia.min, b->value), Max::make(ia.max, b->value)};
+            return { Max::make(ia.min, b->value), Max::make(ia.max, b->value) };
         }
     } else if (const Not *not_ = e.as<Not>()) {
         Interval ia = bounds_of_lanes(not_->a);
-        return {!ia.max, !ia.min};
+        return { !ia.max, !ia.min };
     } else if (const Ramp *r = e.as<Ramp>()) {
-        Expr last_lane_idx = make_const(r->base.type(), r->lanes-1);
+        Expr last_lane_idx = make_const(r->base.type(), r->lanes - 1);
         if (is_positive_const(r->stride)) {
-            return {r->base, r->base + last_lane_idx * r->stride};
+            return { r->base, r->base + last_lane_idx * r->stride };
         } else if (is_negative_const(r->stride)) {
-            return {r->base + last_lane_idx * r->stride, r->base};
+            return { r->base + last_lane_idx * r->stride, r->base };
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
-        return {b->value, b->value};
+        return { b->value, b->value };
     } else if (const Variable *var = e.as<Variable>()) {
-        return {Variable::make(var->type.element_of(), var->name + ".min_lane"),
-                Variable::make(var->type.element_of(), var->name + ".max_lane")};
+        return { Variable::make(var->type.element_of(), var->name + ".min_lane"),
+                 Variable::make(var->type.element_of(), var->name + ".max_lane") };
     } else if (const Let *let = e.as<Let>()) {
         Interval ia = bounds_of_lanes(let->value);
         Interval ib = bounds_of_lanes(let->body);
@@ -174,7 +175,7 @@ Interval bounds_of_lanes(Expr e) {
             max_lane = Max::make(max_lane, next_lane);
         }
     }
-    return {min_lane, max_lane};
+    return { min_lane, max_lane };
 };
 
 // Allocations inside vectorized loops grow an additional inner
@@ -208,8 +209,9 @@ class RewriteAccessToVectorAlloc : public IRMutator {
     }
 
 public:
-    RewriteAccessToVectorAlloc(string v, string a, int l) :
-        var(Variable::make(Int(32), v)), alloc(a), lanes(l) {}
+    RewriteAccessToVectorAlloc(string v, string a, int l)
+        : var(Variable::make(Int(32), v)), alloc(a), lanes(l) {
+    }
 };
 
 class UsesGPUVars : public IRVisitor {
@@ -221,6 +223,7 @@ private:
             uses_gpu = true;
         }
     }
+
 public:
     bool uses_gpu = false;
 };
@@ -245,7 +248,7 @@ class PredicateLoadStore : public IRMutator {
 
     bool should_predicate_store_load(int bit_size) {
         if (in_hexagon) {
-            internal_assert(target.features_any_of({Target::HVX_64, Target::HVX_128}))
+            internal_assert(target.features_any_of({ Target::HVX_64, Target::HVX_128 }))
                 << "We are inside a hexagon loop, but the target doesn't have hexagon's features\n";
             return true;
         } else if (target.arch == Target::X86) {
@@ -338,13 +341,13 @@ class PredicateLoadStore : public IRMutator {
     }
 
 public:
-    PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t) :
-            var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
-            lanes(vpred.type().lanes()), valid(true), vectorized(false) {
+    PredicateLoadStore(string v, Expr vpred, bool in_hexagon, const Target &t)
+        : var(v), vector_predicate(vpred), in_hexagon(in_hexagon), target(t),
+          lanes(vpred.type().lanes()), valid(true), vectorized(false) {
         internal_assert(lanes > 1);
     }
 
-    bool is_vectorized() const  {
+    bool is_vectorized() const {
         return valid && vectorized;
     }
 };
@@ -360,7 +363,7 @@ class VectorSubs : public IRMutator {
 
     const Target &target;
 
-    bool in_hexagon; // Are we inside the hexagon loop?
+    bool in_hexagon;  // Are we inside the hexagon loop?
 
     // A suffix to attach to widened variables.
     string widening_suffix;
@@ -421,21 +424,51 @@ class VectorSubs : public IRMutator {
         }
     }
 
-    void visit(const Add *op) {mutate_binary_operator(op);}
-    void visit(const Sub *op) {mutate_binary_operator(op);}
-    void visit(const Mul *op) {mutate_binary_operator(op);}
-    void visit(const Div *op) {mutate_binary_operator(op);}
-    void visit(const Mod *op) {mutate_binary_operator(op);}
-    void visit(const Min *op) {mutate_binary_operator(op);}
-    void visit(const Max *op) {mutate_binary_operator(op);}
-    void visit(const EQ *op)  {mutate_binary_operator(op);}
-    void visit(const NE *op)  {mutate_binary_operator(op);}
-    void visit(const LT *op)  {mutate_binary_operator(op);}
-    void visit(const LE *op)  {mutate_binary_operator(op);}
-    void visit(const GT *op)  {mutate_binary_operator(op);}
-    void visit(const GE *op)  {mutate_binary_operator(op);}
-    void visit(const And *op) {mutate_binary_operator(op);}
-    void visit(const Or *op)  {mutate_binary_operator(op);}
+    void visit(const Add *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Sub *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Mul *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Div *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Mod *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Min *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Max *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const EQ *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const NE *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const LT *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const LE *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const GT *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const GE *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const And *op) {
+        mutate_binary_operator(op);
+    }
+    void visit(const Or *op) {
+        mutate_binary_operator(op);
+    }
 
     void visit(const Select *op) {
         Expr condition = mutate(op->condition);
@@ -556,9 +589,8 @@ class VectorSubs : public IRMutator {
             mutated_name += widening_suffix;
             scope.push(op->name, mutated_value);
             // Also keep track of the original let, in case inner code scalarizes.
-            containing_lets.push_back({op->name, op->value});
+            containing_lets.push_back({ op->name, op->value });
         }
-
 
         Stmt mutated_body = mutate(op->body);
 
@@ -697,12 +729,13 @@ class VectorSubs : public IRMutator {
             }
 
             debug(4) << "IfThenElse should vectorize predicate over var " << var << "? " << vectorize_predicate << "; cond: " << cond << "\n";
-            debug(4) << "Predicated stmt:\n" << predicated_stmt << "\n";
+            debug(4) << "Predicated stmt:\n"
+                     << predicated_stmt << "\n";
 
             // First check if the condition is marked as likely.
             const Call *c = cond.as<Call>();
             if (c && (c->is_intrinsic(Call::likely) ||
-                c->is_intrinsic(Call::likely_if_innermost))) {
+                      c->is_intrinsic(Call::likely_if_innermost))) {
 
                 // The meaning of the likely intrinsic is that
                 // Halide should optimize for the case in which
@@ -713,7 +746,7 @@ class VectorSubs : public IRMutator {
 
                 // Wrap it in the same flavor of likely
                 all_true = Call::make(Bool(), c->name,
-                                      {all_true}, Call::PureIntrinsic);
+                                      { all_true }, Call::PureIntrinsic);
 
                 if (!vectorize_predicate) {
                     // We should strip the likelies from the case
@@ -726,22 +759,26 @@ class VectorSubs : public IRMutator {
                         IfThenElse::make(all_true,
                                          then_case,
                                          scalarize(without_likelies));
-                    debug(4) << "...With all_true likely: \n" << stmt << "\n";
+                    debug(4) << "...With all_true likely: \n"
+                             << stmt << "\n";
                 } else {
                     stmt =
                         IfThenElse::make(all_true,
                                          then_case,
                                          predicated_stmt);
-                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    debug(4) << "...Predicated IfThenElse: \n"
+                             << stmt << "\n";
                 }
             } else {
                 // It's some arbitrary vector condition.
                 if (!vectorize_predicate) {
-                    debug(4) << "...Scalarizing vector predicate: \n" << stmt << "\n";
+                    debug(4) << "...Scalarizing vector predicate: \n"
+                             << stmt << "\n";
                     stmt = scalarize(op);
                 } else {
                     stmt = predicated_stmt;
-                    debug(4) << "...Predicated IfThenElse: \n" << stmt << "\n";
+                    debug(4) << "...Predicated IfThenElse: \n"
+                             << stmt << "\n";
                 }
             }
         } else {
@@ -857,7 +894,7 @@ class VectorSubs : public IRMutator {
 
         // We'll need the original scalar versions of any containing lets.
         for (size_t i = containing_lets.size(); i > 0; i--) {
-            const auto &l = containing_lets[i-1];
+            const auto &l = containing_lets[i - 1];
             s = LetStmt::make(l.first, l.second, s);
         }
 
@@ -901,8 +938,8 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(string v, Expr r, bool in_hexagon, const Target &t) :
-            var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
+    VectorSubs(string v, Expr r, bool in_hexagon, const Target &t)
+        : var(v), replacement(r), target(t), in_hexagon(in_hexagon) {
         widening_suffix = ".x" + std::to_string(replacement.type().lanes());
     }
 };
@@ -943,14 +980,15 @@ class VectorizeLoops : public IRMutator {
     }
 
 public:
-    VectorizeLoops(const Target &t) : target(t), in_hexagon(false) {}
+    VectorizeLoops(const Target &t)
+        : target(t), in_hexagon(false) {
+    }
 };
 
-} // Anonymous namespace
+}  // Anonymous namespace
 
 Stmt vectorize_loops(Stmt s, const Target &t) {
     return VectorizeLoops(t).mutate(s);
 }
-
 }
 }

@@ -1,8 +1,8 @@
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
-#include "Lerp.h"
 #include "IROperator.h"
+#include "Lerp.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -33,7 +33,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
     // There is likely a better way to handle this.
     if (result_type != computation_type) {
         zero_val = Cast::make(computation_type, zero_val) - bias_value;
-        one_val =  Cast::make(computation_type, one_val)  - bias_value;
+        one_val = Cast::make(computation_type, one_val) - bias_value;
     }
 
     if (result_type.is_bool()) {
@@ -59,7 +59,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                     typed_weight =
                         Cast::make(computation_type,
                                    cast<double>(Expr(65535.0f)) * cast<double>(Expr(65537.0f)) *
-                                   Cast::make(Float(64, typed_weight.type().lanes()), typed_weight));
+                                       Cast::make(Float(64, typed_weight.type().lanes()), typed_weight));
                 } else {
                     typed_weight =
                         Cast::make(computation_type,
@@ -82,7 +82,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 } else {
                     typed_weight =
                         Cast::make(computation_type,
-                                   weight / ((float)ldexp(1.0f, weight_bits) - 1));
+                                   weight / ((float) ldexp(1.0f, weight_bits) - 1));
                 }
                 inverse_typed_weight = 1.0f - typed_weight;
             } else {
@@ -115,11 +115,11 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                     if (bit_size_difference < 0) {
                         typed_weight =
                             Cast::make(computation_type, weight) *
-                            cast(computation_type, (int32_t)scaling_factor);
+                            cast(computation_type, (int32_t) scaling_factor);
                     } else {
                         typed_weight =
                             Cast::make(computation_type,
-                                       weight / cast(weight.type(), (int32_t)scaling_factor));
+                                       weight / cast(weight.type(), (int32_t) scaling_factor));
                     }
                 }
                 inverse_typed_weight =
@@ -130,7 +130,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
         if (computation_type.is_float()) {
             result = zero_val * inverse_typed_weight +
-                one_val * typed_weight;
+                     one_val * typed_weight;
         } else {
             int32_t bits = computation_type.bits();
             switch (bits) {
@@ -142,14 +142,14 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
             case 32: {
                 Expr zero_expand = Cast::make(UInt(2 * bits, computation_type.lanes()),
                                               zero_val);
-                Expr  one_expand = Cast::make(UInt(2 * bits, one_val.type().lanes()),
-                                              one_val);
+                Expr one_expand = Cast::make(UInt(2 * bits, one_val.type().lanes()),
+                                             one_val);
 
                 Expr rounding = Cast::make(UInt(2 * bits), 1) << Cast::make(UInt(2 * bits), (bits - 1));
-                Expr divisor  = Cast::make(UInt(2 * bits), 1) << Cast::make(UInt(2 * bits), bits);
+                Expr divisor = Cast::make(UInt(2 * bits), 1) << Cast::make(UInt(2 * bits), bits);
 
                 Expr prod_sum = zero_expand * inverse_typed_weight +
-                    one_expand * typed_weight + rounding;
+                                one_expand * typed_weight + rounding;
                 Expr divided = ((prod_sum / divisor) + prod_sum) / divisor;
 
                 result = Cast::make(UInt(bits, computation_type.lanes()), divided);
@@ -173,6 +173,5 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
     return simplify(result);
 }
-
 }
 }

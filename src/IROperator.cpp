@@ -1,14 +1,14 @@
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <sstream>
-#include <cmath>
-#include <algorithm>
 
+#include "CSE.h"
+#include "Debug.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IREquality.h"
 #include "Var.h"
-#include "Debug.h"
-#include "CSE.h"
 
 namespace Halide {
 
@@ -71,7 +71,7 @@ bool is_const(const Expr &e, int64_t value) {
     if (const IntImm *i = e.as<IntImm>()) {
         return i->value == value;
     } else if (const UIntImm *i = e.as<UIntImm>()) {
-        return (value >= 0) && (i->value == (uint64_t)value);
+        return (value >= 0) && (i->value == (uint64_t) value);
     } else if (const FloatImm *i = e.as<FloatImm>()) {
         return i->value == value;
     } else if (const Cast *c = e.as<Cast>()) {
@@ -256,11 +256,11 @@ Expr make_const_helper(Type t, T val) {
     if (t.is_vector()) {
         return Broadcast::make(make_const(t.element_of(), val), t.lanes());
     } else if (t.is_int()) {
-        return IntImm::make(t, (int64_t)val);
+        return IntImm::make(t, (int64_t) val);
     } else if (t.is_uint()) {
-        return UIntImm::make(t, (uint64_t)val);
+        return UIntImm::make(t, (uint64_t) val);
     } else if (t.is_float()) {
-        return FloatImm::make(t, (double)val);
+        return FloatImm::make(t, (double) val);
     } else {
         internal_error << "Can't make a constant of type " << t << "\n";
         return Expr();
@@ -279,7 +279,6 @@ Expr make_const(Type t, uint64_t val) {
 Expr make_const(Type t, double val) {
     return make_const_helper(t, val);
 }
-
 
 Expr make_bool(bool val, int w) {
     return make_const(UInt(1, w), val);
@@ -405,12 +404,16 @@ void match_types(Expr &a, Expr &b) {
         b = cast(ta, b);
     } else if (ta.is_float() && tb.is_float()) {
         // float(a) * float(b) -> float(max(a, b))
-        if (ta.bits() > tb.bits()) b = cast(ta, b);
-        else a = cast(tb, a);
+        if (ta.bits() > tb.bits())
+            b = cast(ta, b);
+        else
+            a = cast(tb, a);
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
-        if (ta.bits() > tb.bits()) b = cast(ta, b);
-        else a = cast(tb, a);
+        if (ta.bits() > tb.bits())
+            b = cast(ta, b);
+        else
+            a = cast(tb, a);
     } else if (!ta.is_float() && !tb.is_float()) {
         // int(a) * (u)int(b) -> int(max(a, b))
         int bits = std::max(ta.bits(), tb.bits());
@@ -461,8 +464,8 @@ Expr halide_log(const Expr &x_full) {
     Expr nan = Call::make(type, "nan_f32", {}, Call::PureExtern);
     Expr neg_inf = Call::make(type, "neg_inf_f32", {}, Call::PureExtern);
 
-    Expr use_nan = x_full < 0.0f; // log of a negative returns nan
-    Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
+    Expr use_nan = x_full < 0.0f;  // log of a negative returns nan
+    Expr use_neg_inf = x_full == 0.0f;  // log of zero is -inf
     Expr exceptional = use_nan | use_neg_inf;
 
     // Avoid producing nans or infs by generating ln(1.0f) instead and
@@ -484,9 +487,10 @@ Expr halide_log(const Expr &x_full) {
         0.33333435275479328386f,
         -0.50000106292873236491f,
         1.0f,
-        0.0f};
+        0.0f
+    };
     Expr x1 = reduced - 1.0f;
-    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
 
     result += cast(type, exponent) * logf(2.0);
 
@@ -504,7 +508,7 @@ Expr halide_exp(const Expr &x_full) {
 
     float ln2_part1 = 0.6931457519f;
     float ln2_part2 = 1.4286067653e-6f;
-    float one_over_ln2 = 1.0f/logf(2.0f);
+    float one_over_ln2 = 1.0f / logf(2.0f);
 
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);
@@ -521,8 +525,9 @@ Expr halide_exp(const Expr &x_full) {
         0.16667983794100929562f,
         0.49999899033463041098f,
         1.0f,
-        1.0f};
-    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff)/sizeof(coeff[0]));
+        1.0f
+    };
+    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff) / sizeof(coeff[0]));
 
     // Compute 2^k.
     int fpbias = 127;
@@ -554,27 +559,27 @@ Expr halide_erf(const Expr &x_full) {
 
     // An approximation very similar to one from Abramowitz and
     // Stegun, but tuned for values > 1. Takes the form 1 - P(x)^-16.
-    float c1[] = {0.0000818502f,
-                  -0.0000026500f,
-                  0.0009353904f,
-                  0.0081960206f,
-                  0.0430054424f,
-                  0.0703310579f,
-                  1.0f};
-    Expr approx1 = evaluate_polynomial(x, c1, sizeof(c1)/sizeof(c1[0]));
+    float c1[] = { 0.0000818502f,
+                   -0.0000026500f,
+                   0.0009353904f,
+                   0.0081960206f,
+                   0.0430054424f,
+                   0.0703310579f,
+                   1.0f };
+    Expr approx1 = evaluate_polynomial(x, c1, sizeof(c1) / sizeof(c1[0]));
 
     approx1 = 1.0f - pow(approx1, -16);
 
     // An odd polynomial tuned for values < 1. Similar to the Taylor
     // expansion of erf.
-    float c2[] = {-0.0005553339f,
-                  0.0048937243f,
-                  -0.0266849239f,
-                  0.1127890132f,
-                  -0.3761207240f,
-                  1.1283789803f};
+    float c2[] = { -0.0005553339f,
+                   0.0048937243f,
+                   -0.0266849239f,
+                   0.1127890132f,
+                   -0.3761207240f,
+                   1.1283789803f };
 
-    Expr approx2 = evaluate_polynomial(x*x, c2, sizeof(c2)/sizeof(c2[0]));
+    Expr approx2 = evaluate_polynomial(x * x, c2, sizeof(c2) / sizeof(c2[0]));
     approx2 *= x;
 
     // Switch between the two approximations based on the magnitude.
@@ -595,9 +600,11 @@ Expr raise_to_integer_power(const Expr &e, int64_t p) {
         result = make_one(e.type()) / raise_to_integer_power(e, -p);
     } else {
         // p is at least 2
-        Expr y = raise_to_integer_power(e, p>>1);
-        if (p & 1) result = y*y*e;
-        else result = y*y;
+        Expr y = raise_to_integer_power(e, p >> 1);
+        if (p & 1)
+            result = y * y * e;
+        else
+            result = y * y;
     }
     return result;
 }
@@ -622,7 +629,7 @@ Expr BufferBuilder::build() const {
     if (buffer_memory.defined()) {
         args[0] = buffer_memory;
     } else {
-        args[0] = Call::make(type_of<struct buffer_t *>(), Call::alloca, {(int)sizeof(buffer_t)}, Call::Intrinsic);
+        args[0] = Call::make(type_of<struct buffer_t *>(), Call::alloca, { (int) sizeof(buffer_t) }, Call::Intrinsic);
     }
 
     if (host.defined()) {
@@ -637,18 +644,18 @@ Expr BufferBuilder::build() const {
         args[2] = make_zero(UInt(64));
     }
 
-    args[3] = (int)type.code();
+    args[3] = (int) type.code();
     args[4] = type.bits();
     args[5] = dimensions;
 
     std::vector<Expr> mins_(mins), extents_(extents), strides_(strides);
-    while ((int)mins_.size() < dimensions) {
+    while ((int) mins_.size() < dimensions) {
         mins_.push_back(0);
     }
-    while ((int)extents_.size() < dimensions) {
+    while ((int) extents_.size() < dimensions) {
         extents_.push_back(0);
     }
-    while ((int)strides_.size() < dimensions) {
+    while ((int) strides_.size() < dimensions) {
         strides_.push_back(0);
     }
     args[6] = Call::make(Handle(), Call::make_struct, mins_, Call::Intrinsic);
@@ -670,7 +677,7 @@ Expr BufferBuilder::build() const {
     return Call::make(type_of<struct buffer_t *>(), Call::buffer_init, args, Call::Extern);
 }
 
-} // namespace Internal
+}  // namespace Internal
 
 Expr fast_log(const Expr &x) {
     user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
@@ -688,9 +695,10 @@ Expr fast_log(const Expr &x) {
         0.33320464908377461777f,
         -0.49997513376789826101f,
         1.0f,
-        0.0f};
+        0.0f
+    };
 
-    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff) / sizeof(coeff[0]));
     result = result + cast<float>(exponent) * logf(2);
     result = common_subexpression_elimination(result);
     return result;
@@ -710,8 +718,9 @@ Expr fast_exp(const Expr &x_full) {
         0.16873890085469545053f,
         0.49970514590562437052f,
         1.0f,
-        1.0f};
-    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff)/sizeof(coeff[0]));
+        1.0f
+    };
+    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff) / sizeof(coeff[0]));
 
     // Compute 2^k.
     int fpbias = 127;
@@ -731,13 +740,13 @@ Expr stringify(const std::vector<Expr> &args) {
 
 Expr combine_strings(const std::vector<Expr> &args) {
     // Insert spaces between each expr.
-    std::vector<Expr> strings(args.size()*2);
+    std::vector<Expr> strings(args.size() * 2);
     for (size_t i = 0; i < args.size(); i++) {
-        strings[i*2] = args[i];
+        strings[i * 2] = args[i];
         if (i < args.size() - 1) {
-            strings[i*2+1] = Expr(" ");
+            strings[i * 2 + 1] = Expr(" ");
         } else {
-            strings[i*2+1] = Expr("\n");
+            strings[i * 2 + 1] = Expr("\n");
         }
     }
 
@@ -750,12 +759,12 @@ Expr print(const std::vector<Expr> &args) {
     // Call halide_print.
     Expr print_call =
         Internal::Call::make(Int(32), "halide_print",
-                             {combined_string}, Internal::Call::Extern);
+                             { combined_string }, Internal::Call::Extern);
 
     // Return the first argument.
     Expr result =
         Internal::Call::make(args[0].type(), Internal::Call::return_second,
-                             {print_call, args[0]}, Internal::Call::PureIntrinsic);
+                             { print_call, args[0] }, Internal::Call::PureIntrinsic);
     return result;
 }
 
@@ -763,7 +772,7 @@ Expr print_when(const Expr &condition, const std::vector<Expr> &args) {
     Expr p = print(args);
     return Internal::Call::make(p.type(),
                                 Internal::Call::if_then_else,
-                                {condition, p, args[0]},
+                                { condition, p, args[0] },
                                 Internal::Call::PureIntrinsic);
 }
 
@@ -775,7 +784,7 @@ Expr require(const Expr &condition, const std::vector<Expr> &args) {
     Expr requirement_failed_error =
         Internal::Call::make(Int(32),
                              "halide_error_requirement_failed",
-                             {stringify({condition}), combine_strings(args)},
+                             { stringify({ condition }), combine_strings(args) },
                              Internal::Call::Extern);
     // Just cast to the type expected by the success path: since the actual
     // value will never be used in the failure branch, it doesn't really matter
@@ -783,7 +792,7 @@ Expr require(const Expr &condition, const std::vector<Expr> &args) {
     Expr failure_value = cast(args[0].type(), requirement_failed_error);
     return Internal::Call::make(args[0].type(),
                                 Internal::Call::if_then_else,
-                                {likely(condition), args[0], failure_value},
+                                { likely(condition), args[0], failure_value },
                                 Internal::Call::PureIntrinsic);
 }
 
@@ -810,7 +819,7 @@ Expr saturating_cast(Type t, Expr e) {
     } else if (e.type() != t) {
         // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
         if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
-            e = max(e, t.min()); // min values turn out to be always representable
+            e = max(e, t.min());  // min values turn out to be always representable
 
             // This line depends on t.max() rounding upward, which should always
             // be the case as it is one less than a representable value, thus
@@ -835,5 +844,4 @@ Expr saturating_cast(Type t, Expr e) {
     }
     return e;
 }
-
 }

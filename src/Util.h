@@ -14,10 +14,10 @@
  * Various utility functions used internally Halide. */
 
 #include <cstdint>
+#include <cstring>
+#include <string>
 #include <utility>
 #include <vector>
-#include <string>
-#include <cstring>
 
 // by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
 #if defined(_WIN32) && defined(Halide_SHARED)
@@ -131,21 +131,21 @@ T fold_right(const std::vector<T> &vec, Fn f) {
         return result;
     }
     result = vec.back();
-    for (size_t i = vec.size()-1; i > 0; i--) {
-        result = f(vec[i-1], result);
+    for (size_t i = vec.size() - 1; i > 0; i--) {
+        result = f(vec[i - 1], result);
     }
     return result;
 }
 
-template <typename T1, typename T2, typename T3, typename T4 >
+template<typename T1, typename T2, typename T3, typename T4>
 inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                     const T3 &a1, const T4 &a2) {
+                                          const T3 &a1, const T4 &a2) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
 }
 
-template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
+template<typename T1, typename T2, typename T3, typename T4, typename... Args>
 inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
-                                   const T3 &a1, const T4 &a2, Args&&... args) {
+                                          const T3 &a1, const T4 &a2, Args &&... args) {
     collected_args.push_back(std::pair<T1, T2>(a1, a2));
     collect_paired_args(collected_args, std::forward<Args>(args)...);
 }
@@ -230,9 +230,15 @@ EXPORT FileStat file_stat(const std::string &name);
 class TemporaryFile final {
 public:
     TemporaryFile(const std::string &prefix, const std::string &suffix)
-        : temp_path(file_make_temp(prefix, suffix)) {}
-    const std::string &pathname() const { return temp_path; }
-    ~TemporaryFile() { file_unlink(temp_path); }
+        : temp_path(file_make_temp(prefix, suffix)) {
+    }
+    const std::string &pathname() const {
+        return temp_path;
+    }
+    ~TemporaryFile() {
+        file_unlink(temp_path);
+    }
+
 private:
     const std::string temp_path;
     TemporaryFile(const TemporaryFile &) = delete;
@@ -246,8 +252,6 @@ bool add_would_overflow(int bits, int64_t a, int64_t b);
 bool sub_would_overflow(int bits, int64_t a, int64_t b);
 bool mul_would_overflow(int bits, int64_t a, int64_t b);
 // @}
-
-
 }
 }
 

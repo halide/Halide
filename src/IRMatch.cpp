@@ -1,10 +1,10 @@
 #include <iostream>
 #include <map>
 
-#include "IRVisitor.h"
-#include "IRMatch.h"
 #include "IREquality.h"
+#include "IRMatch.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
@@ -27,19 +27,19 @@ void expr_match_test() {
     internal_assert(expr_match(w, 3, matches) &&
                     equal(matches[0], 3));
 
-    internal_assert(expr_match(w + 3, (y*2) + 3, matches) &&
-                    equal(matches[0], y*2));
+    internal_assert(expr_match(w + 3, (y * 2) + 3, matches) &&
+                    equal(matches[0], y * 2));
 
     internal_assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
-                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(x + 4.5f)), matches) &&
+                               (81.0f * fy) * 17 + cast<float>(x / 2 + cast<int>(x + 4.5f)), matches) &&
                     matches.size() == 3 &&
                     equal(matches[0], 81.0f * fy) &&
-                    equal(matches[1], x/2) &&
+                    equal(matches[1], x / 2) &&
                     equal(matches[2], x + 4.5f));
 
     internal_assert(!expr_match(fw + 17, fx + 18, matches) &&
                     matches.empty());
-    internal_assert(!expr_match((w*2) + 17, fx + 17, matches) &&
+    internal_assert(!expr_match((w * 2) + 17, fx + 17, matches) &&
                     matches.empty());
     internal_assert(!expr_match(w * 3, 3 * x, matches) &&
                     matches.empty());
@@ -56,17 +56,19 @@ public:
     map<string, Expr> *var_matches;
     Expr expr;
 
-    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(&m), var_matches(nullptr), expr(e) {
+    IRMatch(Expr e, vector<Expr> &m)
+        : result(true), matches(&m), var_matches(nullptr), expr(e) {
     }
-    IRMatch(Expr e, map<string, Expr> &m) : result(true), matches(nullptr), var_matches(&m), expr(e) {
+    IRMatch(Expr e, map<string, Expr> &m)
+        : result(true), matches(nullptr), var_matches(&m), expr(e) {
     }
 
     using IRVisitor::visit;
 
     bool types_match(Type pattern_type, Type expr_type) {
-        bool bits_matches  = (pattern_type.bits()  == 0) || (pattern_type.bits()  == expr_type.bits());
+        bool bits_matches = (pattern_type.bits() == 0) || (pattern_type.bits() == expr_type.bits());
         bool lanes_matches = (pattern_type.lanes() == 0) || (pattern_type.lanes() == expr_type.lanes());
-        bool code_matches  = (pattern_type.code()  == expr_type.code());
+        bool code_matches = (pattern_type.code() == expr_type.code());
         return bits_matches && lanes_matches && code_matches;
     }
 
@@ -94,7 +96,7 @@ public:
         // catch NaNs. We're checking for the same bits.
         if (!e ||
             reinterpret_bits<uint64_t>(e->value) !=
-            reinterpret_bits<uint64_t>(op->value) ||
+                reinterpret_bits<uint64_t>(op->value) ||
             !types_match(op->type, e->type)) {
             result = false;
         }
@@ -147,21 +149,51 @@ public:
         }
     }
 
-    void visit(const Add *op) {visit_binary_operator(op);}
-    void visit(const Sub *op) {visit_binary_operator(op);}
-    void visit(const Mul *op) {visit_binary_operator(op);}
-    void visit(const Div *op) {visit_binary_operator(op);}
-    void visit(const Mod *op) {visit_binary_operator(op);}
-    void visit(const Min *op) {visit_binary_operator(op);}
-    void visit(const Max *op) {visit_binary_operator(op);}
-    void visit(const EQ *op) {visit_binary_operator(op);}
-    void visit(const NE *op) {visit_binary_operator(op);}
-    void visit(const LT *op) {visit_binary_operator(op);}
-    void visit(const LE *op) {visit_binary_operator(op);}
-    void visit(const GT *op) {visit_binary_operator(op);}
-    void visit(const GE *op) {visit_binary_operator(op);}
-    void visit(const And *op) {visit_binary_operator(op);}
-    void visit(const Or *op) {visit_binary_operator(op);}
+    void visit(const Add *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const Sub *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const Mul *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const Div *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const Mod *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const Min *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const Max *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const EQ *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const NE *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const LT *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const LE *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const GT *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const GE *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const And *op) {
+        visit_binary_operator(op);
+    }
+    void visit(const Or *op) {
+        visit_binary_operator(op);
+    }
 
     void visit(const Not *op) {
         const Not *e = expr.as<Not>();
@@ -282,5 +314,5 @@ bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
         return false;
     }
 }
-
-}}
+}
+}

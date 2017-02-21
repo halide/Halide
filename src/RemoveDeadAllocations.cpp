@@ -71,7 +71,5 @@ class RemoveDeadAllocations : public IRMutator {
 Stmt remove_dead_allocations(Stmt s) {
     return RemoveDeadAllocations().mutate(s);
 }
-
-
 }
 }

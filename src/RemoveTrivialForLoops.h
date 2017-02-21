@@ -13,7 +13,6 @@ namespace Internal {
 /** Convert for loops of size 1 into LetStmt nodes, which allows for
  * further simplification. Done during a late stage of lowering. */
 Stmt remove_trivial_for_loops(Stmt s);
-
 }
 }
 

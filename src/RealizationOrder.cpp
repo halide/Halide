@@ -1,7 +1,7 @@
 #include <set>
 
-#include "RealizationOrder.h"
 #include "FindCalls.h"
+#include "RealizationOrder.h"
 
 namespace Halide {
 namespace Internal {
@@ -25,7 +25,7 @@ void realization_order_dfs(string current,
     for (const string &fn : iter->second) {
         if (visited.find(fn) == visited.end()) {
             realization_order_dfs(fn, graph, visited, result_set, order);
-        } else if (fn != current) { // Self-loops are allowed in update stages
+        } else if (fn != current) {  // Self-loops are allowed in update stages
             internal_assert(result_set.find(fn) != result_set.end())
                 << "Stuck in a loop computing a realization order. "
                 << "Perhaps this pipeline has a loop?\n";
@@ -62,6 +62,5 @@ vector<string> realization_order(const vector<Function> &outputs,
 
     return order;
 }
-
 }
 }

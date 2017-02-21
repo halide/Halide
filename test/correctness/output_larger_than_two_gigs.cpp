@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
@@ -18,9 +18,9 @@ int main(int argc, char **argv) {
     uint8_t c[4096];
     memset(c, 99, sizeof(c));
 
-    halide_dimension_t shape[] = {{0, 4096, 1},
-                                  {0, 4096, 0},
-                                  {0, 256, 0}};
+    halide_dimension_t shape[] = { { 0, 4096, 1 },
+                                   { 0, 4096, 0 },
+                                   { 0, 256, 0 } };
     Buffer<uint8_t> output(c, 3, shape);
 
     identity_uint8.set_error_handler(&halide_error);

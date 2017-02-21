@@ -21,7 +21,7 @@ getLLVMAPFRoundingMode(Halide::RoundingMode mode) {
     case RoundingMode::TowardNegativeInfinity:
         return llvm::APFloat::roundingMode::rmTowardNegative;
     default:
-        internal_error << "Invalid rounding mode :" << (int)mode << "\n";
+        internal_error << "Invalid rounding mode :" << (int) mode << "\n";
     }
     llvm_unreachable("Could not get LLVM rounding mode");
 }
@@ -33,7 +33,7 @@ float16_t toFP16(llvm::APFloat v) {
 }
 
 llvm::APFloat toLLVMAPF(float16_t v) {
-    llvm::APInt bitRepr(16, (uint64_t)v.to_bits(), /*isSigned=*/false);
+    llvm::APInt bitRepr(16, (uint64_t) v.to_bits(), /*isSigned=*/false);
 #if LLVM_VERSION >= 40
     llvm::APFloat repr(llvm::APFloat::IEEEhalf(), bitRepr);
 #else
@@ -44,7 +44,7 @@ llvm::APFloat toLLVMAPF(float16_t v) {
     return repr;
 }
 
-template <typename T>
+template<typename T>
 void checkConversion(llvm::APFloat::opStatus status,
                      T value,
                      const char *typeName,
@@ -53,8 +53,7 @@ void checkConversion(llvm::APFloat::opStatus status,
     internal_assert(!(status & llvm::APFloat::opStatus::opInvalidOp)) << "Unexpected invalid op\n";
     internal_assert(!(status & llvm::APFloat::opStatus::opDivByZero)) << "Unexpected div by zero\n";
     if (status & llvm::APFloat::opStatus::opOverflow) {
-        user_error << "Converting " << value << " of type " << typeName <<
-                   " to float16_t results in overflow (Result \"" << toFP16(result).to_decimal_string() << "\")\n";
+        user_error << "Converting " << value << " of type " << typeName << " to float16_t results in overflow (Result \"" << toFP16(result).to_decimal_string() << "\")\n";
     }
     if (status & llvm::APFloat::opStatus::opUnderflow) {
         internal_assert(status & llvm::APFloat::opStatus::opInexact) << "Underflow was flagged but inexact was not\n";
@@ -65,15 +64,11 @@ void checkConversion(llvm::APFloat::opStatus status,
     }
 
     if (status & llvm::APFloat::opStatus::opInexact) {
-        user_warning << "Converting " << value << " of type " << typeName <<
-                     " to float16_t cannot be done exactly (Result \"" <<
-                     toFP16(result).to_hex_string() <<
-                     "\" which is approximately \"" <<
-                     toFP16(result).to_decimal_string() << "\" in decimal)\n";
+        user_warning << "Converting " << value << " of type " << typeName << " to float16_t cannot be done exactly (Result \"" << toFP16(result).to_hex_string() << "\" which is approximately \"" << toFP16(result).to_decimal_string() << "\" in decimal)\n";
     }
 }
 
-template <typename T>
+template<typename T>
 uint16_t getBitsFrom(T value, RoundingMode roundingMode, const char *typeName) {
     llvm::APFloat convertedValue(value);
     bool losesInfo = false;
@@ -89,7 +84,7 @@ uint16_t getBitsFrom(T value, RoundingMode roundingMode, const char *typeName) {
     return toFP16(convertedValue).to_bits();
 }
 
-template <>
+template<>
 uint16_t getBitsFrom(const char *value, RoundingMode roundingMode, const char *typeName) {
 #if LLVM_VERSION >= 40
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf());
@@ -98,13 +93,13 @@ uint16_t getBitsFrom(const char *value, RoundingMode roundingMode, const char *t
 #endif
     // TODO: Sanitize value
     llvm::APFloat::opStatus status = convertedValue.convertFromString(value,
-        getLLVMAPFRoundingMode(roundingMode));
+                                                                      getLLVMAPFRoundingMode(roundingMode));
 
     checkConversion(status, value, typeName, convertedValue);
     return toFP16(convertedValue).to_bits();
 }
 
-template <>
+template<>
 uint16_t getBitsFrom(int64_t value, RoundingMode roundingMode, const char *typeName) {
 #if LLVM_VERSION >= 40
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf());
@@ -114,7 +109,7 @@ uint16_t getBitsFrom(int64_t value, RoundingMode roundingMode, const char *typeN
     llvm::integerPart asIP = value;
     llvm::APFloat::opStatus status = convertedValue.convertFromSignExtendedInteger(
         &asIP,
-        /*srcCount=*/1, // All bits are contained within a single int64_t
+        /*srcCount=*/1,  // All bits are contained within a single int64_t
         /*isSigned=*/true,
         getLLVMAPFRoundingMode(roundingMode));
     checkConversion(status, value, typeName, convertedValue);
@@ -164,9 +159,9 @@ float16_t float16_t::make_from_bits(uint16_t rawBits) {
 float16_t::operator float() const {
     llvm::APFloat convertedValue = toLLVMAPF(*this);
     bool losesInfo = false;
-    // Converting to a more precise type so the rounding mode does not matter, so
-    // just pick any.
-#if LLVM_VERSION >= 40 
+// Converting to a more precise type so the rounding mode does not matter, so
+// just pick any.
+#if LLVM_VERSION >= 40
     convertedValue.convert(llvm::APFloat::IEEEsingle(), llvm::APFloat::rmNearestTiesToEven, &losesInfo);
 #else
     convertedValue.convert(llvm::APFloat::IEEEsingle, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
@@ -178,8 +173,8 @@ float16_t::operator float() const {
 float16_t::operator double() const {
     llvm::APFloat convertedValue = toLLVMAPF(*this);
     bool losesInfo = false;
-    // Converting to a more precise type so the rounding mode does not matter, so
-    // just pick any.
+// Converting to a more precise type so the rounding mode does not matter, so
+// just pick any.
 #if LLVM_VERSION >= 40
     convertedValue.convert(llvm::APFloat::IEEEdouble(), llvm::APFloat::rmNearestTiesToEven, &losesInfo);
 #else
@@ -259,14 +254,14 @@ float16_t float16_t::remainder(float16_t denominator) const {
 float16_t float16_t::mod(float16_t denominator, RoundingMode roundingMode) const {
     llvm::APFloat result = toLLVMAPF(*this);
     llvm::APFloat rhsAPF = toLLVMAPF(denominator);
-    // FIXME: Ignoring possible exceptions
-    // LLVM removed the rounding mode as the operation is always exact.
-    // TODO: change float16_t::mod to no take a rounding mode.
-    #if LLVM_VERSION < 38
+// FIXME: Ignoring possible exceptions
+// LLVM removed the rounding mode as the operation is always exact.
+// TODO: change float16_t::mod to no take a rounding mode.
+#if LLVM_VERSION < 38
     result.mod(rhsAPF, getLLVMAPFRoundingMode(roundingMode));
-    #else
+#else
     result.mod(rhsAPF);
-    #endif
+#endif
     return toFP16(result);
 }
 

@@ -12,18 +12,19 @@ int main(int argc, char **argv) {
     // Sort the inputs. We'll maintain the invariant that a >= b.
     Expr a = max(pa, pb), b = min(pa, pb);
 
-    f() = {a, b, 0};
+    f() = { a, b, 0 };
 
     // The worst-case number of iterations occurs when the smaller
     // number is 1. Iterating up to 'a' should suffice.
     RDom r(0, a);
-    a = f()[0]; b = f()[1];
+    a = f()[0];
+    b = f()[1];
 
     // Stop looping when b hits zero. It would be nice if this created
     // an early-exit from the reduction loop, but that doesn't
     // currently happen.
     r.where(b != 0);
-    f() = {b, a % b, r};
+    f() = { b, a % b, r };
 
     // Let's unroll it. This originally triggered two bugs:
 

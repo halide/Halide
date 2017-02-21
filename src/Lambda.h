@@ -2,8 +2,8 @@
 #define HALIDE_LAMBDA_H
 
 #include "Func.h"
-#include "Var.h"
 #include "Util.h"
+#include "Var.h"
 
 /** \file
  * Convenience functions for creating small anonymous Halide
@@ -69,7 +69,6 @@ inline Func lambda(Var x, Var y, Var z, Var w, Var v, Expr e) {
     f(x, y, z, w, v) = e;
     return f;
 }
-
 }
 
-#endif //HALIDE_LAMBDA_H
+#endif  //HALIDE_LAMBDA_H

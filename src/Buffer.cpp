@@ -1,7 +1,7 @@
 #include "Buffer.h"
-#include "Var.h"
 #include "IREquality.h"
 #include "IROperator.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,7 +23,7 @@ Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args) {
             << "Args to a call to an Image must be representable as 32-bit integers.\n";
         if (equal(e, _)) {
             // Expand the _ into the appropriate number of implicit vars.
-            int missing_dimensions = buf.dimensions() - (int)args.size() + 1;
+            int missing_dimensions = buf.dimensions() - (int) args.size() + 1;
             for (int i = 0; i < missing_dimensions; i++) {
                 int_args.push_back(Var::implicit(i));
             }
@@ -31,10 +31,9 @@ Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args) {
             int_args.push_back(e);
         } else {
             int_args.push_back(cast<int>(e));
-       }
+        }
     }
     return Call::make(buf, int_args);
 }
-
 }
 }

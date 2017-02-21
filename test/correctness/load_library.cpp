@@ -1,12 +1,12 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
 // This test exercises the ability to override halide_get_library_symbol (etc)
 // when using JIT code; to do so, it compiles & calls a simple pipeline
 // using an OpenCL schedule, since that is known to use these calls
-// in a (reasonably) well-defined way and is unlikely to change a great deal 
+// in a (reasonably) well-defined way and is unlikely to change a great deal
 // in the near future; additionally, it doesn't require a particular
 // feature in LLVM (unlike, say, Hexagon).
 
@@ -15,7 +15,7 @@ namespace {
 int load_library_calls = 0;
 int get_library_symbol_calls = 0;
 
-void my_error_handler(void* u, const char *msg) {
+void my_error_handler(void *u, const char *msg) {
     if (!strstr(msg, "OpenCL API not found")) {
         fprintf(stderr, "Saw unexpected error: %s\n", msg);
         exit(-1);
@@ -53,7 +53,6 @@ void *my_get_library_symbol_impl(void *lib, const char *name) {
     printf("Saw get_library_symbol: %s\n", name);
     return nullptr;
 }
-
 }
 
 int main(int argc, char **argv) {

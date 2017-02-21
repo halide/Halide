@@ -38,13 +38,16 @@ public:
 
     virtual std::string print_gpu_name(const std::string &name);
 
-    std::string api_unique_name() { return "opencl"; }
+    std::string api_unique_name() {
+        return "opencl";
+    }
 
 protected:
-
     class CodeGen_OpenCL_C : public CodeGen_C {
     public:
-        CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
+        CodeGen_OpenCL_C(std::ostream &s)
+            : CodeGen_C(s) {
+        }
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
@@ -81,7 +84,7 @@ protected:
     CodeGen_OpenCL_C clc;
     Target target;
 };
-
-}}
+}
+}
 
 #endif

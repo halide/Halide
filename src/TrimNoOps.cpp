@@ -1,16 +1,16 @@
 #include <algorithm>
 
-#include "TrimNoOps.h"
+#include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
+#include "ExprUsesVar.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "IREquality.h"
-#include "ExprUsesVar.h"
 #include "Substitute.h"
-#include "CodeGen_GPU_Dev.h"
+#include "TrimNoOps.h"
 #include "Var.h"
-#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -50,9 +50,12 @@ class LoadsFromBuffer : public IRVisitor {
     }
 
     string buffer;
+
 public:
     bool result = false;
-    LoadsFromBuffer(const string &b) : buffer(b) {}
+    LoadsFromBuffer(const string &b)
+        : buffer(b) {
+    }
 };
 
 bool loads_from_buffer(Expr e, string buf) {
@@ -191,14 +194,14 @@ class SimplifyUsingBounds : public IRMutator {
             // need to take each variable one-by-one, simplifying in
             // between to allow for cancellations of the bounds of
             // inner loops with outer loop variables.
-            auto loop = containing_loops[i-1];
+            auto loop = containing_loops[i - 1];
             if (is_const(test)) {
                 break;
             } else if (!expr_uses_var(test, loop.var)) {
                 continue;
-            }  else if (loop.i.is_bounded() &&
-                        can_prove(loop.i.min == loop.i.max) &&
-                        expr_uses_var(test, loop.var)) {
+            } else if (loop.i.is_bounded() &&
+                       can_prove(loop.i.min == loop.i.max) &&
+                       expr_uses_var(test, loop.var)) {
                 // If min == max then either the domain only has one correct value, which we
                 // can substitute directly.
                 // Need to call CSE here since simplify() is sometimes unable to simplify expr with
@@ -301,7 +304,7 @@ class SimplifyUsingBounds : public IRMutator {
     template<typename StmtOrExpr, typename LetStmtOrLet>
     StmtOrExpr visit_let(const LetStmtOrLet *op) {
         Expr value = mutate(op->value);
-        containing_loops.push_back({op->name, {value, value}});
+        containing_loops.push_back({ op->name, { value, value } });
         StmtOrExpr body = mutate(op->body);
         containing_loops.pop_back();
         return LetStmtOrLet::make(op->name, value, body);
@@ -319,17 +322,19 @@ class SimplifyUsingBounds : public IRMutator {
         // Simplify the loop bounds.
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
-        containing_loops.push_back({op->name, {min, min + extent - 1}});
+        containing_loops.push_back({ op->name, { min, min + extent - 1 } });
         Stmt body = mutate(op->body);
         containing_loops.pop_back();
         stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
     }
+
 public:
     SimplifyUsingBounds(const string &v, const Interval &i) {
-        containing_loops.push_back({v, i});
+        containing_loops.push_back({ v, i });
     }
 
-    SimplifyUsingBounds() {}
+    SimplifyUsingBounds() {
+    }
 };
 
 class TrimNoOps : public IRMutator {
@@ -427,13 +432,11 @@ class TrimNoOps : public IRMutator {
                  << "New: " << stmt << "\n";
     }
 };
-
 }
 
 Stmt trim_no_ops(Stmt s) {
     s = TrimNoOps().mutate(s);
     return s;
 }
-
 }
 }

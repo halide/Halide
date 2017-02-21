@@ -2,15 +2,15 @@
 #define HALIDE_HEXAGON_ELF_H
 
 extern "C" {
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 }
 
 #include "log.h"
@@ -32,67 +32,75 @@ static const int alignment = 4096;
 // these fields.
 struct elf_header_t {
     unsigned char e_ident[16];
-    uint16_t      e_type;
-    uint16_t      e_machine;
-    uint32_t      e_version;
-    elfaddr_t     e_entry;
-    elfaddr_t     e_phoff;
-    elfaddr_t     e_shoff;
-    uint32_t      e_flags;
-    uint16_t      e_ehsize;
-    uint16_t      e_phentsize;
-    uint16_t      e_phnum;
-    uint16_t      e_shentsize;
-    uint16_t      e_shnum;
-    uint16_t      e_shstrndx;
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    elfaddr_t e_entry;
+    elfaddr_t e_phoff;
+    elfaddr_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
 };
 
 // An elf section header
 struct section_header_t {
-    uint32_t   sh_name;
-    uint32_t   sh_type;
-    elfaddr_t  sh_flags;
-    elfaddr_t  sh_addr;
-    elfaddr_t  sh_offset;
-    elfaddr_t  sh_size;
-    uint32_t   sh_link;
-    uint32_t   sh_info;
-    elfaddr_t   sh_addralign;
-    elfaddr_t   sh_entsize;
+    uint32_t sh_name;
+    uint32_t sh_type;
+    elfaddr_t sh_flags;
+    elfaddr_t sh_addr;
+    elfaddr_t sh_offset;
+    elfaddr_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    elfaddr_t sh_addralign;
+    elfaddr_t sh_entsize;
 };
 
 // A symbol table entry
 struct symbol_t {
-    uint32_t      st_name;
+    uint32_t st_name;
 
 #ifdef ELF64
     unsigned char st_info;
     unsigned char st_other;
-    uint16_t      st_shndx;
-    elfaddr_t     st_value;
-    uint64_t      st_size;
+    uint16_t st_shndx;
+    elfaddr_t st_value;
+    uint64_t st_size;
 #else
-    elfaddr_t     st_value;
-    uint32_t      st_size;
+    elfaddr_t st_value;
+    uint32_t st_size;
     unsigned char st_info;
     unsigned char st_other;
-    uint16_t      st_shndx;
+    uint16_t st_shndx;
 #endif
 };
 
 // A relocation from a relocation section
 struct rela_t {
-    elfaddr_t  r_offset;
+    elfaddr_t r_offset;
 #ifdef ELF64
-    uint64_t   r_info;
-    uint32_t   r_type() {return r_info & 0xffffffff;}
-    uint32_t   r_sym()  {return r_info >> 32;}
-    int64_t    r_addend;
+    uint64_t r_info;
+    uint32_t r_type() {
+        return r_info & 0xffffffff;
+    }
+    uint32_t r_sym() {
+        return r_info >> 32;
+    }
+    int64_t r_addend;
 #else
-    uint32_t   r_info;
-    uint32_t   r_type() {return r_info & 0xff;}
-    uint32_t   r_sym()  {return r_info >> 8;}
-    int32_t    r_addend;
+    uint32_t r_info;
+    uint32_t r_type() {
+        return r_info & 0xff;
+    }
+    uint32_t r_sym() {
+        return r_info >> 8;
+    }
+    int32_t r_addend;
 #endif
 };
 
@@ -112,10 +120,10 @@ struct elf_t {
 
     // Sections of interest
     section_header_t
-        *sec_symtab,   // The symbol table
-        *sec_secnames, // The name of each section, i.e. the table of contents
-        *sec_text,     // The .text section where the functions live
-        *sec_strtab;   // The string table, for looking up symbol names
+        *sec_symtab,  // The symbol table
+        *sec_secnames,  // The name of each section, i.e. the table of contents
+        *sec_text,  // The .text section where the functions live
+        *sec_strtab;  // The string table, for looking up symbol names
 
     // The writeable portions of the object file in memory
     char *writeable_buf;
@@ -143,14 +151,14 @@ struct elf_t {
         // stuff, the same size again to make a writeable copy, and
         // then an extra page for the global offset table for PIC
         // code.
-        buf = (char *)mmap(NULL, size * 2 + global_offset_table_size,
-                           PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        buf = (char *) mmap(NULL, size * 2 + global_offset_table_size,
+                            PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 
         // Copy over the data
         memcpy(buf, b, s);
 
         // Set up the global offset table
-        global_offset_table = (elfaddr_t *)(buf + size*2);
+        global_offset_table = (elfaddr_t *) (buf + size * 2);
         global_offset_table_entries = 0;
         max_global_offset_table_entries = global_offset_table_size / sizeof(elfaddr_t);
         memset(global_offset_table, 0, global_offset_table_size);
@@ -160,7 +168,7 @@ struct elf_t {
             fail(__LINE__);
             return;
         }
-        header = (elf_header_t *)buf;
+        header = (elf_header_t *) buf;
 
         // Get the section names section first
         sec_secnames = get_section(header->e_shstrndx);
@@ -172,8 +180,8 @@ struct elf_t {
             const char *sec_name = get_section_name(sec);
             if (failed) return;
             if (debug) log_printf("\nSection %s at %p:\n",
-                              sec_name,
-                              get_addr(get_section_offset(sec)));
+                                  sec_name,
+                                  get_addr(get_section_offset(sec)));
 
             // The text, symbol table, and string table sections have
             // types 1, 2, and 3 respectively in the ELF spec.
@@ -236,7 +244,7 @@ struct elf_t {
 
         if (debug) {
             log_printf("Copying %d bytes of writeable data from %p to %p to a separate mapping of size %d at %p\n",
-                       (int)size_to_copy, min_addr, max_addr, (int)writeable_size, writeable_buf);
+                       (int) size_to_copy, min_addr, max_addr, (int) writeable_size, writeable_buf);
         }
 
         // Copy over the sections
@@ -267,7 +275,7 @@ struct elf_t {
     // Get the address given an offset into the buffer. Asserts that
     // it's in-range.
     char *get_addr(elfaddr_t off) {
-        int64_t o = (int64_t)off;
+        int64_t o = (int64_t) off;
         char *addr = buf + o;
         if ((addr < buf || addr >= buf + size) &&
             (addr < writeable_buf || addr >= writeable_buf + writeable_size)) {
@@ -294,7 +302,7 @@ struct elf_t {
             fail(__LINE__);
             return NULL;
         }
-        return (section_header_t *)get_addr(off);
+        return (section_header_t *) get_addr(off);
     }
 
     // Get the starting address of a section
@@ -332,7 +340,7 @@ struct elf_t {
         for (int i = 0; i < num_sections(); i++) {
             section_header_t *sec = get_section(i);
             const char *sec_name = get_section_name(sec);
-            if (strncmp(sec_name, name, strlen(name)+1) == 0) {
+            if (strncmp(sec_name, name, strlen(name) + 1) == 0) {
                 return sec;
             }
         }
@@ -354,7 +362,7 @@ struct elf_t {
             fail(__LINE__);
             return 0;
         }
-        return (symbol_t *)(get_addr(get_section_offset(sec_symtab) + i * sizeof(symbol_t)));
+        return (symbol_t *) (get_addr(get_section_offset(sec_symtab) + i * sizeof(symbol_t)));
     }
 
     // Get the name of a symbol
@@ -363,7 +371,7 @@ struct elf_t {
             fail(__LINE__);
             return NULL;
         }
-        return (const char *)(get_addr(get_section_offset(sec_strtab) + sym->st_name));
+        return (const char *) (get_addr(get_section_offset(sec_strtab) + sym->st_name));
     }
 
     // Get the section a symbol exists in. NULL for extern symbols.
@@ -391,7 +399,7 @@ struct elf_t {
         for (int i = 0; i < num_symbols(); i++) {
             symbol_t *sym = get_symbol(i);
             const char *sym_name = get_symbol_name(sym);
-            if (strncmp(sym_name, name, len+1) == 0) {
+            if (strncmp(sym_name, name, len + 1) == 0) {
                 if (debug) log_printf("-> %p\n", sym);
                 return sym;
             }
@@ -415,15 +423,15 @@ struct elf_t {
             fail(__LINE__);
             return NULL;
         }
-        return (rela_t *)(get_addr(get_section_offset(sec_rela) + i * sizeof(rela_t)));
+        return (rela_t *) (get_addr(get_section_offset(sec_rela) + i * sizeof(rela_t)));
     }
 
     void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
-        uint32_t inst = *((uint32_t *)addr);
+        uint32_t inst = *((uint32_t *) addr);
         if (debug) {
             log_printf("Fixup inside instruction at %lx:\n  %08lx\n",
-                   (uint32_t)(addr - get_addr(get_section_offset(sec_text))), inst);
-            log_printf("val: 0x%08lx\n", (unsigned long)val);
+                       (uint32_t)(addr - get_addr(get_section_offset(sec_text))), inst);
+            log_printf("val: 0x%08lx\n", (unsigned long) val);
             log_printf("mask: 0x%08lx\n", mask);
         }
 
@@ -436,8 +444,8 @@ struct elf_t {
                 // First print the bits so I can search for it in the
                 // instruction encodings.
                 log_printf("Instruction bits: ");
-                for (int i = 31; i >=0; i--) {
-                    log_printf("%d", (int)((inst >> i) & 1));
+                for (int i = 31; i >= 0; i--) {
+                    log_printf("%d", (int) ((inst >> i) & 1));
                 }
                 log_printf("\n");
             }
@@ -453,12 +461,12 @@ struct elf_t {
                     log_printf("Class: %x\n", iclass);
                     log_printf("Hi: ");
                     for (int i = 28; i >= 16; i--) {
-                        log_printf("%d", (int)((inst >> i) & 1));
+                        log_printf("%d", (int) ((inst >> i) & 1));
                     }
                     log_printf("\n");
                     log_printf("Lo: ");
                     for (int i = 12; i >= 0; i--) {
-                        log_printf("%d", (int)((inst >> i) & 1));
+                        log_printf("%d", (int) ((inst >> i) & 1));
                     }
                     log_printf("\n");
                 }
@@ -536,10 +544,10 @@ struct elf_t {
                 // Consume a bit of val
                 int next_bit = val & 1;
                 if (is_signed) {
-                    consumed_every_bit |= ((intptr_t)val) == -1;
-                    val = ((intptr_t)val) >> 1;
+                    consumed_every_bit |= ((intptr_t) val) == -1;
+                    val = ((intptr_t) val) >> 1;
                 } else {
-                    val = ((uintptr_t)val) >> 1;
+                    val = ((uintptr_t) val) >> 1;
                 }
                 consumed_every_bit |= (val == 0);
                 inst |= (next_bit << i);
@@ -548,13 +556,13 @@ struct elf_t {
 
         if (verify && !consumed_every_bit) {
             log_printf("Relocation overflow inst=%08lx mask=%08lx val=%08lx\n",
-                       inst, mask, (unsigned long)old_val);
+                       inst, mask, (unsigned long) old_val);
             fail(__LINE__);
             return;
         }
 
         if (debug) log_printf("Relocated instruction:\n  %08lx\n", inst);
-        *((uint32_t *)addr) = inst;
+        *((uint32_t *) addr) = inst;
     }
 
     // Do all the relocations for sec (e.g. .text), using the list of
@@ -568,7 +576,10 @@ struct elf_t {
         // Read from the GP register for GP-relative relocations. We
         // need to do this with some inline assembly.
         char *GP = NULL;
-        asm ("{%0 = gp}\n" : "=r"(GP) : : );
+        asm("{%0 = gp}\n"
+            : "=r"(GP)
+            :
+            :);
         if (debug) log_printf("GP = %p\n", GP);
 
         for (int i = 0; i < num_relas(sec_rela); i++) {
@@ -592,9 +603,9 @@ struct elf_t {
             char *sym_addr = NULL;
             if (!symbol_is_defined(sym)) {
                 if (strncmp(sym_name, "_GLOBAL_OFFSET_TABLE_", 22) == 0) {
-                    sym_addr = (char *)global_offset_table;
+                    sym_addr = (char *) global_offset_table;
                 } else {
-                    sym_addr = (char *)halide_get_symbol(sym_name);
+                    sym_addr = (char *) halide_get_symbol(sym_name);
                 }
                 if (!sym_addr) {
                     log_printf("Failed to resolve external symbol: %s\n", sym_name);
@@ -616,7 +627,7 @@ struct elf_t {
             // Find the symbol's index in the global_offset_table
             int global_offset_table_idx = global_offset_table_entries;
             for (int i = 0; i < global_offset_table_entries; i++) {
-                if ((elfaddr_t)sym_addr == global_offset_table[i]) {
+                if ((elfaddr_t) sym_addr == global_offset_table[i]) {
                     global_offset_table_idx = i;
                     break;
                 }
@@ -629,19 +640,19 @@ struct elf_t {
             elfaddr_t G = global_offset_table_idx * sizeof(elfaddr_t);
 
             // Define some constants from table 11-3
-            const uint32_t Word32     = 0xffffffff;
-            const uint32_t Word16     = 0xffff;
-            const uint32_t Word8      = 0xff;
+            const uint32_t Word32 = 0xffffffff;
+            const uint32_t Word16 = 0xffff;
+            const uint32_t Word8 = 0xff;
             const uint32_t Word32_B22 = 0x01ff3ffe;
             const uint32_t Word32_B15 = 0x00df20fe;
             const uint32_t Word32_B13 = 0x00202ffe;
-            const uint32_t Word32_B9  = 0x003000fe;
-            const uint32_t Word32_B7  = 0x00001f18;
-            const uint32_t Word32_GP  = 0; // The mask is instruction-specific
+            const uint32_t Word32_B9 = 0x003000fe;
+            const uint32_t Word32_B7 = 0x00001f18;
+            const uint32_t Word32_GP = 0;  // The mask is instruction-specific
             const uint32_t Word32_X26 = 0x0fff3fff;
-            const uint32_t Word32_U6  = 0; // The mask is instruction-specific
-            const uint32_t Word32_R6  = 0x000007e0;
-            const uint32_t Word32_LO  = 0x00c03fff;
+            const uint32_t Word32_U6 = 0;  // The mask is instruction-specific
+            const uint32_t Word32_R6 = 0x000007e0;
+            const uint32_t Word32_LO = 0x00c03fff;
             const bool truncate = false, verify = true;
             const bool _unsigned = false, _signed = true;
 
@@ -693,8 +704,8 @@ struct elf_t {
                 break;
             case 13:
                 // Untested
-                do_reloc(fixup_addr,   Word32_LO, uintptr_t(S + A) >> 16, _unsigned, truncate);
-                do_reloc(fixup_addr+4, Word32_LO, uintptr_t(S + A), _unsigned, truncate);
+                do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A) >> 16, _unsigned, truncate);
+                do_reloc(fixup_addr + 4, Word32_LO, uintptr_t(S + A), _unsigned, truncate);
                 break;
             case 14:
                 // Untested
@@ -736,7 +747,7 @@ struct elf_t {
             case 24:
                 do_reloc(fixup_addr, Word32_R6, uintptr_t(S + A), _unsigned, truncate);
                 break;
-            case 25: // These ones all seem to mean the same thing. Only 30 is tested.
+            case 25:  // These ones all seem to mean the same thing. Only 30 is tested.
             case 26:
             case 27:
             case 28:
@@ -775,12 +786,11 @@ struct elf_t {
                     fail(__LINE__);
                     return;
                 } else {
-                    global_offset_table[global_offset_table_idx] = (elfaddr_t)S;
+                    global_offset_table[global_offset_table_idx] = (elfaddr_t) S;
                     global_offset_table_entries++;
                 }
             }
         }
-
     }
 
     // Do relocations for all relocation sections in the object file
@@ -825,27 +835,27 @@ struct elf_t {
     // all you have is a logging mechanism.
     void dump_as_base64() {
         // For base-64 encoding
-        static const char encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-                                              'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                                              'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-                                              'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-                                              'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-                                              'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-                                              'w', 'x', 'y', 'z', '0', '1', '2', '3',
-                                              '4', '5', '6', '7', '8', '9', '+', '/'};
+        static const char encoding_table[] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+                                               'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+                                               'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+                                               'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+                                               'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+                                               'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+                                               'w', 'x', 'y', 'z', '0', '1', '2', '3',
+                                               '4', '5', '6', '7', '8', '9', '+', '/' };
         // Dump the object in base 64
         log_printf("BEGIN BASE64\n");
         for (int i = 0; i < size; i += 3) {
             // every group of 3 bytes becomes 4 output bytes
             uint32_t a = buf[i];
-            uint32_t b = buf[i+1];
-            uint32_t c = buf[i+2];
+            uint32_t b = buf[i + 1];
+            uint32_t c = buf[i + 2];
             uint32_t triple = (a << 16) | (b << 8) | c;
             log_printf("%c%c%c%c",
-                   encoding_table[(triple >> (3*6)) & 0x3f],
-                   encoding_table[(triple >> (2*6)) & 0x3f],
-                   encoding_table[(triple >> (1*6)) & 0x3f],
-                   encoding_table[(triple >> (0*6)) & 0x3f]);
+                       encoding_table[(triple >> (3 * 6)) & 0x3f],
+                       encoding_table[(triple >> (2 * 6)) & 0x3f],
+                       encoding_table[(triple >> (1 * 6)) & 0x3f],
+                       encoding_table[(triple >> (0 * 6)) & 0x3f]);
         }
         log_printf("\nEND BASE64\n");
     }
@@ -854,7 +864,7 @@ struct elf_t {
 // dlopen a relocatable (but not yet relocated) object file in
 // memory. The object should be compiled with -fno-pic.
 inline elf_t *obj_dlopen_mem(const unsigned char *code, int code_size) {
-    elf_t *elf = (elf_t *)malloc(sizeof(elf_t));
+    elf_t *elf = (elf_t *) malloc(sizeof(elf_t));
     if (!elf) {
         return NULL;
     }
@@ -874,7 +884,7 @@ inline void *obj_dlsym(elf_t *elf, const char *name) {
     symbol_t *sym = elf->find_symbol(name);
     if (!sym) return NULL;
     if (!elf->symbol_is_defined(sym)) return NULL;
-    return (void *)elf->get_symbol_addr(sym);
+    return (void *) elf->get_symbol_addr(sym);
 }
 
 // Release an object opened by obj_dlopen_mem

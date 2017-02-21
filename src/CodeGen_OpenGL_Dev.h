@@ -5,8 +5,8 @@
  * Defines the code-generator for producing GLSL kernel code
  */
 
-#include <sstream>
 #include <map>
+#include <sstream>
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
@@ -34,7 +34,9 @@ public:
 
     void dump();
 
-    std::string api_unique_name() { return "opengl"; }
+    std::string api_unique_name() {
+        return "opengl";
+    }
 
 private:
     CodeGen_GLSL *glc;
@@ -80,11 +82,12 @@ private:
     std::map<std::string, std::string> builtin;
 };
 
-
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_GLSLBase {
 public:
-    CodeGen_GLSL(std::ostream &s, const Target &target) : CodeGen_GLSLBase(s), target(target) {}
+    CodeGen_GLSL(std::ostream &s, const Target &target)
+        : CodeGen_GLSLBase(s), target(target) {
+    }
 
     void add_kernel(Stmt stmt,
                     std::string name,
@@ -125,7 +128,7 @@ private:
 
     const Target target;
 };
-
-}}
+}
+}
 
 #endif

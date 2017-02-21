@@ -7,8 +7,8 @@
 
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Schedule.h"
 #include "Reduction.h"
+#include "Schedule.h"
 
 #include <map>
 
@@ -112,14 +112,13 @@ public:
     std::vector<Specialization> &specializations();
     const Specialization &add_specialization(Expr condition);
     // @}
-
 };
 
 struct Specialization {
     Expr condition;
     Definition definition;
 };
-
-}}
+}
+}
 
 #endif

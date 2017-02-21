@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <map>
+#include <stdio.h>
 #include <string>
 
 using std::vector;
@@ -12,7 +12,9 @@ using namespace Halide::Internal;
 class FindErrorHandler : public IRVisitor {
 public:
     bool result;
-    FindErrorHandler() : result(false) {}
+    FindErrorHandler()
+        : result(false) {
+    }
     using IRVisitor::visit;
     void visit(const Call *op) {
         if (op->name == "halide_error_unaligned_host_ptr" &&
@@ -22,7 +24,6 @@ public:
         }
         IRVisitor::visit(op);
     }
-
 };
 
 class ParseCondition : public IRVisitor {
@@ -40,8 +41,10 @@ class CountHostAlignmentAsserts : public IRVisitor {
 public:
     int count;
     std::map<string, int> alignments_needed;
-    CountHostAlignmentAsserts(std::map<string, int> m) : count(0),
-                                                        alignments_needed(m){}
+    CountHostAlignmentAsserts(std::map<string, int> m)
+        : count(0),
+          alignments_needed(m) {
+    }
 
     using IRVisitor::visit;
 
@@ -57,7 +60,7 @@ public:
                 const Call *reinterpret_call = p.left.as<Call>();
                 if (!reinterpret_call ||
                     !reinterpret_call->is_intrinsic(Call::reinterpret)) return;
-                Expr name =  reinterpret_call->args[0];
+                Expr name = reinterpret_call->args[0];
                 const Variable *V = name.as<Variable>();
                 string name_host_ptr = V->name;
                 int expected_alignment = alignments_needed[name_host_ptr];
@@ -71,13 +74,13 @@ public:
 };
 void set_alignment_host_ptr(ImageParam &i, int align, std::map<string, int> &m) {
     i.set_host_alignment(align);
-    m.insert(std::pair<string, int>(i.name()+".host", align));
+    m.insert(std::pair<string, int>(i.name() + ".host", align));
 }
 int count_host_alignment_asserts(Func f, std::map<string, int> m) {
     Target t = get_jit_target_from_environment();
     t.set_feature(Target::NoBoundsQuery);
     f.compute_root();
-    Stmt s = Internal::lower({f.function()}, f.name(), t);
+    Stmt s = Internal::lower({ f.function() }, f.name(), t);
     CountHostAlignmentAsserts c(m);
     s.accept(&c);
     return c.count;

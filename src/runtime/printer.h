@@ -1,10 +1,12 @@
 #ifndef HALIDE_RUNTIME_PRINTER_H
 #define HALIDE_RUNTIME_PRINTER_H
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
-enum PrinterType {BasicPrinter = 0,
-                  ErrorPrinter = 1,
-                  StringStreamPrinter = 2};
+enum PrinterType { BasicPrinter = 0,
+                   ErrorPrinter = 1,
+                   StringStreamPrinter = 2 };
 
 // A class for constructing debug messages from the runtime. Dumps
 // items into a stack array, then prints them when the object leaves
@@ -31,11 +33,12 @@ public:
     void *user_context;
     bool own_mem;
 
-    Printer(void *ctx, char *mem = NULL) : user_context(ctx), own_mem(mem == NULL) {
-        buf = mem ? mem : (char *)halide_malloc(user_context, length);
+    Printer(void *ctx, char *mem = NULL)
+        : user_context(ctx), own_mem(mem == NULL) {
+        buf = mem ? mem : (char *) halide_malloc(user_context, length);
         dst = buf;
         if (dst) {
-            end = buf + (length-1);
+            end = buf + (length - 1);
             *end = 0;
         } else {
             // Pointers equal ensures no writes to buffer via formatting code
@@ -83,7 +86,7 @@ public:
         return *this;
     }
 
-    Printer & write_float16_from_bits(const uint16_t arg) {
+    Printer &write_float16_from_bits(const uint16_t arg) {
         double value = halide_float16_bits_to_double(arg);
         dst = halide_double_to_string(dst, end, value, 1);
         return *this;
@@ -91,7 +94,7 @@ public:
 
     Printer &operator<<(const halide_type_t &t) {
         const char *code_name = NULL;
-        switch(t.code) {
+        switch (t.code) {
         case halide_type_int:
             code_name = "int";
             break;
@@ -179,7 +182,8 @@ public:
 // does nothing and should compile to a no-op.
 class SinkPrinter {
 public:
-    SinkPrinter(void *user_context) {}
+    SinkPrinter(void *user_context) {
+    }
 };
 template<typename T>
 SinkPrinter operator<<(const SinkPrinter &s, T) {
@@ -196,7 +200,7 @@ typedef Printer<BasicPrinter> debug;
 typedef SinkPrinter debug;
 #endif
 }
-
-
-}}}
+}
+}
+}
 #endif

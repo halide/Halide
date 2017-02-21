@@ -26,7 +26,6 @@ EXPORT const halide_device_interface_t *get_device_interface_for_device_api(cons
  * with DeviceAPI::Default_GPU for a given target. If no suitable api
  * is enabled in the target, returns DeviceAPI::Host. */
 EXPORT DeviceAPI get_default_device_api_for_target(const Target &t);
-
 }
 
 #endif

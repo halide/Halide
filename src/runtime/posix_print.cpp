@@ -1,12 +1,15 @@
 #include "HalideRuntime.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 extern void halide_print_impl(void *, const char *);
 
 WEAK halide_print_t custom_print = halide_print_impl;
-
-}}} // namespace Halide::Runtime::Internal
+}
+}
+}  // namespace Halide::Runtime::Internal
 
 extern "C" {
 
@@ -19,5 +22,4 @@ WEAK halide_print_t halide_set_custom_print(halide_print_t print) {
     custom_print = print;
     return result;
 }
-
 }

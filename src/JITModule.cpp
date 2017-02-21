@@ -1,21 +1,20 @@
-#include <string>
-#include <stdint.h>
 #include <mutex>
 #include <set>
+#include <stdint.h>
+#include <string>
 
 #ifndef _WIN32
 #include <sys/mman.h>
 #endif
 
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
+#include "Debug.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
-#include "LLVM_Runtime_Linker.h"
-#include "Debug.h"
 #include "LLVM_Output.h"
-#include "CodeGen_LLVM.h"
+#include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
-
 
 #ifdef _MSC_VER
 #define NOMINMAX
@@ -46,7 +45,8 @@ struct SharedCudaContext {
     volatile int lock;
 
     // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() : ptr(0), lock(0) {
+    SharedCudaContext()
+        : ptr(0), lock(0) {
     }
 
     // Note that we never free the context, because static destructor
@@ -65,7 +65,8 @@ struct SharedOpenCLContext {
     cl_command_queue command_queue;
     volatile int lock;
 
-    SharedOpenCLContext() : context(nullptr), command_queue(nullptr), lock(0) {
+    SharedOpenCLContext()
+        : context(nullptr), command_queue(nullptr), lock(0) {
     }
 
     // We never free the context, for the same reason as above.
@@ -113,7 +114,6 @@ void load_metal() {
     internal_error << "JIT support for Metal only implemented on OS X\n";
 #endif
 }
-
 }
 
 using namespace llvm;
@@ -123,7 +123,8 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents() : execution_engine(nullptr) {
+    JITModuleContents()
+        : execution_engine(nullptr) {
     }
 
     ~JITModuleContents() {
@@ -143,11 +144,15 @@ public:
     std::string name;
 };
 
-template <>
-EXPORT RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
+template<>
+EXPORT RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) {
+    return f->ref_count;
+}
 
-template <>
-EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
+template<>
+EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) {
+    delete f;
+}
 
 namespace {
 
@@ -155,7 +160,7 @@ namespace {
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
     llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
-    void *f = (void *)ee.getFunctionAddress(name);
+    void *f = (void *) ee.getFunctionAddress(name);
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
@@ -174,8 +179,9 @@ class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<std::pair<uint8_t *, size_t>> code_pages;
 
 public:
-
-    HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
+    HalideJITMemoryManager(const std::vector<JITModule> &modules)
+        : modules(modules) {
+    }
 
     virtual uint64_t getSymbolAddress(const std::string &name) override {
         for (size_t i = 0; i < modules.size(); i++) {
@@ -185,7 +191,7 @@ public:
                 iter = m.exports().find(name.substr(1));
             }
             if (iter != m.exports().end()) {
-                return (uint64_t)iter->second.address;
+                return (uint64_t) iter->second.address;
             }
         }
         return SectionMemoryManager::getSymbolAddress(name);
@@ -193,7 +199,7 @@ public:
 
     virtual uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
         uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
-        code_pages.push_back({result, size});
+        code_pages.push_back({ result, size });
         return result;
     }
 
@@ -203,8 +209,8 @@ public:
             uint8_t *start = p.first;
             uint8_t *end = p.first + p.second;
 
-            (void)start;
-            (void)end;
+            (void) start;
+            (void) end;
 #ifdef __arm__
             // Flush each function from the dcache so that it gets pulled into
             // the icache correctly.
@@ -215,8 +221,8 @@ public:
             // relocations, which gets really confusing to debug, because
             // gdb's view of the code uses the dcache, so the disassembly
             // isn't right.
-            debug(2) << "Flushing cache from " << (void *)start
-                     << " to " << (void *)end << "\n";
+            debug(2) << "Flushing cache from " << (void *) start
+                     << " to " << (void *) end << "\n";
             __builtin___clear_cache(start, end);
 #endif
 
@@ -225,14 +231,13 @@ public:
             // as executable either.
             // https://llvm.org/bugs/show_bug.cgi?id=30905
 
-            start = (uint8_t *)(((uintptr_t)start) & ~4095);
-            end = (uint8_t *)(((uintptr_t)end + 4095) & ~4095);
-            mprotect((void *)start, end - start, PROT_READ | PROT_EXEC);
+            start = (uint8_t *) (((uintptr_t) start) & ~4095);
+            end = (uint8_t *) (((uintptr_t) end + 4095) & ~4095);
+            mprotect((void *) start, end - start, PROT_READ | PROT_EXEC);
 #endif
         }
     }
 };
-
 }
 
 JITModule::JITModule() {
@@ -280,16 +285,16 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     if (!mcpu.empty()) {
         engine_builder.setMCPU(mcpu);
     }
-    std::vector<string> mattrs_array = {mattrs};
+    std::vector<string> mattrs_array = { mattrs };
     engine_builder.setMAttrs(mattrs_array);
 
     TargetMachine *tm = engine_builder.selectTarget();
     internal_assert(tm) << error_string << "\n";
-    #if LLVM_VERSION == 37
+#if LLVM_VERSION == 37
     DataLayout target_data_layout(*(tm->getDataLayout()));
-    #else
+#else
     DataLayout target_data_layout(tm->createDataLayout());
-    #endif
+#endif
     if (initial_module_data_layout != target_data_layout) {
         internal_error << "Warning: data layout mismatch between module ("
                        << initial_module_data_layout.getStringRepresentation()
@@ -381,14 +386,14 @@ JITModule::Symbol JITModule::entrypoint_symbol() const {
 }
 
 int (*JITModule::argv_function() const)(const void **) {
-    return (int (*)(const void **))jit_module->argv_entrypoint.address;
+    return (int (*)(const void **)) jit_module->argv_entrypoint.address;
 }
 
 JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
     return jit_module->argv_entrypoint;
 }
 
-static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set <const JITModuleContents *> &already_seen) {
+static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set<const JITModuleContents *> &already_seen) {
     if (start == target) {
         return true;
     }
@@ -458,7 +463,7 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
 }
 
 bool JITModule::compiled() const {
-  return jit_module->execution_engine != nullptr;
+    return jit_module->execution_engine != nullptr;
 }
 
 namespace {
@@ -503,7 +508,7 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
 
 void print_handler(void *context, const char *msg) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
+        JITUserContext *jit_user_context = (JITUserContext *) context;
         (*jit_user_context->handlers.custom_print)(context, msg);
     } else {
         return (*active_handlers.custom_print)(context, msg);
@@ -512,7 +517,7 @@ void print_handler(void *context, const char *msg) {
 
 void *malloc_handler(void *context, size_t x) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
+        JITUserContext *jit_user_context = (JITUserContext *) context;
         return (*jit_user_context->handlers.custom_malloc)(context, x);
     } else {
         return (*active_handlers.custom_malloc)(context, x);
@@ -521,7 +526,7 @@ void *malloc_handler(void *context, size_t x) {
 
 void free_handler(void *context, void *ptr) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
+        JITUserContext *jit_user_context = (JITUserContext *) context;
         (*jit_user_context->handlers.custom_free)(context, ptr);
     } else {
         (*active_handlers.custom_free)(context, ptr);
@@ -531,7 +536,7 @@ void free_handler(void *context, void *ptr) {
 int do_task_handler(void *context, halide_task f, int idx,
                     uint8_t *closure) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
+        JITUserContext *jit_user_context = (JITUserContext *) context;
         return (*jit_user_context->handlers.custom_do_task)(context, f, idx, closure);
     } else {
         return (*active_handlers.custom_do_task)(context, f, idx, closure);
@@ -541,7 +546,7 @@ int do_task_handler(void *context, halide_task f, int idx,
 int do_par_for_handler(void *context, halide_task f,
                        int min, int size, uint8_t *closure) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
+        JITUserContext *jit_user_context = (JITUserContext *) context;
         return (*jit_user_context->handlers.custom_do_par_for)(context, f, min, size, closure);
     } else {
         return (*active_handlers.custom_do_par_for)(context, f, min, size, closure);
@@ -550,7 +555,7 @@ int do_par_for_handler(void *context, halide_task f,
 
 void error_handler_handler(void *context, const char *msg) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
+        JITUserContext *jit_user_context = (JITUserContext *) context;
         (*jit_user_context->handlers.custom_error)(context, msg);
     } else {
         (*active_handlers.custom_error)(context, msg);
@@ -559,7 +564,7 @@ void error_handler_handler(void *context, const char *msg) {
 
 int32_t trace_handler(void *context, const halide_trace_event_t *e) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
+        JITUserContext *jit_user_context = (JITUserContext *) context;
         return (*jit_user_context->handlers.custom_trace)(context, e);
     } else {
         return (*active_handlers.custom_trace)(context, e);
@@ -578,7 +583,7 @@ void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
 }
 
-template <typename function_t>
+template<typename function_t>
 function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports, const char *hook_name, function_t hook) {
     auto iter = exports.find(hook_name);
     internal_assert(iter != exports.end());
@@ -588,7 +593,7 @@ function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports
 }
 
 void adjust_module_ref_count(void *arg, int32_t count) {
-    JITModuleContents *module = (JITModuleContents *)arg;
+    JITModuleContents *module = (JITModuleContents *) arg;
 
     debug(2) << "Adjusting refcount for module " << module->name << " by " << count << "\n";
 
@@ -687,7 +692,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         // This function is protected by a mutex so this is thread safe.
         std::unique_ptr<llvm::Module> module(get_initial_module_for_target(one_gpu,
-            &runtime.jit_module->context, true, runtime_kind != MainShared));
+                                                                           &runtime.jit_module->context, true, runtime_kind != MainShared));
         if (for_module) {
             clone_target_options(*for_module, *module);
         }
@@ -754,11 +759,11 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             runtime.jit_module->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
 
         internal_assert(arg_addr != 0);
-        *((void **)arg_addr) = runtime.jit_module.get();
+        *((void **) arg_addr) = runtime.jit_module.get();
 
         uint64_t fun_addr = runtime.jit_module->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
         internal_assert(fun_addr != 0);
-        *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
+        *(void (**)(void *arg, int32_t count)) fun_addr = &adjust_module_ref_count;
     }
     return runtime;
 }
@@ -815,7 +820,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.features_any_of({ Target::HVX_64, Target::HVX_128 })) {
         JITModule m = make_module(for_module, target, Hexagon, result, create);
         if (m.compiled()) {
             result.push_back(m);
@@ -861,6 +866,5 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
         shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
 }
-
 }
 }

@@ -24,7 +24,6 @@ Expr random_int(const std::vector<Expr> &);
  * random_int. Tags all calls with the variables in free_vars, and the
  * integer given as the last argument. */
 Expr lower_random(Expr e, const std::vector<std::string> &free_vars, int tag);
-
 }
 }
 

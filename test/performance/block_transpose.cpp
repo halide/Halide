@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <stdio.h>
 #include "benchmark.h"
 #include <memory>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -29,24 +29,23 @@ Buffer<uint16_t> test_transpose(int mode) {
     block.compute_at(output, x).vectorize(x).unroll(y);
 
     std::string algorithm;
-    switch(mode) {
-        case scalar_trans:
-            block_transpose.compute_at(output, x).unroll(x).unroll(y);
-            algorithm = "Scalar transpose";
-            output.compile_to_assembly("scalar_transpose.s", std::vector<Argument>());
-            break;
-        case vec_y_trans:
-            block_transpose.compute_at(output, x).vectorize(y).unroll(x);
-            algorithm = "Transpose vectorized in y";
-            output.compile_to_assembly("fast_transpose_y.s", std::vector<Argument>());
-            break;
-        case vec_x_trans:
-            block_transpose.compute_at(output, x).vectorize(x).unroll(y);
-            algorithm = "Transpose vectorized in x";
-            output.compile_to_assembly("fast_transpose_x.s", std::vector<Argument>());
-            break;
+    switch (mode) {
+    case scalar_trans:
+        block_transpose.compute_at(output, x).unroll(x).unroll(y);
+        algorithm = "Scalar transpose";
+        output.compile_to_assembly("scalar_transpose.s", std::vector<Argument>());
+        break;
+    case vec_y_trans:
+        block_transpose.compute_at(output, x).vectorize(y).unroll(x);
+        algorithm = "Transpose vectorized in y";
+        output.compile_to_assembly("fast_transpose_y.s", std::vector<Argument>());
+        break;
+    case vec_x_trans:
+        block_transpose.compute_at(output, x).vectorize(x).unroll(y);
+        algorithm = "Transpose vectorized in x";
+        output.compile_to_assembly("fast_transpose_x.s", std::vector<Argument>());
+        break;
     }
-
 
     Buffer<uint16_t> result(1024, 1024);
     output.compile_jit();
@@ -57,7 +56,7 @@ Buffer<uint16_t> test_transpose(int mode) {
         output.realize(result);
     });
 
-    std::cout << "Dummy Func version: "  << algorithm << " bandwidth " << 1024*1024 / t << " byte/s.\n";
+    std::cout << "Dummy Func version: " << algorithm << " bandwidth " << 1024 * 1024 / t << " byte/s.\n";
     return result;
 }
 
@@ -79,24 +78,23 @@ Buffer<uint16_t> test_transpose_wrap(int mode) {
     block_transpose = input.in(output).compute_at(output, x).vectorize(x).unroll(y);
 
     std::string algorithm;
-    switch(mode) {
-        case scalar_trans:
-            block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).unroll(x).unroll(y);
-            algorithm = "Scalar transpose";
-            output.compile_to_assembly("scalar_transpose.s", std::vector<Argument>());
-            break;
-        case vec_y_trans:
-            block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(y).unroll(x);
-            algorithm = "Transpose vectorized in y";
-            output.compile_to_assembly("fast_transpose_y.s", std::vector<Argument>());
-            break;
-        case vec_x_trans:
-            block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(x).unroll(y);
-            algorithm = "Transpose vectorized in x";
-            output.compile_to_assembly("fast_transpose_x.s", std::vector<Argument>());
-            break;
+    switch (mode) {
+    case scalar_trans:
+        block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).unroll(x).unroll(y);
+        algorithm = "Scalar transpose";
+        output.compile_to_assembly("scalar_transpose.s", std::vector<Argument>());
+        break;
+    case vec_y_trans:
+        block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(y).unroll(x);
+        algorithm = "Transpose vectorized in y";
+        output.compile_to_assembly("fast_transpose_y.s", std::vector<Argument>());
+        break;
+    case vec_x_trans:
+        block = block_transpose.in(output).reorder_storage(y, x).compute_at(output, x).vectorize(x).unroll(y);
+        algorithm = "Transpose vectorized in x";
+        output.compile_to_assembly("fast_transpose_x.s", std::vector<Argument>());
+        break;
     }
-
 
     Buffer<uint16_t> result(1024, 1024);
     output.compile_jit();
@@ -107,10 +105,9 @@ Buffer<uint16_t> test_transpose_wrap(int mode) {
         output.realize(result);
     });
 
-    std::cout << "Wrapper version: "  << algorithm << " bandwidth " << 1024*1024 / t << " byte/s.\n";
+    std::cout << "Wrapper version: " << algorithm << " bandwidth " << 1024 * 1024 / t << " byte/s.\n";
     return result;
 }
-
 
 int main(int argc, char **argv) {
     test_transpose(scalar_trans);

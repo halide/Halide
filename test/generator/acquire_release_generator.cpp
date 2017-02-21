@@ -22,6 +22,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<AcquireRelease> register_my_gen{"acquire_release"};
+Halide::RegisterGenerator<AcquireRelease> register_my_gen{ "acquire_release" };
 
 }  // namespace

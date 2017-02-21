@@ -31,7 +31,6 @@ Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
  *  Should not affect allocations for non-memoized Funcs.
  */
 Stmt rewrite_memoized_allocations(Stmt s, const std::map<std::string, Function> &env);
-
 }
 }
 

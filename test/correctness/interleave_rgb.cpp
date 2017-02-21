@@ -1,9 +1,9 @@
-#include <stdio.h>
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
-template <typename T>
+template<typename T>
 bool test_interleave() {
     Var x("x"), y("y"), c("c");
 
@@ -17,13 +17,16 @@ bool test_interleave() {
     input.compute_root();
     interleaved.reorder(c, x, y).bound(c, 0, 3);
     interleaved.output_buffer()
-        .dim(0).set_stride(3)
-        .dim(2).set_stride(1).set_extent(3);
+        .dim(0)
+        .set_stride(3)
+        .dim(2)
+        .set_stride(1)
+        .set_extent(3);
 
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         interleaved.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (target.features_any_of({ Target::HVX_64, Target::HVX_128 })) {
         interleaved.hexagon().vectorize(x, 128 / sizeof(T)).unroll(c);
     } else {
         interleaved.vectorize(x, target.natural_vector_size<uint8_t>()).unroll(c);

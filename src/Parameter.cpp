@@ -1,7 +1,7 @@
+#include "Parameter.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "ObjectInstanceRegistry.h"
-#include "Parameter.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -34,10 +34,14 @@ struct ParameterContents {
 };
 
 template<>
-EXPORT RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {return p->ref_count;}
+EXPORT RefCount &ref_count<Halide::Internal::ParameterContents>(const ParameterContents *p) {
+    return p->ref_count;
+}
 
 template<>
-EXPORT void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {delete p;}
+EXPORT void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {
+    delete p;
+}
 
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
@@ -58,12 +62,13 @@ void Parameter::check_dim_ok(int dim) const {
         << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter() : contents(nullptr) {
+Parameter::Parameter()
+    : contents(nullptr) {
     // Undefined Parameters are never registered.
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
+Parameter::Parameter(Type t, bool is_buffer, int d)
+    : contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
     if (contents.defined() && contents->is_registered) {
@@ -71,21 +76,22 @@ Parameter::Parameter(Type t, bool is_buffer, int d) :
     }
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance) :
-    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance)
+    : contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     if (contents.defined() && contents->is_registered) {
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
     }
 }
 
-Parameter::Parameter(const Parameter& that) : contents(that.contents) {
+Parameter::Parameter(const Parameter &that)
+    : contents(that.contents) {
     if (contents.defined() && contents->is_registered) {
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
     }
 }
 
-Parameter& Parameter::operator=(const Parameter& that) {
+Parameter &Parameter::operator=(const Parameter &that) {
     bool was_registered = contents.defined() && contents->is_registered;
     contents = that.contents;
     bool should_be_registered = contents.defined() && contents->is_registered;
@@ -139,28 +145,40 @@ Expr Parameter::get_scalar_expr() const {
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
-        case 32: return Expr(get_scalar<float>());
-        case 64: return Expr(get_scalar<double>());
+        case 32:
+            return Expr(get_scalar<float>());
+        case 64:
+            return Expr(get_scalar<double>());
         }
     } else if (t.is_int()) {
         switch (t.bits()) {
-        case 8: return Expr(get_scalar<int8_t>());
-        case 16: return Expr(get_scalar<int16_t>());
-        case 32: return Expr(get_scalar<int32_t>());
-        case 64: return Expr(get_scalar<int64_t>());
+        case 8:
+            return Expr(get_scalar<int8_t>());
+        case 16:
+            return Expr(get_scalar<int16_t>());
+        case 32:
+            return Expr(get_scalar<int32_t>());
+        case 64:
+            return Expr(get_scalar<int64_t>());
         }
     } else if (t.is_uint()) {
         switch (t.bits()) {
-        case 1: return make_bool(get_scalar<bool>());
-        case 8: return Expr(get_scalar<uint8_t>());
-        case 16: return Expr(get_scalar<uint16_t>());
-        case 32: return Expr(get_scalar<uint32_t>());
-        case 64: return Expr(get_scalar<uint64_t>());
+        case 1:
+            return make_bool(get_scalar<bool>());
+        case 8:
+            return Expr(get_scalar<uint8_t>());
+        case 16:
+            return Expr(get_scalar<uint16_t>());
+        case 32:
+            return Expr(get_scalar<uint32_t>());
+        case 64:
+            return Expr(get_scalar<uint64_t>());
         }
     } else if (t.is_handle()) {
         // handles are always uint64 internally.
         switch (t.bits()) {
-        case 64: return Expr(get_scalar<uint64_t>());
+        case 64:
+            return Expr(get_scalar<uint64_t>());
         }
     }
     internal_error << "Unsupported type " << t << " in get_scalar_expr\n";
@@ -276,7 +294,8 @@ Expr Parameter::get_max_value() const {
     return contents->max_value;
 }
 
-Dimension::Dimension(const Internal::Parameter &p, int d) : param(p), d(d) {
+Dimension::Dimension(const Internal::Parameter &p, int d)
+    : param(p), d(d) {
     user_assert(param.defined())
         << "Can't access the dimensions of an undefined Parameter\n";
     user_assert(param.is_buffer())
@@ -323,7 +342,6 @@ Dimension Dimension::set_stride(Expr stride) {
     return *this;
 }
 
-
 Dimension Dimension::set_bounds(Expr min, Expr extent) {
     return set_min(min).set_extent(extent);
 }
@@ -337,7 +355,7 @@ const Dimension Dimension::dim(int i) const {
 }
 
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
-    user_assert(args->size() == (size_t)dims)
+    user_assert(args->size() == (size_t) dims)
         << args->size() << "-argument call to \""
         << name << "\", which has " << dims << " dimensions.\n";
 
@@ -346,7 +364,7 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
             << "Argument " << i << " to call to \"" << name << "\" is an undefined Expr\n";
         Type t = (*args)[i].type();
         if (t.is_float() || (t.is_uint() && t.bits() >= 32) || (t.is_int() && t.bits() > 32)) {
-            user_error << "Implicit cast from " << t << " to int in argument " << (i+1)
+            user_error << "Implicit cast from " << t << " to int in argument " << (i + 1)
                        << " in call to \"" << name << "\" is not allowed. Use an explicit cast.\n";
         }
         // We're allowed to implicitly cast from other varieties of int
@@ -355,8 +373,5 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
         }
     }
 }
-
-
-
 }
 }

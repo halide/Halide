@@ -1,8 +1,8 @@
+#include "Halide.h"
+#include <limits>
 #include <stdio.h>
 #include <string>
 #include <vector>
-#include <limits>
-#include "Halide.h"
 
 using namespace Halide;
 
@@ -84,7 +84,6 @@ int main(int argc, char **argv) {
         assert(nine == 9);
         assert(forty_two == 42.0f);
         assert(p == 127);
-
     }
 
     messages.clear();
@@ -104,7 +103,7 @@ int main(int argc, char **argv) {
             int32_t hi = n >> 32;
             int32_t lo = n & 0xffffffff;
             args.push_back((cast<uint64_t>(hi) << 32) | lo);
-            Expr dn = cast<double>((float)(n));
+            Expr dn = cast<double>((float) (n));
             args.push_back(dn);
         }
         f(x) = print(args);
@@ -120,10 +119,10 @@ int main(int argc, char **argv) {
 
     messages.clear();
 
-    // Check that Halide's stringification of floats and doubles
-    // matches %f and %e respectively.
+// Check that Halide's stringification of floats and doubles
+// matches %f and %e respectively.
 
-    #ifndef _WIN32
+#ifndef _WIN32
     // msvc's library has different ideas about how %f and %e should come out.
     {
         Func f, g;
@@ -153,7 +152,7 @@ int main(int argc, char **argv) {
         f.set_custom_print(halide_print);
         Buffer<float> imf = f.realize(N);
 
-        assert(messages.size() == (size_t)N);
+        assert(messages.size() == (size_t) N);
 
         char correct[1024];
         for (int i = 0; i < N; i++) {
@@ -176,7 +175,7 @@ int main(int argc, char **argv) {
         g.set_custom_print(halide_print);
         Buffer<double> img = g.realize(N);
 
-        assert(messages.size() == (size_t)N);
+        assert(messages.size() == (size_t) N);
 
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%e\n", img(i));
@@ -191,11 +190,8 @@ int main(int argc, char **argv) {
                 return -1;
             }
         }
-
-
     }
-    #endif
-
+#endif
 
     printf("Success!\n");
     return 0;

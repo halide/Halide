@@ -1,7 +1,7 @@
 #include <algorithm>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "stubtest.h"
 
 using Halide::Runtime::Buffer;
@@ -25,7 +25,7 @@ template<typename InputType, typename OutputType>
 void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const Buffer<OutputType> &output) {
     if (input.width() != output.width() ||
         input.height() != output.height()) {
-        fprintf(stderr, "size mismatch: %dx%d vs %dx%d\n",input.width(),input.height(),output.width(),output.height());
+        fprintf(stderr, "size mismatch: %dx%d vs %dx%d\n", input.width(), input.height(), output.width(), output.height());
         exit(-1);
     }
     int channels = std::max(1, std::min(input.channels(), output.channels()));
@@ -35,7 +35,7 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const 
                 const OutputType expected = static_cast<OutputType>(input(x, y, c) * float_arg + int_arg);
                 const OutputType actual = output(x, y, c);
                 if (expected != actual) {
-                    fprintf(stderr, "img[%d, %d, %d] = %f, expected %f (input = %f)\n", x, y, c, (double)actual, (double)expected, (double)input(x, y, c));
+                    fprintf(stderr, "img[%d, %d, %d] = %f, expected %f (input = %f)\n", x, y, c, (double) actual, (double) expected, (double) input(x, y, c));
                     exit(-1);
                 }
             }
@@ -58,18 +58,17 @@ int main(int argc, char **argv) {
     stubtest(
         buffer_input,
         buffer_input,
-        simple_input, 
-        array_input0, array_input1, 
-        1.25f, 
-        33, 
-        66, 
-        simple_output, 
-        tuple_output0, tuple_output1, 
+        simple_input,
+        array_input0, array_input1,
+        1.25f,
+        33,
+        66,
+        simple_output,
+        tuple_output0, tuple_output1,
         array_output0, array_output1,
         typed_buffer_output,
         untyped_buffer_output,
-        static_compiled_buffer_output
-    );
+        static_compiled_buffer_output);
 
     verify(buffer_input, 1.f, 0, typed_buffer_output);
     verify(buffer_input, 1.f, 0, untyped_buffer_output);

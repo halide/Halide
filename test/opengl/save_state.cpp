@@ -128,7 +128,7 @@ private:
     }
 
     void check_value(const char *operation, const char *label, GLenum pname, GLenum initial) {
-        check_value(operation, label, pname, (GLint)initial);
+        check_value(operation, label, pname, (GLint) initial);
     }
 
     void check_value(const char *operation, const char *label, GLenum pname, GLint initial[], int n = 4) {
@@ -223,7 +223,7 @@ public:
     // be able to try both.
     void setup(bool boolval) {
         // parse the OpenGL version
-        const char *version = (const char *)glGetString(GL_VERSION);
+        const char *version = (const char *) glGetString(GL_VERSION);
         parse_opengl_version(version, &gl_major_version, &gl_minor_version);
 
         glGenTextures(ntextures, initial_bound_textures);

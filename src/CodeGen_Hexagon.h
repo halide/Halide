@@ -66,7 +66,7 @@ protected:
     /** We ask for an extra vector on each allocation to enable fast
      * clamped ramp loads. */
     int allocation_padding(Type type) const {
-        return CodeGen_Posix::allocation_padding(type) + native_vector_bits()/8;
+        return CodeGen_Posix::allocation_padding(type) + native_vector_bits() / 8;
     }
 
     /** Call an LLVM intrinsic, potentially casting the operands to
@@ -110,7 +110,7 @@ protected:
      * bitcasts. */
     llvm::Value *create_bitcast(llvm::Value *v, llvm::Type *ty);
 };
-
-}}
+}
+}
 
 #endif

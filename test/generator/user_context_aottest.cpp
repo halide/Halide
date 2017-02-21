@@ -1,14 +1,14 @@
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include <assert.h>
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
+#include "HalideRuntime.h"
 #include "user_context.h"
 
 using namespace Halide::Runtime;
 
-static void *context_pointer = (void *)(intptr_t)0xf00dd00d;
+static void *context_pointer = (void *) (intptr_t) 0xf00dd00d;
 
 static bool called_error = false;
 static bool called_trace = false;
@@ -68,8 +68,8 @@ int main(int argc, char **argv) {
 
     // verify that calling via the _argv entry point
     // also produces the correct result
-    const void* arg0 = context_pointer;
-    void* args[3] = { &arg0, input.raw_buffer(), output.raw_buffer() };
+    const void *arg0 = context_pointer;
+    void *args[3] = { &arg0, input.raw_buffer(), output.raw_buffer() };
     called_error = false;
     called_trace = false;
     called_malloc = false;

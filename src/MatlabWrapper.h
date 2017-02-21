@@ -23,7 +23,6 @@ namespace Internal {
 EXPORT llvm::Function *define_matlab_wrapper(llvm::Module *module,
                                              llvm::Function *pipeline_argv_wrapper,
                                              llvm::Function *metadata_getter);
-
 }
 }
 

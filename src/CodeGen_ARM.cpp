@@ -3,14 +3,14 @@
 
 #include "CodeGen_ARM.h"
 #include "ConciseCasts.h"
-#include "IROperator.h"
-#include "IRMatch.h"
-#include "IREquality.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Simplify.h"
+#include "IREquality.h"
+#include "IRMatch.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
+#include "Simplify.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,26 +23,27 @@ using std::pair;
 using namespace Halide::ConciseCasts;
 using namespace llvm;
 
-CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
+CodeGen_ARM::CodeGen_ARM(Target target)
+    : CodeGen_Posix(target) {
     if (target.bits == 32) {
-        #if !(WITH_ARM)
+#if !(WITH_ARM)
         user_error << "arm not enabled for this build of Halide.";
-        #endif
+#endif
         user_assert(llvm_ARM_enabled) << "llvm build not configured with ARM target enabled\n.";
     } else {
-        #if !(WITH_AARCH64)
+#if !(WITH_AARCH64)
         user_error << "aarch64 not enabled for this build of Halide.";
-        #endif
+#endif
         user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
     }
 
     // Generate the cast patterns that can take vector types.  We need
     // to iterate over all 64 and 128 bit integer types relevant for
     // neon.
-    Type types[] = {Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
-        Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
-        Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4)};
-    for (size_t i = 0; i < sizeof(types)/sizeof(types[0]); i++) {
+    Type types[] = { Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
+                     Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
+                     Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4) };
+    for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
         Type t = types[i];
 
         int intrin_lanes = t.lanes();
@@ -57,7 +58,7 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
 
         // Wider versions of the type
         Type w = t.with_bits(t.bits() * 2);
-        Type ws = Int(t.bits()*2, t.lanes());
+        Type ws = Int(t.bits() * 2, t.lanes());
 
         // Vector wildcard for this type
         Expr vector = Variable::make(t, "*");
@@ -81,11 +82,11 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
             p.intrin64 = "llvm.aarch64.neon.urhadd" + t_str;
         }
 
-        p.pattern = cast(t, (w_vector + w_vector + 1)/2);
+        p.pattern = cast(t, (w_vector + w_vector + 1) / 2);
         casts.push_back(p);
-        p.pattern = cast(t, (w_vector + (w_vector + 1))/2);
+        p.pattern = cast(t, (w_vector + (w_vector + 1)) / 2);
         casts.push_back(p);
-        p.pattern = cast(t, ((w_vector + 1) + w_vector)/2);
+        p.pattern = cast(t, ((w_vector + 1) + w_vector) / 2);
         casts.push_back(p);
 
         // Rounding down averaging
@@ -96,7 +97,7 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
             p.intrin32 = "llvm.arm.neon.vhaddu" + t_str;
             p.intrin64 = "llvm.aarch64.neon.uhadd" + t_str;
         }
-        p.pattern = cast(t, (w_vector + w_vector)/2);
+        p.pattern = cast(t, (w_vector + w_vector) / 2);
         casts.push_back(p);
 
         // Halving subtract
@@ -107,7 +108,7 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
             p.intrin32 = "llvm.arm.neon.vhsubu" + t_str;
             p.intrin64 = "llvm.aarch64.neon.uhsub" + t_str;
         }
-        p.pattern = cast(t, (w_vector - w_vector)/2);
+        p.pattern = cast(t, (w_vector - w_vector) / 2);
         casts.push_back(p);
 
         // Saturating add
@@ -147,60 +148,60 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     }
 
     casts.push_back(Pattern("vqrdmulh.v4i16", "sqrdmulh.v4i16", 4,
-                            i16_sat((wild_i32x4 * wild_i32x4 + (1<<14)) / (1 << 15)),
+                            i16_sat((wild_i32x4 * wild_i32x4 + (1 << 14)) / (1 << 15)),
                             Pattern::NarrowArgs));
     casts.push_back(Pattern("vqrdmulh.v8i16", "sqrdmulh.v8i16", 8,
-                            i16_sat((wild_i32x_ * wild_i32x_ + (1<<14)) / (1 << 15)),
+                            i16_sat((wild_i32x_ * wild_i32x_ + (1 << 14)) / (1 << 15)),
                             Pattern::NarrowArgs));
     casts.push_back(Pattern("vqrdmulh.v2i32", "sqrdmulh.v2i32", 2,
-                            i32_sat((wild_i64x2 * wild_i64x2 + (1<<30)) / Expr(int64_t(1) << 31)),
+                            i32_sat((wild_i64x2 * wild_i64x2 + (1 << 30)) / Expr(int64_t(1) << 31)),
                             Pattern::NarrowArgs));
     casts.push_back(Pattern("vqrdmulh.v4i32", "sqrdmulh.v4i32", 4,
-                            i32_sat((wild_i64x_ * wild_i64x_ + (1<<30)) / Expr(int64_t(1) << 31)),
+                            i32_sat((wild_i64x_ * wild_i64x_ + (1 << 30)) / Expr(int64_t(1) << 31)),
                             Pattern::NarrowArgs));
 
-    casts.push_back(Pattern("vqshiftns.v8i8",  "sqshrn.v8i8",  8, i8_sat(wild_i16x_/wild_i16x_),  Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_/wild_i32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_/wild_i64x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v8i8",  "uqshrn.v8i8",  8, u8_sat(wild_u16x_/wild_u16x_),  Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_/wild_u32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_/wild_u64x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v8i8",  "sqshrun.v8i8",  8, u8_sat(wild_i16x_/wild_i16x_),  Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_/wild_i32x_), Pattern::RightShift));
-    casts.push_back(Pattern("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_/wild_i64x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftns.v8i8", "sqshrn.v8i8", 8, i8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftns.v4i16", "sqshrn.v4i16", 4, i16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftns.v2i32", "sqshrn.v2i32", 2, i32_sat(wild_i64x_ / wild_i64x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v8i8", "uqshrn.v8i8", 8, u8_sat(wild_u16x_ / wild_u16x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v4i16", "uqshrn.v4i16", 4, u16_sat(wild_u32x_ / wild_u32x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v2i32", "uqshrn.v2i32", 2, u32_sat(wild_u64x_ / wild_u64x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v8i8", "sqshrun.v8i8", 8, u8_sat(wild_i16x_ / wild_i16x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v4i16", "sqshrun.v4i16", 4, u16_sat(wild_i32x_ / wild_i32x_), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v2i32", "sqshrun.v2i32", 2, u32_sat(wild_i64x_ / wild_i64x_), Pattern::RightShift));
 
     // Where a 64-bit and 128-bit version exist, we use the 64-bit
     // version only when the args are 64-bits wide.
-    casts.push_back(Pattern("vqshifts.v8i8",  "sqshl.v8i8",  8, i8_sat(i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v4i16", "sqshl.v4i16", 4, i16_sat(i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v2i32", "sqshl.v2i32", 2, i32_sat(i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v8i8",  "uqshl.v8i8",  8, u8_sat(u16(wild_u8x8)*wild_u16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v4i16", "uqshl.v4i16", 4, u16_sat(u32(wild_u16x4)*wild_u32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v2i32", "uqshl.v2i32", 2, u32_sat(u64(wild_u32x2)*wild_u64x2), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v8i8",  "sqshlu.v8i8",  8, u8_sat(i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v4i16", "sqshlu.v4i16", 4, u16_sat(i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v2i32", "sqshlu.v2i32", 2, u32_sat(i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v8i8", "sqshl.v8i8", 8, i8_sat(i16(wild_i8x8) * wild_i16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v4i16", "sqshl.v4i16", 4, i16_sat(i32(wild_i16x4) * wild_i32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v2i32", "sqshl.v2i32", 2, i32_sat(i64(wild_i32x2) * wild_i64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v8i8", "uqshl.v8i8", 8, u8_sat(u16(wild_u8x8) * wild_u16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v4i16", "uqshl.v4i16", 4, u16_sat(u32(wild_u16x4) * wild_u32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v2i32", "uqshl.v2i32", 2, u32_sat(u64(wild_u32x2) * wild_u64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v8i8", "sqshlu.v8i8", 8, u8_sat(i16(wild_i8x8) * wild_i16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v4i16", "sqshlu.v4i16", 4, u16_sat(i32(wild_i16x4) * wild_i32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v2i32", "sqshlu.v2i32", 2, u32_sat(i64(wild_i32x2) * wild_i64x2), Pattern::LeftShift));
 
     // We use the 128-bit version for all other vector widths.
-    casts.push_back(Pattern("vqshifts.v16i8", "sqshl.v16i8", 16, i8_sat(i16(wild_i8x_)*wild_i16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v8i16", "sqshl.v8i16",  8, i16_sat(i32(wild_i16x_)*wild_i32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshifts.v4i32", "sqshl.v4i32",  4, i32_sat(i64(wild_i32x_)*wild_i64x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v16i8", "uqshl.v16i8",  16, u8_sat(u16(wild_u8x_)*wild_u16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v8i16", "uqshl.v8i16",  8, u16_sat(u32(wild_u16x_)*wild_u32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftu.v4i32", "uqshl.v4i32",  4, u32_sat(u64(wild_u32x_)*wild_u64x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v16i8", "sqshlu.v16i8", 16, u8_sat(i16(wild_i8x_)*wild_i16x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v8i16", "sqshlu.v8i16", 8, u16_sat(i32(wild_i16x_)*wild_i32x_), Pattern::LeftShift));
-    casts.push_back(Pattern("vqshiftsu.v4i32", "sqshlu.v4i32", 4, u32_sat(i64(wild_i32x_)*wild_i64x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v16i8", "sqshl.v16i8", 16, i8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v8i16", "sqshl.v8i16", 8, i16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v4i32", "sqshl.v4i32", 4, i32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v16i8", "uqshl.v16i8", 16, u8_sat(u16(wild_u8x_) * wild_u16x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v8i16", "uqshl.v8i16", 8, u16_sat(u32(wild_u16x_) * wild_u32x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v4i32", "uqshl.v4i32", 4, u32_sat(u64(wild_u32x_) * wild_u64x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v16i8", "sqshlu.v16i8", 16, u8_sat(i16(wild_i8x_) * wild_i16x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v8i16", "sqshlu.v8i16", 8, u16_sat(i32(wild_i16x_) * wild_i32x_), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v4i32", "sqshlu.v4i32", 4, u32_sat(i64(wild_i32x_) * wild_i64x_), Pattern::LeftShift));
 
-    casts.push_back(Pattern("vqmovns.v8i8",  "sqxtn.v8i8",    8,   i8_sat(wild_i16x_)));
-    casts.push_back(Pattern("vqmovns.v4i16", "sqxtn.v4i16",   4,  i16_sat(wild_i32x_)));
-    casts.push_back(Pattern("vqmovns.v2i32", "sqxtn.v2i32",   2,  i32_sat(wild_i64x_)));
-    casts.push_back(Pattern("vqmovnu.v8i8",  "uqxtn.v8i8",    8,   u8_sat(wild_u16x_)));
-    casts.push_back(Pattern("vqmovnu.v4i16", "uqxtn.v4i16",   4,  u16_sat(wild_u32x_)));
-    casts.push_back(Pattern("vqmovnu.v2i32", "uqxtn.v2i32",   2,  u32_sat(wild_u64x_)));
-    casts.push_back(Pattern("vqmovnsu.v8i8",  "sqxtun.v8i8",  8,   u8_sat(wild_i16x_)));
-    casts.push_back(Pattern("vqmovnsu.v4i16", "sqxtun.v4i16", 4,  u16_sat(wild_i32x_)));
-    casts.push_back(Pattern("vqmovnsu.v2i32", "sqxtun.v2i32", 2,  u32_sat(wild_i64x_)));
+    casts.push_back(Pattern("vqmovns.v8i8", "sqxtn.v8i8", 8, i8_sat(wild_i16x_)));
+    casts.push_back(Pattern("vqmovns.v4i16", "sqxtn.v4i16", 4, i16_sat(wild_i32x_)));
+    casts.push_back(Pattern("vqmovns.v2i32", "sqxtn.v2i32", 2, i32_sat(wild_i64x_)));
+    casts.push_back(Pattern("vqmovnu.v8i8", "uqxtn.v8i8", 8, u8_sat(wild_u16x_)));
+    casts.push_back(Pattern("vqmovnu.v4i16", "uqxtn.v4i16", 4, u16_sat(wild_u32x_)));
+    casts.push_back(Pattern("vqmovnu.v2i32", "uqxtn.v2i32", 2, u32_sat(wild_u64x_)));
+    casts.push_back(Pattern("vqmovnsu.v8i8", "sqxtun.v8i8", 8, u8_sat(wild_i16x_)));
+    casts.push_back(Pattern("vqmovnsu.v4i16", "sqxtun.v4i16", 4, u16_sat(wild_i32x_)));
+    casts.push_back(Pattern("vqmovnsu.v2i32", "sqxtun.v2i32", 2, u32_sat(wild_i64x_)));
 
     // Overflow for int32 is not defined by Halide, so for those we can take
     // advantage of special add-and-halve instructions.
@@ -218,14 +219,14 @@ CodeGen_ARM::CodeGen_ARM(Target target) : CodeGen_Posix(target) {
     averagings.push_back(Pattern("vhsubs.v4i32", "shsub.v4i32", 4, (wild_i32x_ - wild_i32x_)));
 
     // 64-bit saturating negation
-    negations.push_back(Pattern("vqneg.v8i8",  "sqneg.v8i8", 8, -max(wild_i8x8, -127)));
+    negations.push_back(Pattern("vqneg.v8i8", "sqneg.v8i8", 8, -max(wild_i8x8, -127)));
     negations.push_back(Pattern("vqneg.v4i16", "sqneg.v4i16", 4, -max(wild_i16x4, -32767)));
     negations.push_back(Pattern("vqneg.v2i32", "sqneg.v2i32", 2, -max(wild_i32x2, -(0x7fffffff))));
 
     // 128-bit
     negations.push_back(Pattern("vqneg.v16i8", "sqneg.v16i8", 16, -max(wild_i8x_, -127)));
-    negations.push_back(Pattern("vqneg.v8i16", "sqneg.v8i16", 8,  -max(wild_i16x_, -32767)));
-    negations.push_back(Pattern("vqneg.v4i32", "sqneg.v4i32", 4,  -max(wild_i32x_, -(0x7fffffff))));
+    negations.push_back(Pattern("vqneg.v8i16", "sqneg.v8i16", 8, -max(wild_i16x_, -32767)));
+    negations.push_back(Pattern("vqneg.v4i32", "sqneg.v4i32", 4, -max(wild_i32x_, -(0x7fffffff))));
 }
 
 Value *CodeGen_ARM::call_pattern(const Pattern &p, Type t, const vector<Expr> &args) {
@@ -254,7 +255,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 
     vector<Expr> matches;
 
-    for (size_t i = 0; i < casts.size() ; i++) {
+    for (size_t i = 0; i < casts.size(); i++) {
         const Pattern &pattern = casts[i];
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
@@ -284,7 +285,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                     value = call_pattern(pattern, t, matches);
                     return;
                 }
-            } else { // must be a shift
+            } else {  // must be a shift
                 Expr constant = matches[1];
                 int shift_amount;
                 bool power_of_two = is_const_power_of_two_integer(constant, &shift_amount);
@@ -301,13 +302,12 @@ void CodeGen_ARM::visit(const Cast *op) {
                         shift = ConstantInt::get(llvm_type_of(matches[0].type()), shift_amount);
                     }
                     value = call_pattern(pattern, llvm_type_of(t),
-                                         {codegen(matches[0]), shift});
+                                         { codegen(matches[0]), shift });
                     return;
                 }
             }
         }
     }
-
 
     // Catch extract-high-half-of-signed integer pattern and convert
     // it to extract-high-half-of-unsigned-integer. llvm peephole
@@ -323,7 +323,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             Type unsigned_type = UInt(t.bits() * 2, t.lanes());
             Expr replacement = cast(t,
                                     cast(unsigned_type, d->a) /
-                                    cast(unsigned_type, d->b));
+                                        cast(unsigned_type, d->b));
             replacement.accept(this);
             return;
         }
@@ -346,7 +346,6 @@ void CodeGen_ARM::visit(const Cast *op) {
     }
 
     CodeGen_Posix::visit(op);
-
 }
 
 void CodeGen_ARM::visit(const Mul *op) {
@@ -365,16 +364,16 @@ void CodeGen_ARM::visit(const Mul *op) {
     // shift-and-sub instead to reduce register pressure (the
     // shift is an immediate)
     if (is_const(op->b, 3)) {
-        value = codegen(op->a*2 + op->a);
+        value = codegen(op->a * 2 + op->a);
         return;
     } else if (is_const(op->b, 5)) {
-        value = codegen(op->a*4 + op->a);
+        value = codegen(op->a * 4 + op->a);
         return;
     } else if (is_const(op->b, 7)) {
-        value = codegen(op->a*8 - op->a);
+        value = codegen(op->a * 8 - op->a);
         return;
     } else if (is_const(op->b, 9)) {
-        value = codegen(op->a*8 + op->a);
+        value = codegen(op->a * 8 + op->a);
         return;
     }
 
@@ -396,7 +395,7 @@ void CodeGen_ARM::visit(const Mul *op) {
                     shift = ConstantInt::get(i32_t, shift_amount);
                 }
                 value = call_pattern(pattern, t_result,
-                                     {codegen(matches[0]), shift});
+                                     { codegen(matches[0]), shift });
                 return;
             }
         }
@@ -409,7 +408,7 @@ Expr CodeGen_ARM::sorted_avg(Expr a, Expr b) {
     Type ty = a.type();
     Type wide_ty = ty.with_bits(ty.bits() * 2);
     // This will codegen to vhaddu (arm32) or uhadd (arm64).
-    return cast(ty, (cast(wide_ty, a) + cast(wide_ty, b))/2);
+    return cast(ty, (cast(wide_ty, a) + cast(wide_ty, b)) / 2);
 }
 
 void CodeGen_ARM::visit(const Div *op) {
@@ -471,17 +470,17 @@ void CodeGen_ARM::visit(const Sub *op) {
 }
 
 void CodeGen_ARM::visit(const Mod *op) {
-     int bits;
-     if (op->type.is_int() &&
-         op->type.is_vector() &&
-         target.bits == 32 &&
-         !is_const_power_of_two_integer(op->b, &bits)) {
-         // 32-bit arm has no vectorized integer modulo, and attempting
-         // to codegen one seems to tickle an llvm bug in some cases.
-         scalarize(op);
-     } else {
-         CodeGen_Posix::visit(op);
-     }
+    int bits;
+    if (op->type.is_int() &&
+        op->type.is_vector() &&
+        target.bits == 32 &&
+        !is_const_power_of_two_integer(op->b, &bits)) {
+        // 32-bit arm has no vectorized integer modulo, and attempting
+        // to codegen one seems to tickle an llvm bug in some cases.
+        scalarize(op);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
 }
 
 void CodeGen_ARM::visit(const Min *op) {
@@ -498,9 +497,9 @@ void CodeGen_ARM::visit(const Min *op) {
         Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
         Value *wide_result;
         if (target.bits == 32) {
-            wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", {a_wide, b_wide});
+            wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmins.v2f32", { a_wide, b_wide });
         } else {
-            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.fmin.v2f32", {a_wide, b_wide});
+            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.fmin.v2f32", { a_wide, b_wide });
         }
         value = builder->CreateExtractElement(wide_result, zero);
         return;
@@ -510,23 +509,23 @@ void CodeGen_ARM::visit(const Min *op) {
         Type t;
         const char *op;
     } patterns[] = {
-        {UInt(8, 8), "v8i8"},
-        {UInt(16, 4), "v4i16"},
-        {UInt(32, 2), "v2i32"},
-        {Int(8, 8), "v8i8"},
-        {Int(16, 4), "v4i16"},
-        {Int(32, 2), "v2i32"},
-        {Float(32, 2), "v2f32"},
-        {UInt(8, 16), "v16i8"},
-        {UInt(16, 8), "v8i16"},
-        {UInt(32, 4), "v4i32"},
-        {Int(8, 16), "v16i8"},
-        {Int(16, 8), "v8i16"},
-        {Int(32, 4), "v4i32"},
-        {Float(32, 4), "v4f32"}
+        { UInt(8, 8), "v8i8" },
+        { UInt(16, 4), "v4i16" },
+        { UInt(32, 2), "v2i32" },
+        { Int(8, 8), "v8i8" },
+        { Int(16, 4), "v4i16" },
+        { Int(32, 2), "v2i32" },
+        { Float(32, 2), "v2f32" },
+        { UInt(8, 16), "v16i8" },
+        { UInt(16, 8), "v8i16" },
+        { UInt(32, 4), "v4i32" },
+        { Int(8, 16), "v16i8" },
+        { Int(16, 8), "v8i16" },
+        { Int(32, 4), "v4i32" },
+        { Float(32, 4), "v4f32" }
     };
 
-    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         bool match = op->type == patterns[i].t;
 
         // The 128-bit versions are also used for other vector widths.
@@ -549,7 +548,7 @@ void CodeGen_ARM::visit(const Min *op) {
                 }
                 intrin += patterns[i].op;
             }
-            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, {op->a, op->b});
+            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, { op->a, op->b });
             return;
         }
     }
@@ -571,9 +570,9 @@ void CodeGen_ARM::visit(const Max *op) {
         Value *b_wide = builder->CreateInsertElement(undef, codegen(op->b), zero);
         Value *wide_result;
         if (target.bits == 32) {
-            wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", {a_wide, b_wide});
+            wide_result = call_intrin(f32x2, 2, "llvm.arm.neon.vmaxs.v2f32", { a_wide, b_wide });
         } else {
-            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.fmax.v2f32", {a_wide, b_wide});
+            wide_result = call_intrin(f32x2, 2, "llvm.aarch64.neon.fmax.v2f32", { a_wide, b_wide });
         }
         value = builder->CreateExtractElement(wide_result, zero);
         return;
@@ -583,23 +582,23 @@ void CodeGen_ARM::visit(const Max *op) {
         Type t;
         const char *op;
     } patterns[] = {
-        {UInt(8, 8), "v8i8"},
-        {UInt(16, 4), "v4i16"},
-        {UInt(32, 2), "v2i32"},
-        {Int(8, 8), "v8i8"},
-        {Int(16, 4), "v4i16"},
-        {Int(32, 2), "v2i32"},
-        {Float(32, 2), "v2f32"},
-        {UInt(8, 16), "v16i8"},
-        {UInt(16, 8), "v8i16"},
-        {UInt(32, 4), "v4i32"},
-        {Int(8, 16), "v16i8"},
-        {Int(16, 8), "v8i16"},
-        {Int(32, 4), "v4i32"},
-        {Float(32, 4), "v4f32"}
+        { UInt(8, 8), "v8i8" },
+        { UInt(16, 4), "v4i16" },
+        { UInt(32, 2), "v2i32" },
+        { Int(8, 8), "v8i8" },
+        { Int(16, 4), "v4i16" },
+        { Int(32, 2), "v2i32" },
+        { Float(32, 2), "v2f32" },
+        { UInt(8, 16), "v16i8" },
+        { UInt(16, 8), "v8i16" },
+        { UInt(32, 4), "v4i32" },
+        { Int(8, 16), "v16i8" },
+        { Int(16, 8), "v8i16" },
+        { Int(32, 4), "v4i32" },
+        { Float(32, 4), "v4f32" }
     };
 
-    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         bool match = op->type == patterns[i].t;
 
         // The 128-bit versions are also used for other vector widths.
@@ -622,7 +621,7 @@ void CodeGen_ARM::visit(const Max *op) {
                 }
                 intrin += patterns[i].op;
             }
-            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, {op->a, op->b});
+            value = call_intrin(op->type, patterns[i].t.lanes(), intrin, { op->a, op->b });
             return;
         }
     }
@@ -711,7 +710,7 @@ void CodeGen_ARM::visit(const Store *op) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
 #if LLVM_VERSION > 37
-                   << ".p0i8"
+                  << ".p0i8"
 #endif
                   << ".v"
                   << intrin_type.lanes()
@@ -748,7 +747,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
             vector<Value *> slice_args = args;
             // Take a slice of each arg
-            for (int j = 0; j < num_vecs ; j++) {
+            for (int j = 0; j < num_vecs; j++) {
                 slice_args[j] = slice_vector(slice_args[j], i, intrin_type.lanes());
             }
 
@@ -797,16 +796,15 @@ void CodeGen_ARM::visit(const Store *op) {
             Value *stride = codegen(ramp->stride * op->value.type().bytes());
             Value *val = codegen(op->value);
             debug(4) << "Creating call to " << builtin.str() << "\n";
-            Value *store_args[] = {base, stride, val};
+            Value *store_args[] = { base, stride, val };
             Instruction *store = builder->CreateCall(fn, store_args);
-            (void)store;
+            (void) store;
             add_tbaa_metadata(store, op->name, op->index);
             return;
         }
     }
 
     CodeGen_Posix::visit(op);
-
 }
 
 void CodeGen_ARM::visit(const Load *op) {
@@ -887,19 +885,19 @@ void CodeGen_ARM::visit(const Load *op) {
             return;
         }
 
-        llvm::Type *load_return_type = llvm_type_of(op->type.with_lanes(intrin_lanes*stride->value));
+        llvm::Type *load_return_type = llvm_type_of(op->type.with_lanes(intrin_lanes * stride->value));
         llvm::Type *load_return_pointer_type = load_return_type->getPointerTo();
         Value *undef = UndefValue::get(load_return_type);
-        SmallVector<Constant*, 256> constants;
-        for(int j = 0; j < intrin_lanes; j++) {
-            Constant *constant = ConstantInt::get(i32_t, j*stride->value+offset);
+        SmallVector<Constant *, 256> constants;
+        for (int j = 0; j < intrin_lanes; j++) {
+            Constant *constant = ConstantInt::get(i32_t, j * stride->value + offset);
             constants.push_back(constant);
         }
-        Constant* constantsV = ConstantVector::get(constants);
+        Constant *constantsV = ConstantVector::get(constants);
 
         vector<Value *> results;
         for (int i = 0; i < op->type.lanes(); i += intrin_lanes) {
-            Expr slice_base = simplify(base + i*ramp->stride);
+            Expr slice_base = simplify(base + i * ramp->stride);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_lanes);
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
             Value *bitcastI = builder->CreateBitOrPointerCast(ptr, load_return_pointer_type);
@@ -928,7 +926,7 @@ void CodeGen_ARM::visit(const Load *op) {
             Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             Value *stride = codegen(ramp->stride * op->type.bytes());
             debug(4) << "Creating call to " << builtin.str() << "\n";
-            Value *args[] = {base, stride};
+            Value *args[] = { base, stride };
             Instruction *load = builder->CreateCall(fn, args, builtin.str());
             add_tbaa_metadata(load, op->name, op->index);
             value = load;
@@ -946,7 +944,7 @@ void CodeGen_ARM::visit(const Call *op) {
         const Sub *sub = op->args[0].as<Sub>();
         if (sub) {
             Expr a = sub->a, b = sub->b;
-            Type narrow = UInt(a.type().bits()/2, a.type().lanes());
+            Type narrow = UInt(a.type().bits() / 2, a.type().lanes());
             Expr na = lossless_cast(narrow, a);
             Expr nb = lossless_cast(narrow, b);
 
@@ -959,7 +957,7 @@ void CodeGen_ARM::visit(const Call *op) {
 
             if (na.defined() && nb.defined()) {
                 Expr absd = Call::make(UInt(narrow.bits(), narrow.lanes()), Call::absd,
-                                       {na, nb}, Call::PureIntrinsic);
+                                       { na, nb }, Call::PureIntrinsic);
 
                 absd = Cast::make(op->type, absd);
                 codegen(absd);
@@ -991,7 +989,8 @@ string CodeGen_ARM::mattrs() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             return "+neon";
-        } if (!target.has_feature(Target::NoNEON)) {
+        }
+        if (!target.has_feature(Target::NoNEON)) {
             return "+neon";
         } else {
             return "-neon";
@@ -1009,13 +1008,13 @@ bool CodeGen_ARM::use_soft_float_abi() const {
     // One expects the flag is irrelevant on 64-bit, but we'll make the logic
     // exhaustive anyway. It is not clear the armv7s case is necessary either.
     return target.has_feature(Target::SoftFloatABI) ||
-        (target.bits == 32 &&
-         ((target.os == Target::Android) ||
-          (target.os == Target::IOS && !target.has_feature(Target::ARMv7s))));
+           (target.bits == 32 &&
+            ((target.os == Target::Android) ||
+             (target.os == Target::IOS && !target.has_feature(Target::ARMv7s))));
 }
 
 int CodeGen_ARM::native_vector_bits() const {
     return 128;
 }
-
-}}
+}
+}

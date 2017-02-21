@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include <cstdio>
-#include <cstdint>
 #include "benchmark.h"
+#include <cstdint>
+#include <cstdio>
 
 using namespace Halide;
 
@@ -10,12 +10,12 @@ bool test(int w, bool div) {
     Func f, g, h;
     Var x, y;
 
-    size_t bits = sizeof(T)*8;
+    size_t bits = sizeof(T) * 8;
     bool is_signed = (T)(-1) < (T)(0);
 
     printf("%sInt(%2d, %2d)    ",
            is_signed ? " " : "U",
-           (int)bits, w);
+           (int) bits, w);
 
     int min_val = 2, num_vals = 254;
 
@@ -33,7 +33,7 @@ bool test(int w, bool div) {
     for (int y = 0; y < num_vals; y++) {
         for (int x = 0; x < input.width(); x++) {
             uint32_t bits = rand() ^ (rand() << 16);
-            input(x, y) = (T)bits;
+            input(x, y) = (T) bits;
         }
     }
 
@@ -85,9 +85,9 @@ bool test(int w, bool div) {
             if (fast(x, y) != correct(x, y)) {
                 printf("fast(%d, %d) = %lld instead of %lld (%lld/%d)\n",
                        x, y,
-                       (long long int)fast(x, y),
-                       (long long int)correct(x, y),
-                       (long long int)input(x, y),
+                       (long long int) fast(x, y),
+                       (long long int) correct(x, y),
+                       (long long int) input(x, y),
                        (T)(y + min_val));
                 return false;
             }
@@ -95,7 +95,6 @@ bool test(int w, bool div) {
     }
 
     return true;
-
 }
 
 int main(int argc, char **argv) {

@@ -20,7 +20,7 @@ int test_lut1d() {
 
     Buffer<uint8_t> input(8, 8, 3);
     input.fill([](int x, int y, int c) {
-        const float v = (1.0f / 16.0f) + (float)x / 8.0f;
+        const float v = (1.0f / 16.0f) + (float) x / 8.0f;
         switch (c) {
         case 0:
             return (uint8_t)(v * 255.0f);
@@ -35,7 +35,7 @@ int test_lut1d() {
     Buffer<float> lut1d(8, 1, 3);
     for (int c = 0; c != 3; ++c) {
         for (int i = 0; i != 8; ++i) {
-            lut1d(i, 0, c) = (float)(1 + i);
+            lut1d(i, 0, c) = (float) (1 + i);
         }
     }
 

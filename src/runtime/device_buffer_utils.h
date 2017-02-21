@@ -5,7 +5,9 @@
 #include "device_interface.h"
 #include "printer.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 // TODO: Make this a method on he new buffer_t.
 // Compute the total amount of memory we'd need to allocate on gpu to
@@ -16,9 +18,9 @@ WEAK size_t buf_size(const buffer_t *buf) {
     for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
         size_t positive_stride;
         if (buf->stride[i] < 0) {
-            positive_stride = (size_t)-buf->stride[i];
+            positive_stride = (size_t) -buf->stride[i];
         } else {
-            positive_stride = (size_t)buf->stride[i];
+            positive_stride = (size_t) buf->stride[i];
         }
         size_t total_dim_size = buf->elem_size * buf->extent[i] * positive_stride;
         if (total_dim_size > size) {
@@ -27,7 +29,6 @@ WEAK size_t buf_size(const buffer_t *buf) {
     }
     return size;
 }
-
 
 // A host <-> dev copy should be done with the fewest possible number
 // of contiguous copies to minimize driver overhead. If our buffer_t
@@ -66,20 +67,20 @@ WEAK void device_copy::copy_memory(void *user_context) const {
     // If this is a zero copy buffer, these pointers will be the same.
     if (src != dst) {
         debug(user_context) << "device_copy::copy_memory: copying "
-            << (extent[0] * extent[1] * extent[2] * extent[3] * chunk_size)
-            << " bytes.\n";
+                            << (extent[0] * extent[1] * extent[2] * extent[3] * chunk_size)
+                            << " bytes.\n";
         // TODO: Is this 32-bit or 64-bit? Leaving signed for now
         // in case negative strides.
-        for (int w = 0; w < (int)extent[3]; w++) {
-            for (int z = 0; z < (int)extent[2]; z++) {
-                for (int y = 0; y < (int)extent[1]; y++) {
-                    for (int x = 0; x < (int)extent[0]; x++) {
+        for (int w = 0; w < (int) extent[3]; w++) {
+            for (int z = 0; z < (int) extent[2]; z++) {
+                for (int y = 0; y < (int) extent[1]; y++) {
+                    for (int x = 0; x < (int) extent[0]; x++) {
                         uint64_t off = (x * stride_bytes[0] +
                                         y * stride_bytes[1] +
                                         z * stride_bytes[2] +
                                         w * stride_bytes[3]);
-                        const void *from = (void *)(src + off);
-                        void *to = (void *)(dst + off);
+                        const void *from = (void *) (src + off);
+                        void *to = (void *) (dst + off);
                         memcpy(to, from, chunk_size);
                     }
                 }
@@ -93,7 +94,7 @@ WEAK void device_copy::copy_memory(void *user_context) const {
 WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     // Make a copy job representing copying the first pixel only.
     device_copy c;
-    c.src = (uint64_t)buf->host;
+    c.src = (uint64_t) buf->host;
     c.dst = halide_get_device_handle(buf->dev);
     c.chunk_size = buf->elem_size;
     for (int i = 0; i < MAX_COPY_DIMS; i++) {
@@ -104,7 +105,7 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     if (buf->elem_size == 0) {
         // This buffer apparently represents no memory. Return a zero'd copy
         // task.
-        device_copy zero = {0};
+        device_copy zero = { 0 };
         return zero;
     }
 
@@ -136,18 +137,18 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     // dimensions are sorted by stride, and the strides must be greater than
     // or equal to the chunk size, this means we can just delete the innermost
     // dimension as long as its stride is equal to the chunk size.
-    while(c.chunk_size == c.stride_bytes[0]) {
+    while (c.chunk_size == c.stride_bytes[0]) {
         // Fold the innermost dimension's extent into the chunk_size.
         c.chunk_size *= c.extent[0];
 
         // Erase the innermost dimension from the list of dimensions to
         // iterate over.
         for (int j = 1; j < MAX_COPY_DIMS; j++) {
-            c.extent[j-1] = c.extent[j];
-            c.stride_bytes[j-1] = c.stride_bytes[j];
+            c.extent[j - 1] = c.extent[j];
+            c.stride_bytes[j - 1] = c.stride_bytes[j];
         }
-        c.extent[MAX_COPY_DIMS-1] = 1;
-        c.stride_bytes[MAX_COPY_DIMS-1] = 0;
+        c.extent[MAX_COPY_DIMS - 1] = 1;
+        c.stride_bytes[MAX_COPY_DIMS - 1] = 0;
     }
     return c;
 }
@@ -160,7 +161,8 @@ WEAK device_copy make_device_to_host_copy(const buffer_t *buf) {
     c.dst = tmp;
     return c;
 }
+}
+}
+}  // namespace Halide::Runtime::Internal
 
-}}} // namespace Halide::Runtime::Internal
-
-#endif // HALIDE_DEVICE_BUFFER_UTILS_H
+#endif  // HALIDE_DEVICE_BUFFER_UTILS_H

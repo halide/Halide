@@ -13,7 +13,6 @@ namespace Internal {
  * and how many memory issue slots there are. Currently only intended
  * for Hexagon. */
 Stmt loop_carry(Stmt, int max_carried_values = 8);
-
 }
 }
 

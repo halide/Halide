@@ -1,17 +1,17 @@
+#include <atomic>
 #include <set>
 #include <stdlib.h>
-#include <atomic>
 
+#include "CSE.h"
+#include "Function.h"
 #include "IR.h"
 #include "IRMutator.h"
-#include "Function.h"
-#include "Scope.h"
-#include "CSE.h"
-#include "Random.h"
-#include "Introspection.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "Introspection.h"
 #include "ParallelRVar.h"
+#include "Random.h"
+#include "Scope.h"
 #include "Var.h"
 
 namespace Halide {
@@ -51,9 +51,11 @@ struct FunctionContents {
 
     bool frozen;
 
-    FunctionContents() : extern_mangling(NameMangling::Default), trace_loads(false),
-                         trace_stores(false), trace_realizations(false),
-                         frozen(false) {}
+    FunctionContents()
+        : extern_mangling(NameMangling::Default), trace_loads(false),
+          trace_stores(false), trace_realizations(false),
+          frozen(false) {
+    }
 
     void accept(IRVisitor *visitor) const {
         init_def.accept(visitor);
@@ -126,8 +128,9 @@ struct CheckVars : public IRGraphVisitor {
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
-    CheckVars(const std::string &n) :
-        name(n) {}
+    CheckVars(const std::string &n)
+        : name(n) {
+    }
 
     using IRVisitor::visit;
 
@@ -228,8 +231,11 @@ class FreezeFunctions : public IRGraphVisitor {
             f.freeze();
         }
     }
+
 public:
-    FreezeFunctions(const string &f) : func(f) {}
+    FreezeFunctions(const string &f)
+        : func(f) {
+    }
 };
 
 // A counter to use in tagging random variables
@@ -237,15 +243,18 @@ namespace {
 static std::atomic<int> rand_counter;
 }
 
-Function::Function() : contents(new FunctionContents) {
+Function::Function()
+    : contents(new FunctionContents) {
 }
 
-Function::Function(const IntrusivePtr<FunctionContents> &ptr) : contents(ptr) {
+Function::Function(const IntrusivePtr<FunctionContents> &ptr)
+    : contents(ptr) {
     internal_assert(ptr.defined())
         << "Can't construct Function from undefined FunctionContents ptr\n";
 }
 
-Function::Function(const std::string &n) : contents(new FunctionContents) {
+Function::Function(const std::string &n)
+    : contents(new FunctionContents) {
     for (size_t i = 0; i < n.size(); i++) {
         user_assert(n[i] != '.')
             << "Func name \"" << n << "\" is invalid. "
@@ -257,14 +266,14 @@ Function::Function(const std::string &n) : contents(new FunctionContents) {
 
 // Return deep-copy of ExternFuncArgument 'src'
 ExternFuncArgument deep_copy_extern_func_argument_helper(
-        const ExternFuncArgument &src, DeepCopyMap &copied_map) {
+    const ExternFuncArgument &src, DeepCopyMap &copied_map) {
     ExternFuncArgument copy;
     copy.arg_type = src.arg_type;
     copy.buffer = src.buffer;
     copy.expr = src.expr;
     copy.image_param = src.image_param;
 
-    if (!src.func.defined()) { // No need to deep-copy the func if it's undefined
+    if (!src.func.defined()) {  // No need to deep-copy the func if it's undefined
         internal_assert(!src.is_func())
             << "ExternFuncArgument has type FuncArg but has no function definition\n";
         return copy;
@@ -285,7 +294,7 @@ ExternFuncArgument deep_copy_extern_func_argument_helper(
 
 // Return a deep-copy of FunctionContents 'src'
 IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-        const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied_map) {
+    const IntrusivePtr<FunctionContents> &src, DeepCopyMap &copied_map) {
 
     IntrusivePtr<FunctionContents> copy(new FunctionContents);
     deep_copy_function_contents_helper(src, copy, copied_map);
@@ -439,15 +448,15 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        Dim d = { args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar };
         contents->init_def.schedule().dims().push_back(d);
-        StorageDim sd = {args[i]};
+        StorageDim sd = { args[i] };
         contents->init_def.schedule().storage_dims().push_back(sd);
     }
 
     // Add the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        Dim d = { Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar };
         contents->init_def.schedule().dims().push_back(d);
     }
 
@@ -459,7 +468,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     for (size_t i = 0; i < values.size(); i++) {
         string buffer_name = name();
         if (values.size() > 1) {
-            buffer_name += '.' + std::to_string((int)i);
+            buffer_name += '.' + std::to_string((int) i);
         }
         Parameter output(values[i].type(), true, args.size(), buffer_name);
         contents->output_buffers.push_back(output);
@@ -482,11 +491,10 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         user_assert(values[i].defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of update.\n";
-
     }
 
     // Check the dimensionality matches
-    user_assert((int)_args.size() == dimensions())
+    user_assert((int) _args.size() == dimensions())
         << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
         << "Dimensionality of update definition must match dimensionality of pure definition.\n";
 
@@ -527,7 +535,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     vector<string> pure_args(args.size());
     const auto &pure_def_args = contents->init_def.args();
     for (size_t i = 0; i < args.size(); i++) {
-        pure_args[i] = ""; // Will never match a var name
+        pure_args[i] = "";  // Will never match a var name
         user_assert(args[i].defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Argument " << i
@@ -635,8 +643,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
             bool pure = can_parallelize_rvar(v, name(), r);
 
-            Dim d = {v, ForType::Serial, DeviceAPI::None,
-                     pure ? Dim::Type::PureRVar : Dim::Type::ImpureRVar};
+            Dim d = { v, ForType::Serial, DeviceAPI::None,
+                      pure ? Dim::Type::PureRVar : Dim::Type::ImpureRVar };
             r.schedule().dims().push_back(d);
         }
     }
@@ -644,14 +652,14 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+            Dim d = { pure_args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar };
             r.schedule().dims().push_back(d);
         }
     }
 
     // Then the dummy outermost dim
     {
-        Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
+        Dim d = { Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar };
         r.schedule().dims().push_back(d);
     }
 
@@ -670,7 +678,6 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     }
 
     contents->updates.push_back(r);
-
 }
 
 void Function::define_extern(const std::string &function_name,
@@ -695,7 +702,7 @@ void Function::define_extern(const std::string &function_name,
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
         if (types.size() > 1) {
-            buffer_name += '.' + std::to_string((int)i);
+            buffer_name += '.' + std::to_string((int) i);
         }
         Parameter output(types[i], true, dimensionality, buffer_name);
         contents->output_buffers.push_back(output);
@@ -707,7 +714,7 @@ void Function::define_extern(const std::string &function_name,
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
         pure_def_args[i] = Var(arg);
-        StorageDim sd = {arg};
+        StorageDim sd = { arg };
         contents->init_def.schedule().storage_dims().push_back(sd);
     }
 }
@@ -764,17 +771,17 @@ const std::vector<Parameter> &Function::output_buffers() const {
 }
 
 Schedule &Function::update_schedule(int idx) {
-    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
+    internal_assert(idx < (int) contents->updates.size()) << "Invalid update definition index\n";
     return contents->updates[idx].schedule();
 }
 
 Definition &Function::update(int idx) {
-    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
+    internal_assert(idx < (int) contents->updates.size()) << "Invalid update definition index\n";
     return contents->updates[idx];
 }
 
 const Definition &Function::update(int idx) const {
-    internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
+    internal_assert(idx < (int) contents->updates.size()) << "Invalid update definition index\n";
     return contents->updates[idx];
 }
 
@@ -809,9 +816,7 @@ Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
     Call::CallType call_type = Call::Extern;
     switch (contents->extern_mangling) {
     case NameMangling::Default:
-        call_type = (target.has_feature(Target::CPlusPlusMangling) ?
-                     Call::ExternCPlusPlus :
-                     Call::Extern);
+        call_type = (target.has_feature(Target::CPlusPlusMangling) ? Call::ExternCPlusPlus : Call::Extern);
         break;
     case NameMangling::CPlusPlus:
         call_type = Call::ExternCPlusPlus;
@@ -895,12 +900,14 @@ class SubstituteCalls : public IRMutator {
             expr = Call::make(subs, c->args, c->value_index);
         }
     }
+
 public:
     SubstituteCalls(const map<Function, Function, Function::Compare> &substitutions)
-        : substitutions(substitutions) {}
+        : substitutions(substitutions) {
+    }
 };
 
-} // anonymous namespace
+}  // anonymous namespace
 
 Function &Function::substitute_calls(const map<Function, Function, Compare> &substitutions) {
     debug(4) << "Substituting calls in " << name() << "\n";
@@ -918,6 +925,5 @@ Function &Function::substitute_calls(const Function &orig, const Function &subst
     substitutions.emplace(orig, substitute);
     return substitute_calls(substitutions);
 }
-
 }
 }

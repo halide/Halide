@@ -83,5 +83,5 @@ void HostClosure::visit(const For *loop) {
         Internal::Closure::visit(loop);
     }
 }
-
-}}
+}
+}
