@@ -4045,12 +4045,12 @@ private:
                 !b.type().is_max(ib) &&
                 is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
                 expr = Mod::make(a, make_const(a.type(), ib + 1));
-            } else if (const_uint(b, &ub)) {
-                if (b.type().is_max(ub)) {
-                    expr = a;
-                } else if (is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
-                    expr = Mod::make(a, make_const(a.type(), ub + 1));
-                }
+            } else if (const_uint(b, &ub) &&
+                       b.type().is_max(ub)) {
+                expr = a;
+            } else if (const_uint(b, &ub) &&
+                       is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
+                expr = Mod::make(a, make_const(a.type(), ub + 1));
             } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
             } else {
@@ -6188,6 +6188,11 @@ void simplify_test() {
     check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
     // Correctly triggers a warning:
     //check(cast(Int(16), x) << 20, cast(Int(16), x) << 20);
+
+    // Check bitwise_and. (Added as result of a bug.)
+    // TODO: more coverage of bitwise_and and bitwise_or.
+    check(cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa),
+          cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa));
 
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.
