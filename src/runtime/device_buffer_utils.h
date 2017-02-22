@@ -40,16 +40,16 @@ struct device_copy {
 
     void copy_memory_helper(int d, int64_t off) const {
         // Skip size-1 dimensions
-        while (extent[d] == 1 && d) d--;
+        while (extent[d] == 1 && d >= 0) d--;
 
-        if (d == 0) {
+        if (d == -1) {
             const void *from = (void *)(src + off);
             void *to = (void *)(dst + off);
             memcpy(to, from, chunk_size);
         } else {
             for (uint64_t i = 0; i < extent[d]; i++) {
                 copy_memory_helper(d - 1, off);
-                off += stride_bytes[d - 1];
+                off += stride_bytes[d];
             }
         }
     }
