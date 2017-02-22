@@ -314,11 +314,13 @@ Func CameraPipe::build() {
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
 
-    int strip_size = 128;
+    Expr strip_size = 32;
     int vec = get_target().natural_vector_size(UInt(16));
     if (get_target().has_feature(Target::HVX_64)) {
+        strip_size = 64;
         vec = 32;
     } else if (get_target().has_feature(Target::HVX_128)) {
+        strip_size = 128;
         vec = 64;
     }
     denoised.compute_at(processed, yi).store_at(processed, yo)
