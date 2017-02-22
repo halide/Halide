@@ -63,7 +63,7 @@ class FindBuffersToTrack : public IRVisitor {
     void visit(const Allocate *op) {
         debug(2) << "Buffers to track: Setting Allocate for loop " << op->name << " to " << static_cast<int>(device_api) << "\n";
         internal_assert(internal.find(op->name) == internal.end()) << "Duplicate Allocate node in FindBuffersToTrack.\n";
-        pair<map<string, DeviceAPI>::iterator, bool> it = internal.insert(make_pair(op->name, device_api));
+        auto it = internal.insert({ op->name, device_api });
         IRVisitor::visit(op);
         internal.erase(it.first);
     }

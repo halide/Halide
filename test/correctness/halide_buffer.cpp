@@ -37,8 +37,13 @@ int main(int argc, char **argv) {
         a.transpose(1, 2);
 
         a.fill(1.0f);
+
+        b.fill([&](int x, int y, int c) {
+            return x + 100.0f * y + 100000.0f * c;
+        });
+
         b.for_each_element([&](int x, int y, int c) {
-            b(x, y, c) = x + 100.0f * y + 100000.0f * c;
+            assert(b(x, y, c) == x + 100.0f * y + 100000.0f * c);
         });
 
         check_equal(a, a.copy());

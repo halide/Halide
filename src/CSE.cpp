@@ -89,7 +89,7 @@ public:
 
     GVN() : protect_loads_in_scope(false), number(0), cache(8) {}
 
-    Stmt mutate(const Stmt &s) {
+    Stmt mutate(Stmt s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
     }
@@ -98,9 +98,7 @@ public:
         return ExprWithCompareCache(e, &cache);
     }
 
-    Expr mutate(const Expr &e_in) {
-        Expr e = e_in;
-
+    Expr mutate(Expr e) {
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -276,7 +274,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(Expr e) {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
 
         if (iter != replacements.end()) {
@@ -297,7 +295,7 @@ class CSEEveryExprInStmt : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(Expr e) {
         return common_subexpression_elimination(e);
     }
 };
@@ -327,7 +325,7 @@ Expr common_subexpression_elimination(Expr e) {
         Expr old = e.expr;
         if (e.use_count > 1) {
             string name = unique_name('t');
-            lets.push_back(make_pair(name, e.expr));
+            lets.push_back({ name, e.expr });
             // Point references to this expr to the variable instead.
             replacements[e.expr] = Variable::make(e.expr.type(), name);
         }

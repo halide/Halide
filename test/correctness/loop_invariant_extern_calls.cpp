@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     Var x, y;
     Func f;
 
-    f(x, y) = my_func(0, Expr(0)) + my_func(1, y) + my_func(2, x);
+    f(x, y) = my_func(0, Expr(0)) + my_func(1, y) + my_func(2, x*32 + y);
 
     // llvm rightly refuses to lift loop invariants out of loops that
     // might have an extent of zero. It's possible wasted work.
@@ -40,11 +40,11 @@ int main(int argc, char **argv) {
     Buffer<int> im = f.realize(32, 32);
 
     // Check the result was what we expected
-    for (int i = 0; i < 32; i++) {
-        for (int j = 0; j < 32; j++) {
-            int correct = i + j;
-            if (im(i, j) != correct) {
-                printf("im[%d, %d] = %d instead of %d\n", i, j, im(i, j), correct);
+    for (int y = 0; y < 32; y++) {
+        for (int x = 0; x < 32; x++) {
+            int correct = y + 32*x + y;
+            if (im(x, y) != correct) {
+                printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
                 return -1;
             }
         }
