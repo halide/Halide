@@ -125,6 +125,24 @@ public:
     FindBuffersToTrack(const Target &t) : target(t), device_api(DeviceAPI::Host) {}
 };
 
+// Set the host field of any buffer_init calls on the given buffer to null.
+class NukeHostField : public IRMutator {
+    using IRMutator::visit;
+    void visit(const Call *call) {
+        if (call->is_intrinsic(Call::address_of)) {
+            const Load *l = call->args[0].as<Load>();
+            if (l->name == buf_name) {
+                expr = make_zero(Handle());
+                return;
+            }
+        }
+        IRMutator::visit(call);
+    }
+    std::string buf_name;
+public:
+    NukeHostField(const std::string &b) : buf_name(b) {}
+};
+
 class InjectBufferCopies : public IRMutator {
     using IRMutator::visit;
 
@@ -156,7 +174,7 @@ class InjectBufferCopies : public IRMutator {
                        dev_allocated(true),  // This is true unless we know for sure it is not allocated (this BufferInfo is from an Allocate node).
                        on_single_device(false),
                        device_first_touched(DeviceAPI::None), // Meaningless initial value
-                       current_device(DeviceAPI::Host) {}
+                       current_device(DeviceAPI::None) {}
     };
 
     map<string, BufferInfo> state;
@@ -321,7 +339,8 @@ class InjectBufferCopies : public IRMutator {
                 direction = ToDevice;
                 // If the buffer will need to be moved from one device to another,
                 // a host allocation will be required.
-                buf.host_touched = buf.host_touched || (buf.current_device != touching_device);
+                buf.host_touched = buf.host_touched || (buf.current_device != DeviceAPI::None &&
+                                                        buf.current_device != touching_device);
                 buf.dev_current = true;
                 buf.current_device = touching_device;
                 buf.host_current = buf.host_current && !device_wrote;
@@ -578,23 +597,6 @@ class InjectBufferCopies : public IRMutator {
             std::vector<Expr> create_buffer_args;
             internal_assert(buffer_init_let) << "Could not find definition of " << op->name << ".buffer\n";
 
-            class NukeHostField : public IRMutator {
-                using IRMutator::visit;
-                void visit(const Call *call) {
-                    if (call->is_intrinsic(Call::address_of)) {
-                        const Load *l = call->args[0].as<Load>();
-                        if (l->name == buf_name) {
-                            expr = make_zero(Handle());
-                            return;
-                        }
-                    }
-                    IRMutator::visit(call);
-                }
-                std::string buf_name;
-            public:
-                NukeHostField(const std::string &b) : buf_name(b) {}
-            };
-
             Expr buf = NukeHostField(op->name).mutate(buffer_init_let->value);
             stmt = LetStmt::make(op->name + ".buffer", buf, inner_body);
 
@@ -622,14 +624,9 @@ class InjectBufferCopies : public IRMutator {
                 return;
             }
 
-            Expr value = op->value;
             if (!state[buf_name].host_touched) {
                 // Use null as a host pointer if there's no host allocation
-                const Call *create_buffer = op->value.as<Call>();
-                internal_assert(create_buffer && create_buffer->name == Call::buffer_init);
-                vector<Expr> args = create_buffer->args;
-                args[1] = make_zero(Handle());
-                value = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init, args, Call::Extern);
+                Expr value = NukeHostField(buf_name).mutate(op->value);
                 stmt = LetStmt::make(op->name, value, op->body);
             }
         }
