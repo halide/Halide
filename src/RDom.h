@@ -185,7 +185,7 @@ class RDom {
 
     template <typename... Args>
     NO_INLINE void initialize_from_ranges(std::vector<std::pair<Expr, Expr>> &ranges, Expr min, Expr extent, Args&&... args) {
-        ranges.push_back(std::make_pair(min, extent));
+        ranges.push_back({ min, extent });
         initialize_from_ranges(ranges, std::forward<Args>(args)...);
     }
 

@@ -19,7 +19,7 @@ class UnifyDuplicateLets : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(const Expr &e) {
+    Expr mutate(Expr e) {
 
         if (e.defined()) {
             map<Expr, string, IRDeepCompare>::iterator iter = scope.find(e);
