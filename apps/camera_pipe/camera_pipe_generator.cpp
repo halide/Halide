@@ -313,14 +313,20 @@ Func CameraPipe::build() {
     // Schedule
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
+    Expr strip_size;
+    if (get_target().has_feature(Target::HVX_128)) {
+        strip_size = processed.output_buffer().dim(1).extent() / 2;
+    } else if (get_target().has_feature(Target::HVX_64)) {
+        strip_size = processed.output_buffer().dim(1).extent() / 4;
+    } else {
+        strip_size = 32;
+    }
+    strip_size = (strip_size / 2) * 2;
 
-    Expr strip_size = 32;
     int vec = get_target().natural_vector_size(UInt(16));
     if (get_target().has_feature(Target::HVX_64)) {
-        strip_size = 64;
         vec = 32;
     } else if (get_target().has_feature(Target::HVX_128)) {
-        strip_size = 128;
         vec = 64;
     }
     denoised.compute_at(processed, yi).store_at(processed, yo)
