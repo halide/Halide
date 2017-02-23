@@ -178,6 +178,17 @@ private:
         }
     }
 
+    void visit(const Shuffle *op) {
+        IRMutator::visit(op);
+        if (op->is_extract_element() && op->type.is_bool()) {
+            op = expr.as<Shuffle>();
+            internal_assert(op);
+            // This is extracting a scalar element of a bool
+            // vector. Generate a call to extract_mask_element.
+            expr = Call::make(Bool(), Call::extract_mask_element, {Shuffle::make_concat(op->vectors), op->indices[0]}, Call::PureIntrinsic);
+        }
+    }
+
     template <typename NodeType, typename LetType>
     NodeType visit_let(const LetType *op) {
         Expr value = mutate(op->value);

@@ -11,7 +11,6 @@ using std::map;
 using std::string;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::set;
 
 // Figure out the region touched of each buffer, and deposit them as

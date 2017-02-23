@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
-#include <stdlib.h>
+
+#include "testing.h"
 
 using namespace Halide;
 
@@ -17,7 +18,7 @@ int test_per_channel_select() {
     gpu(x, y, c) = cast<uint8_t>(select(c == 0, 128,
                                         c == 1, x,
                                         c == 2, y,
-                                        x*y));
+                                        x * y));
     gpu.bound(c, 0, 4);
     gpu.glsl(x, y, c);
     gpu.compute_root();
@@ -28,26 +29,14 @@ int test_per_channel_select() {
     cpu.realize(out, target);
 
     // Verify the result
-    for (int y=0; y!=out.height(); ++y) {
-        for (int x=0; x!=out.width(); ++x) {
-            for (int c=0; c!=out.channels(); ++c) {
-                uint8_t expected;
-                switch (c) {
-                    case 0: expected = 128; break;
-                    case 1: expected = x; break;
-                    case 2: expected = y; break;
-                    default: expected = x*y; break;
-                }
-                uint8_t actual  = out(x,y,c);
-
-                if (expected != actual) {
-                    fprintf(stderr, "Incorrect pixel (%d, %d, %d, %d) at x=%d y=%d.\n",
-                            out(x, y, 0), out(x, y, 1), out(x, y, 2), out(x, y, 3),
-                            x, y);
-                    return 1;
-                }
-            }
-        }
+    if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) {
+	    switch (c) {
+		case 0: return 128;
+		case 1: return x;
+		case 2: return y;
+		default: return x*y;
+	    } })) {
+        return 1;
     }
 
     return 0;
@@ -81,20 +70,10 @@ int test_flag_scalar_select() {
     cpu.realize(out, target);
 
     // Verify the result
-    for (int y=0; y!=out.height(); ++y) {
-        for (int x=0; x!=out.width(); ++x) {
-            for (int c=0; c!=out.channels(); ++c) {
-                uint8_t expected = !flag_value ? 255 : 128;
-                uint8_t actual  = out(x,y,c);
-
-                if (expected != actual) {
-                    fprintf(stderr, "Incorrect pixel (%d, %d, %d, %d) at x=%d y=%d.\n",
-                            out(x, y, 0), out(x, y, 1), out(x, y, 2), out(x, y, 3),
-                            x, y);
-                    return 1;
-                }
-            }
-        }
+    if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) {
+            return !flag_value ? 255 : 128;
+        })) {
+        return 1;
     }
 
     return 0;
@@ -116,15 +95,15 @@ int test_flag_pixel_select() {
     flag.set(flag_value);
 
     Buffer<uint8_t> image(10, 10, 4);
-    for (int y=0; y<image.height(); y++) {
-        for (int x=0; x<image.width(); x++) {
-            for (int c=0; c<image.channels(); c++) {
+    for (int y = 0; y < image.height(); y++) {
+        for (int x = 0; x < image.width(); x++) {
+            for (int c = 0; c < image.channels(); c++) {
                 image(x, y, c) = 128;
             }
         }
     }
 
-    gpu(x, y, c) = cast<uint8_t>(select(flag != 0, image(x,y,c),
+    gpu(x, y, c) = cast<uint8_t>(select(flag != 0, image(x, y, c),
                                         255));
     gpu.bound(c, 0, 4);
     gpu.glsl(x, y, c);
@@ -137,20 +116,10 @@ int test_flag_pixel_select() {
     cpu.realize(out, target);
 
     // Verify the result
-    for (int y=0; y!=out.height(); ++y) {
-        for (int x=0; x!=out.width(); ++x) {
-            for (int c=0; c!=out.channels(); ++c) {
-                uint8_t expected = !flag_value ? 255 : 128;
-                uint8_t actual  = out(x,y,c);
-
-                if (expected != actual) {
-                    fprintf(stderr, "Incorrect pixel (%d, %d, %d, %d) at x=%d y=%d.\n",
-                            out(x, y, 0), out(x, y, 1), out(x, y, 2), out(x, y, 3),
-                            x, y);
-                    return 1;
-                }
-            }
-        }
+    if (!Testing::check_result<uint8_t>(out, [&](int x, int y, int c) {
+            return !flag_value ? 255 : 128;
+        })) {
+        return 1;
     }
 
     return 0;

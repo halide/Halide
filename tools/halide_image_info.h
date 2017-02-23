@@ -19,9 +19,9 @@
 #include <iomanip>
 #include <sstream>
 #include <stdint.h>
+#include <vector>
 
 #include "HalideRuntime.h"
-
 #include "HalideBuffer.h"
 
 namespace Halide {
@@ -37,7 +37,7 @@ static inline void print_dimid(int d, int val) {
     }
 }
 
-static inline void print_loc(int32_t *loc, int dim, int32_t *min) {
+static inline void print_loc(const std::vector<int32_t> &loc, int dim, const int32_t *min) {
     for (int d = 0; d < dim; d++) {
         if (d) { 
             std::cout << ",";
@@ -70,7 +70,7 @@ static inline void print_memalign(intptr_t val) {
 }
 
 template<typename T>
-void info(Buffer<T> &img, const char *tag = "Buffer") {
+void info(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -78,7 +78,7 @@ void info(Buffer<T> &img, const char *tag = "Buffer") {
     int dim = img.dimensions();
     int img_bpp = buf->elem_size;
     int img_tsize = sizeof(T);
-    int img_csize = sizeof(Buffer<T>);
+    int img_csize = sizeof(Runtime::Buffer<T>);
     int img_bsize = sizeof(buffer_t);
     int32_t size = 1;
     uint64_t dev = buf->dev;
@@ -167,7 +167,7 @@ void info(Buffer<T> &img, const char *tag = "Buffer") {
 }
 
 template<typename T>
-void dump(Buffer<T> &img, const char *tag = "Buffer") {
+void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -185,7 +185,7 @@ void dump(Buffer<T> &img, const char *tag = "Buffer") {
 
     // Arbitrary dimension image traversal
     const T *ptr = img.data();
-    int32_t curloc[dim];
+    std::vector<int32_t> curloc(dim);
     for (int d = 1; d < dim; d++) {
         curloc[d] = -1;
     }
@@ -231,7 +231,7 @@ void dump(Buffer<T> &img, const char *tag = "Buffer") {
 }
 
 template<typename T>
-void stats(Buffer<T> &img, const char *tag = "Buffer") {
+void stats(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -248,7 +248,7 @@ void stats(Buffer<T> &img, const char *tag = "Buffer") {
 
     // Arbitrary dimension image traversal
     const T *ptr = img.data();
-    int32_t curloc[dim];
+    std::vector<int32_t> curloc(dim);
     for (int d = 1; d < dim; d++) {
         curloc[d] = -1;
     }
@@ -259,8 +259,8 @@ void stats(Buffer<T> &img, const char *tag = "Buffer") {
     double sum = 0;
     T minval = *ptr;
     T maxval = *ptr;
-    int32_t minloc[dim];
-    int32_t maxloc[dim];
+    std::vector<int32_t> minloc(dim);
+    std::vector<int32_t> maxloc(dim);
     for (int d = 0; d < dim; d++) {
         minloc[d] = 0;
         maxloc[d] = 0;

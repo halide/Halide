@@ -28,7 +28,6 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::pair;
-using std::make_pair;
 using std::ostringstream;
 using std::vector;
 
@@ -38,7 +37,7 @@ using std::vector;
 namespace {
 
 // Things that we can constant fold: Immediates and broadcasts of immediates.
-bool is_simple_const(Expr e) {
+bool is_simple_const(const Expr &e) {
     if (e.as<IntImm>()) return true;
     if (e.as<UIntImm>()) return true;
     // Don't consider NaN to be a "simple const", since it doesn't obey equality rules assumed elsewere
@@ -53,7 +52,7 @@ bool is_simple_const(Expr e) {
 // If the Expr is (var relop const) or (const relop var),
 // fill in the var name and return true.
 template<typename RelOp>
-bool is_var_relop_simple_const(Expr e, string* name) {
+bool is_var_relop_simple_const(const Expr &e, string* name) {
     if (const RelOp *r = e.as<RelOp>()) {
         if (is_simple_const(r->b)) {
             const Variable *v = r->a.template as<Variable>();
@@ -73,7 +72,7 @@ bool is_var_relop_simple_const(Expr e, string* name) {
     return false;
 }
 
-bool is_var_simple_const_comparison(Expr e, string* name) {
+bool is_var_simple_const_comparison(const Expr &e, string* name) {
     // It's not clear if GT, LT, etc would be useful
     // here; leaving them out until proven otherwise.
     return is_var_relop_simple_const<EQ>(e, name) ||
@@ -112,7 +111,7 @@ Expr indeterminate_expression_error(Type t) {
 // If 'e' is indeterminate_expression of other type,
 //      make a new indeterminate_expression of the proper type, set *expr to it and return true.
 // Otherwise, leave *expr untouched and return false.
-bool propagate_indeterminate_expression(Expr e, Type t, Expr *expr) {
+bool propagate_indeterminate_expression(const Expr &e, Type t, Expr *expr) {
     const Call *call = e.as<Call>();
     if (call && call->is_intrinsic(Call::indeterminate_expression)) {
         if (call->type != t) {
@@ -125,12 +124,12 @@ bool propagate_indeterminate_expression(Expr e, Type t, Expr *expr) {
     return false;
 }
 
-bool propagate_indeterminate_expression(Expr e0, Expr e1, Type t, Expr *expr) {
+bool propagate_indeterminate_expression(const Expr &e0, const Expr &e1, Type t, Expr *expr) {
     return propagate_indeterminate_expression(e0, t, expr) ||
            propagate_indeterminate_expression(e1, t, expr);
 }
 
-bool propagate_indeterminate_expression(Expr e0, Expr e1, Expr e2, Type t, Expr *expr) {
+bool propagate_indeterminate_expression(const Expr &e0, const Expr &e1, const Expr &e2, Type t, Expr *expr) {
     return propagate_indeterminate_expression(e0, t, expr) ||
            propagate_indeterminate_expression(e1, t, expr) ||
            propagate_indeterminate_expression(e2, t, expr);
@@ -162,7 +161,7 @@ public:
 
 /** Test if an expression's value could be different at different
  * points in the code. */
-bool expr_is_pure(Expr e) {
+bool expr_is_pure(const Expr &e) {
     ExprIsPure pure;
     e.accept(&pure);
     return pure.result;
@@ -185,7 +184,7 @@ public:
             int64_t i_min, i_max;
             if (const_int(iter.value().min, &i_min) &&
                 const_int(iter.value().max, &i_max)) {
-                bounds_info.push(iter.name(), make_pair(i_min, i_max));
+                bounds_info.push(iter.name(), { i_min, i_max });
             }
         }
 
@@ -244,7 +243,7 @@ private:
     // the large chains of conditions in the visit methods
     // below. Unlike the versions in IROperator, these only match
     // scalars.
-    bool const_float(Expr e, double *f) {
+    bool const_float(const Expr &e, double *f) {
         if (e.type().is_vector()) {
             return false;
         } else if (const double *p = as_const_float(e)) {
@@ -255,7 +254,7 @@ private:
         }
     }
 
-    bool const_int(Expr e, int64_t *i) {
+    bool const_int(const Expr &e, int64_t *i) {
         if (e.type().is_vector()) {
             return false;
         } else if (const int64_t *p = as_const_int(e)) {
@@ -266,7 +265,7 @@ private:
         }
     }
 
-    bool const_uint(Expr e, uint64_t *u) {
+    bool const_uint(const Expr &e, uint64_t *u) {
         if (e.type().is_vector()) {
             return false;
         } else if (const uint64_t *p = as_const_uint(e)) {
@@ -283,7 +282,7 @@ private:
     // it constant-folds. For some expressions the bounds of the
     // expression is at least as complex as the expression, so
     // recursively mutating the bounds causes havoc.
-    bool const_int_bounds(Expr e, int64_t *min_val, int64_t *max_val) {
+    bool const_int_bounds(const Expr &e, int64_t *min_val, int64_t *max_val) {
         Type t = e.type();
 
         if (const int64_t *i = as_const_int(e)) {
@@ -424,7 +423,7 @@ private:
 
     // Check if an Expr is integer-division-rounding-up by the given
     // factor. If so, return the core expression.
-    Expr is_round_up_div(Expr e, int64_t factor) {
+    Expr is_round_up_div(const Expr &e, int64_t factor) {
         if (!no_overflow(e.type())) return Expr();
         const Div *div = e.as<Div>();
         if (!div) return Expr();
@@ -437,7 +436,7 @@ private:
 
     // Check if an Expr is a rounding-up operation, and if so, return
     // the factor.
-    Expr is_round_up(Expr e, int64_t *factor) {
+    Expr is_round_up(const Expr &e, int64_t *factor) {
         if (!no_overflow(e.type())) return Expr();
         const Mul *mul = e.as<Mul>();
         if (!mul) return Expr();
@@ -3290,6 +3289,7 @@ private:
         const Not *not_b = b.as<Not>();
         const Variable *var_a = a.as<Variable>();
         const Variable *var_b = b.as<Variable>();
+        int64_t ia = 0, ib = 0;
 
         if (is_one(a)) {
             expr = b;
@@ -3350,6 +3350,74 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b && b <= a
             expr = const_false(op->type.lanes());
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->a, lt_b->b) &&
+                   const_int(lt_a->b, &ia) &&
+                   const_int(lt_b->a, &ib) &&
+                   ib + 1 >= ia) {
+            // (a < ia && ib < a) where there is no integer a s.t. ib < a < ia
+            expr = const_false(op->type.lanes());
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->b, lt_b->a) &&
+                   const_int(lt_b->b, &ia) &&
+                   const_int(lt_a->a, &ib) &&
+                   ib + 1 >= ia) {
+            // (ib < a && a < ia) where there is no integer a s.t. ib < a < ia
+            expr = const_false(op->type.lanes());
+
+        } else if (le_a &&
+                   lt_b &&
+                   equal(le_a->a, lt_b->b) &&
+                   const_int(le_a->b, &ia) &&
+                   const_int(lt_b->a, &ib) &&
+                   ib >= ia) {
+            // (a <= ia && ib < a) where there is no integer a s.t. ib < a <= ia
+            expr = const_false(op->type.lanes());
+        } else if (le_a &&
+                   lt_b &&
+                   equal(le_a->b, lt_b->a) &&
+                   const_int(lt_b->b, &ia) &&
+                   const_int(le_a->a, &ib) &&
+                   ib >= ia) {
+            // (ib <= a && a < ia) where there is no integer a s.t. ib < a <= ia
+            expr = const_false(op->type.lanes());
+
+        } else if (lt_a &&
+                   le_b &&
+                   equal(lt_a->a, le_b->b) &&
+                   const_int(lt_a->b, &ia) &&
+                   const_int(le_b->a, &ib) &&
+                   ib >= ia) {
+            // (a < ia && ib <= a) where there is no integer a s.t. ib <= a < ia
+            expr = const_false(op->type.lanes());
+        } else if (lt_a &&
+                   le_b &&
+                   equal(lt_a->b, le_b->a) &&
+                   const_int(le_b->b, &ia) &&
+                   const_int(lt_a->a, &ib) &&
+                   ib >= ia) {
+            // (ib < a && a <= ia) where there is no integer a s.t. ib <= a < ia
+            expr = const_false(op->type.lanes());
+
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->a, le_b->b) &&
+                   const_int(le_a->b, &ia) &&
+                   const_int(le_b->a, &ib) &&
+                   ib > ia) {
+            // (a <= ia && ib <= a) where there is no integer a s.t. ib <= a <= ia
+            expr = const_false(op->type.lanes());
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->b, le_b->a) &&
+                   const_int(le_b->b, &ia) &&
+                   const_int(le_a->a, &ib) &&
+                   ib > ia) {
+            // (ib <= a && a <= ia) where there is no integer a s.t. ib <= a <= ia
+            expr = const_false(op->type.lanes());
+
         } else if (eq_a &&
                    neq_b &&
                    equal(eq_a->a, neq_b->a) &&
@@ -3418,6 +3486,7 @@ private:
         const And *and_a = a.as<And>();
         const And *and_b = b.as<And>();
         string name_a, name_b, name_c;
+        int64_t ia = 0, ib = 0;
 
         if (is_one(a)) {
             expr = a;
@@ -3457,6 +3526,71 @@ private:
                    equal(lt_a->b, le_b->a)) {
             // a < b || b <= a
             expr = const_true(op->type.lanes());
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->a, lt_b->b) &&
+                   const_int(lt_a->b, &ia) &&
+                   const_int(lt_b->a, &ib) &&
+                   ib < ia) {
+            // (a < ia || ib < a) where ib < ia
+            expr = const_true(op->type.lanes());
+        } else if (lt_a &&
+                   lt_b &&
+                   equal(lt_a->b, lt_b->a) &&
+                   const_int(lt_b->b, &ia) &&
+                   const_int(lt_a->a, &ib) &&
+                   ib < ia) {
+            // (ib < a || a < ia) where ib < ia
+            expr = const_true(op->type.lanes());
+        } else if (le_a &&
+                   lt_b &&
+                   equal(le_a->a, lt_b->b) &&
+                   const_int(le_a->b, &ia) &&
+                   const_int(lt_b->a, &ib) &&
+                   ib <= ia) {
+            // (a <= ia || ib < a) where ib <= ia
+            expr = const_true(op->type.lanes());
+        } else if (le_a &&
+                   lt_b &&
+                   equal(le_a->b, lt_b->a) &&
+                   const_int(lt_b->b, &ia) &&
+                   const_int(le_a->a, &ib) &&
+                   ib <= ia) {
+            // (ib <= a || a < ia) where ib <= ia
+            expr = const_true(op->type.lanes());
+        } else if (lt_a &&
+                   le_b &&
+                   equal(lt_a->a, le_b->b) &&
+                   const_int(lt_a->b, &ia) &&
+                   const_int(le_b->a, &ib) &&
+                   ib <= ia) {
+            // (a < ia || ib <= a) where ib <= ia
+            expr = const_true(op->type.lanes());
+        } else if (lt_a &&
+                   le_b &&
+                   equal(lt_a->b, le_b->a) &&
+                   const_int(le_b->b, &ia) &&
+                   const_int(lt_a->a, &ib) &&
+                   ib <= ia) {
+            // (ib < a || a <= ia) where ib <= ia
+            expr = const_true(op->type.lanes());
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->a, le_b->b) &&
+                   const_int(le_a->b, &ia) &&
+                   const_int(le_b->a, &ib) &&
+                   ib <= ia + 1) {
+            // (a <= ia || ib <= a) where ib <= ia + 1
+            expr = const_true(op->type.lanes());
+        } else if (le_a &&
+                   le_b &&
+                   equal(le_a->b, le_b->a) &&
+                   const_int(le_b->b, &ia) &&
+                   const_int(le_a->a, &ib) &&
+                   ib <= ia + 1) {
+            // (ib <= a || a <= ia) where ib <= ia + 1
+            expr = const_true(op->type.lanes());
+
         } else if (broadcast_a &&
                    broadcast_b &&
                    broadcast_a->lanes == broadcast_b->lanes) {
@@ -3778,7 +3912,7 @@ private:
                         then_case = substitute(var->name, eq->b, then_case);
                     }
                     if (!and_chain && eq->b.type().is_bool()) {
-                        else_case = substitute(var->name, !eq->b, else_case); 
+                        else_case = substitute(var->name, !eq->b, else_case);
                     }
                 } else if (var) {
                     if (!or_chain) {
@@ -3911,12 +4045,12 @@ private:
                 !b.type().is_max(ib) &&
                 is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
                 expr = Mod::make(a, make_const(a.type(), ib + 1));
-            } else if (const_uint(b, &ub)) {
-                if (b.type().is_max(ub)) {
-                    expr = a;
-                } else if (is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
-                    expr = Mod::make(a, make_const(a.type(), ub + 1));
-                }
+            } else if (const_uint(b, &ub) &&
+                       b.type().is_max(ub)) {
+                expr = a;
+            } else if (const_uint(b, &ub) &&
+                       is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
+                expr = Mod::make(a, make_const(a.type(), ub + 1));
             } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
             } else {
@@ -4111,36 +4245,100 @@ private:
     }
 
     void visit(const Shuffle *op) {
-        if (op->is_interleave()) {
-            // Mutate the vectors
-            vector<Expr> new_vectors;
-            bool changed = false;
-            for (Expr vector : op->vectors) {
-                Expr new_vector = mutate(vector);
-                if (!vector.same_as(new_vector)) {
-                    changed = true;
-                }
-                new_vectors.push_back(new_vector);
+        if (op->is_extract_element() &&
+            (op->vectors[0].as<Ramp>() ||
+             op->vectors[0].as<Broadcast>())) {
+            // Extracting a single lane of a ramp or broadcast
+            if (const Ramp *r = op->vectors[0].as<Ramp>()) {
+                expr = mutate(r->base + op->indices[0]*r->stride);
+            } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
+                expr = mutate(b->value);
+            } else {
+                internal_error << "Unreachable";
             }
-            int terms = (int)new_vectors.size();
+            return;
+        }
 
-            // Try to collapse an interleave of broadcast into a single broadcast.
-            const Broadcast *b1 = new_vectors[0].as<Broadcast>();
-            if (b1) {
-                bool can_collapse = true;
-                for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
-                    if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
-                        Expr check = mutate(b1->value - b2->value);
-                        can_collapse &= is_zero(check);
+        // Mutate the vectors
+        vector<Expr> new_vectors;
+        bool changed = false;
+        for (Expr vector : op->vectors) {
+            Expr new_vector = mutate(vector);
+            if (!vector.same_as(new_vector)) {
+                changed = true;
+            }
+            new_vectors.push_back(new_vector);
+        }
+
+        // Only try to simplify shuffles of loads that aren't concats
+        // of vectors. This is a bit of a hacky heuristic to avoid
+        // undoing the work of AlignLoads for Hexagon.
+        if (!op->is_concat() || new_vectors[0].type().is_scalar()) {
+            // Try to convert a load with shuffled indices into a
+            // shuffle of a dense load.
+            if (const Load *first_load = new_vectors[0].as<Load>()) {
+                vector<Expr> load_predicates;
+                vector<Expr> load_indices;
+                bool unpredicated = true;
+                for (Expr e : new_vectors) {
+                    const Load *load = e.as<Load>();
+                    if (load && load->name == first_load->name) {
+                        load_predicates.push_back(load->predicate);
+                        load_indices.push_back(load->index);
+                        unpredicated = unpredicated && is_one(load->predicate);
                     } else {
-                        can_collapse = false;
+                        break;
                     }
                 }
-                if (can_collapse) {
-                    expr = Broadcast::make(b1->value, b1->lanes * terms);
-                    return;
+
+                if (load_indices.size() == new_vectors.size()) {
+                    Type t = load_indices[0].type().with_lanes(op->indices.size());
+                    Expr shuffled_index = Shuffle::make(load_indices, op->indices);
+                    shuffled_index = mutate(shuffled_index);
+                    Expr shuffled_predicate;
+                    if (unpredicated) {
+                        shuffled_predicate = const_true(t.lanes());
+                    } else {
+                        shuffled_predicate = Shuffle::make(load_predicates, op->indices);
+                        shuffled_predicate = mutate(shuffled_predicate);
+                    }
+                    if (shuffled_index.as<Ramp>()) {
+                        t = first_load->type;
+                        t = t.with_lanes(op->indices.size());
+                        expr = Load::make(t, first_load->name, shuffled_index, first_load->image,
+                                          first_load->param, shuffled_predicate);
+                        return;
+                    }
                 }
             }
+        }
+
+        // Try to collapse a shuffle of broadcasts into a single
+        // broadcast. Note that it doesn't matter what the indices
+        // are.
+        const Broadcast *b1 = new_vectors[0].as<Broadcast>();
+        if (b1) {
+            bool can_collapse = true;
+            for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
+                if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
+                    Expr check = mutate(b1->value - b2->value);
+                    can_collapse &= is_zero(check);
+                } else {
+                    can_collapse = false;
+                }
+            }
+            if (can_collapse) {
+                if (op->indices.size() == 1) {
+                    expr = b1->value;
+                } else {
+                    expr = Broadcast::make(b1->value, op->indices.size());
+                }
+                return;
+            }
+        }
+
+        if (op->is_interleave()) {
+            int terms = (int)new_vectors.size();
 
             // Try to collapse an interleave of ramps into a single ramp.
             const Ramp *r = new_vectors[0].as<Ramp>();
@@ -4168,60 +4366,99 @@ private:
                 }
             }
 
-            // Try to collapse an interleave of strided loads of ramps
-            // from the same buffer into a single load of a ramp.
-            if (const Load *first_load = new_vectors[0].as<Load>()) {
-                vector<Expr> load_predicates;
-                vector<Expr> load_indices;
-                bool always_true = true;
-                for (Expr e : new_vectors) {
-                    const Load *load = e.as<Load>();
-                    if (load && load->name == first_load->name) {
-                        load_predicates.push_back(load->predicate);
-                        load_indices.push_back(load->index);
-                        always_true = always_true && is_one(load->predicate);
-                    }
-                }
+            // Try to collapse an interleave of slices of vectors from
+            // the same vector into a single vector.
+            if (const Shuffle *first_shuffle = new_vectors[0].as<Shuffle>()) {
+                if (first_shuffle->is_slice()) {
+                    bool can_collapse = true;
+                    for (size_t i = 0; i < new_vectors.size() && can_collapse; i++) {
+                        const Shuffle *i_shuffle = new_vectors[i].as<Shuffle>();
 
-                if ((int)load_indices.size() == terms) {
-                    Type t = load_indices[0].type().with_lanes(load_indices[0].type().lanes() * terms);
-                    Expr interleaved_index = Shuffle::make_interleave(load_indices);
-                    interleaved_index = mutate(interleaved_index);
-                    Expr interleaved_predicate;
-                    if (always_true) {
-                        interleaved_predicate = const_true(t.lanes());
-                    } else {
-                        interleaved_predicate = Shuffle::make_interleave(load_predicates);
-                        interleaved_predicate = mutate(interleaved_predicate);
+                        // Check that the current shuffle is a slice...
+                        if (!i_shuffle || !i_shuffle->is_slice()) {
+                            can_collapse = false;
+                            break;
+                        }
+
+                        // ... and that it is a slice in the right place...
+                        if (i_shuffle->slice_begin() != (int)i || i_shuffle->slice_stride() != terms) {
+                            can_collapse = false;
+                            break;
+                        }
+
+                        if (i > 0) {
+                            // ... and that the vectors being sliced are the same.
+                            if (first_shuffle->vectors.size() != i_shuffle->vectors.size()) {
+                                can_collapse = false;
+                                break;
+                            }
+
+                            for (size_t j = 0; j < first_shuffle->vectors.size() && can_collapse; j++) {
+                                if (!equal(first_shuffle->vectors[j], i_shuffle->vectors[j])) {
+                                    can_collapse = false;
+                                }
+                            }
+                        }
                     }
-                    if (interleaved_index.as<Ramp>()) {
-                        t = first_load->type;
-                        t = t.with_lanes(t.lanes() * terms);
-                        expr = Load::make(t, first_load->name, interleaved_index, first_load->image,
-                                          first_load->param, interleaved_predicate);
+
+                    if (can_collapse) {
+                        expr = Shuffle::make_concat(first_shuffle->vectors);
                         return;
                     }
                 }
             }
+        } else if (op->is_concat()) {
+            // Try to collapse a concat of ramps into a single ramp.
+            const Ramp *r = new_vectors[0].as<Ramp>();
+            if (r) {
+                bool can_collapse = true;
+                for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
+                    Expr diff;
+                    if (new_vectors[i].type().lanes() == new_vectors[i-1].type().lanes()) {
+                        diff = mutate(new_vectors[i] - new_vectors[i-1]);
+                    }
 
-            if (!changed) {
-                expr = op;
-            } else {
-                expr = Shuffle::make_interleave(new_vectors);
+                    const Broadcast *b = diff.as<Broadcast>();
+                    if (b) {
+                        Expr check = mutate(b->value - r->stride * new_vectors[i-1].type().lanes());
+                        can_collapse &= is_zero(check);
+                    } else {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    expr = Ramp::make(r->base, r->stride, op->indices.size());
+                    return;
+                }
             }
-        } else if (op->indices.size() == 1 &&
-                   (op->vectors[0].as<Ramp>() ||
-                    op->vectors[0].as<Broadcast>())) {
-            // Extracting a single lane of a ramp or broadcast
-            if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-                expr = mutate(r->base + op->indices[0]*r->stride);
-            } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
-                expr = mutate(b->value);
-            } else {
-                internal_error << "Unreachable";
+
+            // Try to collapse a concat of scalars into a ramp.
+            if (new_vectors[0].type().is_scalar() && new_vectors[1].type().is_scalar()) {
+                bool can_collapse = true;
+                Expr stride = mutate(new_vectors[1] - new_vectors[0]);
+                for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
+                    if (!new_vectors[i].type().is_scalar()) {
+                        can_collapse = false;
+                        break;
+                    }
+
+                    Expr check = mutate(new_vectors[i] - new_vectors[i - 1] - stride);
+                    if (!is_zero(check)) {
+                        can_collapse = false;
+                    }
+                }
+
+                if (can_collapse) {
+                    expr = Ramp::make(new_vectors[0], stride, op->indices.size());
+                    return;
+                }
             }
+        }
+
+        if (!changed) {
+            expr = op;
         } else {
-            IRMutator::visit(op);
+            expr = Shuffle::make(new_vectors, op->indices);
         }
     }
 
@@ -4394,7 +4631,7 @@ private:
             }
             int64_t val_min, val_max;
             if (const_int_bounds(new_value, &val_min, &val_max)) {
-                bounds_info.push(new_name, make_pair(val_min, val_max));
+                bounds_info.push(new_name, { val_min, val_max });
                 new_value_bounds_tracked = true;
             }
         }
@@ -4407,7 +4644,7 @@ private:
             }
             int64_t val_min, val_max;
             if (const_int_bounds(value, &val_min, &val_max)) {
-                bounds_info.push(op->name, make_pair(val_min, val_max));
+                bounds_info.push(op->name, { val_min, val_max });
                 value_bounds_tracked = true;
             }
         }
@@ -4496,7 +4733,7 @@ private:
             const_int(new_extent, &new_extent_int)) {
             bounds_tracked = true;
             int64_t new_max_int = new_min_int + new_extent_int - 1;
-            bounds_info.push(op->name, make_pair(new_min_int, new_max_int));
+            bounds_info.push(op->name, { new_min_int, new_max_int });
         }
 
         Stmt new_body = mutate(op->body);
@@ -4714,7 +4951,7 @@ bool can_prove(Expr e) {
 
 namespace {
 
-void check(Expr a, Expr b) {
+void check(const Expr &a, const Expr &b) {
     //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a);
     if (!equal(simpler, b)) {
@@ -4726,7 +4963,7 @@ void check(Expr a, Expr b) {
     }
 }
 
-void check(Stmt a, Stmt b) {
+void check(const Stmt &a, const Stmt &b) {
     //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Stmt simpler = simplify(a);
     if (!equal(simpler, b)) {
@@ -4738,7 +4975,7 @@ void check(Stmt a, Stmt b) {
     }
 }
 
-void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
+void check_in_bounds(const Expr &a, const Expr &b, const Scope<Interval> &bi) {
     //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a, true, bi);
     if (!equal(simpler, b)) {
@@ -4751,15 +4988,23 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
 }
 
 // Helper functions to use in the tests below
-Expr interleave_vectors(vector<Expr> e) {
+Expr interleave_vectors(const vector<Expr> &e) {
     return Shuffle::make_interleave(e);
 }
 
-Expr ramp(Expr base, Expr stride, int w) {
+Expr concat_vectors(const vector<Expr> &e) {
+    return Shuffle::make_concat(e);
+}
+
+Expr slice(const Expr &e, int begin, int stride, int w) {
+    return Shuffle::make_slice(e, begin, stride, w);
+}
+
+Expr ramp(const Expr &base, const Expr &stride, int w) {
     return Ramp::make(base, stride, w);
 }
 
-Expr broadcast(Expr base, int w) {
+Expr broadcast(const Expr &base, int w) {
     return Broadcast::make(base, w);
 }
 
@@ -5465,6 +5710,42 @@ void check_boolean() {
     check((x == 1) || (x != 1), t);
     check((x != 1) || (x == 1), t);
 
+    check(x < 20 || x > 19, t);
+    check(x > 19 || x < 20, t);
+    check(x < 20 || x > 20, x < 20 || 20 < x);
+    check(x > 20 || x < 20, 20 < x || x < 20);
+    check(x < 20 && x > 19, f);
+    check(x > 19 && x < 20, f);
+    check(x < 20 && x > 18, x < 20 && 18 < x);
+    check(x > 18 && x < 20, 18 < x && x < 20);
+
+    check(x <= 20 || x > 19, t);
+    check(x > 19 || x <= 20, t);
+    check(x <= 18 || x > 20, x <= 18 || 20 < x);
+    check(x > 20 || x <= 18, 20 < x || x <= 18);
+    check(x <= 18 && x > 19, f);
+    check(x > 19 && x <= 18, f);
+    check(x <= 20 && x > 19, x <= 20 && 19 < x);
+    check(x > 19 && x <= 20, 19 < x && x <= 20);
+
+    check(x < 20 || x >= 19, t);
+    check(x >= 19 || x < 20, t);
+    check(x < 18 || x >= 20, x < 18 || 20 <= x);
+    check(x >= 20 || x < 18, 20 <= x || x < 18);
+    check(x < 18 && x >= 19, f);
+    check(x >= 19 && x < 18, f);
+    check(x < 20 && x >= 19, x < 20 && 19 <= x);
+    check(x >= 19 && x < 20, 19 <= x && x < 20);
+
+    check(x <= 20 || x >= 21, t);
+    check(x >= 21 || x <= 20, t);
+    check(x <= 18 || x >= 20, x <= 18 || 20 <= x);
+    check(x >= 20 || x <= 18, 20 <= x || x <= 18);
+    check(x <= 18 && x >= 19, f);
+    check(x >= 19 && x <= 18, f);
+    check(x <= 20 && x >= 20, x <= 20 && 20 <= x);
+    check(x >= 20 && x <= 20, 20 <= x && x <= 20);
+
     // check for substitution patterns
     check((b1 == t) && (b1 && b2), (b1 == t) && b2);
     check((b1 && b2) && (b1 == t), b2 && (b1 == t));
@@ -5908,6 +6189,11 @@ void simplify_test() {
     // Correctly triggers a warning:
     //check(cast(Int(16), x) << 20, cast(Int(16), x) << 20);
 
+    // Check bitwise_and. (Added as result of a bug.)
+    // TODO: more coverage of bitwise_and and bitwise_or.
+    check(cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa),
+          cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa));
+
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.
     check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
@@ -5985,6 +6271,15 @@ void simplify_test() {
     check(interleave_vectors({ramp(x, 4, 4), ramp(x+2, 4, 4)}), ramp(x, 2, 8));
     check(interleave_vectors({ramp(x-y, 2*y, 4), ramp(x, 2*y, 4)}), ramp(x-y, y, 8));
     check(interleave_vectors({ramp(x, 3, 4), ramp(x+1, 3, 4), ramp(x+2, 3, 4)}), ramp(x, 1, 12));
+    {
+        Expr vec = ramp(x, 1, 16);
+        check(interleave_vectors({slice(vec, 0, 2, 8), slice(vec, 1, 2, 8)}), vec);
+        check(interleave_vectors({slice(vec, 0, 4, 4), slice(vec, 1, 4, 4), slice(vec, 2, 4, 4), slice(vec, 3, 4, 4)}), vec);
+    }
+
+    // Collapse some vector concats
+    check(concat_vectors({ramp(x, 2, 4), ramp(x+8, 2, 4)}), ramp(x, 2, 8));
+    check(concat_vectors({ramp(x, 3, 2), ramp(x+6, 3, 2), ramp(x+12, 3, 2)}), ramp(x, 3, 6));
 
     // Now some ones that can't work
     {
@@ -5997,6 +6292,13 @@ void simplify_test() {
         e = interleave_vectors({ramp(x, 2, 4), ramp(y+1, 2, 4)});
         check(e, e);
         e = interleave_vectors({ramp(x, 2, 4), ramp(x+1, 3, 4)});
+        check(e, e);
+
+        e = concat_vectors({ramp(x, 1, 4), ramp(x+4, 2, 4)});
+        check(e, e);
+        e = concat_vectors({ramp(x, 1, 4), ramp(x+8, 1, 4)});
+        check(e, e);
+        e = concat_vectors({ramp(x, 1, 4), ramp(y+4, 1, 4)});
         check(e, e);
     }
 
@@ -6015,7 +6317,17 @@ void simplify_test() {
         Expr load3 = Load::make(Float(32, 4), "buf2", ramp(x+1, 2, 4), Buffer<>(), Parameter(), const_true(4));
         e = interleave_vectors({load1, load3});
         check(e, e);
+    }
 
+    // Check that concatenated loads of adjacent scalars collapse into a vector load.
+    {
+        int lanes = 4;
+        std::vector<Expr> loads;
+        for (int i = 0; i < lanes; i++) {
+            loads.push_back(Load::make(Float(32), "buf", x+i, Buffer<>(), Parameter(), const_true()));
+        }
+
+        check(concat_vectors(loads), Load::make(Float(32, lanes), "buf", ramp(x, 1, lanes), Buffer<>(), Parameter(), const_true(lanes)));
     }
 
     // This expression doesn't simplify, but it did cause exponential

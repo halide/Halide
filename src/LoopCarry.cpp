@@ -202,7 +202,7 @@ class LoopCarryOverLoop : public IRMutator {
         Expr step = is_linear(value, linear);
         linear.push(op->name, step);
 
-        containing_lets.push_back(make_pair(op->name, value));
+        containing_lets.push_back({ op->name, value });
 
         Stmt body = mutate(op->body);
         if (value.same_as(op->value) &&
@@ -422,7 +422,7 @@ class LoopCarryOverLoop : public IRMutator {
             call = simplify(common_subexpression_elimination(call));
             // Peel off lets
             while (const Let *l = call.as<Let>()) {
-                initial_lets.push_back(make_pair(l->name, l->value));
+                initial_lets.push_back({ l->name, l->value });
                 call = l->body;
             }
             internal_assert(call.as<Call>());

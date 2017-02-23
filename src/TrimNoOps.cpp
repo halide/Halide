@@ -18,7 +18,6 @@ namespace Internal {
 using std::string;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::map;
 
 namespace {
@@ -146,10 +145,9 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const Call *op) {
-        // Certain intrinsics that may appear in loops have side-effects. Most notably: image_store.
-        if (op->call_type == Call::Intrinsic &&
-            (op->name == Call::image_store ||
-             op->name == Call::copy_memory)) {
+        // If the loop calls an impure function, we can't remove the
+        // call to it. Most notably: image_store.
+        if (!op->is_pure()) {
             condition = const_false();
             return;
         }

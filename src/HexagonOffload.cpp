@@ -57,34 +57,10 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
     return ReplaceParams(replacements).mutate(s);
 }
 
-// Wrap the stmt in a call to power_hvx_on, calling power_hvx_off
-// as a destructor if successful.
-Stmt power_hvx_on(Stmt stmt) {
-    Expr power_on = Call::make(Int(32), "halide_hexagon_power_hvx_on", {}, Call::Extern);
-    string power_on_result_name = unique_name("power_on_result");
-    Expr power_on_result_var = Variable::make(Int(32), power_on_result_name);
-    Stmt check_power_on = LetStmt::make(power_on_result_name, power_on,
-                                        AssertStmt::make(EQ::make(power_on_result_var, 0), power_on_result_var));
-
-    Expr dummy_obj = reinterpret(Handle(), cast<uint64_t>(1));
-    Expr power_off = Call::make(Int(32), Call::register_destructor,
-                                {Expr("halide_hexagon_power_hvx_off_as_destructor"), dummy_obj}, Call::Intrinsic);
-
-    stmt = Block::make(Evaluate::make(power_off), stmt);
-    stmt = Block::make(check_power_on, stmt);
-    return stmt;
-}
-
 class InjectHexagonRpc : public IRMutator {
     std::map<std::string, Expr> state_vars;
 
     Module device_code;
-
-    // We need to know if the kernel launch occurs inside a loop, so
-    // as to only generate calls to power_hvx_on/off if there is a
-    // single kernel launch.
-    int run_count = 0;
-    bool in_loop = false;
 
     // Alignment info for Int(32) variables in scope, so we don't lose
     // the information when creating Hexagon kernels.
@@ -126,10 +102,7 @@ class InjectHexagonRpc : public IRMutator {
 
     void visit(const For *loop) {
         if (loop->device_api != DeviceAPI::Hexagon) {
-            bool old_in_loop = false;
-            in_loop = true;
             IRMutator::visit(loop);
-            in_loop = old_in_loop;
             return;
         }
 
@@ -223,11 +196,13 @@ class InjectHexagonRpc : public IRMutator {
             arg_flags.push_back(0x0);
         }
 
+        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
         // The argument list is terminated with an argument of size 0.
         arg_sizes.push_back(Expr((uint64_t) 0));
 
         std::string pipeline_name = hex_name + "_argv";
         std::vector<Expr> params;
+        params.push_back(use_shared_object);
         params.push_back(module_state());
         params.push_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
@@ -236,34 +211,6 @@ class InjectHexagonRpc : public IRMutator {
         params.push_back(Call::make(type_of<int*>(), Call::make_struct, arg_flags, Call::Intrinsic));
 
         stmt = call_extern_and_assert("halide_hexagon_run", params);
-
-        // If we're inside a loop, we need to assume that we can run
-        // more than one kernel. 2 is more than 1, so it's good
-        // enough.
-        run_count += in_loop ? 2 : 1;
-    }
-
-    void visit(const IfThenElse *op) {
-        // To keep track of the run count through if then else, take
-        // the max of the runs between the two branches.
-        Expr condition = mutate(op->condition);
-        int old_run_count = run_count;
-        Stmt then_case = mutate(op->then_case);
-        int then_run_count = run_count;
-
-        run_count = old_run_count;
-        Stmt else_case = mutate(op->else_case);
-        int else_run_count = run_count;
-
-        run_count = std::max(then_run_count, else_run_count);
-
-        if (!condition.same_as(op->condition) ||
-            !then_case.same_as(op->then_case) ||
-            !else_case.same_as(op->else_case)) {
-            stmt = IfThenElse::make(condition, then_case, else_case);
-        } else {
-            stmt = op;
-        }
     }
 
     void visit(const Let *op) {
@@ -301,40 +248,106 @@ public:
             return s;
         }
 
-        // If we got here, it means the pipeline runs at least one
-        // Hexagon kernel. Each kernel calls power_hvx_on itself;
-        // however, if this pipeline performs more than one Hexagon
-        // RPC call, we can reduce overhead of individual invocations
-        // by powering on HVX once for the duration of this pipeline.
-        if (run_count > 1) {
-            s = power_hvx_on(s);
-        }
-
         // Compile the device code
         debug(1) << "Hexagon device code module: " << device_code << "\n";
 
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
-        llvm::SmallVector<char, 4096> object;
-        llvm::raw_svector_ostream object_stream(object);
-        compile_llvm_module_to_object(*llvm_module, object_stream);
+        // Determine relocation mode. if both are false, its object relocation.
+        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
 
-        if (debug::debug_level() >= 2) {
-            debug(2) << "Hexagon device code assembly: " << "\n";
-            llvm::SmallString<4096> assembly;
-            llvm::raw_svector_ostream assembly_stream(assembly);
-            compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
-            debug(2) << assembly.c_str() << "\n";
+        if (use_shared_object) {
+            // Dump the llvm module to a temp file as .ll
+            TemporaryFile tmp_bitcode("hex", ".ll");
+            TemporaryFile tmp_shared_object("hex", ".so");
+
+            std::unique_ptr<llvm::raw_fd_ostream> ostream =
+                make_raw_fd_ostream(tmp_bitcode.pathname());
+            compile_llvm_module_to_llvm_assembly(*llvm_module, *ostream);
+            ostream->flush();
+
+            // Shell out to hexagon clang to compile it.
+            string hex_command;
+
+            const char *path = getenv("HL_HEXAGON_CLANG");
+            if (path && path[0]) {
+                hex_command = path;
+            } else {
+                path = getenv("HL_HEXAGON_TOOLS");
+                if (path && path[0]) {
+                    hex_command = string(path) + "/bin/hexagon-clang";
+                } else {
+                    user_error << "Unable to find hexagon-clang: neither HL_HEXAGON_CLANG nor HL_HEXAGON_TOOLS are set properly.";
+                }
+            }
+
+            hex_command += " ";
+            hex_command += tmp_bitcode.pathname();
+            if (0) { // This path should also work, if we want to use PIC code
+                hex_command += " -fpic -O3 -Wno-override-module ";
+            } else {
+                hex_command += " -fpic -G 0 -mlong-calls -O3 -Wno-override-module -shared ";
+            }
+            if (device_code.target().has_feature(Target::HVX_128)) {
+                hex_command += " -mhvx-double";
+            } else {
+                hex_command += " -mhvx";
+            }
+            hex_command += " -o " + tmp_shared_object.pathname();
+
+            int result = system(hex_command.c_str());
+            internal_assert(result == 0) << "hexagon-clang failed\n";
+
+            // Check for a signing callout
+            const char *callout_env = getenv("HL_HEXAGON_CALLOUT");
+            if (callout_env && callout_env[0]) {
+               string callout_command;
+               callout_command = callout_env;
+               callout_command += " " + tmp_shared_object.pathname();
+               int result = system(callout_command.c_str());
+               internal_assert(result == 0) << "hexagon-callout failed\n";
+            }
+
+            // Read the compiled object back in and put it in a buffer in the module
+            std::ifstream so(tmp_shared_object.pathname(), std::ios::binary | std::ios::ate);
+            internal_assert(so.good()) << "failed to open temporary shared object.";
+            std::vector<uint8_t> object(so.tellg());
+            so.seekg(0, std::ios::beg);
+            so.read(reinterpret_cast<char*>(&object[0]), object.size());
+
+            // Wrap the statement in calls to halide_initialize_kernels.
+            size_t code_size = object.size();
+            Expr code_ptr = buffer_ptr(&object[0], code_size, "hexagon_code");
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+                                                       {module_state_ptr(), code_ptr,
+                                                       Expr((uint64_t) code_size),
+                                                       Expr((uint32_t) use_shared_object)});
+            s = Block::make(init_kernels, s);
+
+        } else {
+            llvm::SmallVector<char, 4096> object;
+            llvm::raw_svector_ostream object_stream(object);
+            compile_llvm_module_to_object(*llvm_module, object_stream);
+
+            if (debug::debug_level() >= 2) {
+                debug(2) << "Hexagon device code assembly: " << "\n";
+                llvm::SmallString<4096> assembly;
+                llvm::raw_svector_ostream assembly_stream(assembly);
+                compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+                debug(2) << assembly.c_str() << "\n";
+            }
+
+            // Wrap the statement in calls to halide_initialize_kernels.
+            size_t code_size = object.size();
+            Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&object[0]), code_size, "hexagon_code");
+
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+                                                       {module_state_ptr(), code_ptr,
+                                                       Expr((uint64_t) code_size),
+                                                       Expr((uint32_t) use_shared_object)});
+            s = Block::make(init_kernels, s);
         }
-
-        // Wrap the statement in calls to halide_initialize_kernels.
-        size_t code_size = object.size();
-        Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&object[0]), code_size, "hexagon_code");
-        Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                   {module_state_ptr(), code_ptr, Expr((uint64_t) code_size)});
-        s = Block::make(init_kernels, s);
-
         return s;
     }
 };
@@ -356,7 +369,8 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
         Target::NoAsserts,
         Target::HVX_64,
         Target::HVX_128,
-        Target::HVX_v62
+        Target::HVX_v62,
+        Target::HVX_shared_object
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {
