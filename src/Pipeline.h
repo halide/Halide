@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "ExternalCode.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"

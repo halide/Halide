@@ -9,6 +9,7 @@
 #include <functional>
 
 #include "Argument.h"
+#include "ExternalCode.h"
 #include "IR.h"
 #include "ModulusRemainder.h"
 #include "Outputs.h"
@@ -82,6 +83,7 @@ public:
     // @{
     EXPORT const std::vector<Buffer<>> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
+    EXPORT const std::vector<ExternalCode> &external_code() const;
     // @}
 
     /** Return the function with the given name. If no such function
@@ -92,6 +94,7 @@ public:
     // @{
     EXPORT void append(const Buffer<> &buffer);
     EXPORT void append(const Internal::LoweredFunc &function);
+    EXPORT void append(const ExternalCode &external_code);
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on
