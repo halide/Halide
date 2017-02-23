@@ -20,7 +20,6 @@ using std::string;
 using std::map;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::set;
 
 namespace {
@@ -409,7 +408,7 @@ Stmt build_produce(Function f, const Target &target) {
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
                 buffers_to_annotate.push_back(extern_call_args.back());
-                lets.push_back(make_pair(buf_name, output_buffer_t));
+                lets.push_back({ buf_name, output_buffer_t });
             }
         }
 
@@ -490,7 +489,7 @@ pair<Stmt, Stmt> build_production(Function func, const Target &target) {
 
     // Combine the update steps
     Stmt merged_updates = Block::make(updates);
-    return make_pair(produce, merged_updates);
+    return { produce, merged_updates };
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -658,7 +657,7 @@ private:
         // Dig through any let statements
         vector<pair<string, Expr>> lets;
         while (const LetStmt *l = body.as<LetStmt>()) {
-            lets.push_back(make_pair(l->name, l->value));
+            lets.push_back({ l->name, l->value });
             body = l->body;
         }
 
@@ -738,15 +737,16 @@ public:
         LoopLevel loop_level;
     };
     vector<Site> sites_allowed;
+    bool found;
 
-    ComputeLegalSchedules(Function f, const map<string, Function> &env) : func(f), found(false), env(env) {}
+    ComputeLegalSchedules(Function f, const map<string, Function> &env) : found(false), func(f), env(env) {}
 
 private:
     using IRVisitor::visit;
 
     vector<Site> sites;
     Function func;
-    bool found;
+
     const map<string, Function> &env;
 
     void visit(const For *f) {
@@ -926,7 +926,11 @@ public:
     PrintUsesOfFunc(string f, std::ostream &s) : func(f), stream(s) {}
 };
 
-void validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
+// Check a schedule is legal, throwing an error if it is not. Returns
+// whether or not a realization of the Func should be injected. Unused
+// intermediate Funcs that somehow made it into the Func DAG can be
+// discarded.
+bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output, const map<string, Function> &env) {
 
     // If f is extern, check that none of its inputs are scheduled inline.
     if (f.has_extern_definition()) {
@@ -995,11 +999,20 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
     // store_in_user_code, but store_root is close enough.
     if (is_output) {
         if (store_at.is_root() && compute_at.is_root()) {
-            return;
+            return true;
         } else {
-            user_error << "Func " << f.name() << " is the output, so must"
+            user_error << "Func " << f.name() << " is an output, so must"
                        << " be scheduled compute_root (which is the default).\n";
         }
+    }
+
+    // Otherwise inspect the uses to see what's ok.
+    ComputeLegalSchedules legal(f, env);
+    s.accept(&legal);
+
+    if (!is_output && !legal.found) {
+        // It's not an output, and it's not called anywhere. Skip it.
+        return false;
     }
 
     // Inlining is allowed only if there is no specialization.
@@ -1008,12 +1021,8 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
             << "Func " << f.name() << " is scheduled inline, so it"
             << " must not have any specializations. Specialize on the"
             << " scheduled Func instead.\n";
-        return;
+        return true;
     }
-
-    // Otherwise inspect the uses to see what's ok.
-    ComputeLegalSchedules legal(f, env);
-    s.accept(&legal);
 
     bool store_at_ok = false, compute_at_ok = false;
     const vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
@@ -1057,6 +1066,8 @@ void validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
 
         user_error << err.str();
     }
+
+    return true;
 }
 
 class RemoveLoopsOverOutermost : public IRMutator {
@@ -1102,7 +1113,17 @@ Stmt schedule_functions(const vector<Function> &outputs,
             is_output |= o.same_as(f);
         }
 
-        validate_schedule(f, s, target, is_output, env);
+        bool necessary = validate_schedule(f, s, target, is_output, env);
+
+        if (!necessary) {
+            // The way in which the function was referred to in the
+            // function DAG must not actually result in a use in the
+            // code. This can happen if you inline a Tuple function,
+            // ignoring one of the Tuple elements, and that Tuple
+            // element is the sole call to a function with an update
+            // definition.
+            continue;
+        }
 
         if (f.can_be_inlined() &&
             f.schedule().compute_level().is_inline()) {

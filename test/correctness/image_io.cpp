@@ -78,9 +78,12 @@ int main(int argc, char **argv) {
     std::string formats[] = {"jpg", "png", "ppm"};
     for (std::string format : formats) {
         test_round_trip(color_buf, format);
-        test_round_trip(luma_buf, format);
-        return 0;
+        if (format != "ppm") {
+            // ppm really only supports RGB images.
+            test_round_trip(luma_buf, format);
+        }
     }
+    return 0;
 }
 
 #endif

@@ -12,7 +12,6 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::pair;
-using std::make_pair;
 using std::vector;
 
 namespace {
@@ -862,7 +861,7 @@ class SolveForInterval : public IRVisitor {
     void visit(const Variable *op) {
         internal_assert(op->type.is_bool());
         if (scope.contains(op->name)) {
-            auto key = make_pair(op->name, target);
+            pair<string, bool> key = { op->name, target };
             auto it = solved_vars.find(key);
             if (it != solved_vars.end()) {
                 result = it->second;

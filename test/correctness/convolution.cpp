@@ -2,44 +2,6 @@
 #include "Halide.h"
 
 using namespace Halide;
-using namespace Halide::Internal;
-
-class FindPowerHvxOn : public IRVisitor {
-public:
-    bool found = false;
-
-    void visit(const Call *op) {
-        if (op->name == "halide_hexagon_power_hvx_on") {
-            found = true;
-        }
-        IRVisitor::visit(op);
-    }
-
-    using IRVisitor::visit;
-};
-
-class ExpectPowerHvxOn : public IRMutator {
-    bool expected;
-
-public:
-    ExpectPowerHvxOn(bool expected) : expected(expected) {}
-    using IRMutator::mutate;
-
-    Stmt mutate(Stmt s) {
-        FindPowerHvxOn v;
-        s.accept(&v);
-
-        if (v.found && !expected) {
-            printf("Found halide_hexagon_power_hvx_on call when it was not expected.\n");
-            exit(-1);
-        } else if (!v.found && expected) {
-            printf("Did not find halide_hexagon_power_hvx_on call when it was expected.\n");
-            exit(-1);
-        }
-
-        return s;
-    }
-};
 
 int main(int argc, char **argv) {
 
@@ -126,11 +88,6 @@ int main(int argc, char **argv) {
 
         // TODO: Add parallel to the schedule.
         blur2.hexagon().vectorize(x, hvx_vector_width);
-
-        // blur1 has two hexagon kernels, so it should have a halide_hexagon_power_hvx_on call.
-        // blur2 has one hexagon kernel, so it should not.
-        blur1.add_custom_lowering_pass(new ExpectPowerHvxOn(true));
-        blur2.add_custom_lowering_pass(new ExpectPowerHvxOn(false));
     } else {
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
