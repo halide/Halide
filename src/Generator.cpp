@@ -1376,7 +1376,15 @@ Module GeneratorBase::build_module(const std::string &function_name,
             filter_arguments.push_back(to_argument(p));
         }
     }
-    return pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
+
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
+    std::shared_ptr<ExternsMap> externs_map = get_externs_map();
+    if (externs_map) {
+        for (const auto &map_entry : *externs_map) {
+            result.append(map_entry.second);
+        }
+    }
+    return result;
 }
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {

@@ -109,6 +109,7 @@ struct ModuleContents {
     Target target;
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
+    std::vector<ExternalCode> external_code;
 };
 
 template<>
@@ -157,6 +158,10 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
+const std::vector<ExternalCode> &Module::external_code() const {
+    return contents->external_code;
+}
+
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
@@ -173,6 +178,10 @@ void Module::append(const Buffer<> &buffer) {
 
 void Module::append(const Internal::LoweredFunc &function) {
     contents->functions.push_back(function);
+}
+
+void Module::append(const ExternalCode &external_code) {
+    contents->external_code.push_back(external_code);
 }
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {

@@ -151,6 +151,9 @@ protected:
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
 
+    /** Add external_code entries to llvm module. */
+    void add_external_code(const Module &halide_module);
+
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
 

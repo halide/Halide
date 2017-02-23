@@ -397,7 +397,6 @@ void CodeGen_LLVM::init_context() {
     f64x4 = VectorType::get(f64_t, 4);
 }
 
-
 void CodeGen_LLVM::init_module() {
     init_context();
 
@@ -405,6 +404,14 @@ void CodeGen_LLVM::init_module() {
     module = get_initial_module_for_target(target, context);
 }
 
+void CodeGen_LLVM::add_external_code(const Module &halide_module) {
+    for (const ExternalCode &code_blob : halide_module.external_code()) {
+        if (code_blob.is_for_cpu_target(get_target())) {
+            add_bitcode_to_module(context, *module, code_blob.contents(), code_blob.name());
+        }
+    }
+}
+  
 CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
 }
@@ -417,7 +424,6 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
-
 
 namespace {
 
@@ -492,6 +498,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
+
+    add_external_code(input);
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";

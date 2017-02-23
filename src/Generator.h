@@ -202,6 +202,7 @@
 #include <vector>
 
 #include "Func.h"
+#include "ExternalCode.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
 #include "Target.h"
@@ -1899,7 +1900,7 @@ public:
     virtual Target get_target() const = 0;
 
     // TODO: naming, exact contents of map
-    using ExternsMap = std::map<std::string, std::vector<uint8_t>>;
+    using ExternsMap = std::map<std::string, ExternalCode>;
     virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
 
 protected:
