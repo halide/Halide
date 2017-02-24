@@ -132,7 +132,7 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
         stream << "\n"
                << "// Halide's representation of a multi-dimensional array.\n"
                << "// Halide::Runtime::Buffer is a more user-friendly wrapper\n"
-               << "// around this. Its declaration is in HalideBuffer.h"
+               << "// around this. Its declaration is in HalideBuffer.h\n"
                << "struct halide_buffer_t;\n"
                << "\n"
                << "// Metadata describing the arguments to the generated function.\n"
