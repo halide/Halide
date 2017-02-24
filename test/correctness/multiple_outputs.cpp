@@ -87,7 +87,53 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < g_im.width(); x++) {
             if (g_im(x) != x) {
-                printf("g(%d) = %d instead of %d\n", x, f_im(x), x);
+                printf("g(%d) = %d instead of %d\n", x, g_im(x), x);
+                return -1;
+            }
+        }
+    }
+
+    // Now multiple output Funcs via inferred Realization
+    {
+        Func f, g;
+        Var x;
+        f(x) = 100*x;
+        g(x) = Tuple(x, x+1);
+
+        if (use_gpu) {
+            f.gpu_tile(x, 8);
+            g.gpu_tile(x, 8);
+        }
+
+        Realization r = Pipeline({f, g}).realize(100);
+        Buffer<int> f_im = r[0];
+        Buffer<int> g0_im = r[1];
+        Buffer<int> g1_im = r[2];
+
+        if (use_gpu) {
+            assert(f_im.device_dirty() && g0_im.device_dirty() && g1_im.device_dirty());
+            f_im.copy_to_host();
+            g0_im.copy_to_host();
+            g1_im.copy_to_host();
+        }
+
+        for (int x = 0; x < f_im.width(); x++) {
+            if (f_im(x) != 100*x) {
+                printf("f(%d) = %d instead of %d\n", x, f_im(x), 100*x);
+
+            }
+        }
+
+        for (int x = 0; x < g0_im.width(); x++) {
+            if (g0_im(x) != x) {
+                printf("g0(%d) = %d instead of %d\n", x, g0_im(x), x);
+                return -1;
+            }
+        }
+
+        for (int x = 0; x < g1_im.width(); x++) {
+            if (g1_im(x) != x+1) {
+                printf("g1(%d) = %d instead of %d\n", x, g1_im(x), x+1);
                 return -1;
             }
         }
