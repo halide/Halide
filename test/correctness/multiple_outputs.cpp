@@ -97,8 +97,8 @@ int main(int argc, char **argv) {
     {
         Func f, g;
         Var x;
-        f(x) = 100*x;
-        g(x) = Tuple(x, x+1);
+        f(x) = cast<float>(100*x);
+        g(x) = Tuple(cast<uint8_t>(x), cast<int16_t>(x+1));
 
         if (use_gpu) {
             f.gpu_tile(x, 8);
@@ -106,9 +106,9 @@ int main(int argc, char **argv) {
         }
 
         Realization r = Pipeline({f, g}).realize(100);
-        Buffer<int> f_im = r[0];
-        Buffer<int> g0_im = r[1];
-        Buffer<int> g1_im = r[2];
+        Buffer<float> f_im = r[0];
+        Buffer<uint8_t> g0_im = r[1];
+        Buffer<int16_t> g1_im = r[2];
 
         if (use_gpu) {
             assert(f_im.device_dirty() && g0_im.device_dirty() && g1_im.device_dirty());
@@ -119,21 +119,21 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < f_im.width(); x++) {
             if (f_im(x) != 100*x) {
-                printf("f(%d) = %d instead of %d\n", x, f_im(x), 100*x);
+                printf("f(%d) = %f instead of %f\n", x, f_im(x), (float) 100*x);
 
             }
         }
 
         for (int x = 0; x < g0_im.width(); x++) {
             if (g0_im(x) != x) {
-                printf("g0(%d) = %d instead of %d\n", x, g0_im(x), x);
+                printf("g0(%d) = %d instead of %d\n", x, (int) g0_im(x), x);
                 return -1;
             }
         }
 
         for (int x = 0; x < g1_im.width(); x++) {
             if (g1_im(x) != x+1) {
-                printf("g1(%d) = %d instead of %d\n", x, g1_im(x), x+1);
+                printf("g1(%d) = %d instead of %d\n", x, (int) g1_im(x), x+1);
                 return -1;
             }
         }
