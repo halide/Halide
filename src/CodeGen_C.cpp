@@ -142,6 +142,10 @@ CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::st
                << "// The legacy buffer type. Do not use in new code.\n"
                << "struct buffer_t;\n"
                << "\n";
+        // We just forward declared the following types:
+        forward_declared.insert(type_of<halide_buffer_t *>().handle_type);
+        forward_declared.insert(type_of<halide_filter_metadata_t *>().handle_type);
+        forward_declared.insert(type_of<buffer_t *>().handle_type);
     } else {
         // Include declarations of everything generated C source might want
         stream
@@ -488,6 +492,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     for (size_t i = 0; i < args.size(); i++) {
         auto handle_type = args[i].type.handle_type;
         if (!handle_type) continue;
+        if (forward_declared.count(handle_type)) continue;
         auto type_type = handle_type->inner_name.cpp_type_type;
         for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
             stream << "namespace " << handle_type->namespaces[ns] << " {\n";
@@ -504,6 +509,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
             stream << "}\n";
         }
+        forward_declared.insert(handle_type);
     }
 
     have_user_context = false;
