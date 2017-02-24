@@ -31,12 +31,12 @@ int _halide_buffer_get_max(const buffer_t *buf, int d) {
 }
 
 __attribute__((always_inline, weak))
-bool _halide_buffer_get_host_dirty(buffer_t *buf) {
+bool _halide_buffer_get_host_dirty(const buffer_t *buf) {
     return buf->host_dirty;
 }
 
 __attribute__((always_inline, weak))
-bool _halide_buffer_get_dev_dirty(buffer_t *buf) {
+bool _halide_buffer_get_dev_dirty(const buffer_t *buf) {
     return buf->dev_dirty;
 }
 
