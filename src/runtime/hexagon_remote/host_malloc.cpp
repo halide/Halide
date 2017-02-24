@@ -6,12 +6,7 @@
 #include <fcntl.h>
 #include <android/log.h>
 
-#include "bin/src/halide_hexagon_remote.h"
-
 namespace {
-
-typedef halide_hexagon_remote_handle_t handle_t;
-typedef halide_hexagon_remote_buffer buffer;
 
 // Allocations that are intended to be shared with Hexagon can be
 // shared without copying if they are contiguous in physical
@@ -236,18 +231,6 @@ void halide_hexagon_host_free(void *ptr) {
     }
 
     free(rec);
-}
-// This is a shim for calling v2 from v1.
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr,
-                                          const char* name, int nameLen) {
-    handle_t sym = 0;
-    int result = halide_hexagon_remote_get_symbol_v3(module_ptr, name, nameLen, false, &sym);
-    return result == 0 ? sym : 0;
-}
-
-int halide_hexagon_remote_initialize_kernels(const unsigned char *code, int codeLen,
-                                             handle_t *module_ptr) {
-   return halide_hexagon_remote_initialize_kernels_v2(code, codeLen, false, module_ptr);
 }
 
 }  // extern "C"
