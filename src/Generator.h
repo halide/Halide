@@ -2079,8 +2079,6 @@ public:
     }
 
 protected:
-    // In an ideal world, the GeneratorContext would be a required argument to the ctor;
-    // unfortunately, 
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
     EXPORT void init_from_context(const Halide::GeneratorContext &context);
 
