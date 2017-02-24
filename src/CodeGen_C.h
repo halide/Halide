@@ -136,6 +136,9 @@ protected:
     /** Track current calling convention scope. */
     bool extern_c_open;
 
+    /** Track which handle types have been forward-declared already. */
+    std::set<const halide_handle_cplusplus_type *> forward_declared;
+
     void set_name_mangling_mode(NameMangling mode);
 
     using IRPrinter::visit;
