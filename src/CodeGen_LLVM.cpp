@@ -797,14 +797,14 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     vector<char> data_blob((const char *)buf.data(), (const char *)buf.data() + buf.size_in_bytes());
 
     Constant *fields[] = {
-        ConstantInt::get(i64_t, 0),                                 // device
+        ConstantInt::get(i64_t, 0),                              // device
         ConstantPointerNull::get(device_interface_t_type->getPointerTo()), // device_interface
         create_binary_blob(data_blob, buf.name() + ".data", constant), // host
-        ConstantInt::get(i64_t, 1 << halide_buffer_flag_host_dirty),  // flags
-        ConstantStruct::get(type_t_type, type_fields),            // type
-        ConstantInt::get(i32_t, buf.dimensions()),                  // dimensions
-        shape,                                                    // dim
-        ConstantPointerNull::get(i8_t->getPointerTo()),         // padding
+        ConstantInt::get(i64_t, halide_buffer_flag_host_dirty),  // flags
+        ConstantStruct::get(type_t_type, type_fields),           // type
+        ConstantInt::get(i32_t, buf.dimensions()),               // dimensions
+        shape,                                                   // dim
+        ConstantPointerNull::get(i8_t->getPointerTo()),          // padding
     };
     Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
 
