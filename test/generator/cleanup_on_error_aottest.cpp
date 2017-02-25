@@ -51,7 +51,6 @@ extern "C" int halide_device_free(void *user_context, struct buffer_t *buf) {
 
 extern "C" int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface_t *interface) {
     if (!buf->dev) {
-        printf("Custom device malloc!\n");
         device_mallocs++;
     }
     return interface->device_malloc(user_context, buf);
