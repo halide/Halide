@@ -110,13 +110,6 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> g0_im = r[1];
         Buffer<int16_t> g1_im = r[2];
 
-        if (use_gpu) {
-            assert(f_im.device_dirty() && g0_im.device_dirty() && g1_im.device_dirty());
-            f_im.copy_to_host();
-            g0_im.copy_to_host();
-            g1_im.copy_to_host();
-        }
-
         for (int x = 0; x < f_im.width(); x++) {
             if (f_im(x) != 100*x) {
                 printf("f(%d) = %f instead of %f\n", x, f_im(x), (float) 100*x);
