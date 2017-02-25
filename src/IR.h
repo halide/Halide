@@ -205,8 +205,8 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, const std::string &name, 
-                            const Expr &index, Buffer<> image, 
+    EXPORT static Expr make(Type type, const std::string &name,
+                            const Expr &index, Buffer<> image,
                             Parameter param, const Expr &predicate);
 
     static const IRNodeType _type_info = IRNodeType::Load;
@@ -514,6 +514,8 @@ struct Call : public ExprNode<Call> {
         buffer_get_host,
         buffer_get_device,
         buffer_get_shape,
+        buffer_get_host_dirty,
+        buffer_get_device_dirty,
         buffer_set_host_dirty,
         buffer_set_device_dirty,
         buffer_is_bounds_query,

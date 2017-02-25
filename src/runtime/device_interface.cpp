@@ -284,6 +284,12 @@ WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t 
             } else {
                 return 0;
             }
+        } else {
+            // device_free must have been called on this buffer (which
+            // must be legal for the device interface that was
+            // used). We'd better still free the host pointer.
+            halide_free(user_context, buf->host);
+            buf->host = NULL;
         }
     }
     buf->set_device_dirty(false);
