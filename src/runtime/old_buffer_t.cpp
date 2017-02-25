@@ -71,20 +71,34 @@ WEAK int halide_downgrade_buffer_t(void *user_context, const char *name,
                                                          "buffer has more than four dimensions");
     }
     old_buf->host = new_buf->host;
-    if (new_buf->device) {
-        old_dev_wrapper *wrapper = (old_dev_wrapper *)malloc(sizeof(old_dev_wrapper));
-        wrapper->device = new_buf->device;
-        wrapper->interface = new_buf->device_interface;
-        old_buf->dev = (uint64_t)wrapper;
-    }
     for (int i = 0; i < new_buf->dimensions; i++) {
         old_buf->min[i] = new_buf->dim[i].min;
         old_buf->extent[i] = new_buf->dim[i].extent;
         old_buf->stride[i] = new_buf->dim[i].stride;
     }
     old_buf->elem_size = new_buf->type.bytes();
+    return halide_downgrade_buffer_t_device_fields(user_context, name, new_buf, old_buf);
+}
+
+WEAK int halide_downgrade_buffer_t_device_fields(void *user_context, const char *name,
+                                                 const halide_buffer_t *new_buf, buffer_t *old_buf) {
     old_buf->host_dirty = new_buf->host_dirty();
     old_buf->dev_dirty = new_buf->device_dirty();
+    if (new_buf->device) {
+        if (old_buf->dev) {
+            old_dev_wrapper *wrapper = (old_dev_wrapper *)old_buf->dev;
+            wrapper->device = new_buf->device;
+            wrapper->interface = new_buf->device_interface;
+        } else {
+            old_dev_wrapper *wrapper = (old_dev_wrapper *)malloc(sizeof(old_dev_wrapper));
+            wrapper->device = new_buf->device;
+            wrapper->interface = new_buf->device_interface;
+            old_buf->dev = (uint64_t)wrapper;
+        }
+    } else if (old_buf->dev) {
+        free((void *)old_buf->dev);
+        old_buf->dev = 0;
+    }
     return 0;
 }
 
@@ -95,8 +109,7 @@ WEAK int halide_copy_to_host_legacy(void *user_context, struct buffer_t *old_buf
     int err = guess_type_and_dimensionality(user_context, old_buf, &new_buf);
     err = err || halide_upgrade_buffer_t(user_context, "", old_buf, &new_buf);
     err = err || halide_copy_to_host(user_context, &new_buf);
-    free((void *)old_buf->dev);
-    err = err || halide_downgrade_buffer_t(user_context, "", &new_buf, old_buf);
+    err = err || halide_downgrade_buffer_t_device_fields(user_context, "", &new_buf, old_buf);
     return err;
 }
 
@@ -108,8 +121,7 @@ WEAK int halide_copy_to_device_legacy(void *user_context, struct buffer_t *old_b
     int err = guess_type_and_dimensionality(user_context, old_buf, &new_buf);
     err = err || halide_upgrade_buffer_t(user_context, "", old_buf, &new_buf);
     err = err || halide_copy_to_device(user_context, &new_buf, device_interface);
-    free((void *)old_buf->dev);
-    err = err || halide_downgrade_buffer_t(user_context, "", &new_buf, old_buf);
+    err = err || halide_downgrade_buffer_t_device_fields(user_context, "", &new_buf, old_buf);
     return err;
 }
 
@@ -120,8 +132,7 @@ WEAK int halide_device_sync_legacy(void *user_context, struct buffer_t *old_buf)
     int err = guess_type_and_dimensionality(user_context, old_buf, &new_buf);
     err = err || halide_upgrade_buffer_t(user_context, "", old_buf, &new_buf);
     err = err || halide_device_sync(user_context, &new_buf);
-    free((void *)old_buf->dev);
-    err = err || halide_downgrade_buffer_t(user_context, "", &new_buf, old_buf);
+    err = err || halide_downgrade_buffer_t_device_fields(user_context, "", &new_buf, old_buf);
     return err;
 }
 
@@ -133,8 +144,7 @@ WEAK int halide_device_malloc_legacy(void *user_context, struct buffer_t *old_bu
     int err = guess_type_and_dimensionality(user_context, old_buf, &new_buf);
     err = err || halide_upgrade_buffer_t(user_context, "", old_buf, &new_buf);
     err = err || halide_device_malloc(user_context, &new_buf, device_interface);
-    free((void *)old_buf->dev);
-    err = err || halide_downgrade_buffer_t(user_context, "", &new_buf, old_buf);
+    err = err || halide_downgrade_buffer_t_device_fields(user_context, "", &new_buf, old_buf);
     return err;
 }
 
@@ -145,8 +155,7 @@ WEAK int halide_device_free_legacy(void *user_context, struct buffer_t *old_buf)
     int err = guess_type_and_dimensionality(user_context, old_buf, &new_buf);
     err = err || halide_upgrade_buffer_t(user_context, "", old_buf, &new_buf);
     err = err || halide_device_free(user_context, &new_buf);
-    free((void *)old_buf->dev);
-    err = err || halide_downgrade_buffer_t(user_context, "", &new_buf, old_buf);
+    err = err || halide_downgrade_buffer_t_device_fields(user_context, "", &new_buf, old_buf);
     return err;
 }
 

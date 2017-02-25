@@ -1126,18 +1126,24 @@ typedef struct buffer_t {
     HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
 } buffer_t;
 
-/** Copies host pointer, mins, extents, and strides from an old-style
- * buffer_t into a new-style halide_buffer_t. The dimensions and type
- * fields of the new buffer_t should already be set. Returns an error
- * code if the upgrade could not be performed. */
+/** Copies host pointer, mins, extents, strides, and device state from
+ * an old-style buffer_t into a new-style halide_buffer_t. The
+ * dimensions and type fields of the new buffer_t should already be
+ * set. Returns an error code if the upgrade could not be
+ * performed. */
 extern int halide_upgrade_buffer_t(void *user_context, const char *name,
                                    const buffer_t *old_buf, halide_buffer_t *new_buf);
 
-/** Copies the host pointer, mins, extents, and strides from a
- * halide_buffer_t to a buffer_t. Also sets elem_size. Useful for
- * backporting the results of bounds inference. */
+/** Copies the host pointer, mins, extents, strides, and device state
+ * from a halide_buffer_t to a buffer_t. Also sets elem_size. Useful
+ * for backporting the results of bounds inference. */
 extern int halide_downgrade_buffer_t(void *user_context, const char *name,
                                      const halide_buffer_t *new_buf, buffer_t *old_buf);
+
+/** Copies the dirty flags and device allocation state from a new
+ * buffer_t back to a legacy buffer_t. */
+extern int halide_downgrade_buffer_t_device_fields(void *user_context, const char *name,
+                                                   const halide_buffer_t *new_buf, buffer_t *old_buf);
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;

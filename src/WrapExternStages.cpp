@@ -185,16 +185,23 @@ void add_legacy_wrapper(Module module, const LoweredFunc &fn) {
 
             new_buffers.emplace_back(new_buffer_name, new_buffer);
 
-            // Make the call that downgrades the new
-            // buffer into the old buffer struct.
+            // Make the call that downgrades the new buffer into the
+            // old buffer struct.  We'll only do the full downgrade in
+            // bounds query mode
             Expr downgrade_call = Call::make(Int(32), "halide_downgrade_buffer_t",
                                              {arg.name, new_buffer_var, old_buffer_var},
                                              Call::Extern);
             Stmt downgrade = make_checked_call(downgrade_call);
-            // Only do the downgrade in bounds query mode
+
+            // Otherwise we'll just copy over the device state flags
+            Expr downgrade_device_call = Call::make(Int(32), "halide_downgrade_buffer_t_device_fields",
+                                                    {arg.name, new_buffer_var, old_buffer_var},
+                                                    Call::Extern);
+            Stmt downgrade_device = make_checked_call(downgrade_device_call);
+
             Expr bounds_query = Call::make(Bool(), Call::buffer_is_bounds_query,
                                            {new_buffer_var}, Call::Extern);
-            downgrade = IfThenElse::make(bounds_query, downgrade);
+            downgrade = IfThenElse::make(bounds_query, downgrade, downgrade_device);
             downgrades.push_back(downgrade);
 
             // Make the call to upgrade old buffer
