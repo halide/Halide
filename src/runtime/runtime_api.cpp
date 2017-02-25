@@ -50,6 +50,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_do_task,
     (void *)&halide_double_to_string,
     (void *)&halide_downgrade_buffer_t,
+    (void *)&halide_downgrade_buffer_t_device_fields,
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
     (void *)&halide_error_bad_fold,

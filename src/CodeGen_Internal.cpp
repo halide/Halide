@@ -167,6 +167,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_get_gpu_device",
         "halide_upgrade_buffer_t",
         "halide_downgrade_buffer_t",
+        "halide_downgrade_buffer_t_device_fields",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
