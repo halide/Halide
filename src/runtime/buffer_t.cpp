@@ -47,6 +47,16 @@ int _halide_buffer_set_device_dirty(halide_buffer_t *buf, bool val) {
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
+bool _halide_buffer_get_host_dirty(const halide_buffer_t *buf) {
+    return buf->host_dirty();
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+bool _halide_buffer_get_device_dirty(const halide_buffer_t *buf) {
+    return buf->device_dirty();
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
 halide_dimension_t *_halide_buffer_get_shape(halide_buffer_t *buf) {
     return buf->dim;
 }
