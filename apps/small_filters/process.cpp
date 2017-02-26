@@ -3,6 +3,7 @@
 #include "../support/benchmark.h"
 #include "conv3x3a16_hvx128.h"
 #include "conv3x3a16_hvx64.h"
+#include "conv3x3a16_cpu.h"
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideBuffer.h"
 #include "process.h"
@@ -15,8 +16,9 @@ class Conv3x3a16Descriptor : public PipelineDescriptor<pipeline3, Conv3x3a16Desc
     Halide::Runtime::Buffer<int8_t> i8_mask;
 
 public:
-    Conv3x3a16Descriptor(pipeline3 pipeline64, pipeline3 pipeline128, int W, int H) :
-        PipelineDescriptor<pipeline3, Conv3x3a16Descriptor>(pipeline64, pipeline128),
+    Conv3x3a16Descriptor(pipeline3 pipeline_64, pipeline3 pipeline_128, pipeline3 pipeline3_cpu,
+                         int W, int H) :
+        PipelineDescriptor<pipeline3, Conv3x3a16Descriptor>(pipeline_64, pipeline_128, pipeline_cpu),
         u8_in(nullptr, W, H, 2),
         u8_out(nullptr, W, H, 2),
         i8_mask(nullptr, 3, 3, 2) {}
@@ -74,12 +76,16 @@ public:
         });
         return true;
     }
+
     void identify_pipeline() { printf ("Running conv3x3a16...\n"); }
-    int run(hvx_mode_t mode) {
-        if (mode == hvx_mode_t::hvx64) {
-            return pipeline64(u8_in, i8_mask, u8_out);
-        } else if (mode == hvx_mode_t::hvx128) {
-            return pipeline128(u8_in, i8_mask, u8_out);
+
+    int run(bmark_run_mode_t mode) {
+        if (mode == bmark_run_mode_t::hvx64) {
+            return pipeline_64(u8_in, i8_mask, u8_out);
+        } else if (mode == bmark_run_mode_t::hvx128) {
+            return pipeline_128(u8_in, i8_mask, u8_out);
+        } else if (mode == bmark_run_mode_t::cpu); {
+            return pipeline_cpu(u8_in, i8_mask, u8_out);
         }
         abort();
     }
@@ -87,17 +93,17 @@ public:
 
 void usage(char *prg_name) {
     const char usage_string[] = " Run a bunch of small filters\n\n"
-                                "\t -m -> hvx_mode - options are hvx64, hvx128. Default is to run both 64 and 128 byte modes>\n"
+                                "\t -m -> hvx_mode - options are hvx64, hvx128. Default is to run hvx64, hvx128 and cpu\n"
                                 "\t -n -> number of iterations\n"
                                 "\t -h -> print this help message\n";
     printf ("%s - %s", prg_name, usage_string);
 
 }
 
-const char *to_string(hvx_mode_t mode) {
-    if (mode == hvx_mode_t::hvx64) {
+const char *to_string(bmark_run_mode_t mode) {
+    if (mode == bmark_run_mode_t::hvx64) {
         return "(64 byte mode)";
-    } else if (mode == hvx_mode_t::hvx128) {
+    } else if (mode == bmark_run_mode_t::hvx128) {
         return "(128 byte mode)";
     } else {
         return "(cpu)";
@@ -108,7 +114,7 @@ int main(int argc, char **argv) {
     // Set some defaults first.
     const int W = 1024;
     const int H = 1024;
-    std::vector<hvx_mode_t> modes = {hvx_mode_t::hvx64, hvx_mode_t::hvx128};
+    std::vector<bmark_run_mode_t> modes = {bmark_run_mode_t::hvx64, bmark_run_mode_t::hvx128, bmark_run_mode_t::cpu};
     int iterations = 10;
 
     // Process command line args.
@@ -120,9 +126,11 @@ int main(int argc, char **argv) {
                     std::string mode_to_run = argv[i+1];
                     modes.clear();
                     if (mode_to_run == "hvx64") {
-                        modes.push_back(hvx_mode_t::hvx64);
+                        modes.push_back(bmark_run_mode_t::hvx64);
                     } else if (mode_to_run == "hvx128") {
-                        modes.push_back(hvx_mode_t::hvx128);
+                        modes.push_back(bmark_run_mode_t::hvx128);
+                    } else if (mode_to_run == "cpu") {
+                        modes.push_back(bmark_run_mode_t::cpu);
                     } else {
                         usage(argv[0]);
                         abort();
@@ -142,10 +150,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    Conv3x3a16Descriptor conv3x3a16_pipeline(conv3x3a16_hvx64, conv3x3a16_hvx128, W, H);
+    Conv3x3a16Descriptor conv3x3a16_pipeline(conv3x3a16_hvx64, conv3x3a16_hvx128, conv3x3a16_cpu, W, H);
     std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline};
 
-    for (hvx_mode_t m : modes) {
+    for (bmark_run_mode_t m : modes) {
         for (PipelineDescriptorBase *p : pipelines) {
             p->init();
             p->identify_pipeline();

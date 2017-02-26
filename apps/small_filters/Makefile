@@ -28,6 +28,10 @@ $(BIN)/conv3x3a16: conv3x3a16.cpp $(GENERATOR_DEPS)
 	echo "${GENERATOR_DEPS}"
 	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
+$(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3a16
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_cpu target=$*
+
 $(BIN)/%/conv3x3a16_hvx64.o: $(BIN)/conv3x3a16
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx64 target=$*-hvx_64
@@ -36,7 +40,7 @@ $(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3a16
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128
 
-$(BIN)/process-%: process.cpp $(BIN)/%/conv3x3a16_hvx128.o $(BIN)/%/conv3x3a16_hvx64.o
+$(BIN)/process-%: process.cpp $(BIN)/%/conv3x3a16_hvx128.o $(BIN)/%/conv3x3a16_hvx64.o $(BIN)/%/conv3x3a16_cpu.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp  $(BIN)/$*/conv3x3a16_hvx128.o  $(BIN)/$*/conv3x3a16_hvx64.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
 run-%-android: $(BIN)/process-%-android

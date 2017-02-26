@@ -39,21 +39,23 @@ public:
         set_min_0(0);
         set_min_0(1);
 
-        auto set_aligned_stride = [this](int dim, int alignment) {
-            Expr input_stride = input.dim(dim).stride();
-            input.dim(dim).set_stride((input_stride/alignment) * alignment);
+        if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
+            const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
+            auto set_aligned_stride = [this](int dim, int alignment) {
+                Expr input_stride = input.dim(dim).stride();
+                input.dim(dim).set_stride((input_stride/alignment) * alignment);
 
-            auto output_buff = Func(output).output_buffer();
-            Expr output_stride = output_buff.dim(dim).stride();
-            output_buff.dim(dim).set_stride((output_stride/alignment) * alignment);
-            
-        };
-        set_aligned_stride(1, 128);
-
-        int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
-        Func(output).hexagon().tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp).vectorize(xi).unroll(yi);
+                auto output_buff = Func(output).output_buffer();
+                Expr output_stride = output_buff.dim(dim).stride();
+                output_buff.dim(dim).set_stride((output_stride/alignment) * alignment);
+            };
+            set_aligned_stride(1, vector_size);
+            Func(output).hexagon().tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp).vectorize(xi).unroll(yi);
+        } else {
+            const int vector_size = natural_vector_size<uint8_t>();
+            Func(output).compute_root().vectorize(x, vector_size).parallel(y, 16);
+        }
     }
-
 };
 
 HALIDE_REGISTER_GENERATOR(Conv3x3a16, "conv3x3a16");
