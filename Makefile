@@ -826,7 +826,7 @@ $(BIN_DIR)/runtime.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARE
 
 # Generate a standalone runtime for a given target string
 $(FILTERS_DIR)/runtime.a: $(BIN_DIR)/runtime.generator
-	@mkdir -p $(RUNTIMES_DIR)
+	@mkdir -p $(FILTERS_DIR)
 	$(CURDIR)/$< -r runtime -o $(CURDIR)/$(FILTERS_DIR) target=$*
 
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
