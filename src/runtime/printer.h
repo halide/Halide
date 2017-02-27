@@ -104,6 +104,9 @@ public:
         case halide_type_handle:
             code_name = "handle";
             break;
+        default:
+            code_name = "bad_type_code";
+            break;
         }
         dst = halide_string_to_string(dst, end, code_name);
         dst = halide_uint64_to_string(dst, end, t.bits, 1);
