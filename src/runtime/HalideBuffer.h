@@ -65,7 +65,7 @@ struct AllInts<double, Args...> : std::false_type {};
  * class itself. */
 struct AllocationHeader {
     void (*deallocate_fn)(void *);
-    std::atomic<int> ref_count;
+    std::atomic<int> ref_count {0};
 };
 
 /** A templated Buffer class that wraps halide_buffer_t and adds
