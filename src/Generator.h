@@ -2113,17 +2113,31 @@ private:
     friend class SimpleGeneratorFactory;
     friend class StubOutputBufferBase;
 
+    struct ParamInfo {
+        // Ordered-list  of non-null ptrs to GeneratorParam<> fields.
+        std::vector<Internal::GeneratorParamBase *> generator_params;
+
+        // Ordered-list  of non-null ptrs to Input<>/Output<> fields; empty if old-style Generator.
+        std::vector<Internal::GeneratorInputBase *> filter_inputs;
+        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
+
+        // Ordered-list  of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
+        std::vector<Internal::Parameter *> filter_params;
+    };
+
     const size_t size;
-    std::vector<Internal::Parameter *> filter_params;
-    std::vector<Internal::GeneratorInputBase *> filter_inputs;
-    std::vector<Internal::GeneratorOutputBase *> filter_outputs;
-    std::vector<Internal::GeneratorParamBase *> generator_params;
+    // Lazily-allocated-and-inited struct with info about our various Params. 
+    // Do not access directly: use the param_info() getter to lazy-init.
+    std::unique_ptr<ParamInfo> param_info_ptr; 
+
     std::shared_ptr<Internal::ValueTracker> value_tracker;
-    bool params_built{false};
     bool generator_params_set{false};
     bool schedule_params_set{false};
     bool inputs_set{false};
     std::string generator_name;
+
+    // Return our ParamInfo (lazy-initing as needed).
+    EXPORT ParamInfo &param_info();
 
     EXPORT void check_scheduled(const char* m) const;
 
