@@ -41,7 +41,7 @@ $(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3a16
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128
 
 $(BIN)/process-%: process.cpp $(BIN)/%/conv3x3a16_hvx128.o $(BIN)/%/conv3x3a16_hvx64.o $(BIN)/%/conv3x3a16_cpu.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp  $(BIN)/$*/conv3x3a16_hvx128.o  $(BIN)/$*/conv3x3a16_hvx64.o -o $(BIN)/process-$* $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp  $(BIN)/$*/conv3x3a16_hvx128.o  $(BIN)/$*/conv3x3a16_hvx64.o $(BIN)/$*/conv3x3a16_cpu.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
 run-%-android: $(BIN)/process-%-android
 	adb push $(BIN)/process-$*-android /data/
