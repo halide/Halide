@@ -23,6 +23,11 @@ LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 BIN ?= bin
 all: $(BIN)/process-host $(BIN)/process-arm-64-android $(BIN)/process-arm-32-android $(BIN)/process-arm-64-profile-android $(BIN)/process-arm-32-profile-android
 
+# %(BIN)/%_generator: %.cpp $(GENERATOR_DEPS)
+# 	@-mkdir -p $(BIN)
+# 	echo "${GENERATOR_DEPS}"
+# 	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
 $(BIN)/conv3x3a16: conv3x3a16.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
 	echo "${GENERATOR_DEPS}"
@@ -40,8 +45,26 @@ $(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3a16
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128
 
-$(BIN)/process-%: process.cpp $(BIN)/%/conv3x3a16_hvx128.o $(BIN)/%/conv3x3a16_hvx64.o $(BIN)/%/conv3x3a16_cpu.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp  $(BIN)/$*/conv3x3a16_hvx128.o  $(BIN)/$*/conv3x3a16_hvx64.o $(BIN)/$*/conv3x3a16_cpu.o -o $(BIN)/process-$* $(LDFLAGS-$*)
+
+$(BIN)/dilate3x3: dilate3x3.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	echo "${GENERATOR_DEPS}"
+	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
+$(BIN)/%/dilate3x3_cpu.o: $(BIN)/dilate3x3
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f dilate3x3_cpu target=$*
+
+$(BIN)/%/dilate3x3_hvx64.o: $(BIN)/dilate3x3
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f dilate3x3_hvx64 target=$*-hvx_64
+
+$(BIN)/%/dilate3x3_hvx128.o: $(BIN)/dilate3x3
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f dilate3x3_hvx128 target=$*-hvx_128
+
+$(BIN)/process-%: process.cpp $(BIN)/%/conv3x3a16_hvx128.o $(BIN)/%/conv3x3a16_hvx64.o $(BIN)/%/conv3x3a16_cpu.o $(BIN)/%/dilate3x3_hvx128.o $(BIN)/%/dilate3x3_hvx64.o $(BIN)/%/dilate3x3_cpu.o
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/conv3x3a16_hvx128.o $(BIN)/$*/conv3x3a16_hvx64.o $(BIN)/$*/conv3x3a16_cpu.o $(BIN)/$*/dilate3x3_hvx128.o $(BIN)/$*/dilate3x3_hvx64.o $(BIN)/$*/dilate3x3_cpu.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
 run-%-android: $(BIN)/process-%-android
 	adb push $(BIN)/process-$*-android /data/
