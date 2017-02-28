@@ -1042,15 +1042,9 @@ GeneratorBase::~GeneratorBase() {
     ObjectInstanceRegistry::unregister_instance(this); 
 }
 
-void GeneratorBase::build_params(bool force) {
-    if (force) {
-        params_built = false;
-        filter_inputs.clear();
-        filter_outputs.clear();
-        filter_params.clear();
-        generator_params.clear();
-    }
-    if (!params_built) {
+GeneratorBase::ParamInfo &GeneratorBase::param_info() {
+    if (!param_info_ptr) {
+        param_info_ptr.reset(new ParamInfo);
         std::set<std::string> names;
         std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
             this, size, ObjectInstanceRegistry::FilterParam);
@@ -1061,7 +1055,7 @@ void GeneratorBase::build_params(bool force) {
             user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
             user_assert(!names.count(param->name())) << "Duplicate Param name: " << param->name();
             names.insert(param->name());
-            filter_params.push_back(param);
+            param_info_ptr->filter_params.push_back(param);
         }
 
         std::vector<void *> vi = ObjectInstanceRegistry::instances_in_range(
@@ -1072,7 +1066,7 @@ void GeneratorBase::build_params(bool force) {
             user_assert(is_valid_name(input->name())) << "Invalid Input name: (" << input->name() << ")\n";
             user_assert(!names.count(input->name())) << "Duplicate Input name: " << input->name();
             names.insert(input->name());
-            filter_inputs.push_back(input);
+            param_info_ptr->filter_inputs.push_back(input);
         }
 
         std::vector<void *> vo = ObjectInstanceRegistry::instances_in_range(
@@ -1083,18 +1077,18 @@ void GeneratorBase::build_params(bool force) {
             user_assert(is_valid_name(output->name())) << "Invalid Output name: (" << output->name() << ")\n";
             user_assert(!names.count(output->name())) << "Duplicate Output name: " << output->name();
             names.insert(output->name());
-            filter_outputs.push_back(output);
+            param_info_ptr->filter_outputs.push_back(output);
         }
 
-        if (filter_params.size() > 0 && filter_inputs.size() > 0) {
+        if (param_info_ptr->filter_params.size() > 0 && param_info_ptr->filter_inputs.size() > 0) {
             user_error << "Input<> may not be used with Param<> or ImageParam in Generators.\n";
         }
 
-        if (filter_params.size() > 0 && filter_outputs.size() > 0) {
+        if (param_info_ptr->filter_params.size() > 0 && param_info_ptr->filter_outputs.size() > 0) {
             user_error << "Output<> may not be used with Param<> or ImageParam in Generators.\n";
         }
 
-        if (filter_inputs.size() > 0 && filter_outputs.size() == 0) {
+        if (param_info_ptr->filter_inputs.size() > 0 && param_info_ptr->filter_outputs.size() == 0) {
             // This doesn't catch *every* possibility (since a Generator can have zero Inputs).
             user_error << "Output<> must be used with Input<> in Generators.\n";
         }
@@ -1107,22 +1101,22 @@ void GeneratorBase::build_params(bool force) {
             user_assert(is_valid_name(param->name)) << "Invalid GeneratorParam name: " << param->name;
             user_assert(!names.count(param->name)) << "Duplicate GeneratorParam name: " << param->name;
             names.insert(param->name);
-            generator_params.push_back(param);
+            param_info_ptr->generator_params.push_back(param);
         }
-        params_built = true;
     }
+    return *param_info_ptr;
 }
 
 Func GeneratorBase::get_first_output() {
-    build_params();
-    return get_output(filter_outputs[0]->name());
+    ParamInfo &pi = param_info();
+    return get_output(pi.filter_outputs[0]->name());
 }
 
 Func GeneratorBase::get_output(const std::string &n) {
     user_assert(generate_called) << "Must call generate() before accessing Generator outputs."; 
     // There usually are very few outputs, so a linear search is fine
-    build_params();
-    for (auto output : filter_outputs) {
+    ParamInfo &pi = param_info();
+    for (auto output : pi.filter_outputs) {
         if (output->name() == n) {
             user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
             user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_output_vector()\n";
@@ -1138,8 +1132,8 @@ Func GeneratorBase::get_output(const std::string &n) {
 std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
     user_assert(generate_called) << "Must call generate() before accessing Generator outputs."; 
     // There usually are very few outputs, so a linear search is fine
-    build_params();
-    for (auto output : filter_outputs) {
+    ParamInfo &pi = param_info();
+    for (auto output : pi.filter_outputs) {
         if (output->name() == n) {
             user_assert(output->array_size_defined()) << "Output " << n << " has no ArraySize defined.\n";
             for (const auto &f : output->funcs()) {
@@ -1154,13 +1148,13 @@ std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
 
 void GeneratorBase::set_generator_param_values(const std::map<std::string, std::string> &params) {
     user_assert(!generator_params_set) << "set_generator_param_values() must be called at most once per Generator instance.\n";
-    build_params();
+    ParamInfo &pi = param_info();
     std::map<std::string, GeneratorParamBase *> generator_param_names;
-    for (auto p : generator_params) {
+    for (auto p : pi.generator_params) {
         generator_param_names[p->name] = p;
     }
     std::map<std::string, GIOBase *> type_names, dim_names, array_size_names;
-    for (auto i : filter_inputs) {
+    for (auto i : pi.filter_inputs) {
         if (!i->allow_synthetic_generator_params()) {
             continue;
         }
@@ -1172,7 +1166,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
             array_size_names[i->name() + ".size"] = i;    
         }
     }
-    for (auto o : filter_outputs) {
+    for (auto o : pi.filter_outputs) {
         if (!o->allow_synthetic_generator_params()) {
             continue;
         }
@@ -1217,7 +1211,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
         }
         user_error << "Generator " << generator_name << " has no GeneratorParam named: " << key << "\n";
     }
-    for (auto p : generator_params) {
+    for (auto p : pi.generator_params) {
         p->value_valid = true;
     }
     generator_params_set = true;
@@ -1226,9 +1220,9 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
 void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::string> &params, 
                                               const std::map<std::string, LoopLevel> &looplevel_params) {
     user_assert(!schedule_params_set) << "set_schedule_param_values() must be called at most once per Generator instance.\n";
-    build_params();
+    ParamInfo &pi = param_info();
     std::map<std::string, GeneratorParamBase *> m;
-    for (auto param : generator_params) {
+    for (auto param : pi.generator_params) {
         m[param->name] = param;
     }
     for (auto key_value : params) {
@@ -1253,14 +1247,14 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
 
 void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
     internal_assert(!inputs_set) << "set_inputs_vector() must be called at most once per Generator instance.\n";
-    build_params();
-    user_assert(inputs.size() == filter_inputs.size()) 
-            << "Expected exactly " << filter_inputs.size() 
+    ParamInfo &pi = param_info();
+    user_assert(inputs.size() == pi.filter_inputs.size()) 
+            << "Expected exactly " << pi.filter_inputs.size() 
             << " inputs but got " << inputs.size() << "\n";
-    user_assert(filter_params.size() == 0) 
+    user_assert(pi.filter_params.size() == 0) 
         << "The set_inputs_vector() method cannot be used for Generators that use Param<> or ImageParam.";
-    for (size_t i = 0; i < filter_inputs.size(); ++i) {
-        filter_inputs[i]->set_inputs(inputs[i]);
+    for (size_t i = 0; i < pi.filter_inputs.size(); ++i) {
+        pi.filter_inputs[i]->set_inputs(inputs[i]);
     }
     inputs_set = true;
 }
@@ -1269,7 +1263,8 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
     if (value_tracker == nullptr) {
         value_tracker = std::make_shared<ValueTracker>();
     }
-    for (auto input : filter_inputs) {
+    ParamInfo &pi = param_info();
+    for (auto input : pi.filter_inputs) {
         if (input->kind() == IOKind::Buffer) {
             Parameter p = input->parameter();
             // This must use p.name(), *not* input->name()
@@ -1277,7 +1272,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
         }
     }
     if (include_outputs) {
-        for (auto output : filter_outputs) {
+        for (auto output : pi.filter_outputs) {
             if (output->kind() == IOKind::Buffer) {
                 Parameter p = output->parameter();
                 // This must use p.name(), *not* output->name()
@@ -1288,24 +1283,25 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
 }
 
 void GeneratorBase::pre_generate() {
+    ParamInfo &pi = param_info();
     if (!generator_params_set) {
         // If set_generator_param_values() wasn't called, it's too late now:
         // make everything "valid" at its default value and forbid future calls.
-        for (auto p : generator_params) {
+        for (auto p : pi.generator_params) {
             p->value_valid = true;
         }
         generator_params_set = true;
     }
     user_assert(!generate_called) << "You may not call the generate() method more than once per instance.";
-    user_assert(filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
-    user_assert(filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
+    user_assert(pi.filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
+    user_assert(pi.filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
     if (!inputs_set) {
-        for (auto input : filter_inputs) {
+        for (auto input : pi.filter_inputs) {
             input->init_internals();
         }
         inputs_set = true;
     }
-    for (auto output : filter_outputs) {
+    for (auto output : pi.filter_outputs) {
         output->init_internals();
     }
     track_parameter_values(false);
@@ -1328,8 +1324,9 @@ void GeneratorBase::post_schedule() {
 }
 
 void GeneratorBase::pre_build() {
-    user_assert(filter_inputs.size() == 0) << "May not use build() method with Input<>.";
-    user_assert(filter_outputs.size() == 0) << "May not use build() method with Output<>.";
+    ParamInfo &pi = param_info();
+    user_assert(pi.filter_inputs.size() == 0) << "May not use build() method with Input<>.";
+    user_assert(pi.filter_outputs.size() == 0) << "May not use build() method with Output<>.";
     track_parameter_values(false);
 }
 
@@ -1338,9 +1335,10 @@ void GeneratorBase::post_build() {
 }
 
 Pipeline GeneratorBase::produce_pipeline() {
-    user_assert(filter_outputs.size() > 0) << "Must use produce_pipeline<> with Output<>.";
+    ParamInfo &pi = param_info();
+    user_assert(pi.filter_outputs.size() > 0) << "Must use produce_pipeline<> with Output<>.";
     std::vector<Func> funcs;
-    for (auto output : filter_outputs) {
+    for (auto output : pi.filter_outputs) {
         for (const auto &f : output->funcs()) {
             user_assert(f.defined()) << "Output \"" << f.name() << "\" was not defined.\n";
             if (output->dimensions_defined()) {
@@ -1368,18 +1366,24 @@ Pipeline GeneratorBase::produce_pipeline() {
 
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LoweredFunc::LinkageType linkage_type) {
-    build_params();
+    // ParamInfo &pi = param_info();
     Pipeline pipeline = build_pipeline();
-    // Building the pipeline may mutate the Params/ImageParams (but not Inputs).
-    if (filter_params.size() > 0) {
-        build_params(true);
+
+    // Special-case here: for certain legacy Generators, building the pipeline 
+    // can mutate the Params/ImageParams (mainly, to customize the type/dim 
+    // of an ImageParam based on a GeneratorParam); to handle these, we discard (and rebuild)
+    // the ParamInfo for all "old-style" Generators. This isn't really desirable
+    // and hopefully can be eliminated someday.
+    if (param_info().filter_params.size() > 0) {
+        param_info_ptr.reset();
     }
 
+    ParamInfo &pi = param_info();
     std::vector<Argument> filter_arguments;
-    for (auto param : filter_params) {
+    for (auto param : pi.filter_params) {
         filter_arguments.push_back(to_argument(*param));
     }
-    for (auto input : filter_inputs) {
+    for (auto input : pi.filter_inputs) {
         for (const auto &p : input->parameters_) {
             filter_arguments.push_back(to_argument(p));
         }
@@ -1389,9 +1393,9 @@ Module GeneratorBase::build_module(const std::string &function_name,
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     user_assert(!generator_name.empty()) << "Generator has no name.\n";
-    build_params();
+    ParamInfo &pi = param_info();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_name, generator_params, filter_inputs, filter_outputs);
+    StubEmitter emit(file, generator_name, pi.generator_params, pi.filter_inputs, pi.filter_outputs);
     emit.emit();
 }
 
