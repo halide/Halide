@@ -91,12 +91,12 @@ struct float16_t {
     /** Get a new float16_t that represents NaN (not a number) */
     EXPORT static float16_t make_nan();
 
-    /** Get a new float16_t with the given raw bits 
-     * 
+    /** Get a new float16_t with the given raw bits
+     *
      * \param bits The bits conformant to IEEE754 binary16
      */
     EXPORT static float16_t make_from_bits(uint16_t bits);
-    
+
     /** Get a new float16_t from a signed integer.
      *  It is not provided as a constructor to avoid call ambiguity
      * */
@@ -200,13 +200,9 @@ private:
 };
 }  // namespace Halide
 
-namespace {
-
 template<>
-struct halide_type_of_helper<Halide::float16_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_float, 16); }
-};
-
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<Halide::float16_t>() {
+    return halide_type_t(halide_type_float, 16);
 }
 
 #endif
