@@ -450,6 +450,7 @@ public:
     /** Make a Buffer from a legacy buffer_t. */
     Buffer(const buffer_t &old_buf) {
         assert(!T_is_void && old_buf.elem_size == static_halide_type().bytes());
+        buf.host = old_buf.host;
         buf.type = static_halide_type();
         int d;
         for (d = 0; d < 4 && old_buf.extent[d]; d++);
