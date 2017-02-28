@@ -1806,13 +1806,13 @@ void generator_test() {
         GeneratorBase &tester = tester_instance;
 
         // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
-        tester.set_generator_param("gp0", 1);
-        tester.set_schedule_param("sp0", 200);
+        tester.set_generator_param("gp0", 1)
+              .set_schedule_param("sp0", 200);
 
         tester.set_inputs_vector({{StubInput(42)}});
 
-        tester.set_generator_param("gp1", 2.f);
-        tester.set_schedule_param("sp1", 201.f);
+        tester.set_generator_param("gp1", 2.f)
+              .set_schedule_param("sp1", 201.f);
 
         tester.call_generate();
 
