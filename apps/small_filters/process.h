@@ -1,14 +1,41 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
+#include "HalideRuntimeHexagonHost.h"
+#include "HalideBuffer.h"
+
+#define DECL_WEAK_PIPELINE3S(x) int x##_cpu(buffer_t *, buffer_t *, buffer_t *) __attribute__((weak)); \
+    int x##_hvx128(buffer_t *, buffer_t *, buffer_t *) __attribute__((weak)); \
+    int x##_hvx64(buffer_t *, buffer_t *, buffer_t *) __attribute__((weak));
+
+#define DECL_WEAK_PIPELINE2S(x) int x##_cpu(buffer_t *, buffer_t *) __attribute__((weak)); \
+    int x##_hvx128(buffer_t *, buffer_t *) __attribute__((weak)); \
+    int x##_hvx64(buffer_t *, buffer_t *) __attribute__((weak));
+
+
+#ifdef CONV3X3A16
 #include "conv3x3a16_hvx128.h"
 #include "conv3x3a16_hvx64.h"
 #include "conv3x3a16_cpu.h"
+#else
+DECL_WEAK_PIPELINE3S(conv3x3a16)
+#endif
+
+#ifdef DILATE3X3
 #include "dilate3x3_hvx128.h"
 #include "dilate3x3_hvx64.h"
 #include "dilate3x3_cpu.h"
-#include "HalideRuntimeHexagonHost.h"
-#include "HalideBuffer.h"
+#else
+DECL_WEAK_PIPELINE2S(dilate3x3)
+#endif
+#ifdef MEDIAN3X3
+#include "median3x3_hvx128.h"
+#include "median3x3_hvx64.h"
+#include "median3x3_cpu.h"
+#else
+DECL_WEAK_PIPELINE2S(median3x3)
+#endif
+
 
 enum bmark_run_mode_t {
     hvx64 = 1,
@@ -30,9 +57,10 @@ typedef int (*pipeline3)(buffer_t *, buffer_t *, buffer_t *);
 
 struct PipelineDescriptorBase {
     virtual void init() = 0;
-    virtual void identify_pipeline() = 0;
+    virtual const char * name() = 0;
     virtual int run(bmark_run_mode_t mode) = 0;
     virtual bool verify(int W, int H) = 0;
+    virtual bool defined() = 0;
 };
 
 template <typename T1, typename T2>
@@ -45,11 +73,17 @@ struct PipelineDescriptor : public PipelineDescriptorBase  {
     void init() {
         static_cast<T2*>(this)->init();
     }
+    const char *name() {
+        return static_cast<T2*>(this)->name();
+    }
     int run(bmark_run_mode_t mode) {
         return static_cast<T2*>(this)->run(mode);
     }
     bool verify(int W, int H) {
         return static_cast<T2*>(this)->verify(W, H);
+    }
+    bool defined() {
+        return pipeline_64 && pipeline_128 && pipeline_cpu;
     }
 };
 typedef Halide::Runtime::Buffer<uint8_t> U8Buffer;
@@ -92,7 +126,7 @@ public:
         i8_mask(2, 0) = 7;
     }
 
-    void identify_pipeline() { printf("Running conv3x3a16 ...\n"); }
+    const char *name() { return "conv3x3a16"; }
 
     bool verify(const int W, const int H) {
         u8_out.for_each_element([&](int x, int y) {
@@ -159,7 +193,7 @@ class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2, Dilate3x3Descri
         });
     }
 
-    void identify_pipeline() { printf("Running dilate3x3 ...\n"); }
+    const char *name() { return "dilate3x3"; }
 
     bool verify(const int W, const int H) {
         u8_out.for_each_element([&](int x, int y) {
@@ -198,5 +232,66 @@ class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2, Dilate3x3Descri
         abort();
     }
 
+};
+
+class Median3x3Descriptor : public PipelineDescriptor<pipeline2, Median3x3Descriptor> {
+    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
+
+ public:
+ Median3x3Descriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
+                     int W, int H) :
+    PipelineDescriptor<pipeline2, Median3x3Descriptor>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
+        u8_out(nullptr, W, H, 2) {}
+
+    void init() {
+        u8_in.device_malloc(halide_hexagon_device_interface());
+        u8_out.device_malloc(halide_hexagon_device_interface());
+
+        u8_in.for_each_value([&](uint8_t &x) {
+            x = static_cast<uint8_t>(rand());
+        });
+        u8_out.for_each_value([&](uint8_t &x) {
+            x = 0;
+        });
+    }
+
+    const char *name() { return "median3x3"; };
+
+    bool verify(const int W, const int H) {
+        u8_out.for_each_element([&](int x, int y) {
+            uint8_t inp9[9] = { u8_in(clamp(x-1, 0, W-1), clamp(y-1, 0, H-1)),
+                                u8_in(clamp(x, 0, W-1), clamp(y-1, 0, H-1)),
+                                u8_in(clamp(x+1, 0, W-1), clamp(y-1, 0, H-1)),
+
+                                u8_in(clamp(x-1, 0, W-1), clamp(y, 0, H-1)),
+                                u8_in(clamp(x, 0, W-1), clamp(y, 0, H-1)),
+                                u8_in(clamp(x+1, 0, W-1), clamp(y, 0, H-1)),
+
+                                u8_in(clamp(x-1, 0, W-1), clamp(y+1, 0, H-1)),
+                                u8_in(clamp(x, 0, W-1), clamp(y+1, 0, H-1)),
+                                u8_in(clamp(x+1, 0, W-1), clamp(y+1, 0, H-1))
+                           };
+
+            std::nth_element(&inp9[0], &inp9[4], &inp9[9]);
+            uint8_t median_val = inp9[4];
+            uint8_t out_xy = u8_out(x, y);
+            if (median_val != out_xy) {
+                printf("Median3x3: Mismatch at %d %d : %d != %d\n", x, y, out_xy, median_val);
+                abort();
+            }
+        });
+        return true;
+    }
+
+    int run(bmark_run_mode_t mode) {
+        if (mode == bmark_run_mode_t::hvx64) {
+            return pipeline_64(u8_in, u8_out);
+        } else if (mode == bmark_run_mode_t::hvx128) {
+            return pipeline_128(u8_in, u8_out);
+        } else if (mode == bmark_run_mode_t::cpu); {
+            return pipeline_cpu(u8_in, u8_out);
+        }
+        abort();
+    }
 };
 #endif

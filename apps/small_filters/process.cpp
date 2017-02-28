@@ -64,12 +64,17 @@ int main(int argc, char **argv) {
 
     Conv3x3a16Descriptor conv3x3a16_pipeline(conv3x3a16_hvx64, conv3x3a16_hvx128, conv3x3a16_cpu, W, H);
     Dilate3x3Descriptor dilate3x3_pipeine(dilate3x3_hvx64, dilate3x3_hvx128, dilate3x3_cpu, W, H);
-    std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline, &dilate3x3_pipeine};
+    Median3x3Descriptor median3x3_pipeline(median3x3_hvx64, median3x3_hvx128, median3x3_cpu, W, H);
+
+    std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline, &dilate3x3_pipeine, &median3x3_pipeline};
 
     for (bmark_run_mode_t m : modes) {
         for (PipelineDescriptorBase *p : pipelines) {
+            if (!p->defined()) {
+                continue;
+            }
             p->init();
-            p->identify_pipeline();
+            printf ("Running %s...\n", p->name());
 
             halide_hexagon_set_performance_mode(NULL, halide_hvx_power_turbo);
             halide_hexagon_power_hvx_on(NULL);
@@ -80,7 +85,7 @@ int main(int argc, char **argv) {
                         printf("pipeline failed! %d\n", result);
                     }
                 });
-            printf("Done, time: %g s %s\n", time, to_string(m));
+            printf("Done, time (%s): %g s %s\n", p->name(), time, to_string(m));
 
             // We're done with HVX, power it off.
             halide_hexagon_power_hvx_off(NULL);

@@ -4,23 +4,42 @@ using namespace Halide;
 using namespace Halide::Internal;
 IRPrinter irp(std::cerr);
 
-class Dilate3x3 : public Generator<Dilate3x3> {
+class Median3x3 : public Generator<Median3x3> {
 public:
     // Takes an 8 bit image; one channel.
     Input<Buffer<uint8_t>> input{"input", 2};
     // Outputs an 8 bit image; one channel.
     Output<Buffer<uint8_t>> output{"output", 2};
     Var x{"x"}, y{"y"};
-    Func max_y{"max_y"};
+    Func max_y{"max_y"}, min_y{"min_y"}, mid_y{"mid_y"};
+    Func minmax_x{"minmax_x"}, maxmin_x{"maxmin_x"}, midmid_x{"midmid_x"};
+
+    Expr max3(Expr a, Expr b, Expr c) {
+        return max(max(a, b), c);
+    }
+    Expr min3(Expr a, Expr b, Expr c) {
+        return min(min(a, b), c);
+    }
+    Expr mid3(Expr a, Expr b, Expr c) {
+        return max(min(max(a, b), c), min(a, b));
+    }
 
     void generate() {
         Func bounded_input{"bounded_input"};
 
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
-        max_y(x, y) = max(bounded_input(x, y-1), max(bounded_input(x, y),
-                                                     bounded_input(x, y+1)));
+        max_y(x,y) = max3(bounded_input(x ,y-1), bounded_input(x, y),
+                          bounded_input(x, y+1));
+        min_y(x,y) = min3(bounded_input(x, y-1), bounded_input(x, y),
+                          bounded_input(x, y+1));
+        mid_y(x,y) = mid3(bounded_input(x, y-1), bounded_input(x, y),
+                          bounded_input(x, y+1));
 
-        output(x, y) = max(max_y(x-1, y), max(max_y(x, y), max_y(x+1, y)));
+        minmax_x(x,y) = min3(max_y(x-1, y), max_y(x, y), max_y(x+1, y));
+        maxmin_x(x,y) = max3(min_y(x-1, y), min_y(x, y), min_y(x+1, y));
+        midmid_x(x,y) = mid3(mid_y(x-1, y), mid_y(x, y), mid_y(x+1, y));
+
+        output(x,y) = mid3(minmax_x(x, y), maxmin_x(x, y), midmid_x(x, y));
         bounded_input.compute_root();
     }
     void schedule() {
@@ -52,4 +71,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(Dilate3x3, "dilate3x3");
+HALIDE_REGISTER_GENERATOR(Median3x3, "median3x3");
