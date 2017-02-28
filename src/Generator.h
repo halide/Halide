@@ -328,15 +328,69 @@ public:
 
     const std::string name;
 
+    // overload the set() function to call the right virtual method based on type.
+
+// It's always a bit iffy to use macros for this, but IMHO it clarifies the situation here.
+#define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
+    HALIDE_ALWAYS_INLINE void set(const TYPE &new_value) { set_from_##TYPE(new_value); }
+
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
+
+#undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
+
+    // Add overloads for string and char*
+    void set(const std::string &new_value) { set_from_string(new_value); }
+    void set(const char *new_value) { set_from_string(std::string(new_value)); }
+
 protected:
-    friend void ::Halide::Internal::generator_test();
     friend class GeneratorBase;
     friend class StubEmitter;
 
     EXPORT void check_value_readable() const;
     EXPORT void check_value_writable() const;
 
+    // All GeneratorParams are settable from string.
     virtual void set_from_string(const std::string &value_string) = 0;
+
+    // This allows us to attempt to set a GeneratorParam via a 
+    // plain C++ type, even if we don't know the specific templated
+    // subclass. Attempting to set the wrong type will assert.
+    // Notice that there is no typed setter for Enums, for obvious reasons;
+    // setting enums in an unknown type must fallback to using set_from_string.
+
+#define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
+    virtual void set_from_##TYPE(const TYPE &) = 0;
+
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
+
+#undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
+
     virtual std::string to_string() const = 0;
     virtual std::string call_to_string(const std::string &v) const = 0;
     virtual std::string get_c_type() const = 0;
@@ -369,6 +423,8 @@ protected:
         return false;
     }
 
+    EXPORT void fail_wrong_type(const char *type);
+
 private:
     explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
     void operator=(const GeneratorParamBase &) = delete;
@@ -392,15 +448,58 @@ public:
 
     operator Expr() const { return make_const(type_of<T>(), this->value()); }
 
-    virtual void set(const T &new_value) { check_value_writable(); value_ = new_value; }
-
 protected:
     bool is_looplevel_param() const override {
         return std::is_same<T, LoopLevel>::value;
     }
 
+    virtual void set_impl(const T &new_value) { check_value_writable(); value_ = new_value; }
+
+#define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
+    void set_from_##TYPE(const TYPE &new_value) override { typed_setter_impl<TYPE>(new_value, #TYPE); }
+
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint8_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint16_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint32_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
+
+#undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
+
 private:
     T value_;
+
+    // These use "is_same" but could possibly use "is_convertible" instead;
+    // care would need to be taken to ensure that lossy conversions are avoided
+    // (eg we don't want to allow setting a float value into an int that can't represent it).
+    template <typename T2 = T, typename std::enable_if<std::is_convertible<T, T2>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &t2, const char * msg) {
+        // Arithmetic types must roundtrip losslessly.
+        if (!std::is_same<T, T2>::value && 
+            std::is_arithmetic<T>::value && 
+            std::is_arithmetic<T2>::value) {
+            const T t = t2;
+            const T2 t2a = t;
+            if (t2a != t2) {
+                fail_wrong_type(msg);
+            }
+        }
+        value_ = t2;
+    }
+
+    template <typename T2 = T, typename std::enable_if<!std::is_convertible<T, T2>::value>::type * = nullptr>
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &, const char *msg) {
+        fail_wrong_type(msg);
+    }
 };
 
 // Stubs for type-specific implementations of GeneratorParam, to avoid
@@ -444,9 +543,9 @@ public:
         this->set(value);
     }
 
-    void set(const T &new_value) override {
+    void set_impl(const T &new_value) override {
         user_assert(new_value >= min && new_value <= max) << "Value out of range: " << new_value;
-        GeneratorParamImpl<T>::set(new_value);
+        GeneratorParamImpl<T>::set_impl(new_value);
     }
 
     void set_from_string(const std::string &new_value_string) override {
@@ -538,7 +637,7 @@ public:
     void set_from_string(const std::string &new_value_string) override {
         auto it = enum_map.find(new_value_string);
         user_assert(it != enum_map.end()) << "Enumeration value not found: " << new_value_string;
-        this->set(it->second);
+        this->set_impl(it->second);
     }
 
     std::string to_string() const override {
@@ -2130,7 +2229,20 @@ public:
 
     Target get_target() const override { return target; }
 
+    EXPORT void set_generator_param(const std::string &name, const std::string &value);
     EXPORT void set_generator_param_values(const std::map<std::string, std::string> &params);
+
+    template<typename T>
+    GeneratorBase &set_generator_param(const std::string &name, const T &value) {
+        find_generator_param_by_name(name).set(value);
+        return *this;
+    }
+
+    template<typename T>
+    GeneratorBase &set_schedule_param(const std::string &name, const T &value) {
+        find_schedule_param_by_name(name).set(value);
+        return *this;
+    }
 
     EXPORT void set_schedule_param_values(const std::map<std::string, std::string> &params,
                                           const std::map<std::string, LoopLevel> &looplevel_params);
@@ -2231,6 +2343,7 @@ private:
     friend class GeneratorStub;
     friend class SimpleGeneratorFactory;
     friend class StubOutputBufferBase;
+    friend void ::Halide::Internal::generator_test();
 
     struct ParamInfo {
         EXPORT ParamInfo(GeneratorBase *generator, const size_t size);
@@ -2261,8 +2374,6 @@ private:
     std::unique_ptr<ParamInfo> param_info_ptr; 
 
     std::shared_ptr<Internal::ValueTracker> value_tracker;
-    bool generator_params_set{false};
-    bool schedule_params_set{false};
     bool inputs_set{false};
     std::string generator_name;
 
@@ -2270,6 +2381,16 @@ private:
     EXPORT ParamInfo &param_info();
 
     EXPORT Internal::GeneratorParamBase &find_param_by_name(const std::string &name);
+    Internal::GeneratorParamBase &find_generator_param_by_name(const std::string &name) {
+        auto &p = find_param_by_name(name);
+        internal_assert(!p.is_schedule_param());
+        return p;
+    }
+    Internal::GeneratorParamBase &find_schedule_param_by_name(const std::string &name) {
+        auto &p = find_param_by_name(name);
+        internal_assert(p.is_schedule_param());
+        return p;
+    }
 
     EXPORT void check_scheduled(const char* m) const;
 
@@ -2461,6 +2582,7 @@ protected:
 private:
     friend void ::Halide::Internal::generator_test();
     friend class Internal::SimpleGeneratorFactory;
+    friend void ::Halide::Internal::generator_test();
 
     Generator(const Generator &) = delete;
     void operator=(const Generator &) = delete;
