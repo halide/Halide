@@ -333,7 +333,8 @@ protected:
     friend class GeneratorBase;
     friend class StubEmitter;
 
-    EXPORT void check_value_valid() const;
+    EXPORT void check_value_readable() const;
+    EXPORT void check_value_writable() const;
 
     virtual void set_from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
@@ -368,10 +369,12 @@ private:
     explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
     void operator=(const GeneratorParamBase &) = delete;
 
-    // It is only valid to examine a GeneratorParam's value after the owning
-    // Generator has had set_generator_param_values() called (even if this
-    // particular GP was left unaffected).
-    bool value_valid{false};
+    // Generator which owns this GeneratorParam. Note that this will be null
+    // initially; the GeneratorBase itself will set this field when it initially
+    // builds its info about params. However, since it (generally) isn't
+    // appropriate for GeneratorParam<> to be declared outside of a Generator,
+    // all reasonable non-testing code should expect this to be non-null.
+    GeneratorBase *generator{nullptr};
 };
 
 template<typename T>
@@ -379,13 +382,13 @@ class GeneratorParamImpl : public GeneratorParamBase {
 public:
     GeneratorParamImpl(const std::string &name, const T &value) : GeneratorParamBase(name), value_(value) {}
 
-    T value() const { check_value_valid(); return value_; }
+    T value() const { check_value_readable(); return value_; }
 
     operator T() const { return this->value(); }
 
     operator Expr() const { return make_const(type_of<T>(), this->value()); }
 
-    virtual void set(const T &new_value) { value_ = new_value; }
+    virtual void set(const T &new_value) { check_value_writable(); value_ = new_value; }
 
 protected:
     bool is_looplevel_param() const override {
@@ -1114,6 +1117,13 @@ protected:
     std::vector<Func> funcs_;
     std::vector<Expr> exprs_;
 
+    // Generator which owns this Input or Output. Note that this will be null
+    // initially; the GeneratorBase itself will set this field when it initially
+    // builds its info about params. However, since it isn't
+    // appropriate for Input<> or Output<> to be declared outside of a Generator,
+    // all reasonable non-testing code should expect this to be non-null.
+    GeneratorBase *generator{nullptr};
+
     EXPORT std::string array_name(size_t i) const;
 
     EXPORT virtual void verify_internals() const;
@@ -1132,6 +1142,8 @@ protected:
         internal_error << "Unimplemented";
         return Parameter();
     }
+
+    virtual void check_value_writable() const = 0;
 
 private:
     explicit GIOBase(const GIOBase &) = delete;
@@ -1175,6 +1187,7 @@ protected:
 
     virtual std::string get_c_type() const = 0;
 
+    EXPORT void check_value_writable() const override;
 private:
     EXPORT void init_parameters();
 };
@@ -1585,6 +1598,8 @@ protected:
     virtual std::string get_c_type() const {
         return "Func";
     }
+
+    EXPORT void check_value_writable() const override;
 };
 
 template<typename T>
@@ -1727,6 +1742,8 @@ public:
     // not considered const. We should consider how this really ought to work.
     template<typename T2>
     NO_INLINE GeneratorOutput_Buffer<T> &operator=(Buffer<T2> &buffer) {
+        this->check_value_writable();
+
         user_assert(T::can_convert_from(buffer))
             << "Cannot assign to the Output \"" << this->name()
             << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
@@ -1752,6 +1769,8 @@ public:
     // of the enclosing Generator.
     template<typename T2>
     NO_INLINE GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
+        this->check_value_writable();
+
         const auto &f = stub_output_buffer.f;
         internal_assert(f.defined());
 
@@ -1808,6 +1827,8 @@ public:
     // Allow Output<Func> = Func
     template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
     GeneratorOutput_Func<T> &operator=(const Func &f) {
+        this->check_value_writable();
+
         // Don't bother verifying the Func type, dimensions, etc., here: 
         // That's done later, when we produce the pipeline.
         get_assignable_func_ref(0) = f;
@@ -1817,6 +1838,7 @@ public:
     // Allow Output<Func[]> = Func
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     Func &operator[](size_t i) {
+        this->check_value_writable();
         return get_assignable_func_ref(i);
     }
 
@@ -2104,26 +2126,64 @@ protected:
     template<typename T>
     using Output = GeneratorOutput<T>;
 
-    bool build_pipeline_called{false};
-    bool generate_called{false};
-    bool schedule_called{false};
+    // A Generator's creation and usage must go in a certain phase to ensure correctness;
+    // the state machine here is advanced and checked at various points to ensure
+    // this is the case.
+    enum Phase {
+        // Generator has just come into being.
+        Created,
+
+        // All Input<>/Param<> fields have been set. (Applicable only in JIT mode;
+        // in AOT mode, this can be skipped, going Created->GenerateCalled directly.)
+        InputsSet,
+
+        // Generator has had its generate() method called. (For Generators with
+        // a build() method instead of generate(), this phase will be skipped
+        // and will advance directly to ScheduleCalled.)
+        GenerateCalled,
+
+        // Generator has had its schedule() method called.
+        ScheduleCalled,
+    } phase{Created};
+
+    void check_exact_phase(Phase expected_phase) const;
+    void check_min_phase(Phase expected_phase) const;
+    void advance_phase(Phase new_phase);
 
 private:
+    friend void ::Halide::Internal::generator_test();
+    friend class GeneratorParamBase;
+    friend class GeneratorInputBase;
+    friend class GeneratorOutputBase;
     friend class GeneratorStub;
     friend class SimpleGeneratorFactory;
     friend class StubOutputBufferBase;
 
+    struct ParamInfo {
+        // Ordered-list  of non-null ptrs to GeneratorParam<> fields.
+        std::vector<Internal::GeneratorParamBase *> generator_params;
+
+        // Ordered-list  of non-null ptrs to Input<>/Output<> fields; empty if old-style Generator.
+        std::vector<Internal::GeneratorInputBase *> filter_inputs;
+        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
+
+        // Ordered-list  of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
+        std::vector<Internal::Parameter *> filter_params;
+    };
+
     const size_t size;
-    std::vector<Internal::Parameter *> filter_params;
-    std::vector<Internal::GeneratorInputBase *> filter_inputs;
-    std::vector<Internal::GeneratorOutputBase *> filter_outputs;
-    std::vector<Internal::GeneratorParamBase *> generator_params;
+    // Lazily-allocated-and-inited struct with info about our various Params. 
+    // Do not access directly: use the param_info() getter to lazy-init.
+    std::unique_ptr<ParamInfo> param_info_ptr; 
+
     std::shared_ptr<Internal::ValueTracker> value_tracker;
-    bool params_built{false};
     bool generator_params_set{false};
     bool schedule_params_set{false};
     bool inputs_set{false};
     std::string generator_name;
+
+    // Return our ParamInfo (lazy-initing as needed).
+    EXPORT ParamInfo &param_info();
 
     EXPORT void check_scheduled(const char* m) const;
 
@@ -2248,21 +2308,17 @@ private:
     template <typename T2 = T,
               typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
     Pipeline build_pipeline_impl() {
-        internal_assert(!build_pipeline_called);
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
         pre_build();
         Pipeline p = ((T *)this)->build();
         post_build();
-        build_pipeline_called = true;
         return p;
     }
     template <typename T2 = T,
               typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
     Pipeline build_pipeline_impl() {
-        internal_assert(!build_pipeline_called);
         ((T *)this)->call_generate_impl();
         ((T *)this)->call_schedule_impl();
-        build_pipeline_called = true;
         return produce_pipeline();
     }
 
@@ -2317,6 +2373,7 @@ protected:
         this->call_schedule_impl();
     }
 private:
+    friend void ::Halide::Internal::generator_test();
     friend class Internal::SimpleGeneratorFactory;
 
     Generator(const Generator &) = delete;
