@@ -2269,6 +2269,8 @@ private:
     // Return our ParamInfo (lazy-initing as needed).
     EXPORT ParamInfo &param_info();
 
+    EXPORT Internal::GeneratorParamBase &find_param_by_name(const std::string &name);
+
     EXPORT void check_scheduled(const char* m) const;
 
     EXPORT void build_params(bool force = false);
