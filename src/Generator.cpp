@@ -964,8 +964,20 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
-void GeneratorParamBase::check_value_valid() const {
-    user_assert(value_valid) << "The GeneratorParam " << name << " cannot be accessed before build() or generate() is called.\n";
+void GeneratorParamBase::check_value_readable() const {
+    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
+}
+
+void GeneratorParamBase::check_value_writable() const {
+    // Allow writing when no Generator is set, to avoid having to special-case ctor initing code
+    if (!generator) return;
+    if (is_schedule_param()) {
+        user_assert(generator->phase < GeneratorBase::ScheduleCalled)  << "The ScheduleParam " << name << " cannot be written after schedule() is called.\n";
+    } else {
+        // Special-case for legacy: allow 'target' to be writable. Yikes.
+        if (name == "target") return;
+        user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be written after build() or generate() is called.\n";
+    }
 }
 
 /* static */
@@ -1066,6 +1078,8 @@ GeneratorBase::ParamInfo &GeneratorBase::param_info() {
             user_assert(is_valid_name(input->name())) << "Invalid Input name: (" << input->name() << ")\n";
             user_assert(!names.count(input->name())) << "Duplicate Input name: " << input->name();
             names.insert(input->name());
+            internal_assert(input->generator == nullptr || input->generator == this);
+            input->generator = this;
             param_info_ptr->filter_inputs.push_back(input);
         }
 
@@ -1077,6 +1091,8 @@ GeneratorBase::ParamInfo &GeneratorBase::param_info() {
             user_assert(is_valid_name(output->name())) << "Invalid Output name: (" << output->name() << ")\n";
             user_assert(!names.count(output->name())) << "Duplicate Output name: " << output->name();
             names.insert(output->name());
+            internal_assert(output->generator == nullptr || output->generator == this);
+            output->generator = this;
             param_info_ptr->filter_outputs.push_back(output);
         }
 
@@ -1101,6 +1117,8 @@ GeneratorBase::ParamInfo &GeneratorBase::param_info() {
             user_assert(is_valid_name(param->name)) << "Invalid GeneratorParam name: " << param->name;
             user_assert(!names.count(param->name)) << "Duplicate GeneratorParam name: " << param->name;
             names.insert(param->name);
+            internal_assert(param->generator == nullptr || param->generator == this);
+            param->generator = this;
             param_info_ptr->generator_params.push_back(param);
         }
     }
@@ -1113,7 +1131,7 @@ Func GeneratorBase::get_first_output() {
 }
 
 Func GeneratorBase::get_output(const std::string &n) {
-    user_assert(generate_called) << "Must call generate() before accessing Generator outputs."; 
+    check_min_phase(GenerateCalled);
     // There usually are very few outputs, so a linear search is fine
     ParamInfo &pi = param_info();
     for (auto output : pi.filter_outputs) {
@@ -1130,7 +1148,7 @@ Func GeneratorBase::get_output(const std::string &n) {
 }
 
 std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
-    user_assert(generate_called) << "Must call generate() before accessing Generator outputs."; 
+    check_min_phase(GenerateCalled);
     // There usually are very few outputs, so a linear search is fine
     ParamInfo &pi = param_info();
     for (auto output : pi.filter_outputs) {
@@ -1151,6 +1169,7 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
     ParamInfo &pi = param_info();
     std::map<std::string, GeneratorParamBase *> generator_param_names;
     for (auto p : pi.generator_params) {
+        internal_assert(p->generator == this);
         generator_param_names[p->name] = p;
     }
     std::map<std::string, GIOBase *> type_names, dim_names, array_size_names;
@@ -1211,9 +1230,6 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
         }
         user_error << "Generator " << generator_name << " has no GeneratorParam named: " << key << "\n";
     }
-    for (auto p : pi.generator_params) {
-        p->value_valid = true;
-    }
     generator_params_set = true;
 }
 
@@ -1246,13 +1262,14 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
 }
 
 void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
+    advance_phase(InputsSet);
     internal_assert(!inputs_set) << "set_inputs_vector() must be called at most once per Generator instance.\n";
     ParamInfo &pi = param_info();
+    user_assert(pi.filter_params.size() == 0) 
+        << "The set_inputs_vector() method cannot be used for Generators that use Param<> or ImageParam.";
     user_assert(inputs.size() == pi.filter_inputs.size()) 
             << "Expected exactly " << pi.filter_inputs.size() 
             << " inputs but got " << inputs.size() << "\n";
-    user_assert(pi.filter_params.size() == 0) 
-        << "The set_inputs_vector() method cannot be used for Generators that use Param<> or ImageParam.";
     for (size_t i = 0; i < pi.filter_inputs.size(); ++i) {
         pi.filter_inputs[i]->set_inputs(inputs[i]);
     }
@@ -1282,17 +1299,40 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
     }
 }
 
+void GeneratorBase::check_min_phase(Phase expected_phase) const {
+    user_assert(phase >= expected_phase) << "You may not do this operation at this phase.";
+}
+
+void GeneratorBase::check_exact_phase(Phase expected_phase) const {
+    user_assert(phase == expected_phase) << "You may not do this operation at this phase.";
+}
+
+void GeneratorBase::advance_phase(Phase new_phase) {
+    switch (new_phase) {
+    case Created: 
+        internal_error << "Impossible"; 
+        break;
+    case InputsSet:
+        internal_assert(phase == Created);
+        break;
+    case GenerateCalled:
+        // It's OK to advance from Created to GenerateCalled, skipping InputsSet.
+        internal_assert(phase == Created || phase == InputsSet);
+        break;
+    case ScheduleCalled:
+        internal_assert(phase == GenerateCalled);
+        break;
+    }
+    phase = new_phase;
+}
+
+
 void GeneratorBase::pre_generate() {
+    advance_phase(GenerateCalled);
     ParamInfo &pi = param_info();
     if (!generator_params_set) {
-        // If set_generator_param_values() wasn't called, it's too late now:
-        // make everything "valid" at its default value and forbid future calls.
-        for (auto p : pi.generator_params) {
-            p->value_valid = true;
-        }
         generator_params_set = true;
     }
-    user_assert(!generate_called) << "You may not call the generate() method more than once per instance.";
     user_assert(pi.filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
     user_assert(pi.filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
     if (!inputs_set) {
@@ -1308,22 +1348,21 @@ void GeneratorBase::pre_generate() {
 }
 
 void GeneratorBase::post_generate() {
-    generate_called = true;
     track_parameter_values(true);
 }
 
 void GeneratorBase::pre_schedule() {
-    user_assert(generate_called) << "You must call the generate() method before calling the schedule() method.";
-    user_assert(!schedule_called) << "You may not call the schedule() method more than once per instance.";
+    advance_phase(ScheduleCalled);
     track_parameter_values(true);
 }
 
 void GeneratorBase::post_schedule() {
-    schedule_called = true;
     track_parameter_values(true);
 }
 
 void GeneratorBase::pre_build() {
+    advance_phase(GenerateCalled);
+    advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
     user_assert(pi.filter_inputs.size() == 0) << "May not use build() method with Input<>.";
     user_assert(pi.filter_outputs.size() == 0) << "May not use build() method with Output<>.";
@@ -1393,6 +1432,9 @@ Module GeneratorBase::build_module(const std::string &function_name,
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     user_assert(!generator_name.empty()) << "Generator has no name.\n";
+    // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
+    advance_phase(GenerateCalled);
+    advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
     std::ofstream file(stub_file_path);
     StubEmitter emit(file, generator_name, pi.generator_params, pi.filter_inputs, pi.filter_outputs);
@@ -1400,7 +1442,7 @@ void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
 }
 
 void GeneratorBase::check_scheduled(const char* m) const {
-    user_assert(schedule_called) << "Must call schedule() before calling " << m << "()";
+    check_min_phase(ScheduleCalled);
 }
 
 GIOBase::GIOBase(size_t array_size, 
@@ -1559,6 +1601,10 @@ GeneratorInputBase::~GeneratorInputBase() {
     ObjectInstanceRegistry::unregister_instance(this); 
 }
 
+void GeneratorInputBase::check_value_writable() const {
+    user_assert(generator && generator->phase == GeneratorBase::InputsSet)  << "The Input " << name() << " cannot be set at this point.\n";
+}
+
 void GeneratorInputBase::set_def_min_max() {
     // nothing
 }
@@ -1602,6 +1648,7 @@ void GeneratorInputBase::init_internals() {
 }
 
 void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
+    generator->check_exact_phase(GeneratorBase::InputsSet);
     parameters_.clear();
     exprs_.clear();
     funcs_.clear();
@@ -1658,6 +1705,10 @@ GeneratorOutputBase::~GeneratorOutputBase() {
     ObjectInstanceRegistry::unregister_instance(this); 
 }
 
+void GeneratorOutputBase::check_value_writable() const {
+    user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " cannot only be set inside generate().\n";
+}
+
 void GeneratorOutputBase::init_internals() {
     // user_assert(array_size_defined()) << "ArraySize is not defined for Output " << name() << "; you may need to specify a GeneratorParam.\n";
     // user_assert(types_defined()) << "Type is not defined for Output " << name() << "; you may need to specify a GeneratorParam.\n";
@@ -1689,8 +1740,139 @@ Target StubOutputBufferBase::get_target() const {
 }
 
 void generator_test() {
-    GeneratorParam<int> gp("gp", 1);
-    gp.value_valid = true;
+    // Verify that the Generator's internal phase actually prevents unsupported
+    // order of operations.
+    {
+        class Tester : public Generator<Tester> {
+        public:
+            GeneratorParam<int> gp0{"gp0", 0};
+            GeneratorParam<float> gp1{"gp1", 1.f};
+            GeneratorParam<uint64_t> gp2{"gp2", 2};
+
+            ScheduleParam<int> sp0{"sp0", 100};
+            ScheduleParam<float> sp1{"sp1", 101.f};
+            ScheduleParam<uint64_t> sp2{"sp2", 102};
+
+            Input<int> input{"input"};
+            Output<Func> output{"output", Int(32), 1};
+
+            void generate() {
+                internal_assert(gp0 == 1);
+                internal_assert(gp1 == 2.f);
+                internal_assert(gp2 == (uint64_t) 2);  // unchanged
+                internal_assert(sp0 == 200);
+                internal_assert(sp1 == 201.f);
+                internal_assert(sp2 == (uint64_t) 102);
+                Var x;
+                output(x) = input + gp0;
+            }
+            void schedule() {
+                internal_assert(sp0 == 200);
+                internal_assert(sp1 == 201.f);
+                internal_assert(sp2 == (uint64_t) 202);
+            }
+        };
+
+        Tester tester;
+        internal_assert(tester.phase == GeneratorBase::Created);
+
+        // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
+        tester.gp0.set(1);
+        tester.sp0.set(200);
+
+        tester.set_inputs_vector({{StubInput(42)}});
+        internal_assert(tester.phase == GeneratorBase::InputsSet);
+
+        // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
+
+        // Also ok to call in this phase.
+        tester.gp1.set(2.f);
+        tester.sp1.set(201.f);
+
+        tester.call_generate();
+        internal_assert(tester.phase == GeneratorBase::GenerateCalled);
+
+        // tester.set_inputs_vector({{StubInput(44)}});  // This will assert-fail.
+        // tester.gp2.set(2);  // This will assert-fail.
+        tester.sp2.set(202);  // OK to set ScheduleParams after generate(), but not after schedule()
+
+        tester.call_schedule();
+        internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
+
+        // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
+        // tester.gp2.set(2);  // This will assert-fail.
+        // tester.sp2.set(202);  // This will assert-fail.
+    }
+
+    // Verify that the Generator's internal phase actually prevents unsupported
+    // order of operations (with old-style Generator)
+    {
+        class Tester : public Generator<Tester> {
+        public:
+            GeneratorParam<int> gp0{"gp0", 0};
+            GeneratorParam<float> gp1{"gp1", 1.f};
+            GeneratorParam<uint64_t> gp2{"gp2", 2};
+
+            ScheduleParam<int> sp0{"sp0", 100};
+            ScheduleParam<float> sp1{"sp1", 101.f};
+            ScheduleParam<uint64_t> sp2{"sp2", 102};
+
+            Param<int> input{"input"};
+
+            Func build() {
+                internal_assert(gp0 == 1);
+                internal_assert(gp1 == 2.f);
+                internal_assert(gp2 == (uint64_t) 2);  // unchanged
+                internal_assert(sp0 == 200);
+                internal_assert(sp1 == 201.f);
+                internal_assert(sp2 == (uint64_t) 102);
+                Var x;
+                Func output;
+                output(x) = input + gp0;
+                return output;
+            }
+        };
+
+        Tester tester;
+        internal_assert(tester.phase == GeneratorBase::Created);
+
+        // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
+        tester.gp0.set(1);
+        tester.sp0.set(200);
+
+        // set_inputs_vector() can't be called on an old-style Generator;
+        // that's OK, since we can skip from Created -> GenerateCalled anyway
+        // tester.set_inputs_vector({{StubInput(42)}});
+        // internal_assert(tester.phase == GeneratorBase::InputsSet);
+
+        // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
+
+        // Also ok to call in this phase.
+        tester.gp1.set(2.f);
+        tester.sp1.set(201.f);
+
+        tester.build_pipeline();
+        internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
+
+        // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
+        // tester.gp2.set(2);  // This will assert-fail.
+        // tester.sp2.set(202);  // This will assert-fail.
+    }    
+
+    class GPTester : public Generator<GPTester> {
+    public:
+        GeneratorParam<int> gp{"gp", 0};
+        Output<Func> output{"output", Int(32), 0};
+        void generate() { output() = 0; }
+        void schedule() {}
+    };
+    GPTester gp_tester;
+    // Accessing the GeneratorParam will assert-fail if we
+    // don't do some minimal setup here.
+    gp_tester.set_inputs_vector({});
+    gp_tester.call_generate();
+    gp_tester.call_schedule();
+    auto &gp = gp_tester.gp;
 
     // Verify that RDom parameter-pack variants can convert GeneratorParam to Expr
     RDom rdom(0, gp, 0, gp);
