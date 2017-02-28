@@ -190,7 +190,7 @@ public:
 
     // TODO: This unique_name call is done to prevent IVar names from
     // matching Var names. This is a total hack and is not 100% reliable as
-    // Var's can be made with an name.
+    // Vars can be made with a name.
     IVar(const std::string &n) : Var(n + Internal::unique_name('i'), next_ivar_id()) {
     }
 };

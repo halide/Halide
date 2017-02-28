@@ -257,7 +257,7 @@ private:
     void visit(const Call *op) {
         IRGraphMutator::visit(op);
         if (op->name == name) {
-            internal_assert(op->args.size() >= explicit_arg_count) << "Not enough arguments in self-call to satisfy exlicit count.\n";
+            internal_assert(op->args.size() >= explicit_arg_count) << "Not enough arguments in self-call to satisfy explicit count.\n";
             std::vector<Expr> args;
 
             args.insert(args.end(), op->args.begin(), op->args.begin() + explicit_arg_count);
@@ -660,19 +660,20 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         // Handle schedule for any previous update definitions
         for (Definition &update_def : contents->updates) {
             // Clear out previous implicits and outermost.
-            update_def.schedule().dims().erase(update_def.schedule().dims().end() - prev_implicits - 1, update_def.schedule().dims().end());
+            auto &dims = update_def.schedule().dims();
+            dims.erase(dims.end() - prev_implicits - 1, dims.end());
 
             // Then add the implicit vars outside of that.
             for (const auto &e : contents->init_def.implicit_args()) {
                 const Variable *v = e.as<Variable>();
                 Dim d = {v->name, ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
-                update_def.schedule().dims().push_back(d);
+                dims.push_back(d);
             }
 
             // Then the dummy outermost dim
             {
                 Dim d = {Var::outermost().name(), ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
-                update_def.schedule().dims().push_back(d);
+                dims.push_back(d);
             }
 
             update_def.implicit_args() = contents->init_def.implicit_args();
@@ -865,8 +866,7 @@ const std::vector<Expr> &Function::explicit_args() const {
 std::vector<std::string> Function::all_args() const {
     const auto &pure_def_args = contents->init_def.all_args();
     std::vector<std::string> arg_names(pure_def_args.size());
-    size_t i;
-    for (i = 0; i < pure_def_args.size(); i++) {
+    for (size_t i = 0; i < pure_def_args.size(); i++) {
         const Variable *var = pure_def_args[i].as<Variable>();
         internal_assert(var);
         arg_names[i] = var->name;
