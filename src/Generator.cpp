@@ -1192,15 +1192,19 @@ std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
     return {};
 }
 
+Internal::GeneratorParamBase &GeneratorBase::find_param_by_name(const std::string &name) {
+    ParamInfo &pi = param_info();
+    auto it = pi.params_by_name.find(name);
+    user_assert(it != pi.params_by_name.end()) << "Generator has no GeneratorParam named: " << name << "\n";
+    internal_assert(it->second != nullptr);
+    return *it->second;
+}
+
 void GeneratorBase::set_generator_param_values(const std::map<std::string, std::string> &params) {
     user_assert(!generator_params_set) << "set_generator_param_values() must be called at most once per Generator instance.\n";
-    ParamInfo &pi = param_info();
     for (auto key_value : params) {
-        const std::string &key = key_value.first;
-        const std::string &value = key_value.second;
-        auto p = pi.params_by_name.find(key);
-        user_assert(p != pi.params_by_name.end()) << "Generator " << generator_name << " has no GeneratorParam named: " << key << "\n";
-        p->second->set_from_string(value);
+        // We don't care about is_schedule_param here.
+        find_param_by_name(key_value.first).set_from_string(key_value.second);
     }
     generator_params_set = true;
 }
@@ -1208,23 +1212,17 @@ void GeneratorBase::set_generator_param_values(const std::map<std::string, std::
 void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::string> &params, 
                                               const std::map<std::string, LoopLevel> &looplevel_params) {
     user_assert(!schedule_params_set) << "set_schedule_param_values() must be called at most once per Generator instance.\n";
-    ParamInfo &pi = param_info();
     for (auto key_value : params) {
-        const std::string &key = key_value.first;
-        const std::string &value = key_value.second;
-        auto p = pi.params_by_name.find(key);
-        user_assert(p != pi.params_by_name.end()) << "Generator has no GeneratorParam named: " << key << "\n";
+        auto &p = find_param_by_name(key_value.first);
         // It's not OK to set non-schedule params here.
-        user_assert(p->second->is_schedule_param()) << "GeneratorParam cannot be specified for: " << key;
-        p->second->set_from_string(value);
+        user_assert(p.is_schedule_param()) << "GeneratorParam cannot be specified for: " << p.name;
+        p.set_from_string(key_value.second);
     }
     for (auto key_value : looplevel_params) {
-        const std::string &key = key_value.first;
-        const LoopLevel &value = key_value.second;
-        auto p = pi.params_by_name.find(key);
-        user_assert(p != pi.params_by_name.end()) << "Generator has no GeneratorParam named: " << key << "\n";
-        user_assert(p->second->is_schedule_param()) << "LoopLevel param cannot be specified for: " << key;
-        static_cast<GeneratorParam<LoopLevel> *>(p->second)->set(value);
+        auto &p = find_param_by_name(key_value.first);
+        // It's not OK to set non-schedule params here.
+        user_assert(p.is_schedule_param()) << "GeneratorParam cannot be specified for: " << p.name;
+        static_cast<GeneratorParam<LoopLevel> *>(&p)->set(key_value.second);
     }
     schedule_params_set = true;
 }
