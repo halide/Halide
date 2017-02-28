@@ -19,7 +19,6 @@ using std::vector;
 using std::string;
 using std::ostringstream;
 using std::pair;
-using std::make_pair;
 
 using namespace Halide::ConciseCasts;
 using namespace llvm;
@@ -657,7 +656,7 @@ void CodeGen_ARM::visit(const Store *op) {
     vector<pair<string, Expr>> lets;
     while (const Let *let = rhs.as<Let>()) {
         rhs = let->body;
-        lets.push_back(make_pair(let->name, let->value));
+        lets.push_back({ let->name, let->value });
     }
     const Shuffle *shuffle = rhs.as<Shuffle>();
 

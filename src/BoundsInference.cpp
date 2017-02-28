@@ -500,7 +500,7 @@ public:
                         builder.dimensions = input.dimensions();
                         Expr buf = builder.build();
 
-                        lets.push_back(make_pair(name, buf));
+                        lets.push_back({ name, buf });
                         bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), name));
                         buffers_to_annotate.push_back(bounds_inference_args.back());
                     }
@@ -518,7 +518,7 @@ public:
                                                 {(int)sizeof(buffer_t)}, Call::Intrinsic);
                     query_buf = Call::make(type_of<struct buffer_t *>(), Call::copy_memory,
                                            {query_buf, in_buf, (int)sizeof(buffer_t)}, Call::Intrinsic);
-                    lets.push_back(make_pair(query_name, query_buf));
+                    lets.push_back({ query_name, query_buf });
                     Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
@@ -550,7 +550,7 @@ public:
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
                 buffers_to_annotate.push_back(bounds_inference_args.back());
-                lets.push_back(make_pair(buf_name, output_buffer_t));
+                lets.push_back({ buf_name, output_buffer_t });
             }
 
             Stmt annotate;
@@ -789,7 +789,7 @@ public:
                     */
 
 
-                    producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
+                    producer.bounds[{ consumer.name, consumer.stage }] = b;
                     producer.consumers.push_back((int)i);
                 }
             }
@@ -823,7 +823,7 @@ public:
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
                 if (!s.func.same_as(output)) continue;
-                s.bounds[make_pair(s.name, s.stage)] = output_box;
+                s.bounds[{ s.name, s.stage }] = output_box;
             }
         }
     }
@@ -846,7 +846,7 @@ public:
             }
 
             body = let->body;
-            lets.push_back(make_pair(let->name, let->value));
+            lets.push_back({ let->name, let->value });
         }
 
         // If there are no pipelines at this loop level, we can skip most of the work.

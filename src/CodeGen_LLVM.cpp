@@ -3548,11 +3548,11 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
         int l = sizes_to_try[i];
         llvm::Function *vec_fn = module->getFunction(name + "x" + std::to_string(l));
         if (vec_fn) {
-            return std::make_pair(vec_fn, l);
+            return { vec_fn, l };
         }
     }
 
-    return std::make_pair<llvm::Function *, int>(nullptr, 0);
+    return { nullptr, 0 };
 }
 
 ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {

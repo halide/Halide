@@ -284,7 +284,7 @@ WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf,
 
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != device_interface) {
-        error(user_context) << "halide_device_and_host_malloc doesn't support switching interfaces\n";
+        halide_error(user_context, "halide_device_and_host_malloc doesn't support switching interfaces\n");
         return halide_error_code_device_malloc_failed;
     }
 
@@ -295,6 +295,7 @@ WEAK int halide_device_and_host_malloc(void *user_context, struct buffer_t *buf,
     device_interface->release_module();
 
     if (result) {
+        halide_error(user_context, "allocating host and device memory failed\n");
         return halide_error_code_device_malloc_failed;
     } else {
         return 0;
@@ -324,6 +325,12 @@ WEAK int halide_device_and_host_free(void *user_context, struct buffer_t *buf) {
             } else {
                 return 0;
             }
+        } else if (buf->host) {
+            // device_free must have been called on this buffer (which
+            // must be legal for the device interface that was
+            // used). We'd better still free the host pointer.
+            halide_free(user_context, buf->host);
+            buf->host = NULL;
         }
     }
     buf->dev_dirty = false;
@@ -346,8 +353,10 @@ WEAK int halide_default_device_and_host_malloc(void *user_context, struct buffer
 
 WEAK int halide_default_device_and_host_free(void *user_context, struct buffer_t *buf, const halide_device_interface_t *device_interface) {
     int result = halide_device_free(user_context, buf);
-    halide_free(user_context, buf->host);
-    buf->host = NULL;
+    if (buf->host) {
+        halide_free(user_context, buf->host);
+        buf->host = NULL;
+    }
     buf->host_dirty = false;
     buf->dev_dirty = false;
     return result;

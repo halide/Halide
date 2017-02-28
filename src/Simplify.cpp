@@ -28,7 +28,6 @@ namespace Internal {
 using std::string;
 using std::map;
 using std::pair;
-using std::make_pair;
 using std::ostringstream;
 using std::vector;
 
@@ -185,7 +184,7 @@ public:
             int64_t i_min, i_max;
             if (const_int(iter.value().min, &i_min) &&
                 const_int(iter.value().max, &i_max)) {
-                bounds_info.push(iter.name(), make_pair(i_min, i_max));
+                bounds_info.push(iter.name(), { i_min, i_max });
             }
         }
 
@@ -4046,12 +4045,12 @@ private:
                 !b.type().is_max(ib) &&
                 is_const_power_of_two_integer(make_const(a.type(), ib + 1), &bits)) {
                 expr = Mod::make(a, make_const(a.type(), ib + 1));
-            } else if (const_uint(b, &ub)) {
-                if (b.type().is_max(ub)) {
-                    expr = a;
-                } else if (is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
-                    expr = Mod::make(a, make_const(a.type(), ub + 1));
-                }
+            } else if (const_uint(b, &ub) &&
+                       b.type().is_max(ub)) {
+                expr = a;
+            } else if (const_uint(b, &ub) &&
+                       is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
+                expr = Mod::make(a, make_const(a.type(), ub + 1));
             } else if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
             } else {
@@ -4632,7 +4631,7 @@ private:
             }
             int64_t val_min, val_max;
             if (const_int_bounds(new_value, &val_min, &val_max)) {
-                bounds_info.push(new_name, make_pair(val_min, val_max));
+                bounds_info.push(new_name, { val_min, val_max });
                 new_value_bounds_tracked = true;
             }
         }
@@ -4645,7 +4644,7 @@ private:
             }
             int64_t val_min, val_max;
             if (const_int_bounds(value, &val_min, &val_max)) {
-                bounds_info.push(op->name, make_pair(val_min, val_max));
+                bounds_info.push(op->name, { val_min, val_max });
                 value_bounds_tracked = true;
             }
         }
@@ -4734,7 +4733,7 @@ private:
             const_int(new_extent, &new_extent_int)) {
             bounds_tracked = true;
             int64_t new_max_int = new_min_int + new_extent_int - 1;
-            bounds_info.push(op->name, make_pair(new_min_int, new_max_int));
+            bounds_info.push(op->name, { new_min_int, new_max_int });
         }
 
         Stmt new_body = mutate(op->body);
@@ -6189,6 +6188,11 @@ void simplify_test() {
     check(cast(Int(16), x) << -10, cast(Int(16), x) / 1024);
     // Correctly triggers a warning:
     //check(cast(Int(16), x) << 20, cast(Int(16), x) << 20);
+
+    // Check bitwise_and. (Added as result of a bug.)
+    // TODO: more coverage of bitwise_and and bitwise_or.
+    check(cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa),
+          cast(UInt(32), x) & Expr((uint32_t)0xaaaaaaaa));
 
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.
