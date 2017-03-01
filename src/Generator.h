@@ -365,6 +365,10 @@ protected:
         return false;
     }
 
+    virtual bool is_synthetic_param() const {
+        return false;
+    }
+
 private:
     explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
     void operator=(const GeneratorParamBase &) = delete;
@@ -1146,6 +1150,8 @@ protected:
     virtual void check_value_writable() const = 0;
 
 private:
+    template<typename T> friend class GeneratorParam_Synthetic;
+
     explicit GIOBase(const GIOBase &) = delete;
     void operator=(const GIOBase &) = delete;
 };
@@ -1943,6 +1949,73 @@ public:
 
 namespace Internal {
 
+template<typename T>
+T parse_scalar(const std::string &value) {
+    std::istringstream iss(value);
+    T t;
+    iss >> t;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << value;
+    return t;
+}
+
+EXPORT std::vector<Type> parse_halide_type_list(const std::string &types);
+
+// This is a type of GeneratorParam used internally to create 'synthetic' params
+// (e.g. image.type, image.dim); it is not possible for user code to instantiate it.
+template<typename T>
+class GeneratorParam_Synthetic : public GeneratorParamImpl<T> {
+public:
+    void set_from_string(const std::string &new_value_string) override {
+        set_from_string_impl<T>(new_value_string);
+    }
+
+    std::string to_string() const override {
+        internal_error;
+        return std::string();
+    }
+
+    std::string call_to_string(const std::string &v) const override {
+        internal_error;
+        return std::string();
+    }
+
+    std::string get_c_type() const override {
+        internal_error;
+        return std::string();
+    }
+
+    bool is_synthetic_param() const override {
+        return true;
+    }
+
+private:
+    friend class GeneratorBase;
+
+    enum Which { Type, Dim, ArraySize };
+    GeneratorParam_Synthetic(const std::string &name, GIOBase &gio, Which which) : GeneratorParamImpl<T>(name, T()), gio(gio), which(which) {}
+
+    template <typename T2 = T, typename std::enable_if<std::is_same<T2, ::Halide::Type>::value>::type * = nullptr>
+    void set_from_string_impl(const std::string &new_value_string) {
+        internal_assert(which == Type);
+        gio.types_ = parse_halide_type_list(new_value_string);
+    }
+
+    template <typename T2 = T, typename std::enable_if<std::is_integral<T2>::value>::type * = nullptr>
+    void set_from_string_impl(const std::string &new_value_string) {
+        if (which == Dim) {
+            gio.dimensions_ = parse_scalar<T2>(new_value_string);
+        } else if (which == ArraySize) {
+            gio.array_size_ = parse_scalar<T2>(new_value_string);
+        } else {
+            internal_error;
+        }
+    }
+
+    GIOBase &gio;
+    const Which which;
+};
+
+
 class GeneratorStub;
 
 }  // namespace Internal
@@ -2160,6 +2233,8 @@ private:
     friend class StubOutputBufferBase;
 
     struct ParamInfo {
+        EXPORT ParamInfo(GeneratorBase *generator, const size_t size);
+
         // Ordered-list  of non-null ptrs to GeneratorParam<> fields.
         std::vector<Internal::GeneratorParamBase *> generator_params;
 
@@ -2167,8 +2242,17 @@ private:
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
         std::vector<Internal::GeneratorOutputBase *> filter_outputs;
 
-        // Ordered-list  of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
+        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
         std::vector<Internal::Parameter *> filter_params;
+
+        // Convenience structure to look up GP/SP by name.
+        std::map<std::string, Internal::GeneratorParamBase *> params_by_name;
+
+    private:
+        // list of synthetic GP's that we dynamically created; this list only exists to simplify
+        // lifetime management, and shouldn't be accessed directly outside of our ctor/dtor,
+        // regardless of friend access.
+        std::vector<std::unique_ptr<Internal::GeneratorParamBase>> owned_synthetic_params;
     };
 
     const size_t size;
@@ -2184,6 +2268,8 @@ private:
 
     // Return our ParamInfo (lazy-initing as needed).
     EXPORT ParamInfo &param_info();
+
+    EXPORT Internal::GeneratorParamBase &find_param_by_name(const std::string &name);
 
     EXPORT void check_scheduled(const char* m) const;
 
