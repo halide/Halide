@@ -329,10 +329,15 @@ public:
     const std::string name;
 
     // overload the set() function to call the right virtual method based on type.
-
-// It's always a bit iffy to use macros for this, but IMHO it clarifies the situation here.
+    // This allows us to attempt to set a GeneratorParam via a 
+    // plain C++ type, even if we don't know the specific templated
+    // subclass. Attempting to set the wrong type will assert.
+    // Notice that there is no typed setter for Enums, for obvious reasons;
+    // setting enums in an unknown type must fallback to using set_from_string.
+    //
+    // It's always a bit iffy to use macros for this, but IMHO it clarifies the situation here.
 #define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
-    HALIDE_ALWAYS_INLINE void set(const TYPE &new_value) { set_from_##TYPE(new_value); }
+    virtual void set(const TYPE &new_value) { fail_wrong_type(#TYPE); }
 
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
@@ -364,32 +369,6 @@ protected:
 
     // All GeneratorParams are settable from string.
     virtual void set_from_string(const std::string &value_string) = 0;
-
-    // This allows us to attempt to set a GeneratorParam via a 
-    // plain C++ type, even if we don't know the specific templated
-    // subclass. Attempting to set the wrong type will assert.
-    // Notice that there is no typed setter for Enums, for obvious reasons;
-    // setting enums in an unknown type must fallback to using set_from_string.
-
-#define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
-    virtual void set_from_##TYPE(const TYPE &) = 0;
-
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int16_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int32_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(int64_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint8_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint16_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint32_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
-
-#undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
 
     virtual std::string to_string() const = 0;
     virtual std::string call_to_string(const std::string &v) const = 0;
@@ -448,15 +427,8 @@ public:
 
     operator Expr() const { return make_const(type_of<T>(), this->value()); }
 
-protected:
-    bool is_looplevel_param() const override {
-        return std::is_same<T, LoopLevel>::value;
-    }
-
-    virtual void set_impl(const T &new_value) { check_value_writable(); value_ = new_value; }
-
 #define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
-    void set_from_##TYPE(const TYPE &new_value) override { typed_setter_impl<TYPE>(new_value, #TYPE); }
+    void set(const TYPE &new_value) override { typed_setter_impl<TYPE>(new_value, #TYPE); }
 
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
@@ -475,13 +447,20 @@ protected:
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
 
+protected:
+    bool is_looplevel_param() const override {
+        return std::is_same<T, LoopLevel>::value;
+    }
+
+    virtual void set_impl(const T &new_value) { check_value_writable(); value_ = new_value; }
+
 private:
     T value_;
 
     // These use "is_same" but could possibly use "is_convertible" instead;
     // care would need to be taken to ensure that lossy conversions are avoided
     // (eg we don't want to allow setting a float value into an int that can't represent it).
-    template <typename T2 = T, typename std::enable_if<std::is_convertible<T, T2>::value>::type * = nullptr>
+    template <typename T2, typename std::enable_if<std::is_convertible<T, T2>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &t2, const char * msg) {
         // Arithmetic types must roundtrip losslessly.
         if (!std::is_same<T, T2>::value && 
@@ -496,7 +475,7 @@ private:
         value_ = t2;
     }
 
-    template <typename T2 = T, typename std::enable_if<!std::is_convertible<T, T2>::value>::type * = nullptr>
+    template <typename T2, typename std::enable_if<!std::is_convertible<T, T2>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &, const char *msg) {
         fail_wrong_type(msg);
     }
