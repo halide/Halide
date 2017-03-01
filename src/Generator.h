@@ -333,7 +333,8 @@ protected:
     friend class GeneratorBase;
     friend class StubEmitter;
 
-    EXPORT void check_value_valid() const;
+    EXPORT void check_value_readable() const;
+    EXPORT void check_value_writable() const;
 
     virtual void set_from_string(const std::string &value_string) = 0;
     virtual std::string to_string() const = 0;
@@ -368,10 +369,12 @@ private:
     explicit GeneratorParamBase(const GeneratorParamBase &) = delete;
     void operator=(const GeneratorParamBase &) = delete;
 
-    // It is only valid to examine a GeneratorParam's value after the owning
-    // Generator has had set_generator_param_values() called (even if this
-    // particular GP was left unaffected).
-    bool value_valid{false};
+    // Generator which owns this GeneratorParam. Note that this will be null
+    // initially; the GeneratorBase itself will set this field when it initially
+    // builds its info about params. However, since it (generally) isn't
+    // appropriate for GeneratorParam<> to be declared outside of a Generator,
+    // all reasonable non-testing code should expect this to be non-null.
+    GeneratorBase *generator{nullptr};
 };
 
 template<typename T>
@@ -379,13 +382,13 @@ class GeneratorParamImpl : public GeneratorParamBase {
 public:
     GeneratorParamImpl(const std::string &name, const T &value) : GeneratorParamBase(name), value_(value) {}
 
-    T value() const { check_value_valid(); return value_; }
+    T value() const { check_value_readable(); return value_; }
 
     operator T() const { return this->value(); }
 
     operator Expr() const { return make_const(type_of<T>(), this->value()); }
 
-    virtual void set(const T &new_value) { value_ = new_value; }
+    virtual void set(const T &new_value) { check_value_writable(); value_ = new_value; }
 
 protected:
     bool is_looplevel_param() const override {
@@ -727,117 +730,117 @@ protected:
  * Returns type of underlying operator+. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 + (T)0) operator+(Other a, const GeneratorParam<T> &b) { return a + (T)b; }
+decltype((Other)0 + (T)0) operator+(const Other &a, const GeneratorParam<T> &b) { return a + (T)b; }
 template <typename Other, typename T>
-decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, Other b) { return (T)a + b; }
+decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other & b) { return (T)a + b; }
 // @}
 
 /** Subtraction between GeneratorParam<T> and any type that supports operator- with T.
  * Returns type of underlying operator-. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 - (T)0) operator-(Other a, const GeneratorParam<T> &b) { return a - (T)b; }
+decltype((Other)0 - (T)0) operator-(const Other & a, const GeneratorParam<T> &b) { return a - (T)b; }
 template <typename Other, typename T>
-decltype((T)0 - (Other)0)  operator-(const GeneratorParam<T> &a, Other b) { return (T)a - b; }
+decltype((T)0 - (Other)0)  operator-(const GeneratorParam<T> &a, const Other & b) { return (T)a - b; }
 // @}
 
 /** Multiplication between GeneratorParam<T> and any type that supports operator* with T.
  * Returns type of underlying operator*. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(Other a, const GeneratorParam<T> &b) { return a * (T)b; }
+decltype((Other)0 * (T)0) operator*(const Other &a, const GeneratorParam<T> &b) { return a * (T)b; }
 template <typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, Other b) { return (T)a * b; }
+decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) { return (T)a * b; }
 // @}
 
 /** Division between GeneratorParam<T> and any type that supports operator/ with T.
  * Returns type of underlying operator/. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 / (T)1) operator/(Other a, const GeneratorParam<T> &b) { return a / (T)b; }
+decltype((Other)0 / (T)1) operator/(const Other &a, const GeneratorParam<T> &b) { return a / (T)b; }
 template <typename Other, typename T>
-decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, Other b) { return (T)a / b; }
+decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) { return (T)a / b; }
 // @}
 
 /** Modulo between GeneratorParam<T> and any type that supports operator% with T.
  * Returns type of underlying operator%. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 % (T)1) operator%(Other a, const GeneratorParam<T> &b) { return a % (T)b; }
+decltype((Other)0 % (T)1) operator%(const Other &a, const GeneratorParam<T> &b) { return a % (T)b; }
 template <typename Other, typename T>
-decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, Other b) { return (T)a % b; }
+decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) { return (T)a % b; }
 // @}
 
 /** Greater than comparison between GeneratorParam<T> and any type that supports operator> with T.
  * Returns type of underlying operator>. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 > (T)1) operator>(Other a, const GeneratorParam<T> &b) { return a > (T)b; }
+decltype((Other)0 > (T)1) operator>(const Other &a, const GeneratorParam<T> &b) { return a > (T)b; }
 template <typename Other, typename T>
-decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, Other b) { return (T)a > b; }
+decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) { return (T)a > b; }
 // @}
 
 /** Less than comparison between GeneratorParam<T> and any type that supports operator< with T.
  * Returns type of underlying operator<. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 < (T)1) operator<(Other a, const GeneratorParam<T> &b) { return a < (T)b; }
+decltype((Other)0 < (T)1) operator<(const Other &a, const GeneratorParam<T> &b) { return a < (T)b; }
 template <typename Other, typename T>
-decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, Other b) { return (T)a < b; }
+decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) { return (T)a < b; }
 // @}
 
 /** Greater than or equal comparison between GeneratorParam<T> and any type that supports operator>= with T.
  * Returns type of underlying operator>=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 >= (T)1) operator>=(Other a, const GeneratorParam<T> &b) { return a >= (T)b; }
+decltype((Other)0 >= (T)1) operator>=(const Other &a, const GeneratorParam<T> &b) { return a >= (T)b; }
 template <typename Other, typename T>
-decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, Other b) { return (T)a >= b; }
+decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b) { return (T)a >= b; }
 // @}
 
 /** Less than or equal comparison between GeneratorParam<T> and any type that supports operator<= with T.
  * Returns type of underlying operator<=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 <= (T)1) operator<=(Other a, const GeneratorParam<T> &b) { return a <= (T)b; }
+decltype((Other)0 <= (T)1) operator<=(const Other &a, const GeneratorParam<T> &b) { return a <= (T)b; }
 template <typename Other, typename T>
-decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, Other b) { return (T)a <= b; }
+decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b) { return (T)a <= b; }
 // @}
 
 /** Equality comparison between GeneratorParam<T> and any type that supports operator== with T.
  * Returns type of underlying operator==. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 == (T)1) operator==(Other a, const GeneratorParam<T> &b) { return a == (T)b; }
+decltype((Other)0 == (T)1) operator==(const Other &a, const GeneratorParam<T> &b) { return a == (T)b; }
 template <typename Other, typename T>
-decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, Other b) { return (T)a == b; }
+decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b) { return (T)a == b; }
 // @}
 
 /** Inequality comparison between between GeneratorParam<T> and any type that supports operator!= with T.
  * Returns type of underlying operator!=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 != (T)1) operator!=(Other a, const GeneratorParam<T> &b) { return a != (T)b; }
+decltype((Other)0 != (T)1) operator!=(const Other &a, const GeneratorParam<T> &b) { return a != (T)b; }
 template <typename Other, typename T>
-decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, Other b) { return (T)a != b; }
+decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b) { return (T)a != b; }
 // @}
 
 /** Logical and between between GeneratorParam<T> and any type that supports operator&& with T.
  * Returns type of underlying operator&&. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 && (T)1) operator&&(Other a, const GeneratorParam<T> &b) { return a && (T)b; }
+decltype((Other)0 && (T)1) operator&&(const Other &a, const GeneratorParam<T> &b) { return a && (T)b; }
 template <typename Other, typename T>
-decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, Other b) { return (T)a && b; }
+decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, const Other &b) { return (T)a && b; }
 // @}
 
 /** Logical or between between GeneratorParam<T> and any type that supports operator&& with T.
  * Returns type of underlying operator||. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 || (T)1) operator||(Other a, const GeneratorParam<T> &b) { return a || (T)b; }
+decltype((Other)0 || (T)1) operator||(const Other &a, const GeneratorParam<T> &b) { return a || (T)b; }
 template <typename Other, typename T>
-decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, Other b) { return (T)a || b; }
+decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, const Other &b) { return (T)a || b; }
 // @}
 
 /* min and max are tricky as the language support for these is in the std
@@ -850,14 +853,14 @@ using std::max;
 using std::min;
 
 template <typename Other, typename T>
-decltype(min((Other)0, (T)1)) min_forward(Other a, const GeneratorParam<T> &b) { return min(a, (T)b); }
+decltype(min((Other)0, (T)1)) min_forward(const Other &a, const GeneratorParam<T> &b) { return min(a, (T)b); }
 template <typename Other, typename T>
-decltype(min((T)0, (Other)1)) min_forward(const GeneratorParam<T> &a, Other b) { return min((T)a, b); }
+decltype(min((T)0, (Other)1)) min_forward(const GeneratorParam<T> &a, const Other &b) { return min((T)a, b); }
 
 template <typename Other, typename T>
-decltype(max((Other)0, (T)1)) max_forward(Other a, const GeneratorParam<T> &b) { return max(a, (T)b); }
+decltype(max((Other)0, (T)1)) max_forward(const Other &a, const GeneratorParam<T> &b) { return max(a, (T)b); }
 template <typename Other, typename T>
-decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, Other b) { return max((T)a, b); }
+decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, const Other &b) { return max((T)a, b); }
 
 }}
 
@@ -865,11 +868,11 @@ decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, Other b) {
  * Will automatically import std::min. Returns type of underlying min call. */
 // @{
 template <typename Other, typename T>
-auto min(Other a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
+auto min(const Other &a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
     return Internal::GeneratorMinMax::min_forward(a, b);
 }
 template <typename Other, typename T>
-auto min(const GeneratorParam<T> &a, Other b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
+auto min(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
     return Internal::GeneratorMinMax::min_forward(a, b);
 }
 // @}
@@ -878,11 +881,11 @@ auto min(const GeneratorParam<T> &a, Other b) -> decltype(Internal::GeneratorMin
  * Will automatically import std::max. Returns type of underlying max call. */
 // @{
 template <typename Other, typename T>
-auto max(Other a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
+auto max(const Other &a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
     return Internal::GeneratorMinMax::max_forward(a, b);
 }
 template <typename Other, typename T>
-auto max(const GeneratorParam<T> &a, Other b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
+auto max(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
     return Internal::GeneratorMinMax::max_forward(a, b);
 }
 // @}
@@ -908,7 +911,6 @@ enum class IOKind { Scalar, Function, Buffer };
  */
 template<typename T = void>
 class StubInputBuffer {
-    friend class GeneratorStub;
     friend class StubInput;
     template<typename T2> friend class GeneratorInput_Buffer;
 
@@ -1011,7 +1013,6 @@ public:
 
 private:
     friend class GeneratorInputBase;
-    friend class GeneratorStub;
 
     IOKind kind() const {
         return kind_;
@@ -1116,6 +1117,13 @@ protected:
     std::vector<Func> funcs_;
     std::vector<Expr> exprs_;
 
+    // Generator which owns this Input or Output. Note that this will be null
+    // initially; the GeneratorBase itself will set this field when it initially
+    // builds its info about params. However, since it isn't
+    // appropriate for Input<> or Output<> to be declared outside of a Generator,
+    // all reasonable non-testing code should expect this to be non-null.
+    GeneratorBase *generator{nullptr};
+
     EXPORT std::string array_name(size_t i) const;
 
     EXPORT virtual void verify_internals() const;
@@ -1134,6 +1142,8 @@ protected:
         internal_error << "Unimplemented";
         return Parameter();
     }
+
+    virtual void check_value_writable() const = 0;
 
 private:
     explicit GIOBase(const GIOBase &) = delete;
@@ -1177,6 +1187,7 @@ protected:
 
     virtual std::string get_c_type() const = 0;
 
+    EXPORT void check_value_writable() const override;
 private:
     EXPORT void init_parameters();
 };
@@ -1587,6 +1598,8 @@ protected:
     virtual std::string get_c_type() const {
         return "Func";
     }
+
+    EXPORT void check_value_writable() const override;
 };
 
 template<typename T>
@@ -1729,6 +1742,8 @@ public:
     // not considered const. We should consider how this really ought to work.
     template<typename T2>
     NO_INLINE GeneratorOutput_Buffer<T> &operator=(Buffer<T2> &buffer) {
+        this->check_value_writable();
+
         user_assert(T::can_convert_from(buffer))
             << "Cannot assign to the Output \"" << this->name()
             << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
@@ -1754,6 +1769,8 @@ public:
     // of the enclosing Generator.
     template<typename T2>
     NO_INLINE GeneratorOutput_Buffer<T> &operator=(const StubOutputBuffer<T2> &stub_output_buffer) {
+        this->check_value_writable();
+
         const auto &f = stub_output_buffer.f;
         internal_assert(f.defined());
 
@@ -1810,6 +1827,8 @@ public:
     // Allow Output<Func> = Func
     template <typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
     GeneratorOutput_Func<T> &operator=(const Func &f) {
+        this->check_value_writable();
+
         // Don't bother verifying the Func type, dimensions, etc., here: 
         // That's done later, when we produce the pipeline.
         get_assignable_func_ref(0) = f;
@@ -1819,6 +1838,7 @@ public:
     // Allow Output<Func[]> = Func
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     Func &operator[](size_t i) {
+        this->check_value_writable();
         return get_assignable_func_ref(i);
     }
 
@@ -1937,7 +1957,7 @@ public:
     virtual ~GeneratorContext() {};
     virtual Target get_target() const = 0;
 protected:
-    friend class Internal::GeneratorStub;
+    friend class Internal::GeneratorBase;
     virtual std::shared_ptr<Internal::ValueTracker> get_value_tracker() const = 0;
 };
 
@@ -2001,6 +2021,17 @@ protected:
 
 namespace Internal {
 
+template<typename ...Args>
+struct NoRealizations : std::false_type {};
+
+template<>
+struct NoRealizations<> : std::true_type {};
+
+template<typename T, typename ...Args>
+struct NoRealizations<T, Args...> {
+    static const bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
+};
+
 class GeneratorStub;
 class SimpleGeneratorFactory;
 
@@ -2051,8 +2082,27 @@ public:
     EXPORT Module build_module(const std::string &function_name = "",
                                const LoweredFunc::LinkageType linkage_type = LoweredFunc::ExternalPlusMetadata);
 
+    Realization realize(std::vector<int32_t> sizes) {
+        check_scheduled("realize");
+        return produce_pipeline().realize(sizes, get_target());
+    }
+
+    // Only enable if none of the args are Realization; otherwise we can incorrectly
+    // select this method instead of the Realization-as-outparam variant
+    template <typename... Args, typename std::enable_if<NoRealizations<Args...>::value>::type * = nullptr>
+    Realization realize(Args&&... args) {
+        check_scheduled("realize");
+        return produce_pipeline().realize(std::forward<Args>(args)..., get_target());
+    }
+
+    void realize(Realization r) {
+        check_scheduled("realize");
+        produce_pipeline().realize(r, get_target());
+    }
+
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
+    EXPORT void init_from_context(const Halide::GeneratorContext &context);
 
     EXPORT virtual Pipeline build_pipeline() = 0;
     EXPORT virtual void call_generate() = 0;
@@ -2076,26 +2126,66 @@ protected:
     template<typename T>
     using Output = GeneratorOutput<T>;
 
-    bool build_pipeline_called{false};
-    bool generate_called{false};
-    bool schedule_called{false};
+    // A Generator's creation and usage must go in a certain phase to ensure correctness;
+    // the state machine here is advanced and checked at various points to ensure
+    // this is the case.
+    enum Phase {
+        // Generator has just come into being.
+        Created,
+
+        // All Input<>/Param<> fields have been set. (Applicable only in JIT mode;
+        // in AOT mode, this can be skipped, going Created->GenerateCalled directly.)
+        InputsSet,
+
+        // Generator has had its generate() method called. (For Generators with
+        // a build() method instead of generate(), this phase will be skipped
+        // and will advance directly to ScheduleCalled.)
+        GenerateCalled,
+
+        // Generator has had its schedule() method called.
+        ScheduleCalled,
+    } phase{Created};
+
+    void check_exact_phase(Phase expected_phase) const;
+    void check_min_phase(Phase expected_phase) const;
+    void advance_phase(Phase new_phase);
 
 private:
+    friend void ::Halide::Internal::generator_test();
+    friend class GeneratorParamBase;
+    friend class GeneratorInputBase;
+    friend class GeneratorOutputBase;
     friend class GeneratorStub;
     friend class SimpleGeneratorFactory;
     friend class StubOutputBufferBase;
 
+    struct ParamInfo {
+        // Ordered-list  of non-null ptrs to GeneratorParam<> fields.
+        std::vector<Internal::GeneratorParamBase *> generator_params;
+
+        // Ordered-list  of non-null ptrs to Input<>/Output<> fields; empty if old-style Generator.
+        std::vector<Internal::GeneratorInputBase *> filter_inputs;
+        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
+
+        // Ordered-list  of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
+        std::vector<Internal::Parameter *> filter_params;
+    };
+
     const size_t size;
-    std::vector<Internal::Parameter *> filter_params;
-    std::vector<Internal::GeneratorInputBase *> filter_inputs;
-    std::vector<Internal::GeneratorOutputBase *> filter_outputs;
-    std::vector<Internal::GeneratorParamBase *> generator_params;
+    // Lazily-allocated-and-inited struct with info about our various Params. 
+    // Do not access directly: use the param_info() getter to lazy-init.
+    std::unique_ptr<ParamInfo> param_info_ptr; 
+
     std::shared_ptr<Internal::ValueTracker> value_tracker;
-    bool params_built{false};
     bool generator_params_set{false};
     bool schedule_params_set{false};
     bool inputs_set{false};
     std::string generator_name;
+
+    // Return our ParamInfo (lazy-initing as needed).
+    EXPORT ParamInfo &param_info();
+
+    EXPORT void check_scheduled(const char* m) const;
 
     EXPORT void build_params(bool force = false);
 
@@ -2115,7 +2205,7 @@ private:
         generator_name = n;
     }
 
-    EXPORT void set_inputs(const std::vector<std::vector<StubInput>> &inputs);
+    EXPORT void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
     GeneratorBase(const GeneratorBase &) = delete;
     void operator=(const GeneratorBase &) = delete;
@@ -2126,10 +2216,11 @@ public:
     virtual ~GeneratorFactory() {}
     // Note that this method must never return null:
     // if it cannot return a valid Generator, it should assert-fail.
-    virtual std::unique_ptr<GeneratorBase> create(const std::map<std::string, std::string> &params) const = 0;
+    virtual std::unique_ptr<GeneratorBase> create(const GeneratorContext &context, 
+                                                  const std::map<std::string, std::string> &params) const = 0;
 };
 
-typedef std::unique_ptr<Internal::GeneratorBase> (*GeneratorCreateFunc)();
+using GeneratorCreateFunc = std::function<std::unique_ptr<Internal::GeneratorBase>(const GeneratorContext &context)>;
 
 class SimpleGeneratorFactory : public GeneratorFactory {
 public:
@@ -2138,8 +2229,9 @@ public:
         internal_assert(create_func != nullptr);
     }
 
-    std::unique_ptr<Internal::GeneratorBase> create(const std::map<std::string, std::string> &params) const override {
-        auto g = create_func();
+    std::unique_ptr<Internal::GeneratorBase> create(const GeneratorContext &context,
+                                                    const std::map<std::string, std::string> &params) const override {
+        auto g = create_func(context);
         internal_assert(g.get() != nullptr);
         g->set_generator_name(generator_name);
         g->set_generator_param_values(params);
@@ -2158,6 +2250,7 @@ public:
     // Note that this method will never return null:
     // if it cannot return a valid Generator, it should assert-fail.
     EXPORT static std::unique_ptr<GeneratorBase> create(const std::string &name,
+                                                        const GeneratorContext &context,
                                                         const std::map<std::string, std::string> &params);
 
 private:
@@ -2175,18 +2268,23 @@ private:
 
 }  // namespace Internal
 
-template <class T> class Generator : public Internal::GeneratorBase {
-public:
+template <class T> 
+class Generator : public Internal::GeneratorBase {
+protected:
     Generator() :
         Internal::GeneratorBase(sizeof(T),
                                 Internal::Introspection::get_introspection_helper<T>()) {}
 
-    static std::unique_ptr<Internal::GeneratorBase> create() {
-        return std::unique_ptr<Internal::GeneratorBase>(new T());
+public:
+    static std::unique_ptr<Internal::GeneratorBase> create(const Halide::GeneratorContext &context) {
+        // We must have an object of type T (not merely GeneratorBase) to call a protected method,
+        // because CRTP is a weird beast.
+        T *t = new T;
+        t->init_from_context(context);
+        return std::unique_ptr<Internal::GeneratorBase>(t);
     }
 
 private:
-
     // Implementations for build_pipeline_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
 
@@ -2210,21 +2308,17 @@ private:
     template <typename T2 = T,
               typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
     Pipeline build_pipeline_impl() {
-        internal_assert(!build_pipeline_called);
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
         pre_build();
         Pipeline p = ((T *)this)->build();
         post_build();
-        build_pipeline_called = true;
         return p;
     }
     template <typename T2 = T,
               typename std::enable_if<has_generate_method<T2>::value>::type * = nullptr>
     Pipeline build_pipeline_impl() {
-        internal_assert(!build_pipeline_called);
         ((T *)this)->call_generate_impl();
         ((T *)this)->call_schedule_impl();
-        build_pipeline_called = true;
         return produce_pipeline();
     }
 
@@ -2279,13 +2373,15 @@ protected:
         this->call_schedule_impl();
     }
 private:
+    friend void ::Halide::Internal::generator_test();
     friend class Internal::SimpleGeneratorFactory;
 
     Generator(const Generator &) = delete;
     void operator=(const Generator &) = delete;
 };
 
-template <class GeneratorClass> class RegisterGenerator {
+template <class GeneratorClass> 
+class RegisterGenerator {
 public:
     RegisterGenerator(const char* generator_name) {
         std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, generator_name));
@@ -2294,17 +2390,6 @@ public:
 };
 
 namespace Internal {
-
-template<typename ...Args>
-struct NoRealizations : std::false_type {};
-
-template<>
-struct NoRealizations<> : std::true_type {};
-
-template<typename T, typename ...Args>
-struct NoRealizations<T, Args...> {
-    static const bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
-};
 
 class GeneratorStub : public NamesInterface {
 public:
@@ -2342,29 +2427,26 @@ public:
     }
 
     Realization realize(std::vector<int32_t> sizes) {
-        check_scheduled("realize");
-        return generator->produce_pipeline().realize(sizes, get_target());
+        return generator->realize(sizes);
     }
 
     // Only enable if none of the args are Realization; otherwise we can incorrectly
     // select this method instead of the Realization-as-outparam variant
     template <typename... Args, typename std::enable_if<NoRealizations<Args...>::value>::type * = nullptr>
     Realization realize(Args&&... args) {
-        check_scheduled("realize");
-        return generator->produce_pipeline().realize(std::forward<Args>(args)..., get_target());
+        return generator->realize(std::forward<Args>(args)...);
     }
 
     void realize(Realization r) {
-        check_scheduled("realize");
-        generator->produce_pipeline().realize(r, get_target());
+        generator->realize(r);
     }
 
     virtual ~GeneratorStub() {}
 
 protected:
-    typedef std::function<std::unique_ptr<GeneratorBase>(const std::map<std::string, std::string>&)> GeneratorFactory;
+    typedef std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext&, const std::map<std::string, std::string>&)> GeneratorFactory;
 
-    EXPORT GeneratorStub(const GeneratorContext *context,
+    EXPORT GeneratorStub(const GeneratorContext &context,
                   GeneratorFactory generator_factory,
                   const std::map<std::string, std::string> &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
@@ -2427,10 +2509,6 @@ private:
     Func get_first_output() const {
         return generator->get_first_output();
     }
-    void check_scheduled(const char* m) const {
-        user_assert(generator->schedule_called) << "Must call schedule() before calling " << m << "()";
-    }
-
     explicit GeneratorStub(const GeneratorStub &) = delete;
     void operator=(const GeneratorStub &) = delete;
 };
