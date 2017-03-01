@@ -28,12 +28,21 @@ DECL_WEAK_PIPELINE3S(conv3x3a16)
 #else
 DECL_WEAK_PIPELINE2S(dilate3x3)
 #endif
+
 #ifdef MEDIAN3X3
 #include "median3x3_hvx128.h"
 #include "median3x3_hvx64.h"
 #include "median3x3_cpu.h"
 #else
 DECL_WEAK_PIPELINE2S(median3x3)
+#endif
+
+#ifdef GAUSSIAN5X5
+#include "gaussian5x5_hvx128.h"
+#include "gaussian5x5_hvx64.h"
+#include "gaussian5x5_cpu.h"
+#else
+DECL_WEAK_PIPELINE2S(gaussian5x5)
 #endif
 
 
@@ -277,6 +286,63 @@ class Median3x3Descriptor : public PipelineDescriptor<pipeline2, Median3x3Descri
             uint8_t out_xy = u8_out(x, y);
             if (median_val != out_xy) {
                 printf("Median3x3: Mismatch at %d %d : %d != %d\n", x, y, out_xy, median_val);
+                abort();
+            }
+        });
+        return true;
+    }
+
+    int run(bmark_run_mode_t mode) {
+        if (mode == bmark_run_mode_t::hvx64) {
+            return pipeline_64(u8_in, u8_out);
+        } else if (mode == bmark_run_mode_t::hvx128) {
+            return pipeline_128(u8_in, u8_out);
+        } else if (mode == bmark_run_mode_t::cpu); {
+            return pipeline_cpu(u8_in, u8_out);
+        }
+        abort();
+    }
+};
+
+class Gaussian5x5Descriptor : public PipelineDescriptor<pipeline2, Gaussian5x5Descriptor> {
+    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
+
+ public:
+ Gaussian5x5Descriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
+                     int W, int H) :
+    PipelineDescriptor<pipeline2, Gaussian5x5Descriptor>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
+        u8_out(nullptr, W, H, 2) {}
+
+    void init() {
+        u8_in.device_malloc(halide_hexagon_device_interface());
+        u8_out.device_malloc(halide_hexagon_device_interface());
+
+        u8_in.for_each_value([&](uint8_t &x) {
+            x = static_cast<uint8_t>(rand());
+        });
+        u8_out.for_each_value([&](uint8_t &x) {
+            x = 0;
+        });
+    }
+
+    const char *name() { return "gaussian5x5"; };
+
+    bool verify(const int W, const int H) {
+        const int16_t coeffs[5] = { 1, 4, 6, 4, 1 };
+        u8_out.for_each_element([&](int x, int y) {
+            int16_t blur = 0;
+            for (int rx = -2; rx < 3; ++rx) {
+                int16_t blur_y = 0;
+                for (int ry = -2; ry < 3; ++ry) {
+                    int16_t val = static_cast<int16_t>(u8_in(clamp(x+rx, 0, W-1), clamp(y+ry, 0, H-1)));
+                    blur_y += val * coeffs[ry + 2];
+                }
+                blur += blur_y * coeffs[rx + 2];
+            }
+            uint8_t blur_val = blur >> 8;
+            uint8_t out_xy = u8_out(x, y);
+            if (blur_val != out_xy) {
+                printf("Gaussian5x5: Mismatch at %d %d : %d != %d\n", x, y, out_xy, blur_val);
                 abort();
             }
         });
