@@ -337,7 +337,7 @@ public:
     //
     // It's always a bit iffy to use macros for this, but IMHO it clarifies the situation here.
 #define HALIDE_GENERATOR_PARAM_TYPED_SETTER(TYPE) \
-    virtual void set(const TYPE &new_value) { fail_wrong_type(#TYPE); }
+    virtual void set(const TYPE &new_value) = 0;
 
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(bool)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(int8_t)
