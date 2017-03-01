@@ -465,6 +465,22 @@ public:
         assert(old_buf.dev == 0 && "Cannot construct a Halide::Runtime::Buffer from a legacy buffer_t with a device allocation. Use halide_upgrade_buffer_t to upgrade it to a halide_buffer_t first.");
     }
 
+    /** Populate the fields of a legacy buffer_t using this
+     * Buffer. Does not copy device metadata. */
+    buffer_t make_legacy_buffer_t() {
+        buffer_t old_buf = {0};
+        assert(!has_device_allocation() && "Cannot construct a legacy buffer_t from a Halide::Runtime::Buffer with a device allocation. Use halide_downgrade_buffer_t instead.");
+        old_buf.host = buf.host;
+        old_buf.elem_size = buf.type.bytes();
+        assert(dimensions() <= 4 && "Cannot construct a legacy buffer_t from a Halide::Runtime::Buffer with more than four dimensions.");
+        for (int i = 0; i < dimensions(); i++) {
+            old_buf.min[i] = dim(i).min();
+            old_buf.extent[i] = dim(i).extent();
+            old_buf.stride[i] = dim(i).stride();
+        }
+        return old_buf;
+    }
+
     /** Give Buffers access to the members of Buffers of different dimensionalities and types. */
     template<typename T2, int D2> friend class Buffer;
 
