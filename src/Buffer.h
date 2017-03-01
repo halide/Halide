@@ -149,6 +149,10 @@ public:
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(buf), name) {}
 
+    explicit Buffer(const buffer_t &buf,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(buf), name) {}
+
     template<typename ...Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(int first, Args... rest) :
