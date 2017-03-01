@@ -471,7 +471,7 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         Module wrapper_module(fn_name, wrapper_target);
-        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
+        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
 
         // Add a wrapper to accept old buffer_ts
         add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
@@ -486,7 +486,7 @@ void compile_multitarget(const std::string &fn_name,
 
     if (!output_files.c_header_name.empty()) {
         Module header_module(fn_name, base_target);
-        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::External));
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::ExternalPlusMetadata));
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
         futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";
