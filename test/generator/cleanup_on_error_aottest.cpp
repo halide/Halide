@@ -66,8 +66,12 @@ int main(int argc, char **argv) {
     Buffer<int32_t> output(size);
     int result = cleanup_on_error(output);
 
-    if (result != halide_error_code_out_of_memory) {
-        printf("The exit status was %d instead of %d\n", result, halide_error_code_out_of_memory);
+    if (result != halide_error_code_out_of_memory &&
+        result != halide_error_code_device_malloc_failed) {
+        printf("The exit status was %d instead of %d or %d\n",
+               result,
+               halide_error_code_out_of_memory,
+               halide_error_code_device_malloc_failed);
         return -1;
     }
 
@@ -87,8 +91,7 @@ int main(int argc, char **argv) {
     }
 
     if (errors != 1) {
-        // There's one error from the malloc failing
-        printf("There was supposed to be one error\n");
+        printf("%d errors. There was supposed to be one error\n", errors);
         return -1;
     }
 
