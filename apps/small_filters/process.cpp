@@ -65,8 +65,11 @@ int main(int argc, char **argv) {
     Conv3x3a16Descriptor conv3x3a16_pipeline(conv3x3a16_hvx64, conv3x3a16_hvx128, conv3x3a16_cpu, W, H);
     Dilate3x3Descriptor dilate3x3_pipeine(dilate3x3_hvx64, dilate3x3_hvx128, dilate3x3_cpu, W, H);
     Median3x3Descriptor median3x3_pipeline(median3x3_hvx64, median3x3_hvx128, median3x3_cpu, W, H);
+    Gaussian5x5Descriptor gaussian5x5_pipeline(gaussian5x5_hvx64, gaussian5x5_hvx128, gaussian5x5_cpu, W, H);
 
-    std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline, &dilate3x3_pipeine, &median3x3_pipeline};
+
+    std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline, &dilate3x3_pipeine, &median3x3_pipeline,
+                                                       &gaussian5x5_pipeline};
 
     for (bmark_run_mode_t m : modes) {
         for (PipelineDescriptorBase *p : pipelines) {
