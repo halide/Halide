@@ -467,7 +467,7 @@ public:
 
     /** Populate the fields of a legacy buffer_t using this
      * Buffer. Does not copy device metadata. */
-    buffer_t make_legacy_buffer_t() {
+    buffer_t make_legacy_buffer_t() const {
         buffer_t old_buf = {0};
         assert(!has_device_allocation() && "Cannot construct a legacy buffer_t from a Halide::Runtime::Buffer with a device allocation. Use halide_downgrade_buffer_t instead.");
         old_buf.host = buf.host;
