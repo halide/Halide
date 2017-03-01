@@ -2322,7 +2322,6 @@ private:
     friend class GeneratorStub;
     friend class SimpleGeneratorFactory;
     friend class StubOutputBufferBase;
-    friend void ::Halide::Internal::generator_test();
 
     struct ParamInfo {
         EXPORT ParamInfo(GeneratorBase *generator, const size_t size);
