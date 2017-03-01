@@ -651,7 +651,7 @@ public:
                       "Too many arguments to constructor. Use Buffer<T, D>, "
                       "where D is at least the desired number of dimensions");
         initialize_shape(0, first, rest...);
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         if (!any_zero(first, rest...)) {
             check_overflow();
@@ -687,7 +687,7 @@ public:
                       "Too many arguments to constructor. Use Buffer<T, D>, "
                       "where D is at least the desired number of dimensions");
         initialize_shape(0, first, rest...);
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         if (!any_zero(first, rest...)) {
             check_overflow();
@@ -703,7 +703,7 @@ public:
         }
         assert(sizes.size() <= D);
         initialize_shape(sizes);
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         dims = (int)sizes.size();
         if (!any_zero(sizes)) {
             check_overflow();
@@ -730,7 +730,7 @@ public:
         dims = dimensionality_of_array(vals);
         initialize_shape_from_array_shape(dims - 1, vals);
         ty = scalar_type_of_array(vals);
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         buf.host = (uint8_t *)vals;
     }
 
@@ -749,7 +749,7 @@ public:
                       "where D is at least the desired number of dimensions");
         ty = t;
         initialize_shape(0, first, int(rest)...);
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
     }
@@ -765,7 +765,7 @@ public:
                       "where D is at least the desired number of dimensions");
         ty = static_halide_type();
         initialize_shape(0, first, int(rest)...);
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         dims = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)data;
     }
@@ -778,7 +778,7 @@ public:
         assert(sizes.size() <= D);
         initialize_shape(sizes);
         ty = static_halide_type();
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         dims = (int)sizes.size();
         buf.host = (uint8_t *)data;
     }
@@ -794,7 +794,7 @@ public:
         assert(sizes.size() <= D);
         initialize_shape(sizes);
         ty = t;
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         dims = (int)sizes.size();
         buf.host = (uint8_t *)data;
     }
@@ -813,7 +813,7 @@ public:
             buf.extent[i] = shape[i].extent;
             buf.stride[i] = shape[i].stride;
         }
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         buf.host = (uint8_t *)data;
     }
 
@@ -828,7 +828,7 @@ public:
             buf.extent[i] = shape[i].extent;
             buf.stride[i] = shape[i].stride;
         }
-        buf.elem_size = ty.bytes();
+        buf.elem_size = (int32_t) ty.bytes();
         buf.host = (uint8_t *)data;
     }
 
