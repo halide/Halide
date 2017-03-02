@@ -457,9 +457,6 @@ protected:
 private:
     T value_;
 
-    // These use "is_same" but could possibly use "is_convertible" instead;
-    // care would need to be taken to ensure that lossy conversions are avoided
-    // (eg we don't want to allow setting a float value into an int that can't represent it).
     template <typename T2, typename std::enable_if<std::is_convertible<T, T2>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &t2, const char * msg) {
         // Arithmetic types must roundtrip losslessly.
@@ -2246,6 +2243,26 @@ public:
     EXPORT Module build_module(const std::string &function_name = "",
                                const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
 
+    /**
+     * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
+     * in many cases, as it constructs the relevant entries for the vector for you, which
+     * is often a bit unintuitive at present. The arguments are passed in Input<>-declaration-order,
+     * and the types must be compatible. Array inputs are passed as std::vector<> of the relevant type.
+     *
+     * Note: at present, scalar input types must match *exactly*, i.e., for Input<uint8_t>, you
+     * must pass an argument that is actually uint8_t; an argument that is int-that-will-fit-in-uint8
+     * will assert-fail at Halide compile time.
+     */
+    template <typename... Args>
+    void set_inputs(const Args &...args) {
+        // set_inputs_vector() checks this too, but checking it here allows build_inputs() to avoid out-of-range checks.
+        ParamInfo &pi = param_info();
+        user_assert(sizeof...(args) == pi.filter_inputs.size()) 
+                << "Expected exactly " << pi.filter_inputs.size() 
+                << " inputs but got " << sizeof...(args) << "\n";
+        set_inputs_vector(build_inputs(std::forward_as_tuple<const Args &...>(args...), make_index_sequence<sizeof...(Args)>{}));
+    }
+
     Realization realize(std::vector<int32_t> sizes) {
         check_scheduled("realize");
         return produce_pipeline().realize(sizes, get_target());
@@ -2391,6 +2408,141 @@ private:
     }
 
     EXPORT void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
+
+    EXPORT static void check_input_is_singular(Internal::GeneratorInputBase *in);
+    EXPORT static void check_input_is_array(Internal::GeneratorInputBase *in);
+    EXPORT static void check_input_kind(Internal::GeneratorInputBase *in, Internal::IOKind kind);
+
+    // Allow Buffer<> if:
+    // -- we are assigning it to an Input<Buffer<>> (with compatible type and dimensions),
+    // causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
+    // -- we are assigningit to an Input<Func>, in which case we just Func-wrap the Buffer<>.
+    template<typename T>
+    std::vector<StubInput> build_input(size_t i, const Buffer<T> &arg) {
+        auto *in = param_info().filter_inputs.at(i);
+        check_input_is_singular(in);
+        const auto k = in->kind();
+        if (k == Internal::IOKind::Buffer) {
+            Halide::Buffer<> b = arg;
+            StubInputBuffer<> sib(b);
+            StubInput si(sib);
+            return {si};
+        } else if (k == Internal::IOKind::Function) {
+            Halide::Func f(arg.name() + "_im");
+            f(Halide::_) = arg(Halide::_);
+            StubInput si(f);
+            return {si};
+        } else {
+            check_input_kind(in, Internal::IOKind::Buffer);  // just to trigger assertion
+            return {};
+        }
+    }
+
+    // Allow Input<Buffer<>> if:
+    // -- we are assigning it to another Input<Buffer<>> (with compatible type and dimensions),
+    // allowing us to simply pipe a parameter from an enclosing Generator to the Invoker.
+    // -- we are assigningit to an Input<Func>, in which case we just Func-wrap the Input<Buffer<>>.
+    template<typename T>
+    std::vector<StubInput> build_input(size_t i, const GeneratorInput<Buffer<T>> &arg) {
+        auto *in = param_info().filter_inputs.at(i);
+        check_input_is_singular(in);
+        const auto k = in->kind();
+        if (k == Internal::IOKind::Buffer) {
+            StubInputBuffer<> sib = arg;
+            StubInput si(sib);
+            return {si};
+        } else if (k == Internal::IOKind::Function) {
+            Halide::Func f = arg.funcs().at(0);
+            StubInput si(f);
+            return {si};
+        } else {
+            check_input_kind(in, Internal::IOKind::Buffer);  // just to trigger assertion
+            return {};
+        }
+    }
+
+    // Allow Func iff we are assigning it to an Input<Func> (with compatible type and dimensions).
+    std::vector<StubInput> build_input(size_t i, const Func &arg) {
+        auto *in = param_info().filter_inputs.at(i);
+        check_input_kind(in, Internal::IOKind::Function);
+        check_input_is_singular(in);
+        Halide::Func f = arg;
+        StubInput si(f);
+        return {si};
+    }
+
+    // Allow vector<Func> iff we are assigning it to an Input<Func[]> (with compatible type and dimensions).
+    std::vector<StubInput> build_input(size_t i, const std::vector<Func> &arg) {
+        auto *in = param_info().filter_inputs.at(i);
+        check_input_kind(in, Internal::IOKind::Function);
+        check_input_is_array(in);
+        // My kingdom for a list comprehension...
+        std::vector<StubInput> siv;
+        siv.reserve(arg.size());
+        for (const auto &f : arg) {
+            siv.emplace_back(f);
+        }
+        return siv;
+    }
+
+    // Expr must be Input<Scalar>.
+    std::vector<StubInput> build_input(size_t i, const Expr &arg) {
+        auto *in = param_info().filter_inputs.at(i);
+        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_is_singular(in);
+        StubInput si(arg);
+        return {si};
+    }
+
+    // (Array form)
+    std::vector<StubInput> build_input(size_t i, const std::vector<Expr> &arg) {
+        auto *in = param_info().filter_inputs.at(i);
+        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_is_array(in);
+        std::vector<StubInput> siv;
+        siv.reserve(arg.size());
+        for (const auto &value : arg) {
+            siv.emplace_back(value);
+        }
+        return siv;
+    }
+
+    // Any other type must be convertible to Expr and must be associated with an Input<Scalar>.
+    // Use is_arithmetic since some Expr conversions are explicit.
+    template<typename T,
+             typename std::enable_if<std::is_arithmetic<T>::value>::type * = nullptr>
+    std::vector<StubInput> build_input(size_t i, const T &arg) {
+        auto *in = param_info().filter_inputs.at(i);
+        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_is_singular(in);
+        // We must use an explicit Expr() ctor to preserve the type
+        Expr e(arg);
+        StubInput si(e);
+        return {si};
+    }
+
+    // (Array form)
+    template<typename T,
+             typename std::enable_if<std::is_arithmetic<T>::value>::type * = nullptr>
+    std::vector<StubInput> build_input(size_t i, const std::vector<T> &arg) {
+        auto *in = param_info().filter_inputs.at(i);
+        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_is_array(in);
+        std::vector<StubInput> siv;
+        siv.reserve(arg.size());
+        for (const auto &value : arg) {
+            // We must use an explicit Expr() ctor to preserve the type;
+            // otherwise, implicit conversions can downgrade (e.g.) float -> int
+            Expr e(value);
+            siv.emplace_back(e);
+        }
+        return siv;
+    }
+
+    template<typename... Args, size_t... Indices>
+    std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...>& t, index_sequence<Indices...>) { 
+        return {build_input(Indices, std::get<Indices>(t))...};
+    }
 
     GeneratorBase(const GeneratorBase &) = delete;
     void operator=(const GeneratorBase &) = delete;
