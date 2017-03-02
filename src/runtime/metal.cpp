@@ -393,9 +393,19 @@ WEAK int halide_metal_device_free(void *user_context, buffer_t* buf) {
     #endif
 
     mtl_buffer *metal_buf = (mtl_buffer *)halide_get_device_handle(buf->dev);
+    #ifdef DEBUG_RUNTIME
+    // If buf->host is not null, it should match the metal_buf's contents.
+    if (buf->host) {
+        uint8_t *metal_buf_host = (uint8_t *)buffer_contents(metal_buf);
+        halide_assert(user_context, buf->host == metal_buf_host);
+    }
+    #endif
     release_ns_object(metal_buf);
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
+    // If buf->host is not null, it is a pointer gotten from metal_buf... which is no longer
+    // valid. Null it out to avoid writes or frees of memory we don't own.
+    buf->host = NULL;
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
