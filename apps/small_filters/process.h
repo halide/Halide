@@ -179,7 +179,7 @@ public:
             return pipeline_64(u8_in, i8_mask, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
             return pipeline_128(u8_in, i8_mask, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu); {
+        } else if (mode == bmark_run_mode_t::cpu) {
             return pipeline_cpu(u8_in, i8_mask, u8_out);
         }
         abort();
@@ -243,7 +243,7 @@ class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2, Dilate3x3Descri
             return pipeline_64(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
             return pipeline_128(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu); {
+        } else if (mode == bmark_run_mode_t::cpu) {
             return pipeline_cpu(u8_in, u8_out);
         }
         abort();
@@ -305,7 +305,7 @@ class Median3x3Descriptor : public PipelineDescriptor<pipeline2, Median3x3Descri
             return pipeline_64(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
             return pipeline_128(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu); {
+        } else if (mode == bmark_run_mode_t::cpu) {
             return pipeline_cpu(u8_in, u8_out);
         }
         abort();
@@ -362,7 +362,7 @@ class Gaussian5x5Descriptor : public PipelineDescriptor<pipeline2, Gaussian5x5De
             return pipeline_64(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
             return pipeline_128(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu); {
+        } else if (mode == bmark_run_mode_t::cpu) {
             return pipeline_cpu(u8_in, u8_out);
         }
         abort();
@@ -383,7 +383,7 @@ class SobelDescriptor : public PipelineDescriptor<pipeline2, SobelDescriptor> {
         u8_out.device_malloc(halide_hexagon_device_interface());
 
         u8_in.for_each_value([&](uint8_t &x) {
-            x = static_cast<uint8_t>(rand());
+                x = static_cast<uint8_t>(rand());
         });
         u8_out.for_each_value([&](uint8_t &x) {
             x = 0;
@@ -430,7 +430,7 @@ class SobelDescriptor : public PipelineDescriptor<pipeline2, SobelDescriptor> {
             return pipeline_64(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
             return pipeline_128(u8_in, u8_out);
-        } else if (mode == bmark_run_mode_t::cpu); {
+        } else if (mode == bmark_run_mode_t::cpu) {
             return pipeline_cpu(u8_in, u8_out);
         }
         abort();

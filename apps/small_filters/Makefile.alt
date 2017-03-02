@@ -125,13 +125,16 @@ $(BIN)/%/sobel_hvx128.o: $(BIN)/sobel
 $(BIN)/%/filters.a : $(OBJS)
 	ar q $(BIN)/$*/filters.a $^
 
-$(BIN)/process-%: process.cpp $(BIN)/%/filters.a
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$*  $(DASH_D_DEFINES) -Wall -O3 process.cpp $(BIN)/$*/filters.a -o $(BIN)/process-$* $(LDFLAGS-$*)
+$(BIN)/process-%: process.cpp $(BIN)/%/filters.a process.h
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$*  $(DASH_D_DEFINES) -Wall -O0 -g process.cpp $(BIN)/$*/filters.a -o $(BIN)/process-$* $(LDFLAGS-$*)
 
 run-%-android: $(BIN)/process-%-android
 	adb push $(BIN)/process-$*-android /data/
 	adb shell chmod +x /data/process-$*-android
 	adb shell /data/process-$*-android -n 10
+
+run-host: $(BIN)/process-host
+	$(BIN)/process-host -n 10
 
 clean:
 	rm -rf $(BIN)
