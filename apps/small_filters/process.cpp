@@ -1,4 +1,7 @@
 #include <stdio.h>
+#include <memory.h>
+#include <assert.h>
+#include <stdlib.h>
 
 #include "../support/benchmark.h"
 #include "process.h"
