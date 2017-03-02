@@ -23,7 +23,7 @@ LDFLAGS-arm-32-profile-android ?= -llog -fPIE -pie
 
 BIN ?= bin
 
-FILTERS ?= conv3x3a16 dilate3x3 median3x3 gaussian5x5 sobel
+FILTERS ?= conv3x3a16 dilate3x3 median3x3 gaussian5x5 sobel conv3x3a32
 
 OBJS = $(patsubst %,$(BIN)/\%/%_hvx64.o, $(FILTERS))
 OBJS += $(patsubst %,$(BIN)/\%/%_hvx128.o, $(FILTERS))
@@ -121,6 +121,23 @@ $(BIN)/%/sobel_hvx64.o: $(BIN)/sobel
 $(BIN)/%/sobel_hvx128.o: $(BIN)/sobel
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f sobel_hvx128 target=$*-hvx_128
+
+$(BIN)/conv3x3a32: conv3x3a32.cpp $(GENERATOR_DEPS)
+	@-mkdir -p $(BIN)
+	echo "${GENERATOR_DEPS}"
+	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
+$(BIN)/%/conv3x3a32_cpu.o: $(BIN)/conv3x3a32
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_cpu target=$*
+
+$(BIN)/%/conv3x3a32_hvx64.o: $(BIN)/conv3x3a32
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx64 target=$*-hvx_64
+
+$(BIN)/%/conv3x3a32_hvx128.o: $(BIN)/conv3x3a32
+	@-mkdir -p $(BIN)/$*
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx128 target=$*-hvx_128
 
 $(BIN)/%/filters.a : $(OBJS)
 	ar q $(BIN)/$*/filters.a $^
