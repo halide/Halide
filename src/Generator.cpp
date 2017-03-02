@@ -1409,6 +1409,21 @@ void GeneratorBase::check_scheduled(const char* m) const {
     check_min_phase(ScheduleCalled);
 }
 
+void GeneratorBase::check_input_is_singular(Internal::GeneratorInputBase *in) {
+    user_assert(!in->is_array())
+        << "Input " << in->name() << " is an array, and must be set with a vector type.";
+}
+
+void GeneratorBase::check_input_is_array(Internal::GeneratorInputBase *in) {
+    user_assert(in->is_array())
+        << "Input " << in->name() << " is not an array, and must not be set with a vector type.";
+}
+
+void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal::IOKind kind) {
+    user_assert(in->kind() == kind)
+        << "Input " << in->name() << " cannot be set with the type specified.";
+}
+
 GIOBase::GIOBase(size_t array_size, 
                  const std::string &name, 
                  IOKind kind,             
@@ -1769,7 +1784,7 @@ void generator_test() {
     }
 
     // Verify that set_generator_param<T> and set_schedule_param<T>
-    // work properly, even if the specific subtype of Generator is not know.
+    // work properly, even if the specific subtype of Generator is not known.
     {
         class Tester : public Generator<Tester> {
         public:
@@ -1875,6 +1890,70 @@ void generator_test() {
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }    
+
+    // Verify that set_inputs() works properly, even if the specific subtype of Generator is not known.
+    {
+        class Tester : public Generator<Tester> {
+        public:
+            Input<int> input_int{"input_int"};
+            Input<float> input_float{"input_float"};
+            Input<uint8_t> input_byte{"input_byte"};
+            Input<uint64_t[4]> input_scalar_array{ "input_scalar_array" };
+            Input<Func> input_func_typed{"input_func_typed", Int(16), 1};
+            Input<Func> input_func_untyped{"input_func_untyped", 1};
+            Input<Func[]> input_func_array{ "input_func_array", 1 };
+            Input<Buffer<uint8_t>> input_buffer_typed{ "input_buffer_typed", 3 };
+            Input<Buffer<>> input_buffer_untyped{ "input_buffer_untyped" };
+            Output<Func> output{"output", Float(32), 1};
+
+
+            void generate() {
+                Var x;
+                output(x) = input_int + 
+                            input_float +
+                            input_byte +
+                            input_scalar_array[3] +
+                            input_func_untyped(x) + 
+                            input_func_typed(x) + 
+                            input_func_array[0](x) + 
+                            input_buffer_typed(x, 0, 0) +
+                            input_buffer_untyped(x, Halide::_);
+            }
+            void schedule() {
+                // nothing
+            }
+        };
+
+        Tester tester_instance;
+        // Use a base-typed reference to verify the code below doesn't know about subtype
+        GeneratorBase &tester = tester_instance;
+
+        const int i = 1234;
+        const float f = 2.25f;
+        const uint8_t b = 0x42;
+        const std::vector<uint64_t> a = { 1, 2, 3, 4 };
+        Var x;
+        Func fn_typed, fn_untyped;
+        fn_typed(x) = cast<int16_t>(38);
+        fn_untyped(x) = 32.f;
+        const std::vector<Func> fn_array = { fn_untyped, fn_untyped };
+
+        Buffer<uint8_t> buf_typed(1, 1, 1);
+        Buffer<float> buf_untyped(1);
+
+        buf_typed.fill(33);
+        buf_untyped.fill(34);
+
+        // set_inputs() requires inputs in Input<>-decl-order,
+        // and all inputs match type exactly. 
+        tester.set_inputs(i, f, b, a, fn_typed, fn_untyped, fn_array, buf_typed, buf_untyped);
+        tester.call_generate();
+        tester.call_schedule();
+
+        Buffer<float> im = tester_instance.realize(1);
+        internal_assert(im.dim(0).extent() == 1);
+        internal_assert(im(0) == 1475.25f) << "Expected 1475.25 but saw " << im(0);
+    }
 
     class GPTester : public Generator<GPTester> {
     public:
