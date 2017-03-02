@@ -80,7 +80,7 @@ struct PipelineDescriptorBase {
     virtual bool defined() = 0;
 };
 
-template <typename T1, typename T2>
+template <typename T1>
 struct PipelineDescriptor : public PipelineDescriptorBase  {
     T1 pipeline_64, pipeline_128, pipeline_cpu;
  
@@ -88,32 +88,30 @@ struct PipelineDescriptor : public PipelineDescriptorBase  {
     pipeline_64(pipeline_64), pipeline_128(pipeline_128), pipeline_cpu(pipeline_cpu) {}
  
     void init() {
-        static_cast<T2*>(this)->init();
+        return;
     }
     const char *name() {
-        return static_cast<T2*>(this)->name();
+        return "";
     }
     int run(bmark_run_mode_t mode) {
-        return static_cast<T2*>(this)->run(mode);
+        return -1;
     }
     bool verify(int W, int H) {
-        return static_cast<T2*>(this)->verify(W, H);
+        return false;
     }
     bool defined() {
         return pipeline_64 && pipeline_128 && pipeline_cpu;
     }
 };
-typedef Halide::Runtime::Buffer<uint8_t> U8Buffer;
-typedef Halide::Runtime::Buffer<int8_t> I8Buffer;
 
-class Conv3x3a16Descriptor : public PipelineDescriptor<pipeline3, Conv3x3a16Descriptor> {
+class Conv3x3a16Descriptor : public PipelineDescriptor<pipeline3> {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
     Halide::Runtime::Buffer<int8_t> i8_mask;
 
 public:
     Conv3x3a16Descriptor(pipeline3 pipeline_64, pipeline3 pipeline_128, pipeline3 pipeline_cpu,
                          int W, int H) :
-        PipelineDescriptor<pipeline3, Conv3x3a16Descriptor>(pipeline_64, pipeline_128, pipeline_cpu),
+        PipelineDescriptor<pipeline3>(pipeline_64, pipeline_128, pipeline_cpu),
         u8_in(nullptr, W, H, 2),
         u8_out(nullptr, W, H, 2),
         i8_mask(nullptr, 3, 3, 2) {}
@@ -186,7 +184,7 @@ public:
     }
 };
 
-class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2, Dilate3x3Descriptor> {
+class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2> {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
  private:
     uint8_t max3(uint8_t a, uint8_t b, uint8_t c) {
@@ -195,7 +193,7 @@ class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2, Dilate3x3Descri
  public:
  Dilate3x3Descriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
                      int W, int H) :
-    PipelineDescriptor<pipeline2, Dilate3x3Descriptor>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
+    PipelineDescriptor<pipeline2>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
         u8_out(nullptr, W, H, 2) {}
 
     void init() {
@@ -251,13 +249,13 @@ class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2, Dilate3x3Descri
 
 };
 
-class Median3x3Descriptor : public PipelineDescriptor<pipeline2, Median3x3Descriptor> {
+class Median3x3Descriptor : public PipelineDescriptor<pipeline2> {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
  Median3x3Descriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
                      int W, int H) :
-    PipelineDescriptor<pipeline2, Median3x3Descriptor>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
+    PipelineDescriptor<pipeline2>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
         u8_out(nullptr, W, H, 2) {}
 
     void init() {
@@ -312,13 +310,13 @@ class Median3x3Descriptor : public PipelineDescriptor<pipeline2, Median3x3Descri
     }
 };
 
-class Gaussian5x5Descriptor : public PipelineDescriptor<pipeline2, Gaussian5x5Descriptor> {
+class Gaussian5x5Descriptor : public PipelineDescriptor<pipeline2> {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
  Gaussian5x5Descriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
                      int W, int H) :
-    PipelineDescriptor<pipeline2, Gaussian5x5Descriptor>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
+    PipelineDescriptor<pipeline2>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
         u8_out(nullptr, W, H, 2) {}
 
     void init() {
@@ -369,13 +367,13 @@ class Gaussian5x5Descriptor : public PipelineDescriptor<pipeline2, Gaussian5x5De
     }
 };
 
-class SobelDescriptor : public PipelineDescriptor<pipeline2, SobelDescriptor> {
+class SobelDescriptor : public PipelineDescriptor<pipeline2> {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
  SobelDescriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
                      int W, int H) :
-    PipelineDescriptor<pipeline2, SobelDescriptor>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
+    PipelineDescriptor<pipeline2>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
         u8_out(nullptr, W, H, 2) {}
 
     void init() {
