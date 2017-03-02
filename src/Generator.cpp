@@ -978,6 +978,10 @@ void GeneratorParamBase::check_value_writable() const {
     }
 }
 
+void GeneratorParamBase::fail_wrong_type(const char *type) {
+    user_error << "The GeneratorParam " << name << " cannot be set with a value of type " << type << ".\n";
+}
+
 /* static */
 GeneratorRegistry &GeneratorRegistry::get_registry() {
     static GeneratorRegistry *registry = new GeneratorRegistry;
@@ -1201,17 +1205,14 @@ Internal::GeneratorParamBase &GeneratorBase::find_param_by_name(const std::strin
 }
 
 void GeneratorBase::set_generator_param_values(const std::map<std::string, std::string> &params) {
-    user_assert(!generator_params_set) << "set_generator_param_values() must be called at most once per Generator instance.\n";
     for (auto key_value : params) {
         // We don't care about is_schedule_param here.
         find_param_by_name(key_value.first).set_from_string(key_value.second);
     }
-    generator_params_set = true;
 }
 
 void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::string> &params, 
                                               const std::map<std::string, LoopLevel> &looplevel_params) {
-    user_assert(!schedule_params_set) << "set_schedule_param_values() must be called at most once per Generator instance.\n";
     for (auto key_value : params) {
         auto &p = find_param_by_name(key_value.first);
         // It's not OK to set non-schedule params here.
@@ -1224,7 +1225,6 @@ void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::s
         user_assert(p.is_schedule_param()) << "GeneratorParam cannot be specified for: " << p.name;
         static_cast<GeneratorParam<LoopLevel> *>(&p)->set(key_value.second);
     }
-    schedule_params_set = true;
 }
 
 void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
@@ -1296,11 +1296,9 @@ void GeneratorBase::advance_phase(Phase new_phase) {
 void GeneratorBase::pre_generate() {
     advance_phase(GenerateCalled);
     ParamInfo &pi = param_info();
-    if (!generator_params_set) {
-        generator_params_set = true;
-    }
     user_assert(pi.filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
     user_assert(pi.filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
+
     if (!inputs_set) {
         for (auto input : pi.filter_inputs) {
             input->init_internals();
@@ -1770,6 +1768,59 @@ void generator_test() {
         // tester.sp2.set(202);  // This will assert-fail.
     }
 
+    // Verify that set_generator_param<T> and set_schedule_param<T>
+    // work properly, even if the specific subtype of Generator is not know.
+    {
+        class Tester : public Generator<Tester> {
+        public:
+            GeneratorParam<int> gp0{"gp0", 0};
+            GeneratorParam<float> gp1{"gp1", 1.f};
+            GeneratorParam<uint64_t> gp2{"gp2", 2};
+
+            ScheduleParam<int> sp0{"sp0", 100};
+            ScheduleParam<float> sp1{"sp1", 101.f};
+            ScheduleParam<uint64_t> sp2{"sp2", 102};
+
+            Input<int> input{"input"};
+            Output<Func> output{"output", Int(32), 1};
+
+            void generate() {
+                internal_assert(gp0 == 1);
+                internal_assert(gp1 == 2.f);
+                internal_assert(gp2 == (uint64_t) 2);  // unchanged
+                internal_assert(sp0 == 200);
+                internal_assert(sp1 == 201.f);
+                internal_assert(sp2 == (uint64_t) 102);
+                Var x;
+                output(x) = input + gp0;
+            }
+            void schedule() {
+                internal_assert(sp0 == 200);
+                internal_assert(sp1 == 201.f);
+                internal_assert(sp2 == (uint64_t) 202);
+            }
+        };
+
+        Tester tester_instance;
+        // Use a base-typed reference to verify the code below doesn't know about subtype
+        GeneratorBase &tester = tester_instance;
+
+        // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
+        tester.set_generator_param("gp0", 1)
+              .set_schedule_param("sp0", 200);
+
+        tester.set_inputs_vector({{StubInput(42)}});
+
+        tester.set_generator_param("gp1", 2.f)
+              .set_schedule_param("sp1", 201.f);
+
+        tester.call_generate();
+
+        tester.set_schedule_param("sp2", 202);
+
+        tester.call_schedule();
+    }
+
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations (with old-style Generator)
     {
@@ -1839,6 +1890,7 @@ void generator_test() {
     gp_tester.call_generate();
     gp_tester.call_schedule();
     auto &gp = gp_tester.gp;
+
 
     // Verify that RDom parameter-pack variants can convert GeneratorParam to Expr
     RDom rdom(0, gp, 0, gp);
