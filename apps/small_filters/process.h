@@ -53,6 +53,14 @@ DECL_WEAK_PIPELINE2S(gaussian5x5)
 DECL_WEAK_PIPELINE2S(sobel)
 #endif
 
+#ifdef CONV3X3A32
+#include "conv3x3a32_hvx128.h"
+#include "conv3x3a32_hvx64.h"
+#include "conv3x3a32_cpu.h"
+#else
+DECL_WEAK_PIPELINE3S(conv3x3a32)
+#endif
+
 
 enum bmark_run_mode_t {
     hvx64 = 1,
@@ -434,4 +442,85 @@ class SobelDescriptor : public PipelineDescriptor<pipeline2> {
         abort();
     }
 };
+
+class Conv3x3a32Descriptor : public PipelineDescriptor<pipeline3> {
+    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
+    Halide::Runtime::Buffer<int8_t> i8_mask;
+
+public:
+    Conv3x3a32Descriptor(pipeline3 pipeline_64, pipeline3 pipeline_128, pipeline3 pipeline_cpu,
+                         int W, int H) :
+        PipelineDescriptor<pipeline3>(pipeline_64, pipeline_128, pipeline_cpu),
+        u8_in(nullptr, W, H, 2),
+        u8_out(nullptr, W, H, 2),
+        i8_mask(nullptr, 3, 3, 2) {}
+
+    void init() {
+        u8_in.device_malloc(halide_hexagon_device_interface());
+        u8_out.device_malloc(halide_hexagon_device_interface());
+        i8_mask.device_malloc(halide_hexagon_device_interface());
+
+        u8_in.for_each_value([&](uint8_t &x) {
+            x = static_cast<uint8_t>(rand());
+        });
+        u8_out.for_each_value([&](uint8_t &x) {
+            x = 0;
+        });
+
+        i8_mask(0, 0) = 1;
+        i8_mask(1, 0) = -4;
+        i8_mask(2, 0) = 7;
+
+        i8_mask(0, 0) = 2;
+        i8_mask(1, 0) = -5;
+        i8_mask(2, 0) = 8;
+
+        i8_mask(0, 0) = 3;
+        i8_mask(1, 0) = -6;
+        i8_mask(2, 0) = 7;
+    }
+
+    const char *name() { return "conv3x3a32"; }
+
+    bool verify(const int W, const int H) {
+        u8_out.for_each_element([&](int x, int y) {
+            int32_t sum = 0;
+            for (int ry = -1; ry <= 1; ry++) {
+                for (int rx = -1; rx <= 1; rx++) {
+                    int clamped_x = (x + rx < 0) ? 0 : x + rx;
+                    clamped_x = (clamped_x >= W) ? (W-1) : clamped_x;
+
+                    int clamped_y = (y + ry < 0) ? 0 : y + ry;
+                    clamped_y = (clamped_y >= H) ? (H-1) : clamped_y;
+
+                    sum += static_cast<int16_t>(u8_in(clamped_x, clamped_y)) * static_cast<int16_t>(i8_mask(rx+1, ry+1));
+                }
+            }
+            sum = sum >> 4;
+            if (sum > 255) {
+                sum = 255;
+            } else if (sum < 0) {
+                sum = 0;
+            }
+            uint8_t out_xy = u8_out(x, y);
+            if (sum != out_xy) {
+                printf("Conv3x3a32: Mismatch at %d %d : %d != %d\n", x, y, out_xy, sum);
+                abort();
+            }
+        });
+        return true;
+    }
+
+    int run(bmark_run_mode_t mode) {
+        if (mode == bmark_run_mode_t::hvx64) {
+            return pipeline_64(u8_in, i8_mask, u8_out);
+        } else if (mode == bmark_run_mode_t::hvx128) {
+            return pipeline_128(u8_in, i8_mask, u8_out);
+        } else if (mode == bmark_run_mode_t::cpu) {
+            return pipeline_cpu(u8_in, i8_mask, u8_out);
+        }
+        abort();
+    }
+};
+
 #endif

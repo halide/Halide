@@ -4,7 +4,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 IRPrinter irp(std::cerr);
 
-class Conv3x3a16 : public Generator<Conv3x3a16> {
+class Conv3x3a32 : public Generator<Conv3x3a32> {
 public:
     // Takes an 8 bit image; one channel.
     Input<Buffer<uint8_t>> input{"input", 2};
@@ -58,4 +58,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(Conv3x3a16, "conv3x3a16");
+HALIDE_REGISTER_GENERATOR(Conv3x3a32, "conv3x3a32");
