@@ -457,9 +457,6 @@ protected:
 private:
     T value_;
 
-    // These use "is_same" but could possibly use "is_convertible" instead;
-    // care would need to be taken to ensure that lossy conversions are avoided
-    // (eg we don't want to allow setting a float value into an int that can't represent it).
     template <typename T2, typename std::enable_if<std::is_convertible<T, T2>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &t2, const char * msg) {
         // Arithmetic types must roundtrip losslessly.
