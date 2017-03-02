@@ -126,7 +126,7 @@ public:
 };
 
 // Set the host field of any buffer_init calls on the given buffer to null.
-class NukeHostField : public IRMutator {
+class NullifyHostField : public IRMutator {
     using IRMutator::visit;
     void visit(const Call *call) {
         if (call->is_intrinsic(Call::address_of)) {
@@ -140,7 +140,7 @@ class NukeHostField : public IRMutator {
     }
     std::string buf_name;
 public:
-    NukeHostField(const std::string &b) : buf_name(b) {}
+    NullifyHostField(const std::string &b) : buf_name(b) {}
 };
 
 class InjectBufferCopies : public IRMutator {
@@ -597,7 +597,7 @@ class InjectBufferCopies : public IRMutator {
             std::vector<Expr> create_buffer_args;
             internal_assert(buffer_init_let) << "Could not find definition of " << op->name << ".buffer\n";
 
-            Expr buf = NukeHostField(op->name).mutate(buffer_init_let->value);
+            Expr buf = NullifyHostField(op->name).mutate(buffer_init_let->value);
             stmt = LetStmt::make(op->name + ".buffer", buf, inner_body);
 
             // Rebuild any wrapped lets outside the one for the _halide_buffer_init
@@ -626,7 +626,7 @@ class InjectBufferCopies : public IRMutator {
 
             if (!state[buf_name].host_touched) {
                 // Use null as a host pointer if there's no host allocation
-                Expr value = NukeHostField(buf_name).mutate(op->value);
+                Expr value = NullifyHostField(buf_name).mutate(op->value);
                 stmt = LetStmt::make(op->name, value, op->body);
             }
         }
