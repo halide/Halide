@@ -99,7 +99,9 @@ public:
         i8_mask(2, 0) = 7;
     }
 
+
     const char *name() { return "conv3x3a16"; }
+
     bool defined() {
 #ifdef CONV3X3A16
         return true;
@@ -107,6 +109,7 @@ public:
         return false;
 #endif
     }
+
     bool verify(const int W, const int H) {
 #ifdef CONV3X3A16
         u8_out.for_each_element([&](int x, int y) {
@@ -164,6 +167,7 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
     }
 
     const char *name() { return "dilate3x3"; }
+
     bool defined() {
 #ifdef DILATE3X3
         return true;
@@ -171,6 +175,7 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
         return false;
 #endif
     }
+
     bool verify(const int W, const int H) {
 #ifdef DILATE3X3
         u8_out.for_each_element([&](int x, int y) {
@@ -227,6 +232,7 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
     }
 
     const char *name() { return "median3x3"; };
+
     bool defined() {
 #ifdef MEDIAN3X3
         return true;
@@ -234,6 +240,7 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
         return false;
 #endif
     }
+
     bool verify(const int W, const int H) {
 #ifdef MEDIAN3X3
         u8_out.for_each_element([&](int x, int y) {
@@ -288,6 +295,7 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
     }
 
     const char *name() { return "gaussian5x5"; };
+
     bool defined() {
 #ifdef GAUSSIAN5X5
         return true;
@@ -295,6 +303,7 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
         return false;
 #endif
     }
+
     bool verify(const int W, const int H) {
 #ifdef GAUSSIAN5X5
         const int16_t coeffs[5] = { 1, 4, 6, 4, 1 };
@@ -351,9 +360,11 @@ class SobelDescriptor : public PipelineDescriptorBase {
     }
 
     const char *name() { return "sobel"; };
+
     uint16_t sobel3(uint16_t a, uint16_t b, uint16_t c) {
         return (a + 2*b + c);
     }
+
     bool defined() {
 #ifdef SOBEL
         return true;
@@ -361,6 +372,7 @@ class SobelDescriptor : public PipelineDescriptorBase {
         return false;
 #endif
     }
+
     bool verify(const int W, const int H) {
 #ifdef SOBEL
         u8_out.for_each_element([&](int x, int y) {
@@ -434,6 +446,7 @@ public:
     }
 
     const char *name() { return "conv3x3a32"; }
+
     bool defined() {
 #ifdef CONV3X3A32
         return true;
@@ -441,6 +454,7 @@ public:
         return false;
 #endif
     }
+
     bool verify(const int W, const int H) {
 #ifdef CONV3X3A32
         u8_out.for_each_element([&](int x, int y) {

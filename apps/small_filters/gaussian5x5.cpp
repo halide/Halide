@@ -21,6 +21,7 @@ public:
 
         output(x, y)  = cast<uint8_t> (cols(x, y) >> 8);
     }
+
     void schedule() {
         Var xi{"xi"}, yi{"yi"};
 

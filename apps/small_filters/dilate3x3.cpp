@@ -21,6 +21,7 @@ public:
         output(x, y) = max(max_y(x-1, y), max(max_y(x, y), max_y(x+1, y)));
         bounded_input.compute_root();
     }
+
     void schedule() {
         Var xi{"xi"}, yi{"yi"};
 
