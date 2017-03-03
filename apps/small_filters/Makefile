@@ -39,7 +39,6 @@ DASH_D_DEFINES = $(patsubst %, -D%=1, $(UPPERCASE_FILTERS))
 
 $(BIN)/conv3x3a16: conv3x3a16.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	echo "${GENERATOR_DEPS}"
 	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3a16
