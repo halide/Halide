@@ -4,61 +4,40 @@
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideBuffer.h"
 
-#define DECL_WEAK_PIPELINE3S(x) int x##_cpu(buffer_t *, buffer_t *, buffer_t *) __attribute__((weak)); \
-    int x##_hvx128(buffer_t *, buffer_t *, buffer_t *) __attribute__((weak)); \
-    int x##_hvx64(buffer_t *, buffer_t *, buffer_t *) __attribute__((weak));
-
-#define DECL_WEAK_PIPELINE2S(x) int x##_cpu(buffer_t *, buffer_t *) __attribute__((weak)); \
-    int x##_hvx128(buffer_t *, buffer_t *) __attribute__((weak)); \
-    int x##_hvx64(buffer_t *, buffer_t *) __attribute__((weak));
-
-
 #ifdef CONV3X3A16
 #include "conv3x3a16_hvx128.h"
 #include "conv3x3a16_hvx64.h"
 #include "conv3x3a16_cpu.h"
-#else
-DECL_WEAK_PIPELINE3S(conv3x3a16)
 #endif
 
 #ifdef DILATE3X3
 #include "dilate3x3_hvx128.h"
 #include "dilate3x3_hvx64.h"
 #include "dilate3x3_cpu.h"
-#else
-DECL_WEAK_PIPELINE2S(dilate3x3)
 #endif
 
 #ifdef MEDIAN3X3
 #include "median3x3_hvx128.h"
 #include "median3x3_hvx64.h"
 #include "median3x3_cpu.h"
-#else
-DECL_WEAK_PIPELINE2S(median3x3)
 #endif
 
 #ifdef GAUSSIAN5X5
 #include "gaussian5x5_hvx128.h"
 #include "gaussian5x5_hvx64.h"
 #include "gaussian5x5_cpu.h"
-#else
-DECL_WEAK_PIPELINE2S(gaussian5x5)
 #endif
 
 #ifdef SOBEL
 #include "sobel_hvx128.h"
 #include "sobel_hvx64.h"
 #include "sobel_cpu.h"
-#else
-DECL_WEAK_PIPELINE2S(sobel)
 #endif
 
 #ifdef CONV3X3A32
 #include "conv3x3a32_hvx128.h"
 #include "conv3x3a32_hvx64.h"
 #include "conv3x3a32_cpu.h"
-#else
-DECL_WEAK_PIPELINE3S(conv3x3a32)
 #endif
 
 
@@ -88,41 +67,14 @@ struct PipelineDescriptorBase {
     virtual bool defined() = 0;
 };
 
-template <typename T1>
-struct PipelineDescriptor : public PipelineDescriptorBase  {
-    T1 pipeline_64, pipeline_128, pipeline_cpu;
- 
-    PipelineDescriptor(T1 pipeline_64, T1 pipeline_128, T1 pipeline_cpu) :
-    pipeline_64(pipeline_64), pipeline_128(pipeline_128), pipeline_cpu(pipeline_cpu) {}
- 
-    void init() {
-        return;
-    }
-    const char *name() {
-        return "";
-    }
-    int run(bmark_run_mode_t mode) {
-        return -1;
-    }
-    bool verify(int W, int H) {
-        return false;
-    }
-    bool defined() {
-        return pipeline_64 && pipeline_128 && pipeline_cpu;
-    }
-};
-
-class Conv3x3a16Descriptor : public PipelineDescriptor<pipeline3> {
+class Conv3x3a16Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
     Halide::Runtime::Buffer<int8_t> i8_mask;
 
 public:
-    Conv3x3a16Descriptor(pipeline3 pipeline_64, pipeline3 pipeline_128, pipeline3 pipeline_cpu,
-                         int W, int H) :
-        PipelineDescriptor<pipeline3>(pipeline_64, pipeline_128, pipeline_cpu),
-        u8_in(nullptr, W, H, 2),
-        u8_out(nullptr, W, H, 2),
-        i8_mask(nullptr, 3, 3, 2) {}
+    Conv3x3a16Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
+                                         u8_out(nullptr, W, H, 2),
+                                         i8_mask(nullptr, 3, 3, 2) {}
 
     void init() {
         u8_in.device_malloc(halide_hexagon_device_interface());
@@ -132,9 +84,7 @@ public:
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
         });
-        u8_out.for_each_value([&](uint8_t &x) {
-            x = 0;
-        });
+        u8_out.fill(0);
 
         i8_mask(0, 0) = 1;
         i8_mask(1, 0) = -4;
@@ -150,59 +100,58 @@ public:
     }
 
     const char *name() { return "conv3x3a16"; }
-
+    bool defined() {
+#ifdef CONV3X3A16
+        return true;
+#else
+        return false;
+#endif
+    }
     bool verify(const int W, const int H) {
+#ifdef CONV3X3A16
         u8_out.for_each_element([&](int x, int y) {
             int16_t sum = 0;
             for (int ry = -1; ry <= 1; ry++) {
                 for (int rx = -1; rx <= 1; rx++) {
-                    int clamped_x = (x + rx < 0) ? 0 : x + rx;
-                    clamped_x = (clamped_x >= W) ? (W-1) : clamped_x;
-
-                    int clamped_y = (y + ry < 0) ? 0 : y + ry;
-                    clamped_y = (clamped_y >= H) ? (H-1) : clamped_y;
-
-                    sum += static_cast<int16_t>(u8_in(clamped_x, clamped_y)) * static_cast<int16_t>(i8_mask(rx+1, ry+1));
+                    sum += static_cast<int16_t>(u8_in(clamp(x+rx, 0, W-1), clamp(y+ry, 0, H-1)))
+                                                * static_cast<int16_t>(i8_mask(rx+1, ry+1));
                 }
             }
             sum = sum >> 4;
-            if (sum > 255) {
-                sum = 255;
-            } else if (sum < 0) {
-                sum = 0;
-            }
+            sum = clamp<int16_t>(sum, 0, 255);
             uint8_t out_xy = u8_out(x, y);
             if (sum != out_xy) {
                 printf("Conv3x3a16: Mismatch at %d %d : %d != %d\n", x, y, out_xy, sum);
                 abort();
             }
         });
+#endif
         return true;
     }
 
     int run(bmark_run_mode_t mode) {
+#ifdef CONV3X3A16
         if (mode == bmark_run_mode_t::hvx64) {
-            return pipeline_64(u8_in, i8_mask, u8_out);
+            return conv3x3a16_hvx64(u8_in, i8_mask, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
-            return pipeline_128(u8_in, i8_mask, u8_out);
+            return conv3x3a16_hvx128(u8_in, i8_mask, u8_out);
         } else if (mode == bmark_run_mode_t::cpu) {
-            return pipeline_cpu(u8_in, i8_mask, u8_out);
+            return conv3x3a16_cpu(u8_in, i8_mask, u8_out);
         }
-        abort();
+#endif
+        return 0;
     }
 };
 
-class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2> {
+class Dilate3x3Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
  private:
-    uint8_t max3(uint8_t a, uint8_t b, uint8_t c) {
+    static uint8_t max3(uint8_t a, uint8_t b, uint8_t c) {
         return std::max(std::max(a, b), c);
     }
  public:
- Dilate3x3Descriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
-                     int W, int H) :
-    PipelineDescriptor<pipeline2>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
-        u8_out(nullptr, W, H, 2) {}
+     Dilate3x3Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
+                                         u8_out(nullptr, W, H, 2) {}
 
     void init() {
         u8_in.device_malloc(halide_hexagon_device_interface());
@@ -211,60 +160,61 @@ class Dilate3x3Descriptor : public PipelineDescriptor<pipeline2> {
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
         });
-        u8_out.for_each_value([&](uint8_t &x) {
-            x = 0;
-        });
+        u8_out.fill(0);
     }
 
     const char *name() { return "dilate3x3"; }
-
+    bool defined() {
+#ifdef DILATE3X3
+        return true;
+#else
+        return false;
+#endif
+    }
     bool verify(const int W, const int H) {
+#ifdef DILATE3X3
         u8_out.for_each_element([&](int x, int y) {
+            auto u8_in_bounded = [&](int x_, int y_) { return u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1)); };
+
             uint8_t max_y[3];
-            max_y[0] = max3(u8_in(clamp(x-1, 0, (W-1)), clamp(y-1, 0, (H-1))),
-                            u8_in(clamp(x-1, 0, (W-1)), clamp(y, 0, (H-1))),
-                            u8_in(clamp(x-1, 0, (W-1)), clamp(y+1, 0, (H-1))));
+            max_y[0] = max3(u8_in_bounded(x-1, y-1), u8_in_bounded(x-1, y), u8_in_bounded(x-1, y+1));
 
-            max_y[1] = max3(u8_in(clamp(x, 0, (W-1)), clamp(y-1, 0, (H-1))),
-                            u8_in(clamp(x, 0, (W-1)), clamp(y, 0, (H-1))),
-                            u8_in(clamp(x, 0, (W-1)), clamp(y+1, 0, (H-1))));
+            max_y[1] = max3(u8_in_bounded(x, y-1), u8_in_bounded(x, y), u8_in_bounded(x, y+1));
 
-            max_y[2] = max3(u8_in(clamp(x+1, 0, (W-1)), clamp(y-1, 0, (H-1))),
-                            u8_in(clamp(x+1, 0, (W-1)), clamp(y, 0, (H-1))),
-                            u8_in(clamp(x+1, 0, (W-1)), clamp(y+1, 0, (H-1))));
+            max_y[2] = max3(u8_in_bounded(x+1, y-1), u8_in_bounded(x+1, y), u8_in_bounded(x+1, y+1));
 
             uint8_t max_val = max3(max_y[0], max_y[1], max_y[2]);
+
             uint8_t out_xy = u8_out(x, y);
             if (max_val != out_xy) {
                 printf("Dilate3x3: Mismatch at %d %d : %d != %d\n", x, y, out_xy, max_val);
                 abort();
             }
         });
-
+#endif
         return true;
     }
 
     int run(bmark_run_mode_t mode) {
+#ifdef DILATE3X3
         if (mode == bmark_run_mode_t::hvx64) {
-            return pipeline_64(u8_in, u8_out);
+            return dilate3x3_hvx64(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
-            return pipeline_128(u8_in, u8_out);
+            return dilate3x3_hvx128(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::cpu) {
-            return pipeline_cpu(u8_in, u8_out);
+            return dilate3x3_cpu(u8_in, u8_out);
         }
-        abort();
+#endif
+        return 0;
     }
-
 };
 
-class Median3x3Descriptor : public PipelineDescriptor<pipeline2> {
+class Median3x3Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
- Median3x3Descriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
-                     int W, int H) :
-    PipelineDescriptor<pipeline2>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
-        u8_out(nullptr, W, H, 2) {}
+      Median3x3Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
+                                          u8_out(nullptr, W, H, 2) {}
 
     void init() {
         u8_in.device_malloc(halide_hexagon_device_interface());
@@ -273,29 +223,28 @@ class Median3x3Descriptor : public PipelineDescriptor<pipeline2> {
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
         });
-        u8_out.for_each_value([&](uint8_t &x) {
-            x = 0;
-        });
+        u8_out.fill(0);
     }
 
     const char *name() { return "median3x3"; };
-
+    bool defined() {
+#ifdef MEDIAN3X3
+        return true;
+#else
+        return false;
+#endif
+    }
     bool verify(const int W, const int H) {
+#ifdef MEDIAN3X3
         u8_out.for_each_element([&](int x, int y) {
-            uint8_t inp9[9] = { u8_in(clamp(x-1, 0, W-1), clamp(y-1, 0, H-1)),
-                                u8_in(clamp(x, 0, W-1), clamp(y-1, 0, H-1)),
-                                u8_in(clamp(x+1, 0, W-1), clamp(y-1, 0, H-1)),
+            auto u8_in_bounded = [&](int x_, int y_) { return u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1)); };
 
-                                u8_in(clamp(x-1, 0, W-1), clamp(y, 0, H-1)),
-                                u8_in(clamp(x, 0, W-1), clamp(y, 0, H-1)),
-                                u8_in(clamp(x+1, 0, W-1), clamp(y, 0, H-1)),
-
-                                u8_in(clamp(x-1, 0, W-1), clamp(y+1, 0, H-1)),
-                                u8_in(clamp(x, 0, W-1), clamp(y+1, 0, H-1)),
-                                u8_in(clamp(x+1, 0, W-1), clamp(y+1, 0, H-1))
-                           };
+            uint8_t inp9[9] = { u8_in_bounded(x-1, y-1), u8_in_bounded(x, y-1), u8_in_bounded(x+1, y-1),
+                                u8_in_bounded(x-1, y), u8_in_bounded(x, y), u8_in_bounded(x+1, y),
+                                u8_in_bounded(x-1, y+1), u8_in_bounded(x, y+1), u8_in_bounded(x+1, y+1) };
 
             std::nth_element(&inp9[0], &inp9[4], &inp9[9]);
+
             uint8_t median_val = inp9[4];
             uint8_t out_xy = u8_out(x, y);
             if (median_val != out_xy) {
@@ -303,29 +252,30 @@ class Median3x3Descriptor : public PipelineDescriptor<pipeline2> {
                 abort();
             }
         });
+#endif
         return true;
     }
 
     int run(bmark_run_mode_t mode) {
+#ifdef MEDIAN3X3
         if (mode == bmark_run_mode_t::hvx64) {
-            return pipeline_64(u8_in, u8_out);
+            return median3x3_hvx64(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
-            return pipeline_128(u8_in, u8_out);
+            return median3x3_hvx128(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::cpu) {
-            return pipeline_cpu(u8_in, u8_out);
+            return median3x3_cpu(u8_in, u8_out);
         }
-        abort();
+#endif
+        return 0;
     }
 };
 
-class Gaussian5x5Descriptor : public PipelineDescriptor<pipeline2> {
+class Gaussian5x5Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
- Gaussian5x5Descriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
-                     int W, int H) :
-    PipelineDescriptor<pipeline2>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
-        u8_out(nullptr, W, H, 2) {}
+     Gaussian5x5Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
+                                           u8_out(nullptr, W, H, 2) {}
 
     void init() {
         u8_in.device_malloc(halide_hexagon_device_interface());
@@ -334,14 +284,19 @@ class Gaussian5x5Descriptor : public PipelineDescriptor<pipeline2> {
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
         });
-        u8_out.for_each_value([&](uint8_t &x) {
-            x = 0;
-        });
+        u8_out.fill(0);
     }
 
     const char *name() { return "gaussian5x5"; };
-
+    bool defined() {
+#ifdef GAUSSIAN5X5
+        return true;
+#else
+        return false;
+#endif
+    }
     bool verify(const int W, const int H) {
+#ifdef GAUSSIAN5X5
         const int16_t coeffs[5] = { 1, 4, 6, 4, 1 };
         u8_out.for_each_element([&](int x, int y) {
             int16_t blur = 0;
@@ -360,29 +315,30 @@ class Gaussian5x5Descriptor : public PipelineDescriptor<pipeline2> {
                 abort();
             }
         });
+#endif
         return true;
     }
 
     int run(bmark_run_mode_t mode) {
+#ifdef GAUSSIAN5X5
         if (mode == bmark_run_mode_t::hvx64) {
-            return pipeline_64(u8_in, u8_out);
+            return gaussian5x5_hvx64(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
-            return pipeline_128(u8_in, u8_out);
+            return gaussian5x5_hvx128(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::cpu) {
-            return pipeline_cpu(u8_in, u8_out);
+            return gaussian5x5_cpu(u8_in, u8_out);
         }
-        abort();
+#endif
+        return 0;
     }
 };
 
-class SobelDescriptor : public PipelineDescriptor<pipeline2> {
+class SobelDescriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
 
  public:
- SobelDescriptor(pipeline2 pipeline_64, pipeline2 pipeline_128, pipeline2 pipeline_cpu,
-                     int W, int H) :
-    PipelineDescriptor<pipeline2>(pipeline_64, pipeline_128, pipeline_cpu), u8_in(nullptr, W, H, 2),
-        u8_out(nullptr, W, H, 2) {}
+     SobelDescriptor(int W, int H) : u8_in(nullptr, W, H, 2),
+                                     u8_out(nullptr, W, H, 2) {}
 
     void init() {
         u8_in.device_malloc(halide_hexagon_device_interface());
@@ -391,31 +347,32 @@ class SobelDescriptor : public PipelineDescriptor<pipeline2> {
         u8_in.for_each_value([&](uint8_t &x) {
                 x = static_cast<uint8_t>(rand());
         });
-        u8_out.for_each_value([&](uint8_t &x) {
-            x = 0;
-        });
+        u8_out.fill(0);
     }
 
     const char *name() { return "sobel"; };
     uint16_t sobel3(uint16_t a, uint16_t b, uint16_t c) {
         return (a + 2*b + c);
     }
+    bool defined() {
+#ifdef SOBEL
+        return true;
+#else
+        return false;
+#endif
+    }
     bool verify(const int W, const int H) {
+#ifdef SOBEL
         u8_out.for_each_element([&](int x, int y) {
-            uint16_t sobel_x_avg0 = sobel3(static_cast<uint16_t>(u8_in(clamp(x-1, 0, W-1), clamp(y-1, 0, H-1))),
-                                           static_cast<uint16_t>(u8_in(clamp(x, 0, W-1), clamp(y-1, 0, H-1))),
-                                           static_cast<uint16_t>(u8_in(clamp(x+1, 0, W-1), clamp(y-1, 0, H-1))));
-            uint16_t sobel_x_avg1 = sobel3(static_cast<uint16_t>(u8_in(clamp(x-1, 0, W-1), clamp(y+1, 0, H-1))),
-                                           static_cast<uint16_t>(u8_in(clamp(x, 0, W-1), clamp(y+1, 0, H-1))),
-                                           static_cast<uint16_t>(u8_in(clamp(x+1, 0, W-1), clamp(y+1, 0, H-1))));
+            auto u16_in_bounded = [&](int x_, int y_) { return static_cast<uint16_t>(u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1))); };
+
+            uint16_t sobel_x_avg0 = sobel3(u16_in_bounded(x-1, y-1), u16_in_bounded(x, y-1), u16_in_bounded(x+1, y-1));
+            uint16_t sobel_x_avg1 = sobel3(u16_in_bounded(x-1, y+1), u16_in_bounded(x, y+1), u16_in_bounded(x+1, y+1));
             uint16_t sobel_x = abs(sobel_x_avg0 - sobel_x_avg1);
 
-            uint16_t sobel_y_avg0 = sobel3(static_cast<uint16_t>(u8_in(clamp(x-1, 0, W-1), clamp(y-1, 0, H-1))),
-                                           static_cast<uint16_t>(u8_in(clamp(x-1, 0, W-1), clamp(y, 0, H-1))),
-                                           static_cast<uint16_t>(u8_in(clamp(x-1, 0, W-1), clamp(y+1, 0, H-1))));
-            uint16_t sobel_y_avg1 = sobel3(static_cast<uint16_t>(u8_in(clamp(x+1, 0, W-1), clamp(y-1, 0, H-1))),
-                                           static_cast<uint16_t>(u8_in(clamp(x+1, 0, W-1), clamp(y, 0, H-1))),
-                                           static_cast<uint16_t>(u8_in(clamp(x+1, 0, W-1), clamp(y+1, 0, H-1))));
+
+            uint16_t sobel_y_avg0 = sobel3(u16_in_bounded(x-1, y-1), u16_in_bounded(x-1, y), u16_in_bounded(x-1, y+1));
+            uint16_t sobel_y_avg1 = sobel3(u16_in_bounded(x+1, y-1), u16_in_bounded(x+1, y), u16_in_bounded(x+1, y+1));
             uint16_t sobel_y = abs(sobel_y_avg0 - sobel_y_avg1);
 
             uint8_t sobel_val = static_cast<uint8_t>(clamp(sobel_x + sobel_y, 0, 255));
@@ -426,34 +383,32 @@ class SobelDescriptor : public PipelineDescriptor<pipeline2> {
                 abort();
             }
         });
-        {
-        }
+#endif
         return true;
     }
 
     int run(bmark_run_mode_t mode) {
+#ifdef SOBEL
         if (mode == bmark_run_mode_t::hvx64) {
-            return pipeline_64(u8_in, u8_out);
+            return sobel_hvx64(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
-            return pipeline_128(u8_in, u8_out);
+            return sobel_hvx128(u8_in, u8_out);
         } else if (mode == bmark_run_mode_t::cpu) {
-            return pipeline_cpu(u8_in, u8_out);
+            return sobel_cpu(u8_in, u8_out);
         }
-        abort();
+#endif
+        return 0;
     }
 };
 
-class Conv3x3a32Descriptor : public PipelineDescriptor<pipeline3> {
+class Conv3x3a32Descriptor : public PipelineDescriptorBase {
     Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
     Halide::Runtime::Buffer<int8_t> i8_mask;
 
 public:
-    Conv3x3a32Descriptor(pipeline3 pipeline_64, pipeline3 pipeline_128, pipeline3 pipeline_cpu,
-                         int W, int H) :
-        PipelineDescriptor<pipeline3>(pipeline_64, pipeline_128, pipeline_cpu),
-        u8_in(nullptr, W, H, 2),
-        u8_out(nullptr, W, H, 2),
-        i8_mask(nullptr, 3, 3, 2) {}
+    Conv3x3a32Descriptor(int W, int H) : u8_in(nullptr, W, H, 2),
+                                         u8_out(nullptr, W, H, 2),
+                                         i8_mask(nullptr, 3, 3, 2) {}
 
     void init() {
         u8_in.device_malloc(halide_hexagon_device_interface());
@@ -463,9 +418,7 @@ public:
         u8_in.for_each_value([&](uint8_t &x) {
             x = static_cast<uint8_t>(rand());
         });
-        u8_out.for_each_value([&](uint8_t &x) {
-            x = 0;
-        });
+        u8_out.fill(0);
 
         i8_mask(0, 0) = 1;
         i8_mask(1, 0) = -4;
@@ -481,45 +434,46 @@ public:
     }
 
     const char *name() { return "conv3x3a32"; }
-
+    bool defined() {
+#ifdef CONV3X3A32
+        return true;
+#else
+        return false;
+#endif
+    }
     bool verify(const int W, const int H) {
+#ifdef CONV3X3A32
         u8_out.for_each_element([&](int x, int y) {
             int32_t sum = 0;
             for (int ry = -1; ry <= 1; ry++) {
                 for (int rx = -1; rx <= 1; rx++) {
-                    int clamped_x = (x + rx < 0) ? 0 : x + rx;
-                    clamped_x = (clamped_x >= W) ? (W-1) : clamped_x;
-
-                    int clamped_y = (y + ry < 0) ? 0 : y + ry;
-                    clamped_y = (clamped_y >= H) ? (H-1) : clamped_y;
-
-                    sum += static_cast<int16_t>(u8_in(clamped_x, clamped_y)) * static_cast<int16_t>(i8_mask(rx+1, ry+1));
+                    sum += static_cast<int16_t>(u8_in(clamp(x+rx, 0, W-1), clamp(y+ry, 0, H-1)))
+                                                * static_cast<int16_t>(i8_mask(rx+1, ry+1));
                 }
             }
             sum = sum >> 4;
-            if (sum > 255) {
-                sum = 255;
-            } else if (sum < 0) {
-                sum = 0;
-            }
+            sum = clamp(sum, 0, 255);
             uint8_t out_xy = u8_out(x, y);
             if (sum != out_xy) {
                 printf("Conv3x3a32: Mismatch at %d %d : %d != %d\n", x, y, out_xy, sum);
                 abort();
             }
         });
+#endif
         return true;
     }
 
     int run(bmark_run_mode_t mode) {
+#ifdef CONV3X3A32
         if (mode == bmark_run_mode_t::hvx64) {
-            return pipeline_64(u8_in, i8_mask, u8_out);
+            return conv3x3a32_hvx64(u8_in, i8_mask, u8_out);
         } else if (mode == bmark_run_mode_t::hvx128) {
-            return pipeline_128(u8_in, i8_mask, u8_out);
+            return conv3x3a32_hvx128(u8_in, i8_mask, u8_out);
         } else if (mode == bmark_run_mode_t::cpu) {
-            return pipeline_cpu(u8_in, i8_mask, u8_out);
+            return conv3x3a32_cpu(u8_in, i8_mask, u8_out);
         }
-        abort();
+#endif
+        return 0;
     }
 };
 
