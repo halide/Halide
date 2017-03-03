@@ -111,7 +111,6 @@ public:
     }
 
     bool verify(const int W, const int H) {
-#ifdef CONV3X3A16
         u8_out.for_each_element([&](int x, int y) {
             int16_t sum = 0;
             for (int ry = -1; ry <= 1; ry++) {
@@ -128,7 +127,6 @@ public:
                 abort();
             }
         });
-#endif
         return true;
     }
 
@@ -177,7 +175,6 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
     }
 
     bool verify(const int W, const int H) {
-#ifdef DILATE3X3
         u8_out.for_each_element([&](int x, int y) {
             auto u8_in_bounded = [&](int x_, int y_) { return u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1)); };
 
@@ -196,7 +193,6 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
                 abort();
             }
         });
-#endif
         return true;
     }
 
@@ -242,7 +238,6 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
     }
 
     bool verify(const int W, const int H) {
-#ifdef MEDIAN3X3
         u8_out.for_each_element([&](int x, int y) {
             auto u8_in_bounded = [&](int x_, int y_) { return u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1)); };
 
@@ -259,7 +254,6 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
                 abort();
             }
         });
-#endif
         return true;
     }
 
@@ -305,7 +299,6 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
     }
 
     bool verify(const int W, const int H) {
-#ifdef GAUSSIAN5X5
         const int16_t coeffs[5] = { 1, 4, 6, 4, 1 };
         u8_out.for_each_element([&](int x, int y) {
             int16_t blur = 0;
@@ -324,7 +317,6 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
                 abort();
             }
         });
-#endif
         return true;
     }
 
@@ -374,7 +366,6 @@ class SobelDescriptor : public PipelineDescriptorBase {
     }
 
     bool verify(const int W, const int H) {
-#ifdef SOBEL
         u8_out.for_each_element([&](int x, int y) {
             auto u16_in_bounded = [&](int x_, int y_) { return static_cast<uint16_t>(u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1))); };
 
@@ -395,7 +386,6 @@ class SobelDescriptor : public PipelineDescriptorBase {
                 abort();
             }
         });
-#endif
         return true;
     }
 
@@ -456,7 +446,6 @@ public:
     }
 
     bool verify(const int W, const int H) {
-#ifdef CONV3X3A32
         u8_out.for_each_element([&](int x, int y) {
             int32_t sum = 0;
             for (int ry = -1; ry <= 1; ry++) {
@@ -473,7 +462,6 @@ public:
                 abort();
             }
         });
-#endif
         return true;
     }
 
