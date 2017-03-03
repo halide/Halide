@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-class Conv3x3a16 : public Generator<Conv3x3a16> {
+class Conv3x3 : public Generator<Conv3x3> {
 public:
     // Takes an 8 bit image; one channel.
     Input<Buffer<uint8_t>> input{"input", 2};
@@ -10,13 +10,14 @@ public:
     // Outputs an 8 bit image; one channel.
     Output<Buffer<uint8_t>> output{"output", 2};
     Var x{"x"}, y{"y"};
+    GeneratorParam<Type> accumulator_type{"accumulator_type", Int(16)};
 
     void generate() {
         Func bounded_input{"input_bounded"};
 
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
-        Expr sum = cast<int16_t>(0);
+        Expr sum = cast(accumulator_type, 0);
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
                 sum += cast<int16_t>(bounded_input(x+j, y+i)) * cast<int16_t>(mask(j+1, i+1));
@@ -57,4 +58,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(Conv3x3a16, "conv3x3a16");
+HALIDE_REGISTER_GENERATOR(Conv3x3, "conv3x3");
