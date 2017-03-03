@@ -9,9 +9,9 @@ public:
     Var x{"x"}, y{"y"};
     Func sobel_x_avg{"sobel_x_avg"}, sobel_y_avg{"sobel_y_avg"};
     Func sobel_x{"sobel_x"}, sobel_y{"sobel_y"};
+    Func bounded_input{"bounded_input"};
 
     void generate() {
-        Func bounded_input{"bounded_input"};
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
         Func input_16{"input_16"};
@@ -23,8 +23,9 @@ public:
         sobel_y_avg(x,y) = input_16(x, y-1) + 2*input_16(x, y) + input_16(x, y+1);
         sobel_y(x, y) = absd(sobel_y_avg(x-1, y),  sobel_y_avg(x+1, y));
 
+        // This sobel implementation is non-standard in that it doesn't take the square root
+        // of the gradient.
         output(x, y) = cast<uint8_t>(clamp(sobel_x(x, y) + sobel_y(x, y), 0, 255));
-        bounded_input.compute_root();
     }
 
     void schedule() {
@@ -44,6 +45,7 @@ public:
 
             Expr output_stride = output_buffer.dim(1).stride();
             output_buffer.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            bounded_input.compute_root();
             Func(output)
                 .hexagon()
                 .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)

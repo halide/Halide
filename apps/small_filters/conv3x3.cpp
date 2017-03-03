@@ -10,11 +10,10 @@ public:
     // Outputs an 8 bit image; one channel.
     Output<Buffer<uint8_t>> output{"output", 2};
     Var x{"x"}, y{"y"};
+    Func bounded_input{"input_bounded"};
     GeneratorParam<Type> accumulator_type{"accumulator_type", Int(16)};
 
     void generate() {
-        Func bounded_input{"input_bounded"};
-
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
         Expr sum = cast(accumulator_type, 0);
@@ -24,7 +23,6 @@ public:
             }
         }
         output(x, y) = cast<uint8_t>(clamp(sum >> 4, 0, 255));
-        bounded_input.compute_root();
     }
 
     void schedule() {
@@ -44,6 +42,7 @@ public:
 
             Expr output_stride = output_buffer.dim(1).stride();
             output_buffer.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            bounded_input.compute_root();
             Func(output)
                 .hexagon()
                 .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)

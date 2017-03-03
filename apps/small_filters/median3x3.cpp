@@ -3,6 +3,19 @@
 using namespace Halide;
 
 class Median3x3 : public Generator<Median3x3> {
+private:
+    static Expr max3(Expr a, Expr b, Expr c) {
+        return max(max(a, b), c);
+    }
+
+    static Expr min3(Expr a, Expr b, Expr c) {
+        return min(min(a, b), c);
+    }
+
+    static Expr mid3(Expr a, Expr b, Expr c) {
+        return max(min(max(a, b), c), min(a, b));
+    }
+
 public:
     // Takes an 8 bit image; one channel.
     Input<Buffer<uint8_t>> input{"input", 2};
@@ -11,22 +24,9 @@ public:
     Var x{"x"}, y{"y"};
     Func max_y{"max_y"}, min_y{"min_y"}, mid_y{"mid_y"};
     Func minmax_x{"minmax_x"}, maxmin_x{"maxmin_x"}, midmid_x{"midmid_x"};
-
-    Expr max3(Expr a, Expr b, Expr c) {
-        return max(max(a, b), c);
-    }
-
-    Expr min3(Expr a, Expr b, Expr c) {
-        return min(min(a, b), c);
-    }
-
-    Expr mid3(Expr a, Expr b, Expr c) {
-        return max(min(max(a, b), c), min(a, b));
-    }
+    Func bounded_input{"bounded_input"};
 
     void generate() {
-        Func bounded_input{"bounded_input"};
-
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
         max_y(x,y) = max3(bounded_input(x ,y-1), bounded_input(x, y),
                           bounded_input(x, y+1));
@@ -40,7 +40,6 @@ public:
         midmid_x(x,y) = mid3(mid_y(x-1, y), mid_y(x, y), mid_y(x+1, y));
 
         output(x,y) = mid3(minmax_x(x, y), maxmin_x(x, y), midmid_x(x, y));
-        bounded_input.compute_root();
     }
 
     void schedule() {
@@ -60,6 +59,7 @@ public:
 
             Expr output_stride = output_buffer.dim(1).stride();
             output_buffer.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            bounded_input.compute_root();
             Func(output)
                 .hexagon()
                 .tile(x, y, xi, yi, vector_size, 4)

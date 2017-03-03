@@ -10,16 +10,14 @@ public:
     Output<Buffer<uint8_t>> output{"output", 2};
     Var x{"x"}, y{"y"};
     Func max_y{"max_y"};
+    Func bounded_input{"bounded_input"};
 
     void generate() {
-        Func bounded_input{"bounded_input"};
-
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
         max_y(x, y) = max(bounded_input(x, y-1), max(bounded_input(x, y),
                                                      bounded_input(x, y+1)));
 
         output(x, y) = max(max_y(x-1, y), max(max_y(x, y), max_y(x+1, y)));
-        bounded_input.compute_root();
     }
 
     void schedule() {
@@ -39,6 +37,7 @@ public:
 
             Expr output_stride = output_buffer.dim(1).stride();
             output_buffer.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            bounded_input.compute_root();
             Func(output)
                 .hexagon()
                 .tile(x, y, xi, yi, vector_size, 4)
