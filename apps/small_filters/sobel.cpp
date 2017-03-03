@@ -26,6 +26,7 @@ public:
         output(x, y) = cast<uint8_t>(clamp(sobel_x(x, y) + sobel_y(x, y), 0, 255));
         bounded_input.compute_root();
     }
+
     void schedule() {
         Var xi{"xi"}, yi{"yi"};
 

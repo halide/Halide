@@ -15,9 +15,11 @@ public:
     Expr max3(Expr a, Expr b, Expr c) {
         return max(max(a, b), c);
     }
+
     Expr min3(Expr a, Expr b, Expr c) {
         return min(min(a, b), c);
     }
+
     Expr mid3(Expr a, Expr b, Expr c) {
         return max(min(max(a, b), c), min(a, b));
     }
@@ -40,6 +42,7 @@ public:
         output(x,y) = mid3(minmax_x(x, y), maxmin_x(x, y), midmid_x(x, y));
         bounded_input.compute_root();
     }
+
     void schedule() {
         Var xi{"xi"}, yi{"yi"};
 
