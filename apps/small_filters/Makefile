@@ -37,21 +37,21 @@ UPPERCASE_FILTERS = $(shell echo $(FILTERS) | tr '[:lower:]' '[:upper:]')
 DASH_D_DEFINES = $(patsubst %, -D%=1, $(UPPERCASE_FILTERS))
 
 
-$(BIN)/conv3x3a16: conv3x3a16.cpp $(GENERATOR_DEPS)
+$(BIN)/conv3x3: conv3x3.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-$(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3a16
+$(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3
 	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_cpu target=$*
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_cpu target=$* accumulator_type=int16
 
-$(BIN)/%/conv3x3a16_hvx64.o: $(BIN)/conv3x3a16
+$(BIN)/%/conv3x3a16_hvx64.o: $(BIN)/conv3x3
 	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx64 target=$*-hvx_64
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx64 target=$*-hvx_64 accumulator_type=int16
 
-$(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3a16
+$(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3
 	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128 accumulator_type=int16
 
 $(BIN)/dilate3x3: dilate3x3.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
@@ -121,22 +121,17 @@ $(BIN)/%/sobel_hvx128.o: $(BIN)/sobel
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f sobel_hvx128 target=$*-hvx_128
 
-$(BIN)/conv3x3a32: conv3x3a32.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
-	echo "${GENERATOR_DEPS}"
-	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
-
-$(BIN)/%/conv3x3a32_cpu.o: $(BIN)/conv3x3a32
+$(BIN)/%/conv3x3a32_cpu.o: $(BIN)/conv3x3
 	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_cpu target=$*
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_cpu target=$* accumulator_type=int32
 
-$(BIN)/%/conv3x3a32_hvx64.o: $(BIN)/conv3x3a32
+$(BIN)/%/conv3x3a32_hvx64.o: $(BIN)/conv3x3
 	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx64 target=$*-hvx_64
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx64 target=$*-hvx_64 accumulator_type=int32
 
-$(BIN)/%/conv3x3a32_hvx128.o: $(BIN)/conv3x3a32
+$(BIN)/%/conv3x3a32_hvx128.o: $(BIN)/conv3x3
 	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx128 target=$*-hvx_128
+	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx128 target=$*-hvx_128 accumulator_type=int32
 
 $(BIN)/%/filters.a : $(OBJS)
 	ar q $(BIN)/$*/filters.a $^
