@@ -21,10 +21,6 @@ public:
     Input<Buffer<uint8_t>> input{"input", 2};
     // Outputs an 8 bit image; one channel.
     Output<Buffer<uint8_t>> output{"output", 2};
-    Var x{"x"}, y{"y"};
-    Func max_y{"max_y"}, min_y{"min_y"}, mid_y{"mid_y"};
-    Func minmax_x{"minmax_x"}, maxmin_x{"maxmin_x"}, midmid_x{"midmid_x"};
-    Func bounded_input{"bounded_input"};
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
@@ -72,6 +68,11 @@ public:
                 .parallel(y, 16);
         }
     }
+private:
+    Var x{"x"}, y{"y"};
+    Func max_y{"max_y"}, min_y{"min_y"}, mid_y{"mid_y"};
+    Func minmax_x{"minmax_x"}, maxmin_x{"maxmin_x"}, midmid_x{"midmid_x"};
+    Func bounded_input{"bounded_input"};
 };
 
 HALIDE_REGISTER_GENERATOR(Median3x3, "median3x3");

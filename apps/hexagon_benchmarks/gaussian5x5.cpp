@@ -6,8 +6,6 @@ class Gaussian5x5 : public Generator<Gaussian5x5> {
 public:
     Input<Buffer<uint8_t>> input{"input", 2};
     Output<Buffer<uint8_t>> output{"output", 2};
-    Func rows{"rows"}, cols{"cols"};
-    Var x{"x"}, y{"y"};
 
     void generate() {
         Func bounded_input{"bounded_input"};
@@ -55,6 +53,9 @@ public:
                 .parallel(y, 16);
         }
     }
+private:
+    Func rows{"rows"}, cols{"cols"};
+    Var x{"x"}, y{"y"};
 };
 
 HALIDE_REGISTER_GENERATOR(Gaussian5x5, "gaussian5x5");

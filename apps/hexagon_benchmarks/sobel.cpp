@@ -6,10 +6,6 @@ class Sobel : public Generator<Sobel> {
 public:
     Input<Buffer<uint8_t>> input{"input", 2};
     Output<Buffer<uint8_t>> output{"output", 2};
-    Var x{"x"}, y{"y"};
-    Func sobel_x_avg{"sobel_x_avg"}, sobel_y_avg{"sobel_y_avg"};
-    Func sobel_x{"sobel_x"}, sobel_y{"sobel_y"};
-    Func bounded_input{"bounded_input"};
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
@@ -58,6 +54,11 @@ public:
                 .parallel(y, 16);
         }
     }
+private:
+    Var x{"x"}, y{"y"};
+    Func sobel_x_avg{"sobel_x_avg"}, sobel_y_avg{"sobel_y_avg"};
+    Func sobel_x{"sobel_x"}, sobel_y{"sobel_y"};
+    Func bounded_input{"bounded_input"};
 };
 
 HALIDE_REGISTER_GENERATOR(Sobel, "sobel");

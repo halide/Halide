@@ -8,9 +8,6 @@ public:
     Input<Buffer<uint8_t>> input{"input", 2};
     // Outputs an 8 bit image; one channel.
     Output<Buffer<uint8_t>> output{"output", 2};
-    Var x{"x"}, y{"y"};
-    Func max_y{"max_y"};
-    Func bounded_input{"bounded_input"};
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
@@ -50,6 +47,10 @@ public:
                 .parallel(y, 16);
         }
     }
+private:
+    Var x{"x"}, y{"y"};
+    Func max_y{"max_y"};
+    Func bounded_input{"bounded_input"};
 };
 
 HALIDE_REGISTER_GENERATOR(Dilate3x3, "dilate3x3");
