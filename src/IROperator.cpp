@@ -675,6 +675,10 @@ Expr BufferBuilder::build() const {
         // per-dimension flags, currently unused.
         shape.push_back(0);
     }
+    for (const Expr &e : shape) {
+        internal_assert(e.type() == Int(32))
+            << "Buffer shape fields must be int32_t:" << e << "\n";
+    }
     Expr shape_arg = Call::make(type_of<halide_dimension_t *>(), Call::make_struct, shape, Call::Intrinsic);
     if (shape_memory.defined()) {
         args[8] = shape_arg;
