@@ -36,100 +36,79 @@ LINK_OBJS += $(patsubst %,$(BIN)/$$*/%_cpu.o, $(FILTERS))
 UPPERCASE_FILTERS = $(shell echo $(FILTERS) | tr '[:lower:]' '[:upper:]')
 DASH_D_DEFINES = $(patsubst %, -D%=1, $(UPPERCASE_FILTERS))
 
-
-$(BIN)/conv3x3: conv3x3.cpp $(GENERATOR_DEPS)
+$(BIN)/%_generator : %_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
 	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-$(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3
+$(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_cpu target=$* accumulator_type=int16
 
-$(BIN)/%/conv3x3a16_hvx64.o: $(BIN)/conv3x3
+$(BIN)/%/conv3x3a16_hvx64.o: $(BIN)/conv3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx64 target=$*-hvx_64 accumulator_type=int16
 
-$(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3
+$(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128 accumulator_type=int16
 
-$(BIN)/dilate3x3: dilate3x3.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
-	echo "${GENERATOR_DEPS}"
-	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
-
-$(BIN)/%/dilate3x3_cpu.o: $(BIN)/dilate3x3
+$(BIN)/%/dilate3x3_cpu.o: $(BIN)/dilate3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f dilate3x3_cpu target=$*
 
-$(BIN)/%/dilate3x3_hvx64.o: $(BIN)/dilate3x3
+$(BIN)/%/dilate3x3_hvx64.o: $(BIN)/dilate3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f dilate3x3_hvx64 target=$*-hvx_64
 
-$(BIN)/%/dilate3x3_hvx128.o: $(BIN)/dilate3x3
+$(BIN)/%/dilate3x3_hvx128.o: $(BIN)/dilate3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f dilate3x3_hvx128 target=$*-hvx_128
 
-$(BIN)/median3x3: median3x3.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
-	echo "${GENERATOR_DEPS}"
-	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
-
-$(BIN)/%/median3x3_cpu.o: $(BIN)/median3x3
+$(BIN)/%/median3x3_cpu.o: $(BIN)/median3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f median3x3_cpu target=$*
 
-$(BIN)/%/median3x3_hvx64.o: $(BIN)/median3x3
+$(BIN)/%/median3x3_hvx64.o: $(BIN)/median3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f median3x3_hvx64 target=$*-hvx_64
 
-$(BIN)/%/median3x3_hvx128.o: $(BIN)/median3x3
+$(BIN)/%/median3x3_hvx128.o: $(BIN)/median3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f median3x3_hvx128 target=$*-hvx_128
 
-$(BIN)/gaussian5x5: gaussian5x5.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
-	echo "${GENERATOR_DEPS}"
-	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
-
-$(BIN)/%/gaussian5x5_cpu.o: $(BIN)/gaussian5x5
+$(BIN)/%/gaussian5x5_cpu.o: $(BIN)/gaussian5x5_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f gaussian5x5_cpu target=$*
 
-$(BIN)/%/gaussian5x5_hvx64.o: $(BIN)/gaussian5x5
+$(BIN)/%/gaussian5x5_hvx64.o: $(BIN)/gaussian5x5_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f gaussian5x5_hvx64 target=$*-hvx_64
 
-$(BIN)/%/gaussian5x5_hvx128.o: $(BIN)/gaussian5x5
+$(BIN)/%/gaussian5x5_hvx128.o: $(BIN)/gaussian5x5_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f gaussian5x5_hvx128 target=$*-hvx_128
 
-$(BIN)/sobel: sobel.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
-	echo "${GENERATOR_DEPS}"
-	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
-
-$(BIN)/%/sobel_cpu.o: $(BIN)/sobel
+$(BIN)/%/sobel_cpu.o: $(BIN)/sobel_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f sobel_cpu target=$*
 
-$(BIN)/%/sobel_hvx64.o: $(BIN)/sobel
+$(BIN)/%/sobel_hvx64.o: $(BIN)/sobel_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f sobel_hvx64 target=$*-hvx_64
 
-$(BIN)/%/sobel_hvx128.o: $(BIN)/sobel
+$(BIN)/%/sobel_hvx128.o: $(BIN)/sobel_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f sobel_hvx128 target=$*-hvx_128
 
-$(BIN)/%/conv3x3a32_cpu.o: $(BIN)/conv3x3
+$(BIN)/%/conv3x3a32_cpu.o: $(BIN)/conv3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_cpu target=$* accumulator_type=int32
 
-$(BIN)/%/conv3x3a32_hvx64.o: $(BIN)/conv3x3
+$(BIN)/%/conv3x3a32_hvx64.o: $(BIN)/conv3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx64 target=$*-hvx_64 accumulator_type=int32
 
-$(BIN)/%/conv3x3a32_hvx128.o: $(BIN)/conv3x3
+$(BIN)/%/conv3x3a32_hvx128.o: $(BIN)/conv3x3_generator
 	@-mkdir -p $(BIN)/$*
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx128 target=$*-hvx_128 accumulator_type=int32
 

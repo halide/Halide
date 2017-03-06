@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     // Set some defaults first.
     const int W = 1024;
     const int H = 1024;
-    std::vector<bmark_run_mode_t> modes = {bmark_run_mode_t::hvx64, bmark_run_mode_t::hvx128, bmark_run_mode_t::cpu};
+    std::vector<bmark_run_mode_t> modes;
     int iterations = 10;
 
     // Process command line args.
@@ -39,7 +39,6 @@ int main(int argc, char **argv) {
             case 'm':
                 {
                     std::string mode_to_run = argv[i+1];
-                    modes.clear();
                     if (mode_to_run == "hvx64") {
                         modes.push_back(bmark_run_mode_t::hvx64);
                     } else if (mode_to_run == "hvx128") {
@@ -64,7 +63,11 @@ int main(int argc, char **argv) {
             }
         }
     }
-
+    if (modes.empty()) {
+        modes.push_back(bmark_run_mode_t::hvx64);
+        modes.push_back(bmark_run_mode_t::hvx128);
+        modes.push_back(bmark_run_mode_t::cpu);
+    }
     Conv3x3a16Descriptor conv3x3a16_pipeline(W, H);
     Dilate3x3Descriptor dilate3x3_pipeine(W, H);
     Median3x3Descriptor median3x3_pipeline(W, H);
