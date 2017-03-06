@@ -2544,8 +2544,12 @@ private:
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
+    // No copy
     GeneratorBase(const GeneratorBase &) = delete;
     void operator=(const GeneratorBase &) = delete;
+    // No move
+    GeneratorBase(GeneratorBase&& that) = delete;
+    void operator=(GeneratorBase&& that) = delete;
 };
 
 class GeneratorFactory {
@@ -2714,8 +2718,12 @@ private:
     friend class Internal::SimpleGeneratorFactory;
     friend void ::Halide::Internal::generator_test();
 
+    // No copy
     Generator(const Generator &) = delete;
     void operator=(const Generator &) = delete;
+    // No move
+    Generator(Generator&& that) = delete;
+    void operator=(Generator&& that) = delete;
 };
 
 template <class GeneratorClass> 
