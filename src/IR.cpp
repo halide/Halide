@@ -801,6 +801,7 @@ Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
 Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
 Call::ConstString Call::buffer_get_device = "_halide_buffer_get_device";
+Call::ConstString Call::buffer_get_device_interface = "_halide_buffer_get_device_interface";
 Call::ConstString Call::buffer_get_shape = "_halide_buffer_get_shape";
 Call::ConstString Call::buffer_get_host_dirty = "_halide_buffer_get_host_dirty";
 Call::ConstString Call::buffer_get_device_dirty = "_halide_buffer_get_device_dirty";
