@@ -513,6 +513,7 @@ struct Call : public ExprNode<Call> {
         buffer_get_max,
         buffer_get_host,
         buffer_get_device,
+        buffer_get_device_interface,
         buffer_get_shape,
         buffer_get_host_dirty,
         buffer_get_device_dirty,
