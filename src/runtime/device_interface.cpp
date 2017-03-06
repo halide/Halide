@@ -163,7 +163,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
         debug(user_context) << "halide_copy_to_device " << buf << " host is dirty\n";
         if (buf->dev_dirty) {
             debug(user_context) << "halide_copy_to_device " << buf << " dev_dirty is true error\n";
-            result = halide_error_code_copy_to_device_failed;
+            return halide_error_code_copy_to_device_failed;
         } else {
             result = device_interface->copy_to_device(user_context, buf);
             if (result == 0) {
