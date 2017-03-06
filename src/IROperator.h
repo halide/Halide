@@ -678,6 +678,22 @@ inline Expr max(int a, const Expr &b) {
     return Internal::Max::make(Internal::make_const(b.type(), a), b);
 }
 
+/** Returns an expression representing the greater of an expressions
+ * vector, after doing any necessary type coersion using
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
+ * (with the exception of integer types on x86 without SSE4).
+ * The expressions are folded from left ie. max(.., max(.., ..)). */
+inline Expr max(std::vector<Expr> vec) {
+    for (auto &e : vec) {
+        user_assert(e.defined()) << "max of undefined Expr\n";
+    }
+    return Internal::fold_right(vec,
+                                [](Expr lhs, Expr rhs) -> Expr {
+                                    Internal::match_types(lhs, rhs);
+                                    return Internal::Max::make(lhs, rhs);
+                                });
+}
+
 /** Returns an expression representing the lesser of the two
  * arguments, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
@@ -709,6 +725,23 @@ inline Expr min(int a, const Expr &b) {
     user_assert(b.defined()) << "max of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::Min::make(Internal::make_const(b.type(), a), b);
+}
+
+/** Returns an expression representing the lesser of an expressions
+ * vector, after doing any necessary type coersion using
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
+ * (with the exception of integer types on x86 without SSE4).
+ * The expressions are folded from right ie. min(.., min(.., ..)). */
+inline Expr min(std::vector<Expr> vec) {
+    for (auto &e : vec) {
+        user_assert(e.defined()) << "min of undefined Expr\n";
+    }
+    return Internal::fold_right(vec,
+                                [](const Expr &lhs, const Expr &rhs) -> Expr {
+                                    user_assert(lhs.type() == rhs.type())
+                                        << "min of mismatched Expr types\n";
+                                    return Internal::Min::make(lhs, rhs);
+                                });
 }
 
 /** Operators on floats treats those floats as Exprs. Making these
