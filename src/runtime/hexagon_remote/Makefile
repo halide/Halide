@@ -91,9 +91,13 @@ bin/%/halide_remote.o: halide_remote.cpp elf.h
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
 
-bin/%/halide_host.o: halide_host.cpp
+bin/%/host_malloc.o: host_malloc.cpp
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_host.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c host_malloc.cpp -o $@
+
+bin/%/rpc_compat_shim.o: rpc_compat_shim.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c rpc_compat_shim.cpp -o $@
 
 bin/%/nearbyint.o: nearbyint.cpp
 	mkdir -p $(@D)
@@ -114,7 +118,7 @@ bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexag
 	-Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
 	-Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail
 
-bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/halide_host.o
+bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o bin/%/rpc_compat_shim.o
 	mkdir -p $(@D)
 	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 

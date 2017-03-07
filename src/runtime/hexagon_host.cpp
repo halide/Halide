@@ -605,7 +605,7 @@ WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t *
         return -2;
     }
 
-    ion_device_handle *handle = new ion_device_handle();
+    ion_device_handle *handle = (ion_device_handle*)  halide_malloc(user_context, sizeof(ion_device_handle));
     if (!handle) {
         return -1;
     }
@@ -613,7 +613,7 @@ WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct buffer_t *
     handle->size = size;
     buf->dev = halide_new_device_wrapper(reinterpret<uint64_t>(handle), &hexagon_device_interface);
     if (buf->dev == 0) {
-        delete handle;
+        halide_free(user_context, handle);
         return -1;
     }
     return 0;
@@ -626,7 +626,7 @@ WEAK void *halide_hexagon_detach_device_handle(void *user_context, struct buffer
     halide_assert(user_context, halide_get_device_interface(buf->dev) == &hexagon_device_interface);
     ion_device_handle *handle = reinterpret<ion_device_handle *>(halide_get_device_handle(buf->dev));
     void *ion_buf = handle->buffer;
-    delete handle;
+    halide_free(user_context, handle);
 
     halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;

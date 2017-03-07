@@ -87,7 +87,46 @@ int main(int argc, char **argv) {
 
         for (int x = 0; x < g_im.width(); x++) {
             if (g_im(x) != x) {
-                printf("g(%d) = %d instead of %d\n", x, f_im(x), x);
+                printf("g(%d) = %d instead of %d\n", x, g_im(x), x);
+                return -1;
+            }
+        }
+    }
+
+    // Now multiple output Funcs via inferred Realization
+    {
+        Func f, g;
+        Var x;
+        f(x) = cast<float>(100*x);
+        g(x) = Tuple(cast<uint8_t>(x), cast<int16_t>(x+1));
+
+        if (use_gpu) {
+            f.gpu_tile(x, 8);
+            g.gpu_tile(x, 8);
+        }
+
+        Realization r = Pipeline({f, g}).realize(100);
+        Buffer<float> f_im = r[0];
+        Buffer<uint8_t> g0_im = r[1];
+        Buffer<int16_t> g1_im = r[2];
+
+        for (int x = 0; x < f_im.width(); x++) {
+            if (f_im(x) != 100*x) {
+                printf("f(%d) = %f instead of %f\n", x, f_im(x), (float) 100*x);
+
+            }
+        }
+
+        for (int x = 0; x < g0_im.width(); x++) {
+            if (g0_im(x) != x) {
+                printf("g0(%d) = %d instead of %d\n", x, (int) g0_im(x), x);
+                return -1;
+            }
+        }
+
+        for (int x = 0; x < g1_im.width(); x++) {
+            if (g1_im(x) != x+1) {
+                printf("g1(%d) = %d instead of %d\n", x, (int) g1_im(x), x+1);
                 return -1;
             }
         }
