@@ -2201,7 +2201,7 @@ public:
               emit_bitcode(false), emit_stmt(false), emit_stmt_html(false), emit_static_library(true), emit_cpp_stub(false) {}
     };
 
-    EXPORT virtual ~GeneratorBase();
+    EXPORT ~GeneratorBase() override;
 
     Target get_target() const override { return target; }
 

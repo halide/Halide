@@ -12,7 +12,7 @@ private:
 
     Scope<Type> lets;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (lets.contains(op->name)) {
             expr = Variable::make(lets.get(op->name), op->name);
         } else {
@@ -54,12 +54,12 @@ private:
         }
     }
 
-    void visit(const EQ *op) { visit_comparison(op); }
-    void visit(const NE *op) { visit_comparison(op); }
-    void visit(const LT *op) { visit_comparison(op); }
-    void visit(const LE *op) { visit_comparison(op); }
-    void visit(const GT *op) { visit_comparison(op); }
-    void visit(const GE *op) { visit_comparison(op); }
+    void visit(const EQ *op) override { visit_comparison(op); }
+    void visit(const NE *op) override { visit_comparison(op); }
+    void visit(const LT *op) override { visit_comparison(op); }
+    void visit(const LE *op) override { visit_comparison(op); }
+    void visit(const GT *op) override { visit_comparison(op); }
+    void visit(const GE *op) override { visit_comparison(op); }
 
     template <typename T>
     void visit_logical_binop(const T* op, const std::string& bitwise_op) {
@@ -86,15 +86,15 @@ private:
         }
     }
 
-    void visit(const Or *op) {
+    void visit(const Or *op) override {
         visit_logical_binop(op, Call::bitwise_or);
     }
 
-    void visit(const And *op) {
+    void visit(const And *op) override {
         visit_logical_binop(op, Call::bitwise_and);
     }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         Expr a = mutate(op->a);
         if (a.type().lanes() > 1) {
             // Replace logical operation with bitwise operation.
@@ -106,7 +106,7 @@ private:
         }
     }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         if (op->value.type().is_bool() && op->value.type().is_vector()) {
             // Casting from bool
             expr = mutate(Select::make(op->value,
@@ -120,7 +120,7 @@ private:
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         Expr predicate = mutate(op->predicate);
         Expr value = op->value;
         if (op->value.type().is_bool()) {
@@ -139,7 +139,7 @@ private:
         }
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         Expr cond = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
@@ -167,7 +167,7 @@ private:
         }
     }
 
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         Expr value = mutate(op->value);
         if (op->type.bits() == 1) {
             expr = Broadcast::make(Call::make(Int(8), Call::bool_to_mask, {value}, Call::PureIntrinsic), op->lanes);
@@ -178,7 +178,7 @@ private:
         }
     }
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         IRMutator::visit(op);
         if (op->is_extract_element() && op->type.is_bool()) {
             op = expr.as<Shuffle>();
@@ -213,8 +213,8 @@ private:
         }
     }
 
-    void visit(const Let *op) { expr = visit_let<Expr>(op); }
-    void visit(const LetStmt *op) { stmt = visit_let<Stmt>(op); }
+    void visit(const Let *op) override { expr = visit_let<Expr>(op); }
+    void visit(const LetStmt *op) override { stmt = visit_let<Stmt>(op); }
 };
 
 Stmt eliminate_bool_vectors(Stmt s) {

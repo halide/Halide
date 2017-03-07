@@ -57,13 +57,13 @@ private:
     Scope<int> varying;
     Scope<int> in_pipeline;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         bool this_varies = varying.contains(op->name);
 
         varies |= this_varies;
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         op->min.accept(this);
         bool min_varies = varies;
         op->extent.accept(this);
@@ -100,15 +100,15 @@ private:
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op->name, op->value, op->body);
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         in_pipeline.push(op->name, 0);
         if (op->is_producer) {
             if (op->name != buffer) {
@@ -200,7 +200,7 @@ private:
         varies = varies || old_varies;
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         if (treat_selects_as_guards) {
             visit_conditional(op->condition, op->true_value, op->false_value);
         } else {
@@ -208,11 +208,11 @@ private:
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         visit_conditional(op->condition, op->then_case, op->else_case);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // Calls inside of an address_of aren't considered, because no
         // actuall call to the Func happens.
         if (op->is_intrinsic(Call::address_of)) {
@@ -242,7 +242,7 @@ private:
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         // This code works to ensure expressions depending on an
         // allocation don't get moved outside the allocation and are
         // marked as varying if predicate depends on the value of the
@@ -282,7 +282,7 @@ private:
         return false;
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
 
         if ((op->name == "halide_memoization_cache_lookup") &&
              memoize_call_uses_buffer(op)) {
@@ -308,7 +308,7 @@ private:
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         // If the compute_predicate at this stage depends on something
         // vectorized we should bail out.
         IRMutator::visit(op);
@@ -334,7 +334,7 @@ private:
     Scope<int> vector_vars;
     bool in_vector_loop;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         bool old_in_vector_loop = in_vector_loop;
 
         // We want to be sure that the predicate doesn't vectorize.
@@ -352,7 +352,7 @@ private:
         in_vector_loop = old_in_vector_loop;
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         bool should_pop = false;
         if (in_vector_loop &&
             expr_uses_vars(op->value, vector_vars)) {
@@ -367,7 +367,7 @@ private:
         }
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         if (op->name == func) {
             debug(3) << "Finding compute predicate for " << op->name << "\n";
             PredicateFinder find_compute(op->name, true);
@@ -418,7 +418,7 @@ class MightBeSkippable : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // Calls inside of an address_of aren't considered, because no
         // actuall call to the Func happens.
         if (op->is_intrinsic(Call::address_of)) {
@@ -443,7 +443,7 @@ class MightBeSkippable : public IRVisitor {
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         op->condition.accept(this);
 
         bool old = guarded;
@@ -457,7 +457,7 @@ class MightBeSkippable : public IRVisitor {
         guarded = old;
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         op->condition.accept(this);
 
         bool old = guarded;
@@ -469,14 +469,14 @@ class MightBeSkippable : public IRVisitor {
         guarded = old;
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         if (op->name == func) {
             guarded = false;
         }
         IRVisitor::visit(op);
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (!op->is_producer && (op->name == func)) {
             bool old_result = result;
             result = true;

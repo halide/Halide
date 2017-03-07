@@ -18,7 +18,7 @@ private:
 
     Scope<int> dead_vars;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (dead_vars.contains(op->name)) {
             expr = Expr();
         } else {
@@ -41,7 +41,7 @@ private:
         stmt = Stmt();
     }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         Expr value = mutate(op->value);
         if (!expr.defined()) return;
         if (value.same_as(op->value)) {
@@ -51,23 +51,23 @@ private:
         }
     }
 
-    void visit(const Add *op)     {mutate_binary_operator(op);}
-    void visit(const Sub *op)     {mutate_binary_operator(op);}
-    void visit(const Mul *op)     {mutate_binary_operator(op);}
-    void visit(const Div *op)     {mutate_binary_operator(op);}
-    void visit(const Mod *op)     {mutate_binary_operator(op);}
-    void visit(const Min *op)     {mutate_binary_operator(op);}
-    void visit(const Max *op)     {mutate_binary_operator(op);}
-    void visit(const EQ *op)      {mutate_binary_operator(op);}
-    void visit(const NE *op)      {mutate_binary_operator(op);}
-    void visit(const LT *op)      {mutate_binary_operator(op);}
-    void visit(const LE *op)      {mutate_binary_operator(op);}
-    void visit(const GT *op)      {mutate_binary_operator(op);}
-    void visit(const GE *op)      {mutate_binary_operator(op);}
-    void visit(const And *op)     {mutate_binary_operator(op);}
-    void visit(const Or *op)      {mutate_binary_operator(op);}
+    void visit(const Add *op) override     {mutate_binary_operator(op);}
+    void visit(const Sub *op) override     {mutate_binary_operator(op);}
+    void visit(const Mul *op) override     {mutate_binary_operator(op);}
+    void visit(const Div *op) override     {mutate_binary_operator(op);}
+    void visit(const Mod *op) override     {mutate_binary_operator(op);}
+    void visit(const Min *op) override     {mutate_binary_operator(op);}
+    void visit(const Max *op) override     {mutate_binary_operator(op);}
+    void visit(const EQ *op) override      {mutate_binary_operator(op);}
+    void visit(const NE *op) override      {mutate_binary_operator(op);}
+    void visit(const LT *op) override      {mutate_binary_operator(op);}
+    void visit(const LE *op) override      {mutate_binary_operator(op);}
+    void visit(const GT *op) override      {mutate_binary_operator(op);}
+    void visit(const GE *op) override      {mutate_binary_operator(op);}
+    void visit(const And *op) override     {mutate_binary_operator(op);}
+    void visit(const Or *op) override      {mutate_binary_operator(op);}
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         Expr a = mutate(op->a);
         if (!expr.defined()) return;
         if (a.same_as(op->a)) {
@@ -76,7 +76,7 @@ private:
         else expr = Not::make(a);
     }
 
-    void visit(const Select *op)  {
+    void visit(const Select *op) override  {
         Expr cond = mutate(op->condition);
         Expr t = mutate(op->true_value);
         Expr f = mutate(op->false_value);
@@ -116,7 +116,7 @@ private:
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         Expr pred = mutate(op->predicate);
         Expr index = mutate(op->index);
         if (!expr.defined()) return;
@@ -127,7 +127,7 @@ private:
         }
     }
 
-    void visit(const Ramp *op) {
+    void visit(const Ramp *op) override {
         Expr base = mutate(op->base);
         if (!expr.defined()) return;
         Expr stride = mutate(op->stride);
@@ -140,14 +140,14 @@ private:
         }
     }
 
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         Expr value = mutate(op->value);
         if (!expr.defined()) return;
         if (value.same_as(op->value)) expr = op;
         else expr = Broadcast::make(value, op->lanes);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::undef)) {
             expr = Expr();
             return;
@@ -173,7 +173,7 @@ private:
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         Expr value = mutate(op->value);
         if (!value.defined()) {
             dead_vars.push(op->name, 0);
@@ -194,7 +194,7 @@ private:
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Expr value = mutate(op->value);
         if (!value.defined()) {
             dead_vars.push(op->name, 0);
@@ -214,7 +214,7 @@ private:
         }
     }
 
-    void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) override {
         Expr condition = mutate(op->condition);
         if (!expr.defined()) {
             stmt = Stmt();
@@ -234,7 +234,7 @@ private:
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
         if (!stmt.defined()) return;
         if (body.same_as(op->body)) {
@@ -244,7 +244,7 @@ private:
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         Expr min = mutate(op->min);
         if (!expr.defined()) {
             stmt = Stmt();
@@ -266,7 +266,7 @@ private:
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         predicate = Expr();
 
         Expr pred = mutate(op->predicate);
@@ -295,7 +295,7 @@ private:
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         predicate = Expr();
 
         vector<Expr> new_args(op->args.size());
@@ -362,7 +362,7 @@ private:
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         std::vector<Expr> new_extents;
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
@@ -394,11 +394,11 @@ private:
         }
     }
 
-    void visit(const Free *op) {
+    void visit(const Free *op) override {
         stmt = op;
     }
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         Region new_bounds(op->bounds.size());
         bool bounds_changed = false;
 
@@ -436,7 +436,7 @@ private:
         }
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         Stmt first = mutate(op->first);
         Stmt rest = mutate(op->rest);
         if (!first.defined()) {
@@ -451,7 +451,7 @@ private:
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         Expr condition = mutate(op->condition);
         if (!expr.defined()) {
             stmt = Stmt();
@@ -480,7 +480,7 @@ private:
         }
     }
 
-    void visit(const Evaluate *op) {
+    void visit(const Evaluate *op) override {
         Expr v = mutate(op->value);
         if (!expr.defined()) {
             stmt = Stmt();

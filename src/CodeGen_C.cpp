@@ -344,7 +344,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
 
         if (!emitted.count(op->name)) {

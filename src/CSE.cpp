@@ -89,7 +89,7 @@ public:
 
     GVN() : protect_loads_in_scope(false), number(0), cache(8) {}
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(Stmt s) override {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
     }
@@ -98,7 +98,7 @@ public:
         return ExprWithCompareCache(e, &cache);
     }
 
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -156,7 +156,7 @@ public:
 
     using IRMutator::visit;
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         // Visit the value and add it to the numbering.
         Expr value = mutate(let->value);
 
@@ -172,7 +172,7 @@ public:
         expr = body;
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         bool old_protect_loads_in_scope = protect_loads_in_scope;
         if (call->is_intrinsic(Call::address_of)) {
             // We shouldn't lift a load out of an address_of node
@@ -182,7 +182,7 @@ public:
         protect_loads_in_scope = old_protect_loads_in_scope;
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         Expr predicate = op->predicate;
         // If the predicate is trivially true, there is no point to lift it out
         if (!is_one(predicate)) {
@@ -196,7 +196,7 @@ public:
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         Expr predicate = op->predicate;
         // If the predicate is trivially true, there is no point to lift it out
         if (!is_one(predicate)) {
@@ -222,7 +222,7 @@ public:
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
 
-    void include(const Expr &e) {
+    void include(const Expr &e) override {
         // If it's not the sort of thing we want to extract as a let,
         // just use the generic visitor to increment use counts for
         // the children.
@@ -255,7 +255,7 @@ public:
     }
 
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         bool old_protect_loads_in_scope = protect_loads_in_scope;
         if (call->is_intrinsic(Call::address_of)) {
             // We shouldn't lift load out of an address_of node.
@@ -274,7 +274,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
 
         if (iter != replacements.end()) {
@@ -295,7 +295,7 @@ class CSEEveryExprInStmt : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
         return common_subexpression_elimination(e);
     }
 };
@@ -371,7 +371,7 @@ class NormalizeVarNames : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         map<string, string>::iterator iter = new_names.find(var->name);
         if (iter == new_names.end()) {
             expr = var;
@@ -380,7 +380,7 @@ class NormalizeVarNames : public IRMutator {
         }
     }
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         string new_name = "t" + std::to_string(counter++);
         new_names[let->name] = new_name;
         Expr value = mutate(let->value);

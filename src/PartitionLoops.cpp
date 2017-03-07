@@ -30,7 +30,7 @@ namespace {
 // partitioning.
 class MarkClampedRampsAsLikely : public IRMutator {
     using IRMutator::visit;
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         if (in_index && op->a.as<Ramp>()) {
             // No point recursing into the ramp - it can't contain
             // another ramp.
@@ -42,7 +42,7 @@ class MarkClampedRampsAsLikely : public IRMutator {
         }
     }
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         if (in_index && op->a.as<Ramp>()) {
             expr = max(likely(op->a), mutate(op->b));
         } else if (in_index && op->b.as<Ramp>()) {
@@ -52,14 +52,14 @@ class MarkClampedRampsAsLikely : public IRMutator {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         bool old_in_index = in_index;
         in_index = true;
         IRMutator::visit(op);
         in_index = old_in_index;
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         bool old_in_index = in_index;
         in_index = true;
         Expr index = mutate(op->index);
@@ -80,7 +80,7 @@ class MarkClampedRampsAsLikely : public IRMutator {
 class RemoveLikelyTags : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::likely)) {
             internal_assert(op->args.size() == 1);
             expr = mutate(op->args[0]);
@@ -93,7 +93,7 @@ class RemoveLikelyTags : public IRMutator {
 // Check if an expression or statement uses a likely tag
 class HasLikelyTag : public IRVisitor {
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::likely)) {
             result = true;
         } else {
@@ -222,7 +222,7 @@ class ExprUsesInvalidBuffers : public IRVisitor {
 
     const Scope<int> &invalid_buffers;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (invalid_buffers.contains(op->name)) {
             invalid = true;
         } else {
@@ -248,7 +248,7 @@ class FindSimplifications : public IRVisitor {
     Scope<int> depends_on_loop_var;
     Scope<int> buffers;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         buffers.push(op->name, 0);
         IRVisitor::visit(op);
     }
@@ -278,7 +278,7 @@ class FindSimplifications : public IRVisitor {
         simplifications.push_back(s);
     }
 
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         IRVisitor::visit(op);
         bool likely_a = has_likely_tag(op->a);
         bool likely_b = has_likely_tag(op->b);
@@ -290,7 +290,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         IRVisitor::visit(op);
         bool likely_a = has_likely_tag(op->a);
         bool likely_b = has_likely_tag(op->b);
@@ -302,7 +302,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         IRVisitor::visit(op);
         bool likely_t = has_likely_tag(op->true_value);
         bool likely_f = has_likely_tag(op->false_value);
@@ -314,7 +314,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         // For select statements, mins, and maxes, you can mark the
         // likely branch with likely. For if statements there's no way
         // to mark the likely stmt. So if the condition of an if
@@ -327,7 +327,7 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         vector<Simplification> old;
         old.swap(simplifications);
         IRVisitor::visit(op);
@@ -372,11 +372,11 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op);
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op);
     }
 public:
@@ -398,7 +398,7 @@ public:
     MakeSimplifications(const vector<Simplification> &s) : simplifications(s) {}
 
     using IRMutator::mutate;
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
         for (auto const &s : simplifications) {
             if (e.same_as(s.old_expr)) {
                 return mutate(s.likely_value);
@@ -415,7 +415,7 @@ public:
 
 protected:
     using IRVisitor::visit;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == "halide_gpu_thread_barrier") {
             result = true;
         }
@@ -434,7 +434,7 @@ class PartitionLoops : public IRMutator {
 
     bool in_gpu_loop = false;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         Stmt body = op->body;
 
         bool old_in_gpu_loop = in_gpu_loop;
@@ -696,7 +696,7 @@ class PartitionLoops : public IRMutator {
 class ExprContainsLoad : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         result = true;
     }
 
@@ -722,7 +722,7 @@ class RenormalizeGPULoops : public IRMutator {
 
     vector<pair<string, Expr> > lifted_lets;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (op->device_api == DeviceAPI::GLSL) {
             // The partitioner did not enter GLSL loops
             stmt = op;
@@ -758,7 +758,7 @@ class RenormalizeGPULoops : public IRMutator {
         in_gpu_loop = old_in_gpu_loop;
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (!in_gpu_loop) {
             IRMutator::visit(op);
             return;
@@ -812,7 +812,7 @@ class RenormalizeGPULoops : public IRMutator {
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         if (!in_gpu_loop || in_thread_loop) {
             IRMutator::visit(op);
             return;
@@ -889,7 +889,7 @@ class ExpandSelects : public IRMutator {
         return e.as<Variable>() || is_const(e);
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         Expr condition   = mutate(op->condition);
         Expr true_value  = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
@@ -927,7 +927,7 @@ class ExpandSelects : public IRMutator {
 class CollapseSelects : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         const Select *t = op->true_value.as<Select>();
         const Select *f = op->false_value.as<Select>();
 
@@ -945,7 +945,7 @@ class CollapseSelects : public IRMutator {
 
 class ContainsLoop : public IRVisitor {
     using IRVisitor::visit;
-    void visit(const For *op) {
+    void visit(const For *op) override {
         result = true;
     }
 public:
@@ -957,7 +957,7 @@ class LowerLikelyIfInnermost : public IRMutator {
 
     bool inside_innermost_loop = false;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::likely_if_innermost)) {
             internal_assert(op->args.size() == 1);
             if (inside_innermost_loop) {
@@ -970,7 +970,7 @@ class LowerLikelyIfInnermost : public IRMutator {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         ContainsLoop c;
         op->body.accept(&c);
         inside_innermost_loop = !c.result;

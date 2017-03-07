@@ -89,16 +89,16 @@ namespace {
 class UsesHvx : public IRVisitor {
 private:
     using IRVisitor::visit;
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
     }
-    void visit(const Ramp *op) {
+    void visit(const Ramp *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
     }
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         uses_hvx = uses_hvx || op->lanes > 1;
     }
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
     }
 
@@ -144,7 +144,7 @@ bool is_dense_ramp(Expr x) {
 // buffers. Using this assumption, this mutator replaces vector
 // predicated dense loads with scalar predicated dense loads.
 class SloppyUnpredicateLoads : public IRMutator {
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         // Don't handle loads with without predicates, scalar predicates, or non-dense ramps.
         if (is_one(op->predicate) || op->predicate.as<Broadcast>() || !is_dense_ramp(op->index)) {
             IRMutator::visit(op);

@@ -27,7 +27,7 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const For *loop) {
+    void visit(const For *loop) override {
         loop->min.accept(this);
         loop->extent.accept(this);
         bool old_in_loop = in_loop;
@@ -36,14 +36,14 @@ private:
         in_loop = old_in_loop;
     }
 
-    void visit(const Load *load) {
+    void visit(const Load *load) override {
         if (func == load->name) {
             last_use = containing_stmt;
         }
         IRVisitor::visit(load);
     }
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->name == func) {
             last_use = containing_stmt;
         }
@@ -53,21 +53,21 @@ private:
         IRVisitor::visit(call);
     }
 
-    void visit(const Store *store) {
+    void visit(const Store *store) override {
         if (func == store->name) {
             last_use = containing_stmt;
         }
         IRVisitor::visit(store);
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (starts_with(var->name, func + ".") &&
             (ends_with(var->name, ".buffer") || ends_with(var->name, ".host"))) {
             last_use = containing_stmt;
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         // It's a bad idea to inject it in either side of an
         // ifthenelse, so we treat this as being in a loop.
         op->condition.accept(this);
@@ -80,7 +80,7 @@ private:
         in_loop = old_in_loop;
     }
 
-    void visit(const Block *block) {
+    void visit(const Block *block) override {
         if (in_loop) {
             IRVisitor::visit(block);
         } else {
@@ -129,7 +129,7 @@ private:
         }
     }
 
-    void visit(const Block *block) {
+    void visit(const Block *block) override {
         Stmt new_rest = inject_marker(block->rest);
         Stmt new_first = inject_marker(block->first);
 
@@ -145,7 +145,7 @@ private:
 class InjectEarlyFrees : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Allocate *alloc) {
+    void visit(const Allocate *alloc) override {
         IRMutator::visit(alloc);
         alloc = stmt.as<Allocate>();
         internal_assert(alloc);

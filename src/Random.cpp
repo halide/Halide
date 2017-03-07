@@ -96,7 +96,7 @@ Expr random_float(const vector<Expr> &e) {
 class LowerRandom : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::random)) {
             vector<Expr> args = op->args;
             args.insert(args.end(), extra_args.begin(), extra_args.end());

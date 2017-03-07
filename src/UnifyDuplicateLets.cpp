@@ -19,7 +19,7 @@ class UnifyDuplicateLets : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
 
         if (e.defined()) {
             map<Expr, string, IRDeepCompare>::iterator iter = scope.find(e);
@@ -36,7 +36,7 @@ public:
     }
 
 protected:
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         map<string, string>::iterator iter = rewrites.find(op->name);
         if (iter != rewrites.end()) {
             expr = Variable::make(op->type, iter->second);
@@ -47,18 +47,18 @@ protected:
 
     // Can't unify lets where the RHS might be not be pure
     bool is_impure;
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         is_impure |= !op->is_pure();
         IRMutator::visit(op);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         is_impure |= ((op->name == producing) ||
                       starts_with(op->name + ".", producing));
         IRMutator::visit(op);
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             string old_producing = producing;
             producing = op->name;
@@ -69,7 +69,7 @@ protected:
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         is_impure = false;
         Expr value = mutate(op->value);
         Stmt body = op->body;

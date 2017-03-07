@@ -118,19 +118,19 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const IntImm *op) {
+    void visit(const IntImm *op) override {
         interval = Interval::single_point(op);
     }
 
-    void visit(const UIntImm *op) {
+    void visit(const UIntImm *op) override {
         interval = Interval::single_point(op);
     }
 
-    void visit(const FloatImm *op) {
+    void visit(const FloatImm *op) override {
         interval = Interval::single_point(op);
     }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
 
         op->value.accept(this);
         Interval a = interval;
@@ -197,7 +197,7 @@ private:
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (scope.contains(op->name)) {
             interval = scope.get(op->name);
         } else if (op->type.is_vector()) {
@@ -208,7 +208,7 @@ private:
         }
     }
 
-    void visit(const Add *op) {
+    void visit(const Add *op) override {
         op->a.accept(this);
         Interval a = interval;
         op->b.accept(this);
@@ -247,7 +247,7 @@ private:
         }
     }
 
-    void visit(const Sub *op) {
+    void visit(const Sub *op) override {
         op->a.accept(this);
         Interval a = interval;
         op->b.accept(this);
@@ -293,7 +293,7 @@ private:
         }
     }
 
-    void visit(const Mul *op) {
+    void visit(const Mul *op) override {
 
         op->a.accept(this);
         Interval a = interval;
@@ -353,7 +353,7 @@ private:
 
     }
 
-    void visit(const Div *op) {
+    void visit(const Div *op) override {
         op->a.accept(this);
         Interval a = interval;
 
@@ -400,7 +400,7 @@ private:
         }
     }
 
-    void visit(const Mod *op) {
+    void visit(const Mod *op) override {
         op->a.accept(this);
         Interval a = interval;
 
@@ -439,7 +439,7 @@ private:
         }
     }
 
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         op->a.accept(this);
         Interval a = interval;
 
@@ -455,7 +455,7 @@ private:
     }
 
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         op->a.accept(this);
         Interval a = interval;
 
@@ -470,43 +470,43 @@ private:
         }
     }
 
-    void visit(const EQ *op) {
+    void visit(const EQ *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const NE *op) {
+    void visit(const NE *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const LT *op) {
+    void visit(const LT *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const LE *op) {
+    void visit(const LE *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const GT *op) {
+    void visit(const GT *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const GE *op) {
+    void visit(const GE *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const And *op) {
+    void visit(const And *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const Or *op) {
+    void visit(const Or *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         bounds_of_type(op->type);
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         op->true_value.accept(this);
         if (!interval.is_bounded()) {
             return;
@@ -540,7 +540,7 @@ private:
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         op->index.accept(this);
         if (interval.is_single_point()) {
             // If the index is const we can return the load of that index
@@ -554,7 +554,7 @@ private:
         }
     }
 
-    void visit(const Ramp *op) {
+    void visit(const Ramp *op) override {
         // Treat the ramp lane as a free variable
         string var_name = unique_name('t');
         Expr var = Variable::make(op->base.type(), var_name);
@@ -565,11 +565,11 @@ private:
         scope.pop(var_name);
     }
 
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         op->value.accept(this);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // If the args are const we can return the call of those args
         // for pure functions. For other types of functions, the same
         // call in two different places might produce different
@@ -675,7 +675,7 @@ private:
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         op->value.accept(this);
         Interval val = interval;
 
@@ -729,7 +729,7 @@ private:
         }
     }
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         Interval result = Interval::nothing();
         for (Expr i : op->vectors) {
             i.accept(this);
@@ -738,39 +738,39 @@ private:
         interval = result;
     }
 
-    void visit(const LetStmt *) {
+    void visit(const LetStmt *) override {
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const AssertStmt *) {
+    void visit(const AssertStmt *) override {
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const ProducerConsumer *) {
+    void visit(const ProducerConsumer *) override {
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const For *) {
+    void visit(const For *) override {
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const Store *) {
+    void visit(const Store *) override {
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const Provide *) {
+    void visit(const Provide *) override {
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const Allocate *) {
+    void visit(const Allocate *) override {
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const Realize *) {
+    void visit(const Realize *) override {
         internal_error << "Bounds of statement\n";
     }
 
-    void visit(const Block *) {
+    void visit(const Block *) override {
         internal_error << "Bounds of statement\n";
     }
 };
@@ -990,7 +990,7 @@ private:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!consider_calls) return;
 
         // Calls inside of an address_of aren't touched, because no
@@ -1046,7 +1046,7 @@ private:
     class CountVars : public IRVisitor {
         using IRVisitor::visit;
 
-        void visit(const Variable *var) {
+        void visit(const Variable *var) override {
             count++;
         }
     public:
@@ -1114,15 +1114,15 @@ private:
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(op);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         visit_let(op);
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
             if (!op->else_case.defined() || is_no_op(op->else_case)) {
@@ -1277,7 +1277,7 @@ private:
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (consider_calls) {
             op->min.accept(this);
             op->extent.accept(this);
@@ -1303,7 +1303,7 @@ private:
         scope.pop(op->name);
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         if (consider_provides) {
             if (op->name == func || func.empty()) {
                 Box b(op->args.size());

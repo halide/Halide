@@ -1,0 +1,6 @@
+---
+# Disable everything but "modernize-use-override" for now.
+# Apply with:
+#   clang-tidy -fix src/*.cpp -- -std=c++11 -I${LLVM}/llvm_build/include -I${LLVM}/include -DLLVM_VERSION=50
+Checks: '-*,modernize-use-override'
+...

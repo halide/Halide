@@ -11,7 +11,7 @@ class RemoveDeadAllocations : public IRMutator {
 
     Scope<int> allocs;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->call_type == Call::Extern ||
             op->call_type == Call::ExternCPlusPlus) {
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -28,7 +28,7 @@ class RemoveDeadAllocations : public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (allocs.contains(op->name)) {
             allocs.pop(op->name);
         }
@@ -36,7 +36,7 @@ class RemoveDeadAllocations : public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (allocs.contains(op->name)) {
             allocs.pop(op->name);
         }
@@ -44,7 +44,7 @@ class RemoveDeadAllocations : public IRMutator {
         IRMutator::visit(op);
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         allocs.push(op->name, 1);
         Stmt body = mutate(op->body);
 
@@ -58,7 +58,7 @@ class RemoveDeadAllocations : public IRMutator {
         }
     }
 
-    void visit(const Free *op) {
+    void visit(const Free *op) override {
         if (allocs.contains(op->name)) {
             // We have reached a Free Stmt without ever using this buffer, do nothing.
             stmt = Evaluate::make(0);

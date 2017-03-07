@@ -34,7 +34,7 @@ class InjectThreadBarriers : public IRMutator {
 
     Stmt barrier;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         bool old_in_threads = in_threads;
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             in_threads = true;
@@ -45,7 +45,7 @@ class InjectThreadBarriers : public IRMutator {
         in_threads = old_in_threads;
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
             Stmt rest = mutate(op->rest);
@@ -78,7 +78,7 @@ class ExtractBlockSize : public IRVisitor {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         for (int i = 0; i < 4; i++) {
             if (ends_with(op->name, thread_names[i])) {
                 found_for(i, op->extent);
@@ -99,7 +99,7 @@ class ExtractBlockSize : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         IRVisitor::visit(op);
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
@@ -150,7 +150,7 @@ class NormalizeDimensionality : public IRMutator {
         return s;
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         Stmt first = wrap(op->first);
 
         Stmt rest;
@@ -166,7 +166,7 @@ class NormalizeDimensionality : public IRMutator {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             depth++;
             if (depth > max_depth) {
@@ -189,7 +189,7 @@ class ReplaceForWithIf : public IRMutator {
 
     const ExtractBlockSize &block_size;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             int dim;
             for (dim = 0; dim < 4; dim++) {
@@ -270,7 +270,7 @@ class ExtractSharedAllocations : public IRMutator {
 
     const DeviceAPI device_api;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             bool old = in_threads;
             in_threads = true;
@@ -307,7 +307,7 @@ class ExtractSharedAllocations : public IRMutator {
         }
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
             barrier_stage++;
@@ -324,7 +324,7 @@ class ExtractSharedAllocations : public IRMutator {
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         user_assert(!op->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n" <<
             "(Memoization is not supported inside GPU kernels at present.)\n";
 
@@ -352,7 +352,7 @@ class ExtractSharedAllocations : public IRMutator {
         stmt = op->body;
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (shared.count(op->name)) {
             Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
@@ -371,7 +371,7 @@ class ExtractSharedAllocations : public IRMutator {
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (shared.count(op->name)) {
             shared[op->name].max = barrier_stage;
             Expr predicate = mutate(op->predicate);
@@ -389,7 +389,7 @@ class ExtractSharedAllocations : public IRMutator {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (in_threads) {
             IRMutator::visit(op);
             return;
@@ -586,7 +586,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
     const ExtractBlockSize &block_size;
     ExtractSharedAllocations &shared_mem;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (ends_with(op->name, ".__block_id_x")) {
             Stmt body = op->body;
 
@@ -645,7 +645,7 @@ public:
 class FuseGPUThreadLoops : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (op->device_api == DeviceAPI::GLSL) {
             stmt = op;
             return;
@@ -682,7 +682,7 @@ class ZeroGPULoopMins : public IRMutator {
     bool in_non_glsl_gpu;
     using IRMutator::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         bool old_in_non_glsl_gpu = in_non_glsl_gpu;
 
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
@@ -711,7 +711,7 @@ class ValidateGPULoopNesting : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         string old_innermost_block_var  = innermost_block_var;
         string old_innermost_thread_var = innermost_thread_var;
         int old_gpu_block_depth  = gpu_block_depth;

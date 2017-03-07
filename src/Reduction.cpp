@@ -158,7 +158,7 @@ namespace {
 class DropSelfReferences : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->reduction_domain.defined()) {
             user_assert(op->reduction_domain.same_as(domain))
                 << "An RDom's predicate may only refer to its own RVars, "

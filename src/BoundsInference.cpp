@@ -20,14 +20,14 @@ namespace {
 class DependsOnBoundsInference : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (ends_with(var->name, ".max") ||
             ends_with(var->name, ".min")) {
             result = true;
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->name == Call::buffer_get_min ||
             op->name == Call::buffer_get_max) {
             result = true;
@@ -69,7 +69,7 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Interval in = bounds_of_expr_in_scope(op->value, scope);
         if (op->name == var) {
             result = in;
@@ -80,7 +80,7 @@ private:
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // At this stage of lowering, loop_min and loop_max
         // conveniently exist in scope.
         Interval in(Variable::make(Int(32), op->name + ".loop_min"),
@@ -830,7 +830,7 @@ public:
 
     using IRMutator::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         set<string> old_inner_productions;
         inner_productions.swap(old_inner_productions);
 
@@ -969,7 +969,7 @@ public:
         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }
 
-    void visit(const ProducerConsumer *p) {
+    void visit(const ProducerConsumer *p) override {
         in_pipeline.insert(p->name);
         IRMutator::visit(p);
         in_pipeline.erase(p->name);

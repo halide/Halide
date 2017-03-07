@@ -26,8 +26,8 @@ protected:
      * on the stack. The rest go on the heap by calling "halide_malloc"
      * and "halide_free" in the standard library. */
     // @{
-    void visit(const Allocate *);
-    void visit(const Free *);
+    void visit(const Allocate *) override;
+    void visit(const Free *) override;
     // @}
 
     /** It can be convenient for backends to assume there is extra
@@ -68,7 +68,7 @@ protected:
      * we enter a new function. */
     Scope<Allocation> allocations;
 
-    std::string get_allocation_name(const std::string &n);
+    std::string get_allocation_name(const std::string &n) override;
 
 private:
 

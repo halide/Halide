@@ -21,11 +21,11 @@ namespace {
 class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == var) result = true;
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         op->value.accept(this);
         // The name might be hidden within the body of the let, in
         // which case there's no point descending.
@@ -53,7 +53,7 @@ class ExpandExpr : public IRMutator {
     using IRMutator::visit;
     const Scope<Expr> &scope;
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (scope.contains(var->name)) {
             expr = scope.get(var->name);
             debug(3) << "Fully expanded " << var->name << " -> " << expr << "\n";
@@ -106,7 +106,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         return true;
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (!op->is_producer || (op->name != func.name())) {
             IRMutator::visit(op);
         } else {
@@ -274,7 +274,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         // It's not safe to enter an inner loop whose bounds depend on
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
@@ -299,7 +299,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         scope.push(op->name, simplify(expand_expr(op->value, scope)));
         Stmt new_body = mutate(op->body);
 
@@ -330,7 +330,7 @@ class SlidingWindowOnFunction : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         debug(3) << " Doing sliding window analysis over loop: " << op->name << "\n";
 
         Stmt new_body = op->body;
@@ -359,7 +359,7 @@ class SlidingWindow : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         // Find the args for this function
         map<string, Function>::const_iterator iter = env.find(op->name);
 

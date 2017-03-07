@@ -28,7 +28,7 @@ using std::map;
 class CountProducers : public IRVisitor {
     const std::string &name;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->is_producer && (op->name == name)) {
             count++;
         } else {
@@ -58,7 +58,7 @@ class FoldStorageOfFunction : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
@@ -71,7 +71,7 @@ class FoldStorageOfFunction : public IRMutator {
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         IRMutator::visit(op);
         op = stmt.as<Provide>();
         internal_assert(op);
@@ -94,7 +94,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (op->name == func.name()) {
             // Can't proceed into the pipeline for this func
             stmt = op;
@@ -103,7 +103,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
             // We can't proceed into a parallel for loop.
 
@@ -275,7 +275,7 @@ private:
 
     using IRVisitor::visit;
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         if (var->type.is_handle() &&
             var->name == func + ".buffer") {
             special = true;
@@ -289,7 +289,7 @@ class StorageFolding : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         Stmt body = mutate(op->body);
 
         IsBufferSpecial special(op->name);
@@ -352,7 +352,7 @@ class SubstituteInConstants : public IRMutator {
     using IRMutator::visit;
 
     Scope<Expr> scope;
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Expr value = simplify(mutate(op->value));
 
         Stmt body;
@@ -371,7 +371,7 @@ class SubstituteInConstants : public IRMutator {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (scope.contains(op->name)) {
             expr = scope.get(op->name);
         } else {

@@ -85,7 +85,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(const Realize *op) {
+    void visit(const Realize *op) override {
         realizations.push(op->name, 0);
 
         Stmt body = mutate(op->body);
@@ -182,7 +182,7 @@ private:
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         internal_assert(op->values.size() == 1);
 
         Expr idx = mutate(flatten_args(op->name, op->args));
@@ -190,7 +190,7 @@ private:
         stmt = Store::make(op->name, value, idx, Parameter(), const_true(value.type().lanes()));
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
             internal_assert(op->value_index == 0);
@@ -202,7 +202,7 @@ private:
         }
     }
 
-    void visit(const LetStmt *let) {
+    void visit(const LetStmt *let) override {
         // Discover constrained versions of things.
         bool constrained_version_exists = ends_with(let->name, ".constrained");
         if (constrained_version_exists) {
@@ -226,7 +226,7 @@ class PromoteToMemoryType : public IRMutator {
         return t.with_bits(((t.bits() + 7)/8)*8);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::address_of)) {
             Expr load = mutate(op->args[0]);
             if (const Cast *cast = load.as<Cast>()) {
@@ -238,7 +238,7 @@ class PromoteToMemoryType : public IRMutator {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
             expr = Cast::make(op->type, Load::make(t, op->name, mutate(op->index),
@@ -248,7 +248,7 @@ class PromoteToMemoryType : public IRMutator {
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         Type t = upgrade(op->value.type());
         if (t != op->value.type()) {
             stmt = Store::make(op->name, Cast::make(t, mutate(op->value)), mutate(op->index),
@@ -258,7 +258,7 @@ class PromoteToMemoryType : public IRMutator {
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
             vector<Expr> extents;
@@ -278,7 +278,7 @@ class PromoteToMemoryType : public IRMutator {
 class ConnectOutputBuffers : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         Parameter output_buf;
         auto it = env.find(op->name);
         if (it != env.end()) {

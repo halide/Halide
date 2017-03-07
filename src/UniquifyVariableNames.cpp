@@ -38,7 +38,7 @@ class UniquifyVariableNames : public IRMutator {
         vars[s]--;
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Expr value = mutate(op->value);
         push_name(op->name);
         string new_name = get_name(op->name);
@@ -55,7 +55,7 @@ class UniquifyVariableNames : public IRMutator {
 
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         Expr value = mutate(op->value);
         push_name(op->name);
         string new_name = get_name(op->name);
@@ -72,7 +72,7 @@ class UniquifyVariableNames : public IRMutator {
 
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
         push_name(op->name);
@@ -90,7 +90,7 @@ class UniquifyVariableNames : public IRMutator {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         string new_name = get_name(op->name);
         if (op->name != new_name) {
             expr = Variable::make(op->type, new_name);

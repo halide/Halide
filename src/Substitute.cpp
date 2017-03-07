@@ -27,7 +27,7 @@ public:
 
     using IRMutator::visit;
 
-    void visit(const Variable *v) {
+    void visit(const Variable *v) override {
         Expr r = find_replacement(v->name);
         if (r.defined()) {
             expr = r;
@@ -36,7 +36,7 @@ public:
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         Expr new_value = mutate(op->value);
         hidden.push(op->name, 0);
         Expr new_body = mutate(op->body);
@@ -50,7 +50,7 @@ public:
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         Expr new_value = mutate(op->value);
         hidden.push(op->name, 0);
         Stmt new_body = mutate(op->body);
@@ -64,7 +64,7 @@ public:
         }
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
 
         Expr new_min = mutate(op->min);
         Expr new_extent = mutate(op->extent);
@@ -114,7 +114,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
         if (equal(e, find)) {
             return replacement;
         } else {
@@ -144,7 +144,7 @@ class GraphSubstitute : public IRGraphMutator {
 
     using IRGraphMutator::visit;
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->name == var) {
             expr = value;
         } else {
@@ -165,7 +165,7 @@ public:
 
     using IRGraphMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
         if (e.same_as(find)) return replace;
         return IRGraphMutator::mutate(e);
     }
@@ -193,7 +193,7 @@ class SubstituteInAllLets : public IRGraphMutator {
 
     using IRGraphMutator::visit;
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         Expr value = mutate(op->value);
         Expr body = mutate(op->body);
         expr = graph_substitute(op->name, value, body);

@@ -72,7 +72,7 @@ class WithLanes : public IRMutator {
 
     Type with_lanes(Type t) { return t.with_lanes(lanes); }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         if (op->type.lanes() != lanes) {
             expr = Cast::make(with_lanes(op->type), mutate(op->value));
         } else {
@@ -80,7 +80,7 @@ class WithLanes : public IRMutator {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.lanes() != lanes) {
             expr = Variable::make(with_lanes(op->type), op->name);
         } else {
@@ -88,7 +88,7 @@ class WithLanes : public IRMutator {
         }
     }
 
-    void visit(const Broadcast *op) {
+    void visit(const Broadcast *op) override {
         if (op->type.lanes() != lanes) {
             expr = Broadcast::make(op->value, lanes);
         } else {
@@ -284,7 +284,7 @@ class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
-    void visit(const Mul *op) {
+    void visit(const Mul *op) override {
         static vector<Pattern> scalar_muls = {
             // Vector by scalar widening multiplies.
             { "halide.hexagon.mpy.vub.ub", wild_u16x*bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
@@ -452,7 +452,7 @@ private:
         return 0;
     }
 
-    void visit(const Add *op) {
+    void visit(const Add *op) override {
         // vmpa, vdmpy, and vrmpy instructions are hard to match with
         // patterns, do it manually here.
         // Try to find vrmpy opportunities first, which consume 4 operands.
@@ -663,7 +663,7 @@ private:
         IRMutator::visit(op);
     }
 
-    void visit(const Sub *op) {
+    void visit(const Sub *op) override {
         if (op->type.is_vector()) {
             // Try negating op->b, using an add pattern if successful.
             Expr neg_b = lossless_negate(op->b);
@@ -689,7 +689,7 @@ private:
         IRMutator::visit(op);
     }
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         IRMutator::visit(op);
 
         if (op->type.is_vector()) {
@@ -710,7 +710,7 @@ private:
         }
     }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
 
         static vector<Pattern> casts = {
             // Averaging
@@ -865,7 +865,7 @@ private:
         IRMutator::visit(op);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::lerp)) {
             // We need to lower lerps now to optimize the arithmetic
             // that they generate.
@@ -1023,36 +1023,36 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    void visit(const Add *op) { visit_binary(op); }
-    void visit(const Sub *op) { visit_binary(op); }
-    void visit(const Mul *op) { visit_binary(op); }
-    void visit(const Div *op) { visit_binary(op); }
-    void visit(const Mod *op) { visit_binary(op); }
-    void visit(const Min *op) { visit_binary(op); }
-    void visit(const Max *op) { visit_binary(op); }
-    void visit(const EQ *op) { visit_binary(op); }
-    void visit(const NE *op) { visit_binary(op); }
-    void visit(const LT *op) { visit_binary(op); }
-    void visit(const LE *op) { visit_binary(op); }
-    void visit(const GT *op) { visit_binary(op); }
-    void visit(const GE *op) { visit_binary(op); }
+    void visit(const Add *op) override { visit_binary(op); }
+    void visit(const Sub *op) override { visit_binary(op); }
+    void visit(const Mul *op) override { visit_binary(op); }
+    void visit(const Div *op) override { visit_binary(op); }
+    void visit(const Mod *op) override { visit_binary(op); }
+    void visit(const Min *op) override { visit_binary(op); }
+    void visit(const Max *op) override { visit_binary(op); }
+    void visit(const EQ *op) override { visit_binary(op); }
+    void visit(const NE *op) override { visit_binary(op); }
+    void visit(const LT *op) override { visit_binary(op); }
+    void visit(const LE *op) override { visit_binary(op); }
+    void visit(const GT *op) override { visit_binary(op); }
+    void visit(const GE *op) override { visit_binary(op); }
 
     // These next 3 nodes should not exist if we're vectorized, they
     // should have been replaced with bitwise operations.
-    void visit(const And *op) {
+    void visit(const And *op) override {
         internal_assert(op->type.is_scalar());
         IRMutator::visit(op);
     }
-    void visit(const Or *op) {
+    void visit(const Or *op) override {
         internal_assert(op->type.is_scalar());
         IRMutator::visit(op);
     }
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         internal_assert(op->type.is_scalar());
         IRMutator::visit(op);
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
 
@@ -1150,7 +1150,7 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         visit_let(expr, op);
 
         // Lift interleaves out of Let expression bodies.
@@ -1160,9 +1160,9 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    void visit(const LetStmt *op) { visit_let(stmt, op); }
+    void visit(const LetStmt *op) override { visit_let(stmt, op); }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         if (op->type.bits() == op->value.type().bits()) {
             // We can only move interleaves through casts of the same size.
             Expr value = mutate(op->value);
@@ -1241,7 +1241,7 @@ class EliminateInterleaves : public IRMutator {
         in_bool_to_mask = old_in_bool_to_mask;
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::bool_to_mask)) {
             visit_bool_to_mask(op);
             return;
@@ -1334,7 +1334,7 @@ class EliminateInterleaves : public IRMutator {
     // Buffers we should deinterleave the storage of.
     Scope<bool> deinterleave_buffers;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         Expr condition = mutate(op->condition);
 
         // First, we need to mutate the op, to pull native interleaves
@@ -1360,7 +1360,7 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
@@ -1429,7 +1429,7 @@ class EliminateInterleaves : public IRMutator {
         return &example->name;
     }
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         if (op->is_concat()) {
             expr = op;
             const std::string *load_from = is_double_vector_load(op);
@@ -1453,7 +1453,7 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (buffers.contains(op->name)) {
             // When inspecting the stores to a buffer, update the state.
             BufferState &state = buffers.ref(op->name);
@@ -1478,7 +1478,7 @@ class EliminateInterleaves : public IRMutator {
 // otherwise this might eat some interleaves that could have cancelled
 // with other operations.
 class FuseInterleaves : public IRMutator {
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // This is a list of {f, g} pairs that if the first operation
         // is interleaved, interleave(f(x)) is equivalent to g(x).
         static std::vector<std::pair<string, string>> non_deinterleaving_alts = {
@@ -1545,7 +1545,7 @@ class OptimizeShuffles : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         bool old_inside_address_of = inside_address_of;
         if (op->is_intrinsic(Call::address_of)) {
             inside_address_of = true;
@@ -1566,14 +1566,14 @@ class OptimizeShuffles : public IRMutator {
         }
     }
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         lets.push_back({op->name, op->value});
         visit_let(op);
         lets.pop_back();
     }
-    void visit(const LetStmt *op) { visit_let(op); }
+    void visit(const LetStmt *op) override { visit_let(op); }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (inside_address_of) {
             // We shouldn't mess with load inside an address_of.
             IRMutator::visit(op);

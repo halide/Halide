@@ -23,7 +23,7 @@ public:
 private:
     using IRMutator::visit;
 
-    void visit(const Call *call) {
+    void visit(const Call *call) override {
         if (call->is_intrinsic(Call::image_load)) {
             vector<Expr> call_args = call->args;
             //

@@ -60,7 +60,7 @@ class FindBuffersToTrack : public IRVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         debug(2) << "Buffers to track: Setting Allocate for loop " << op->name << " to " << static_cast<int>(device_api) << "\n";
         internal_assert(internal.find(op->name) == internal.end()) << "Duplicate Allocate node in FindBuffersToTrack.\n";
         auto it = internal.insert({ op->name, device_api });
@@ -68,7 +68,7 @@ class FindBuffersToTrack : public IRVisitor {
         internal.erase(it.first);
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
       if (different_device_api(device_api, op->device_api, target)) {
             debug(2) << "Buffers to track: switching from " << static_cast<int>(device_api) <<
                 " to " << static_cast<int>(op->device_api) << " for loop " << op->name << "\n";
@@ -85,7 +85,7 @@ class FindBuffersToTrack : public IRVisitor {
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         // The let that defines the buffer_t is not interesting, and
         // nothing before that let could be interesting either
         // (because the buffer doesn't exist yet).
@@ -98,7 +98,7 @@ class FindBuffersToTrack : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (internal.find(op->name) == internal.end() ||
             different_device_api(device_api, internal[op->name], target)) {
             buffers_to_track.insert(op->name);
@@ -106,7 +106,7 @@ class FindBuffersToTrack : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         if (internal.find(op->name) == internal.end() ||
             different_device_api(device_api, internal[op->name], target)) {
             buffers_to_track.insert(op->name);
@@ -114,7 +114,7 @@ class FindBuffersToTrack : public IRVisitor {
         IRVisitor::visit(op);
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (op->type.is_handle() && ends_with(op->name, ".buffer")) {
             buffers_to_track.insert(op->name.substr(0, op->name.size() - 7));
         }
@@ -386,7 +386,7 @@ class InjectBufferCopies : public IRMutator {
         return buffers_to_track.count(buf) != 0;
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         IRMutator::visit(op);
 
         if (!should_track(op->name)) {
@@ -397,7 +397,7 @@ class InjectBufferCopies : public IRMutator {
         state[op->name].devices_writing.insert(device_api);
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         IRMutator::visit(op);
 
         if (!should_track(op->name)) {
@@ -408,7 +408,7 @@ class InjectBufferCopies : public IRMutator {
         state[op->name].devices_reading.insert(device_api);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (op->is_intrinsic(Call::address_of)) {
             // We're after storage flattening, so the sole arg should be a load.
             internal_assert(op->args.size() == 1);
@@ -447,7 +447,7 @@ class InjectBufferCopies : public IRMutator {
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
@@ -491,7 +491,7 @@ class InjectBufferCopies : public IRMutator {
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         IRMutator::visit(op);
 
         // Direct access to a buffer inside its allocate node
@@ -508,7 +508,7 @@ class InjectBufferCopies : public IRMutator {
 
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         if (device_api != DeviceAPI::Host ||
             !should_track(op->name)) {
             IRMutator::visit(op);
@@ -599,7 +599,7 @@ class InjectBufferCopies : public IRMutator {
         state.erase(buf_name);
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         IRMutator::visit(op);
         if (device_api != DeviceAPI::Host) {
             return;
@@ -627,7 +627,7 @@ class InjectBufferCopies : public IRMutator {
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
@@ -695,7 +695,7 @@ class InjectBufferCopies : public IRMutator {
         }
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
@@ -713,7 +713,7 @@ class InjectBufferCopies : public IRMutator {
         stmt = Block::make(first, rest);
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         string old_loop_level = loop_level;
         loop_level = op->name;
 

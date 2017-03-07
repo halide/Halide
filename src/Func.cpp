@@ -355,7 +355,7 @@ class SubstituteSelfReference : public IRMutator {
     const Function substitute;
     const vector<Var> new_args;
 
-    void visit(const Call *c) {
+    void visit(const Call *c) override {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);

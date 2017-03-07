@@ -93,8 +93,8 @@ public:
 
 protected:
     using Internal::Closure::visit;
-    void visit(const For *loop);
-    void visit(const Call *op);
+    void visit(const For *loop) override;
+    void visit(const Call *op) override;
 };
 
 }}

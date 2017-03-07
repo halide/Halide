@@ -9,7 +9,7 @@ namespace {
 class FuzzFloatStores : public IRMutator {
     using IRMutator::visit;
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         Type t = op->value.type();
         if (t.is_float()) {
             // Drop the last bit of the mantissa.

@@ -131,14 +131,14 @@ struct CheckVars : public IRGraphVisitor {
 
     using IRVisitor::visit;
 
-    void visit(const Let *let) {
+    void visit(const Let *let) override {
         let->value.accept(this);
         defined_internally.push(let->name, 0);
         let->body.accept(this);
         defined_internally.pop(let->name);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->name == name && op->call_type == Call::Halide) {
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -154,7 +154,7 @@ struct CheckVars : public IRGraphVisitor {
         }
     }
 
-    void visit(const Variable *var) {
+    void visit(const Variable *var) override {
         // Is it a parameter?
         if (var->param.defined()) return;
 
@@ -200,7 +200,7 @@ struct DeleteSelfReferences : public IRMutator {
 
     using IRMutator::visit;
 
-    void visit(const Call *c) {
+    void visit(const Call *c) override {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);
@@ -219,7 +219,7 @@ class FreezeFunctions : public IRGraphVisitor {
 
     const string &func;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->call_type == Call::Halide &&
             op->func.defined() &&
@@ -883,7 +883,7 @@ class SubstituteCalls : public IRMutator {
 
     map<Function, Function, Function::Compare> substitutions;
 
-    void visit(const Call *c) {
+    void visit(const Call *c) override {
         IRMutator::visit(c);
         c = expr.as<Call>();
         internal_assert(c);

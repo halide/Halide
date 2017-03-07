@@ -100,7 +100,7 @@ private:
         return size;
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         int idx = get_func_id(op->name);
 
         vector<Expr> new_extents;
@@ -151,7 +151,7 @@ private:
         }
     }
 
-    void visit(const Free *op) {
+    void visit(const Free *op) override {
         int idx = get_func_id(op->name);
 
         AllocSize alloc = func_alloc_sizes.get(op->name);
@@ -181,7 +181,7 @@ private:
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         int idx;
         Stmt body;
         if (op->is_producer) {
@@ -208,7 +208,7 @@ private:
         stmt = ProducerConsumer::make(op->name, op->is_producer, body);
     }
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         Stmt body = op->body;
 
         // The for loop indicates a device transition or a

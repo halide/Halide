@@ -27,7 +27,7 @@ public:
 
     using IRGraphVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
         if (op->image.defined()) {
             Result r;
@@ -44,7 +44,7 @@ public:
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (ends_with(op->name, ".buffer") &&
             op->param.defined() &&
             op->param.is_buffer() &&

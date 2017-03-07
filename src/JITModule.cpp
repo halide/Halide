@@ -177,7 +177,7 @@ public:
 
     HalideJITMemoryManager(const std::vector<JITModule> &modules) : modules(modules) {}
 
-    virtual uint64_t getSymbolAddress(const std::string &name) override {
+    uint64_t getSymbolAddress(const std::string &name) override {
         for (size_t i = 0; i < modules.size(); i++) {
             const JITModule &m = modules[i];
             std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
@@ -191,7 +191,7 @@ public:
         return SectionMemoryManager::getSymbolAddress(name);
     }
 
-    virtual uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
+    uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
         uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
         code_pages.push_back({result, size});
         return result;

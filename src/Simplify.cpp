@@ -138,7 +138,7 @@ bool propagate_indeterminate_expression(const Expr &e0, const Expr &e1, const Ex
 class ExprIsPure : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
@@ -146,7 +146,7 @@ class ExprIsPure : public IRVisitor {
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         if (!op->image.defined() && !op->param.defined()) {
             // It's a load from an internal buffer, which could
             // mutate.
@@ -444,7 +444,7 @@ private:
         return is_round_up_div(mul->a, *factor);
     }
 
-    void visit(const Cast *op) {
+    void visit(const Cast *op) override {
         Expr value = mutate(op->value);
         if (propagate_indeterminate_expression(value, op->type, &expr)) {
             return;
@@ -536,7 +536,7 @@ private:
         }
     }
 
-    void visit(const Variable *op) {
+    void visit(const Variable *op) override {
         if (var_info.contains(op->name)) {
             VarInfo &info = var_info.ref(op->name);
 
@@ -560,7 +560,7 @@ private:
         }
     }
 
-    void visit(const Add *op) {
+    void visit(const Add *op) override {
         int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
         double fa = 0.0f, fb = 0.0f;
@@ -932,7 +932,7 @@ private:
         }
     }
 
-    void visit(const Sub *op) {
+    void visit(const Sub *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
@@ -1419,7 +1419,7 @@ private:
         }
     }
 
-    void visit(const Mul *op) {
+    void visit(const Mul *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
@@ -1522,7 +1522,7 @@ private:
         }
     }
 
-    void visit(const Div *op) {
+    void visit(const Div *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
@@ -1945,7 +1945,7 @@ private:
         }
     }
 
-    void visit(const Mod *op) {
+    void visit(const Mod *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
@@ -2082,7 +2082,7 @@ private:
         }
     }
 
-    void visit(const Min *op) {
+    void visit(const Min *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
@@ -2473,7 +2473,7 @@ private:
         }
     }
 
-    void visit(const Max *op) {
+    void visit(const Max *op) override {
         Expr a = mutate(op->a), b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return;
@@ -2835,7 +2835,7 @@ private:
         }
     }
 
-    void visit(const EQ *op) {
+    void visit(const EQ *op) override {
         Expr delta = mutate(op->a - op->b);
         if (propagate_indeterminate_expression(delta, op->type, &expr)) {
             return;
@@ -2928,11 +2928,11 @@ private:
         }
     }
 
-    void visit(const NE *op) {
+    void visit(const NE *op) override {
         expr = mutate(Not::make(op->a == op->b));
     }
 
-    void visit(const LT *op) {
+    void visit(const LT *op) override {
         Expr a = mutate(op->a), b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return;
@@ -3256,19 +3256,19 @@ private:
         }
     }
 
-    void visit(const LE *op) {
+    void visit(const LE *op) override {
         expr = mutate(!(op->b < op->a));
     }
 
-    void visit(const GT *op) {
+    void visit(const GT *op) override {
         expr = mutate(op->b < op->a);
     }
 
-    void visit(const GE *op) {
+    void visit(const GE *op) override {
         expr = mutate(!(op->a < op->b));
     }
 
-    void visit(const And *op) {
+    void visit(const And *op) override {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
@@ -3463,7 +3463,7 @@ private:
         }
     }
 
-    void visit(const Or *op) {
+    void visit(const Or *op) override {
         Expr a = mutate(op->a), b = mutate(op->b);
         if (propagate_indeterminate_expression(a, b, op->type, &expr)) {
             return;
@@ -3641,7 +3641,7 @@ private:
         }
     }
 
-    void visit(const Not *op) {
+    void visit(const Not *op) override {
         Expr a = mutate(op->a);
         if (propagate_indeterminate_expression(a, op->type, &expr)) {
             return;
@@ -3675,7 +3675,7 @@ private:
         }
     }
 
-    void visit(const Select *op) {
+    void visit(const Select *op) override {
         Expr condition = mutate(op->condition);
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
@@ -3829,7 +3829,7 @@ private:
         }
     }
 
-    void visit(const Ramp *op) {
+    void visit(const Ramp *op) override {
         Expr base = mutate(op->base);
         Expr stride = mutate(op->stride);
 
@@ -3843,7 +3843,7 @@ private:
         }
     }
 
-    void visit(const IfThenElse *op) {
+    void visit(const IfThenElse *op) override {
         Expr condition = mutate(op->condition);
 
         // If (true) ...
@@ -3948,7 +3948,7 @@ private:
         }
     }
 
-    void visit(const Load *op) {
+    void visit(const Load *op) override {
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
@@ -3968,7 +3968,7 @@ private:
         }
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         // Calls implicitly depend on mins and strides of the buffer referenced
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -4244,7 +4244,7 @@ private:
         }
     }
 
-    void visit(const Shuffle *op) {
+    void visit(const Shuffle *op) override {
         if (op->is_extract_element() &&
             (op->vectors[0].as<Ramp>() ||
              op->vectors[0].as<Broadcast>())) {
@@ -4694,7 +4694,7 @@ private:
     }
 
 
-    void visit(const Let *op) {
+    void visit(const Let *op) override {
         if (simplify_lets) {
             expr = simplify_let<Let, Expr>(op);
         } else {
@@ -4702,7 +4702,7 @@ private:
         }
     }
 
-    void visit(const LetStmt *op) {
+    void visit(const LetStmt *op) override {
         if (simplify_lets) {
             stmt = simplify_let<LetStmt, Stmt>(op);
         } else {
@@ -4710,7 +4710,7 @@ private:
         }
     }
 
-    void visit(const AssertStmt *op) {
+    void visit(const AssertStmt *op) override {
         IRMutator::visit(op);
 
         const AssertStmt *a = stmt.as<AssertStmt>();
@@ -4723,7 +4723,7 @@ private:
     }
 
 
-    void visit(const For *op) {
+    void visit(const For *op) override {
         Expr new_min = mutate(op->min);
         Expr new_extent = mutate(op->extent);
 
@@ -4753,7 +4753,7 @@ private:
         }
     }
 
-    void visit(const Provide *op) {
+    void visit(const Provide *op) override {
         // Provides implicitly depend on mins and strides of the buffer referenced
         for (size_t i = 0; i < op->args.size(); i++) {
             {
@@ -4777,7 +4777,7 @@ private:
         IRMutator::visit(op);
     }
 
-    void visit(const Store *op) {
+    void visit(const Store *op) override {
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
@@ -4801,7 +4801,7 @@ private:
         }
     }
 
-    void visit(const Allocate *op) {
+    void visit(const Allocate *op) override {
         std::vector<Expr> new_extents;
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
@@ -4836,7 +4836,7 @@ private:
         }
     }
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
 
         if (is_no_op(body)) {
@@ -4848,7 +4848,7 @@ private:
         }
     }
 
-    void visit(const Block *op) {
+    void visit(const Block *op) override {
         Stmt first = mutate(op->first);
         Stmt rest = mutate(op->rest);
 
@@ -4934,7 +4934,7 @@ Stmt simplify(Stmt s, bool simplify_lets,
 class SimplifyExprs : public IRMutator {
 public:
     using IRMutator::mutate;
-    Expr mutate(Expr e) {
+    Expr mutate(Expr e) override {
         return simplify(e);
     }
 };
