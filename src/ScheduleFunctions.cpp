@@ -1021,6 +1021,8 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
             << "Func " << f.name() << " is scheduled inline, so it"
             << " must not have any specializations. Specialize on the"
             << " scheduled Func instead.\n";
+        // Check if the schedule of the inlined function is legal.
+        validate_schedule_inlined_function(f);
         return true;
     }
 
