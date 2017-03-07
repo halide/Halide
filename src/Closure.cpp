@@ -38,6 +38,54 @@ void Closure::visit(const For *op) {
     ignore.pop(op->name);
 }
 
+void Closure::visit(const Call *op) {
+    if (op->is_intrinsic(Call::address_of)) {
+        const Load *load = op->args[0].as<Load>();
+        internal_assert(load);
+        if (!ignore.contains(load->name)) {
+            debug(3) << "Adding buffer " << load->name << " to closure\n";
+            Buffer &ref = buffers[load->name];
+            ref.type = load->type.element_of(); // TODO: Validate type is the same as existing refs?
+            ref.read = address_of_read;
+            ref.write = address_of_written;
+
+            // If reading an image/buffer, compute the size.
+            if (op->image.defined()) {
+                ref.size = op->image.size_in_bytes();
+                ref.dimensions = op->image.dimensions();
+            }
+        } else {
+            debug(3) << "Not adding " << load->name << " to closure\n";
+        }
+    } else if (op->is_intrinsic(Call::copy_memory)) {
+        internal_assert(op->args.size() == 3);
+        bool old_address_of_read = address_of_read;
+        bool old_address_of_written = address_of_written;
+
+        // The destination is first, which is written but not read.
+        address_of_read = false;
+        address_of_written = true;
+        op->args[0].accept(this);
+
+        // The source is second, which is read but not written.
+        address_of_read = true;
+        address_of_written = false;
+        op->args[1].accept(this);
+
+        address_of_read = old_address_of_read;
+        address_of_written = old_address_of_written;
+
+        op->args[2].accept(this);
+    } else {
+        bool old_address_of_written = address_of_written;
+        if (!op->is_pure()) {
+            address_of_written = true;
+        }
+        IRVisitor::visit(op);
+        address_of_written = old_address_of_written;
+    }
+}
+
 void Closure::visit(const Load *op) {
     op->predicate.accept(this);
     op->index.accept(this);
