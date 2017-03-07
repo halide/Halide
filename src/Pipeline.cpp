@@ -953,7 +953,9 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
         user_assert(func.implicit_args().empty())
             << "Can't realize Func \"" << func.name()
             << "\" into Buffer at " << (void *)dst[i].data()
-            << " because Func has one or more implicit vars.\n";
+            << " because Func has one or more implicit vars; "
+            << "all IVars must be resolved via use in the "
+            << "left-hand side of a Func definition.\n";
         int  dims = output_buffer_types[i].dims;
         Type type = output_buffer_types[i].type;
         user_assert(dst[i].dimensions() == dims)
