@@ -946,9 +946,14 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
         << ") for realizing pipeline with " << output_buffer_types.size()
         << " outputs\n";
 
-    // Check the type and dimensionality of the buffer
+    // Check the type and dimensionality of the buffer.
+    // Also verify that there are no implicit vars.
     for (size_t i = 0; i < dst.size(); i++) {
         Function func = output_buffer_types[i].func;
+        user_assert(func.implicit_args().empty())
+            << "Can't realize Func \"" << func.name()
+            << "\" into Buffer at " << (void *)dst[i].data()
+            << " because Func has one or more implicit vars.\n";
         int  dims = output_buffer_types[i].dims;
         Type type = output_buffer_types[i].type;
         user_assert(dst[i].dimensions() == dims)
