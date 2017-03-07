@@ -113,13 +113,9 @@ void histogram_test(bool use_rfactor) {
         }
     }
 
-    for (int y = 0; y < 2; y++) {
-        for (int x = 0; x < 2; x++) {
-            for (int bin = 0; bin < 31; bin++) {
-                assert(hists(x, y, bin) == hists_cxx[x][y][bin]);
-            }
-        }
-    }
+    hists.for_each_element([=](int x, int y, int bin) {
+        assert(hists(x, y, bin) == hists_cxx[x][y][bin]);
+    });
 }
 
 int main(int argc, char **argv) {
@@ -138,11 +134,9 @@ int main(int argc, char **argv) {
         output(x_implicit, y_implicit) = g() + h(x_implicit, y_implicit);
 
         Buffer<int32_t> result = output.realize(10, 10);
-        for (int32_t y = 0; y < 10; y++) {
-            for (int32_t x = 0; x < 10; x++) {
-                assert(result(x, y) == (x + y * 256) * 3 + 42);
-            }
-        }
+        result.for_each_element([=](int x, int y) {
+            assert(result(x, y) == (x + y * 256) * 3 + 42);
+        });
     }
 
     // Implicit based input function used in reduction
@@ -167,11 +161,11 @@ int main(int argc, char **argv) {
         whythoff(x, y) = row(x);
 
         Buffer<int32_t> result = whythoff.realize(10, 10);
-        for (int y = 1; y < 10; y++) {
-            for (int x = 1; x < 10; x++) {
-                assert(result(x, y) == whythoff_cxx(x, y));
-            }
-        }
+        result.for_each_element([=](int x, int y) {
+            // whythoff_cxx() is only defined for x >= 1
+            if (x == 0) return;
+            assert(result(x, y) == whythoff_cxx(x, y));
+        });
     }
 
     // Implicit used in where clause of RDom
@@ -194,11 +188,10 @@ int main(int argc, char **argv) {
         pascal_unwrap(k, n) = pascal(k);
 
         Buffer<int32_t> result = pascal_unwrap.realize(10, 10);
-        for (int y = 0; y < 10; y++) {
-            for (int x = 0; x <= y; x++) {
-                assert(result(x, y) == fact_cxx(y) / (fact_cxx(x) * fact_cxx(y - x)));
-            }
-        }
+        result.for_each_element([=](int x, int y) {
+            if (x > y) return;
+            assert(result(x, y) == fact_cxx(y) / (fact_cxx(x) * fact_cxx(y - x)));
+        });
     }
 
     // Implicit with Var::outermost() used in scheduling
@@ -250,16 +243,9 @@ int main(int argc, char **argv) {
         blurred_frames(_, frame) = cast<uint8_t>(blur_y(_) / 9);
 
         Buffer<uint8_t> result = blurred_frames.realize(320, 320, 3, 4);
-
-        for (int32_t frame = 0; frame < 4; frame++) {
-            for (int32_t c = 0; c < 3; c++) {
-                for (int32_t y = 0; y < 4; y++) {
-                    for (int32_t x = 0; x < 4; x++) {
-                        assert(result(x, y, c, frame) == blurred_val(x, y, c, frame));
-                    }
-                }
-            }
-        }
+        result.for_each_element([=](int x, int y, int c, int frame) {
+            assert(result(x, y, c, frame) == blurred_val(x, y, c, frame));
+        });
     }
 
     // IVar used with implciit argument deduction
@@ -278,16 +264,9 @@ int main(int argc, char **argv) {
         i(_, tx, ty) = g(_);
 
         Buffer<int32_t> result = i.realize(16, 16, 2, 2);
-
-        for (int32_t ty = 0; ty < 2; ty++) {
-            for (int32_t tx = 0; tx < 2; tx++) {
-                for (int32_t y = 0; y < 16; y++) {
-                    for (int32_t x = 0; x < 16; x++) {
-                        assert(result(x, y, tx, ty) == x * y + (tx * 256) + (ty * 1024));
-                    }
-                }
-            }
-        }
+        result.for_each_element([=](int x, int y, int tx, int ty) {
+            assert(result(x, y, tx, ty) == x * y + (tx * 256) + (ty * 1024));
+        });
     }
 
     // Ivar used with rename in scheduling
@@ -316,15 +295,9 @@ int main(int argc, char **argv) {
         blur_x.compute_root();
 
         Buffer<float> result = out.realize(16, 16, 4, 4);
-        for (int32_t ty = 0; ty < 4; ty++) {
-            for (int32_t tx = 0; tx < 4; tx++) {
-                for (int32_t y = 0; y < 16; y++) {
-                    for (int32_t x = 0; x < 16; x++) {
-                          assert(result(x, y, tx, ty) == (((tx & 1) == (ty & 1)) ? 1.0f : 0.0f));
-                    }
-                }
-            }
-        }
+        result.for_each_element([=](int x, int y, int tx, int ty) {
+            assert(result(x, y, tx, ty) == (((tx & 1) == (ty & 1)) ? 1.0f : 0.0f));
+        });
     }
 
     printf("Success!\n");
