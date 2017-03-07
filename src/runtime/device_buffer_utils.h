@@ -38,7 +38,7 @@ struct device_copy {
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
 
-    void copy_memory_helper(int d, int64_t off) const {
+    WEAK void copy_memory_helper(int d, int64_t off) const {
         // Skip size-1 dimensions
         while (extent[d] == 1 && d >= 0) d--;
 
@@ -54,7 +54,7 @@ struct device_copy {
         }
     }
 
-    void copy_memory(void *user_context) const {
+    WEAK void copy_memory(void *user_context) const {
         // If this is a zero copy buffer, these pointers will be the same.
         if (src != dst) {
             copy_memory_helper(MAX_COPY_DIMS-1, 0);
