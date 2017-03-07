@@ -4,15 +4,7 @@ using namespace Halide;
 
 class Median3x3 : public Generator<Median3x3> {
 private:
-    static Expr max3(Expr a, Expr b, Expr c) {
-        return max(max(a, b), c);
-    }
-
-    static Expr min3(Expr a, Expr b, Expr c) {
-        return min(min(a, b), c);
-    }
-
-    static Expr mid3(Expr a, Expr b, Expr c) {
+    static Expr mid(Expr a, Expr b, Expr c) {
         return max(min(max(a, b), c), min(a, b));
     }
 
@@ -24,18 +16,15 @@ public:
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
-        max_y(x,y) = max3(bounded_input(x ,y-1), bounded_input(x, y),
-                          bounded_input(x, y+1));
-        min_y(x,y) = min3(bounded_input(x, y-1), bounded_input(x, y),
-                          bounded_input(x, y+1));
-        mid_y(x,y) = mid3(bounded_input(x, y-1), bounded_input(x, y),
-                          bounded_input(x, y+1));
+        max_y(x,y) = max({ bounded_input(x ,y-1), bounded_input(x, y), bounded_input(x, y+1) });
+        min_y(x,y) = min({ bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1) });
+        mid_y(x,y) = mid(bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1));
 
-        minmax_x(x,y) = min3(max_y(x-1, y), max_y(x, y), max_y(x+1, y));
-        maxmin_x(x,y) = max3(min_y(x-1, y), min_y(x, y), min_y(x+1, y));
-        midmid_x(x,y) = mid3(mid_y(x-1, y), mid_y(x, y), mid_y(x+1, y));
+        minmax_x(x,y) = min({ max_y(x-1, y), max_y(x, y), max_y(x+1, y) });
+        maxmin_x(x,y) = max({ min_y(x-1, y), min_y(x, y), min_y(x+1, y) });
+        midmid_x(x,y) = mid(mid_y(x-1, y), mid_y(x, y), mid_y(x+1, y));
 
-        output(x,y) = mid3(minmax_x(x, y), maxmin_x(x, y), midmid_x(x, y));
+        output(x,y) = mid(minmax_x(x, y), maxmin_x(x, y), midmid_x(x, y));
     }
 
     void schedule() {
