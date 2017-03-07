@@ -55,9 +55,6 @@ T clamp(T val, T min, T max) {
     return val;
 }
 
-typedef int (*pipeline2)(buffer_t *, buffer_t *);
-typedef int (*pipeline3)(buffer_t *, buffer_t *, buffer_t *);
-
 struct PipelineDescriptorBase {
     virtual void init() = 0;
     virtual const char * name() = 0;
@@ -345,7 +342,7 @@ class SobelDescriptor : public PipelineDescriptorBase {
         u8_out.device_malloc(halide_hexagon_device_interface());
 
         u8_in.for_each_value([&](uint8_t &x) {
-                x = static_cast<uint8_t>(rand());
+            x = static_cast<uint8_t>(rand());
         });
         u8_out.fill(0);
     }
