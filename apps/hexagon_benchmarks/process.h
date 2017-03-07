@@ -40,7 +40,6 @@
 #include "conv3x3a32_cpu.h"
 #endif
 
-
 enum bmark_run_mode_t {
     hvx64 = 1,
     hvx128 = 2,
@@ -140,7 +139,7 @@ public:
             return conv3x3a16_cpu(u8_in, i8_mask, u8_out);
         }
 #endif
-        return 0;
+        return 1;
     }
 };
 
@@ -206,7 +205,7 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
             return dilate3x3_cpu(u8_in, u8_out);
         }
 #endif
-        return 0;
+        return 1;
     }
 };
 
@@ -267,7 +266,7 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
             return median3x3_cpu(u8_in, u8_out);
         }
 #endif
-        return 0;
+        return 1;
     }
 };
 
@@ -330,7 +329,7 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
             return gaussian5x5_cpu(u8_in, u8_out);
         }
 #endif
-        return 0;
+        return 1;
     }
 };
 
@@ -399,7 +398,7 @@ class SobelDescriptor : public PipelineDescriptorBase {
             return sobel_cpu(u8_in, u8_out);
         }
 #endif
-        return 0;
+        return 1;
     }
 };
 
@@ -475,7 +474,7 @@ public:
             return conv3x3a32_cpu(u8_in, i8_mask, u8_out);
         }
 #endif
-        return 0;
+        return 1;
     }
 };
 
