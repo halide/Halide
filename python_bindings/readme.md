@@ -19,11 +19,10 @@ and across platforms.
 ## Compilation instructions ##
 
 Build using:
+
 ```bash
-  mkdir build
-  cd build
-  ccmake ..
-  make 
+pip install .
+# or pip install -e .
 ```
 
 ## Documentation and Examples ##
@@ -39,7 +38,6 @@ You can run them as a batch via:
     run_tutorial.sh
 ```
 
-To run these examples, make sure the `PYTHONPATH` environment variable points to your build directory (e.g. `export PYTHONPATH=halide_source/python_bindings/build:$PYTHONPATH`).
 
 ## License ##
 
