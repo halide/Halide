@@ -248,7 +248,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // IVar used with implciit argument deduction
+    // IVar used with implicit argument deduction
     {
         Var x, y;
         IVar tx("tx"), ty("ty");
@@ -269,7 +269,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Ivar used with rename in scheduling
+    // IVar used with rename in scheduling
     {
         Var x, y;
         IVar tx("tx"), ty("ty");
