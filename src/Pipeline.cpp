@@ -774,8 +774,10 @@ Realization Pipeline::realize(vector<int32_t> sizes,
                               const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
-    for (Type t : contents->outputs[0].output_types()) {
-        bufs.emplace_back(t, sizes);
+    for (auto & out : contents->outputs) {
+        for (Type t : out.output_types()) {
+            bufs.emplace_back(t, sizes);
+        }
     }
     Realization r(bufs);
     realize(r, target);
