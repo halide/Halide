@@ -116,7 +116,7 @@ extern "C" int halide_release_cl_context(void *user_context) {
     printf("Releasing CL context %p\n", cl_ctx);
     return 0;
 }
-#elif defined(TEST_PTX)
+#elif defined(TEST_CUDA)
 // Implement CUDA custom context.
 #include <cuda.h>
 
