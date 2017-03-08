@@ -163,7 +163,7 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<Type> &types,
                          int dimensionality,
                          NameMangling mangling,
-                         bool uses_old_buffer_t) {
+                         bool /* uses_old_buffer_t */) {
     func.define_extern(function_name, args, types, dimensionality, mangling);
 }
 
