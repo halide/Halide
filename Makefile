@@ -162,10 +162,10 @@ endif
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
-TEST_PTX = 1
+TEST_CUDA = 1
 endif
 ifneq (,$(findstring cuda,$(HL_TARGET)))
-TEST_PTX = 1
+TEST_CUDA = 1
 endif
 endif
 
@@ -182,7 +182,7 @@ endif
 endif
 
 ifeq ($(UNAME), Linux)
-ifneq ($(TEST_PTX), )
+ifneq ($(TEST_CUDA), )
 CUDA_LD_FLAGS ?= -L/usr/lib/nvidia-current -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
@@ -194,7 +194,7 @@ endif
 
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
-ifneq ($(TEST_PTX), )
+ifneq ($(TEST_CUDA), )
 CUDA_LD_FLAGS ?= -L/usr/local/cuda/lib -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
@@ -215,8 +215,8 @@ ifneq ($(TEST_METAL), )
 TEST_CXX_FLAGS += -DTEST_METAL
 endif
 
-ifneq ($(TEST_PTX), )
-TEST_CXX_FLAGS += -DTEST_PTX
+ifneq ($(TEST_CUDA), )
+TEST_CXX_FLAGS += -DTEST_CUDA
 endif
 
 # Compiling the tutorials requires libpng
