@@ -110,23 +110,16 @@ public:
     }
 };
 
-// These tersely named functions concatenate vectors of Var/Expr for use
-// in generating argument lists to Halide functions. They are named to avoid
-// bloating the code, since these are used extremely frequently, and often many
-// times within one line.
-vector<Var> A(vector<Var> l, const vector<Var> &r) {
-    for (const Var& i : r) {
-        l.push_back(i);
-    }
-    return l;
-}
-
+// for T-is-convertible-to-Expr
 template <typename T>
-vector<Expr> A(vector<Expr> l, const vector<T> &r) {
-    for (const Var& i : r) {
-        l.push_back(i);
+vector<Expr> concat(const Expr& l, const vector<T> &r) {
+    vector<Expr> c;
+    c.reserve(r.size() + 1);
+    c.push_back(l);
+    for (const T& i : r) {
+        c.push_back(i);
     }
-    return l;
+    return c;
 }
 
 // Get call references to the first N elements of dimension dim of x. If temps
@@ -139,9 +132,9 @@ vector<ComplexFuncRef> get_func_refs(ComplexFunc x, int N, bool temps = false) {
     vector<ComplexFuncRef> refs;
     for (int i = 0; i < N; i++) {
         if (temps) {
-            refs.push_back(x(A({Expr(-i - 1)}, args)));
+            refs.push_back(x(concat(Expr(-i - 1), args)));
         } else {
-            refs.push_back(x(A({Expr(i)}, args)));
+            refs.push_back(x(concat(Expr(i), args)));
         }
     }
     return refs;
@@ -285,15 +278,15 @@ ComplexFunc dftN(ComplexFunc x, int N, float sign, const string& prefix) {
     ComplexFunc X(prefix + "XN");
     if (N < 10) {
         // If N is small, unroll the loop.
-        ComplexExpr dft = x(A({Expr(0)}, args));
+        ComplexExpr dft = x(concat(Expr(0), args));
         for (int k = 1; k < N; k++) {
-                dft += expj((sign*2*kPi*k*n)/N) * x(A({Expr(k)}, args));
+                dft += expj((sign*2*kPi*k*n)/N) * x(concat(Expr(k), args));
         }
-        X(A({n}, args)) = dft;
+        X(concat(n, args)) = dft;
     } else {
         // If N is larger, we really shouldn't be using this algorithm for the DFT anyways.
         RDom k(0, N);
-        X(A({n}, args)) = sum(expj((sign*2*kPi*k*n)/N) * x(A({k}, args)));
+        X(concat(n, args)) = sum(expj((sign*2*kPi*k*n)/N) * x(concat(k, args)));
     }
     X.unroll(n);
     return X;
