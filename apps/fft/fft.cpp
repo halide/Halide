@@ -64,11 +64,11 @@ int product(const vector<int> &R) {
 
 template <typename FuncT>
 class FixDimensions : public FuncT {
-    std::string name;
-    std::vector<Var> original_args;
-    std::vector<Var> explicit_args;
-    std::vector<IVar> implicit_args;
-    std::vector<Var> all_args;
+    string name;
+    vector<Var> original_args;
+    vector<Var> explicit_args;
+    vector<IVar> implicit_args;
+    vector<Var> all_args;
 
 public:
     FixDimensions(const FuncT &in, size_t dims)
