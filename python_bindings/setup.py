@@ -22,8 +22,6 @@ BOOST_PYTHON_LIB: name of the boost Python lib to link (e.g. boost_python3-mt)
 import glob
 import os
 from os.path import join
-import re
-from subprocess import check_output
 import sys
 
 from distutils.ccompiler import new_compiler
@@ -97,18 +95,11 @@ class bdist_egg_disabled(bdist_egg):
     def run(self):
         sys.exit("Aborting implicit building of eggs. Use `pip install .` to install from source.")
 
-# get version from `git describe`
-describe = check_output(
-    ['git', 'describe', '--tags'],
-    cwd=here,
-).decode('utf8')
-
-version = '.'.join(re.search(r'(\d+)_(\d+)_(\d+)', describe).groups())
 
 
 setup_args = dict(
     name='halide',
-    version=version,
+    version='2017.03.07', # TODO: some SemVer scheme should be introduced once this stabilizes
     ext_modules=[ext],
     cmdclass=dict(bdist_egg=bdist_egg_disabled),
     description='a language for image processing and computational photography',
