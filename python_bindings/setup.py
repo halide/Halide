@@ -8,12 +8,14 @@ For example, from repo root:
 
     make -j
     cd python_bindings
-    pip install .
+    HALIDE_DIR=$PWD/.. pip install .
+    # or to build a wheel for distribution:
+    python setup.py bdist_wheel
 
 
 Environment variables:
 
-HALIDE_DIR: installation prefix of Halide, if needed (currently ignored)
+HALIDE_DIR: installation prefix of Halide, if needed
 BOOST_DIR: installation prefix of Boost, if needed
 BOOST_PYTHON_LIB: name of the boost Python lib to link (e.g. boost_python3-mt)
     only necessary if boost_python cannot be found
@@ -35,7 +37,10 @@ import numpy
 include_dirs = [numpy.get_include()]
 library_dirs = []
 
-prefixes = [sys.prefix, '/opt/local']
+# NOTE: /opt/local is included to mirror the Makefile behavior, but should 
+#       probably be removed eventually. No reason to treat it specially.
+here = os.path.abspath(os.path.dirname(__file__))
+prefixes = [join(here, '..'), sys.prefix, '/opt/local']
 for prefix_env in ('HALIDE_DIR', 'BOOST_DIR'):
     prefix = os.getenv(prefix_env)
     if prefix and prefix not in prefixes:
@@ -46,29 +51,56 @@ for prefix in prefixes:
     include_dirs.append(join(prefix, 'include'))
     library_dirs.append(join(prefix, 'lib'))
 
+cc = new_compiler()
+
+
+def find_static_lib(names, env_key):
+    """Find a static library
+
+    Returns abspath if found, raises IOError if not.
+    """
+    
+    if not isinstance(names, list):
+        names = [names]
+    
+    env_prefix = os.getenv(env_key)
+    if env_prefix:
+        search = [env_prefix]
+    else:
+        search = prefixes + ['/usr/local', '/usr']
+    lib_dirs = [ join(p, 'lib') for p in search if os.path.isdir(p) ]
+    lib_names = [ cc.library_filename(name) for name in names ]
+    for lib_dir in lib_dirs:
+        for lib_name in lib_names:
+            lib = join(lib_dir, lib_name)
+            if os.path.exists(lib):
+                return lib
+    raise IOError("Couldn't find %s in %s. You may need to set %s" % (
+        ' or '.join(lib_names), os.pathsep.join(lib_dirs), env_key
+    ))
+
 
 def find_boost_python():
     """Figure out the name of boost_python.
     
     Could be: boost_python, boost_python3-mt, etc.
     """
-    if os.getenv('BOOST_PYTHON_LIB'):
-        return os.getenv('BOOST_PYTHON_LIB')
-    base_name = 'boost_python'
-    if sys.version_info[0] == 3:
-        base_name += '3'
-    cc = new_compiler()
-    lib_dirs = [ os.path.join(p, 'lib') for p in prefixes if os.path.isdir(p) ]
-    for name in [base_name + '-mt', base_name]:
-        full_path = cc.find_library_file(lib_dirs, name)
-        if full_path:
-            return name
-    raise ValueError("Couldn't find boost_python in %s" % os.pathsep.join(libs))
+    name_specified = os.getenv('BOOST_PYTHON_LIB')
+    if name_specified:
+        names = [name_specified]
+    else:
+        base_name = 'boost_python'
+        if sys.version_info[0] == 3:
+            base_name += '3'
+        names = [base_name + '-mt', base_name]
+    
+    return find_static_lib(names, 'BOOST_DIR')
+
 
 boost_python = find_boost_python()
+libHalide = find_static_lib('Halide', 'HALIDE_DIR')
 
 
-here = os.path.abspath(os.path.dirname(__file__))
 sources = glob.glob(join(here, 'python', '*.cpp')) + \
           glob.glob(join(here, 'numpy', '*.cpp'))
 
@@ -77,12 +109,8 @@ ext = Extension('halide', sources,
     include_dirs=include_dirs,
     library_dirs=library_dirs,
     extra_compile_args=['-std=c++11'],
-    extra_link_args=[
-        # get libHalide.a from the repo:
-        # TODO: find it in PREFIX/lib
-        os.path.join(here, '..', 'lib', 'libHalide.a'),
-    ],
-    libraries=['z', boost_python],
+    extra_objects=[libHalide, boost_python],
+    libraries=['z'],
 )
 
 
