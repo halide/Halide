@@ -14,13 +14,13 @@
 
 #include "funct.h"
 
+namespace {
+
 using std::vector;
 using std::string;
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
-
-namespace {
 
 #ifndef M_PI
 #define M_PI 3.14159265358979310000
