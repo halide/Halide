@@ -104,6 +104,7 @@ int main(int argc, char **argv) {
             if (!p->verify(W, H)) {
                 abort();
             }
+            p->finalize();
         }
     }
 
