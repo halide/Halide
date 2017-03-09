@@ -61,6 +61,7 @@ struct PipelineDescriptorBase {
     virtual int run(bmark_run_mode_t mode) = 0;
     virtual bool verify(int W, int H) = 0;
     virtual bool defined() = 0;
+    virtual void finalize() = 0;
 };
 
 class Conv3x3a16Descriptor : public PipelineDescriptorBase {
@@ -107,6 +108,7 @@ public:
     }
 
     bool verify(const int W, const int H) {
+        u8_out.copy_to_host();
         u8_out.for_each_element([&](int x, int y) {
             int16_t sum = 0;
             for (int ry = -1; ry <= 1; ry++) {
@@ -137,6 +139,11 @@ public:
         }
 #endif
         return 1;
+    }
+    void finalize() {
+        u8_in.device_free();
+        i8_mask.device_free();
+        u8_out.device_free();
     }
 };
 
@@ -171,6 +178,7 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
     }
 
     bool verify(const int W, const int H) {
+        u8_out.copy_to_host();
         u8_out.for_each_element([&](int x, int y) {
             auto u8_in_bounded = [&](int x_, int y_) { return u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1)); };
 
@@ -204,6 +212,10 @@ class Dilate3x3Descriptor : public PipelineDescriptorBase {
 #endif
         return 1;
     }
+    void finalize() {
+        u8_in.device_free();
+        u8_out.device_free();
+    }
 };
 
 class Median3x3Descriptor : public PipelineDescriptorBase {
@@ -234,6 +246,7 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
     }
 
     bool verify(const int W, const int H) {
+        u8_out.copy_to_host();
         u8_out.for_each_element([&](int x, int y) {
             auto u8_in_bounded = [&](int x_, int y_) { return u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1)); };
 
@@ -264,6 +277,10 @@ class Median3x3Descriptor : public PipelineDescriptorBase {
         }
 #endif
         return 1;
+    }
+    void finalize() {
+        u8_in.device_free();
+        u8_out.device_free();
     }
 };
 
@@ -296,6 +313,7 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
 
     bool verify(const int W, const int H) {
         const int16_t coeffs[5] = { 1, 4, 6, 4, 1 };
+        u8_out.copy_to_host();
         u8_out.for_each_element([&](int x, int y) {
             int16_t blur = 0;
             for (int rx = -2; rx < 3; ++rx) {
@@ -327,6 +345,10 @@ class Gaussian5x5Descriptor : public PipelineDescriptorBase {
         }
 #endif
         return 1;
+    }
+    void finalize() {
+        u8_in.device_free();
+        u8_out.device_free();
     }
 };
 
@@ -362,6 +384,7 @@ class SobelDescriptor : public PipelineDescriptorBase {
     }
 
     bool verify(const int W, const int H) {
+        u8_out.copy_to_host();
         u8_out.for_each_element([&](int x, int y) {
             auto u16_in_bounded = [&](int x_, int y_) { return static_cast<uint16_t>(u8_in(clamp(x_, 0, W-1), clamp(y_, 0, H-1))); };
 
@@ -396,6 +419,10 @@ class SobelDescriptor : public PipelineDescriptorBase {
         }
 #endif
         return 1;
+    }
+    void finalize() {
+        u8_in.device_free();
+        u8_out.device_free();
     }
 };
 
@@ -442,6 +469,7 @@ public:
     }
 
     bool verify(const int W, const int H) {
+        u8_out.copy_to_host();
         u8_out.for_each_element([&](int x, int y) {
             int32_t sum = 0;
             for (int ry = -1; ry <= 1; ry++) {
@@ -472,6 +500,11 @@ public:
         }
 #endif
         return 1;
+    }
+    void finalize() {
+        u8_in.device_free();
+        i8_mask.device_free();
+        u8_out.device_free();
     }
 };
 
