@@ -963,7 +963,12 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 void GeneratorParamBase::check_value_readable() const {
-    user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
+    internal_assert(generator);
+    if (is_schedule_param()) {
+        user_assert(generator->phase >= GeneratorBase::ScheduleCalled)  << "The ScheduleParam " << name << " cannot be read before schedule() is called.\n";
+    } else {
+        user_assert(generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
+    }
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1739,9 +1744,6 @@ void generator_test() {
                 internal_assert(gp0 == 1);
                 internal_assert(gp1 == 2.f);
                 internal_assert(gp2 == (uint64_t) 2);  // unchanged
-                internal_assert(sp0 == 200);
-                internal_assert(sp1 == 201.f);
-                internal_assert(sp2 == (uint64_t) 102);
                 Var x;
                 output(x) = input + gp0;
             }
@@ -1803,9 +1805,6 @@ void generator_test() {
                 internal_assert(gp0 == 1);
                 internal_assert(gp1 == 2.f);
                 internal_assert(gp2 == (uint64_t) 2);  // unchanged
-                internal_assert(sp0 == 200);
-                internal_assert(sp1 == 201.f);
-                internal_assert(sp2 == (uint64_t) 102);
                 Var x;
                 output(x) = input + gp0;
             }
