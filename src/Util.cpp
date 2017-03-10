@@ -24,6 +24,7 @@
 #endif
 #ifdef _WIN32
 #include <windows.h>
+#include <Objbase.h>  // needed for CoCreateGuid
 #endif
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
