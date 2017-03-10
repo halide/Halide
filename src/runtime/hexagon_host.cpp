@@ -266,7 +266,6 @@ WEAK int map_arguments(void *user_context, int arg_count,
     for (int i = 0; i < arg_count; i++) {
         if ((arg_flags[i] & flag_mask) != flag_value) continue;
         remote_buffer &mapped_arg = mapped_args[mapped_count++];
-        debug(user_context) << i << "\n";
         if (arg_flags[i] != 0) {
             // This is a buffer, map it and put the mapped buffer into
             // the result.
@@ -281,7 +280,6 @@ WEAK int map_arguments(void *user_context, int arg_count,
             mapped_arg.data = (uint8_t*)args[i];
             mapped_arg.dataLen = arg_sizes[i];
         }
-        debug(user_context) << i << "\n";
     }
     return mapped_count;
 }
