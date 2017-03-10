@@ -1231,94 +1231,73 @@ extern double halide_float16_bits_to_double(uint16_t);
 #ifdef __cplusplus
 
 namespace {
-
-template<typename T>
-struct halide_type_of_helper;
-
-template<typename T>
-struct halide_type_of_helper<T *> {
-    operator halide_type_t() {
-        return halide_type_t(halide_type_handle, 64);
-    }
-};
-
-template<typename T>
-struct halide_type_of_helper<T &> {
-    operator halide_type_t() {
-        return halide_type_t(halide_type_handle, 64);
-    }
-};
-
-// Halide runtime does not require C++11
-#if __cplusplus > 199711L
-template<typename T>
-struct halide_type_of_helper<T &&> {
-    operator halide_type_t() {
-        return halide_type_t(halide_type_handle, 64);
-    }
-};
-#endif
-
-template<>
-struct halide_type_of_helper<float> {
-    operator halide_type_t() { return halide_type_t(halide_type_float, 32); }
-};
-
-template<>
-struct halide_type_of_helper<double> {
-    operator halide_type_t() { return halide_type_t(halide_type_float, 64); }
-};
-
-template<>
-struct halide_type_of_helper<uint8_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 8); }
-};
-
-template<>
-struct halide_type_of_helper<uint16_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 16); }
-};
-
-template<>
-struct halide_type_of_helper<uint32_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 32); }
-};
-
-template<>
-struct halide_type_of_helper<uint64_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 64); }
-};
-
-template<>
-struct halide_type_of_helper<int8_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_int, 8); }
-};
-
-template<>
-struct halide_type_of_helper<int16_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_int, 16); }
-};
-
-template<>
-struct halide_type_of_helper<int32_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_int, 32); }
-};
-
-template<>
-struct halide_type_of_helper<int64_t> {
-    operator halide_type_t() { return halide_type_t(halide_type_int, 64); }
-};
-
-template<>
-struct halide_type_of_helper<bool> {
-    operator halide_type_t() { return halide_type_t(halide_type_uint, 1); }
-};
-
+template<typename T> struct check_is_pointer;
+template<typename T> struct check_is_pointer<T *> {};
 }
 
 /** Construct the halide equivalent of a C type */
-template<typename T> halide_type_t halide_type_of() {
-    return halide_type_of_helper<T>();
+template<typename T>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of() {
+    // Create a compile-time error if T is not a pointer (without
+    // using any includes - this code goes into the runtime).
+    check_is_pointer<T> check;
+    (void)check;
+    return halide_type_t(halide_type_handle, 64);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<float>() {
+    return halide_type_t(halide_type_float, 32);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<double>() {
+    return halide_type_t(halide_type_float, 64);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<bool>() {
+    return halide_type_t(halide_type_uint, 1);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<uint8_t>() {
+    return halide_type_t(halide_type_uint, 8);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<uint16_t>() {
+    return halide_type_t(halide_type_uint, 16);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<uint32_t>() {
+    return halide_type_t(halide_type_uint, 32);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<uint64_t>() {
+    return halide_type_t(halide_type_uint, 64);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<int8_t>() {
+    return halide_type_t(halide_type_int, 8);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<int16_t>() {
+    return halide_type_t(halide_type_int, 16);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<int32_t>() {
+    return halide_type_t(halide_type_int, 32);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<int64_t>() {
+    return halide_type_t(halide_type_int, 64);
 }
 
 #endif

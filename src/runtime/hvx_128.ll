@@ -325,7 +325,7 @@ define weak_odr <128 x i8> @halide.hexagon.shr.vb.vb(<128 x i8> %a, <128 x i8> %
 declare <64 x i32> @llvm.hexagon.V6.vmpabus.128B(<64 x i32>, i32)
 declare <64 x i32> @llvm.hexagon.V6.vmpabus.acc.128B(<64 x i32>, <64 x i32>, i32)
 
-define weak_odr <128 x i16> @halide.hexagon.add_mpy_mpy.vub.vub.b.b(<128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
+define weak_odr <128 x i16> @halide.hexagon.add_2mpy.vub.vub.b.b(<128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
   %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
   %low = bitcast <128 x i8> %low_v to <32 x i32>
   %high = bitcast <128 x i8> %high_v to <32 x i32>
@@ -335,7 +335,7 @@ define weak_odr <128 x i16> @halide.hexagon.add_mpy_mpy.vub.vub.b.b(<128 x i8> %
   ret <128 x i16> %ret_val
 }
 
-define weak_odr <128 x i16> @halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b(<128 x i16> %acc, <128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
+define weak_odr <128 x i16> @halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b(<128 x i16> %acc, <128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
   %dv0 = bitcast <128 x i16> %acc to <64 x i32>
   %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
   %low = bitcast <128 x i8> %low_v to <32 x i32>
@@ -349,7 +349,7 @@ define weak_odr <128 x i16> @halide.hexagon.acc_add_mpy_mpy.vh.vub.vub.b.b(<128 
 declare <64 x i32> @llvm.hexagon.V6.vmpahb.128B(<64 x i32>, i32)
 declare <64 x i32> @llvm.hexagon.V6.vmpahb.acc.128B(<64 x i32>, <64 x i32>, i32)
 
-define weak_odr <64 x i32> @halide.hexagon.add_mpy_mpy.vh.vh.b.b(<64 x i16> %low_v, <64 x i16> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
+define weak_odr <64 x i32> @halide.hexagon.add_2mpy.vh.vh.b.b(<64 x i16> %low_v, <64 x i16> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
   %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
   %low = bitcast <64 x i16> %low_v to <32 x i32>
   %high = bitcast <64 x i16> %high_v to <32 x i32>
@@ -358,7 +358,7 @@ define weak_odr <64 x i32> @halide.hexagon.add_mpy_mpy.vh.vh.b.b(<64 x i16> %low
   ret <64 x i32> %res
 }
 
-define weak_odr <64 x i32> @halide.hexagon.acc_add_mpy_mpy.vw.vh.vh.b.b(<64 x i32> %acc, <64 x i16> %low_v, <64 x i16> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
+define weak_odr <64 x i32> @halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b(<64 x i32> %acc, <64 x i16> %low_v, <64 x i16> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
   %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
   %low = bitcast <64 x i16> %low_v to <32 x i32>
   %high = bitcast <64 x i16> %high_v to <32 x i32>

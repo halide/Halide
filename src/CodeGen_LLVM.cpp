@@ -3377,8 +3377,14 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
             vector<Value *> args;
             for (size_t i = 0; i < arg_values.size(); i++) {
                 if (arg_values[i]->getType()->isVectorTy()) {
-                    internal_assert((int)arg_values[i]->getType()->getVectorNumElements() == arg_lanes);
-                    args.push_back(slice_vector(arg_values[i], start, intrin_lanes));
+                    int arg_i_lanes = (int)arg_values[i]->getType()->getVectorNumElements();
+                    internal_assert(arg_i_lanes >= arg_lanes);
+                    // Horizontally reducing intrinsics may have
+                    // arguments that have more lanes than the
+                    // result. Assume that the horizontally reduce
+                    // neighboring elements...
+                    int reduce = arg_i_lanes / arg_lanes;
+                    args.push_back(slice_vector(arg_values[i], start * reduce, intrin_lanes * reduce));
                 } else {
                     args.push_back(arg_values[i]);
                 }
@@ -3542,11 +3548,11 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
         int l = sizes_to_try[i];
         llvm::Function *vec_fn = module->getFunction(name + "x" + std::to_string(l));
         if (vec_fn) {
-            return std::make_pair(vec_fn, l);
+            return { vec_fn, l };
         }
     }
 
-    return std::make_pair<llvm::Function *, int>(nullptr, 0);
+    return { nullptr, 0 };
 }
 
 ModulusRemainder CodeGen_LLVM::get_alignment_info(Expr e) {

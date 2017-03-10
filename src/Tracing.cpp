@@ -237,19 +237,20 @@ private:
             }
 
             builder.event = (op->is_producer ?
-                             halide_trace_end_produce :
-                             halide_trace_end_consume);
-            Expr call = builder.build();
-            Stmt new_body = Block::make(op->body, Evaluate::make(call));
-
-            stmt = ProducerConsumer::make(op->name, op->is_producer, new_body);
-
-            builder.event = (op->is_producer ?
                              halide_trace_produce :
                              halide_trace_consume);
-            call = builder.build();
+            Expr begin_op_call = builder.build();
 
-            stmt = LetStmt::make(f.name() + ".trace_id", call, stmt);
+            builder.event = (op->is_producer ?
+                             halide_trace_end_produce :
+                             halide_trace_end_consume);
+            Expr end_op_call = builder.build();
+
+
+            Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
+
+            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call, 
+                                 ProducerConsumer::make(op->name, op->is_producer, new_body));
         }
     }
 };

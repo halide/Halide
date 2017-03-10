@@ -18,7 +18,6 @@ namespace Internal {
 using std::string;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::map;
 
 namespace {
