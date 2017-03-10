@@ -525,6 +525,8 @@ WEAK int halide_hexagon_device_free(void *user_context, halide_buffer_t* buf) {
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
+    // This is to match what the default implementation of halide_device_free does.
+    buf->dev_dirty = false;
     return 0;
 }
 
