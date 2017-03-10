@@ -34,22 +34,17 @@ def halide_workspace():
 
   llvm_repository()
 
-  # TODO: this should be fixable/removable via $ANDROID_HOME as of 0.5.0+, see https://github.com/bazelbuild/bazel/issues/746
-  ANDROID_SDK_PATH = "/Users/srj/Library/Android/sdk"
-  ANDROID_NDK_PATH = "/Users/srj/Library/Android/sdk/ndk-bundle"
+  # Replace with your installed Android SDK API level
   ANDROID_API_LEVEL = 17
-  ANDROID_BUILD_TOOLS_VERSION = "25.0.0"
   
-  if ANDROID_SDK_PATH and ANDROID_NDK_PATH:
-    native.android_sdk_repository(
-      name = "androidsdk",
-      path = ANDROID_SDK_PATH,
-      api_level = ANDROID_API_LEVEL,
-      build_tools_version=ANDROID_BUILD_TOOLS_VERSION
-    )
+  # This requires that $ANDROID_HOME is set
+  native.android_sdk_repository(
+    name = "androidsdk",
+    api_level = ANDROID_API_LEVEL,
+  )
 
-    native.android_ndk_repository(
-        name = "androidndk",
-        path = ANDROID_NDK_PATH,
-        api_level = ANDROID_API_LEVEL
-    )
+  # This requires that $ANDROID_NDK_HOME is set
+  native.android_ndk_repository(
+      name = "androidndk",
+      api_level = ANDROID_API_LEVEL
+  )
