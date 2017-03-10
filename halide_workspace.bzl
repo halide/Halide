@@ -34,7 +34,7 @@ def halide_workspace():
 
   llvm_repository()
 
-  # TODO
+  # TODO: this should be fixable/removable via $ANDROID_HOME as of 0.5.0+, see https://github.com/bazelbuild/bazel/issues/746
   ANDROID_SDK_PATH = "/Users/srj/Library/Android/sdk"
   ANDROID_NDK_PATH = "/Users/srj/Library/Android/sdk/ndk-bundle"
   ANDROID_API_LEVEL = 17
