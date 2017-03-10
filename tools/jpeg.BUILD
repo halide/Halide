@@ -1,7 +1,8 @@
 # Description:
 #  Private BUILD file for libjpeg use inside Halide.
 #  Should not be used by code outside of Halide itself.
-#  Adapted directly from TensorFlow's JPEG support.
+#  Adapted directly from TensorFlow's JPEG support, with SIMD specializations
+# removed to simplify build requirements.
 
 libjpegturbo_nocopts = "-[W]error"
 
@@ -112,145 +113,7 @@ cc_library(
     copts = libjpegturbo_copts,
     nocopts = libjpegturbo_nocopts,
     visibility = ["//visibility:public"],
-    deps = select({
-        ":k8": [":simd_x86_64"],
-        ":armeabi-v7a": [":simd_armv7a"],
-        ":arm64-v8a": [":simd_armv8a"],
-        "//conditions:default": [":simd_none"],
-    }),
-)
-
-cc_library(
-    name = "simd_x86_64",
-    srcs = [
-        "jchuff.h",
-        "jconfig.h",
-        "jdct.h",
-        "jerror.h",
-        "jinclude.h",
-        "jmorecfg.h",
-        "jpegint.h",
-        "jpeglib.h",
-        "jsimd.h",
-        "jsimddct.h",
-        "simd/jccolor-sse2-64.o",
-        "simd/jcgray-sse2-64.o",
-        "simd/jchuff-sse2-64.o",
-        "simd/jcsample-sse2-64.o",
-        "simd/jdcolor-sse2-64.o",
-        "simd/jdmerge-sse2-64.o",
-        "simd/jdsample-sse2-64.o",
-        "simd/jfdctflt-sse-64.o",
-        "simd/jfdctfst-sse2-64.o",
-        "simd/jfdctint-sse2-64.o",
-        "simd/jidctflt-sse2-64.o",
-        "simd/jidctfst-sse2-64.o",
-        "simd/jidctint-sse2-64.o",
-        "simd/jidctred-sse2-64.o",
-        "simd/jquantf-sse2-64.o",
-        "simd/jquanti-sse2-64.o",
-        "simd/jsimd.h",
-        "simd/jsimd_x86_64.c",
-    ],
-    copts = libjpegturbo_copts,
-    linkstatic = 1,
-    nocopts = libjpegturbo_nocopts,
-)
-
-genrule(
-    name = "simd_x86_64_assemblage23",
-    srcs = [
-        "simd/jccolext-sse2-64.asm",
-        "simd/jccolor-sse2-64.asm",
-        "simd/jcgray-sse2-64.asm",
-        "simd/jcgryext-sse2-64.asm",
-        "simd/jchuff-sse2-64.asm",
-        "simd/jcolsamp.inc",
-        "simd/jcsample-sse2-64.asm",
-        "simd/jdcolext-sse2-64.asm",
-        "simd/jdcolor-sse2-64.asm",
-        "simd/jdct.inc",
-        "simd/jdmerge-sse2-64.asm",
-        "simd/jdmrgext-sse2-64.asm",
-        "simd/jdsample-sse2-64.asm",
-        "simd/jfdctflt-sse-64.asm",
-        "simd/jfdctfst-sse2-64.asm",
-        "simd/jfdctint-sse2-64.asm",
-        "simd/jidctflt-sse2-64.asm",
-        "simd/jidctfst-sse2-64.asm",
-        "simd/jidctint-sse2-64.asm",
-        "simd/jidctred-sse2-64.asm",
-        "simd/jpeg_nbits_table.inc",
-        "simd/jquantf-sse2-64.asm",
-        "simd/jquanti-sse2-64.asm",
-        "simd/jsimdcfg.inc",
-        "simd/jsimdext.inc",
-    ],
-    outs = [
-        "simd/jccolor-sse2-64.o",
-        "simd/jcgray-sse2-64.o",
-        "simd/jchuff-sse2-64.o",
-        "simd/jcsample-sse2-64.o",
-        "simd/jdcolor-sse2-64.o",
-        "simd/jdmerge-sse2-64.o",
-        "simd/jdsample-sse2-64.o",
-        "simd/jfdctflt-sse-64.o",
-        "simd/jfdctfst-sse2-64.o",
-        "simd/jfdctint-sse2-64.o",
-        "simd/jidctflt-sse2-64.o",
-        "simd/jidctfst-sse2-64.o",
-        "simd/jidctint-sse2-64.o",
-        "simd/jidctred-sse2-64.o",
-        "simd/jquantf-sse2-64.o",
-        "simd/jquanti-sse2-64.o",
-    ],
-    cmd = "for out in $(OUTS); do\n" +
-          "  $(location @nasm//:nasm) -f elf64" +
-          "    -DELF -DPIC -DRGBX_FILLER_0XFF -D__x86_64__ -DARCH_X86_64" +
-          "    -I $$(dirname $(location simd/jdct.inc))/" +
-          "    -I $$(dirname $(location simd/jsimdcfg.inc))/" +
-          "    -o $$out" +
-          "    $$(dirname $(location simd/jdct.inc))/$$(basename $${out%.o}.asm)\n" +
-          "done",
-    tools = ["@nasm//:nasm"],
-)
-
-cc_library(
-    name = "simd_armv7a",
-    srcs = [
-        "jchuff.h",
-        "jconfig.h",
-        "jdct.h",
-        "jinclude.h",
-        "jmorecfg.h",
-        "jpeglib.h",
-        "jsimd.h",
-        "jsimddct.h",
-        "simd/jsimd.h",
-        "simd/jsimd_arm.c",
-        "simd/jsimd_arm_neon.S",
-    ],
-    copts = libjpegturbo_copts,
-    nocopts = libjpegturbo_nocopts,
-)
-
-cc_library(
-    name = "simd_armv8a",
-    srcs = [
-        "jchuff.h",
-        "jconfig.h",
-        "jdct.h",
-        "jinclude.h",
-        "jmorecfg.h",
-        "jpeglib.h",
-        "jsimd.h",
-        "jsimddct.h",
-        "simd/jsimd.h",
-        "simd/jsimd_arm64.c",
-        "simd/jsimd_arm64_neon.S",
-    ],
-    copts = libjpegturbo_copts,
-    nocopts = libjpegturbo_nocopts,
+    deps = [":simd_none"],
 )
 
 cc_library(
