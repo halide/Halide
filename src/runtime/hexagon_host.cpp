@@ -526,7 +526,7 @@ WEAK int halide_hexagon_device_free(void *user_context, halide_buffer_t* buf) {
     #endif
 
     // This is to match what the default implementation of halide_device_free does.
-    buf->device_dirty = false;
+    buf->set_device_dirty(false);
     return 0;
 }
 
