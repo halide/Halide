@@ -558,7 +558,9 @@ void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm:
     } else {
         // We're using an offloaded hexagon kernel.
 
-        // Buffers come in to hexagon kernels as just a dev/host pair
+        // Buffers come in to hexagon kernels as just a dev/host
+        // pair. Other buffer fields (extents, strides, etc) were
+        // captured as separate arguments to the kernel.
         StructType *struct_type = StructType::get(*context, {i64_t, i8_t->getPointerTo()});
         llvm::Type *type = struct_type->getPointerTo();
         buffer = builder->CreatePointerCast(buffer, type);

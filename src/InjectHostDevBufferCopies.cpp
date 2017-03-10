@@ -581,7 +581,7 @@ class InjectBufferCopies : public IRMutator {
             // creation, use the host pointer as the allocation and
             // set the destructor to a nop.  (The Allocation
             // destructor cannot be used as it takes the host pointer
-            // as it's argument and we need the complete buffer_t.  it
+            // as it's argument and we need the complete buffer_t. It
             // would be possible to keep a map between host pointers
             // and dev ones to facilitate this, but it seems better to
             // just register a destructor with the buffer creation.)
@@ -597,6 +597,12 @@ class InjectBufferCopies : public IRMutator {
             std::vector<Expr> create_buffer_args;
             internal_assert(buffer_init_let) << "Could not find definition of " << op->name << ".buffer\n";
 
+            // The original buffer_init call uses address_of on the
+            // allocate node.  We want it to be initially null and let
+            // the device_and_host_malloc fill it in instead. The
+            // Allocate node was just rewritten to just grab this
+            // pointer out of the buffer after the combined
+            // allocation, so no memory is dropped.
             Expr buf = NullifyHostField(op->name).mutate(buffer_init_let->value);
             stmt = LetStmt::make(op->name + ".buffer", buf, inner_body);
 

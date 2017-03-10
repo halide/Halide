@@ -213,6 +213,7 @@ private:
     }
 
     void copy_shape_from(const halide_buffer_t &other) {
+        // All callers of this ensure that buf.dimensions == other.dimensions.
         make_shape_storage();
         for (int i = 0; i < buf.dimensions; i++) {
             buf.dim[i] = other.dim[i];

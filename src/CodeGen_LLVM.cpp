@@ -3400,18 +3400,16 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     }
     Value *size = ConstantInt::get(i32_t, n);
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
+    int align = native_vector_bits() / 8;
     if (t->isVectorTy() || n > 1) {
-        ptr->setAlignment(native_vector_bits() / 8);
+        ptr->setAlignment(align);
     }
 
     if (zero_initialize) {
         if (n == 1) {
             builder->CreateStore(Constant::getNullValue(t), ptr);
         } else {
-            for (int i = 0; i < n; i++) {
-                Value *field_ptr = create_gep(t, ptr, {i});
-                builder->CreateStore(Constant::getNullValue(t), field_ptr);
-            }
+            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, align);
         }
     }
     builder->restoreIP(here);
