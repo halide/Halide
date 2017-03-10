@@ -2,8 +2,8 @@ load("@halide//:halide.bzl", "halide_language_copts", "halide_language_linkopts"
 
 [cc_test(
     name = test[0:-4],
-    srcs = [test],
-    copts = halide_language_copts() + ["-UNDEBUG"],
+    srcs = [test, "testing.h"],
+    copts = halide_language_copts() + ["-UNDEBUG", "-fexceptions"],
     linkopts = halide_language_linkopts() + halide_opengl_linkopts(),
     deps = [
         "@halide//:language",
