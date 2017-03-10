@@ -24,6 +24,11 @@ void validate_schedule_inlined_function(Function f) {
                    << "is meaningless for functions computed inline.\n";
     }
 
+    user_assert(f.definition().specializations().empty())
+        << "Function " << f.name() << " is scheduled inline, so it"
+        << " must not have any specializations. Specialize on the"
+        << " scheduled function instead.\n";
+
     if (s.memoized()) {
         user_error << "Cannot memoize function "
                    << f.name() << " because the function is scheduled inline.\n";
