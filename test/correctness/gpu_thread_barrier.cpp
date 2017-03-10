@@ -27,7 +27,7 @@ public:
     CheckBarrierCount(int correct) : correct(correct) {}
     using IRMutator::mutate;
 
-    Stmt mutate(const Stmt &s) {
+    Stmt mutate(Stmt s) {
         CountBarriers c;
         s.accept(&c);
 

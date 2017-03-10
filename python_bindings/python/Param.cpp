@@ -6,10 +6,7 @@
 #include <boost/mpl/list.hpp>
 #include <boost/python.hpp>
 
-#include "../../src/IROperator.h"  // enables Param + Expr operations (which include is it ?)
-#include "../../src/ImageParam.h"
-#include "../../src/OutputImageParam.h"
-#include "../../src/Param.h"
+#include "Halide.h"
 #include "Type.h"
 
 #include <boost/format.hpp>

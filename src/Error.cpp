@@ -87,6 +87,10 @@ ErrorReport::~ErrorReport()
     noexcept(false)
 #endif
 {
+    if (!msg.str().empty() && msg.str().back() != '\n') {
+        msg << '\n';
+    }
+
     if (custom_error_reporter != nullptr) {
         if (flags & Warning) {
             custom_error_reporter->warning(msg.str().c_str());

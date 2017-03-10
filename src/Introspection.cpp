@@ -1558,7 +1558,7 @@ private:
 
                 } else if (fmt.tag == tag_function) {
                     if (fmt.has_children) {
-                        func_stack.push_back(std::make_pair(func, stack_depth));
+                        func_stack.push_back({ func, stack_depth });
                     } else {
                         functions.push_back(func);
                     }
@@ -1567,7 +1567,7 @@ private:
                            fmt.tag == tag_array_type ||
                            fmt.tag == tag_base_type) {
                     if (fmt.has_children) {
-                        type_stack.push_back(std::make_pair(type_info, stack_depth));
+                        type_stack.push_back({ type_info, stack_depth });
                     } else {
                         types.push_back(type_info);
                     }
@@ -1581,11 +1581,11 @@ private:
                     if (namespace_name.empty()) {
                         namespace_name = "{anonymous}";
                     }
-                    namespace_stack.push_back(std::make_pair(namespace_name, stack_depth));
+                    namespace_stack.push_back({ namespace_name, stack_depth });
                 } else if ((fmt.tag == tag_inlined_subroutine ||
                             fmt.tag == tag_lexical_block) &&
                            live_ranges.size() && fmt.has_children) {
-                    live_range_stack.push_back(std::make_pair(live_ranges, stack_depth));
+                    live_range_stack.push_back({ live_ranges, stack_depth });
                 }
             }
         }

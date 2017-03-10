@@ -17,7 +17,6 @@ using std::vector;
 using std::string;
 using std::map;
 using std::pair;
-using std::make_pair;
 
 using namespace llvm;
 
