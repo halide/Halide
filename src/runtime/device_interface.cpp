@@ -237,6 +237,7 @@ WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
     debug(user_context) << "halide_device_free: " << buf
                         << " buf dev " << buf->dev
                         << " interface " << halide_get_device_interface(dev_field) << "\n";
+
     if (buf != NULL) {
         const halide_device_interface_t *device_interface = halide_get_device_interface(dev_field);
         if (device_interface != NULL) {
