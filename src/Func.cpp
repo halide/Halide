@@ -1148,6 +1148,7 @@ Stage &Stage::purify(VarOrRVar old_var, VarOrRVar new_var) {
             found = true;
             old_name = dims[i].var;
             dims[i].var = new_name;
+            dims[i].dim_type = Dim::Type::PureVar;
         }
     }
 

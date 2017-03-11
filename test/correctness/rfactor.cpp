@@ -815,6 +815,44 @@ int check_allocation_bound_test() {
     return 0;
 }
 
+int rfactor_tile_reorder_test() {
+    Func ref("ref"), f("f");
+    Var x("x");
+    RDom r(0, 8, 0, 8);
+
+    // Create an input with random values
+    Buffer<uint8_t> input(8, 8, "input");
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            input(x, y) = (rand() % 256);
+        }
+    }
+
+    ref(x) = 0;
+    ref(input(r.x, r.y) % 8) += 1;
+
+    f(x) = 0;
+    f(input(r.x, r.y) % 8) += 1;
+
+    Var u("u"), v("v"), ui("ui"), vi("vi");
+    f.update()
+        .rfactor({{r.x, u}, {r.y, v}})
+        .compute_root()
+        .update().tile(u, v, ui, vi, 4, 4)
+        .parallel(u).parallel(v);
+
+    Buffer<int> im_ref = ref.realize(8);
+    Buffer<int> im = f.realize(8);
+    auto func = [&im_ref](int x, int y) {
+        return im_ref(x, y);
+    };
+    if (check_image(im, func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     printf("Running simple rfactor test\n");
     printf("    checking call graphs...\n");
@@ -940,6 +978,12 @@ int main(int argc, char **argv) {
 
     printf("Running check allocation bound test\n");
     if (check_allocation_bound_test() != 0) {
+        return -1;
+    }
+
+    printf("Running rfactor tile reorder test\n");
+    printf("    checking output img correctness...\n");
+    if (rfactor_tile_reorder_test() != 0) {
         return -1;
     }
 

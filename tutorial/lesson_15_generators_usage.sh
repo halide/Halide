@@ -10,7 +10,7 @@
 # "lesson_15_generate".
 
 # To run this script:
-# bash lesson_15_generators_build.sh
+# bash lesson_15_generators_usage.sh
 
 # First we define a helper function that checks that a file exists
 check_file_exists()
