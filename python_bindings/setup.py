@@ -8,7 +8,7 @@ For example, from repo root:
 
     make -j
     cd python_bindings
-    HALIDE_DIR=$PWD/.. pip install .
+    NPY_NUM_BUILD_JOBS=16 HALIDE_DIR=$PWD/.. pip install .
     # or to build a wheel for distribution:
     python setup.py bdist_wheel
 
@@ -25,11 +25,37 @@ import glob
 import os
 from os.path import join
 import sys
+from subprocess import Popen, PIPE
 
-from distutils.ccompiler import new_compiler
+# patch exec_command to allow parallel builds on mac
+# (numpy bug, should be fixed in numpy 1.13)
+from numpy.distutils import exec_command, ccompiler
+def patch_exec_command(command, execute_in='', use_shell=None, use_tee=None,
+                 _with_python = 1, **env ):
+    execute_in = os.path.abspath(execute_in)
+
+    if isinstance(command, list) and use_shell:
+        # need string with shell=True
+        command = ' '.join(pipes.quote(arg) for arg in command)
+    elif not isinstance(command, list) and not use_shell:
+        # need list with shell=False
+        command = shlex.split(command)
+    cmd_env = dict(os.environ)
+    cmd_env.update(env)
+    p = Popen(command, stdout=PIPE, shell=use_shell, env=cmd_env, cwd=execute_in)
+    out, _ = p.communicate()
+    if sys.version_info[0] >= 3:
+        out = out.decode(sys.getdefaultencoding(), 'replace')
+    return p.returncode, out
+
+exec_command.exec_command = ccompiler.exec_command = patch_exec_command
+
+
 from setuptools import setup
-from setuptools.extension import Extension
+from numpy.distutils.extension import Extension
 from setuptools.command.bdist_egg import bdist_egg
+
+from numpy.distutils.extension import Extension
 
 import numpy
 
@@ -51,7 +77,7 @@ for prefix in prefixes:
     include_dirs.append(join(prefix, 'include'))
     library_dirs.append(join(prefix, 'lib'))
 
-cc = new_compiler()
+cc = ccompiler.new_compiler()
 
 
 def find_static_lib(names, env_key):
