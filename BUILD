@@ -13,7 +13,7 @@ package(
 )
 
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
-load("@halide//:halide.bzl", "halide_config_settings")
+load("@halide//:halide.bzl", "halide_config_settings", "halide_language_copts")
 load("@halide//:tools/halide_internal_build_defs.bzl", "gen_runtime_targets", "runtime_srcs")
 load("@llvm//:llvm_internal_build_defs.bzl", "get_llvm_version", "get_llvm_enabled_components", "get_llvm_linkopts")
 
@@ -190,19 +190,8 @@ cc_library(
     ],
     copts = [
         "-DCOMPILING_HALIDE",
-        "-DLLVM_VERSION=" + get_llvm_version(),
-        "-fPIC",
-        "-fno-exceptions",
-        "-fno-rtti",
-        # unwind-tables is required on some hosts like powerpc64le-linux-gnu 
-        # because we may build everything with -fno-exceptions.  
-        # Without -funwind-tables, libHalide.so fails to propagate exceptions 
-        # and causes a test failure.
-        "-funwind-tables",
-        "-fvisibility-inlines-hidden",
-        "-std=c++11",
-        "-Wframe-larger-than=131070",  # This applies to the code generator, not the generated code.
-    ],
+        "-DLLVM_VERSION=" + get_llvm_version()
+    ] + halide_language_copts(),
     defines = get_llvm_enabled_components() + [
         "WITH_METAL",
         "WITH_OPENCL",
