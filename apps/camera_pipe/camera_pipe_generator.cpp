@@ -45,8 +45,8 @@ Expr CameraPipe::avg(Expr a, Expr b) {
 
 Func CameraPipe::hot_pixel_suppression(Func input) {
 
-    Expr a = max(max(input(x-2, y), input(x+2, y)),
-                 max(input(x, y-2), input(x, y+2)));
+    Expr a = max({ input(x - 2, y), input(x + 2, y),
+                   input(x, y - 2), input(x, y + 2) });
 
     Func denoised("denoised");
     denoised(x, y) = clamp(input(x, y), 0, a);
@@ -314,8 +314,19 @@ Func CameraPipe::build() {
     // Schedule
     Expr out_width = processed.output_buffer().width();
     Expr out_height = processed.output_buffer().height();
+    // In HVX 128, we need 2 threads to saturate HVX with work,
+    //and in HVX 64 we need 4 threads, and on other devices,
+    // we might need many threads.
+    Expr strip_size;
+    if (get_target().has_feature(Target::HVX_128)) {
+        strip_size = processed.output_buffer().dim(1).extent() / 2;
+    } else if (get_target().has_feature(Target::HVX_64)) {
+        strip_size = processed.output_buffer().dim(1).extent() / 4;
+    } else {
+        strip_size = 32;
+    }
+    strip_size = (strip_size / 2) * 2;
 
-    int strip_size = 32;
     int vec = get_target().natural_vector_size(UInt(16));
     if (get_target().has_feature(Target::HVX_64)) {
         vec = 32;
