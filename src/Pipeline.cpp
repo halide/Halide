@@ -567,6 +567,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     Stmt private_body;
 
     const Module &old_module = contents->module;
+    std::vector<Module> submodules;
     if (!old_module.functions().empty() &&
         old_module.target() == target) {
         internal_assert(old_module.functions().size() == 2);
@@ -581,7 +582,8 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
             custom_passes.push_back(p.pass);
         }
 
-        private_body = lower(contents->outputs, fn_name, target, custom_passes);
+        private_body = lower(contents->outputs, fn_name, target,
+                             std::inserter(submodules, submodules.end()), custom_passes);
     }
 
     std::vector<std::string> namespaces;
@@ -626,6 +628,10 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     public_body = LetStmt::make(private_result_name, call_private, public_body);
 
     module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
+
+    for (const Module &submodule : submodules) {
+        module.append(submodule);
+    }
 
     contents->module = module;
 
