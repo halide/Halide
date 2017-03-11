@@ -7,6 +7,8 @@
  * Hexagon host runtime module.
  */
 
+#include <iterator>
+
 #include "Module.h"
 
 namespace Halide {
@@ -14,7 +16,10 @@ namespace Internal {
 
 /** Pull loops marked with the Hexagon device API to a separate
  * module, and call them through the Hexagon host runtime module. */
-Stmt inject_hexagon_rpc(Stmt s, const Target &host_target);
+Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
+                        std::insert_iterator<std::vector<Module>> submodules);
+
+Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_code);
 
 }
 }

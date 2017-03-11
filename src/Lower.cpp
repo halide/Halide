@@ -69,7 +69,8 @@ using std::vector;
 using std::map;
 
 Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
-           const Target &t, const vector<IRMutator *> &custom_passes) {
+           const Target &t, std::insert_iterator<std::vector<Module>> submodules,
+           const vector<IRMutator *> &custom_passes) {
 
     // Compute an environment
     map<string, Function> env;
@@ -293,7 +294,7 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     debug(1) << "Splitting off Hexagon offload...\n";
-    s = inject_hexagon_rpc(s, t);
+    s = inject_hexagon_rpc(s, t, submodules);
     debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
 
     if (!custom_passes.empty()) {
