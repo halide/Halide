@@ -61,10 +61,8 @@ CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/include/iss/ -fPIC \
 
 CCFLAGS-v60 := $(CCFLAGS-v60) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Release_toolv80_v62 ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/common/qurt/ADSPv60MP/include
 
-CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
-	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release_aarch64/ -ladsprpc
-CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie \
-	-L${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release/ -ladsprpc
+CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie
+CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie
 
 .PHONY: all
 all: hosts remotes
@@ -99,6 +97,10 @@ bin/%/rpc_compat_shim.o: rpc_compat_shim.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c rpc_compat_shim.cpp -o $@
 
+bin/%/libadsprpc_shim.o: libadsprpc_shim.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c libadsprpc_shim.cpp -o $@
+
 bin/%/nearbyint.o: nearbyint.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c nearbyint.cpp -o $@
@@ -118,7 +120,7 @@ bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexag
 	-Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
 	-Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail
 
-bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o bin/%/rpc_compat_shim.o
+bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o bin/%/rpc_compat_shim.o bin/%/libadsprpc_shim.o
 	mkdir -p $(@D)
 	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
