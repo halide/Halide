@@ -448,6 +448,7 @@ _gengen_closure = rule(
 
 def halide_generator(name,
                      srcs,
+                     copts=[],
                      deps=[],
                      generator_name="",
                      tags=[],
@@ -465,14 +466,14 @@ def halide_generator(name,
       name="%s_library" % name,
       srcs=srcs,
       alwayslink=1,
-      copts=halide_language_copts(),
+      copts=copts + halide_language_copts(),
       deps=["@halide//:language"] + deps,
       tags=tags,
       visibility=["//visibility:private"])
 
   native.cc_binary(
       name="%s_binary" % name,
-      copts=halide_language_copts(),
+      copts=copts + halide_language_copts(),
       linkopts=halide_language_linkopts(),
       deps=[
           ":%s_library" % name,
