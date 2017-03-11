@@ -1,42 +1,79 @@
 def halide_language_copts():
-  # TODO: this is wrong for (e.g.) Windows and will need further specialization.
-  return [
-      "$(STACK_FRAME_UNLIMITED)", "-fno-exceptions", "-fno-rtti", "-fPIC",
-      "-fvisibility-inlines-hidden", "-std=c++11", "-DGOOGLE_PROTOBUF_NO_RTTI"
+  _clangy_opts = [
+      "$(STACK_FRAME_UNLIMITED)", 
+      "-DGOOGLE_PROTOBUF_NO_RTTI",
+      "-fPIC",
+      "-fno-exceptions", 
+      "-fno-rtti", 
+      "-funwind-tables",
+      "-fvisibility-inlines-hidden", 
+      "-std=c++11", 
   ]
-
+  _msvc_opts = []  # TODO
+  return select({
+      "@halide//:halide_host_config_x64_windows_msvc":
+          _msvc_opts,
+      "@halide//:halide_host_config_x64_windows_msys2":
+          _msvc_opts,
+      "@halide//:halide_host_config_x64_windows":
+          _msvc_opts,
+      "@halide//:halide_host_config_darwin":
+          _clangy_opts,
+      "@halide//:halide_host_config_darwin_x86_64":
+          _clangy_opts,
+      "//conditions:default":
+          _clangy_opts,
+  })
 
 def halide_language_linkopts():
   _linux_opts = ["-rdynamic", "-ldl", "-lpthread", "-lz"]
   _osx_opts = ["-Wl,-stack_size", "-Wl,1000000"]
+  _msvc_opts = []  # TODO
   return select({
+      "@halide//:halide_host_config_x64_windows_msvc":
+          _msvc_opts,
+      "@halide//:halide_host_config_x64_windows_msys2":
+          _msvc_opts,
+      "@halide//:halide_host_config_x64_windows":
+          _msvc_opts,
       "@halide//:halide_host_config_darwin":
           _osx_opts,
       "@halide//:halide_host_config_darwin_x86_64":
           _osx_opts,
-      # TODO: this is wrong for (e.g.) Windows and will need further specialization.
       "//conditions:default":
           _linux_opts,
   })
 
 
 def halide_runtime_linkopts():
-  # TODO: this is wrong for (e.g.) Windows and will need further specialization.
-  return [
+  _clangy_opts = [
       "-ldl",
       "-lpthread",
   ]
+  _msvc_opts = []  # TODO
+  return select({
+      "@halide//:halide_platform_config_x64_windows_msvc":
+          _msvc_opts,
+      "@halide//:halide_platform_config_darwin":
+          _clangy_opts,
+      "@halide//:halide_platform_config_darwin_x86_64":
+          _clangy_opts,
+      "//conditions:default":
+          _clangy_opts,
+  })
 
 
 def halide_opengl_linkopts():
   _linux_opts = ["-lGL", "-lX11"]
   _osx_opts = ["-framework OpenGL"]
+  _msvc_opts = []  # TODO
   return select({
+      "@halide//:halide_platform_config_x64_windows_msvc":
+          _msvc_opts,
       "@halide//:halide_platform_config_darwin":
           _osx_opts,
       "@halide//:halide_platform_config_darwin_x86_64":
           _osx_opts,
-      # TODO: this is wrong for (e.g.) Windows and will need further specialization.
       "//conditions:default":
           _linux_opts,
   })
@@ -107,6 +144,9 @@ def _halide_host_config_settings():
   _host_cpus = [
       "darwin",
       "darwin_x86_64",
+      "x64_windows_msvc",
+      "x64_windows",
+      "x64_windows_msys2",
   ]
   for host_cpu in _host_cpus:
     native.config_setting(
