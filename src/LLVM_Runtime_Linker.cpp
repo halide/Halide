@@ -317,10 +317,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
         } else if (target.os == Target::Android) {
             triple.setOS(llvm::Triple::Linux);
             triple.setEnvironment(llvm::Triple::Android);
-
-            if (target.bits == 64) {
-                std::cerr << "Warning: x86-64 android is untested\n";
-            }
         } else if (target.os == Target::IOS) {
             // X86 on iOS for the simulator
             triple.setVendor(llvm::Triple::Apple);
