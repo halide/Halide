@@ -242,6 +242,9 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
 }
 
 void Module::compile(const Outputs &output_files) const {
+    // If there are submodules, recursively lower submodules to
+    // buffers on a copy of the module being compiled, then compile
+    // the copied module.
     if (!submodules().empty()) {
         Module lowered_module(name(), target());
 
