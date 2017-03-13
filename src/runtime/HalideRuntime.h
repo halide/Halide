@@ -989,6 +989,9 @@ typedef struct buffer_t {
 
 #endif
 
+// See PR #1899
+typedef buffer_t halide_buffer_t;
+
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;
  * you must ensure you know the proper type before accessing. Most user
