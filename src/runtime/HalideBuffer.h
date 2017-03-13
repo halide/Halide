@@ -856,6 +856,11 @@ public:
         return &buf;
     }
 
+    /** Affordance for upgrading code. See PR #1899 */
+    buffer_t make_legacy_buffer_t() const {
+        return buf;
+    }
+
     /** Return a typed reference to this Buffer. Useful for converting
      * a reference to a Buffer<void> to a reference to, for example, a
      * Buffer<const uint8_t>. Does a runtime assert if the source
