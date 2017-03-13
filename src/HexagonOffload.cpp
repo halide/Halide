@@ -352,7 +352,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     so.seekg(0, std::ios::beg);
     so.read(reinterpret_cast<char*>(result_buf.data()), code_size);
 
-  return result_buf;
+    return result_buf;
 }
   
 }  // namespace Internal
