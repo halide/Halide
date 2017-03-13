@@ -717,14 +717,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
     }
 
 
-    debug(user_context) << "    allocating buffer of type " << buf->type
-                        << " of " << (uint64_t)size << " bytes\n";
-    for (int i = 0; i < buf->dimensions; i++) {
-        debug(user_context) << "      dim " << i
-                            << ": min = " << buf->dim[i].min
-                            << " extent = " << buf->dim[i].extent
-                            << " stride = " << buf->dim[i].stride << "\n";
-    }
+    debug(user_context) << "    allocating " << *buf << "\n";
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
