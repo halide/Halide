@@ -37,32 +37,33 @@ struct device_copy {
     uint64_t stride_bytes[MAX_COPY_DIMS];
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
-
-    WEAK void copy_memory_helper(int d, int64_t off) const {
-        // Skip size-1 dimensions
-        while (extent[d] == 1 && d >= 0) d--;
-
-        if (d == -1) {
-            const void *from = (void *)(src + off);
-            void *to = (void *)(dst + off);
-            memcpy(to, from, chunk_size);
-        } else {
-            for (uint64_t i = 0; i < extent[d]; i++) {
-                copy_memory_helper(d - 1, off);
-                off += stride_bytes[d];
-            }
-        }
-    }
-
-    WEAK void copy_memory(void *user_context) const {
-        // If this is a zero copy buffer, these pointers will be the same.
-        if (src != dst) {
-            copy_memory_helper(MAX_COPY_DIMS-1, 0);
-        } else {
-            debug(user_context) << "device_copy::copy_memory: no copy needed as pointers are the same.\n";
-        }
-    }
 };
+
+
+WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t off) {
+    // Skip size-1 dimensions
+    while (copy.extent[d] == 1 && d >= 0) d--;
+    
+    if (d == -1) {
+        const void *from = (void *)(copy.src + off);
+        void *to = (void *)(copy.dst + off);
+        memcpy(to, from, copy.chunk_size);
+    } else {
+        for (uint64_t i = 0; i < copy.extent[d]; i++) {
+            copy_memory_helper(copy, d - 1, off);
+            off += copy.stride_bytes[d];
+        }
+    }
+}
+
+WEAK void copy_memory(const device_copy &copy, void *user_context) {
+    // If this is a zero copy buffer, these pointers will be the same.
+    if (copy.src != copy.dst) {
+        copy_memory_helper(copy, MAX_COPY_DIMS-1, 0);
+    } else {
+        debug(user_context) << "copy_memory: no copy needed as pointers are the same.\n";
+    }
+}
 
 WEAK device_copy make_host_to_device_copy(const halide_buffer_t *buf) {
     // Make a copy job representing copying the first pixel only.
