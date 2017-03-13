@@ -117,6 +117,20 @@ public:
         return *this;
     }
 
+    Printer &operator<<(const halide_buffer_t &buf) {
+        (*this) << "buffer(" << buf.type << ", ";
+        for (int i = 0; i < buf.dimensions; i++) {
+            if (i > 0) {
+                (*this) << ", ";
+            }
+            (*this) << "{" << buf.dim[i].min << ", "
+                    << buf.dim[i].extent << ", "
+                    << buf.dim[i].stride << "}";
+        }
+        (*this) << ", " << buf.flags << ")";
+        return *this;
+    }
+
     // Use it like a stringstream.
     const char *str() {
         if (buf) {
