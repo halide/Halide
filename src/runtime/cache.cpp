@@ -538,6 +538,8 @@ WEAK void halide_memoization_cache_cleanup() {
         }
     }
     current_cache_size = 0;
+    most_recently_used = NULL;
+    least_recently_used = NULL;
     halide_mutex_destroy(&memoization_lock);
 }
 
