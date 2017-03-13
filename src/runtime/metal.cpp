@@ -561,7 +561,7 @@ WEAK int halide_metal_copy_to_device(void *user_context, halide_buffer_t* buffer
                         << " metal_buffer = " << metal_buffer
                         << " host = " << buffer->host << "\n";
 
-    c.copy_memory(user_context);
+    copy_memory(c, user_context);
 
     if (is_buffer_managed(metal_buffer)) {
         size_t total_size = buffer->size_in_bytes();
@@ -603,7 +603,7 @@ WEAK int halide_metal_copy_to_host(void *user_context, halide_buffer_t* buffer) 
     device_copy c = make_device_to_host_copy(buffer);
     c.src = (uint64_t)buffer_contents((mtl_buffer *)c.src);
 
-    c.copy_memory(user_context);
+    copy_memory(c, user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
