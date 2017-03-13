@@ -549,7 +549,7 @@ WEAK int halide_hexagon_copy_to_device(void *user_context, halide_buffer_t* buf)
 
     // Get the descriptor associated with the ion buffer.
     c.dst = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
-    c.copy_memory(user_context);
+    copy_memory(c, user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -573,7 +573,7 @@ WEAK int halide_hexagon_copy_to_host(void *user_context, struct halide_buffer_t 
 
     // Get the descriptor associated with the ion buffer.
     c.src = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
-    c.copy_memory(user_context);
+    copy_memory(c, user_context);
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
