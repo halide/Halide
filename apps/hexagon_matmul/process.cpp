@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     });
 
     // To avoid the cost of powering HVX on in each call of the
-    // pipeline, power it on once now.
+    // pipeline, power it on once now. Also, set Hexagon performance to turbo.
     halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_turbo);
     halide_hexagon_power_hvx_on(nullptr);
 
@@ -80,9 +80,9 @@ int main(int argc, char **argv) {
 
     printf("Done, time: %g s\n", time);
 
-    // We're done with HVX, power it off.
+    // We're done with HVX, power it off, and reset the performance mode
+    // to default to save power.
     halide_hexagon_power_hvx_off(nullptr);
-    // Also reset performance mode, to save power.
     halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_default);
 
     // Validate that the algorithm did what we expect.
