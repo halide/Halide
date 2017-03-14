@@ -44,6 +44,7 @@ const string buffer_t_definition =
     "    HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;\n"
     "    HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];\n"
     "} buffer_t;\n"
+    "typedef buffer_t halide_buffer_t;\n"
     "#endif\n";
 
 const string headers =
