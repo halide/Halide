@@ -70,7 +70,7 @@ inline T div_imp(T a, T b) {
         int64_t r = a - q * b;
         int64_t bs = b >> (t.bits() - 1);
         int64_t rs = r >> (t.bits() - 1);
-        return q - (rs & bs) + (rs & ~bs);
+        return (T) (q - (rs & bs) + (rs & ~bs));
     } else {
         return a / b;
     }
