@@ -2709,7 +2709,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         user_assert((op->args.size() == 3) && is_one(op->args[1]))
             << "Only prefetch of 1 cache line is supported.\n";
 
-        llvm::Function *prefetch_fn = module->getFunction("halide_prefetch");
+        llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch");
         internal_assert(prefetch_fn);
 
         vector<llvm::Value *> args;

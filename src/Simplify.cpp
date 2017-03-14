@@ -4252,17 +4252,18 @@ private:
                 }
             }
 
+            // The {extent, stride} args in the prefetch call are sorted
+            // based on the storage dimension in ascending order (i.e. innermost
+            // first and outermost last), so, it is enough to check for the upper
+            // triangular pairs to see if any contiguous addresses exist.
             for (size_t i = 1; i < args.size(); i += 2) {
                 Expr extent_0 = args[i];
                 Expr stride_0 = args[i + 1];
-                for (size_t j = 1; j < args.size(); j+= 2) {
-                    if (i == j) {
-                        continue;
-                    }
+                for (size_t j = i + 2; j < args.size(); j += 2) {
                     Expr extent_1 = args[j];
                     Expr stride_1 = args[j + 1];
 
-                    if (can_prove(extent_0 * stride_0 == stride_1) || can_prove(extent_1 * stride_1 == stride_0)) {
+                    if (can_prove(extent_0 * stride_0 == stride_1)) {
                         Expr new_extent = mutate(extent_0 * extent_1);
                         const IntImm *int_stride_0 = stride_0.as<IntImm>();
                         const IntImm *int_stride_1 = stride_1.as<IntImm>();
@@ -6298,6 +6299,14 @@ void simplify_test() {
 
     check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
           Call::make(type_of<const char *>(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
+
+    {
+        // Check that contiguous prefetch call get collapsed
+        Expr load = Load::make(Int(32), "buf", x, Buffer<>(), Parameter(), const_true());
+        Expr base = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        check(Call::make(Int(32), Call::prefetch, {base, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+              Call::make(Int(32), Call::prefetch, {base, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+    }
 
     // Check min(x, y)*max(x, y) gets simplified into x*y
     check(min(x, y)*max(x, y), x*y);

@@ -80,8 +80,8 @@ public:
                     .unroll(y);
 
                 AB.update(0)
-                    .prefetch(A, rk, 2)
                     .reorder(x, y, rk)
+                    .prefetch(A, rk, 2)
                     .vectorize(x)
                     .unroll(y)
                     .unroll(rk, k_unroll_factor);
