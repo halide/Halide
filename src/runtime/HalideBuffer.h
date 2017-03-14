@@ -29,9 +29,9 @@
 #endif
 
 #ifdef _MSC_VER
-#define HALIDE_ALLOCA _alloca;
+#define HALIDE_ALLOCA _alloca
 #else
-#define HALIDE_ALLOCA __builtin_alloca;
+#define HALIDE_ALLOCA __builtin_alloca
 #endif
 
 // gcc 5.1 has a false positive warning on this code
