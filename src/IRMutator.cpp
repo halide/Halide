@@ -284,6 +284,32 @@ void IRMutator::visit(const Realize *op) {
     }
 }
 
+void IRMutator::visit(const Prefetch *op) {
+    Region new_bounds(op->bounds.size());
+    bool bounds_changed = false;
+
+    // Mutate the bounds
+    for (size_t i = 0; i < op->bounds.size(); i++) {
+        Expr old_min = op->bounds[i].min;
+        Expr old_extent = op->bounds[i].extent;
+        Expr new_min = mutate(old_min);
+        Expr new_extent = mutate(old_extent);
+        if (!new_min.same_as(old_min)) {
+            bounds_changed = true;
+        }
+        if (!new_extent.same_as(old_extent)) {
+            bounds_changed = true;
+        }
+        new_bounds[i] = Range(new_min, new_extent);
+    }
+
+    if (!bounds_changed) {
+        stmt = op;
+    } else {
+        stmt = Prefetch::make(op->name, op->types, new_bounds, op->param);
+    }
+}
+
 void IRMutator::visit(const Block *op) {
     Stmt first = mutate(op->first);
     Stmt rest = mutate(op->rest);
