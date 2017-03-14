@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
             p->init();
             printf ("Running %s...\n", p->name());
 
-            halide_hexagon_set_performance_mode(NULL, halide_hvx_power_turbo);
+            halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_turbo);
             halide_hexagon_power_hvx_on(NULL);
 
             double time = benchmark(iterations, 10, [&]() {
@@ -100,6 +100,7 @@ int main(int argc, char **argv) {
 
             // We're done with HVX, power it off.
             halide_hexagon_power_hvx_off(NULL);
+            halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_default);
 
             if (!p->verify(W, H)) {
                 abort();

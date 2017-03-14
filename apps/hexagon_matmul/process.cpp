@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 
     // To avoid the cost of powering HVX on in each call of the
     // pipeline, power it on once now.
-    halide_hexagon_set_performance_mode(nullptr, halide_hvx_power_turbo);
+    halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_turbo);
     halide_hexagon_power_hvx_on(nullptr);
 
     printf("Running pipeline...\n");
@@ -82,6 +82,8 @@ int main(int argc, char **argv) {
 
     // We're done with HVX, power it off.
     halide_hexagon_power_hvx_off(nullptr);
+    // Also reset performance mode, to save power.
+    halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_default);
 
     // Validate that the algorithm did what we expect.
     mat_ab.for_each_element([&](int x, int y) {

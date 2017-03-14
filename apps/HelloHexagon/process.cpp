@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
 
     // To avoid the cost of powering HVX on in each call of the
     // pipeline, power it on once now. Also, set HVX performance to turbo.
-    halide_hexagon_set_performance_mode(NULL, halide_hvx_power_turbo);
+    halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_turbo);
     halide_hexagon_power_hvx_on(NULL);
 
     printf("Running pipeline...\n");
@@ -76,6 +76,7 @@ int main(int argc, char **argv) {
 
     // We're done with HVX, power it off.
     halide_hexagon_power_hvx_off(NULL);
+    halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_default);
 
     // Validate that the algorithm did what we expect.
     const uint16_t gaussian5[] = { 1, 4, 6, 4, 1 };
