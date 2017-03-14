@@ -120,14 +120,11 @@ public:
     Printer &operator<<(const halide_buffer_t &buf) {
         (*this) << "buffer(" << buf.type << ", ";
         for (int i = 0; i < buf.dimensions; i++) {
-            if (i > 0) {
-                (*this) << ", ";
-            }
             (*this) << "{" << buf.dim[i].min << ", "
                     << buf.dim[i].extent << ", "
-                    << buf.dim[i].stride << "}";
+                    << buf.dim[i].stride << "}, ";
         }
-        (*this) << ", " << buf.flags << ")";
+        (*this) << buf.flags << ")";
         return *this;
     }
 
