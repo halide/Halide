@@ -69,7 +69,7 @@ private:
         return def.schedule().prefetches();
     }
 
-    const Box &get_buffer_bounds(string name, int dims) {
+    Box get_buffer_bounds(string name, int dims) {
         if (buffer_bounds.contains(name)) {
             const Box &b = buffer_bounds.ref(name);
             internal_assert((int)b.size() == dims);
@@ -86,8 +86,7 @@ private:
             Expr buf_max_i = buf_min_i + buf_extent_i - 1;
             b.push_back(Interval(buf_min_i, buf_max_i));
         }
-        buffer_bounds.push(name, b);
-        return buffer_bounds.ref(name);
+        return b;
     }
 
     void visit(const Realize *op) {
@@ -171,21 +170,20 @@ private:
                 // should subtract the box accessed during previous iteration
                 // from the one accessed during this iteration.
 
-                // TODO(psuriana): Shift the base address of the prefetched box
-                // instead of intersecting the extents with the bounds to simplify
-                // the extent exprs. We may have a higher chance a collapsing the
-                // box this way.
+                // TODO(psuriana): Add a new PrefetchBoundStrategy::ShiftInwards
+                // that shifts the base address of the prefetched box so that
+                // the box is completely within the bounds.
                 const auto &b = boxes_rw.find(p.name);
                 if (b != boxes_rw.end()) {
                     Box prefetch_box = b->second;
                     // Only prefetch the region that is in bounds.
-                    const Box &bounds = get_buffer_bounds(b->first, b->second.size());
+                    Box bounds = get_buffer_bounds(b->first, b->second.size());
                     internal_assert(prefetch_box.size() == bounds.size());
 
                     if (p.strategy == PrefetchBoundStrategy::Clamp) {
                         prefetch_box = box_intersection(prefetch_box, bounds);
                     } else if (p.strategy == PrefetchBoundStrategy::GuardWithIf) {
-                        Expr predicate = const_true();
+                        Expr predicate = prefetch_box.used.defined() ? prefetch_box.used : const_true();
                         for (size_t i = 0; i < bounds.size(); ++i) {
                             predicate = predicate && (prefetch_box[i].min >= bounds[i].min) &&
                                         (prefetch_box[i].max <= bounds[i].max);
@@ -212,6 +210,8 @@ private:
     }
 };
 
+// Reduce the prefetch dimension if bigger than 'max_dim'. It keeps the 'max_dim'
+// innermost dimensions and replaces the rests with for-loops.
 class ReducePrefetchDimension : public IRMutator {
     using IRMutator::visit;
 
@@ -223,7 +223,6 @@ class ReducePrefetchDimension : public IRMutator {
         internal_assert(op);
         const Call *call = op->value.as<Call>();
 
-        // Reduce the prefetch dimension if bigger than 'max_dim'.
         // TODO(psuriana): Ideally, we want to keep the loop size minimal to
         // minimize the number of prefetch calls. We probably want to lift
         // the dimensions with larger strides and keep the smaller ones in
@@ -267,6 +266,9 @@ public:
     ReducePrefetchDimension(size_t dim) : max_dim(dim) {}
 };
 
+// If the prefetched data is larger than 'max_byte_size', we need to tile the
+// prefetch. This will split the prefetch call into multiple calls by adding
+// an outer for-loop around the prefetch.
 class SplitPrefetch : public IRMutator {
     using IRMutator::visit;
 
@@ -277,9 +279,6 @@ class SplitPrefetch : public IRMutator {
         op = stmt.as<Evaluate>();
         internal_assert(op);
         const Call *call = op->value.as<Call>();
-
-        // If the prefetched data is larger than 'max_byte_size', we need to
-        // tile the prefetch.
 
         if (call && call->is_intrinsic(Call::prefetch)) {
             const Call *base_addr = call->args[0].as<Call>();
@@ -324,7 +323,7 @@ public:
     SplitPrefetch(Expr bytes) : max_byte_size(bytes) {}
 };
 
-} // namespace
+} // anonymous namespace
 
 Stmt inject_prefetch(Stmt s, const map<string, Function> &env) {
     return InjectPrefetch(env).mutate(s);
@@ -334,8 +333,15 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
     size_t max_dim = 0;
     Expr max_byte_size;
 
+    // Hexagon's prefetch takes in a range of address and can be maximum of
+    // two dimension. Other architectures generate one prefetch per cache line.
     if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
         max_dim = 2;
+    } else if (t.arch == Target::ARM) {
+        // ARM's cache line size can be 32 or 64 bytes and it can switch the
+        // size at runtime. To be safe, we just use 32 bytes.
+        max_dim = 1;
+        max_byte_size = 32;
     } else {
         max_dim = 1;
         max_byte_size = 64;

@@ -1506,9 +1506,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
         llvm::Function *prefetch_fn = nullptr;
         if (op->args.size() == 3) { // 1D prefetch: {base address, extent0, stride0}
-            prefetch_fn = module->getFunction("halide_prefetch");
+            prefetch_fn = module->getFunction("_halide_prefetch");
         } else { // 2D prefetch: {base address, extent0, stride0, extent1, stride1}
-            prefetch_fn = module->getFunction("halide_prefetch_2d");
+            prefetch_fn = module->getFunction("_halide_prefetch_2d");
             args.push_back(codegen(op->args[3]));
             Expr stride_1_bytes = op->args[4] * op->type.bytes();
             args.push_back(codegen(stride_1_bytes));

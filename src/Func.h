@@ -1554,7 +1554,7 @@ public:
      * The following schedule:
      \code
      f.compute_root();
-     g.prefetch(f, x, 2);
+     g.prefetch(f, x, 2, PrefetchBoundStrategy::NonFaulting);
      \endcode
      *
      * will inject prefetch call at the innermost loop of 'g' and generate
@@ -1564,7 +1564,7 @@ public:
      *     f(x, y) = x + y
      * for y = ..
      *   for x = ...
-     *     prefetch(f, extent, stride);
+     *     prefetch(&f[x + 2], 1, 16);
      *     g(x, y) = 2 * f(x, y)
      */
     // @{
