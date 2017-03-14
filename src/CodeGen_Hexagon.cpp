@@ -40,6 +40,7 @@ using namespace llvm;
 #endif
 
 #define IPICK(is_128B, i64) (is_128B ? i64##_128B : i64)
+#define V62PICK(is_128B, is_v62, i64, v62_i64) (is_v62 ? IPICK(is_128B, v62_i64) : IPICK(is_128B, i64))
 #else
 #define IPICK(is_128B, i64) (is_128B ? Intrinsic::not_intrinsic : Intrinsic::not_intrinsic)
 #endif
@@ -230,6 +231,7 @@ void CodeGen_Hexagon::init_module() {
     CodeGen_Posix::init_module();
 
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
+    bool is_v62 = target.has_feature(Halide::Target::HVX_v62);
 
     Type i8 = Int(8);
     Type i16 = Int(16);
@@ -292,6 +294,9 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsathub),  u8v1,  "trunc_satub.vh",  {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsatwh),   i16v1, "trunc_sath.vw",   {i32v2} },
 
+        // v62 - Saturating narrowing cast
+        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_vsatwh, Intrinsic::hexagon_V6_vsatuwuh),   u16v1, "trunc_satuh.vuw",   {u32v2} },
+
         { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhub), u8v1,  "trunc_satub_rnd.vh", {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhb),  i8v1,  "trunc_satb_rnd.vh",  {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vroundwuh), u16v1, "trunc_satuh_rnd.vw", {i32v2} },
@@ -348,6 +353,10 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat_dv),  i16v2, "sath_add.vh.vh.dv",    {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat_dv),  i32v2, "satw_add.vw.vw.dv",    {i32v2, i32v2} },
 
+        // v62 - 32 bit saturating add
+        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_vaddw,    Intrinsic::hexagon_V6_vadduwsat),    u32v1, "satuw_add.vuw.vuw",    {u32v1, u32v1} },
+        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_vaddw_dv, Intrinsic::hexagon_V6_vadduwsat_dv), u32v2, "satuw_add.vuw.vuw.dv", {u32v2, u32v2} },
+        
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsububsat),    u8v1,  "satub_sub.vub.vub",    {u8v1,  u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhsat),    u16v1, "satuh_sub.vuh.vuh",    {u16v1, u16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhsat),     i16v1, "sath_sub.vh.vh",       {i16v1, i16v1} },
@@ -529,6 +538,8 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u32v1, "not.vw",     {u32v1} },
 
         // Broadcasts
+        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_lvsplatw, Intrinsic::hexagon_V6_lvsplatb), u8v1,  "splat.b", {u8} },
+        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_lvsplatw, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat.h", {u16} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32v1,  "splat.w", {u32} },
 
         // Bit counting
