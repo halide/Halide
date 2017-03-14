@@ -28,6 +28,12 @@
 #endif
 #endif
 
+#ifdef _MSC_VER
+#define HALIDE_ALLOCA _alloca;
+#else
+#define HALIDE_ALLOCA __builtin_alloca;
+#endif
+
 // gcc 5.1 has a false positive warning on this code
 #if __GNUC__ == 5 && __GNUC_MINOR__ == 1
 #pragma GCC diagnostic ignored "-Warray-bounds"
@@ -1585,7 +1591,7 @@ public:
     template<typename Fn, typename ...Args, int N = sizeof...(Args) + 1>
     void for_each_value(Fn &&f, Args... other_buffers) {
         for_each_value_task_dim<N> *t =
-            (for_each_value_task_dim<N> *)__builtin_alloca((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
+            (for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions()+1) * sizeof(for_each_value_task_dim<N>));
         for (int i = 0; i <= dimensions(); i++) {
             for (int j = 0; j < N; j++) {
                 t[i].stride[j] = 0;
@@ -1744,7 +1750,7 @@ private:
     template<typename Fn,
              typename = decltype(std::declval<Fn>()((const int *)nullptr))>
     static void for_each_element(int, int dims, const for_each_element_task_dim *t, Fn &&f, int check = 0) {
-        int *pos = (int *)__builtin_alloca(dims * sizeof(int));
+        int *pos = (int *)HALIDE_ALLOCA(dims * sizeof(int));
         for_each_element_array(dims - 1, t, std::forward<Fn>(f), pos);
     }
 
@@ -1818,7 +1824,7 @@ public:
     template<typename Fn>
     void for_each_element(Fn &&f) const {
         for_each_element_task_dim *t =
-            (for_each_element_task_dim *)__builtin_alloca(dimensions() * sizeof(for_each_element_task_dim));
+            (for_each_element_task_dim *)HALIDE_ALLOCA(dimensions() * sizeof(for_each_element_task_dim));
         for (int i = 0; i < dimensions(); i++) {
             t[i].min = dim(i).min();
             t[i].max = dim(i).max();
@@ -1858,5 +1864,7 @@ public:
 
 }  // namespace Runtime
 }  // namespace Halide
+
+#undef HALIDE_ALLOCA
 
 #endif  // HALIDE_RUNTIME_IMAGE_H
