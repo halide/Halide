@@ -605,6 +605,20 @@ void IRPrinter::visit(const Realize *op) {
     stream << "}\n";
 }
 
+void IRPrinter::visit(const Prefetch *op) {
+    do_indent();
+    stream << "prefetch " << op->name << "(";
+    for (size_t i = 0; i < op->bounds.size(); i++) {
+        stream << "[";
+        print(op->bounds[i].min);
+        stream << ", ";
+        print(op->bounds[i].extent);
+        stream << "]";
+        if (i < op->bounds.size() - 1) stream << ", ";
+    }
+    stream << ")\n";
+}
+
 void IRPrinter::visit(const Block *op) {
     print(op->first);
     if (op->rest.defined()) print(op->rest);

@@ -368,6 +368,7 @@ protected:
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Shuffle *);
+    virtual void visit(const Prefetch *);
     // @}
 
     /** Generate code for an allocate node. It has no default

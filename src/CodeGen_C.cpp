@@ -1152,6 +1152,10 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
+    } else if (op->is_intrinsic(Call::prefetch)) {
+        user_assert((op->args.size() == 3) && is_one(op->args[1]))
+            << "Only prefetch of 1 cache line is supported in C backend.\n";
+        rhs << "__builtin_prefetch(" << print_expr(op->args[0]) << ", 1)";
     } else if (op->is_intrinsic(Call::indeterminate_expression)) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
     } else if (op->call_type == Call::Intrinsic ||
@@ -1448,6 +1452,10 @@ void CodeGen_C::visit(const Realize *op) {
     internal_error << "Cannot emit realize statements to C\n";
 }
 
+void CodeGen_C::visit(const Prefetch *op) {
+    internal_error << "Cannot emit prefetch statements to C\n";
+}
+
 void CodeGen_C::visit(const IfThenElse *op) {
     string cond_id = print_expr(op->condition);
 
@@ -1591,7 +1599,7 @@ void CodeGen_C::test() {
         "#ifdef __cplusplus\n"
         "}  // extern \"C\"\n"
         "#endif\n";
-;
+
     if (src != correct_source) {
         int diff = 0;
         while (src[diff] == correct_source[diff]) diff++;
@@ -1608,7 +1616,6 @@ void CodeGen_C::test() {
 
 
     }
-
 
     std::cout << "CodeGen_C test passed\n";
 }
