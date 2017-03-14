@@ -186,7 +186,6 @@ volatile int power_ref_count = 0;
 
 int halide_hexagon_remote_power_hvx_on() {
     if (power_ref_count == 0) {
-        log_printf("Powering HVX on");
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = TRUE;
@@ -204,7 +203,6 @@ int halide_hexagon_remote_power_hvx_on() {
 int halide_hexagon_remote_power_hvx_off() {
     power_ref_count--;
     if (power_ref_count == 0) {
-        log_printf("Powering HVX off");
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = FALSE;
