@@ -61,6 +61,8 @@ define weak_odr <256 x i8> @halide.hexagon.deinterleave.vb(<256 x i8> %arg) noun
 }
 
 declare <32 x i32> @llvm.hexagon.V6.lvsplatw.128B(i32)
+declare i32 @llvm.hexagon.S2.vsplatrb(i32)
+
 
 define weak_odr i16 @halide.hexagon.dup2.b(i8 %arg) nounwind uwtable readnone alwaysinline {
   %arg_i16 = zext i8 %arg to i16
@@ -77,8 +79,8 @@ define weak_odr i32 @halide.hexagon.dup2.h(i16 %arg) nounwind uwtable readnone a
 }
 
 define weak_odr i32 @halide.hexagon.dup4.b(i8 %arg) nounwind uwtable readnone alwaysinline {
-  %dup2 = call i16 @halide.hexagon.dup2.b(i8 %arg)
-  %dup4 = call i32 @halide.hexagon.dup2.h(i16 %dup2)
+  %arg_i32 = zext i8 %arg to i32
+  %dup4 = tail call i32 @llvm.hexagon.S2.vsplatrb(i32 %arg_i32)
   ret i32 %dup4
 }
 
