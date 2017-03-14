@@ -509,7 +509,8 @@ p::object ndarray_to_buffer(bn::ndarray &array) {
     h::Type t = dtype_to_type(array.get_dtype());
     const int dims = array.get_nd();
     void *host = reinterpret_cast<void *>(array.get_data());
-    halide_dimension_t shape[dims];
+    halide_dimension_t *shape =
+        (halide_dimension_t *)__builtin_alloca(sizeof(halide_dimension_t) * dims);
     for (int i = 0; i < dims; i++) {
         shape[i].min = 0;
         shape[i].extent = array.shape(i);
