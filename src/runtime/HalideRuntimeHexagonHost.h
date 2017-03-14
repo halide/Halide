@@ -93,9 +93,13 @@ typedef struct {
     int latency;
 } halide_hvx_power_perf_t;
 
-/** Set a performance target for HVX. HVX applications can vote for
- * the performance levels they want, which may or may not be respected
- * by Hexagon. */
+/** Set a performance target for Hexagon. Hexagon applications can
+ * vote for the performance levels they want, which may or may not be
+ * respected by Hexagon. Applications should be careful not to leave
+ * Hexagon in a high power state for too long. These functions can
+ * significantly increase standby power consumption. Use
+ * halide_hexagon_power_default to reset performance to the default
+ * power state. */
 // @{
 extern int halide_hexagon_set_performance_mode(void *user_context, halide_hvx_power_mode_t mode);
 extern int halide_hexagon_set_performance(void *user_context, halide_hvx_power_perf_t *perf);
