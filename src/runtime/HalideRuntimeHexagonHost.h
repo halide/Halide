@@ -57,9 +57,16 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 
 /** Power modes for Hexagon. */
 typedef enum halide_hvx_power_mode_t {
-    halide_hvx_power_low     = 0,
-    halide_hvx_power_nominal = 1,
-    halide_hvx_power_turbo   = 2
+    halide_hexagon_power_low     = 0,
+    halide_hexagon_power_nominal = 1,
+    halide_hexagon_power_turbo   = 2,
+    halide_hexagon_power_default = 3, /// Resets power to its default state.
+
+    // These are deprecated.
+    halide_hvx_power_low     = halide_hexagon_power_low,
+    halide_hvx_power_nominal = halide_hexagon_power_nominal,
+    halide_hvx_power_turbo   = halide_hexagon_power_turbo,
+    halide_hvx_power_default = halide_hexagon_power_default,
 } halide_hvx_power_mode_t;
 
 /** More detailed power settings to control Hexagon.
