@@ -1145,9 +1145,6 @@ extern int halide_downgrade_buffer_t(void *user_context, const char *name,
 extern int halide_downgrade_buffer_t_device_fields(void *user_context, const char *name,
                                                    const halide_buffer_t *new_buf, buffer_t *old_buf);
 
-// See PR #1899
-typedef buffer_t halide_buffer_t;
-
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;
  * you must ensure you know the proper type before accessing. Most user
