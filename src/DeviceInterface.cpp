@@ -218,7 +218,7 @@ EXPORT_SYM(halide_opengl_device_interface)
 int halide_opengl_wrap_texture(void *user_context, struct halide_buffer_t *buf, uintptr_t tex) {
     Target target(get_host_target());
     target.set_feature(Target::OpenGL);
-    int (*fn)(void *user_context, struct halide_buffer_t *buf, uint ptr_ttex);
+    int (*fn)(void *, struct halide_buffer_t *, uintptr_t);
     if (lookup_runtime_routine("halide_opengl_wrap_texture", target, fn)) {
         return (*fn)(user_context, buf, tex);
     }
@@ -229,7 +229,7 @@ EXPORT_SYM(halide_opengl_wrap_texture)
 uintptr_t halide_opengl_detach_texture(void *user_context, struct halide_buffer_t *buf) {
     Target target(get_host_target());
     target.set_feature(Target::OpenGL);
-    uintptr_t (*fn)(void *user_context, struct halide_buffer_t *buf);
+    uintptr_t (*fn)(void *, struct halide_buffer_t *);
     if (lookup_runtime_routine("halide_opengl_detach_texture", target, fn)) {
         return (*fn)(user_context, buf);
     }
