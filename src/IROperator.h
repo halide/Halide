@@ -737,9 +737,8 @@ inline Expr min(std::vector<Expr> vec) {
         user_assert(e.defined()) << "min of undefined Expr\n";
     }
     return Internal::fold_right(vec,
-                                [](const Expr &lhs, const Expr &rhs) -> Expr {
-                                    user_assert(lhs.type() == rhs.type())
-                                        << "min of mismatched Expr types\n";
+                                [](Expr lhs, Expr rhs) -> Expr {
+                                    Internal::match_types(lhs, rhs);
                                     return Internal::Min::make(lhs, rhs);
                                 });
 }

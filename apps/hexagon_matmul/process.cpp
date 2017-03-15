@@ -85,6 +85,10 @@ int main(int argc, char **argv) {
 
     // Validate that the algorithm did what we expect.
     mat_ab.for_each_element([&](int x, int y) {
+        // This reference implementation is very slow, so only check a subset of the result.
+        if ((y * N + x) % 100 != 0) {
+            return;
+        }
         uint32_t ab_xy = 0;
         for (int k = 0; k < K; k++) {
             ab_xy += static_cast<uint32_t>(mat_a(k, y))*static_cast<uint32_t>(mat_b(x, k));
