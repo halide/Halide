@@ -688,8 +688,8 @@ inline Expr max(const Expr &a, float b) {return max(a, Expr(b));}
  * The expressions are folded from right ie. max(.., max(.., ..)). 
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest>
-inline Expr max(const A &a, const B &b, const C &c, const Rest &... rest) {
-    return max(a, max(b, c, rest...));
+inline Expr max(const A &a, const B &b, const C &c, Rest&&... rest) {
+    return max(a, max(b, c, std::forward<Rest>(rest)...));
 }
 
 inline Expr min(Expr a, Expr b) {
@@ -731,8 +731,8 @@ inline Expr min(const Expr &a, float b) {return min(a, Expr(b));}
  * The expressions are folded from right ie. min(.., min(.., ..)).
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest>
-inline Expr min(const A &a, const B &b, const C &c, const Rest &... rest) {
-    return min(a, min(b, c, rest...));
+inline Expr min(const A &a, const B &b, const C &c, Rest&&... rest) {
+    return min(a, min(b, c, std::forward<Rest>(rest)...));
 }
 
 /** Operators on floats treats those floats as Exprs. Making these
