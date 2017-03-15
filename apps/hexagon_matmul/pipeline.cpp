@@ -69,7 +69,8 @@ public:
                 Func(output).compute_root()
                     .hexagon()
                     .tile(x, y, xo, yo, x, y, vector_size_u8, tile_rows, TailStrategy::RoundUp)
-                    .reorder(yo, xo)
+                    .reorder(x, y, yo, xo)
+                    .prefetch(A, yo, 1)
                     .vectorize(x)
                     .unroll(y)
                     .parallel(xo);
@@ -79,14 +80,11 @@ public:
                     .vectorize(x)
                     .unroll(y);
 
-                RVar rko("rko"), rki("rki");
                 AB.update(0)
                     .reorder(x, y, rk)
-                    .split(rk, rko, rki, 16, TailStrategy::GuardWithIf)
-                    .prefetch(A, rko, 1)
                     .vectorize(x)
                     .unroll(y)
-                    .unroll(rki, k_unroll_factor);
+                    .unroll(rk, k_unroll_factor);
 
                 // Lift the swizzling out of the inner loop.
                 B_swizzled.compute_at(output, xo)
