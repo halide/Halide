@@ -298,9 +298,21 @@ class SplitPrefetch : public IRMutator {
 
                 string index_name = "prefetch_split_" + base->name + "." + std::to_string((i-1)/2);
                 index_names.push_back(index_name);
-                offset += Variable::make(Int(32), index_name) * stride_bytes;
 
-                Expr outer_extent = simplify((extent * stride_bytes + max_byte_size - 1)/max_byte_size);
+                Expr is_negative_stride = (stride < 0);
+                Expr outer_var = Variable::make(Int(32), index_name);
+                Expr outer_extent;
+                if (can_prove(max_byte_size < stride_bytes) || can_prove(max_byte_size < -stride_bytes)) {
+                    // If 'max_byte_size' is smaller than the absolute value of the
+                    // stride bytes, we can only prefetch one element per iteration.
+                    outer_extent = extent;
+                    offset += outer_var * stride_bytes;
+                } else {
+                    // Otherwise, we just prefetch 'max_byte_size' per iteration.
+                    Expr abs_stride_bytes = Call::make(stride_bytes.type(), Call::abs, {stride_bytes}, Call::PureIntrinsic);
+                    outer_extent = simplify((extent * abs_stride_bytes + max_byte_size - 1)/max_byte_size);
+                    offset += outer_var * simplify(select(is_negative_stride, -max_byte_size, max_byte_size));
+                }
                 extents.push_back(outer_extent);
             }
 
