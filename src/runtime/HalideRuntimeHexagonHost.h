@@ -56,11 +56,18 @@ extern void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void 
 // @}
 
 /** Power modes for Hexagon. */
-typedef enum halide_hvx_power_mode_t {
-    halide_hvx_power_low     = 0,
-    halide_hvx_power_nominal = 1,
-    halide_hvx_power_turbo   = 2
-} halide_hvx_power_mode_t;
+typedef enum halide_hexagon_power_mode_t {
+    halide_hexagon_power_low     = 0,
+    halide_hexagon_power_nominal = 1,
+    halide_hexagon_power_turbo   = 2,
+    halide_hexagon_power_default = 3, /// Resets power to its default state.
+
+    // These are deprecated.
+    halide_hvx_power_low     = halide_hexagon_power_low,
+    halide_hvx_power_nominal = halide_hexagon_power_nominal,
+    halide_hvx_power_turbo   = halide_hexagon_power_turbo,
+    halide_hvx_power_default = halide_hexagon_power_default,
+} halide_hexagon_power_mode_t;
 
 /** More detailed power settings to control Hexagon.
  * @param set_mips - Set to TRUE to requst MIPS
@@ -84,14 +91,21 @@ typedef struct {
     unsigned short busbwUsagePercentage;
     bool set_latency;
     int latency;
-} halide_hvx_power_perf_t;
+} halide_hexagon_power_t;
 
-/** Set a performance target for HVX. HVX applications can vote for
- * the performance levels they want, which may or may not be respected
- * by Hexagon. */
+// This is deprecated.
+typedef halide_hexagon_power_t halide_hvx_power_perf_t;
+
+/** Set a performance target for Hexagon. Hexagon applications can
+ * vote for the performance levels they want, which may or may not be
+ * respected by Hexagon. Applications should be careful not to leave
+ * Hexagon in a high power state for too long. These functions can
+ * significantly increase standby power consumption. Use
+ * halide_hexagon_power_default to reset performance to the default
+ * power state. */
 // @{
-extern int halide_hexagon_set_performance_mode(void *user_context, halide_hvx_power_mode_t mode);
-extern int halide_hexagon_set_performance(void *user_context, halide_hvx_power_perf_t *perf);
+extern int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_power_mode_t mode);
+extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf);
 // @}
 
 /** These are forward declared here to allow clients to override the
