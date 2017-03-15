@@ -71,11 +71,12 @@ enum class PrefetchBoundStrategy {
      * more complicated. */
     Clamp,
 
-    /** Guard the prefetch with an if statement that prevents prefetching region
-     * beyond the original extents. */
+    /** Guard the prefetch with if-guards that ignores the prefetch if
+     * any of the prefetched region ever goes beyond the original extents
+     * (i.e. all or nothing). */
     GuardWithIf,
 
-    /** Leave the prefetched exprs as are (no if guards around the prefetch
+    /** Leave the prefetched exprs as are (no if-guards around the prefetch
      * and no intersecting with the original extents). This makes the prefetch
      * exprs simpler but this may cause prefetching of region outside the original
      * extents. This is good if prefetch won't fault when accessing region
