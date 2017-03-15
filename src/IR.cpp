@@ -823,6 +823,7 @@ Call::ConstString Call::buffer_get_dev_dirty = "_halide_buffer_get_dev_dirty";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
 Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
 Call::ConstString Call::buffer_init = "_halide_buffer_init";
+Call::ConstString Call::buffer_crop = "_halide_buffer_crop";
 Call::ConstString Call::trace = "halide_trace_helper";
 
 }

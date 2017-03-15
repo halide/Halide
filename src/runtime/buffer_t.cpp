@@ -73,4 +73,16 @@ buffer_t *_halide_buffer_init(buffer_t *dst, uint8_t *host, uint64_t dev, int /*
     return dst;
 }
 
+__attribute__((always_inline, weak))
+buffer_t *_halide_buffer_crop(buffer_t *dst, buffer_t *src, int dimensions,
+                              const int *min, const int *extent) {
+    *dst = *src;
+    for (int i = 0; i < dimensions; i++) {
+        dst->min[i] = min[i];
+        dst->extent[i] = extent[i];
+        dst->host += (min[i] - src->min[i]) * src->stride[i] * src->elem_size;
+    }
+    return dst;
+}
+
 }
