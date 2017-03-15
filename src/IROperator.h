@@ -862,7 +862,7 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
  * to the first value for which the condition is true. Returns the
  * final value if all conditions are false. */
 template<typename... Args>
-inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args&&... args) {
+inline Expr select(const Expr &c0, const Expr &v0, const Expr &c1, const Expr &v1, Args&&... args) {
     return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
 }
 
