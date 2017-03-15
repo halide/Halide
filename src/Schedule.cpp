@@ -75,7 +75,7 @@ struct ScheduleContents {
     std::vector<Dim> dims;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
-    std::vector<Prefetch> prefetches;
+    std::vector<PrefetchDirective> prefetches;
     std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
     bool memoized;
     bool touched;
@@ -112,7 +112,7 @@ struct ScheduleContents {
                 b.remainder = mutator->mutate(b.remainder);
             }
         }
-        for (Prefetch &p : prefetches) {
+        for (PrefetchDirective &p : prefetches) {
             if (p.offset.defined()) {
                 p.offset = mutator->mutate(p.offset);
             }
@@ -214,11 +214,11 @@ const std::vector<Bound> &Schedule::bounds() const {
     return contents->bounds;
 }
 
-std::vector<Prefetch> &Schedule::prefetches() {
+std::vector<PrefetchDirective> &Schedule::prefetches() {
     return contents->prefetches;
 }
 
-const std::vector<Prefetch> &Schedule::prefetches() const {
+const std::vector<PrefetchDirective> &Schedule::prefetches() const {
     return contents->prefetches;
 }
 
@@ -303,7 +303,7 @@ void Schedule::accept(IRVisitor *visitor) const {
             b.remainder.accept(visitor);
         }
     }
-    for (const Prefetch &p : prefetches()) {
+    for (const PrefetchDirective &p : prefetches()) {
         if (p.offset.defined()) {
             p.offset.accept(visitor);
         }

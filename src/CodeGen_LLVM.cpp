@@ -2705,10 +2705,23 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
         value = call;
-    } else if (op->is_intrinsic(Call::prefetch) ||
-               op->is_intrinsic(Call::prefetch_2d)) {
-        // Convert to a no-op since prefetch was not supported by target
-        value = ConstantInt::get(i32_t, 0);
+    } else if (op->is_intrinsic(Call::prefetch)) {
+        user_assert((op->args.size() == 3) && is_one(op->args[1]))
+            << "Only prefetch of 1 cache line is supported.\n";
+
+        llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch");
+        internal_assert(prefetch_fn);
+
+        vector<llvm::Value *> args;
+        args.push_back(codegen(op->args[0]));
+        // The first argument is a pointer, which has type i8*. We
+        // need to cast the argument, which might be a pointer to a
+        // different type.
+        llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
+        args[0] = builder->CreateBitCast(args[0], ptr_type);
+
+        value = builder->CreateCall(prefetch_fn, args);
+
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
@@ -2879,6 +2892,10 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
         }
     }
+}
+
+void CodeGen_LLVM::visit(const Prefetch *op) {
+    internal_error << "Prefetch encountered during codegen\n";
 }
 
 void CodeGen_LLVM::visit(const Let *op) {
