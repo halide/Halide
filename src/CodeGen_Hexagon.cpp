@@ -1539,13 +1539,26 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
-    if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {
-        llvm::Function *prefetch_fn = module->getFunction("halide_" + op->name);
-        internal_assert(prefetch_fn);
+    if (op->is_intrinsic(Call::prefetch)) {
+        internal_assert((op->args.size() == 3) || (op->args.size() == 5))
+            << "Hexagon only supports 1D or 2D prefetch\n";
+
         vector<llvm::Value *> args;
-        for (Expr i : op->args) {
-            args.push_back(codegen(i));
+        args.push_back(codegen(op->args[0]));
+        Expr extent_0_bytes = op->args[1] * op->args[2] * op->type.bytes();
+        args.push_back(codegen(extent_0_bytes));
+
+        llvm::Function *prefetch_fn = nullptr;
+        if (op->args.size() == 3) { // 1D prefetch: {base address, extent0, stride0}
+            prefetch_fn = module->getFunction("_halide_prefetch");
+        } else { // 2D prefetch: {base address, extent0, stride0, extent1, stride1}
+            prefetch_fn = module->getFunction("_halide_prefetch_2d");
+            args.push_back(codegen(op->args[3]));
+            Expr stride_1_bytes = op->args[4] * op->type.bytes();
+            args.push_back(codegen(stride_1_bytes));
         }
+        internal_assert(prefetch_fn);
+
         // The first argument is a pointer, which has type i8*. We
         // need to cast the argument, which might be a pointer to a
         // different type.

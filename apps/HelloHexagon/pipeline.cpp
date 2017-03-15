@@ -60,7 +60,7 @@ public:
                 Var yo("yo");
                 Func(blur).compute_root()
                     .hexagon()
-                    .prefetch(y, 2)
+                    .prefetch(input, y, 2)
                     .split(y, yo, y, 128).parallel(yo)
                     .vectorize(x, vector_size * 2, TailStrategy::RoundUp);
                 blur_y
