@@ -1564,7 +1564,7 @@ public:
      *     f(x, y) = x + y
      * for y = ..
      *   for x = ...
-     *     prefetch(&f[x + 2], 1, 16);
+     *     prefetch(&f[x + 2, y], 1, 16);
      *     g(x, y) = 2 * f(x, y)
      */
     // @{
