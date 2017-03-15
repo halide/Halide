@@ -573,6 +573,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_tempfile \
   posix_threads \
   powerpc_cpu_features \
+  prefetch \
   profiler \
   profiler_inlined \
   qurt_allocator \

@@ -120,6 +120,7 @@ protected:
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
     void visit(const Shuffle *);
+    void visit(const Prefetch *);
 };
 }
 }

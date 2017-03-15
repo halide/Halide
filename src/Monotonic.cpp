@@ -378,6 +378,10 @@ class MonotonicVisitor : public IRVisitor {
         internal_error << "Monotonic of statement\n";
     }
 
+    void visit(const Prefetch *op) {
+        internal_error << "Monotonic of statement\n";
+    }
+
 public:
     Monotonic result;
 

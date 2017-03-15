@@ -205,8 +205,8 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, const std::string &name, 
-                            const Expr &index, Buffer<> image, 
+    EXPORT static Expr make(Type type, const std::string &name,
+                            const Expr &index, Buffer<> image,
                             Parameter param, const Expr &predicate);
 
     static const IRNodeType _type_info = IRNodeType::Load;
@@ -497,7 +497,6 @@ struct Call : public ExprNode<Call> {
         mod_round_to_zero,
         call_cached_indirect_function,
         prefetch,
-        prefetch_2d,
         signed_integer_overflow,
         indeterminate_expression,
         bool_to_mask,
@@ -696,6 +695,22 @@ struct Shuffle : public ExprNode<Shuffle> {
     EXPORT bool is_extract_element() const;
 
     static const IRNodeType _type_info = IRNodeType::Shuffle;
+};
+
+/** Represent a multi-dimensional region of a Func or an ImageParam that
+ * needs to be prefetched. */
+struct Prefetch : public StmtNode<Prefetch> {
+    std::string name;
+    std::vector<Type> types;
+    Region bounds;
+
+    /** If it's a prefetch load from an image parameter, this points to that. */
+    Parameter param;
+
+    EXPORT static Stmt make(const std::string &name, const std::vector<Type> &types,
+                            const Region &bounds, Parameter param = Parameter());
+
+    static const IRNodeType _type_info = IRNodeType::Prefetch;
 };
 
 }

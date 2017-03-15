@@ -91,7 +91,7 @@ private:
         Stmt body = mutate(op->body);
 
         // Compute the size
-        std::vector<Expr> extents;
+        vector<Expr> extents;
         for (size_t i = 0; i < op->bounds.size(); i++) {
             extents.push_back(op->bounds[i].extent);
             extents[i] = mutate(extents[i]);
@@ -103,8 +103,8 @@ private:
         vector<int> storage_permutation;
         {
             auto iter = env.find(op->name);
-            Function f = iter->second.first;
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+            Function f = iter->second.first;
             const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
             const vector<string> &args = f.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
@@ -200,6 +200,60 @@ private:
         } else {
             IRMutator::visit(op);
         }
+    }
+
+    void visit(const Prefetch *op) {
+        internal_assert(op->types.size() == 1)
+            << "Prefetch from multi-dimensional halide tuple should have been split\n";
+
+        vector<Expr> prefetch_min(op->bounds.size());
+        vector<Expr> prefetch_extent(op->bounds.size());
+        vector<Expr> prefetch_stride(op->bounds.size());
+        for (size_t i = 0; i < op->bounds.size(); i++) {
+            prefetch_min[i] = mutate(op->bounds[i].min);
+            prefetch_extent[i] = mutate(op->bounds[i].extent);
+            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i));
+        }
+
+        Expr base_index = mutate(flatten_args(op->name, prefetch_min));
+        Expr base_load = Load::make(op->types[0], op->name, base_index, Buffer<>(),
+                                    op->param, const_true(op->types[0].lanes()));
+        Expr base_address = Call::make(Handle(), Call::address_of, {base_load}, Call::Intrinsic);
+        vector<Expr> args = {base_address};
+
+        auto iter = env.find(op->name);
+        if (iter != env.end()) {
+            // Order the <min, extent> args based on the storage dims (i.e. innermost
+            // dimension should be first in args)
+            vector<int> storage_permutation;
+            {
+                Function f = iter->second.first;
+                const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
+                const vector<string> &args = f.args();
+                for (size_t i = 0; i < storage_dims.size(); i++) {
+                    for (size_t j = 0; j < args.size(); j++) {
+                        if (args[j] == storage_dims[i].var) {
+                            storage_permutation.push_back((int)j);
+                        }
+                    }
+                    internal_assert(storage_permutation.size() == i+1);
+                }
+            }
+            internal_assert(storage_permutation.size() == op->bounds.size());
+
+            for (size_t i = 0; i < op->bounds.size(); i++) {
+                internal_assert(storage_permutation[i] < (int)op->bounds.size());
+                args.push_back(prefetch_extent[storage_permutation[i]]);
+                args.push_back(prefetch_stride[storage_permutation[i]]);
+            }
+        } else {
+            for (size_t i = 0; i < op->bounds.size(); i++) {
+                args.push_back(prefetch_extent[i]);
+                args.push_back(prefetch_stride[i]);
+            }
+        }
+
+        stmt = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
     }
 
     void visit(const LetStmt *let) {

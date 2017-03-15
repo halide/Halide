@@ -334,7 +334,7 @@ Func CameraPipe::build() {
         vec = 64;
     }
     denoised.compute_at(processed, yi).store_at(processed, yo)
-        .prefetch(y, 2)
+        .prefetch(input, y, 2)
         .fold_storage(y, 8)
         .tile(x, y, x, y, xi, yi, 2*vec, 2)
         .vectorize(xi)

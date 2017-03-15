@@ -30,6 +30,7 @@
 #include "Solve.h"
 #include "Associativity.h"
 #include "ApplySplit.h"
+#include "ImageParam.h"
 
 namespace Halide {
 
@@ -1710,10 +1711,15 @@ Stage &Stage::hexagon(VarOrRVar x) {
     return *this;
 }
 
-Stage &Stage::prefetch(VarOrRVar var, Expr offset) {
-    Prefetch prefetch = {var.name(), offset};
+Stage &Stage::prefetch(const Func &f, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
+    PrefetchDirective prefetch = {f.name(), var.name(), offset, strategy, Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
+    return *this;
+}
 
+Stage &Stage::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
+    PrefetchDirective prefetch = {param.name(), var.name(), offset, strategy, param};
+    definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
@@ -2183,9 +2189,15 @@ Func &Func::hexagon(VarOrRVar x) {
     return *this;
 }
 
-Func &Func::prefetch(VarOrRVar var, Expr offset) {
+Func &Func::prefetch(const Func &f, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(var, offset);
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(f, var, offset);
+    return *this;
+}
+
+Func &Func::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
+    invalidate_cache();
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(param, var, offset);
     return *this;
 }
 
