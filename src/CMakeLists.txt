@@ -77,6 +77,7 @@ set(RUNTIME_CPP
   posix_tempfile
   posix_threads
   powerpc_cpu_features
+  prefetch
   profiler
   profiler_inlined
   qurt_allocator

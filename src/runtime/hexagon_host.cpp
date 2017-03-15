@@ -724,7 +724,7 @@ WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * 
     halide_hexagon_power_hvx_off(user_context);
 }
 
-WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hvx_power_mode_t mode) {
+WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_power_mode_t mode) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
 
@@ -745,7 +745,7 @@ WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hvx_powe
     return 0;
 }
 
-WEAK int halide_hexagon_set_performance(void *user_context, halide_hvx_power_perf_t *perf) {
+WEAK int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
 
