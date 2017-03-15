@@ -6,6 +6,7 @@
  */
 
 #include "Expr.h"
+#include "Parameter.h"
 
 #include <map>
 
