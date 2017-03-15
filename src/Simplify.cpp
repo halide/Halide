@@ -4265,12 +4265,7 @@ private:
 
                     if (can_prove(extent_0 * stride_0 == stride_1)) {
                         Expr new_extent = mutate(extent_0 * extent_1);
-                        const IntImm *int_stride_0 = stride_0.as<IntImm>();
-                        const IntImm *int_stride_1 = stride_1.as<IntImm>();
-                        Expr new_stride = 1;
-                        if (int_stride_0 && int_stride_1) {
-                            new_stride = gcd(int_stride_0->value, int_stride_1->value);
-                        }
+                        Expr new_stride = stride_0;
                         args.erase(args.begin() + j, args.begin() + j + 2);
                         args[i] = new_extent;
                         args[i + 1] = new_stride;
