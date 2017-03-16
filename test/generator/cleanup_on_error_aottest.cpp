@@ -43,14 +43,14 @@ void my_halide_error(void *user_context, const char *msg) {
 #ifndef _WIN32
 // These two can't be overridden on windows, so we'll just check that
 // the number of calls to free matches the number of calls to malloc.
-extern "C" int halide_device_free(void *user_context, struct buffer_t *buf) {
+extern "C" int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
     device_frees++;
-    const halide_device_interface_t *interface = halide_get_device_interface(buf->dev);
-    return interface->device_free(user_context, buf);
+    return buf->device_interface->device_free(user_context, buf);
 }
 
-extern "C" int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface_t *interface) {
-    if (!buf->dev) {
+extern "C" int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
+                                    const halide_device_interface_t *interface) {
+    if (!buf->device) {
         device_mallocs++;
     }
     return interface->device_malloc(user_context, buf);

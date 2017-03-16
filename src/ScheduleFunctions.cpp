@@ -321,7 +321,7 @@ Stmt build_produce(Function f, const Target &target) {
                         buf_name += "." + std::to_string(k);
                     }
                     buf_name += ".buffer";
-                    Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
+                    Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
                     buffers_to_annotate.push_back(buffer);
                     buffers_contents_to_annotate.push_back(buffer);
@@ -330,15 +330,13 @@ Stmt build_produce(Function f, const Target &target) {
                 Buffer<> b = arg.buffer;
                 Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
-                string buf_name = b.name() + ".buffer";
-                Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name, p);
+                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
                 buffers_to_annotate.push_back(buf);
                 buffers_contents_to_annotate.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
-                string buf_name = p.name() + ".buffer";
-                Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name, p);
+                Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
                 // Do not annotate ImageParams: both the buffer_t itself,
                 // and the contents it points to, should be filled by the caller;
@@ -350,11 +348,11 @@ Stmt build_produce(Function f, const Target &target) {
             }
         }
 
-        // Grab the buffer_ts representing the output. If the store
-        // level matches the compute level, then we can use the ones
-        // already injected by allocation bounds inference. If it's
-        // the output to the pipeline then it will similarly be in the
-        // symbol table.
+        // Grab the halide_buffer_t's representing the output. If the
+        // store level matches the compute level, then we can use the
+        // ones already injected by allocation bounds inference. If
+        // it's the output to the pipeline then it will similarly be
+        // in the symbol table.
         if (f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
@@ -362,7 +360,7 @@ Stmt build_produce(Function f, const Target &target) {
                     buf_name += "." + std::to_string(j);
                 }
                 buf_name += ".buffer";
-                Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name);
+                Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                 extern_call_args.push_back(buffer);
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
@@ -404,7 +402,7 @@ Stmt build_produce(Function f, const Target &target) {
                 Expr output_buffer_t = builder.build();
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
-                extern_call_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
+                extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
                 buffers_to_annotate.push_back(extern_call_args.back());
@@ -418,7 +416,7 @@ Stmt build_produce(Function f, const Target &target) {
             for (const auto &buffer: buffers_to_annotate) {
                 // Return type is really 'void', but no way to represent that in our IR.
                 // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
+                Expr sizeof_buffer_t((uint64_t) sizeof(halide_buffer_t));
                 Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
                 if (annotate.defined()) {
                     annotate = Block::make(annotate, mark_buffer);

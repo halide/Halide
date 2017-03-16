@@ -27,13 +27,16 @@ WEAK int halide_error_explicit_bounds_too_small(void *user_context, const char *
     return halide_error_code_explicit_bounds_too_small;
 }
 
-WEAK int halide_error_bad_elem_size(void *user_context, const char *func_name,
-                                    const char *type_name, int elem_size_given, int correct_elem_size) {
+WEAK int halide_error_bad_type(void *user_context, const char *func_name,
+                               uint8_t code_given, uint8_t correct_code,
+                               uint8_t bits_given, uint8_t correct_bits,
+                               uint16_t lanes_given, uint16_t correct_lanes) {
+    halide_type_t correct_type(halide_type_code_t(correct_code), correct_bits, correct_lanes);
+    halide_type_t type_given(halide_type_code_t(code_given), bits_given, lanes_given);
     error(user_context)
-        << func_name << " has type " << type_name
-        << " but elem_size of the buffer passed in is "
-        << elem_size_given << " instead of " << correct_elem_size;
-    return halide_error_code_bad_elem_size;
+        << func_name << " has type " << correct_type
+        << " but type of the buffer passed in is " << type_given;
+    return halide_error_code_bad_type;
 }
 
 WEAK int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
@@ -172,6 +175,22 @@ WEAK int halide_error_debug_to_file_failed(void *user_context, const char *func,
         << " to file " << filename
         << " with error " << error_code;
     return halide_error_code_debug_to_file_failed;
+}
+
+WEAK int halide_error_failed_to_upgrade_buffer_t(void *user_context,
+                                                 const char *name,
+                                                 const char *reason) {
+    error(user_context)
+        << "Failed to upgrade buffer_t to halide_buffer_t for " << name << ": " << reason;
+    return halide_error_code_failed_to_upgrade_buffer_t;
+}
+
+WEAK int halide_error_failed_to_downgrade_buffer_t(void *user_context,
+                                                 const char *name,
+                                                 const char *reason) {
+    error(user_context)
+        << "Failed to downgrade halide_buffer_t to buffer_t for " << name << ": " << reason;
+    return halide_error_code_failed_to_downgrade_buffer_t;
 }
 
 WEAK int halide_error_unaligned_host_ptr(void *user_context, const char *func,
