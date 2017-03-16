@@ -24,10 +24,16 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "float";
         break;
     case Type::Handle:
-        out << "handle";
+        if (type.handle_type) {
+            out << "(" << type.handle_type->inner_name.name << " *)";
+        } else {
+            out << "(void *)";
+        }
         break;
     }
-    out << type.bits();
+    if (!type.is_handle()) {
+        out << type.bits();
+    }
     if (type.lanes() > 1) out << 'x' << type.lanes();
     return out;
 }
@@ -162,6 +168,21 @@ ostream &operator<<(ostream &out, const ForType &type) {
     return out;
 }
 
+ostream &operator<<(ostream &out, const NameMangling &m) {
+    switch(m) {
+    case NameMangling::Default:
+        out << "default";
+        break;
+    case NameMangling::C:
+        out << "c";
+        break;
+    case NameMangling::CPlusPlus:
+        out << "c++";
+        break;
+    }
+    return out;
+}
+
 ostream &operator<<(ostream &stream, const Stmt &ir) {
     if (!ir.defined()) {
         stream << "(undefined)\n";
@@ -190,6 +211,9 @@ ostream &operator <<(ostream &stream, const LoweredFunc &function) {
 
 std::ostream &operator<<(std::ostream &out, const LoweredFunc::LinkageType &type) {
     switch (type) {
+    case LoweredFunc::ExternalPlusMetadata:
+        out << "external_plus_metadata";
+        break;
     case LoweredFunc::External:
         out << "external";
         break;
@@ -460,6 +484,12 @@ void IRPrinter::visit(const Broadcast *op) {
 void IRPrinter::visit(const Call *op) {
     // TODO: Print indication of C vs C++?
     stream << op->name << "(";
+    if (op->is_intrinsic(Call::reinterpret) ||
+        op->is_intrinsic(Call::make_struct)) {
+        // For calls that define a type that isn't just a function of
+        // the types of the args, we also print the type.
+        stream << op->type << ", ";
+    }
     print_list(op->args);
     stream << ")";
 }

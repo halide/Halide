@@ -131,7 +131,7 @@ string CodeGen_OpenGL_Dev::print_gpu_name(const string &name) {
 //
 // CodeGen_GLSLBase
 //
-CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s) : CodeGen_C(s) {
+CodeGen_GLSLBase::CodeGen_GLSLBase(std::ostream &s, Target target) : CodeGen_C(s, target) {
     builtin["sin_f32"] = "sin";
     builtin["sqrt_f32"] = "sqrt";
     builtin["cos_f32"] = "cos";
