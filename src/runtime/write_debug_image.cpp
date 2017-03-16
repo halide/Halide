@@ -115,16 +115,24 @@ WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int3
 }}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                             int32_t type_code, struct buffer_t *buf) {
+                                             int32_t type_code, struct halide_buffer_t *buf) {
+
+    if (buf->dimensions > 4) {
+        halide_error(user_context, "Can't debug_to_file a Func with more than four dimensions\n");
+        return -1;
+    }
 
     halide_copy_to_host(user_context, buf);
 
     void *f = fopen(filename, "wb");
     if (!f) return -1;
 
-    int32_t s0 = max(1, buf->extent[0]), s1 = max(1, buf->extent[1]);
-    int32_t s2 = max(1, buf->extent[2]), s3 = max(1, buf->extent[3]);
-    int32_t bytes_per_element = buf->elem_size;
+    int32_t s0 = buf->dimensions > 0 ? buf->dim[0].extent : 1;
+    int32_t s1 = buf->dimensions > 1 ? buf->dim[1].extent : 1;
+    int32_t s2 = buf->dimensions > 2 ? buf->dim[2].extent : 1;
+    int32_t s3 = buf->dimensions > 3 ? buf->dim[3].extent : 1;
+
+    int32_t bytes_per_element = buf->type.bytes();
 
     size_t elts = s0;
     elts *= s1*s2*s3;
@@ -226,7 +234,8 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
                 for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
                     counter++;
-                    uint8_t *loc = get_pointer_to_data(dim0, dim1, dim2, dim3, buf);
+                    int idx[] = {dim0, dim1, dim2, dim3};
+                    uint8_t *loc = buf->address_of(idx);
                     void *dst = temp + (counter-1)*bytes_per_element;
                     memcpy(dst, loc, bytes_per_element);
 

@@ -60,6 +60,7 @@ public:
     void visit(const Free *);
     void visit(const Evaluate *);
     void visit(const Shuffle *);
+    void visit(const Prefetch *);
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -441,6 +442,10 @@ void ComputeModulusRemainder::visit(const IfThenElse *) {
 }
 
 void ComputeModulusRemainder::visit(const Evaluate *) {
+    internal_assert(false) << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const Prefetch *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 

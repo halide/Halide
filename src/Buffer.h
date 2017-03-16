@@ -145,6 +145,10 @@ public:
         Buffer(Runtime::Buffer<T>(t, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                Internal::get_name_from_end_of_parameter_pack(rest...)) {}
 
+    explicit Buffer(const halide_buffer_t &buf,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(buf), name) {}
+
     explicit Buffer(const buffer_t &buf,
                     const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(buf), name) {}
@@ -155,10 +159,14 @@ public:
         Buffer(Runtime::Buffer<T>(Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                Internal::get_name_from_end_of_parameter_pack(rest...)) {}
 
-    Buffer(Type t,
-           const std::vector<int> &sizes,
-           const std::string &name = "") :
+    explicit Buffer(Type t,
+                    const std::vector<int> &sizes,
+                    const std::string &name = "") :
         Buffer(Runtime::Buffer<T>(t, sizes), name) {}
+
+    explicit Buffer(const std::vector<int> &sizes,
+                    const std::string &name = "") :
+        Buffer(Runtime::Buffer<T>(sizes), name) {}
 
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N],
@@ -367,10 +375,6 @@ public:
 
     template<typename T2>
     static bool can_convert_from(const Buffer<T2> &other) {
-        // TODO: This effectively disables dimension checking inside the
-        // runtime version of can_convert_from. Per conversation with
-        // Andrew, we're going with this for now and will revisit for arbitrary
-        // dimensionality buffer_t.
         return Halide::Runtime::Buffer<T>::can_convert_from(*other.get());
     }
 
