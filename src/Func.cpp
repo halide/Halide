@@ -164,8 +164,9 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<Type> &types,
                          int dimensionality,
                          NameMangling mangling,
-                         bool /* uses_old_buffer_t */) {
-    func.define_extern(function_name, args, types, dimensionality, mangling);
+                         bool uses_old_buffer_t) {
+    func.define_extern(function_name, args, types, dimensionality,
+                       mangling, uses_old_buffer_t);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
@@ -2191,13 +2192,13 @@ Func &Func::hexagon(VarOrRVar x) {
 
 Func &Func::prefetch(const Func &f, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(f, var, offset);
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(f, var, offset, strategy);
     return *this;
 }
 
 Func &Func::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(param, var, offset);
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(param, var, offset, strategy);
     return *this;
 }
 
