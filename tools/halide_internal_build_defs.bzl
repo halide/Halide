@@ -74,10 +74,32 @@ def _gen_runtime_nvidia_bitcode_component(component_file) :
     outs = [ "initmod_ptx_{0}_ll.cpp".format(component_file) ]
   )
 
-def gen_runtime_targets(runtime_cpp_components, runtime_ll_components, runtime_nvidia_bitcode_components):
+def _get_runtime_header_component(component_file) :
+  native.genrule(
+    name = "initmod.{0}_h.cpp".format(component_file),
+    tools = [ "@halide//tools:binary2cpp" ],
+    srcs = [ "src/runtime/{0}.h".format(component_file) ],
+    cmd = "$(location @halide//tools:binary2cpp) runtime_header_{0}_h < $< > $@".format(component_file),
+    outs = [ "initmod_{0}_h.cpp".format(component_file) ]
+  )
+
+def _get_inlined_c_component(srcs):
+  native.genrule(
+    name = "initmod.inlined_c.cpp",
+    tools = [ "@halide//tools:binary2cpp" ],
+    srcs = ["src/runtime/{0}.cpp".format(src) for src in srcs],
+    cmd = "$(location @halide//tools:binary2cpp) initmod_inlined_c < $< > $@",
+    outs = [ "initmod_inlined_c.cpp" ]
+  )
+
+def gen_runtime_targets(runtime_cpp_components, 
+                        runtime_ll_components, 
+                        runtime_nvidia_bitcode_components, 
+                        runtime_header_components, 
+                        runtime_inlined_c_components):
   for component in runtime_cpp_components:
     for bits in [ "32", "64" ]:
-      for suffix, opts in [ ("", "-O3"), ("_debug", "-g -DDEBUG_RUNTIME") ]:
+      for suffix, opts in [ ("", "-O3"), ("_debug", "-DDEBUG_RUNTIME") ]:
         _gen_runtime_cpp_component_1(component, bits, suffix,  opts)
         _gen_runtime_cpp_component_2(component, bits, suffix)
         _gen_runtime_cpp_component_3(component, bits, suffix)
@@ -86,8 +108,15 @@ def gen_runtime_targets(runtime_cpp_components, runtime_ll_components, runtime_n
     _gen_runtime_ll_component_2(component)
   for component in runtime_nvidia_bitcode_components:
     _gen_runtime_nvidia_bitcode_component(component)
+  for component in runtime_header_components:
+    _get_runtime_header_component(component)
+  _get_inlined_c_component(runtime_inlined_c_components)
 
-def runtime_srcs(runtime_cpp_components, runtime_ll_components, runtime_nvidia_bitcode_components):
+def runtime_srcs(runtime_cpp_components, 
+                 runtime_ll_components, 
+                 runtime_nvidia_bitcode_components, 
+                 runtime_header_components, 
+                 runtime_inlined_c_components):
   result = []
   for component in runtime_cpp_components:
     for bits in [ "32", "64" ]:
@@ -97,6 +126,9 @@ def runtime_srcs(runtime_cpp_components, runtime_ll_components, runtime_nvidia_b
     result = result + [":initmod_%s_ll.cpp" % component]
   for component in runtime_nvidia_bitcode_components:
     result = result + [":initmod_ptx_%s_ll.cpp" % component]
+  for component in runtime_header_components:
+    result = result + [":initmod_%s_h.cpp" % component]
+  result = result + [":initmod_inlined_c.cpp"]
   return result
 
 

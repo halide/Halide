@@ -108,6 +108,7 @@ _RUNTIME_CPP_COMPONENTS = [
     "msan",
     "msan_stubs",
     "noos",
+    "old_buffer_t",
     "opencl",
     "opengl",
     "openglcompute",
@@ -124,6 +125,7 @@ _RUNTIME_CPP_COMPONENTS = [
     "posix_print",
     "posix_tempfile",
     "posix_threads",
+    "prefetch",
     "profiler",
     "profiler_inlined",
     "qurt_allocator",
@@ -166,11 +168,37 @@ _RUNTIME_NVIDIA_BITCODE_COMPONENTS = [
     "compute_35",
 ]
 
-gen_runtime_targets(_RUNTIME_CPP_COMPONENTS, _RUNTIME_LL_COMPONENTS, _RUNTIME_NVIDIA_BITCODE_COMPONENTS)
+_RUNTIME_HEADER_COMPONENTS = [
+    "HalideRuntimeCuda",
+    "HalideRuntime",
+    "HalideRuntimeHexagonHost",
+    "HalideRuntimeMetal",
+    "HalideRuntimeOpenCL",
+    "HalideRuntimeOpenGLCompute",
+    "HalideRuntimeOpenGL",
+]
+
+_RUNTIME_INLINED_C_COMPONENTS = [
+    "buffer_t",
+]
+
+gen_runtime_targets(
+    _RUNTIME_CPP_COMPONENTS, 
+    _RUNTIME_LL_COMPONENTS, 
+    _RUNTIME_NVIDIA_BITCODE_COMPONENTS, 
+    _RUNTIME_HEADER_COMPONENTS, 
+    _RUNTIME_INLINED_C_COMPONENTS
+)
 
 filegroup(
     name = "runtime_components",
-    srcs = runtime_srcs(_RUNTIME_CPP_COMPONENTS, _RUNTIME_LL_COMPONENTS, _RUNTIME_NVIDIA_BITCODE_COMPONENTS),
+    srcs = runtime_srcs(
+        _RUNTIME_CPP_COMPONENTS, 
+        _RUNTIME_LL_COMPONENTS, 
+        _RUNTIME_NVIDIA_BITCODE_COMPONENTS, 
+        _RUNTIME_HEADER_COMPONENTS, 
+        _RUNTIME_INLINED_C_COMPONENTS
+    ),
 )
 
 # Note that this target does *not* build a fully-static libHalide.a;
