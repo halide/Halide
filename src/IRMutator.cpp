@@ -363,6 +363,15 @@ void IRMutator::visit(const Shuffle *op) {
     }
 }
 
+void IRMutator::visit(const AddressOf *op) {
+    Expr index = mutate(op->index);
+    if (index.same_as(op->index)) {
+        expr = op;
+    } else {
+        expr = AddressOf::make(op->type, op->name, index, op->image, op->param);
+    }
+}
+
 
 Stmt IRGraphMutator::mutate(Stmt s) {
     auto iter = stmt_replacements.find(s);

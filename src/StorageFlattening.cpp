@@ -144,8 +144,7 @@ private:
 
         // Create a buffer_t object for this allocation.
         BufferBuilder builder;
-        Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter(), const_true());
-        builder.host = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
+        builder.host = AddressOf::make(op->types[0], op->name, 0);
         builder.type = op->types[0];
         builder.dimensions = dims;
         for (int i = 0; i < dims; i++) {
@@ -213,9 +212,7 @@ private:
         }
 
         Expr base_index = mutate(flatten_args(op->name, prefetch_min));
-        Expr base_load = Load::make(op->types[0], op->name, base_index, Buffer<>(),
-                                    op->param, const_true(op->types[0].lanes()));
-        Expr base_address = Call::make(Handle(), Call::address_of, {base_load}, Call::Intrinsic);
+        Expr base_address = AddressOf::make(op->types[0], op->name, base_index, Buffer<>(), op->param);
         vector<Expr> args = {base_address};
 
         auto iter = env.find(op->name);
@@ -277,13 +274,10 @@ class PromoteToMemoryType : public IRMutator {
         return t.with_bits(((t.bits() + 7)/8)*8);
     }
 
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::address_of)) {
-            Expr load = mutate(op->args[0]);
-            if (const Cast *cast = load.as<Cast>()) {
-                load = cast->value;
-            }
-            expr = Call::make(op->type, op->name, {load}, op->call_type);
+    void visit(const AddressOf *op) {
+        Type t = upgrade(op->type);
+        if (t != op->type) {
+            expr = AddressOf::make(t, op->name, mutate(op->index), op->image, op->param);
         } else {
             IRMutator::visit(op);
         }

@@ -28,6 +28,14 @@ class RemoveDeadAllocations : public IRMutator {
         IRMutator::visit(op);
     }
 
+    void visit(const AddressOf *op) {
+        if (allocs.contains(op->name)) {
+            allocs.pop(op->name);
+        }
+
+        IRMutator::visit(op);
+    }
+
     void visit(const Load *op) {
         if (allocs.contains(op->name)) {
             allocs.pop(op->name);

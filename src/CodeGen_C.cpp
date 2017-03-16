@@ -1009,16 +1009,6 @@ void CodeGen_C::visit(const Call *op) {
         Expr b = op->args[1];
         Expr e = select(a < b, b - a, a - b);
         rhs << print_expr(e);
-    } else if (op->is_intrinsic(Call::address_of)) {
-        const Load *l = op->args[0].as<Load>();
-        internal_assert(op->args.size() == 1 && l);
-        rhs << "(("
-            << print_type(l->type.element_of()) // index is in elements, not vectors.
-            << " *)"
-            << print_name(l->name)
-            << " + "
-            << print_expr(l->index)
-            << ")";
     } else if (op->is_intrinsic(Call::return_second)) {
         internal_assert(op->args.size() == 2);
         string arg0 = print_expr(op->args[0]);
@@ -1475,6 +1465,18 @@ void CodeGen_C::visit(const Free *op) {
         heap_allocations.pop(op->name);
     }
     allocations.pop(op->name);
+}
+
+void CodeGen_C::visit(const AddressOf *op) {
+    ostringstream rhs;
+    rhs << "(("
+        << print_type(op->type.element_of()) // index is in elements, not vectors.
+        << " *)"
+        << print_name(op->name)
+        << " + "
+        << print_expr(op->index)
+        << ")";
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_C::visit(const Realize *op) {

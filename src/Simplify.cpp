@@ -6292,8 +6292,7 @@ void simplify_test() {
 
     {
         // Check that contiguous prefetch call get collapsed
-        Expr load = Load::make(Int(32), "buf", x, Buffer<>(), Parameter(), const_true());
-        Expr base = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        Expr base = AddressOf::make(Int(32), "buf", x);
         check(Call::make(Int(32), Call::prefetch, {base, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
               Call::make(Int(32), Call::prefetch, {base, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }

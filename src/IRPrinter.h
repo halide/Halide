@@ -124,6 +124,7 @@ protected:
     void visit(const Evaluate *);
     void visit(const Shuffle *);
     void visit(const Prefetch *);
+    void visit(const AddressOf *);
 };
 }
 }

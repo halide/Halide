@@ -61,6 +61,7 @@ public:
     void visit(const Evaluate *);
     void visit(const Shuffle *);
     void visit(const Prefetch *);
+    void visit(const AddressOf *);
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -371,6 +372,11 @@ void ComputeModulusRemainder::visit(const Broadcast *) {
 }
 
 void ComputeModulusRemainder::visit(const Call *) {
+    modulus = 1;
+    remainder = 0;
+}
+
+void ComputeModulusRemainder::visit(const AddressOf *) {
     modulus = 1;
     remainder = 0;
 }

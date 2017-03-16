@@ -1061,6 +1061,10 @@ class SolveForInterval : public IRVisitor {
         fail();
     }
 
+    void visit(const AddressOf *op) {
+        fail();
+    }
+
 public:
     Interval result;
 
@@ -1296,6 +1300,10 @@ class AndConditionOverDomain : public IRMutator {
     }
 
     void visit(const Call *op) {
+        fail();
+    }
+
+    void visit(const AddressOf *op) {
         fail();
     }
 

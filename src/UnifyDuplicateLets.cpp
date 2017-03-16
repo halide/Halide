@@ -52,6 +52,12 @@ protected:
         IRMutator::visit(op);
     }
 
+    void visit(const AddressOf *op) {
+        is_impure |= ((op->name == producing) ||
+                      starts_with(op->name + ".", producing));
+        IRMutator::visit(op);
+    }
+
     void visit(const Load *op) {
         is_impure |= ((op->name == producing) ||
                       starts_with(op->name + ".", producing));

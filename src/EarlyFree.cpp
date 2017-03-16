@@ -43,6 +43,13 @@ private:
         IRVisitor::visit(load);
     }
 
+    void visit(const AddressOf *address) {
+        if (func == address->name) {
+            last_use = containing_stmt;
+        }
+        IRVisitor::visit(address);
+    }
+
     void visit(const Call *call) {
         if (call->name == func) {
             last_use = containing_stmt;

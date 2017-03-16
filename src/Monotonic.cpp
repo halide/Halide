@@ -278,6 +278,11 @@ class MonotonicVisitor : public IRVisitor {
         }
     }
 
+    void visit(const AddressOf *op) {
+        // The address might change even if the index may stay the same
+        result = Monotonic::Unknown;
+    }
+
     void visit(const Ramp *op) {
         internal_error << "Monotonic of vector\n";
     }

@@ -246,6 +246,19 @@ Expr Load::make(Type type, const std::string &name, const Expr &index, Buffer<> 
     return node;
 }
 
+Expr AddressOf::make(Type type, const std::string &name, const Expr &index, Buffer<> image, Parameter param) {
+    internal_assert(index.defined()) << "AddressOf of undefined\n";
+    internal_assert(index.type().is_scalar()) << "Can't take the address of a vector\n";
+
+    AddressOf *node = new AddressOf;
+    node->type = type;
+    node->name = name;
+    node->index = index;
+    node->image = image;
+    node->param = param;
+    return node;
+}
+
 Expr Ramp::make(const Expr &base, const Expr &stride, int lanes) {
     internal_assert(base.defined()) << "Ramp of undefined\n";
     internal_assert(stride.defined()) << "Ramp of undefined\n";
@@ -757,6 +770,7 @@ template<> void ExprNode<Broadcast>::accept(IRVisitor *v) const { v->visit((cons
 template<> void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Call *)this); }
 template<> void ExprNode<Shuffle>::accept(IRVisitor *v) const { v->visit((const Shuffle *)this); }
 template<> void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
+template<> void ExprNode<AddressOf>::accept(IRVisitor *v) const { v->visit((const AddressOf *)this); }
 template<> void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
 template<> void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
 template<> void StmtNode<ProducerConsumer>::accept(IRVisitor *v) const { v->visit((const ProducerConsumer *)this); }
@@ -787,7 +801,6 @@ Call::ConstString Call::popcount = "popcount";
 Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
 Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
 Call::ConstString Call::undef = "undef";
-Call::ConstString Call::address_of = "address_of";
 Call::ConstString Call::return_second = "return_second";
 Call::ConstString Call::if_then_else = "if_then_else";
 Call::ConstString Call::glsl_texture_load = "glsl_texture_load";

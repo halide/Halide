@@ -2393,14 +2393,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic(Call::address_of)) {
-        internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
-        internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
-        const Load *load = op->args[0].as<Load>();
-        internal_assert(load) << "The sole argument to address_of must be a Load node\n";
-        internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
-
-        value = codegen_buffer_pointer(load->name, load->type, load->index);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
@@ -3378,6 +3370,11 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 
     // Discard result
     value = nullptr;
+}
+
+void CodeGen_LLVM::visit(const AddressOf *op) {
+    internal_assert(op->index.type().is_scalar()) << "Can't take the address of a vector\n";
+    value = codegen_buffer_pointer(op->name, op->type, op->index);
 }
 
 void CodeGen_LLVM::visit(const Shuffle *op) {

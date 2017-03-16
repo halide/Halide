@@ -352,6 +352,24 @@ class ExtractSharedAllocations : public IRMutator {
         stmt = op->body;
     }
 
+    void visit(const AddressOf *op) {
+        if (shared.count(op->name)) {
+            Expr index = mutate(op->index);
+            shared[op->name].max = barrier_stage;
+            if (device_api == DeviceAPI::OpenGLCompute) {
+                expr = AddressOf::make(op->type, shared_mem_name + "_" + op->name,
+                                       index, op->image, op->param);
+            } else {
+                Expr base = Variable::make(Int(32), op->name + ".shared_offset");
+                expr = AddressOf::make(op->type, shared_mem_name, base + index,
+                                       op->image, op->param);
+            }
+
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const Load *op) {
         if (shared.count(op->name)) {
             Expr predicate = mutate(op->predicate);

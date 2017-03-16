@@ -64,6 +64,7 @@ public:
     EXPORT virtual void visit(const Evaluate *);
     EXPORT virtual void visit(const Shuffle *);
     EXPORT virtual void visit(const Prefetch *);
+    EXPORT virtual void visit(const AddressOf *);
 };
 
 /** A base class for algorithms that walk recursively over the IR
@@ -130,6 +131,7 @@ public:
     EXPORT virtual void visit(const Evaluate *);
     EXPORT virtual void visit(const Shuffle *);
     EXPORT virtual void visit(const Prefetch *);
+    EXPORT virtual void visit(const AddressOf *);
     // @}
 };
 

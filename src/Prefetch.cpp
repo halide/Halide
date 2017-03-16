@@ -230,9 +230,7 @@ class ReducePrefetchDimension : public IRMutator {
 
         size_t max_arg_size = 1 + 2 * max_dim; // Prefetch: {base, extent0, stride0, extent1, stride1, ...}
         if (call && call->is_intrinsic(Call::prefetch) && (call->args.size() > max_arg_size)) {
-            const Call *base_addr = call->args[0].as<Call>();
-            internal_assert(base_addr && base_addr->is_intrinsic(Call::address_of));
-            const Load *base = base_addr->args[0].as<Load>();
+            const AddressOf *base = call->args[0].as<AddressOf>();
             internal_assert(base);
 
             vector<string> index_names;
@@ -243,9 +241,8 @@ class ReducePrefetchDimension : public IRMutator {
                 index_names.push_back(index_name);
                 offset += Variable::make(Int(32), index_name) * stride;
             }
-            Expr new_base = Load::make(base->type, base->name, simplify(base->index + offset),
-                                       base->image, base->param, base->predicate);
-            Expr new_base_addr = Call::make(Handle(), Call::address_of, {new_base}, Call::Intrinsic);
+            Expr new_base_addr = AddressOf::make(base->type, base->name, simplify(base->index + offset),
+                                                 base->image, base->param);
 
             vector<Expr> args = {new_base_addr};
             for (size_t i = 1; i < max_arg_size; ++i) {
@@ -281,9 +278,7 @@ class SplitPrefetch : public IRMutator {
         const Call *call = op->value.as<Call>();
 
         if (call && call->is_intrinsic(Call::prefetch)) {
-            const Call *base_addr = call->args[0].as<Call>();
-            internal_assert(base_addr && base_addr->is_intrinsic(Call::address_of));
-            const Load *base = base_addr->args[0].as<Load>();
+            const AddressOf *base = call->args[0].as<AddressOf>();
             internal_assert(base);
 
             int elem_size = base->type.bytes();
@@ -316,9 +311,8 @@ class SplitPrefetch : public IRMutator {
                 extents.push_back(outer_extent);
             }
 
-            Expr new_base = Load::make(base->type, base->name, simplify(base->index + offset),
-                                       base->image, base->param, base->predicate);
-            Expr new_base_addr = Call::make(Handle(), Call::address_of, {new_base}, Call::Intrinsic);
+            Expr new_base_addr = AddressOf::make(base->type, base->name, simplify(base->index + offset),
+                                                 base->image, base->param);
 
             vector<Expr> args = {new_base_addr, Expr(1), simplify(max_byte_size / elem_size)};
             stmt = Evaluate::make(Call::make(call->type, Call::prefetch, args, Call::Intrinsic));

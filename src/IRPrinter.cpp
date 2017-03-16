@@ -467,6 +467,12 @@ void IRPrinter::visit(const Load *op) {
     }
 }
 
+void IRPrinter::visit(const AddressOf *op) {
+    stream << "address_of(" << op->name << ", ";
+    print(op->index);
+    stream << ")";
+}
+
 void IRPrinter::visit(const Ramp *op) {
     stream << "ramp(";
     print(op->base);
@@ -536,7 +542,6 @@ void IRPrinter::visit(const ProducerConsumer *op) {
 }
 
 void IRPrinter::visit(const For *op) {
-
     do_indent();
     stream << op->for_type << op->device_api << " (" << op->name << ", ";
     print(op->min);

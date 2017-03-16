@@ -64,6 +64,7 @@ enum class IRNodeType {
     Evaluate,
     Shuffle,
     Prefetch,
+    AddressOf,
 };
 
 /** The abstract base classes for a node in the Halide IR. */

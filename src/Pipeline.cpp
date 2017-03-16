@@ -403,6 +403,12 @@ private:
         include_buffer(op->image);
     }
 
+    void visit(const AddressOf *op) {
+        IRGraphVisitor::visit(op);
+        include_parameter(op->param);
+        include_buffer(op->image);
+    }
+
     void visit(const Variable *op) {
         IRGraphVisitor::visit(op);
         include_parameter(op->param);

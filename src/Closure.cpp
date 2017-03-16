@@ -58,11 +58,7 @@ void Closure::found_buffer_ref(const string &name, Type type,
 }
 
 void Closure::visit(const Call *op) {
-    if (op->is_intrinsic(Call::address_of)) {
-        const Load *load = op->args[0].as<Load>();
-        internal_assert(load);
-        found_buffer_ref(load->name, load->type, address_of_read, address_of_written, op->image);
-    } else if (op->is_intrinsic(Call::copy_memory)) {
+    if (op->is_intrinsic(Call::copy_memory)) {
         internal_assert(op->args.size() == 3);
         bool old_address_of_read = address_of_read;
         bool old_address_of_written = address_of_written;
@@ -92,6 +88,10 @@ void Closure::visit(const Call *op) {
         IRVisitor::visit(op);
         address_of_written = old_address_of_written;
     }
+}
+
+void Closure::visit(const AddressOf *op) {
+    found_buffer_ref(op->name, op->type, address_of_read, address_of_written, op->image);
 }
 
 void Closure::visit(const Load *op) {

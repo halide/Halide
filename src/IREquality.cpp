@@ -90,6 +90,7 @@ private:
     void visit(const Evaluate *);
     void visit(const Shuffle *);
     void visit(const Prefetch *);
+    void visit(const AddressOf *);
 };
 
 template<typename T>
@@ -460,6 +461,12 @@ void IRComparer::visit(const Prefetch *op) {
         compare_expr(s->bounds[i].min, op->bounds[i].min);
         compare_expr(s->bounds[i].extent, op->bounds[i].extent);
     }
+}
+
+void IRComparer::visit(const AddressOf *op) {
+    const AddressOf *e = expr.as<AddressOf>();
+    compare_names(e->name, op->name);
+    compare_expr(e->index, op->index);
 }
 
 } // namespace

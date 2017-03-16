@@ -55,48 +55,6 @@ private:
     using IRMutator::visit;
 
     void visit(const Call *op) {
-
-        // Calls inside of an address_of don't count, but we want to
-        // visit the args of the inner call.
-        if (op->is_intrinsic(Call::address_of)) {
-            internal_assert(op->args.size() == 1);
-            const Call *c = op->args[0].as<Call>();
-            const Load *l = op->args[0].as<Load>();
-
-            internal_assert(c || l);
-
-            std::vector<Expr> args;
-            if (c) {
-                args = c->args;
-            } else {
-                args.push_back(l->index);
-            }
-
-            bool unchanged = true;
-            vector<Expr> new_args(args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                new_args[i] = mutate(args[i]);
-                unchanged = unchanged && (new_args[i].same_as(args[i]));
-            }
-
-            if (unchanged) {
-                expr = op;
-                return;
-            } else {
-                Expr inner;
-                if (c) {
-                    inner = Call::make(c->type, c->name, new_args, c->call_type,
-                                       c->func, c->value_index, c->image, c->param);
-                } else {
-                    Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param, l->predicate);
-                }
-                expr = Call::make(op->type, Call::address_of, {inner}, Call::Intrinsic);
-                return;
-            }
-        }
-
-
-
         IRMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
@@ -249,7 +207,7 @@ private:
 
             Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
 
-            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call, 
+            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call,
                                  ProducerConsumer::make(op->name, op->is_producer, new_body));
         }
     }
