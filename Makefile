@@ -382,7 +382,8 @@ SOURCE_FILES = \
   Var.cpp \
   VaryingAttributes.cpp \
   VectorizeLoops.cpp \
-  WrapCalls.cpp
+  WrapCalls.cpp \
+  WrapExternStages.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
 HEADER_FILES = \
@@ -516,7 +517,8 @@ HEADER_FILES = \
   Var.h \
   VaryingAttributes.h \
   VectorizeLoops.h \
-  WrapCalls.h
+  WrapCalls.h \
+  WrapExternStages.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
@@ -557,6 +559,7 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   noos \
+  old_buffer_t \
   opencl \
   opengl \
   openglcompute \
@@ -573,6 +576,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_tempfile \
   posix_threads \
   powerpc_cpu_features \
+  prefetch \
   profiler \
   profiler_inlined \
   qurt_allocator \
@@ -621,6 +625,8 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
+                  $(RUNTIME_EXPORTED_INCLUDES:$(INCLUDE_DIR)/%.h=$(BUILD_DIR)/initmod.%_h.o) \
+                  $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
@@ -735,6 +741,13 @@ $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
 
 $(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/binary2cpp $(BUILD_DIR)/initmod.%.bc
 	./$(BIN_DIR)/binary2cpp initmod_$* < $(BUILD_DIR)/initmod.$*.bc > $@
+
+$(BUILD_DIR)/initmod.%_h.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/%.h
+	./$(BIN_DIR)/binary2cpp runtime_header_$*_h < $(SRC_DIR)/runtime/$*.h > $@
+
+# Any c in the runtime that must be inlined needs to be copy-pasted into the output for the C backend.
+$(BUILD_DIR)/initmod.inlined_c.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/buffer_t.cpp
+	./$(BIN_DIR)/binary2cpp initmod_inlined_c < $(SRC_DIR)/runtime/buffer_t.cpp > $@
 
 $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
 	./$(BIN_DIR)/binary2cpp initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@

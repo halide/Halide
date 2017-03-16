@@ -459,6 +459,23 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
     return node;
 }
 
+Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Parameter param) {
+    for (size_t i = 0; i < bounds.size(); i++) {
+        internal_assert(bounds[i].min.defined()) << "Prefetch of undefined\n";
+        internal_assert(bounds[i].extent.defined()) << "Prefetch of undefined\n";
+        internal_assert(bounds[i].min.type().is_scalar()) << "Prefetch of vector size\n";
+        internal_assert(bounds[i].extent.type().is_scalar()) << "Prefetch of vector size\n";
+    }
+    internal_assert(!types.empty()) << "Prefetch has empty type\n";
+
+    Prefetch *node = new Prefetch;
+    node->name = name;
+    node->types = types;
+    node->bounds = bounds;
+    node->param = param;
+    return node;
+}
+
 Stmt Block::make(const Stmt &first, const Stmt &rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
     internal_assert(rest.defined()) << "Block of undefined\n";
@@ -752,6 +769,7 @@ template<> void StmtNode<Realize>::accept(IRVisitor *v) const { v->visit((const 
 template<> void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Block *)this); }
 template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
+template<> void StmtNode<Prefetch>::accept(IRVisitor *v) const { v->visit((const Prefetch *)this); }
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::reinterpret = "reinterpret";
@@ -789,7 +807,6 @@ Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
 Call::ConstString Call::prefetch = "prefetch";
-Call::ConstString Call::prefetch_2d = "prefetch_2d";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
 Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
@@ -800,12 +817,16 @@ Call::ConstString Call::extract_mask_element = "extract_mask_element";
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
 Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
-Call::ConstString Call::buffer_get_dev = "_halide_buffer_get_dev";
+Call::ConstString Call::buffer_get_device = "_halide_buffer_get_device";
+Call::ConstString Call::buffer_get_device_interface = "_halide_buffer_get_device_interface";
+Call::ConstString Call::buffer_get_shape = "_halide_buffer_get_shape";
 Call::ConstString Call::buffer_get_host_dirty = "_halide_buffer_get_host_dirty";
-Call::ConstString Call::buffer_get_dev_dirty = "_halide_buffer_get_dev_dirty";
+Call::ConstString Call::buffer_get_device_dirty = "_halide_buffer_get_device_dirty";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
-Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
+Call::ConstString Call::buffer_set_device_dirty = "_halide_buffer_set_device_dirty";
+Call::ConstString Call::buffer_is_bounds_query = "_halide_buffer_is_bounds_query";
 Call::ConstString Call::buffer_init = "_halide_buffer_init";
+Call::ConstString Call::buffer_init_from_buffer = "_halide_buffer_init_from_buffer";
 Call::ConstString Call::trace = "halide_trace_helper";
 
 }
