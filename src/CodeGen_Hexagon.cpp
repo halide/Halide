@@ -195,7 +195,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
-    body = simplify(body);
+    // Don't simplify here, otherwise it will re-collapse the loads we
+    // want to carry across loop iterations.
     debug(2) << "Lowering after aligning loads:\n" << body << "\n\n";
 
     debug(1) << "Carrying values across loop iterations...\n";
@@ -211,7 +212,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
-    body = optimize_hexagon_instructions(body);
+    body = optimize_hexagon_instructions(body, target.natural_vector_size(Int(8)));
 
     if (uses_hvx(body)) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";

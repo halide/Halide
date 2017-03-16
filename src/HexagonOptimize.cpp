@@ -906,6 +906,9 @@ public:
 class EliminateInterleaves : public IRMutator {
     Scope<bool> vars;
 
+    // We need to know when loads are a multiple of 2 native vectors.
+    int native_vector_bits;
+
     // We can't interleave booleans, so we handle them specially.
     bool in_bool_to_mask = false;
     bool interleave_mask = false;
@@ -1403,72 +1406,35 @@ class EliminateInterleaves : public IRMutator {
         }
     }
 
-    // We need to be able to find loads of multiples of pairs from a
-    // buffer, concatenated into one vector.
-    static const std::string *is_double_vector_load(const Shuffle *op) {
-        if (!op->is_concat()) {
-            return nullptr;
-        }
-
-        if (op->vectors.size() % 2 != 0) {
-            return nullptr;
-        }
-
-        Expr first = op->vectors.front();
-        const Load *example = first.as<Load>();
-        if (!example) {
-            return nullptr;
-        }
-
-        for (size_t i = 1; i < op->vectors.size(); i++) {
-            const Load *load_i = op->vectors[i].as<Load>();
-            if (!load_i || load_i->name != example->name) {
-                return nullptr;
-            }
-        }
-        return &example->name;
-    }
-
-    void visit(const Shuffle *op) {
-        if (op->is_concat()) {
-            expr = op;
-            const std::string *load_from = is_double_vector_load(op);
-            if (load_from) {
-                if (buffers.contains(*load_from)) {
-                    // We don't want to actually do anything to the buffer
-                    // state here. We know we can interleave the load if
-                    // necessary, but we don't want to cause it to be
-                    // interleaved unless it is a useful improvement,
-                    // which is only true if any of the stores are
-                    // actually interleaved (and don't just yield an
-                    // interleave).
-                }
-
-                if (deinterleave_buffers.contains(*load_from)) {
-                    expr = native_interleave(expr);
-                }
-            }
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
     void visit(const Load *op) {
         if (buffers.contains(op->name)) {
-            // When inspecting the stores to a buffer, update the state.
-            BufferState &state = buffers.ref(op->name);
-
-            // If we found a load, it must have been outside a
-            // concat_vectors intrinsic (handled above), and so it
-            // must not be a double vector load (since we've broken up
-            // loads into native vector loads). Therefore, we can't
-            // deinterleave the storage of this buffer.
-            state = BufferState::NotInterleaved;
+            if ((op->type.lanes()*op->type.bits()) % (native_vector_bits*2) == 0) {
+                // This is a double vector load, we might be able to
+                // deinterleave the storage of this buffer.
+                // We don't want to actually do anything to the buffer
+                // state here. We know we can interleave the load if
+                // necessary, but we don't want to cause it to be
+                // interleaved unless it is a useful improvement,
+                // which is only true if any of the stores are
+                // actually interleaved (and don't just yield an
+                // interleave).
+            } else {
+                // This is not a double vector load, so we can't
+                // deinterleave the storage of this buffer.
+                BufferState &state = buffers.ref(op->name);
+                state = BufferState::NotInterleaved;
+            }
         }
         IRMutator::visit(op);
+        if (deinterleave_buffers.contains(op->name)) {
+            expr = native_interleave(expr);
+        }
     }
 
     using IRMutator::visit;
+
+public:
+    EliminateInterleaves(int native_vector_bits) : native_vector_bits(native_vector_bits) {}
 };
 
 // After eliminating interleaves, there may be some that remain. This
@@ -1649,13 +1615,13 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     return OptimizeShuffles(lut_alignment).mutate(s);
 }
 
-Stmt optimize_hexagon_instructions(Stmt s) {
+Stmt optimize_hexagon_instructions(Stmt s, int native_vector_bytes) {
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns().mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves().mutate(s);
+    s = EliminateInterleaves(native_vector_bytes*8).mutate(s);
 
     // There may be interleaves left over that we can fuse with other
     // operations.
