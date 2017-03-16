@@ -4313,31 +4313,28 @@ private:
             new_vectors.push_back(new_vector);
         }
 
-        // Only try to simplify shuffles of loads that aren't concats
-        // of vectors. This is a bit of a hacky heuristic to avoid
-        // undoing the work of AlignLoads for Hexagon.
-        if (!op->is_concat() || new_vectors[0].type().is_scalar()) {
-            // Try to convert a load with shuffled indices into a
-            // shuffle of a dense load.
-            if (const Load *first_load = new_vectors[0].as<Load>()) {
-                vector<Expr> load_predicates;
-                vector<Expr> load_indices;
-                bool unpredicated = true;
-                for (Expr e : new_vectors) {
-                    const Load *load = e.as<Load>();
-                    if (load && load->name == first_load->name) {
-                        load_predicates.push_back(load->predicate);
-                        load_indices.push_back(load->index);
-                        unpredicated = unpredicated && is_one(load->predicate);
-                    } else {
-                        break;
-                    }
+        // Try to convert a load with shuffled indices into a
+        // shuffle of a dense load.
+        if (const Load *first_load = new_vectors[0].as<Load>()) {
+            vector<Expr> load_predicates;
+            vector<Expr> load_indices;
+            bool unpredicated = true;
+            for (Expr e : new_vectors) {
+                const Load *load = e.as<Load>();
+                if (load && load->name == first_load->name) {
+                    load_predicates.push_back(load->predicate);
+                    load_indices.push_back(load->index);
+                    unpredicated = unpredicated && is_one(load->predicate);
+                } else {
+                    break;
                 }
+            }
 
-                if (load_indices.size() == new_vectors.size()) {
-                    Type t = load_indices[0].type().with_lanes(op->indices.size());
-                    Expr shuffled_index = Shuffle::make(load_indices, op->indices);
-                    shuffled_index = mutate(shuffled_index);
+            if (load_indices.size() == new_vectors.size()) {
+                Type t = load_indices[0].type().with_lanes(op->indices.size());
+                Expr shuffled_index = Shuffle::make(load_indices, op->indices);
+                shuffled_index = mutate(shuffled_index);
+                if (shuffled_index.as<Ramp>()) {
                     Expr shuffled_predicate;
                     if (unpredicated) {
                         shuffled_predicate = const_true(t.lanes());
@@ -4345,13 +4342,11 @@ private:
                         shuffled_predicate = Shuffle::make(load_predicates, op->indices);
                         shuffled_predicate = mutate(shuffled_predicate);
                     }
-                    if (shuffled_index.as<Ramp>()) {
-                        t = first_load->type;
-                        t = t.with_lanes(op->indices.size());
-                        expr = Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                          first_load->param, shuffled_predicate);
-                        return;
-                    }
+                    t = first_load->type;
+                    t = t.with_lanes(op->indices.size());
+                    expr = Load::make(t, first_load->name, shuffled_index, first_load->image,
+                                      first_load->param, shuffled_predicate);
+                    return;
                 }
             }
         }
