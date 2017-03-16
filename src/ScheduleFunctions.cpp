@@ -1013,9 +1013,15 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         return false;
     }
 
+    // Check if the schedule of the inlined function is legal. Since only
+    // pure function can be inlined, we only need to call the validator on
+    // pure function. An inlined Halide Func with multiple stages technically
+    // will get lowered into compute_at innermost and thus can be treated
+    // similarly as a non-inlined Func.
     if (store_at.is_inline() && compute_at.is_inline()) {
-        // Check if the schedule of the inlined function is legal.
-        validate_schedule_inlined_function(f);
+        if (f.is_pure()) {
+            validate_schedule_inlined_function(f);
+        }
         return true;
     }
 
