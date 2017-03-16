@@ -490,7 +490,37 @@ void IRPrinter::visit(const Call *op) {
         // the types of the args, we also print the type.
         stream << op->type << ", ";
     }
-    print_list(op->args);
+
+    bool is_inline_reduction = false;
+    if (op->func.defined()) {
+        Halide::Internal::Function f(op->func);
+        if (f.has_update_definition()) {
+            Halide::Expr e = f.update(0).values()[0];
+            switch (e->type_info()) {
+            case IRNodeType::Add:
+                is_inline_reduction = true;
+                print(e.as<Add>()->b);
+                break;
+            case IRNodeType::Mul:
+                is_inline_reduction = true;
+                print(e.as<Mul>()->b);
+                break;
+            case IRNodeType::Max:
+                is_inline_reduction = true;
+                print(e.as<Max>()->b);
+                break;
+            case IRNodeType::Min:
+                is_inline_reduction = true;
+                print(e.as<Min>()->b);
+                break;
+            default:
+              break;
+            }
+        }
+    }
+    if (!is_inline_reduction) {
+      print_list(op->args);
+    }
     stream << ")";
 }
 
