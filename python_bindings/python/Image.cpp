@@ -278,9 +278,9 @@ void defineBuffer_impl(const std::string suffix, const h::Type type) {
             p::args("self", "r"),
             "Wrap a single-element realization in an Buffer object."))
 
-        .def(p::init<buffer_t>(
+        .def(p::init<halide_buffer_t>(
             p::args("self", "b"),
-            "Wrap a buffer_t in an Buffer object, so that we can access its pixels."));
+            "Wrap a halide_buffer_t in an Buffer object, so that we can access its pixels."));
 
     buffer_class
         .def("__repr__", buffer_repr<T>, p::arg("self"));
@@ -509,7 +509,8 @@ p::object ndarray_to_buffer(bn::ndarray &array) {
     h::Type t = dtype_to_type(array.get_dtype());
     const int dims = array.get_nd();
     void *host = reinterpret_cast<void *>(array.get_data());
-    halide_dimension_t shape[dims];
+    halide_dimension_t *shape =
+        (halide_dimension_t *)__builtin_alloca(sizeof(halide_dimension_t) * dims);
     for (int i = 0; i < dims; i++) {
         shape[i].min = 0;
         shape[i].extent = array.shape(i);
@@ -590,8 +591,8 @@ struct BufferFactory {
         return create_buffer_impl(type, r);
     }
 
-    static p::object create_buffer_from_buffer(h::Type type, buffer_t b) {
-        return create_buffer_impl(type, b);
+    static p::object create_buffer_from_buffer(halide_buffer_t b) {
+        return create_buffer_impl(b.type, b);
     }
 };
 
@@ -630,9 +631,9 @@ void defineBuffer() {
            "Wrap a single-element realization in an Buffer object of type T.");
 
     p::def("Buffer", &BufferFactory::create_buffer_from_buffer,
-           p::args("type", "b"),
+           p::args("b"),
            p::with_custodian_and_ward_postcall<0, 2>(),  // the buffer_t reference count is increased
-           "Wrap a buffer_t in an Buffer object of type T, so that we can access its pixels.");
+           "Wrap a halide_buffer_t in an Buffer object, so that we can access its pixels.");
 
 #ifdef USE_NUMPY
     bn::initialize();
