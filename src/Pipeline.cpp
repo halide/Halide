@@ -9,6 +9,7 @@
 #include "Lower.h"
 #include "Outputs.h"
 #include "PrintLoopNest.h"
+#include "WrapExternStages.h"
 
 using namespace Halide::Internal;
 
@@ -104,8 +105,6 @@ struct PipelineContents {
 
     PipelineContents() :
         module("", Target()) {
-        // user_context needs to be a const void * (not a non-const void *)
-        // to maintain backwards compatibility with existing code.
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context",
                                            /*is_explicit_name*/ true, /*register_instance*/ false);
@@ -566,16 +565,25 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
     Stmt private_body;
 
+    std::vector<std::string> namespaces;
+    std::string simple_new_fn_name = extract_namespaces(new_fn_name, namespaces);
+    string private_name = "__" + simple_new_fn_name;
+
     const Module &old_module = contents->module;
     if (!old_module.functions().empty() &&
         old_module.target() == target) {
-        internal_assert(old_module.functions().size() == 2);
         // We can avoid relowering and just reuse the private body
-        // from the old module. We expect two functions in the old
-        // module: the private one then the public one.
-        private_body = old_module.functions().front().body;
+        // from the old module.
+        for (const LoweredFunc &fn : old_module.functions()) {
+            if (fn.name == private_name) {
+                private_body = fn.body;
+                break;
+            }
+        }
         debug(2) << "Reusing old module\n";
-    } else {
+    }
+
+    if (!private_body.defined()) {
         vector<IRMutator *> custom_passes;
         for (CustomLoweringPass p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
@@ -583,10 +591,6 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
         private_body = lower(contents->outputs, fn_name, target, custom_passes);
     }
-
-    std::vector<std::string> namespaces;
-    std::string simple_new_fn_name = extract_namespaces(new_fn_name, namespaces);
-    string private_name = "__" + simple_new_fn_name;
 
     // Get all the arguments/global images referenced in this function.
     vector<Argument> public_args = build_public_args(args, target);
@@ -626,6 +630,16 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     public_body = LetStmt::make(private_result_name, call_private, public_body);
 
     module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
+
+    // Append a wrapper for this pipeline that accepts old buffer_ts
+    // and upgrades them. It will use the same name, so it will
+    // require C++ linkage. We don't need it when jitting.
+    if (!target.has_feature(Target::JIT)) {
+        add_legacy_wrapper(module, module.functions().back());
+    }
+
+    // Also append any wrappers for extern stages that expect the old buffer_t
+    wrap_legacy_extern_stages(module);
 
     contents->module = module;
 
