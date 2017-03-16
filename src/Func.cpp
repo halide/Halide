@@ -2191,13 +2191,13 @@ Func &Func::hexagon(VarOrRVar x) {
 
 Func &Func::prefetch(const Func &f, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(f, var, offset);
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(f, var, offset, strategy);
     return *this;
 }
 
 Func &Func::prefetch(const Internal::Parameter &param, VarOrRVar var, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(param, var, offset);
+    Stage(func.definition(), name(), args(), func.schedule().storage_dims()).prefetch(param, var, offset, strategy);
     return *this;
 }
 
