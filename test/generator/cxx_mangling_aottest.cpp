@@ -71,6 +71,9 @@ int main(int argc, char **argv) {
              int32_t *, int32_t const *,
              void *, void const *,
              void *, void const *,
+             ::my_namespace::my_class const *, 
+             struct ::my_namespace::my_subnamespace::my_struct const *, 
+             my_union const *,
              halide_buffer_t *) = HalideTest::cxx_mangling_gpu;
 
     printf("HalideTest::cxx_mangling is at: %p\n", (void*) f);
