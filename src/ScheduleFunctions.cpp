@@ -383,11 +383,13 @@ Stmt build_produce(Function f, const Target &target) {
                 src_buf_name += ".buffer";
                 Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
 
-                Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca, {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
+                Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
+                                                  {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
 
                 vector<Expr> args(5);
                 args[0] = output_buffer_t;
-                args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca, {(int)sizeof(halide_dimension_t) * f.dimensions()}, Call::Intrinsic);
+                args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
+                                     {(int)sizeof(halide_dimension_t) * f.dimensions()}, Call::Intrinsic);
                 args[2] = src_buffer;
 
                 vector<Expr> mins, extents;
@@ -402,7 +404,7 @@ Stmt build_produce(Function f, const Target &target) {
                 args[3] = Call::make(Handle(), Call::make_struct, mins, Call::Intrinsic);
                 args[4] = Call::make(Handle(), Call::make_struct, extents, Call::Intrinsic);
 
-                output_buffer_t = Call::make(type_of<struct buffer_t *>(), Call::buffer_crop, args, Call::Extern);
+                output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args, Call::Extern);
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
                 extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
