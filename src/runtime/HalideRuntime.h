@@ -956,18 +956,18 @@ typedef struct halide_dimension_t {
     uint32_t flags;
 
 #ifdef __cplusplus
-    halide_dimension_t() : min(0), extent(0), stride(0), flags(0) {}
-    halide_dimension_t(int32_t m, int32_t e, int32_t s, uint32_t f = 0) :
+    HALIDE_ALWAYS_INLINE halide_dimension_t() : min(0), extent(0), stride(0), flags(0) {}
+    HALIDE_ALWAYS_INLINE halide_dimension_t(int32_t m, int32_t e, int32_t s, uint32_t f = 0) :
         min(m), extent(e), stride(s), flags(f) {}
 
-    bool operator==(const halide_dimension_t &other) const {
+    HALIDE_ALWAYS_INLINE bool operator==(const halide_dimension_t &other) const {
         return (min == other.min) &&
             (extent == other.extent) &&
             (stride == other.stride) &&
             (flags == other.flags);
     }
 
-    bool operator!=(const halide_dimension_t &other) const {
+    HALIDE_ALWAYS_INLINE bool operator!=(const halide_dimension_t &other) const {
         return !(*this == other);
     }
 #endif
@@ -1016,11 +1016,11 @@ typedef struct halide_buffer_t {
 #ifdef __cplusplus
     /** Convenience methods for accessing the flags */
     // @{
-    bool get_flag(halide_buffer_flags flag) const {
+    HALIDE_ALWAYS_INLINE bool get_flag(halide_buffer_flags flag) const {
         return flags & flag;
     }
 
-    void set_flag(halide_buffer_flags flag, bool value) {
+    HALIDE_ALWAYS_INLINE void set_flag(halide_buffer_flags flag, bool value) {
         if (value) {
             flags |= flag;
         } else {
@@ -1028,26 +1028,26 @@ typedef struct halide_buffer_t {
         }
     }
 
-    bool host_dirty() const {
+    HALIDE_ALWAYS_INLINE bool host_dirty() const {
         return get_flag(halide_buffer_flag_host_dirty);
     }
 
-    bool device_dirty() const {
+    HALIDE_ALWAYS_INLINE bool device_dirty() const {
         return get_flag(halide_buffer_flag_device_dirty);
     }
 
-    void set_host_dirty(bool v = true) {
+    HALIDE_ALWAYS_INLINE void set_host_dirty(bool v = true) {
         set_flag(halide_buffer_flag_host_dirty, v);
     }
 
-    void set_device_dirty(bool v = true) {
+    HALIDE_ALWAYS_INLINE void set_device_dirty(bool v = true) {
         set_flag(halide_buffer_flag_device_dirty, v);
     }
     // @}
 
     /** The total number of elements this buffer represents. Equal to
      * the product of the extents */
-    size_t number_of_elements() const {
+    HALIDE_ALWAYS_INLINE size_t number_of_elements() const {
         size_t s = 1;
         for (int i = 0; i < dimensions; i++) {
             s *= dim[i].extent;
@@ -1057,7 +1057,7 @@ typedef struct halide_buffer_t {
 
     /** A pointer to the element with the lowest address. If all
      * strides are positive, equal to the host pointer. */
-    uint8_t *begin() const {
+    HALIDE_ALWAYS_INLINE uint8_t *begin() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             if (dim[i].stride < 0) {
@@ -1068,7 +1068,7 @@ typedef struct halide_buffer_t {
     }
 
     /** A pointer to one beyond the element with the highest address. */
-    uint8_t *end() const {
+    HALIDE_ALWAYS_INLINE uint8_t *end() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             if (dim[i].stride > 0) {
@@ -1080,12 +1080,12 @@ typedef struct halide_buffer_t {
     }
 
     /** The total number of bytes spanned by the data in memory. */
-    size_t size_in_bytes() const {
+    HALIDE_ALWAYS_INLINE size_t size_in_bytes() const {
         return (size_t)(end() - begin());
     }
 
     /** A pointer to the element at the given location. */
-    uint8_t *address_of(const int *pos) const {
+    HALIDE_ALWAYS_INLINE uint8_t *address_of(const int *pos) const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             index += dim[i].stride * (pos[i] - dim[i].min);
