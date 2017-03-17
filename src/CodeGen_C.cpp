@@ -1470,7 +1470,7 @@ void CodeGen_C::visit(const Free *op) {
 void CodeGen_C::visit(const AddressOf *op) {
     ostringstream rhs;
     rhs << "(("
-        << print_type(op->type.element_of()) // index is in elements, not vectors.
+        << print_type(op->elem_type.element_of()) // index is in elements, not vectors.
         << " *)"
         << print_name(op->name)
         << " + "

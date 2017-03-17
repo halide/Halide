@@ -212,6 +212,11 @@ private:
         visit_conditional(op->condition, op->then_case, op->else_case);
     }
 
+    void visit(const AddressOf *op) {
+        varies |= varying.contains(op->name);
+        op->index.accept(this);
+    }
+
     void visit(const Call *op) {
         varies |= in_pipeline.contains(op->name);
 
@@ -263,7 +268,6 @@ private:
     }
 
     void visit(const Call *op) {
-
         if ((op->name == "halide_memoization_cache_lookup") &&
              memoize_call_uses_buffer(op)) {
             // We need to guard call to halide_memoization_cache_lookup to only

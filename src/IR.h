@@ -720,6 +720,7 @@ struct Prefetch : public StmtNode<Prefetch> {
 struct AddressOf : public ExprNode<AddressOf> {
     std::string name;
     Expr index;
+    Type elem_type;
 
     // If it's an address of an image argument or compiled-in constant
     // image, this will point to that
@@ -729,7 +730,8 @@ struct AddressOf : public ExprNode<AddressOf> {
     Parameter param;
 
     EXPORT static Expr make(Type type, const std::string &name, const Expr &index,
-                            Buffer<> image = Buffer<>(), Parameter param = Parameter());
+                            Type elem_type, Buffer<> image = Buffer<>(),
+                            Parameter param = Parameter());
 
     static const IRNodeType _type_info = IRNodeType::AddressOf;
 };

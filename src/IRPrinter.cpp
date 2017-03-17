@@ -468,9 +468,9 @@ void IRPrinter::visit(const Load *op) {
 }
 
 void IRPrinter::visit(const AddressOf *op) {
-    stream << "address_of(" << op->name << ", ";
+    stream << "address_of(" << op->name << "[";
     print(op->index);
-    stream << ")";
+    stream << "])";
 }
 
 void IRPrinter::visit(const Ramp *op) {

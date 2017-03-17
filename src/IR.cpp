@@ -246,7 +246,8 @@ Expr Load::make(Type type, const std::string &name, const Expr &index, Buffer<> 
     return node;
 }
 
-Expr AddressOf::make(Type type, const std::string &name, const Expr &index, Buffer<> image, Parameter param) {
+Expr AddressOf::make(Type type, const std::string &name, const Expr &index, Type elem_type, Buffer<> image, Parameter param) {
+    internal_assert(type.is_handle()) << "AddressOf must return a Handle type\n";
     internal_assert(index.defined()) << "AddressOf of undefined\n";
     internal_assert(index.type().is_scalar()) << "Can't take the address of a vector\n";
 
@@ -254,6 +255,7 @@ Expr AddressOf::make(Type type, const std::string &name, const Expr &index, Buff
     node->type = type;
     node->name = name;
     node->index = index;
+    node->elem_type = elem_type;
     node->image = image;
     node->param = param;
     return node;

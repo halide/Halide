@@ -3373,8 +3373,9 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 }
 
 void CodeGen_LLVM::visit(const AddressOf *op) {
+    internal_assert(op->type.is_handle()) << "AddressOf must return a Handle type\n";
     internal_assert(op->index.type().is_scalar()) << "Can't take the address of a vector\n";
-    value = codegen_buffer_pointer(op->name, op->type, op->index);
+    value = codegen_buffer_pointer(op->name, op->elem_type, op->index);
 }
 
 void CodeGen_LLVM::visit(const Shuffle *op) {

@@ -28,6 +28,16 @@ class ReplaceParams : public IRMutator {
 
     using IRMutator::visit;
 
+    void visit(const AddressOf *op) {
+        auto i = replacements.find(op->name);
+        if (i != replacements.end()) {
+            expr = AddressOf::make(op->type, op->name, mutate(op->index),
+                                   op->elem_type, op->image, i->second);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const Load *op) {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {
@@ -79,7 +89,7 @@ class InjectHexagonRpc : public IRMutator {
     Expr state_var_ptr(const std::string& name, Type type) {
         const Load *load = state_var(name, type).as<Load>();
         internal_assert(load);
-        return AddressOf::make(load->type, load->name, load->index, load->image, load->param);
+        return AddressOf::make(Handle(), load->name, load->index, load->type, load->image, load->param);
     }
 
     Expr module_state() {
@@ -95,7 +105,7 @@ class InjectHexagonRpc : public IRMutator {
     Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
         Buffer<uint8_t> code((int)size, name);
         memcpy(code.data(), buffer, (int)size);
-        return AddressOf::make(type_of<uint8_t>(), name, 0, code, Parameter());
+        return AddressOf::make(Handle(), name, 0, type_of<uint8_t>(), code, Parameter());
     }
 
     using IRMutator::visit;

@@ -358,11 +358,11 @@ class ExtractSharedAllocations : public IRMutator {
             shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
                 expr = AddressOf::make(op->type, shared_mem_name + "_" + op->name,
-                                       index, op->image, op->param);
+                                       index, op->elem_type, op->image, op->param);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
                 expr = AddressOf::make(op->type, shared_mem_name, base + index,
-                                       op->image, op->param);
+                                       op->elem_type, op->image, op->param);
             }
 
         } else {

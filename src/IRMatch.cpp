@@ -252,7 +252,8 @@ public:
 
     void visit(const AddressOf *op) {
         const AddressOf *e = expr.as<AddressOf>();
-        if (result && e && types_match(op->type, e->type) && e->name == op->name) {
+        if (result && e && types_match(op->type, e->type) &&
+            types_match(op->elem_type, e->elem_type) && (e->name == op->name)) {
             expr = e->index;
             op->index.accept(this);
         } else {

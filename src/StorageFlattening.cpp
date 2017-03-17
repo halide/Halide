@@ -144,7 +144,7 @@ private:
 
         // Create a buffer_t object for this allocation.
         BufferBuilder builder;
-        builder.host = AddressOf::make(op->types[0], op->name, 0);
+        builder.host = AddressOf::make(Handle(), op->name, 0, op->types[0]);
         builder.type = op->types[0];
         builder.dimensions = dims;
         for (int i = 0; i < dims; i++) {
@@ -212,7 +212,7 @@ private:
         }
 
         Expr base_index = mutate(flatten_args(op->name, prefetch_min));
-        Expr base_address = AddressOf::make(op->types[0], op->name, base_index, Buffer<>(), op->param);
+        Expr base_address = AddressOf::make(Handle(), op->name, base_index, op->types[0], Buffer<>(), op->param);
         vector<Expr> args = {base_address};
 
         auto iter = env.find(op->name);
@@ -275,9 +275,9 @@ class PromoteToMemoryType : public IRMutator {
     }
 
     void visit(const AddressOf *op) {
-        Type t = upgrade(op->type);
-        if (t != op->type) {
-            expr = AddressOf::make(t, op->name, mutate(op->index), op->image, op->param);
+        Type elem_type = upgrade(op->elem_type);
+        if (elem_type != op->elem_type) {
+            expr = AddressOf::make(op->type, op->name, mutate(op->index), elem_type, op->image, op->param);
         } else {
             IRMutator::visit(op);
         }

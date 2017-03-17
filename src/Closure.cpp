@@ -91,7 +91,8 @@ void Closure::visit(const Call *op) {
 }
 
 void Closure::visit(const AddressOf *op) {
-    found_buffer_ref(op->name, op->type, address_of_read, address_of_written, op->image);
+    op->index.accept(this);
+    found_buffer_ref(op->name, op->elem_type, address_of_read, address_of_written, op->image);
 }
 
 void Closure::visit(const Load *op) {

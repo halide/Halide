@@ -288,8 +288,8 @@ private:
     }
     void visit(const AddressOf *op) {
         stream << open_span("AddressOf");
-        stream << keyword("prefetch");
-        stream << "(" << op->name << ", " << op->index << ")";
+        stream << keyword("address_of");
+        stream << "(" << op->name << "[" << op->index << "])";
         stream << close_span();
     }
 

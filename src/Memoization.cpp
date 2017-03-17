@@ -187,7 +187,7 @@ class KeyInfo {
 #define USE_FULL_NAMES_IN_KEY 0
 #if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
-        Expr dest = AddressOf::make(UInt(8), key_name, index, Buffer<>(), Parameter());
+        Expr dest = AddressOf::make(Handle(), key_name, index, UInt(8), Buffer<>(), Parameter());
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
 
@@ -315,7 +315,7 @@ public:
     Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(AddressOf::make(type_of<uint8_t>(), key_allocation_name, 0));
+        args.push_back(AddressOf::make(type_of<uint8_t *>(), key_allocation_name, 0, type_of<uint8_t>()));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
@@ -336,7 +336,7 @@ public:
     Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(AddressOf::make(type_of<uint8_t>(), key_allocation_name, 0));
+        args.push_back(AddressOf::make(type_of<uint8_t *>(), key_allocation_name, 0, type_of<uint8_t>()));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
