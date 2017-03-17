@@ -97,6 +97,7 @@ public:
     EXPORT const std::vector<Buffer<>> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
     EXPORT std::vector<Internal::LoweredFunc> &functions();
+    EXPORT const std::vector<Module> &submodules() const;
     EXPORT const std::vector<ExternalCode> &external_code() const;
     // @}
 
@@ -108,12 +109,18 @@ public:
     // @{
     EXPORT void append(const Buffer<> &buffer);
     EXPORT void append(const Internal::LoweredFunc &function);
+    EXPORT void append(const Module &module);
     EXPORT void append(const ExternalCode &external_code);
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
     EXPORT void compile(const Outputs &output_files) const;
+
+    /** Compile a halide Module to in-memory object code. Currently
+     * only supports LLVM based compilation, but should be extended to
+     * handle source code backends. */
+    EXPORT Buffer<uint8_t> compile_to_buffer() const;
 };
 
 /** Link a set of modules together into one module. */
