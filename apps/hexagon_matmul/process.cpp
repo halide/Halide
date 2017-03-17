@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    int (*pipeline)(buffer_t *, buffer_t*, buffer_t*);
+    int (*pipeline)(halide_buffer_t *, halide_buffer_t*, halide_buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
         pipeline = pipeline_cpu;
         printf("Using CPU schedule\n");
@@ -66,8 +66,8 @@ int main(int argc, char **argv) {
     });
 
     // To avoid the cost of powering HVX on in each call of the
-    // pipeline, power it on once now.
-    halide_hexagon_set_performance_mode(nullptr, halide_hvx_power_turbo);
+    // pipeline, power it on once now. Also, set Hexagon performance to turbo.
+    halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_turbo);
     halide_hexagon_power_hvx_on(nullptr);
 
     printf("Running pipeline...\n");
@@ -80,11 +80,17 @@ int main(int argc, char **argv) {
 
     printf("Done, time: %g s\n", time);
 
-    // We're done with HVX, power it off.
+    // We're done with HVX, power it off, and reset the performance mode
+    // to default to save power.
     halide_hexagon_power_hvx_off(nullptr);
+    halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_default);
 
     // Validate that the algorithm did what we expect.
     mat_ab.for_each_element([&](int x, int y) {
+        // This reference implementation is very slow, so only check a subset of the result.
+        if ((y * N + x) % 100 != 0) {
+            return;
+        }
         uint32_t ab_xy = 0;
         for (int k = 0; k < K; k++) {
             ab_xy += static_cast<uint32_t>(mat_a(k, y))*static_cast<uint32_t>(mat_b(x, k));

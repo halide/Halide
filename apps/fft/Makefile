@@ -56,3 +56,5 @@ clean:
 
 fft_aot_test: $(BIN)/fft_aot_test
 	$(BIN)/fft_aot_test
+
+all: fft_aot_test bench_16x16 bench_32x32 bench_48x48 bench_64x64

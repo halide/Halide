@@ -4,9 +4,7 @@
 #include "add_operators.h"
 #include <boost/python.hpp>
 
-#include "../../src/IROperator.h"  // for operations with RVar
-#include "../../src/ImageParam.h"
-#include "../../src/RDom.h"
+#include "Halide.h"
 
 #include <string>
 
