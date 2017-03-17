@@ -167,20 +167,23 @@ EXPORT Expr raise_to_integer_power(const Expr &a, int64_t b);
  * return an empty vector. */
 EXPORT void split_into_ands(const Expr &cond, std::vector<Expr> &result);
 
-/** A builder to help create Exprs representing buffer_t structs
- * (e.g. foo.buffer) via calls to halide_buffer_init. Fill out the
- * fields and then call build. The resulting Expr will be a call to
- * halide_buffer_init with the struct members as arguments. If the
+/** A builder to help create Exprs representing halide_buffer_t
+ * structs (e.g. foo.buffer) via calls to halide_buffer_init. Fill out
+ * the fields and then call build. The resulting Expr will be a call
+ * to halide_buffer_init with the struct members as arguments. If the
  * buffer_memory field is undefined, it uses a call to alloca to make
- * some stack memory for the buffer. Other unitialized fields will
- * take on a value of zero in the constructed buffer. */
+ * some stack memory for the buffer. If the shape_memory field is
+ * undefined, it similarly uses stack memory for the shape. If the
+ * shape_memory field is null, it uses the dim field already in the
+ * buffer. Other unitialized fields will take on a value of zero in
+ * the constructed buffer. */
 struct BufferBuilder {
-    Expr buffer_memory;
-    Expr host, dev;
+    Expr buffer_memory, shape_memory;
+    Expr host, device, device_interface;
     Type type;
     int dimensions = 0;
     std::vector<Expr> mins, extents, strides;
-    Expr host_dirty, dev_dirty;
+    Expr host_dirty, device_dirty;
     EXPORT Expr build() const;
 };
 
@@ -678,6 +681,22 @@ inline Expr max(int a, const Expr &b) {
     return Internal::Max::make(Internal::make_const(b.type(), a), b);
 }
 
+/** Returns an expression representing the greater of an expressions
+ * vector, after doing any necessary type coersion using
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
+ * (with the exception of integer types on x86 without SSE4).
+ * The expressions are folded from left ie. max(.., max(.., ..)). */
+inline Expr max(std::vector<Expr> vec) {
+    for (auto &e : vec) {
+        user_assert(e.defined()) << "max of undefined Expr\n";
+    }
+    return Internal::fold_right(vec,
+                                [](Expr lhs, Expr rhs) -> Expr {
+                                    Internal::match_types(lhs, rhs);
+                                    return Internal::Max::make(lhs, rhs);
+                                });
+}
+
 /** Returns an expression representing the lesser of the two
  * arguments, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
@@ -709,6 +728,22 @@ inline Expr min(int a, const Expr &b) {
     user_assert(b.defined()) << "max of undefined Expr\n";
     Internal::check_representable(b.type(), a);
     return Internal::Min::make(Internal::make_const(b.type(), a), b);
+}
+
+/** Returns an expression representing the lesser of an expressions
+ * vector, after doing any necessary type coersion using
+ * \ref Internal::match_types. Vectorizes cleanly on most platforms
+ * (with the exception of integer types on x86 without SSE4).
+ * The expressions are folded from right ie. min(.., min(.., ..)). */
+inline Expr min(std::vector<Expr> vec) {
+    for (auto &e : vec) {
+        user_assert(e.defined()) << "min of undefined Expr\n";
+    }
+    return Internal::fold_right(vec,
+                                [](Expr lhs, Expr rhs) -> Expr {
+                                    Internal::match_types(lhs, rhs);
+                                    return Internal::Min::make(lhs, rhs);
+                                });
 }
 
 /** Operators on floats treats those floats as Exprs. Making these

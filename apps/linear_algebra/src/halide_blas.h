@@ -29,31 +29,31 @@
 #include "halide_sgemm_transAB.h"
 #include "halide_dgemm_transAB.h"
 
-inline int halide_scopy(buffer_t *x, buffer_t *y) {
+inline int halide_scopy(halide_buffer_t *x, halide_buffer_t *y) {
     return halide_scopy_impl(0, x, nullptr, y);
 }
 
-inline int halide_dcopy(buffer_t *x, buffer_t *y) {
+inline int halide_dcopy(halide_buffer_t *x, halide_buffer_t *y) {
     return halide_dcopy_impl(0, x, nullptr, y);
 }
 
-inline int halide_sscal(float a, buffer_t *x) {
+inline int halide_sscal(float a, halide_buffer_t *x) {
     return halide_sscal_impl(a, x, nullptr, x);
 }
 
-inline int halide_dscal(double a, buffer_t *x) {
+inline int halide_dscal(double a, halide_buffer_t *x) {
     return halide_dscal_impl(a, x, nullptr, x);
 }
 
-inline int halide_saxpy(float a, buffer_t *x, buffer_t *y) {
+inline int halide_saxpy(float a, halide_buffer_t *x, halide_buffer_t *y) {
     return halide_saxpy_impl(a, x, y, y);
 }
 
-inline int halide_daxpy(double a, buffer_t *x, buffer_t *y) {
+inline int halide_daxpy(double a, halide_buffer_t *x, halide_buffer_t *y) {
     return halide_daxpy_impl(a, x, y, y);
 }
 
-inline int halide_sgemv(bool trans, float a, buffer_t *A, buffer_t *x, float b, buffer_t *y) {
+inline int halide_sgemv(bool trans, float a, halide_buffer_t *A, halide_buffer_t *x, float b, halide_buffer_t *y) {
     if (trans) {
         return halide_sgemv_trans(a, A, x, b, y, y);
     } else {
@@ -61,7 +61,7 @@ inline int halide_sgemv(bool trans, float a, buffer_t *A, buffer_t *x, float b, 
     }
 }
 
-inline int halide_dgemv(bool trans, double a, buffer_t *A, buffer_t *x, double b, buffer_t *y) {
+inline int halide_dgemv(bool trans, double a, halide_buffer_t *A, halide_buffer_t *x, double b, halide_buffer_t *y) {
     if (trans) {
         return halide_dgemv_trans(a, A, x, b, y, y);
     } else {
@@ -69,15 +69,15 @@ inline int halide_dgemv(bool trans, double a, buffer_t *A, buffer_t *x, double b
     }
 }
 
-inline int halide_sger(float a, buffer_t *x, buffer_t *y, buffer_t *A) {
+inline int halide_sger(float a, halide_buffer_t *x, halide_buffer_t *y, halide_buffer_t *A) {
     return halide_sger_impl(a, x, y, A, A);
 }
 
-inline int halide_dger(float a, buffer_t *x, buffer_t *y, buffer_t *A) {
+inline int halide_dger(float a, halide_buffer_t *x, halide_buffer_t *y, halide_buffer_t *A) {
     return halide_dger_impl(a, x, y, A, A);
 }
 
-inline int halide_sgemm(bool transA, bool transB, float a, buffer_t *A, buffer_t *B, float b, buffer_t *C) {
+inline int halide_sgemm(bool transA, bool transB, float a, halide_buffer_t *A, halide_buffer_t *B, float b, halide_buffer_t *C) {
     if (transA && transB) {
         return halide_sgemm_transAB(a, A, B, b, C, C);
     } else if (transA) {
@@ -90,7 +90,7 @@ inline int halide_sgemm(bool transA, bool transB, float a, buffer_t *A, buffer_t
     return -1;
 }
 
-inline int halide_dgemm(bool transA, bool transB, double a, buffer_t *A, buffer_t *B, double b, buffer_t *C) {
+inline int halide_dgemm(bool transA, bool transB, double a, halide_buffer_t *A, halide_buffer_t *B, double b, halide_buffer_t *C) {
     if (transA && transB) {
         return halide_dgemm_transAB(a, A, B, b, C, C);
     } else if (transA) {

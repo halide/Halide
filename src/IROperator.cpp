@@ -616,58 +616,98 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result) {
 }
 
 Expr BufferBuilder::build() const {
-    user_assert(dimensions <= 4) << "Halide buffers are currently limited to four dimensions\n";
-
-    std::vector<Expr> args(11);
+    std::vector<Expr> args(10);
     if (buffer_memory.defined()) {
         args[0] = buffer_memory;
     } else {
-        args[0] = Call::make(type_of<struct buffer_t *>(), Call::alloca, {(int)sizeof(buffer_t)}, Call::Intrinsic);
+        args[0] = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca, {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
+    }
+
+    std::string shape_var_name = unique_name('t');
+    Expr shape_var = Variable::make(type_of<halide_dimension_t *>(), shape_var_name);
+    if (shape_memory.defined()) {
+        args[1] = shape_memory;
+    } else if (dimensions == 0) {
+        args[1] = make_zero(type_of<halide_dimension_t *>());
+    } else {
+        args[1] = shape_var;
     }
 
     if (host.defined()) {
-        args[1] = host;
+        args[2] = host;
     } else {
-        args[1] = make_zero(Handle());
+        args[2] = make_zero(type_of<void *>());
     }
 
-    if (dev.defined()) {
-        args[2] = dev;
+    if (device.defined()) {
+        args[3] = device;
     } else {
-        args[2] = make_zero(UInt(64));
+        args[3] = make_zero(UInt(64));
     }
 
-    args[3] = (int)type.code();
-    args[4] = type.bits();
-    args[5] = dimensions;
+    if (device_interface.defined()) {
+        args[4] = device_interface;
+    } else {
+        args[4] = make_zero(type_of<struct halide_device_interface_t *>());
+    }
 
-    std::vector<Expr> mins_(mins), extents_(extents), strides_(strides);
-    while ((int)mins_.size() < dimensions) {
-        mins_.push_back(0);
-    }
-    while ((int)extents_.size() < dimensions) {
-        extents_.push_back(0);
-    }
-    while ((int)strides_.size() < dimensions) {
-        strides_.push_back(0);
-    }
-    args[6] = Call::make(Handle(), Call::make_struct, mins_, Call::Intrinsic);
-    args[7] = Call::make(Handle(), Call::make_struct, extents_, Call::Intrinsic);
-    args[8] = Call::make(Handle(), Call::make_struct, strides_, Call::Intrinsic);
+    args[5] = (int)type.code();
+    args[6] = type.bits();
+    args[7] = dimensions;
 
+    std::vector<Expr> shape;
+    for (size_t i = 0; i < (size_t)dimensions; i++) {
+        if (i < mins.size()) {
+            shape.push_back(mins[i]);
+        } else {
+            shape.push_back(0);
+        }
+        if (i < extents.size()) {
+            shape.push_back(extents[i]);
+        } else {
+            shape.push_back(0);
+        }
+        if (i < strides.size()) {
+            shape.push_back(strides[i]);
+        } else {
+            shape.push_back(0);
+        }
+        // per-dimension flags, currently unused.
+        shape.push_back(0);
+    }
+    for (const Expr &e : shape) {
+        internal_assert(e.type() == Int(32))
+            << "Buffer shape fields must be int32_t:" << e << "\n";
+    }
+    Expr shape_arg = Call::make(type_of<halide_dimension_t *>(), Call::make_struct, shape, Call::Intrinsic);
+    if (shape_memory.defined()) {
+        args[8] = shape_arg;
+    } else if (dimensions == 0) {
+        args[8] = make_zero(type_of<halide_dimension_t *>());
+    } else {
+        args[8] = shape_var;
+    }
+
+    Expr flags = make_zero(UInt(64));
     if (host_dirty.defined()) {
-        args[9] = host_dirty;
-    } else {
-        args[9] = const_false();
+        flags = select(host_dirty,
+                       make_const(UInt(64), halide_buffer_flag_host_dirty),
+                       make_zero(UInt(64)));
+    }
+    if (device_dirty.defined()) {
+        flags = flags | select(device_dirty,
+                               make_const(UInt(64), halide_buffer_flag_device_dirty),
+                               make_zero(UInt(64)));
+    }
+    args[9] = flags;
+
+    Expr e = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init, args, Call::Extern);
+
+    if (!shape_memory.defined() && dimensions != 0) {
+        e = Let::make(shape_var_name, shape_arg, e);
     }
 
-    if (dev_dirty.defined()) {
-        args[10] = dev_dirty;
-    } else {
-        args[10] = const_false();
-    }
-
-    return Call::make(type_of<struct buffer_t *>(), Call::buffer_init, args, Call::Extern);
+    return e;
 }
 
 } // namespace Internal

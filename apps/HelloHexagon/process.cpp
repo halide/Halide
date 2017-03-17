@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    int (*pipeline)(buffer_t *, buffer_t*);
+    int (*pipeline)(halide_buffer_t *, halide_buffer_t*);
     if (strcmp(argv[1], "cpu") == 0) {
         pipeline = pipeline_cpu;
         printf("Using CPU schedule\n");
@@ -60,8 +60,8 @@ int main(int argc, char **argv) {
     });
 
     // To avoid the cost of powering HVX on in each call of the
-    // pipeline, power it on once now. Also, set HVX performance to turbo.
-    halide_hexagon_set_performance_mode(NULL, halide_hvx_power_turbo);
+    // pipeline, power it on once now. Also, set Hexagon performance to turbo.
+    halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_turbo);
     halide_hexagon_power_hvx_on(NULL);
 
     printf("Running pipeline...\n");
@@ -74,8 +74,10 @@ int main(int argc, char **argv) {
 
     printf("Done, time: %g s\n", time);
 
-    // We're done with HVX, power it off.
+    // We're done with HVX, power it off, and reset the performance mode
+    // to default to save power.
     halide_hexagon_power_hvx_off(NULL);
+    halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_default);
 
     // Validate that the algorithm did what we expect.
     const uint16_t gaussian5[] = { 1, 4, 6, 4, 1 };
