@@ -314,13 +314,14 @@ SOURCE_FILES = \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
-  Interval.cpp \
+  InferArguments.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
   IntegerDivisionTable.cpp \
+  Interval.cpp \
   Introspection.cpp \
   IR.cpp \
   IREquality.cpp \
@@ -442,13 +443,14 @@ HEADER_FILES = \
   runtime/HalideRuntime.h \
   runtime/HalideBuffer.h \
   ImageParam.h \
-  Interval.h \
+  InferArguments.h \
   InjectHostDevBufferCopies.h \
   InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
   IntegerDivisionTable.h \
+  Interval.h \
   Introspection.h \
   IntrusivePtr.h \
   IREquality.h \

@@ -253,7 +253,7 @@ public:
 }
 
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
-                        std::insert_iterator<std::vector<Module>> submodules) {
+                        Module &containing_module) {
     // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
 
@@ -282,7 +282,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
     s = injector.inject(s);
 
     if (!hexagon_module.functions().empty()) {
-        *submodules++ = hexagon_module;
+        containing_module.append(hexagon_module);
     }
 
     return s;
