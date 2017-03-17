@@ -40,7 +40,7 @@ private:
         Expr value_arg = mutate(provide->values[0]);
         vector<Expr> args = {
             provide->name,
-            Variable::make(type_of<struct buffer_t *>(), provide->name + ".buffer"),
+            Variable::make(type_of<struct halide_buffer_t *>(), provide->name + ".buffer"),
             provide->args[0],
             provide->args[1],
             provide->args[2],
@@ -81,7 +81,7 @@ private:
         // for coordinates normalization.
         vector<Expr> args(2);
         args[0] = call->name;
-        args[1] = Variable::make(type_of<struct buffer_t *>(), call->name + ".buffer");
+        args[1] = Variable::make(type_of<struct halide_buffer_t *>(), call->name + ".buffer");
         for (size_t i = 0; i < padded_call_args.size(); i++) {
 
             // If this is an ordinary dimension, insert a variable that will be

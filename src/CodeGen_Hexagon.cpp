@@ -195,7 +195,8 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
-    body = simplify(body);
+    // Don't simplify here, otherwise it will re-collapse the loads we
+    // want to carry across loop iterations.
     debug(2) << "Lowering after aligning loads:\n" << body << "\n\n";
 
     debug(1) << "Carrying values across loop iterations...\n";
@@ -211,7 +212,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
-    body = optimize_hexagon_instructions(body);
+    body = optimize_hexagon_instructions(body, target.natural_vector_size(Int(8)));
 
     if (uses_hvx(body)) {
         debug(1) << "Adding calls to qurt_hvx_lock...\n";
@@ -547,6 +548,50 @@ void CodeGen_Hexagon::init_module() {
     for (HvxIntrinsic &i : intrinsic_wrappers) {
         define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types,
                              i.flags & HvxIntrinsic::BroadcastScalarsToWords);
+    }
+}
+
+void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm::Value *buffer) {
+
+    if (target.os == Target::QuRT) {
+        // We're running standalone hexagon code
+        CodeGen_LLVM::push_buffer(name, dimensions, buffer);
+    } else {
+        // We're using an offloaded hexagon kernel.
+
+        // Buffers come in to hexagon kernels as just a dev/host
+        // pair. Other buffer fields (extents, strides, etc) were
+        // captured as separate arguments to the kernel.
+        StructType *struct_type = StructType::get(*context, {i64_t, i8_t->getPointerTo()});
+        llvm::Type *type = struct_type->getPointerTo();
+        buffer = builder->CreatePointerCast(buffer, type);
+        Value *device_ptr = builder->CreateLoad(create_gep(struct_type, buffer, {0, 0}));
+        Value *host_ptr = builder->CreateLoad(create_gep(struct_type, buffer, {0, 1}));
+
+        // Track this buffer name so that loads and stores from it
+        // don't try to be too aligned.
+        external_buffer.insert(name);
+
+        // Push the buffer pointer as well, to pass through to
+        // sub-functions. TODO: This might have nasty implications for
+        // extern stages on hexagon that take buffers passed through from
+        // the input, but we are constrained by how the hexagon runtime
+        // (which is hard to update) chose to treat buffer arguments.
+        sym_push(name + ".buffer", buffer);
+        sym_push(name + ".host", host_ptr);
+        sym_push(name + ".device", device_ptr);
+    }
+}
+
+void CodeGen_Hexagon::pop_buffer(const std::string &name, int dimensions) {
+    if (target.os == Target::QuRT) {
+        // We're running standalone hexagon code
+        CodeGen_LLVM::pop_buffer(name, dimensions);
+    } else  {
+        // We're using an offloaded hexagon kernel.
+        sym_pop(name + ".buffer");
+        sym_pop(name + ".host");
+        sym_pop(name + ".device");
     }
 }
 
@@ -1495,13 +1540,26 @@ void CodeGen_Hexagon::visit(const Call *op) {
         return;
     }
 
-    if (op->is_intrinsic(Call::prefetch) || op->is_intrinsic(Call::prefetch_2d)) {
-        llvm::Function *prefetch_fn = module->getFunction("halide_" + op->name);
-        internal_assert(prefetch_fn);
+    if (op->is_intrinsic(Call::prefetch)) {
+        internal_assert((op->args.size() == 3) || (op->args.size() == 5))
+            << "Hexagon only supports 1D or 2D prefetch\n";
+
         vector<llvm::Value *> args;
-        for (Expr i : op->args) {
-            args.push_back(codegen(i));
+        args.push_back(codegen(op->args[0]));
+        Expr extent_0_bytes = op->args[1] * op->args[2] * op->type.bytes();
+        args.push_back(codegen(extent_0_bytes));
+
+        llvm::Function *prefetch_fn = nullptr;
+        if (op->args.size() == 3) { // 1D prefetch: {base address, extent0, stride0}
+            prefetch_fn = module->getFunction("_halide_prefetch");
+        } else { // 2D prefetch: {base address, extent0, stride0, extent1, stride1}
+            prefetch_fn = module->getFunction("_halide_prefetch_2d");
+            args.push_back(codegen(op->args[3]));
+            Expr stride_1_bytes = op->args[4] * op->type.bytes();
+            args.push_back(codegen(stride_1_bytes));
         }
+        internal_assert(prefetch_fn);
+
         // The first argument is a pointer, which has type i8*. We
         // need to cast the argument, which might be a pointer to a
         // different type.

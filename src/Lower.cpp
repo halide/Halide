@@ -234,6 +234,10 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     s = remove_trivial_for_loops(s);
     debug(2) << "Lowering after second simplifcation:\n" << s << "\n\n";
 
+    debug(1) << "Reduce prefetch dimension...\n";
+    s = reduce_prefetch_dimension(s, t);
+    debug(2) << "Lowering after reduce prefetch dimension:\n" << s << "\n";
+
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
     s = simplify(s);

@@ -12,20 +12,20 @@ using namespace Halide;
 #endif
 
 extern "C" DLLEXPORT
-int dump_to_file(buffer_t *input, const char *filename,
+int dump_to_file(halide_buffer_t *input, const char *filename,
                  int desired_min, int desired_extent,
-                 buffer_t *) {
+                 halide_buffer_t *) {
     // Note the final output buffer argument is unused.
     if (input->host == nullptr) {
         // Request some range of the input buffer
-        input->min[0] = desired_min;
-        input->extent[0] = desired_extent;
+        input->dim[0].min = desired_min;
+        input->dim[0].extent = desired_extent;
     } else {
         FILE *f = fopen(filename, "w");
         // Depending on the schedule, other consumers, etc, Halide may
         // have evaluated more than we asked for, so don't assume that
         // the min and extents match what we requested.
-        int *base = ((int *)input->host) - input->min[0];
+        int *base = ((int *)input->host) - input->dim[0].min;
         for (int i = desired_min; i < desired_min + desired_extent; i++) {
             fprintf(f, "%d\n", base[i]);
         }
