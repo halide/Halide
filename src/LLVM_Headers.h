@@ -86,9 +86,10 @@
 
 namespace Halide { namespace Internal {
 template <typename T>
-typename T::value_type *iterator_to_pointer(T iter) {
+auto iterator_to_pointer(T iter) -> decltype(&*std::declval<T>()) {
     return &*iter;
 }
+
 }}
 
 
