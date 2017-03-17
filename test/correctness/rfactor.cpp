@@ -175,6 +175,7 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
     Func intm = g.update(0).rfactor(r.z, u);
     RVar rfi("rfi"), rfo("rfo");
     intm.update(0).split(rf, rfi, rfo, 2);
+    intm.compute_at(g, r.z);
 
     Func wrapper = f.in(intm).compute_root();
     f.compute_root();
@@ -249,6 +250,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
         RVar rzi("rzi"), rzo("rzo");
         Func intm = f.update(0).rfactor({{r.x, u}, {r.y, v}});
         intm.update(0).split(r.z, rzo, rzi, 2);
+        intm.compute_root();
 
         if (compile_module) {
             // Check the call graphs.
@@ -473,14 +475,15 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     Var u("u");
     Func intm1 = dot.update(0).rfactor(rxo, u);
     RVar rxio("rxio"), rxii("rxii");
-    intm1.compute_root();
-    intm1.update(0).parallel(u);
     intm1.update(0).split(rxi, rxio, rxii, 8);
 
     Var v("v");
     Func intm2 = intm1.update(0).rfactor(rxii, v);
     intm2.compute_at(intm1, u);
     intm2.update(0).vectorize(v, 8);
+
+    intm1.compute_root();
+    intm1.update(0).parallel(u);
 
     Buffer<int32_t> im = dot.realize();
 
@@ -529,19 +532,20 @@ int tuple_rfactor_test(bool compile_module) {
     g.reorder({y, x});
 
     Var xi("xi"), yi("yi");
-    g.update(0).tile(x, y, xi, yi, 2, 2);
+    g.update(0).tile(x, y, xi, yi, 4, 4);
 
     Var u("u");
     Func intm1 = g.update(0).rfactor(r.y, u);
-    intm1.update(0).parallel(u, 2);
     RVar rxi("rxi"), rxo("rxo");
-    intm1.tile(x, y, xi, yi, 2, 2);
+    intm1.tile(x, y, xi, yi, 4, 4);
     intm1.update(0).split(r.x, rxo, rxi, 2);
 
     Var v("v");
     Func intm2 = intm1.update(0).rfactor(rxo, v);
-    intm2.update(0).vectorize(v);
     intm2.compute_at(intm1, rxo);
+
+    intm1.update(0).parallel(u, 2);
+    intm1.compute_root();
 
     if (compile_module) {
         // Check the call graphs.
@@ -611,14 +615,15 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
 
     Var u("u"), v("v"), w("w");
     Func intm1 = g.update(0).specialize(p >= 5).rfactor({{r.y, v}, {r.z, w}});
-    intm1.update(0).parallel(v, 2);
+    intm1.update(0).parallel(v, 4);
+    intm1.compute_root();
 
     RVar rxi("rxi"), rxo("rxo");
     intm1.update(0).split(r.x, rxo, rxi, 2);
     Var t("t");
-    Func intm2 = intm1.update(0).specialize(q).rfactor(rxi, t);
-    Func intm3 = intm1.update(0).specialize(!q).rfactor(rxo, t);
-    Func intm4 = g.update(0).rfactor({{r.x, u}, {r.z, w}});
+    Func intm2 = intm1.update(0).specialize(q).rfactor(rxi, t).compute_root();
+    Func intm3 = intm1.update(0).specialize(!q).rfactor(rxo, t).compute_root();
+    Func intm4 = g.update(0).rfactor({{r.x, u}, {r.z, w}}).compute_root();
     intm4.update(0).vectorize(u);
 
     if (compile_module) {
@@ -806,7 +811,7 @@ int check_allocation_bound_test() {
     RVar rxo("rxo"), rxi("rxi");
     g.update(0).split(r.x, rxo, rxi, 2);
     f.compute_at(g, rxo);
-    g.update(0).rfactor({{rxo, u}});
+    g.update(0).rfactor({{rxo, u}}).compute_at(g, rxo);
 
     f.trace_realizations();
     g.set_custom_trace(allocation_bound_test_trace);
