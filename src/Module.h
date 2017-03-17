@@ -82,6 +82,9 @@ struct ModuleContents;
  * definitions and buffers. */
 class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
+
+    Module resolve_submodules() const;
+
 public:
     EXPORT Module(const std::string &name, const Target &target);
 

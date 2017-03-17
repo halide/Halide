@@ -263,24 +263,53 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
     }
 }
 
+Module Module::resolve_submodules() const {
+    if (submodules().empty()) {
+        return *this;
+    }
+
+    Module lowered_module(name(), target());
+
+    for (const auto &f : functions()) {
+        lowered_module.append(f);
+    }
+    for (const auto &buf : buffers()) {
+        lowered_module.append(buf);
+    }
+    for (const auto &ec : external_code()) {
+        lowered_module.append(ec);
+    }
+    for (const auto &m : submodules()) {
+        Module copy(m.resolve_submodules());
+
+        // Propgate external code blocks.
+        for (const auto &ec : external_code()) {
+            // TODO(zalman): Is this the right thing to do?
+            bool already_in_list = false;
+            for (const auto &ec_sub : copy.external_code()) {
+                if (ec_sub.name() == ec.name()) {
+                    already_in_list = true;
+                    break;
+                }
+            }
+            if (!already_in_list) {
+                copy.append(ec);
+            }
+        }
+
+        auto buf = m.compile_to_buffer();
+        lowered_module.append(buf);
+    }
+
+    return lowered_module;
+}
+
 void Module::compile(const Outputs &output_files) const {
     // If there are submodules, recursively lower submodules to
     // buffers on a copy of the module being compiled, then compile
     // the copied module.
     if (!submodules().empty()) {
-        Module lowered_module(name(), target());
-
-        for (const auto &f : functions()) {
-            lowered_module.append(f);
-        }
-        for (const auto &buf : buffers()) {
-            lowered_module.append(buf);
-        }
-        for (const auto &m : submodules()) {
-            auto buf = m.compile_to_buffer();
-            lowered_module.append(buf);
-        }
-        lowered_module.compile(output_files);
+        resolve_submodules().compile(output_files);
         return;
     }
 
