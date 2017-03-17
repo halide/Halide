@@ -87,13 +87,13 @@ public:
         i8_mask(1, 0) = -4;
         i8_mask(2, 0) = 7;
 
-        i8_mask(0, 0) = 2;
-        i8_mask(1, 0) = -5;
-        i8_mask(2, 0) = 8;
+        i8_mask(0, 1) = 2;
+        i8_mask(1, 1) = -5;
+        i8_mask(2, 1) = 8;
 
-        i8_mask(0, 0) = 3;
-        i8_mask(1, 0) = -6;
-        i8_mask(2, 0) = 7;
+        i8_mask(0, 2) = 3;
+        i8_mask(1, 2) = -6;
+        i8_mask(2, 2) = 9;
     }
 
 
@@ -449,13 +449,13 @@ public:
         i8_mask(1, 0) = -4;
         i8_mask(2, 0) = 7;
 
-        i8_mask(0, 0) = 2;
-        i8_mask(1, 0) = -5;
-        i8_mask(2, 0) = 8;
+        i8_mask(0, 1) = 2;
+        i8_mask(1, 1) = -5;
+        i8_mask(2, 1) = 8;
 
-        i8_mask(0, 0) = 3;
-        i8_mask(1, 0) = -6;
-        i8_mask(2, 0) = 7;
+        i8_mask(0, 2) = 3;
+        i8_mask(1, 2) = -6;
+        i8_mask(2, 2) = 9;
     }
 
     const char *name() { return "conv3x3a32"; }

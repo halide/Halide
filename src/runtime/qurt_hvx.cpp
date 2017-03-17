@@ -55,7 +55,7 @@ WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*
 // These need to inline, otherwise the extern call with the ptr
 // parameter breaks a lot of optimizations.
 __attribute__((always_inline))
-WEAK int halide_prefetch_2d(const void *ptr, int width_bytes, int height, int stride_bytes) {
+WEAK int _halide_prefetch_2d(const void *ptr, int width_bytes, int height, int stride_bytes) {
     // Notes:
     //  - Prefetches can be queued up to 3 deep (MAX_PREFETCH)
     //  - If 3 are already pending, the oldest request is dropped
@@ -74,8 +74,8 @@ WEAK int halide_prefetch_2d(const void *ptr, int width_bytes, int height, int st
 }
 
 __attribute__((always_inline))
-WEAK int halide_prefetch(const void *ptr, int size) {
-    halide_prefetch_2d(ptr, size, 1, 1);
+WEAK int _halide_prefetch(const void *ptr, int size) {
+    _halide_prefetch_2d(ptr, size, 1, 1);
     return 0;
 }
 

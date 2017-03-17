@@ -292,7 +292,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
         result += "X";
     } else {
         for (const auto &arg : args) {
-            result += prev_decls.check_and_enter_type(mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct buffer_t *>(), target, prev_decls));
+            result += prev_decls.check_and_enter_type(mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct halide_buffer_t *>(), target, prev_decls));
         }
         // I think ending in a 'Z' only happens for nested function types, which never
         // occurs with Halide, but putting it in anyway per.
@@ -585,7 +585,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
     }
 
     for (const auto &arg : args) {
-        result += mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct buffer_t *>(), target, prevs);
+        result += mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct halide_buffer_t *>(), target, prevs);
     }
 
     return result;
@@ -617,10 +617,10 @@ MangleResult ItaniumABIMangling_main[] = {
   { "_ZN3foo13test_functionEv", "int32_t foo::test_function(void)" },
   { "_ZN3foo3bar13test_functionEv", "int32_t foo::bar::test_function(void)" },
   { "_ZN3foo3bar13test_functionEi", "int32_t foo::test_function(int32_t)" },
-  { "_ZN3foo3bar13test_functionEiP8buffer_t", "int32_t foo::test_function(int32_t, struct buffer_t *)" },
+  { "_ZN3foo3bar13test_functionEiP15halide_buffer_t", "int32_t foo::test_function(int32_t, struct halide_buffer_t *)" },
   { "_ZN14test_namespace14test_namespace13test_functionENS0_15enclosing_class11test_structE",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct)" },
-  { "_ZN3foo3bar13test_functionEiP8buffer_tS2_", "foo::bar::test_function(int, buffer_t*, buffer_t*)" },
+  { "_ZN3foo3bar13test_functionEiP15halide_buffer_tS2_", "foo::bar::test_function(int, halide_buffer_t*, halide_buffer_t*)" },
   { "_ZN14test_namespace14test_namespace13test_functionEPNS_11test_structEPKS1_", "test_namespace::test_namespace::test_function(test_namespace::test_struct*, test_namespace::test_struct const*)" },
   { "_ZN14test_namespace14test_namespace13test_functionENS0_15enclosing_class11test_structES2_",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct, test_namespace::test_namespace::enclosing_class::test_struct)" },
@@ -637,10 +637,10 @@ MangleResult win32_expecteds[] = {
   { "\001?test_function@foo@@YAHXZ", "int32_t foo::test_function(void)" },
   { "\001?test_function@bar@foo@@YAHXZ", "int32_t foo::bar::test_function(void)" },
   { "\001?test_function@bar@foo@@YAHH@Z", "int32_t foo::test_function(int32_t)" },
-  { "\001?test_function@bar@foo@@YAHHPAUbuffer_t@@@Z", "int32_t foo::test_function(int32_t, struct buffer_t *)" },
+  { "\001?test_function@bar@foo@@YAHHPAUhalide_buffer_t@@@Z", "int32_t foo::test_function(int32_t, struct halide_buffer_t *)" },
   { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@@Z",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct)" },
-  { "\001?test_function@bar@foo@@YAHHPAUbuffer_t@@0@Z", "foo::bar::test_function(int, buffer_t*, buffer_t*)" },
+  { "\001?test_function@bar@foo@@YAHHPAUhalide_buffer_t@@0@Z", "foo::bar::test_function(int, halide_buffer_t*, halide_buffer_t*)" },
   { "\001?test_function@test_namespace@1@YAHPAUtest_struct@1@PBU21@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_struct*, test_namespace::test_struct const*)" },
   { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@0@Z",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct, test_namespace::test_namespace::enclosing_class::test_struct)" },
@@ -657,10 +657,10 @@ MangleResult win64_expecteds[] = {
   { "\001?test_function@foo@@YAHXZ", "int32_t foo::test_function(void)" },
   { "\001?test_function@bar@foo@@YAHXZ", "int32_t foo::bar::test_function(void)" },
   { "\001?test_function@bar@foo@@YAHH@Z", "int32_t foo::test_function(int32_t)" },
-  { "\001?test_function@bar@foo@@YAHHPEAUbuffer_t@@@Z", "int32_t foo::test_function(int32_t, struct buffer_t *)" },
+  { "\001?test_function@bar@foo@@YAHHPEAUhalide_buffer_t@@@Z", "int32_t foo::test_function(int32_t, struct halide_buffer_t *)" },
   { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@@Z",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct)" },
-  { "\001?test_function@bar@foo@@YAHHPEAUbuffer_t@@0@Z", "foo::bar::test_function(int, buffer_t*, buffer_t*)" },
+  { "\001?test_function@bar@foo@@YAHHPEAUhalide_buffer_t@@0@Z", "foo::bar::test_function(int, halide_buffer_t*, halide_buffer_t*)" },
   { "\001?test_function@test_namespace@1@YAHPEAUtest_struct@1@PEBU21@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_struct*, test_namespace::test_struct const*)" },
   { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@0@Z",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct, test_namespace::test_namespace::enclosing_class::test_struct)" },

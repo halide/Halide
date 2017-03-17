@@ -3,6 +3,7 @@
 namespace Halide {
 namespace Internal {
 
+using std::pair;
 using std::vector;
 
 Expr IRMutator::mutate(Expr e) {
@@ -38,6 +39,27 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
     }
     *stmt = nullptr;
 }
+
+pair<Region, bool> mutate_region(IRMutator *mutator, const Region &bounds) {
+    Region new_bounds(bounds.size());
+    bool bounds_changed = false;
+
+    for (size_t i = 0; i < bounds.size(); i++) {
+        Expr old_min = bounds[i].min;
+        Expr old_extent = bounds[i].extent;
+        Expr new_min = mutator->mutate(old_min);
+        Expr new_extent = mutator->mutate(old_extent);
+        if (!new_min.same_as(old_min)) {
+            bounds_changed = true;
+        }
+        if (!new_extent.same_as(old_extent)) {
+            bounds_changed = true;
+        }
+        new_bounds[i] = Range(new_min, new_extent);
+    }
+    return {new_bounds, bounds_changed};
+}
+
 }
 
 void IRMutator::visit(const IntImm *op)   {expr = op;}
@@ -258,19 +280,11 @@ void IRMutator::visit(const Free *op) {
 }
 
 void IRMutator::visit(const Realize *op) {
-    Region new_bounds(op->bounds.size());
-    bool bounds_changed = false;
+    Region new_bounds;
+    bool bounds_changed;
 
     // Mutate the bounds
-    for (size_t i = 0; i < op->bounds.size(); i++) {
-        Expr old_min    = op->bounds[i].min;
-        Expr old_extent = op->bounds[i].extent;
-        Expr new_min    = mutate(old_min);
-        Expr new_extent = mutate(old_extent);
-        if (!new_min.same_as(old_min))       bounds_changed = true;
-        if (!new_extent.same_as(old_extent)) bounds_changed = true;
-        new_bounds[i] = Range(new_min, new_extent);
-    }
+    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
 
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
@@ -281,6 +295,20 @@ void IRMutator::visit(const Realize *op) {
     } else {
         stmt = Realize::make(op->name, op->types, new_bounds,
                              condition, body);
+    }
+}
+
+void IRMutator::visit(const Prefetch *op) {
+    Region new_bounds;
+    bool bounds_changed;
+
+    // Mutate the bounds
+    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
+
+    if (!bounds_changed) {
+        stmt = op;
+    } else {
+        stmt = Prefetch::make(op->name, op->types, new_bounds, op->param);
     }
 }
 
