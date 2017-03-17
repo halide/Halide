@@ -69,21 +69,22 @@ public:
         }
     }
 };
+
 void set_alignment_host_ptr(ImageParam &i, int align, std::map<string, int> &m) {
     i.set_host_alignment(align);
     m.insert(std::pair<string, int>(i.name()+".host", align));
 }
+
 int count_host_alignment_asserts(Func f, std::map<string, int> m) {
     Target t = get_jit_target_from_environment();
     t.set_feature(Target::NoBoundsQuery);
     f.compute_root();
-    std::vector<Module> submodules;
-    Stmt s = Internal::lower({f.function()}, f.name(), t,
-                             std::inserter(submodules, submodules.end()));
+    Stmt s = Internal::lower_main_stmt({f.function()}, f.name(), t);
     CountHostAlignmentAsserts c(m);
     s.accept(&c);
     return c.count;
 }
+
 int main(int argc, char **argv) {
     Var x, y, c;
     std::map<string, int> m;

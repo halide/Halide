@@ -143,6 +143,7 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
+    input_module(nullptr),
     function(nullptr), context(nullptr),
     builder(nullptr),
     value(nullptr),
@@ -466,6 +467,8 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 }  // namespace
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    input_module = &input;
+  
     init_module();
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -524,6 +527,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Optimize
     CodeGen_LLVM::optimize_module();
 
+    input_module = nullptr;
+
     // Disown the module and return it.
     return std::move(module);
 }
@@ -564,6 +569,12 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
 
+    // Put the global buffers in the symbol table.
+    for (const auto &buf : input_module->buffers()) {
+        llvm::Value *buf_ptr = sym_get(buf.name() + ".buffer");
+        push_buffer(buf.name(), buf_ptr, true);
+    }
+
     // Put the arguments in the symbol table
     {
         size_t i = 0;
@@ -595,6 +606,11 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
         if (args[i].alignment.modulus != 0) {
             alignment_info.pop(args[i].name);
         }
+    }
+
+    // Remove the global buffers from the symbol table.
+    for (const auto &buf : input_module->buffers()) {
+        pop_buffer(buf.name(), true);
     }
 
     llvm::raw_os_ostream os(std::cerr);
@@ -1022,11 +1038,13 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
-void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
-    // Make sure the buffer object itself is not null
-    create_assertion(builder->CreateIsNotNull(buffer),
-                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                {name}, Call::Extern));
+void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer, bool global) {
+    if (!global) {
+        // Make sure the buffer object itself is not null
+      create_assertion(builder->CreateIsNotNull(buffer),
+                       Call::make(Int(32), "halide_error_buffer_argument_is_null",
+                                  {name}, Call::Extern));
+    }
 
     Value *host_ptr = buffer_host(buffer);
     Value *dev_ptr = buffer_dev(buffer);
@@ -1035,8 +1053,10 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     // don't try to be too aligned.
     external_buffer.insert(name);
 
-    // Push the buffer pointer as well, for backends that care.
-    sym_push(name + ".buffer", buffer);
+    if (!global) {
+        // Push the buffer pointer as well, for backends that care.
+        sym_push(name + ".buffer", buffer);
+    }
 
     sym_push(name + ".host", host_ptr);
     sym_push(name + ".dev", dev_ptr);
@@ -1057,8 +1077,10 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     sym_push(name + ".elem_size", buffer_elem_size(buffer));
 }
 
-void CodeGen_LLVM::pop_buffer(const string &name) {
-    sym_pop(name + ".buffer");
+void CodeGen_LLVM::pop_buffer(const string &name, bool global) {
+    if (!global) {
+        sym_pop(name + ".buffer");
+    }
     sym_pop(name + ".host");
     sym_pop(name + ".dev");
     sym_pop(name + ".host_dirty");
