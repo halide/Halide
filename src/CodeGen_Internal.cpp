@@ -165,6 +165,9 @@ bool function_takes_user_context(const std::string &name) {
         "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_get_gpu_device",
+        "halide_upgrade_buffer_t",
+        "halide_downgrade_buffer_t",
+        "halide_downgrade_buffer_t_device_fields",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
@@ -358,7 +361,9 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
 
     options = llvm::TargetOptions();
+    #if LLVM_VERSION < 50
     options.LessPreciseFPMADOption = true;
+    #endif
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
 

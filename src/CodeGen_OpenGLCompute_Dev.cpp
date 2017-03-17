@@ -20,7 +20,7 @@ using std::map;
 
 
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
-    : glc(src_stream), target(target) {
+    : glc(src_stream, target) {
 }
 
 namespace {
@@ -235,7 +235,7 @@ void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
-    glc.add_kernel(s, target, name, args);
+    glc.add_kernel(s, name, args);
 }
 
 namespace {
@@ -255,7 +255,6 @@ public:
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
-                                                                    Target target,
                                                                     const string &name,
                                                                     const vector<DeviceArgument> &args) {
 

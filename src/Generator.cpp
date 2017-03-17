@@ -276,6 +276,7 @@ private:
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto p : in) {
             if (p->name == "target") continue;
+            if (p->is_synthetic_param()) continue;
             if (p->is_schedule_param() != is_schedule_params) continue;
             out.push_back(p);
         }
@@ -304,7 +305,6 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
     indent_level++;
     if (!v.empty()) {
         for (auto p : v) {
-            if (p->is_synthetic_param()) continue;
             stream << indent() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
         }
         stream << "\n";
@@ -318,7 +318,6 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
         indent_level++;
         std::string comma = "";
         for (auto p : v) {
-            if (p->is_synthetic_param()) continue;
             stream << indent() << comma << p->get_c_type() << " " << p->name << "\n";
             comma = ", ";
         }
@@ -327,7 +326,6 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
         indent_level++;
         comma = "";
         for (auto p : v) {
-            if (p->is_synthetic_param()) continue;
             stream << indent() << comma << p->name << "(" << p->name << ")\n";
             comma = ", ";
         }
@@ -341,7 +339,6 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
     indent_level++;
     stream << indent() << "std::map<std::string, std::string> m;\n";
     for (auto p : v) {
-        if (p->is_synthetic_param()) continue;
         if (p->is_looplevel_param()) continue;
         stream << indent() << "if (" << p->name << " != " << p->get_default_value() << ") "
                         << "m[\"" << p->name << "\"] = " << p->call_to_string(p->name) << ";\n";
@@ -356,7 +353,6 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
         indent_level++;
         stream << indent() << "std::map<std::string, LoopLevel> m;\n";
         for (auto p : v) {
-            if (p->is_synthetic_param()) continue;
             if (!p->is_looplevel_param()) continue;
             stream << indent() << "if (" << p->name << " != " << p->get_default_value() << ") "
                             << "m[\"" << p->name << "\"] = " << p->name << ";\n";
@@ -556,7 +552,6 @@ void StubEmitter::emit() {
         std::string comma = "";
         indent_level++;
         for (auto p : generator_params) {
-            if (p->is_synthetic_param()) continue;
             std::string type = p->get_template_type();
             std::string value = p->get_template_value();
             if (type == "float" || type == "double") {
@@ -579,7 +574,6 @@ void StubEmitter::emit() {
         indent_level++;
         comma = "";
         for (auto p : generator_params) {
-            if (p->is_synthetic_param()) continue;
             std::string type = p->get_template_type();
             if (type == "typename") {
                 stream << indent() << comma << "Halide::type_of<" << p->name << ">()\n";

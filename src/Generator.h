@@ -329,7 +329,7 @@ public:
     const std::string name;
 
     // overload the set() function to call the right virtual method based on type.
-    // This allows us to attempt to set a GeneratorParam via a 
+    // This allows us to attempt to set a GeneratorParam via a
     // plain C++ type, even if we don't know the specific templated
     // subclass. Attempting to set the wrong type will assert.
     // Notice that there is no typed setter for Enums, for obvious reasons;
@@ -457,11 +457,11 @@ protected:
 private:
     T value_;
 
-    template <typename T2, typename std::enable_if<std::is_convertible<T, T2>::value>::type * = nullptr>
+    template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &t2, const char * msg) {
         // Arithmetic types must roundtrip losslessly.
-        if (!std::is_same<T, T2>::value && 
-            std::is_arithmetic<T>::value && 
+        if (!std::is_same<T, T2>::value &&
+            std::is_arithmetic<T>::value &&
             std::is_arithmetic<T2>::value) {
             const T t = t2;
             const T2 t2a = t;
@@ -472,7 +472,7 @@ private:
         value_ = t2;
     }
 
-    template <typename T2, typename std::enable_if<!std::is_convertible<T, T2>::value>::type * = nullptr>
+    template <typename T2, typename std::enable_if<!std::is_convertible<T2, T>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &, const char *msg) {
         fail_wrong_type(msg);
     }
@@ -1342,6 +1342,9 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
+    friend class ::Halide::Func;
+    friend class ::Halide::Stage;
+
     bool allow_synthetic_generator_params() const override {
         return !T::has_static_halide_type();
     }
@@ -1910,7 +1913,7 @@ public:
     GeneratorOutput_Func<T> &operator=(const Func &f) {
         this->check_value_writable();
 
-        // Don't bother verifying the Func type, dimensions, etc., here: 
+        // Don't bother verifying the Func type, dimensions, etc., here:
         // That's done later, when we produce the pipeline.
         get_assignable_func_ref(0) = f;
         return *this;
@@ -2241,7 +2244,7 @@ public:
     // Call build() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     EXPORT Module build_module(const std::string &function_name = "",
-                               const LoweredFunc::LinkageType linkage_type = LoweredFunc::External);
+                               const LoweredFunc::LinkageType linkage_type = LoweredFunc::ExternalPlusMetadata);
 
     /**
      * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
@@ -2257,8 +2260,8 @@ public:
     void set_inputs(const Args &...args) {
         // set_inputs_vector() checks this too, but checking it here allows build_inputs() to avoid out-of-range checks.
         ParamInfo &pi = param_info();
-        user_assert(sizeof...(args) == pi.filter_inputs.size()) 
-                << "Expected exactly " << pi.filter_inputs.size() 
+        user_assert(sizeof...(args) == pi.filter_inputs.size())
+                << "Expected exactly " << pi.filter_inputs.size()
                 << " inputs but got " << sizeof...(args) << "\n";
         set_inputs_vector(build_inputs(std::forward_as_tuple<const Args &...>(args...), make_index_sequence<sizeof...(Args)>{}));
     }
@@ -2364,9 +2367,9 @@ private:
     };
 
     const size_t size;
-    // Lazily-allocated-and-inited struct with info about our various Params. 
+    // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter to lazy-init.
-    std::unique_ptr<ParamInfo> param_info_ptr; 
+    std::unique_ptr<ParamInfo> param_info_ptr;
 
     std::shared_ptr<Internal::ValueTracker> value_tracker;
     bool inputs_set{false};
@@ -2540,7 +2543,7 @@ private:
     }
 
     template<typename... Args, size_t... Indices>
-    std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...>& t, index_sequence<Indices...>) { 
+    std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...>& t, index_sequence<Indices...>) {
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
@@ -2557,7 +2560,7 @@ public:
     virtual ~GeneratorFactory() {}
     // Note that this method must never return null:
     // if it cannot return a valid Generator, it should assert-fail.
-    virtual std::unique_ptr<GeneratorBase> create(const GeneratorContext &context, 
+    virtual std::unique_ptr<GeneratorBase> create(const GeneratorContext &context,
                                                   const std::map<std::string, std::string> &params) const = 0;
 };
 
@@ -2609,7 +2612,7 @@ private:
 
 }  // namespace Internal
 
-template <class T> 
+template <class T>
 class Generator : public Internal::GeneratorBase {
 protected:
     Generator() :
@@ -2726,7 +2729,7 @@ private:
     void operator=(Generator&& that) = delete;
 };
 
-template <class GeneratorClass> 
+template <class GeneratorClass>
 class RegisterGenerator {
 public:
     RegisterGenerator(const char* generator_name) {

@@ -89,6 +89,7 @@ private:
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
     void visit(const Shuffle *);
+    void visit(const Prefetch *);
 };
 
 template<typename T>
@@ -447,6 +448,17 @@ void IRComparer::visit(const Shuffle *op) {
     compare_scalar(e->indices.size(), op->indices.size());
     for (size_t i = 0; (i < e->indices.size()) && result == Equal; i++) {
         compare_scalar(e->indices[i], op->indices[i]);
+    }
+}
+
+void IRComparer::visit(const Prefetch *op) {
+    const Prefetch *s = expr.as<Prefetch>();
+
+    compare_names(s->name, op->name);
+    compare_scalar(s->bounds.size(), op->bounds.size());
+    for (size_t i = 0; (result == Equal) && (i < s->bounds.size()); i++) {
+        compare_expr(s->bounds[i].min, op->bounds[i].min);
+        compare_expr(s->bounds[i].extent, op->bounds[i].extent);
     }
 }
 
