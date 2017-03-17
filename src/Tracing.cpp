@@ -6,11 +6,6 @@
 namespace Halide {
 namespace Internal {
 
-int tracing_level() {
-    char *trace = getenv("HL_TRACE");
-    return trace ? atoi(trace) : 0;
-}
-
 using std::vector;
 using std::map;
 using std::string;
@@ -45,11 +40,14 @@ struct TraceEventBuilder {
 class InjectTracing : public IRMutator {
 public:
     const map<string, Function> &env;
-    int global_level;
+    bool trace_all_loads, trace_all_stores, trace_all_realizations;
 
-    InjectTracing(const map<string, Function> &e)
-        : env(e),
-          global_level(tracing_level()) {}
+    InjectTracing(const map<string, Function> &e, const Target &t)
+        : env(e) {
+        trace_all_loads = t.has_feature(Target::TraceLoads);
+        trace_all_stores = t.has_feature(Target::TraceStores);
+        trace_all_realizations = t.has_feature(Target::TraceRealizations);
+    }
 
 private:
     using IRMutator::visit;
@@ -107,10 +105,10 @@ private:
             Function f = env.find(op->name)->second;
             internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
-            trace_it = f.is_tracing_loads() || (global_level > 2);
+            trace_it = f.is_tracing_loads() || trace_all_loads;
             trace_parent = Variable::make(Int(32), op->name + ".trace_id");
         } else if (op->call_type == Call::Image) {
-            trace_it = global_level > 2;
+            trace_it = trace_all_loads;
             trace_parent = Variable::make(Int(32), "pipeline.trace_id");
         }
 
@@ -145,7 +143,7 @@ private:
         Function f = iter->second;
         internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
-        if (f.is_tracing_stores() || (global_level > 1)) {
+        if (f.is_tracing_stores() || trace_all_stores) {
             // Wrap each expr in a tracing call
 
             const vector<Expr> &values = op->values;
@@ -183,7 +181,7 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        if (f.is_tracing_realizations() || global_level > 0) {
+        if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call before and after the realize body
             TraceEventBuilder builder;
             builder.func = op->name;
@@ -220,7 +218,7 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        if (f.is_tracing_realizations() || global_level > 0) {
+        if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call around each pipeline event
             TraceEventBuilder builder;
             builder.func = op->name;
@@ -249,7 +247,7 @@ private:
 
             Stmt new_body = Block::make(op->body, Evaluate::make(end_op_call));
 
-            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call, 
+            stmt = LetStmt::make(f.name() + ".trace_id", begin_op_call,
                                  ProducerConsumer::make(op->name, op->is_producer, new_body));
         }
     }
@@ -274,9 +272,10 @@ public:
 };
 
 Stmt inject_tracing(Stmt s, const string &pipeline_name,
-                    const map<string, Function> &env, const vector<Function> &outputs) {
+                    const map<string, Function> &env, const vector<Function> &outputs,
+                    const Target &t) {
     Stmt original = s;
-    InjectTracing tracing(env);
+    InjectTracing tracing(env, t);
 
     // Add a dummy realize block for the output buffers
     for (Function output : outputs) {

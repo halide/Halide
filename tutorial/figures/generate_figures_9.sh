@@ -15,7 +15,7 @@ rm -rf tmp
 mkdir -p tmp
 
 # grab a trace
-HL_TRACE=3 HL_TRACE_FILE=$(pwd)/tmp/trace.bin make -C ../.. tutorial_lesson_09*
+HL_JIT_TARGET=host-trace_stores-trace_loads-trace_realizations HL_TRACE_FILE=$(pwd)/tmp/trace.bin make -C ../.. tutorial_lesson_09*
 ls tmp/trace.bin
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz -s 192 192 -t 1 -d 10000 -h 10 -f g 0 10 -1 0 32 2 32 32 1 0 0 1  |  avconv -f rawvideo -pix_fmt bgr32 -s 192x192 -i /dev/stdin tmp/frames_%04d.tif
@@ -49,5 +49,3 @@ cat tmp/trace.bin | ../../bin/HalideTraceViz -s 576 304 -t 1 -d 10000 -h 40 -f '
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz -s 544 144 -t 1 -d 10000 -h 5 -f 'producer$6' 0 16 -1 0 32 1 32 32 1 0 -l 'producer$6' producer 32 32 1 -f 'consumer$6' 0 50 -1 0 32 1 32 96 1 0 -l 'consumer$6' consumer 32 96 1  | avconv -f rawvideo -pix_fmt bgr32 -s 544x144 -i /dev/stdin tmp/frames_%04d.tif
 make_gif lesson_09_compute_at_rvar.gif 10
-
-
