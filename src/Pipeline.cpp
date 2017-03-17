@@ -84,8 +84,6 @@ struct PipelineContents {
 
     PipelineContents() :
         module("", Target()) {
-        // user_context needs to be a const void * (not a non-const void *)
-        // to maintain backwards compatibility with existing code.
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void*>(), 0);
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context",
                                            /*is_explicit_name*/ true, /*register_instance*/ false);
@@ -319,25 +317,26 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     const Module &old_module = contents->module;
 
     bool same_compile = !old_module.functions().empty() && old_module.target() == target;
-    // Either generated name or names are the same
-    same_compile = same_compile && (fn_name.empty() || old_module.functions().front().name == fn_name);
+    // Either generated name or one of the LoweredFuncs in the existing module has the same name.
+    same_compile = same_compile && fn_name.empty();
+    bool found_name = false;
+    for (const auto &lf : old_module.functions()) {
+        if (lf.name == fn_name) {
+            found_name = true;
+            break;
+        }
+    }
+    same_compile = same_compile && found_name;
     // Number of args + number of outputs is the same as total args in existing LoweredFunc
     same_compile = same_compile && (lowering_args.size() + outputs().size()) == old_module.functions().front().args.size();
     // The initial args are the same.
-#if 0
-    for (size_t i = 0; i < lowering_args.size(); i++) {
-        same_compile = same_compile && lowering_args[i] == *(const Argument *)&old_module.functions().front().args[i];
-    }
-#endif
     same_compile = same_compile && std::equal(lowering_args.begin(), lowering_args.end(), old_module.functions().front().args.begin());
     // Linkage is the same.
     same_compile = same_compile && old_module.functions().front().linkage == linkage_type;
     // The outputs of a Pipeline cannot change, so no need to test them.
 
     if (same_compile) {
-        // We can avoid relowering and just reuse the private body
-        // from the old module. We expect two functions in the old
-        // module: the private one then the public one.
+        // We can avoid relowering and just reuse the existing module.
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
@@ -347,7 +346,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
         contents->module = lower(contents->outputs, new_fn_name, target, lowering_args, linkage_type, custom_passes);
     }
-    
+
     return contents->module;
 }
 

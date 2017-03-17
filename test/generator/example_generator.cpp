@@ -12,7 +12,7 @@
 
 namespace {
 
-enum class SomeEnum { Foo, Bar };
+enum SomeEnum { Foo, Bar };
 
 // Note the inheritance using the Curiously Recurring Template Pattern
 class Example : public Halide::Generator<Example> {
@@ -40,9 +40,9 @@ public:
     GeneratorParam<int> channels{ "channels", 3 };
     // ...or enums: {default, name->value map}
     GeneratorParam<SomeEnum> enummy{ "enummy",
-                                     SomeEnum::Foo,
-                                     { { "foo", SomeEnum::Foo },
-                                       { "bar", SomeEnum::Bar } } };
+                                     Foo,
+                                     { { "foo", Foo },
+                                       { "bar", Bar } } };
     // ...or bools: {default}
     ScheduleParam<bool> vectorize{ "vectorize", true };
 

@@ -32,7 +32,9 @@ public:
 
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
-    CodeGen_C(std::ostream &dest, OutputKind output_kind = CImplementation,
+    CodeGen_C(std::ostream &dest,
+              Target target,
+              OutputKind output_kind = CImplementation,
               const std::string &include_guard = "");
     ~CodeGen_C();
 
@@ -42,6 +44,7 @@ public:
     EXPORT static void test();
 
 protected:
+
     /** Emit a declaration. */
     // @{
     virtual void compile(const LoweredFunc &func);
@@ -50,6 +53,9 @@ protected:
 
     /** An ID for the most recently generated ssa variable */
     std::string id;
+
+    /** The target being generated for. */
+    Target target;
 
     /** Controls whether this instance is generating declarations or
      * definitions and whether the interface us extern "C" or C++. */
@@ -108,7 +114,7 @@ protected:
     void close_scope(const std::string &comment);
 
     /** Unpack a buffer into its constituent parts and push it on the allocations stack. */
-    void push_buffer(Type t, const std::string &buffer_name);
+    void push_buffer(Type t, int dimensions, const std::string &buffer_name);
 
     /** Pop a buffer from the stack. */
     void pop_buffer(const std::string &buffer_name);
@@ -129,6 +135,9 @@ protected:
 
     /** Track current calling convention scope. */
     bool extern_c_open;
+
+    /** Track which handle types have been forward-declared already. */
+    std::set<const halide_handle_cplusplus_type *> forward_declared;
 
     void set_name_mangling_mode(NameMangling mode);
 
@@ -172,6 +181,7 @@ protected:
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
     void visit(const Shuffle *);
+    void visit(const Prefetch *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 };

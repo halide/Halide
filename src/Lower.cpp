@@ -59,6 +59,7 @@
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 #include "WrapCalls.h"
+#include "WrapExternStages.h"
 
 namespace Halide {
 namespace Internal {
@@ -240,6 +241,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = remove_trivial_for_loops(s);
     debug(2) << "Lowering after second simplifcation:\n" << s << "\n\n";
 
+    debug(1) << "Reduce prefetch dimension...\n";
+    s = reduce_prefetch_dimension(s, t);
+    debug(2) << "Lowering after reduce prefetch dimension:\n" << s << "\n";
+
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
     s = simplify(s);
@@ -363,7 +368,18 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         }
     }
 
-    result_module.append(LoweredFunc(pipeline_name, public_args, s, linkage_type));
+    LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
+    result_module.append(main_func);
+
+    // Append a wrapper for this pipeline that accepts old buffer_ts
+    // and upgrades them. It will use the same name, so it will
+    // require C++ linkage. We don't need it when jitting.
+    if (!t.has_feature(Target::JIT)) {
+        add_legacy_wrapper(result_module, main_func);
+    }
+
+    // Also append any wrappers for extern stages that expect the old buffer_t
+    wrap_legacy_extern_stages(result_module);
 
     return result_module;
 }

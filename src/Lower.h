@@ -24,9 +24,9 @@ class IRMutator;
  * on. Some stages of lowering may be target-specific. The Module may
  * contain submodules for computation offloaded to another execution
  * engine or API as well as buffers that are used in the passed in
- * Stmt. At present this only ever produces one LoweredFunc in the
- * Module, but that may change. */
- EXPORT Module lower(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
+ * Stmt. Multiple LoweredFuncs are added to support legacy buffer_t
+ * calling convention. */
+EXPORT Module lower(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
                     std::vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
                     const std::vector<IRMutator *> &custom_passes = std::vector<IRMutator *>());
 
