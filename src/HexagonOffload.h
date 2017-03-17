@@ -7,8 +7,6 @@
  * Hexagon host runtime module.
  */
 
-#include <iterator>
-
 #include "Module.h"
 
 namespace Halide {
