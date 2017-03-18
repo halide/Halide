@@ -313,7 +313,6 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   ImageParam.h
-  InferArguments.h
   Interval.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
@@ -458,7 +457,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   ImageParam.cpp
-  InferArguments.cpp
   Interval.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
