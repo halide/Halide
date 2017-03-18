@@ -866,8 +866,9 @@ class VectorSubs : public IRMutator {
             s = LetStmt::make(l.first, l.second, s);
         }
 
-        int lanes = replacement.type().lanes();
-        s = For::make(var, 0, lanes, ForType::Serial, DeviceAPI::None, s);
+        const Ramp *r = replacement.as<Ramp>();
+        internal_assert(r) << "Expected replacement in VectorSubs to be a ramp\n";
+        s = For::make(var, r->base, r->lanes, ForType::Serial, DeviceAPI::None, s);
 
         return s;
     }
