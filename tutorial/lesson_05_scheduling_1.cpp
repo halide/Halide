@@ -457,9 +457,9 @@ int main(int argc, char **argv) {
 
         printf("Equivalent (serial) C:\n");
         // This outermost loop should be a parallel for loop, but that's hard in C.
-        for (int tile_index = 0; tile_index < 16; tile_index++) {
-            int y_outer = tile_index / 4;
-            int x_outer = tile_index % 4;
+        for (int tile_index = 0; tile_index < 4; tile_index++) {
+            int y_outer = tile_index / 2;
+            int x_outer = tile_index % 2;
             for (int y_inner = 0; y_inner < 4; y_inner++) {
                 for (int x_inner = 0; x_inner < 4; x_inner++) {
                     int y = y_outer * 4 + y_inner;
