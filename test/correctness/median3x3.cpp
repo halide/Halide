@@ -30,13 +30,13 @@ int main(int arch, char **argv) {
 
     // Algorithm.
     Func max_x("max_x"), min_x("min_x"), mid_x("mid_x");
-    max_x(x, y) = max({ input(x - 1, y), input(x, y), input(x + 1, y) });
-    min_x(x, y) = min({ input(x - 1, y), input(x, y), input(x + 1, y) });
+    max_x(x, y) = max(input(x - 1, y), input(x, y), input(x + 1, y));
+    min_x(x, y) = min(input(x - 1, y), input(x, y), input(x + 1, y));
     mid_x(x, y) = mid3(input(x-1, y), input(x, y), input(x+1, y));
 
     Func min_max("min_max"), max_min("max_min"), mid_mid("mid_mid");
-    min_max(x, y) = min({ max_x(x, y - 1), max_x(x, y), max_x(x, y + 1) });
-    max_min(x, y) = max({ min_x(x, y - 1), min_x(x, y), min_x(x, y + 1) });
+    min_max(x, y) = min(max_x(x, y - 1), max_x(x, y), max_x(x, y + 1));
+    max_min(x, y) = max(min_x(x, y - 1), min_x(x, y), min_x(x, y + 1));
     mid_mid(x, y) = mid3(mid_x(x, y-1), mid_x(x, y), mid_x(x, y+1));
 
     Func median3x3("median3x3");
