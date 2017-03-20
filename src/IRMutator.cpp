@@ -368,7 +368,7 @@ void IRMutator::visit(const AddressOf *op) {
     if (index.same_as(op->index)) {
         expr = op;
     } else {
-        expr = AddressOf::make(op->type, op->name, index, op->elem_type, op->image, op->param);
+        expr = AddressOf::make(op->name, index, op->elem_type, op->image, op->param);
     }
 }
 

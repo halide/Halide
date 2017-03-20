@@ -241,7 +241,7 @@ class ReducePrefetchDimension : public IRMutator {
                 index_names.push_back(index_name);
                 offset += Variable::make(Int(32), index_name) * stride;
             }
-            Expr new_base_addr = AddressOf::make(Handle(), base->name, simplify(base->index + offset),
+            Expr new_base_addr = AddressOf::make(base->name, simplify(base->index + offset),
                                                  base->type, base->image, base->param);
 
             vector<Expr> args = {new_base_addr};
@@ -311,7 +311,7 @@ class SplitPrefetch : public IRMutator {
                 extents.push_back(outer_extent);
             }
 
-            Expr new_base_addr = AddressOf::make(Handle(), base->name, simplify(base->index + offset),
+            Expr new_base_addr = AddressOf::make(base->name, simplify(base->index + offset),
                                                  base->type, base->image, base->param);
 
             vector<Expr> args = {new_base_addr, Expr(1), simplify(max_byte_size / elem_size)};

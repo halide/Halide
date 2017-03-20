@@ -467,6 +467,7 @@ void IRComparer::visit(const AddressOf *op) {
     const AddressOf *e = expr.as<AddressOf>();
     compare_names(e->name, op->name);
     compare_expr(e->index, op->index);
+    compare_types(e->type, op->type);
 }
 
 } // namespace

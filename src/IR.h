@@ -717,6 +717,8 @@ struct Prefetch : public StmtNode<Prefetch> {
     static const IRNodeType _type_info = IRNodeType::Prefetch;
 };
 
+/** Equivalent to a Load node, but this represents the address that would be
+ * loaded from rather than the value. */
 struct AddressOf : public ExprNode<AddressOf> {
     std::string name;
     Expr index;
@@ -729,7 +731,7 @@ struct AddressOf : public ExprNode<AddressOf> {
     // If it's an address of an image parameter, this points to that
     Parameter param;
 
-    EXPORT static Expr make(Type type, const std::string &name, const Expr &index,
+    EXPORT static Expr make(const std::string &name, const Expr &index,
                             Type elem_type, Buffer<> image = Buffer<>(),
                             Parameter param = Parameter());
 
