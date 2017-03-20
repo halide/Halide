@@ -16,7 +16,7 @@ namespace Runtime {
 namespace Internal {
 
 WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
-    while (c.extent[d] == 1 && d) d--;
+    while (d >= 0 && c.extent[d] == 1) d--;
 
     if (d == -1) {
         const void *from = (void *)(c.src + off);
