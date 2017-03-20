@@ -681,26 +681,20 @@ inline Expr max(int a, const Expr &b) {
     return Internal::Max::make(Internal::make_const(b.type(), a), b);
 }
 
+inline Expr max(float a, const Expr &b) {return max(Expr(a), b);}
+inline Expr max(const Expr &a, float b) {return max(a, Expr(b));}
+
 /** Returns an expression representing the greater of an expressions
  * vector, after doing any necessary type coersion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
- * The expressions are folded from left ie. max(.., max(.., ..)). */
-inline Expr max(std::vector<Expr> vec) {
-    for (auto &e : vec) {
-        user_assert(e.defined()) << "max of undefined Expr\n";
-    }
-    return Internal::fold_right(vec,
-                                [](Expr lhs, Expr rhs) -> Expr {
-                                    Internal::match_types(lhs, rhs);
-                                    return Internal::Max::make(lhs, rhs);
-                                });
+ * The expressions are folded from right ie. max(.., max(.., ..)). 
+ * The arguments can be any mix of types but must all be convertible to Expr. */
+template<typename A, typename B, typename C, typename... Rest>
+inline Expr max(const A &a, const B &b, const C &c, Rest&&... rest) {
+    return max(a, max(b, c, std::forward<Rest>(rest)...));
 }
 
-/** Returns an expression representing the lesser of the two
- * arguments, after doing any necessary type coercion using
- * \ref Internal::match_types. Vectorizes cleanly on most platforms
- * (with the exception of integer types on x86 without SSE4). */
 inline Expr min(Expr a, Expr b) {
     user_assert(a.defined() && b.defined())
         << "min of undefined Expr\n";
@@ -730,20 +724,18 @@ inline Expr min(int a, const Expr &b) {
     return Internal::Min::make(Internal::make_const(b.type(), a), b);
 }
 
+inline Expr min(float a, const Expr &b) {return min(Expr(a), b);}
+inline Expr min(const Expr &a, float b) {return min(a, Expr(b));}
+
 /** Returns an expression representing the lesser of an expressions
  * vector, after doing any necessary type coersion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
- * The expressions are folded from right ie. min(.., min(.., ..)). */
-inline Expr min(std::vector<Expr> vec) {
-    for (auto &e : vec) {
-        user_assert(e.defined()) << "min of undefined Expr\n";
-    }
-    return Internal::fold_right(vec,
-                                [](Expr lhs, Expr rhs) -> Expr {
-                                    Internal::match_types(lhs, rhs);
-                                    return Internal::Min::make(lhs, rhs);
-                                });
+ * The expressions are folded from right ie. min(.., min(.., ..)).
+ * The arguments can be any mix of types but must all be convertible to Expr. */
+template<typename A, typename B, typename C, typename... Rest>
+inline Expr min(const A &a, const B &b, const C &c, Rest&&... rest) {
+    return min(a, min(b, c, std::forward<Rest>(rest)...));
 }
 
 /** Operators on floats treats those floats as Exprs. Making these
@@ -772,10 +764,6 @@ inline Expr operator==(const Expr &a, float b) {return a == Expr(b);}
 inline Expr operator==(float a, const Expr &b) {return Expr(a) == b;}
 inline Expr operator!=(const Expr &a, float b) {return a != Expr(b);}
 inline Expr operator!=(float a, const Expr &b) {return Expr(a) != b;}
-inline Expr min(float a, const Expr &b) {return min(Expr(a), b);}
-inline Expr min(const Expr &a, float b) {return min(a, Expr(b));}
-inline Expr max(float a, const Expr &b) {return max(Expr(a), b);}
-inline Expr max(const Expr &a, float b) {return max(a, Expr(b));}
 // @}
 
 /** Clamps an expression to lie within the given bounds. The bounds

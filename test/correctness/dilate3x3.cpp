@@ -22,8 +22,8 @@ int main(int argc, char **argv) {
     // Define the dilate algorithm.
     Func max_x("max_x");
     Func dilate3x3("dilate3x3");
-    max_x(x, y) = max({ input(x-1, y), input(x, y), input(x+1, y) });
-    dilate3x3(x, y) = max({ max_x(x, y-1), max_x(x, y), max_x(x, y+1) });
+    max_x(x, y) = max(input(x-1, y), input(x, y), input(x+1, y));
+    dilate3x3(x, y) = max(max_x(x, y-1), max_x(x, y), max_x(x, y+1));
 
     // Schedule.
     Target target = get_jit_target_from_environment();
