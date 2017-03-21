@@ -1769,8 +1769,8 @@ struct Test {
 
         if (is_v62) {
             // v62 - Broadcasting unsigned 8 bit and 16 bit scalers
-            check("v*.b = vsplat(r*)", hvx_width/1, in_u8(0));
-            check("v*.h = vsplat(r*)", hvx_width/2, in_u16(0));
+            // check("v*.b = vsplat(r*)", hvx_width/1, in_u8(0));
+            // check("v*.h = vsplat(r*)", hvx_width/2, in_u16(0));
         } else {
             check("vsplat(r*)", hvx_width/1, in_u8(0));
             check("vsplat(r*)", hvx_width/2, in_u16(0));

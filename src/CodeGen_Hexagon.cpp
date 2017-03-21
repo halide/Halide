@@ -354,8 +354,8 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat_dv),  i32v2, "satw_add.vw.vw.dv",    {i32v2, i32v2} },
 
         // v62 - 32 bit saturating add
-        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_vaddw,    Intrinsic::hexagon_V6_vadduwsat),    u32v1, "satuw_add.vuw.vuw",    {u32v1, u32v1} },
-        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_vaddw_dv, Intrinsic::hexagon_V6_vadduwsat_dv), u32v2, "satuw_add.vuw.vuw.dv", {u32v2, u32v2} },
+        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_vaddw,    Intrinsic::hexagon_V6_vadduwsat),    u32v1, "add.vuw.vuw",    {u32v1, u32v1} },
+        { V62PICK(is_128B, is_v62, Intrinsic::hexagon_V6_vaddw_dv, Intrinsic::hexagon_V6_vadduwsat_dv), u32v2, "add.vuw.vuw.dv", {u32v2, u32v2} },
         
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsububsat),    u8v1,  "satub_sub.vub.vub",    {u8v1,  u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhsat),    u16v1, "satuh_sub.vuh.vuh",    {u16v1, u16v1} },
@@ -1297,9 +1297,17 @@ int CodeGen_Hexagon::native_vector_bits() const {
 
 void CodeGen_Hexagon::visit(const Add *op) {
     if (op->type.is_vector()) {
-        value = call_intrin(op->type,
-                            "halide.hexagon.add" + type_suffix(op->a, op->b, false),
-                            {op->a, op->b});
+        if (op->a.type().is_uint() && op->b.type().is_uint() && op->a.type().bits()==32 && op->b.type().bits()==32) {
+            // v62 - Saturating 32 bit addition
+            value = call_intrin(op->type,
+                                "halide.hexagon.add" + type_suffix(op->a, op->b, true),
+                                {op->a, op->b});
+        }
+        else {
+            value = call_intrin(op->type,
+                                "halide.hexagon.add" + type_suffix(op->a, op->b, false),
+                                {op->a, op->b});
+        }
     } else {
         CodeGen_Posix::visit(op);
     }
