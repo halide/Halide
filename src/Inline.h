@@ -18,6 +18,10 @@ Stmt inline_function(Stmt, Function);
 Expr inline_function(Expr, Function);
 // @}
 
+/** Check if the schedule of an inlined function is legal, throwing an error
+ * if it is not. */
+void validate_schedule_inlined_function(Function f);
+
 }
 }
 

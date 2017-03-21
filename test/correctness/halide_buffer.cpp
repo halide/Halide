@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
         Buffer<float, 2> a(100, 80);
         Buffer<const float, 3> b(a); // statically safe
         Buffer<const void, 4> c(b);  // statically safe
-        Buffer<const float, 3> d(c); // does runtime checks of actual dimensionality and type.
+        Buffer<const float, 3> d(c); // does runtime check of actual type.
         Buffer<void, 3> e(a);        // statically safe
         Buffer<float, 2> f(e);       // runtime checks
     }

@@ -6,6 +6,7 @@
  */
 
 #include "Expr.h"
+#include "Parameter.h"
 
 #include <map>
 
@@ -62,6 +63,26 @@ enum class TailStrategy {
      * update definitions use RoundUp. For RVars in update
      * definitions use GuardWithIf. */
     Auto
+};
+
+/** Different ways to handle accesses outside the original extents in a prefetch. */
+enum class PrefetchBoundStrategy {
+    /** Clamp the prefetched exprs by intersecting the prefetched region with
+     * the original extents. This may make the exprs of the prefetched region
+     * more complicated. */
+    Clamp,
+
+    /** Guard the prefetch with if-guards that ignores the prefetch if
+     * any of the prefetched region ever goes beyond the original extents
+     * (i.e. all or nothing). */
+    GuardWithIf,
+
+    /** Leave the prefetched exprs as are (no if-guards around the prefetch
+     * and no intersecting with the original extents). This makes the prefetch
+     * exprs simpler but this may cause prefetching of region outside the original
+     * extents. This is good if prefetch won't fault when accessing region
+     * outside the original extents. */
+    NonFaulting
 };
 
 /** A reference to a site in a Halide statement at the top of the
@@ -192,9 +213,13 @@ struct StorageDim {
     bool fold_forward;
 };
 
-struct Prefetch {
+struct PrefetchDirective {
+    std::string name;
     std::string var;
     Expr offset;
+    PrefetchBoundStrategy strategy;
+    // If it's a prefetch load from an image parameter, this points to that.
+    Parameter param;
 };
 
 struct FunctionContents;
@@ -282,8 +307,8 @@ public:
     /** You may perform prefetching in some of the dimensions of a
      * function. See \ref Func::prefetch */
     // @{
-    const std::vector<Prefetch> &prefetches() const;
-    std::vector<Prefetch> &prefetches();
+    const std::vector<PrefetchDirective> &prefetches() const;
+    std::vector<PrefetchDirective> &prefetches();
     // @}
 
     /** Mark calls of a function by 'f' to be replaced with its wrapper

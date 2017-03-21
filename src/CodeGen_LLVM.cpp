@@ -135,8 +135,11 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
     return llvm::GlobalValue::ExternalLinkage;
 
     switch (t) {
-    case LoweredFunc::External: return llvm::GlobalValue::ExternalLinkage;
-    default: return llvm::GlobalValue::PrivateLinkage;
+    case LoweredFunc::ExternalPlusMetadata:
+    case LoweredFunc::External:
+        return llvm::GlobalValue::ExternalLinkage;
+    default:
+        return llvm::GlobalValue::PrivateLinkage;
     }
 }
 
@@ -155,6 +158,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     metadata_t_type(nullptr),
     argument_t_type(nullptr),
     scalar_value_t_type(nullptr),
+    device_interface_t_type(nullptr),
 
     // Vector types. These need an LLVMContext before they can be initialized.
     i8x8(nullptr),
@@ -428,8 +432,11 @@ struct MangledNames {
     string metadata_name;
 };
 
-MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType linkage,
-                               const std::vector<LoweredArgument> &args, const Target &target) {
+MangledNames get_mangled_names(const std::string &name,
+                               LoweredFunc::LinkageType linkage,
+                               NameMangling mangling,
+                               const std::vector<LoweredArgument> &args,
+                               const Target &target) {
     std::vector<std::string> namespaces;
     MangledNames names;
     names.simple_name = extract_namespaces(name, namespaces);
@@ -437,9 +444,10 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
     names.argv_name = names.simple_name + "_argv";
     names.metadata_name = names.simple_name + "_metadata";
 
-    if (linkage == LoweredFunc::External &&
-        target.has_feature(Target::CPlusPlusMangling) &&
-        !target.has_feature(Target::JIT)) { // TODO: make this work with JIT or remove mangling flag in JIT target setup
+    if (linkage != LoweredFunc::Internal &&
+        ((mangling == NameMangling::Default &&
+          target.has_feature(Target::CPlusPlusMangling)) ||
+         mangling == NameMangling::CPlusPlus)) {
         std::vector<ExternFuncArgument> mangle_args;
         for (const auto &arg : args) {
             if (arg.kind == Argument::InputScalar) {
@@ -460,7 +468,7 @@ MangledNames get_mangled_names(const std::string &name, LoweredFunc::LinkageType
 }
 
 MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
-    return get_mangled_names(f.name, f.linkage, f.args, target);
+    return get_mangled_names(f.name, f.linkage, f.name_mangling, f.args, target);
 }
 
 }  // namespace
@@ -481,8 +489,14 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
 
     // Ensure some types we need are defined
-    buffer_t_type = module->getTypeByName("struct.buffer_t");
-    internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
+    buffer_t_type = module->getTypeByName("struct.halide_buffer_t");
+    internal_assert(buffer_t_type) << "Did not find halide_buffer_t in initial module";
+
+    type_t_type = module->getTypeByName("struct.halide_type_t");
+    internal_assert(type_t_type) << "Did not find halide_type_t in initial module";
+
+    dimension_t_type = module->getTypeByName("struct.halide_dimension_t");
+    internal_assert(dimension_t_type) << "Did not find halide_dimension_t in initial module";
 
     metadata_t_type = module->getTypeByName("struct.halide_filter_metadata_t");
     internal_assert(metadata_t_type) << "Did not find halide_filter_metadata_t in initial module";
@@ -492,6 +506,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     scalar_value_t_type = module->getTypeByName("struct.halide_scalar_value_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_scalar_value_t in initial module";
+
+    device_interface_t_type = module->getTypeByName("struct.halide_device_interface_t");
+    internal_assert(scalar_value_t_type) << "Did not find halide_device_interface_t in initial module";
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
@@ -505,7 +522,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LoweredFunc::External) {
+        if (f.linkage == LoweredFunc::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(names.argv_name);
             llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name, names.simple_name, f.args);
 
@@ -542,10 +559,32 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
             arg_types[i] = llvm_type_of(args[i].type);
         }
     }
-
-    // Make our function
     FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
+
+    // Make our function. There may already be a declaration of it.
+    function = module->getFunction(extern_name);
+    if (!function) {
+        function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
+    } else {
+        user_assert(function->isDeclaration())
+            << "Another function with the name " << extern_name
+            << " already exists in the same module\n";
+        if (func_t != function->getFunctionType()) {
+            std::cerr << "Desired function type for " << extern_name << ":\n";
+            #if LLVM_VERSION >= 50
+            func_t->print(dbgs(), true);
+            #else
+            func_t->dump();
+            #endif
+            std::cerr << "Declared function type of " << extern_name << ":\n";
+            #if LLVM_VERSION >= 50
+            function->getFunctionType()->print(dbgs(), true);
+            #else
+            function->getFunctionType()->dump();
+            #endif
+            user_error << "Cannot create a function with a declaration of mismatched type.\n";
+        }
+    }
     set_function_attributes_for_target(function, target);
 
     // Mark the buffer args as no alias
@@ -570,7 +609,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
         for (auto &arg : function->args()) {
             sym_push(args[i].name, &arg);
             if (args[i].is_buffer()) {
-                push_buffer(args[i].name, &arg);
+                push_buffer(args[i].name, args[i].dimensions, &arg);
             }
 
             if (args[i].alignment.modulus != 0) {
@@ -589,7 +628,7 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
     for (size_t i = 0; i < args.size(); i++) {
         sym_pop(args[i].name);
         if (args[i].is_buffer()) {
-            pop_buffer(args[i].name);
+            pop_buffer(args[i].name, args[i].dimensions);
         }
 
         if (args[i].alignment.modulus != 0) {
@@ -604,13 +643,14 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
 }
 
 void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_name,
-                                  const std::string &extern_name) {
+                                const std::string &extern_name) {
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
     // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
     // happen for every output buffer if the function succeeds.
-    if (f.linkage == LoweredFunc::External && target.has_feature(Target::MSAN)) {
+    if (f.linkage != LoweredFunc::Internal &&
+        target.has_feature(Target::MSAN)) {
         llvm::Function *annotate_buffer_fn = module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
         internal_assert(annotate_buffer_fn) << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
         annotate_buffer_fn->setDoesNotAlias(0);
@@ -726,49 +766,53 @@ void CodeGen_LLVM::compile_buffer(const Buffer<> &buf) {
     // Embed the buffer declaration as a global.
     internal_assert(buf.defined());
 
-    buffer_t b = *(buf.raw_buffer());
-    user_assert(b.host)
+    user_assert(buf.data())
         << "Can't embed buffer " << buf.name() << " because it has a null host pointer.\n";
-    user_assert(!b.dev_dirty)
+    user_assert(!buf.device_dirty())
         << "Can't embed Image \"" << buf.name() << "\""
         << " because it has a dirty device pointer\n";
 
-    // Figure out the offset of the last pixel.
-    size_t num_elems = 1;
-    for (int d = 0; b.extent[d]; d++) {
-        num_elems += b.stride[d] * (b.extent[d] - 1);
-    }
-    vector<char> array(b.host, b.host + num_elems * b.elem_size);
+    Constant *type_fields[] = {
+        ConstantInt::get(i8_t, buf.type().code()),
+        ConstantInt::get(i8_t, buf.type().bits()),
+        ConstantInt::get(i16_t, buf.type().lanes())
+    };
 
-    // Embed the buffer_t and make it point to the data array.
+    Constant *shape = nullptr;
+    if (buf.dimensions()) {
+        size_t shape_size = buf.dimensions() * sizeof(halide_dimension_t);
+        vector<char> shape_blob((char *)buf.raw_buffer()->dim, (char *)buf.raw_buffer()->dim + shape_size);
+        shape = create_binary_blob(shape_blob, buf.name() + ".shape");
+        shape = ConstantExpr::getPointerCast(shape, dimension_t_type->getPointerTo());
+    } else {
+        shape = ConstantPointerNull::get(dimension_t_type->getPointerTo());
+    }
+
+    // For now, we assume buffers that aren't scalar are constant,
+    // while scalars can be mutated. This accommodates all our existing
+    // use cases, which is that all buffers are constant, except those
+    // used to store stateful module information in offloading runtimes.
+    bool constant = buf.dimensions() != 0;
+
+    vector<char> data_blob((const char *)buf.data(), (const char *)buf.data() + buf.size_in_bytes());
+
+    Constant *fields[] = {
+        ConstantInt::get(i64_t, 0),                              // device
+        ConstantPointerNull::get(device_interface_t_type->getPointerTo()), // device_interface
+        create_binary_blob(data_blob, buf.name() + ".data", constant), // host
+        ConstantInt::get(i64_t, halide_buffer_flag_host_dirty),  // flags
+        ConstantStruct::get(type_t_type, type_fields),           // type
+        ConstantInt::get(i32_t, buf.dimensions()),               // dimensions
+        shape,                                                   // dim
+        ConstantPointerNull::get(i8_t->getPointerTo()),          // padding
+    };
+    Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
+
+    // Embed the halide_buffer_t and make it point to the data array.
     GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
                                                 false, GlobalValue::PrivateLinkage,
                                                 0, buf.name() + ".buffer");
-    llvm::ArrayType *i32_array = ArrayType::get(i32_t, 4);
-
-    llvm::Type *padding_bytes_type =
-        buffer_t_type->getElementType(buffer_t_type->getNumElements()-1);
-
-    // For now, we assume buffers that aren't scalar are constant,
-    // while scalars can be mutated. This accomodates all our existing
-    // use cases, which is that all buffers are constant, except those
-    // used to store stateful module information in offloading runtimes.
-    bool constant = num_elems > 1;
-
-    Constant *fields[] = {
-        ConstantInt::get(i64_t, 0), // dev
-        create_binary_blob(array, buf.name() + ".data", constant), // host
-        ConstantArray::get(i32_array, get_constants(i32_t, b.extent, b.extent + 4)),
-        ConstantArray::get(i32_array, get_constants(i32_t, b.stride, b.stride + 4)),
-        ConstantArray::get(i32_array, get_constants(i32_t, b.min, b.min + 4)),
-        ConstantInt::get(i32_t, b.elem_size),
-        ConstantInt::get(i8_t, 1), // host_dirty
-        ConstantInt::get(i8_t, 0), // dev_dirty
-        Constant::getNullValue(padding_bytes_type)
-    };
-    Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
     global->setInitializer(buffer_struct);
-
 
     // Finally, dump it in the symbol table
     Constant *zero[] = {ConstantInt::get(i32_t, 0)};
@@ -1022,14 +1066,14 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
-void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
+void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *buffer) {
     // Make sure the buffer object itself is not null
     create_assertion(builder->CreateIsNotNull(buffer),
                      Call::make(Int(32), "halide_error_buffer_argument_is_null",
                                 {name}, Call::Extern));
 
     Value *host_ptr = buffer_host(buffer);
-    Value *dev_ptr = buffer_dev(buffer);
+    Value *device_ptr = buffer_device(buffer);
 
     // Instead track this buffer name so that loads and stores from it
     // don't try to be too aligned.
@@ -1039,43 +1083,50 @@ void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     sym_push(name + ".buffer", buffer);
 
     sym_push(name + ".host", host_ptr);
-    sym_push(name + ".dev", dev_ptr);
-    sym_push(name + ".host_dirty", buffer_host_dirty(buffer));
-    sym_push(name + ".dev_dirty", buffer_dev_dirty(buffer));
-    sym_push(name + ".extent.0", buffer_extent(buffer, 0));
-    sym_push(name + ".extent.1", buffer_extent(buffer, 1));
-    sym_push(name + ".extent.2", buffer_extent(buffer, 2));
-    sym_push(name + ".extent.3", buffer_extent(buffer, 3));
-    sym_push(name + ".stride.0", buffer_stride(buffer, 0));
-    sym_push(name + ".stride.1", buffer_stride(buffer, 1));
-    sym_push(name + ".stride.2", buffer_stride(buffer, 2));
-    sym_push(name + ".stride.3", buffer_stride(buffer, 3));
-    sym_push(name + ".min.0", buffer_min(buffer, 0));
-    sym_push(name + ".min.1", buffer_min(buffer, 1));
-    sym_push(name + ".min.2", buffer_min(buffer, 2));
-    sym_push(name + ".min.3", buffer_min(buffer, 3));
-    sym_push(name + ".elem_size", buffer_elem_size(buffer));
+    sym_push(name + ".device", device_ptr);
+    sym_push(name + ".host_dirty", buffer_get_flag(buffer, halide_buffer_flag_host_dirty));
+    sym_push(name + ".device_dirty", buffer_get_flag(buffer, halide_buffer_flag_device_dirty));
+    sym_push(name + ".type.code", buffer_type_code(buffer));
+    sym_push(name + ".type.bits", buffer_type_bits(buffer));
+    sym_push(name + ".type.lanes", buffer_type_lanes(buffer));
+    sym_push(name + ".type.bytes", buffer_type_bytes(buffer));
+    for (int i = 0; i < dimensions; i++) {
+        string d = std::to_string(i);
+        sym_push(name + ".extent." + d, buffer_extent(buffer, i));
+        sym_push(name + ".stride." + d, buffer_stride(buffer, i));
+        sym_push(name + ".min." + d, buffer_min(buffer, i));
+    }
 }
 
-void CodeGen_LLVM::pop_buffer(const string &name) {
+void CodeGen_LLVM::pop_buffer(const string &name, int dimensions) {
     sym_pop(name + ".buffer");
     sym_pop(name + ".host");
-    sym_pop(name + ".dev");
+    sym_pop(name + ".device");
     sym_pop(name + ".host_dirty");
-    sym_pop(name + ".dev_dirty");
-    sym_pop(name + ".extent.0");
-    sym_pop(name + ".extent.1");
-    sym_pop(name + ".extent.2");
-    sym_pop(name + ".extent.3");
-    sym_pop(name + ".stride.0");
-    sym_pop(name + ".stride.1");
-    sym_pop(name + ".stride.2");
-    sym_pop(name + ".stride.3");
-    sym_pop(name + ".min.0");
-    sym_pop(name + ".min.1");
-    sym_pop(name + ".min.2");
-    sym_pop(name + ".min.3");
-    sym_pop(name + ".elem_size");
+    sym_pop(name + ".device_dirty");
+    sym_pop(name + ".type.code");
+    sym_pop(name + ".type.bits");
+    sym_pop(name + ".type.bytes");
+    sym_pop(name + ".type.lanes");
+    for (int i = 0; i < dimensions; i++) {
+        string d = std::to_string(i);
+        sym_pop(name + ".extent." + d);
+        sym_pop(name + ".stride." + d);
+        sym_pop(name + ".min." + d);
+    }
+}
+
+llvm::Value *CodeGen_LLVM::create_gep(llvm::Type *t, llvm::Value *obj, std::vector<int> field) {
+    vector<llvm::Value *> args;
+    for (int i : field) {
+        args.push_back(ConstantInt::get(i32_t, i));
+    }
+    llvm::Value *result;
+    result = builder->CreateInBoundsGEP(
+        t,
+        obj,
+        args);
+    return result;
 }
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
@@ -1083,16 +1134,33 @@ Value *CodeGen_LLVM::buffer_host(Value *buffer) {
     return builder->CreateLoad(buffer_host_ptr(buffer));
 }
 
-Value *CodeGen_LLVM::buffer_dev(Value *buffer) {
-    return builder->CreateLoad(buffer_dev_ptr(buffer));
+Value *CodeGen_LLVM::buffer_device(Value *buffer) {
+    return builder->CreateLoad(buffer_device_ptr(buffer));
 }
 
-Value *CodeGen_LLVM::buffer_host_dirty(Value *buffer) {
-    return builder->CreateLoad(buffer_host_dirty_ptr(buffer));
+Value *CodeGen_LLVM::buffer_device_interface(Value *buffer) {
+    return builder->CreateLoad(buffer_device_interface_ptr(buffer));
 }
 
-Value *CodeGen_LLVM::buffer_dev_dirty(Value *buffer) {
-    return builder->CreateLoad(buffer_dev_dirty_ptr(buffer));
+Value *CodeGen_LLVM::buffer_flags(Value *buffer) {
+    return builder->CreateLoad(buffer_flags_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_get_flag(Value *buffer, halide_buffer_flags flag) {
+    Value *flags = buffer_flags(buffer);
+    flags = builder->CreateAnd(flags, ConstantInt::get(i64_t, 1 << flag));
+    return builder->CreateICmpNE(flags, ConstantInt::get(i64_t, 0));
+}
+
+void CodeGen_LLVM::buffer_set_flag(Value *buffer, halide_buffer_flags flag, bool value) {
+    Value *flags_ptr = buffer_flags_ptr(buffer);
+    Value *flags = builder->CreateLoad(flags_ptr);
+    if (value) {
+        flags = builder->CreateOr(flags, ConstantInt::get(i64_t, flag));
+    } else {
+        flags = builder->CreateAnd(flags, ConstantInt::get(i64_t, ~(flag)));
+    }
+    builder->CreateStore(flags, flags_ptr);
 }
 
 Value *CodeGen_LLVM::buffer_extent(Value *buffer, int i) {
@@ -1107,89 +1175,84 @@ Value *CodeGen_LLVM::buffer_min(Value *buffer, int i) {
     return builder->CreateLoad(buffer_min_ptr(buffer, i));
 }
 
-Value *CodeGen_LLVM::buffer_elem_size(Value *buffer) {
-    return builder->CreateLoad(buffer_elem_size_ptr(buffer));
+Value *CodeGen_LLVM::buffer_type_code(Value *buffer) {
+    return builder->CreateLoad(buffer_type_code_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_type_bits(Value *buffer) {
+    return builder->CreateLoad(buffer_type_bits_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_type_lanes(Value *buffer) {
+    return builder->CreateLoad(buffer_type_lanes_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_type_bytes(Value *buffer) {
+    Value *bits = buffer_type_bits(buffer);
+    return builder->CreateAShr(bits, ConstantInt::get(bits->getType(), 8));
+}
+
+Value *CodeGen_LLVM::buffer_dimensions(Value *buffer) {
+    return builder->CreateLoad(buffer_dimensions_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_dim_array(Value *buffer) {
+    return builder->CreateLoad(buffer_dim_array_ptr(buffer));
+}
+
+Value *CodeGen_LLVM::buffer_device_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 0});
+}
+
+Value *CodeGen_LLVM::buffer_device_interface_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 1});
 }
 
 Value *CodeGen_LLVM::buffer_host_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        1,
-        "buf_host");
+    return create_gep(buffer_t_type, buffer, {0, 2});
 }
 
-Value *CodeGen_LLVM::buffer_dev_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        0,
-        "buf_dev");
+Value *CodeGen_LLVM::buffer_flags_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 3});
 }
 
-Value *CodeGen_LLVM::buffer_host_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        6,
-        "buffer_host_dirty");
+Value *CodeGen_LLVM::buffer_type_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 4});
 }
 
-Value *CodeGen_LLVM::buffer_dev_dirty_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        7,
-        "buffer_dev_dirty");
+Value *CodeGen_LLVM::buffer_type_code_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 4, 0});
 }
 
-Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32_t, 0);
-    llvm::Value *field = ConstantInt::get(i32_t, 2);
-    llvm::Value *idx = ConstantInt::get(i32_t, i);
-    vector<llvm::Value *> args = {zero, field, idx};
-    return builder->CreateInBoundsGEP(
-        buffer_t_type,
-        buffer,
-        args,
-        "buf_extent");
+Value *CodeGen_LLVM::buffer_type_bits_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 4, 1});
 }
 
-Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32_t, 0);
-    llvm::Value *field = ConstantInt::get(i32_t, 3);
-    llvm::Value *idx = ConstantInt::get(i32_t, i);
-    vector<llvm::Value *> args = {zero, field, idx};
-    return builder->CreateInBoundsGEP(
-        buffer_t_type,
-        buffer,
-        args,
-        "buf_stride");
+Value *CodeGen_LLVM::buffer_type_lanes_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 4, 2});
+}
+
+Value *CodeGen_LLVM::buffer_dimensions_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 5});
+}
+
+Value *CodeGen_LLVM::buffer_dim_array_ptr(Value *buffer) {
+    return create_gep(buffer_t_type, buffer, {0, 6});
 }
 
 Value *CodeGen_LLVM::buffer_min_ptr(Value *buffer, int i) {
-    llvm::Value *zero = ConstantInt::get(i32_t, 0);
-    llvm::Value *field = ConstantInt::get(i32_t, 4);
-    llvm::Value *idx = ConstantInt::get(i32_t, i);
-    vector<llvm::Value *> args = {zero, field, idx};
-    return builder->CreateInBoundsGEP(
-        buffer_t_type,
-        buffer,
-        args,
-        "buf_min");
+    Value *dim_array = buffer_dim_array(buffer);
+    return create_gep(dimension_t_type, dim_array, {i, 0});
 }
 
-Value *CodeGen_LLVM::buffer_elem_size_ptr(Value *buffer) {
-    return builder->CreateConstInBoundsGEP2_32(
-        buffer_t_type,
-        buffer,
-        0,
-        5,
-        "buf_elem_size");
+Value *CodeGen_LLVM::buffer_extent_ptr(Value *buffer, int i) {
+    Value *dim_array = buffer_dim_array(buffer);
+    return create_gep(dimension_t_type, dim_array, {i, 1});
+}
+
+Value *CodeGen_LLVM::buffer_stride_ptr(Value *buffer, int i) {
+    Value *dim_array = buffer_dim_array(buffer);
+    return create_gep(dimension_t_type, dim_array, {i, 2});
 }
 
 Value *CodeGen_LLVM::codegen(Expr e) {
@@ -2538,11 +2601,11 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         // We can generate slightly cleaner IR with fewer alignment
         // restrictions if we recognize the most common types we
-        // expect to get alloca'd. Right now this is just buffer_t. In
-        // the future there will also be halide_dimension_t and
-        // halide_buffer_t.
-        if (op->type == type_of<struct buffer_t *>()) {
-            value = create_alloca_at_entry(buffer_t_type, *sz / sizeof(buffer_t));
+        // expect to get alloca'd.
+        if (op->type == type_of<struct halide_buffer_t *>()) {
+            value = create_alloca_at_entry(buffer_t_type, *sz / sizeof(halide_buffer_t));
+        } else if (op->type == type_of<struct halide_dimension_t *>()) {
+            value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
         } else {
             // Just use an i8* and make the users bitcast it.
             value = create_alloca_at_entry(i8_t, *sz);
@@ -2622,8 +2685,13 @@ void CodeGen_LLVM::visit(const Call *op) {
             string extern_sub_fn_name = sub_fn_name;
             llvm::Function *sub_fn = module->getFunction(sub_fn_name);
             if (!sub_fn) {
-                extern_sub_fn_name = get_mangled_names(sub_fn_name, LoweredFunc::External, current_function_args, get_target()).extern_name;
-                debug(1) << "Did not find function " << sub_fn_name << ", assuming extern \"C\" " << extern_sub_fn_name << "\n";
+                extern_sub_fn_name = get_mangled_names(sub_fn_name,
+                                                       LoweredFunc::External,
+                                                       NameMangling::Default,
+                                                       current_function_args,
+                                                       get_target()).extern_name;
+                debug(1) << "Did not find function " << sub_fn_name
+                         << ", assuming extern \"C\" " << extern_sub_fn_name << "\n";
                 vector<llvm::Type *> arg_types;
                 for (const auto &arg : function->args()) {
                      arg_types.push_back(arg.getType());
@@ -2705,10 +2773,23 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
         value = call;
-    } else if (op->is_intrinsic(Call::prefetch) ||
-               op->is_intrinsic(Call::prefetch_2d)) {
-        // Convert to a no-op since prefetch was not supported by target
-        value = ConstantInt::get(i32_t, 0);
+    } else if (op->is_intrinsic(Call::prefetch)) {
+        user_assert((op->args.size() == 3) && is_one(op->args[1]))
+            << "Only prefetch of 1 cache line is supported.\n";
+
+        llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch");
+        internal_assert(prefetch_fn);
+
+        vector<llvm::Value *> args;
+        args.push_back(codegen(op->args[0]));
+        // The first argument is a pointer, which has type i8*. We
+        // need to cast the argument, which might be a pointer to a
+        // different type.
+        llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
+        args[0] = builder->CreateBitCast(args[0], ptr_type);
+
+        value = builder->CreateCall(prefetch_fn, args);
+
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
             " integer overflow for int32 and int64 is undefined behavior in"
@@ -2881,6 +2962,10 @@ void CodeGen_LLVM::visit(const Call *op) {
     }
 }
 
+void CodeGen_LLVM::visit(const Prefetch *op) {
+    internal_error << "Prefetch encountered during codegen\n";
+}
+
 void CodeGen_LLVM::visit(const Let *op) {
     sym_push(op->name, codegen(op->value));
     if (op->value.type() == Int(32)) {
@@ -2929,6 +3014,7 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
 }
 
 Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const string &name, bool constant) {
+    internal_assert(!data.empty());
     llvm::Type *type = ArrayType::get(i8_t, data.size());
     GlobalVariable *global = new GlobalVariable(*module, type,
                                                 constant, GlobalValue::PrivateLinkage,
@@ -3331,13 +3417,17 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     }
     Value *size = ConstantInt::get(i32_t, n);
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
+    int align = native_vector_bits() / 8;
     if (t->isVectorTy() || n > 1) {
-        ptr->setAlignment(native_vector_bits() / 8);
+        ptr->setAlignment(align);
     }
 
     if (zero_initialize) {
-        internal_assert(n == 1) << "Zero initialization for stack arrays not implemented\n";
-        builder->CreateStore(Constant::getNullValue(t), ptr);
+        if (n == 1) {
+            builder->CreateStore(Constant::getNullValue(t), ptr);
+        } else {
+            builder->CreateMemSet(ptr, Constant::getNullValue(t), n, align);
+        }
     }
     builder->restoreIP(here);
     return ptr;
