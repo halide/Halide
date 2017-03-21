@@ -1524,12 +1524,11 @@ WEAK int halide_opengl_run(void *user_context,
             halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
-            uint64_t dev = *(uint64_t *)args[i];
-            if (!dev) {
+            uint64_t handle = *(uint64_t *)args[i];
+            if (!handle) {
                 error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
                 return 1;
             }
-            uint64_t handle = halide_get_device_handle(dev);
             if (handle == HALIDE_OPENGL_RENDER_TARGET) {
                 bind_render_targets = false;
             }
@@ -1546,12 +1545,11 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
-            uint64_t dev = *(uint64_t *)args[i];
-            if (!dev) {
+            uint64_t handle = *(uint64_t *)args[i];
+            if (!handle) {
                 error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
                 return 1;
             }
-            uint64_t handle = halide_get_device_handle(dev);
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
             global_state.BindTexture(GL_TEXTURE_2D, handle == HALIDE_OPENGL_RENDER_TARGET ? 0 : (GLuint)handle);
             global_state.Uniform1iv(loc, 1, &num_active_textures);
@@ -1680,12 +1678,11 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        uint64_t dev = *(uint64_t *)args[i];
-        if (!dev) {
+        uint64_t handle = *(uint64_t *)args[i];
+        if (!handle) {
             error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
             return 1;
         }
-        uint64_t handle = halide_get_device_handle(dev);
         GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
 
         // Check to see if the object name is actually a FBO
