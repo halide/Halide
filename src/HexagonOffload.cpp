@@ -252,6 +252,17 @@ public:
     Stmt inject(Stmt s) {
         s = mutate(s);
 
+        if (!device_code.functions().empty()) {
+            // Wrap the statement in calls to halide_initialize_kernels.
+            Expr buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "hexagon_code.buffer");
+            Expr code_size = Call::make(Int(32), Call::buffer_get_max, { buf_var, 0 }, Call::Extern);
+            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { buf_var }, Call::Extern);
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+                                                       {module_state_ptr(), code_ptr, code_size,
+                                                        Expr((uint32_t)device_code.target().has_feature(Target::HVX_shared_object))});
+            s = Block::make(init_kernels, s);
+        }
+   
         // TODO: This can probably go away due to general debug info at the submodule compile level.
         debug(1) << "Hexagon device code module: " << device_code << "\n";
 
@@ -286,7 +297,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         }
     }
 
-    Module hexagon_module("hexagon", target);
+    Module hexagon_module("hexagon_code", target);
     InjectHexagonRpc injector(hexagon_module);
     s = injector.inject(s);
 
