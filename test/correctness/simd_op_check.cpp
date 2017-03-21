@@ -1677,6 +1677,12 @@ struct Test {
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width/1, u8_sat(i32_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width/1, i8_sat(i32_1));
         check("v*.h = vsat(v*.w,v*.w)", hvx_width/1, u8_sat(i32(i16_1) << 8));
+        if (is_v62) {
+            // v62 - Saturating narrowing cast
+            check("v*.uh = vsat(v*.uw, v*.uw)", hvx_width/2, u16_sat(u32_1));
+        } else {
+            check("v*.h = vsat(v*.w, v*.w)", hvx_width/2, u16_sat(u32_1));
+        }
 
         check("vround(v*.h,v*.h)", hvx_width/1, u8_sat((i32(i16_1) + 128)/256));
         check("vround(v*.h,v*.h)", hvx_width/1, i8_sat((i32(i16_1) + 128)/256));
