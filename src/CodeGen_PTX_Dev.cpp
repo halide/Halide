@@ -284,7 +284,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(target) << err_str << "\n";
 
     TargetOptions options;
+    #if LLVM_VERSION < 50
     options.LessPreciseFPMADOption = true;
+    #endif
     options.PrintMachineCode = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;

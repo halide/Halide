@@ -4239,6 +4239,49 @@ private:
             } else {
                 expr = op;
             }
+        } else if (op->is_intrinsic(Call::prefetch)) {
+            // Collapse the prefetched region into lower dimension whenever is possible.
+            // TODO(psuriana): Deal with negative strides and overlaps.
+
+            vector<Expr> args(op->args);
+            bool changed = false;
+            for (size_t i = 0; i < op->args.size(); ++i) {
+                args[i] = mutate(op->args[i]);
+                if (!args[i].same_as(op->args[i])) {
+                    changed = true;
+                }
+            }
+
+            // The {extent, stride} args in the prefetch call are sorted
+            // based on the storage dimension in ascending order (i.e. innermost
+            // first and outermost last), so, it is enough to check for the upper
+            // triangular pairs to see if any contiguous addresses exist.
+            for (size_t i = 1; i < args.size(); i += 2) {
+                Expr extent_0 = args[i];
+                Expr stride_0 = args[i + 1];
+                for (size_t j = i + 2; j < args.size(); j += 2) {
+                    Expr extent_1 = args[j];
+                    Expr stride_1 = args[j + 1];
+
+                    if (can_prove(extent_0 * stride_0 == stride_1)) {
+                        Expr new_extent = mutate(extent_0 * extent_1);
+                        Expr new_stride = stride_0;
+                        args.erase(args.begin() + j, args.begin() + j + 2);
+                        args[i] = new_extent;
+                        args[i + 1] = new_stride;
+                        i -= 2;
+                        break;
+                    }
+                }
+            }
+            internal_assert(args.size() <= op->args.size());
+
+            if (changed || (args.size() != op->args.size())) {
+                expr = Call::make(op->type, Call::prefetch, args, Call::Intrinsic);
+            } else {
+                expr = op;
+            }
+
         } else {
             IRMutator::visit(op);
         }
@@ -4270,31 +4313,28 @@ private:
             new_vectors.push_back(new_vector);
         }
 
-        // Only try to simplify shuffles of loads that aren't concats
-        // of vectors. This is a bit of a hacky heuristic to avoid
-        // undoing the work of AlignLoads for Hexagon.
-        if (!op->is_concat() || new_vectors[0].type().is_scalar()) {
-            // Try to convert a load with shuffled indices into a
-            // shuffle of a dense load.
-            if (const Load *first_load = new_vectors[0].as<Load>()) {
-                vector<Expr> load_predicates;
-                vector<Expr> load_indices;
-                bool unpredicated = true;
-                for (Expr e : new_vectors) {
-                    const Load *load = e.as<Load>();
-                    if (load && load->name == first_load->name) {
-                        load_predicates.push_back(load->predicate);
-                        load_indices.push_back(load->index);
-                        unpredicated = unpredicated && is_one(load->predicate);
-                    } else {
-                        break;
-                    }
+        // Try to convert a load with shuffled indices into a
+        // shuffle of a dense load.
+        if (const Load *first_load = new_vectors[0].as<Load>()) {
+            vector<Expr> load_predicates;
+            vector<Expr> load_indices;
+            bool unpredicated = true;
+            for (Expr e : new_vectors) {
+                const Load *load = e.as<Load>();
+                if (load && load->name == first_load->name) {
+                    load_predicates.push_back(load->predicate);
+                    load_indices.push_back(load->index);
+                    unpredicated = unpredicated && is_one(load->predicate);
+                } else {
+                    break;
                 }
+            }
 
-                if (load_indices.size() == new_vectors.size()) {
-                    Type t = load_indices[0].type().with_lanes(op->indices.size());
-                    Expr shuffled_index = Shuffle::make(load_indices, op->indices);
-                    shuffled_index = mutate(shuffled_index);
+            if (load_indices.size() == new_vectors.size()) {
+                Type t = load_indices[0].type().with_lanes(op->indices.size());
+                Expr shuffled_index = Shuffle::make(load_indices, op->indices);
+                shuffled_index = mutate(shuffled_index);
+                if (shuffled_index.as<Ramp>()) {
                     Expr shuffled_predicate;
                     if (unpredicated) {
                         shuffled_predicate = const_true(t.lanes());
@@ -4302,13 +4342,11 @@ private:
                         shuffled_predicate = Shuffle::make(load_predicates, op->indices);
                         shuffled_predicate = mutate(shuffled_predicate);
                     }
-                    if (shuffled_index.as<Ramp>()) {
-                        t = first_load->type;
-                        t = t.with_lanes(op->indices.size());
-                        expr = Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                          first_load->param, shuffled_predicate);
-                        return;
-                    }
+                    t = first_load->type;
+                    t = t.with_lanes(op->indices.size());
+                    expr = Load::make(t, first_load->name, shuffled_index, first_load->image,
+                                      first_load->param, shuffled_predicate);
+                    return;
                 }
             }
         }
@@ -4833,6 +4871,28 @@ private:
             stmt = Allocate::make(op->name, op->type, new_extents,
                                   condition, body,
                                   new_expr, op->free_function);
+        }
+    }
+
+    void visit(const Evaluate *op) {
+        Expr value = mutate(op->value);
+
+        // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
+        vector<pair<string, Expr>> lets;
+        while (const Let *let = value.as<Let>()) {
+            value = let->body;
+            lets.push_back({let->name, let->value});
+        }
+
+        if (value.same_as(op->value)) {
+            internal_assert(lets.empty());
+            stmt = op;
+        } else {
+            // Rewrap the lets outside the evaluate node
+            stmt = Evaluate::make(value);
+            for (size_t i = lets.size(); i > 0; i--) {
+                stmt = LetStmt::make(lets[i-1].first, lets[i-1].second, stmt);
+            }
         }
     }
 
@@ -6215,6 +6275,10 @@ void simplify_test() {
     check(Let::make("x", 3*y*y*y, 4), 4);
     check(Let::make("x", 0, 0), 0);
 
+    // Check that lets inside an evaluate node get lifted
+    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Let::make("y", 10, x + y + 2))),
+          LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
+
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
@@ -6225,6 +6289,14 @@ void simplify_test() {
 
     check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
           Call::make(type_of<const char *>(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
+
+    {
+        // Check that contiguous prefetch call get collapsed
+        Expr load = Load::make(Int(32), "buf", x, Buffer<>(), Parameter(), const_true());
+        Expr base = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        check(Call::make(Int(32), Call::prefetch, {base, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+              Call::make(Int(32), Call::prefetch, {base, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+    }
 
     // Check min(x, y)*max(x, y) gets simplified into x*y
     check(min(x, y)*max(x, y), x*y);

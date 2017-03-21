@@ -7,49 +7,28 @@
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-// TODO: Make this a method on he new buffer_t.
-// Compute the total amount of memory we'd need to allocate on gpu to
-// represent a given buffer (using the same strides as the host
-// allocation).
-WEAK size_t buf_size(const buffer_t *buf) {
-    size_t size = buf->elem_size;
-    for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
-        size_t positive_stride;
-        if (buf->stride[i] < 0) {
-            positive_stride = (size_t)-buf->stride[i];
-        } else {
-            positive_stride = (size_t)buf->stride[i];
-        }
-        size_t total_dim_size = buf->elem_size * buf->extent[i] * positive_stride;
-        if (total_dim_size > size) {
-            size = total_dim_size;
-        }
-    }
-    return size;
-}
-
 
 // A host <-> dev copy should be done with the fewest possible number
-// of contiguous copies to minimize driver overhead. If our buffer_t
-// has strides larger than its extents (e.g. because it represents a
-// sub-region of a larger buffer_t) we can't safely copy it back and
-// forth using a single contiguous copy, because we'd clobber
-// in-between values that another thread might be using.  In the best
-// case we can do a single contiguous copy, but in the worst case we
-// need to individually copy over every pixel.
+// of contiguous copies to minimize driver overhead. If our
+// halide_buffer_t has strides larger than its extents (e.g. because
+// it represents a sub-region of a larger halide_buffer_t) we can't
+// safely copy it back and forth using a single contiguous copy,
+// because we'd clobber in-between values that another thread might be
+// using.  In the best case we can do a single contiguous copy, but in
+// the worst case we need to individually copy over every pixel.
 //
 // This problem is made extra difficult by the fact that the ordering
-// of the dimensions in a buffer_t doesn't relate to memory layout at
+// of the dimensions in a halide_buffer_t doesn't relate to memory layout at
 // all, so the strides could be in any order.
 //
 // We solve it by representing a copy job we need to perform as a
-// device_copy struct. It describes a 4D array of copies to
-// perform. Initially it describes copying over a single pixel at a
-// time. We then try to discover contiguous groups of copies that can
-// be coalesced into a single larger copy.
+// device_copy struct. It describes a multi-dimensional array of
+// copies to perform. Initially it describes copying over a single
+// pixel at a time. We then try to discover contiguous groups of
+// copies that can be coalesced into a single larger copy.
 
 // The struct that describes a host <-> dev copy to perform.
-#define MAX_COPY_DIMS 4
+#define MAX_COPY_DIMS 16
 struct device_copy {
     uint64_t src, dst;
     // The multidimensional array of contiguous copy tasks that need to be done.
@@ -58,50 +37,52 @@ struct device_copy {
     uint64_t stride_bytes[MAX_COPY_DIMS];
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
-
-    void copy_memory(void *user_context) const;
 };
 
-WEAK void device_copy::copy_memory(void *user_context) const {
-    // If this is a zero copy buffer, these pointers will be the same.
-    if (src != dst) {
-        debug(user_context) << "device_copy::copy_memory: copying "
-            << (extent[0] * extent[1] * extent[2] * extent[3] * chunk_size)
-            << " bytes.\n";
-        // TODO: Is this 32-bit or 64-bit? Leaving signed for now
-        // in case negative strides.
-        for (int w = 0; w < (int)extent[3]; w++) {
-            for (int z = 0; z < (int)extent[2]; z++) {
-                for (int y = 0; y < (int)extent[1]; y++) {
-                    for (int x = 0; x < (int)extent[0]; x++) {
-                        uint64_t off = (x * stride_bytes[0] +
-                                        y * stride_bytes[1] +
-                                        z * stride_bytes[2] +
-                                        w * stride_bytes[3]);
-                        const void *from = (void *)(src + off);
-                        void *to = (void *)(dst + off);
-                        memcpy(to, from, chunk_size);
-                    }
-                }
-            }
-        }
+
+WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t off) {
+    // Skip size-1 dimensions
+    while (copy.extent[d] == 1 && d >= 0) d--;
+    
+    if (d == -1) {
+        const void *from = (void *)(copy.src + off);
+        void *to = (void *)(copy.dst + off);
+        memcpy(to, from, copy.chunk_size);
     } else {
-        debug(user_context) << "device_copy::copy_memory: no copy needed as pointers are the same.\n";
+        for (uint64_t i = 0; i < copy.extent[d]; i++) {
+            copy_memory_helper(copy, d - 1, off);
+            off += copy.stride_bytes[d];
+        }
     }
 }
 
-WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
+WEAK void copy_memory(const device_copy &copy, void *user_context) {
+    // If this is a zero copy buffer, these pointers will be the same.
+    if (copy.src != copy.dst) {
+        copy_memory_helper(copy, MAX_COPY_DIMS-1, 0);
+    } else {
+        debug(user_context) << "copy_memory: no copy needed as pointers are the same.\n";
+    }
+}
+
+WEAK device_copy make_host_to_device_copy(const halide_buffer_t *buf) {
     // Make a copy job representing copying the first pixel only.
     device_copy c;
     c.src = (uint64_t)buf->host;
-    c.dst = halide_get_device_handle(buf->dev);
-    c.chunk_size = buf->elem_size;
+    c.dst = buf->device;
+    c.chunk_size = buf->type.bytes();
     for (int i = 0; i < MAX_COPY_DIMS; i++) {
         c.extent[i] = 1;
         c.stride_bytes[i] = 0;
     }
 
-    if (buf->elem_size == 0) {
+    if (buf->dimensions > MAX_COPY_DIMS) {
+        // This condition should also be checked for outside this fn.
+        device_copy zero = {0};
+        return zero;
+    }
+
+    if (buf->type.bits == 0) {
         // This buffer apparently represents no memory. Return a zero'd copy
         // task.
         device_copy zero = {0};
@@ -109,11 +90,12 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     }
 
     // Now expand it to copy all the pixels (one at a time) by taking
-    // the extents and strides from the buffer_t. Dimensions are added
-    // to the copy by inserting it s.t. the stride is in ascending order.
-    for (int i = 0; i < 4 && buf->extent[i]; i++) {
+    // the extents and strides from the halide_buffer_t. Dimensions
+    // are added to the copy by inserting it such that the stride is
+    // in ascending order.
+    for (int i = 0; i < buf->dimensions; i++) {
         // TODO: deal with negative strides.
-        uint64_t stride_bytes = buf->stride[i] * buf->elem_size;
+        uint64_t stride_bytes = buf->dim[i].stride * buf->type.bytes();
         // Insert the dimension sorted into the buffer copy.
         int insert;
         for (insert = 0; insert < i; insert++) {
@@ -128,7 +110,8 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
             c.stride_bytes[j] = c.stride_bytes[j - 1];
         }
         // If the stride is 0, only copy it once.
-        c.extent[insert] = stride_bytes != 0 ? buf->extent[i] : 1;
+        c.extent[insert] = stride_bytes != 0 ? buf->dim[i].extent : 1;
+        debug(NULL) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
         c.stride_bytes[insert] = stride_bytes;
     };
 
@@ -152,7 +135,7 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     return c;
 }
 
-WEAK device_copy make_device_to_host_copy(const buffer_t *buf) {
+WEAK device_copy make_device_to_host_copy(const halide_buffer_t *buf) {
     // Just make a host to dev copy and swap src and dst
     device_copy c = make_host_to_device_copy(buf);
     uint64_t tmp = c.src;
