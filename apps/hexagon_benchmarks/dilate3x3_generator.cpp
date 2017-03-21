@@ -11,9 +11,9 @@ public:
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
-        max_y(x, y) = max({ bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1) });
+        max_y(x, y) = max(bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1));
 
-        output(x, y) = max({ max_y(x-1, y), max_y(x, y), max_y(x+1, y) });
+        output(x, y) = max(max_y(x-1, y), max_y(x, y), max_y(x+1, y));
     }
 
     void schedule() {

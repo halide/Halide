@@ -16,12 +16,12 @@ public:
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
-        max_y(x,y) = max({ bounded_input(x ,y-1), bounded_input(x, y), bounded_input(x, y+1) });
-        min_y(x,y) = min({ bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1) });
+        max_y(x,y) = max(bounded_input(x ,y-1), bounded_input(x, y), bounded_input(x, y+1));
+        min_y(x,y) = min(bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1));
         mid_y(x,y) = mid(bounded_input(x, y-1), bounded_input(x, y), bounded_input(x, y+1));
 
-        minmax_x(x,y) = min({ max_y(x-1, y), max_y(x, y), max_y(x+1, y) });
-        maxmin_x(x,y) = max({ min_y(x-1, y), min_y(x, y), min_y(x+1, y) });
+        minmax_x(x,y) = min(max_y(x-1, y), max_y(x, y), max_y(x+1, y));
+        maxmin_x(x,y) = max(min_y(x-1, y), min_y(x, y), min_y(x+1, y));
         midmid_x(x,y) = mid(mid_y(x-1, y), mid_y(x, y), mid_y(x+1, y));
 
         output(x,y) = mid(minmax_x(x, y), maxmin_x(x, y), midmid_x(x, y));
