@@ -1658,7 +1658,67 @@ public:
 
 namespace Internal {
 
+
 class GeneratorOutputBase : public GIOBase {
+public:
+#define HALIDE_OUTPUT_FORWARD(method)                                       \
+    template<typename ...Args>                                              \
+    inline auto method(Args&&... args) ->                                   \
+        decltype(std::declval<Func>().method(std::forward<Args>(args)...)) {\
+        return get_func_ref().method(std::forward<Args>(args)...);          \
+    }
+
+    /** Forward schedule-related methods to the underlying Func. */
+    // @{
+    HALIDE_OUTPUT_FORWARD(align_bounds)
+    HALIDE_OUTPUT_FORWARD(align_storage)
+    HALIDE_OUTPUT_FORWARD(args)
+    HALIDE_OUTPUT_FORWARD(bound)
+    HALIDE_OUTPUT_FORWARD(bound_extent)
+    HALIDE_OUTPUT_FORWARD(compute_at)
+    HALIDE_OUTPUT_FORWARD(compute_inline)
+    HALIDE_OUTPUT_FORWARD(compute_root)
+    HALIDE_OUTPUT_FORWARD(defined)
+    HALIDE_OUTPUT_FORWARD(fold_storage)
+    HALIDE_OUTPUT_FORWARD(fuse)
+    HALIDE_OUTPUT_FORWARD(glsl)
+    HALIDE_OUTPUT_FORWARD(gpu)
+    HALIDE_OUTPUT_FORWARD(gpu_blocks)
+    HALIDE_OUTPUT_FORWARD(gpu_single_thread)
+    HALIDE_OUTPUT_FORWARD(gpu_threads)
+    HALIDE_OUTPUT_FORWARD(gpu_tile)
+    HALIDE_OUTPUT_FORWARD(has_update_definition)
+    HALIDE_OUTPUT_FORWARD(hexagon)
+    HALIDE_OUTPUT_FORWARD(in)
+    HALIDE_OUTPUT_FORWARD(memoize)
+    HALIDE_OUTPUT_FORWARD(num_update_definitions)
+    HALIDE_OUTPUT_FORWARD(output_types)
+    HALIDE_OUTPUT_FORWARD(outputs)
+    HALIDE_OUTPUT_FORWARD(parallel)
+    HALIDE_OUTPUT_FORWARD(prefetch)
+    HALIDE_OUTPUT_FORWARD(rename)
+    HALIDE_OUTPUT_FORWARD(reorder)
+    HALIDE_OUTPUT_FORWARD(reorder_storage)
+    HALIDE_OUTPUT_FORWARD(rvars)
+    HALIDE_OUTPUT_FORWARD(serial)
+    HALIDE_OUTPUT_FORWARD(shader)
+    HALIDE_OUTPUT_FORWARD(specialize)
+    HALIDE_OUTPUT_FORWARD(split)
+    HALIDE_OUTPUT_FORWARD(store_at)
+    HALIDE_OUTPUT_FORWARD(store_root)
+    HALIDE_OUTPUT_FORWARD(tile)
+    HALIDE_OUTPUT_FORWARD(unroll)
+    HALIDE_OUTPUT_FORWARD(update)
+    HALIDE_OUTPUT_FORWARD(update_args)
+    HALIDE_OUTPUT_FORWARD(update_value)
+    HALIDE_OUTPUT_FORWARD(update_values)
+    HALIDE_OUTPUT_FORWARD(value)
+    HALIDE_OUTPUT_FORWARD(values)
+    HALIDE_OUTPUT_FORWARD(vectorize)
+    // }@
+
+#undef HALIDE_OUTPUT_FORWARD
+
 protected:
     EXPORT GeneratorOutputBase(size_t array_size,
                         const std::string &name,
@@ -1684,6 +1744,12 @@ protected:
     }
 
     EXPORT void check_value_writable() const override;
+
+    NO_INLINE Func &get_func_ref() {
+        internal_assert(kind() != IOKind::Scalar);
+        internal_assert(funcs_.size() == array_size() && exprs_.empty());
+        return funcs_[0];
+    }
 };
 
 template<typename T>
