@@ -119,8 +119,18 @@ def find_boost_python():
         if sys.version_info[0] == 3:
             base_name += '3'
         names = [base_name + '-mt', base_name, 'boost_python-py%i%i' % sys.version_info[:2]]
-        
     
+    print("\nSearching for Boost Python")
+    for name in names:
+        if cc.has_function('rand',
+                            includes=['stdlib.h'],
+                            library_dirs=library_dirs,
+                            libraries=[name]):
+            print("Found Boost Python: %s" % name)
+            return name
+    else:
+        raise IOError("Failed to find boost_python in %s."
+        " Maybe set BOOST_DIR and/or BOOST_PYTHON_LIB" % os.pathsep.join(library_dirs))
     return find_static_lib(names, 'BOOST_DIR')
 
 
@@ -136,8 +146,8 @@ ext = Extension('halide', sources,
     include_dirs=include_dirs,
     library_dirs=library_dirs,
     extra_compile_args=['-std=c++11'],
-    extra_objects=[libHalide, boost_python],
-    libraries=['z'],
+    extra_objects=[libHalide],
+    libraries=['z', boost_python],
 )
 
 
