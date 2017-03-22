@@ -10,6 +10,7 @@
 #include <atomic>
 
 #include "IR.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -690,7 +691,8 @@ inline Expr max(const Expr &a, float b) {return max(a, Expr(b));}
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. max(.., max(.., ..)). 
  * The arguments can be any mix of types but must all be convertible to Expr. */
-template<typename A, typename B, typename C, typename... Rest>
+template<typename A, typename B, typename C, typename... Rest,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type* = nullptr>
 inline Expr max(const A &a, const B &b, const C &c, Rest&&... rest) {
     return max(a, max(b, c, std::forward<Rest>(rest)...));
 }
@@ -733,7 +735,8 @@ inline Expr min(const Expr &a, float b) {return min(a, Expr(b));}
  * (with the exception of integer types on x86 without SSE4).
  * The expressions are folded from right ie. min(.., min(.., ..)).
  * The arguments can be any mix of types but must all be convertible to Expr. */
-template<typename A, typename B, typename C, typename... Rest>
+template<typename A, typename B, typename C, typename... Rest,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type* = nullptr>
 inline Expr min(const A &a, const B &b, const C &c, Rest&&... rest) {
     return min(a, min(b, c, std::forward<Rest>(rest)...));
 }
@@ -852,7 +855,8 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
  * which can accept multiple conditions and values in pairs. Evaluates
  * to the first value for which the condition is true. Returns the
  * final value if all conditions are false. */
-template<typename... Args>
+template<typename... Args,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type* = nullptr>
 inline Expr select(const Expr &c0, const Expr &v0, const Expr &c1, const Expr &v1, Args&&... args) {
     return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
 }
