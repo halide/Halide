@@ -118,7 +118,8 @@ def find_boost_python():
         base_name = 'boost_python'
         if sys.version_info[0] == 3:
             base_name += '3'
-        names = [base_name + '-mt', base_name]
+        names = [base_name + '-mt', base_name, 'boost_python-py%i%i' % sys.version_info[:2]]
+        
     
     return find_static_lib(names, 'BOOST_DIR')
 
