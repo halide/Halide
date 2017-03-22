@@ -1337,6 +1337,7 @@ void GeneratorBase::post_build() {
 }
 
 Pipeline GeneratorBase::produce_pipeline() {
+    check_exact_phase(GeneratorBase::ScheduleCalled);
     ParamInfo &pi = param_info();
     user_assert(pi.filter_outputs.size() > 0) << "Must use produce_pipeline<> with Output<>.";
     std::vector<Func> funcs;
@@ -1368,7 +1369,6 @@ Pipeline GeneratorBase::produce_pipeline() {
 
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LoweredFunc::LinkageType linkage_type) {
-    // ParamInfo &pi = param_info();
     Pipeline pipeline = build_pipeline();
 
     // Special-case here: for certain legacy Generators, building the pipeline 
