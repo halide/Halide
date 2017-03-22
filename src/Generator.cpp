@@ -1684,14 +1684,10 @@ GeneratorOutputBase::~GeneratorOutputBase() {
 }
 
 void GeneratorOutputBase::check_value_writable() const {
-    user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " cannot only be set inside generate().\n";
+    user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)  << "The Output " << name() << " can only be set inside generate().\n";
 }
 
 void GeneratorOutputBase::init_internals() {
-    // user_assert(array_size_defined()) << "ArraySize is not defined for Output " << name() << "; you may need to specify a GeneratorParam.\n";
-    // user_assert(types_defined()) << "Type is not defined for Output " << name() << "; you may need to specify a GeneratorParam.\n";
-    // user_assert(dimensions_defined()) << "Dimensions is not defined for Output " << name() << "; you may need to specify a GeneratorParam.\n";
-
     exprs_.clear();
     funcs_.clear();
     if (array_size_defined()) {
