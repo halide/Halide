@@ -4,30 +4,28 @@ namespace {
 
 class BilateralGrid : public Halide::Generator<BilateralGrid> {
 public:
-    GeneratorParam<int>   s_sigma{"s_sigma", 8};
+    GeneratorParam<int>     s_sigma{"s_sigma", 8};
 
-    ImageParam            input{Float(32), 2, "input"};
-    Param<float>          r_sigma{"r_sigma"};
+    Input<Buffer<float>>    input{"input", 2};
+    Input<float>            r_sigma{"r_sigma"};
 
-    Func build() {
-        Var x("x"), y("y"), z("z"), c("c");
+    Output<Buffer<float>>   output{"output", 2};
 
+    void generate() {
         // Add a boundary condition
         Func clamped = Halide::BoundaryConditions::repeat_edge(input);
 
         // Construct the bilateral grid
-        RDom r(0, s_sigma, 0, s_sigma);
+        r = RDom(0, s_sigma, 0, s_sigma);
         Expr val = clamped(x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2);
         val = clamp(val, 0.0f, 1.0f);
 
         Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
 
-        Func histogram("histogram");
         histogram(x, y, z, c) = 0.0f;
         histogram(x, y, zi, c) += select(c == 0, val, 1.0f);
 
         // Blur the grid using a five-tap filter
-        Func blurx("blurx"), blury("blury"), blurz("blurz");
         blurz(x, y, z, c) = (histogram(x, y, z-2, c) +
                              histogram(x, y, z-1, c)*4 +
                              histogram(x, y, z  , c)*6 +
@@ -61,9 +59,10 @@ public:
                       lerp(blury(xi, yi+1, zi+1, c), blury(xi+1, yi+1, zi+1, c), xf), yf), zf);
 
         // Normalize
-        Func bilateral_grid("bilateral_grid");
-        bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
+        output(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
+    }
 
+    void schedule() {
         if (get_target().has_gpu_feature()) {
             Var xi("xi"), yi("yi"), zi("zi");
 
@@ -88,7 +87,8 @@ public:
             // Schedule the remaining blurs and the sampling at the end similarly.
             blurx.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
             blury.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
-            bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma);
+
+            Func(output).compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma);
         } else {
             // The CPU schedule.
             blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
@@ -96,13 +96,17 @@ public:
             histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
             blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
-            bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
-        }
 
-        return bilateral_grid;
+            Func(output).compute_root().parallel(y).vectorize(x, 8);
+        }
     }
+private:
+    Var x{"x"}, y{"y"}, z{"z"}, c{"c"};
+    RDom r;
+    Func histogram{"histogram"};
+    Func blurx{"blurx"}, blury{"blury"}, blurz{"blurz"};
 };
 
-Halide::RegisterGenerator<BilateralGrid> register_me{"bilateral_grid"};
+HALIDE_REGISTER_GENERATOR(BilateralGrid, "bilateral_grid")
 
 }  // namespace
