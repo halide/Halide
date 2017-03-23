@@ -146,7 +146,6 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
-    input_module(nullptr),
     function(nullptr), context(nullptr),
     builder(nullptr),
     value(nullptr),
@@ -481,8 +480,6 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 }  // namespace
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
-    input_module = &input;
-  
     init_module();
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -552,8 +549,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Optimize
     CodeGen_LLVM::optimize_module();
 
-    input_module = nullptr;
-
     // Disown the module and return it.
     return std::move(module);
 }
@@ -616,12 +611,6 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
 
-    // Put the global buffers in the symbol table.
-    for (const auto &buf : input_module->buffers()) {
-        llvm::Value *buf_ptr = sym_get(buf.name() + ".buffer");
-        push_buffer(buf.name(), buf.dimensions(), buf_ptr, true);
-    }
-
     // Put the arguments in the symbol table
     {
         size_t i = 0;
@@ -653,11 +642,6 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
         if (args[i].alignment.modulus != 0) {
             alignment_info.pop(args[i].name);
         }
-    }
-
-    // Remove the global buffers from the symbol table.
-    for (const auto &buf : input_module->buffers()) {
-        pop_buffer(buf.name(), buf.dimensions(), true);
     }
 
     llvm::raw_os_ostream os(std::cerr);
@@ -1029,7 +1013,11 @@ void CodeGen_LLVM::optimize_module() {
 
     PassManagerBuilder b;
     b.OptLevel = 3;
+#if LLVM_VERSION >= 50
+    b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
+#else
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
+#endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
     b.populateFunctionPassManager(function_pass_manager);
@@ -1090,13 +1078,11 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
-void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *buffer, bool global) {
-    if (!global) {
-        // Make sure the buffer object itself is not null
-        create_assertion(builder->CreateIsNotNull(buffer),
-                         Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                    {name}, Call::Extern));
-    }
+void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *buffer) {
+    // Make sure the buffer object itself is not null
+    create_assertion(builder->CreateIsNotNull(buffer),
+                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
+                                {name}, Call::Extern));
 
     Value *host_ptr = buffer_host(buffer);
     Value *device_ptr = buffer_device(buffer);
@@ -1105,10 +1091,8 @@ void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *
     // don't try to be too aligned.
     external_buffer.insert(name);
 
-    if (!global) {
-        // Push the buffer pointer as well, for backends that care.
-        sym_push(name + ".buffer", buffer);
-    }
+    // Push the buffer pointer as well, for backends that care.
+    sym_push(name + ".buffer", buffer);
 
     sym_push(name + ".host", host_ptr);
     sym_push(name + ".device", device_ptr);
@@ -1126,10 +1110,8 @@ void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *
     }
 }
 
-void CodeGen_LLVM::pop_buffer(const string &name, int dimensions, bool global) {
-    if (!global) {
-        sym_pop(name + ".buffer");
-    }
+void CodeGen_LLVM::pop_buffer(const string &name, int dimensions) {
+    sym_pop(name + ".buffer");
     sym_pop(name + ".host");
     sym_pop(name + ".device");
     sym_pop(name + ".host_dirty");

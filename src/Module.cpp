@@ -7,7 +7,6 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
-#include "HexagonOffload.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
@@ -169,6 +168,7 @@ const std::vector<Buffer<>> &Module::buffers() const {
 const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
+
 
 std::vector<Internal::LoweredFunc> &Module::functions() {
     return contents->functions;

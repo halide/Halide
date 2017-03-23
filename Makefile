@@ -41,7 +41,7 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g'))
+LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/g'))
 OPTIMIZE ?= -O3
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
@@ -314,14 +314,13 @@ SOURCE_FILES = \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
-  InferArguments.cpp \
+  Interval.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
   IntegerDivisionTable.cpp \
-  Interval.cpp \
   Introspection.cpp \
   IR.cpp \
   IREquality.cpp \
@@ -444,14 +443,13 @@ HEADER_FILES = \
   runtime/HalideRuntime.h \
   runtime/HalideBuffer.h \
   ImageParam.h \
-  InferArguments.h \
+  Interval.h \
   InjectHostDevBufferCopies.h \
   InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
   IntegerDivisionTable.h \
-  Interval.h \
   Introspection.h \
   IntrusivePtr.h \
   IREquality.h \
