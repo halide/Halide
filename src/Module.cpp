@@ -247,7 +247,6 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
             debug(2) << assembly.c_str() << "\n";
         }
 
-
         Buffer<uint8_t> result(object.size(), name());
         memcpy(result.data(), reinterpret_cast<uint8_t*>(&object[0]), object.size());
         return result;
