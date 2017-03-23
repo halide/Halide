@@ -284,6 +284,8 @@ class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
+    Target target;
+
     void visit(const Mul *op) {
         static vector<Pattern> scalar_muls = {
             // Vector by scalar widening multiplies.
@@ -767,9 +769,7 @@ private:
             { "halide.hexagon.trunc_satub_shr.vh.h", u8_sat(wild_i16x/wild_i16), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
             { "halide.hexagon.trunc_sath_shr.vw.w",  i16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
-            
-            // v62 - Saturating narrowing cast
-            { "halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x) },
+
 
             // For some of the following narrowing casts, we have the choice of
             // non-interleaving or interleaving instructions. Because we don't
@@ -802,7 +802,7 @@ private:
             { "halide.hexagon.pack.vh", u8(wild_i16x) },
             { "halide.hexagon.pack.vh", i8(wild_u16x) },
             { "halide.hexagon.pack.vh", i8(wild_i16x) },
-            { "halide.hexagon.pack.vw", u16(wild_u32x) },
+            // { "halide.hexagon.pack.vw", u16(wild_u32x) },
             { "halide.hexagon.pack.vw", u16(wild_i32x) },
             { "halide.hexagon.pack.vw", i16(wild_u32x) },
             { "halide.hexagon.pack.vw", i16(wild_i32x) },
@@ -816,9 +816,17 @@ private:
             { "halide.hexagon.sxt.vb", i16(wild_i8x), Pattern::InterleaveResult },
             { "halide.hexagon.sxt.vh", u32(wild_i16x), Pattern::InterleaveResult },
             { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
+
         };
 
-
+        bool is_v62 = target.has_feature(Halide::Target::HVX_v62);
+        if (is_v62) {
+            // v62 - Saturating narrowing cast
+            casts.emplace_back( "halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x) );
+            // v62 - 32 bit saturating add
+            casts.emplace_back( "halide.hexagon.add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps );
+        }
+        casts.emplace_back( "halide.hexagon.pack.vw", u16(wild_u32x) );
         // To hit more of the patterns we want, rewrite "double casts"
         // as two stage casts. This also avoids letting vector casts
         // fall through to LLVM, which will generate large unoptimized
@@ -898,7 +906,9 @@ private:
     }
 
 public:
-    OptimizePatterns() {}
+    OptimizePatterns(Target t) {
+        target = t;
+    }
 };
 
 // Attempt to cancel out redundant interleave/deinterleave pairs. The
@@ -1618,13 +1628,13 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     return OptimizeShuffles(lut_alignment).mutate(s);
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, int native_vector_bytes) {
+Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
-    s = OptimizePatterns().mutate(s);
+    s = OptimizePatterns(t).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(native_vector_bytes*8).mutate(s);
+    s = EliminateInterleaves(t.natural_vector_size(Int(8))*8).mutate(s);
 
     // There may be interleaves left over that we can fuse with other
     // operations.
