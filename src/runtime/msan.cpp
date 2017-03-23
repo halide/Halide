@@ -16,15 +16,15 @@ namespace Runtime {
 namespace Internal {
 
 WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
-    while (c.extent[d] == 1 && d) d--;
+    while (d >= 0 && c.extent[d] == 1) d--;
 
-    if (d == 0) {
+    if (d == -1) {
         const void *from = (void *)(c.src + off);
         halide_msan_annotate_memory_is_initialized(uc, from, c.chunk_size);
     } else {
         for (uint64_t i = 0; i < c.extent[d]; i++) {
             annotate_helper(uc, c, d - 1, off);
-            off += c.stride_bytes[d - 1];
+            off += c.stride_bytes[d];
         }
     }
 };

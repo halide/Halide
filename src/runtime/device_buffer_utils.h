@@ -42,7 +42,7 @@ struct device_copy {
 
 WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t off) {
     // Skip size-1 dimensions
-    while (copy.extent[d] == 1 && d >= 0) d--;
+    while (d >= 0 && copy.extent[d] == 1) d--;
     
     if (d == -1) {
         const void *from = (void *)(copy.src + off);

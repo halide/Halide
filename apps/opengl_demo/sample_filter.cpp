@@ -13,12 +13,10 @@ class SampleFilter: public Halide::Generator<SampleFilter>
 
 	filter(x, y, c) = select(c == 3, input(x,y,c), Halide::cast<uint8_t>(255.0f-input(x, y, c)));
 
-        input.set_stride(0, 4);
-        input.set_stride(2, 1);
-        input.set_bounds(2, 0, 4);
+        input.dim(0).set_stride(4);
+        input.dim(2).set_stride(1).set_bounds(0, 4);
 
-        filter.output_buffer().set_stride(0, 4);
-        filter.output_buffer().set_stride(2, 1);
+        filter.output_buffer().dim(0).set_stride(4).dim(2).set_stride(1);
         filter.bound(c, 0, 4);
 
         if (get_target().has_feature(Halide::Target::OpenGL)) {
