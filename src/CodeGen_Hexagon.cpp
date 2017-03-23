@@ -551,11 +551,11 @@ void CodeGen_Hexagon::init_module() {
     }
 }
 
-void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm::Value *buffer) {
+void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm::Value *buffer, bool global) {
 
     if (target.os == Target::QuRT) {
         // We're running standalone hexagon code
-        CodeGen_LLVM::push_buffer(name, dimensions, buffer);
+        CodeGen_LLVM::push_buffer(name, dimensions, buffer, global);
     } else {
         // We're using an offloaded hexagon kernel.
 
@@ -577,19 +577,23 @@ void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm:
         // extern stages on hexagon that take buffers passed through from
         // the input, but we are constrained by how the hexagon runtime
         // (which is hard to update) chose to treat buffer arguments.
-        sym_push(name + ".buffer", buffer);
+        if (!global) {
+            sym_push(name + ".buffer", buffer);
+        }
         sym_push(name + ".host", host_ptr);
         sym_push(name + ".device", device_ptr);
     }
 }
 
-void CodeGen_Hexagon::pop_buffer(const std::string &name, int dimensions) {
+void CodeGen_Hexagon::pop_buffer(const std::string &name, int dimensions, bool global) {
     if (target.os == Target::QuRT) {
         // We're running standalone hexagon code
-        CodeGen_LLVM::pop_buffer(name, dimensions);
+        CodeGen_LLVM::pop_buffer(name, dimensions, global);
     } else  {
         // We're using an offloaded hexagon kernel.
-        sym_pop(name + ".buffer");
+        if (!global) {
+            sym_pop(name + ".buffer");
+        }
         sym_pop(name + ".host");
         sym_pop(name + ".device");
     }
