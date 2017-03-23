@@ -349,11 +349,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
     hex_command += " ";
     hex_command += tmp_object.pathname();
-    if (0) { // This path should also work, if we want to use PIC code
-        hex_command += " -fpic -O3 -Wno-override-module ";
-    } else {
-        hex_command += " -fpic -G 0 -mlong-calls -O3 -Wno-override-module -shared ";
-    }
+    hex_command += " -fpic -G 0 -mlong-calls -O3 -Wno-override-module -shared ";
     if (device_code.target().has_feature(Target::HVX_128)) {
         hex_command += " -mhvx-double";
     } else {
