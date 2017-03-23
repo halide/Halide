@@ -312,14 +312,25 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
 
+    llvm::SmallVector<char, 4096> object;
+    llvm::raw_svector_ostream object_stream(object);
+    compile_llvm_module_to_object(*llvm_module, object_stream);
+
+    if (debug::debug_level() >= 2) {
+        debug(2) << "Hexagon Submodule assembly for " << device_code.name() << ": " << "\n";
+        llvm::SmallString<4096> assembly;
+        llvm::raw_svector_ostream assembly_stream(assembly);
+        compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+        debug(2) << assembly.c_str() << "\n";
+    }
+
     // Dump the llvm module to a temp file as .ll
-    TemporaryFile tmp_bitcode("hex", ".ll");
+    TemporaryFile tmp_object("hex", ".o");
     TemporaryFile tmp_shared_object("hex", ".so");
 
-    std::unique_ptr<llvm::raw_fd_ostream> ostream =
-        make_raw_fd_ostream(tmp_bitcode.pathname());
-    compile_llvm_module_to_llvm_assembly(*llvm_module, *ostream);
-    ostream->flush();
+    std::ofstream out(tmp_object.pathname());
+    out.write(object.data(), object.size());
+    out.close();
 
     // Shell out to hexagon clang to compile it.
     string hex_command;
@@ -337,12 +348,8 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     }
 
     hex_command += " ";
-    hex_command += tmp_bitcode.pathname();
-    if (0) { // This path should also work, if we want to use PIC code
-        hex_command += " -fpic -O3 -Wno-override-module ";
-    } else {
-        hex_command += " -fpic -G 0 -mlong-calls -O3 -Wno-override-module -shared ";
-    }
+    hex_command += tmp_object.pathname();
+    hex_command += " -fpic -G 0 -mlong-calls -O3 -Wno-override-module -shared ";
     if (device_code.target().has_feature(Target::HVX_128)) {
         hex_command += " -mhvx-double";
     } else {
