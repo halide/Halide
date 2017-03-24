@@ -263,16 +263,16 @@ public:
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    // Will be deprecated.
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // Will be deprecated.
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // Will be deprecated.
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            Expr x_size, Expr y_size, Expr z_size,
                            TailStrategy tail = TailStrategy::Auto,
@@ -1469,13 +1469,15 @@ public:
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    // Will be deprecated.
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Func &gpu_tile(VarOrRVar x, int x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           int x_size, int y_size, int z_size,
                           TailStrategy tail = TailStrategy::Auto,
