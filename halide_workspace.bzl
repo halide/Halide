@@ -33,20 +33,3 @@ def halide_workspace():
   )
 
   llvm_repository()
-
-  # use --deleted_packages=apps/HelloAndroid to skip the need for these
-
-  # Replace with your installed Android SDK API level
-  ANDROID_API_LEVEL = 17
-  
-  # This requires that $ANDROID_HOME is set
-  native.android_sdk_repository(
-    name = "androidsdk",
-    api_level = ANDROID_API_LEVEL,
-  )
-
-  # This requires that $ANDROID_NDK_HOME is set
-  native.android_ndk_repository(
-      name = "androidndk",
-      api_level = ANDROID_API_LEVEL
-  )
