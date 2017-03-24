@@ -12,7 +12,7 @@ extern "C" {
 #include "HAP_power.h"
 }
 
-#include "elf.h"
+#include "dlib.h"
 #include "pipeline_context.h"
 #include "log.h"
 
@@ -118,17 +118,16 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
                                                 int use_shared_object,
                                                 handle_t *module_ptr) {
     void *lib = NULL;
-    elf_t *elib = NULL;
     if (use_shared_object) {
-        lib = dlopenbuf( "libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
+        lib = dlopenbuf("libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
         if (!lib) {
             log_printf("dlopenbuf failed");
             return -1;
         }
     } else {
-        elib = obj_dlopen_mem(code, codeLen);
-        if (!elib) {
-            log_printf("dlopen obj failed");
+        lib = mmap_dlopen(code, codeLen);
+        if (!lib) {
+            log_printf("mmap_dlopen failed");
             return -1;
         }
     }
@@ -140,13 +139,13 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     if (use_shared_object) {
         set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
     } else {
-        set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
+        set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
     }
     if (!set_runtime) {
         if (use_shared_object) {
             dlclose(lib);
         } else {
-            obj_dlclose(elib);
+            mmap_dlclose(lib);
         }
         log_printf("halide_noos_set_runtime not found in shared object\n");
         return -1;
@@ -165,21 +164,19 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
         if (use_shared_object) {
             dlclose(lib);
         } else {
-            obj_dlclose(elib);
+            mmap_dlclose(lib);
         }
         log_printf("set_runtime failed (%d)\n", result);
         return result;
     }
-    if (use_shared_object) {
-        *module_ptr = reinterpret_cast<handle_t>(lib);
-    } else {
-        *module_ptr = reinterpret_cast<handle_t>(elib);
-    }
+
+    *module_ptr = reinterpret_cast<handle_t>(lib);
+
     return 0;
 }
 
 handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+    return reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void*>(module_ptr), name));
 }
 
 volatile int power_ref_count = 0;
@@ -350,9 +347,9 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
 
 int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
     if (use_shared_object) {
-       *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+       *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
     } else {
-        *sym_ptr= reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+        *sym_ptr= reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void*>(module_ptr), name));
     }
     return *sym_ptr != 0 ? 0 : -1;
 }
@@ -411,7 +408,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
-    obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
+    mmap_dlclose(reinterpret_cast<void*>(module_ptr));
     return 0;
 }
 

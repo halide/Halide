@@ -301,6 +301,7 @@ SOURCE_FILES = \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
+  Elf.cpp \
   EliminateBoolVectors.cpp \
   Error.cpp \
   FastIntegerDivide.cpp \
