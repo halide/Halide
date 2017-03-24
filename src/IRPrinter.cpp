@@ -491,8 +491,8 @@ void IRPrinter::visit(const Call *op) {
         stream << op->type << ", ";
     }
 
+    bool is_inline_reduction = false;
     if (op->func.defined()) {
-        bool is_inline_reduction = false;
         Halide::Internal::Function f(op->func);
         if (f.has_update_definition()) {
             Halide::Expr e = f.update(0).values()[0];
@@ -517,10 +517,8 @@ void IRPrinter::visit(const Call *op) {
               break;
             }
         }
-        if (!is_inline_reduction) {
-          print_list(f.values());
-        }
-    } else {
+    }
+    if (!is_inline_reduction) {
       print_list(op->args);
     }
     stream << ")";
