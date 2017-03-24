@@ -66,7 +66,7 @@ public:
 
                 // Split the output into tiles, traversed in columns of tiles
                 // that we parallelize over.
-                Func(output).compute_root()
+                output.compute_root()
                     .hexagon()
                     .tile(x, y, xo, yo, x, y, vector_size_u8, tile_rows, TailStrategy::RoundUp)
                     .reorder(x, y, yo, xo)
@@ -100,7 +100,7 @@ public:
                 constexpr int kBlockSize = 32;
                 const int kBlockSizeXi = 8;
 
-                Func(output).compute_root()
+                output.compute_root()
                     .tile(x, y, x, y, xi, yi, vector_size_u8, tile_rows, TailStrategy::RoundUp)
                     .reorder(xi, yi, x, y)
                     .vectorize(xi)

@@ -34,7 +34,7 @@ public:
 
     void schedule() {
         Var xi, yi;
-        Func(brighter2).reorder(c, x, y).tile(x, y, xi, yi, 32, 32);
+        brighter2.reorder(c, x, y).tile(x, y, xi, yi, 32, 32);
         tiled_blur.compute_at(brighter2, x);
         brighter1.compute_at(brighter2, x);
 
@@ -49,10 +49,10 @@ public:
         brighter2.dim(0).set_stride(Expr());
 
         // Add specialization for input and output buffers that are both planar.
-        Func(brighter2).specialize(is_planar(input) && is_planar(brighter2));
+        brighter2.specialize(is_planar(input) && is_planar(brighter2));
 
         // Add specialization for input and output buffers that are both interleaved.
-        Func(brighter2).specialize(is_interleaved(input) && is_interleaved(brighter2));
+        brighter2.specialize(is_interleaved(input) && is_interleaved(brighter2));
 
         // Note that other combinations (e.g. interleaved -> planar) will work
         // but be relatively unoptimized.

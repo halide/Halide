@@ -6427,6 +6427,31 @@ void simplify_test() {
         check(stmt, Evaluate::make(0));
     }
 
+    {
+        // Verify that integer types passed to min() and max() are coerced to match
+        // Exprs, rather than being promoted to int first. (TODO: This doesn't really
+        // belong in the test for Simplify, but IROperator has no test unit of its own.)
+        Expr one = cast<uint16_t>(1);
+        const int two = 2;  // note that type is int, not uint16_t
+        Expr r1, r2, r3;
+
+        r1 = min(one, two);
+        internal_assert(r1.type() == halide_type_of<uint16_t>());
+        r2 = min(one, two, one);
+        internal_assert(r2.type() == halide_type_of<uint16_t>());
+        // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
+        r3 = min(one, Expr(two), one);
+        internal_assert(r3.type() == halide_type_of<int>());
+
+        r1 = max(one, two);
+        internal_assert(r1.type() == halide_type_of<uint16_t>());
+        r2 = max(one, two, one);
+        internal_assert(r2.type() == halide_type_of<uint16_t>());
+        // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
+        r3 = max(one, Expr(two), one);
+        internal_assert(r3.type() == halide_type_of<int>());
+    }
+
     std::cout << "Simplify test passed" << std::endl;
 }
 }

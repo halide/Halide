@@ -376,30 +376,35 @@ Stmt build_produce(Function f, const Target &target) {
             string stage_name = f.name() + ".s0.";
             const vector<string> f_args = f.args();
             for (int j = 0; j < f.outputs(); j++) {
-
-                vector<Expr> top_left;
-                for (int k = 0; k < f.dimensions(); k++) {
-                    string var = stage_name + f_args[k];
-                    top_left.push_back(Variable::make(Int(32), var + ".min"));
+                string src_buf_name = f.name();
+                if (f.outputs() > 1) {
+                    src_buf_name += "." + std::to_string(j);
                 }
-                Expr host_ptr = Call::make(f, top_left, j);
-                host_ptr = Call::make(Handle(), Call::address_of, {host_ptr}, Call::Intrinsic);
+                src_buf_name += ".buffer";
+                Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
 
-                BufferBuilder builder;
-                builder.host = host_ptr;
-                builder.type = f.output_types()[j];
-                builder.dimensions = f.dimensions();
-                int k = 0;
+                Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
+                                                  {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
+
+                vector<Expr> args(5);
+                args[0] = output_buffer_t;
+                args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
+                                     {(int)sizeof(halide_dimension_t) * f.dimensions()}, Call::Intrinsic);
+                args[2] = src_buffer;
+
+                vector<Expr> mins, extents;
+                internal_assert(f.dimensions() == (int)f.args().size());
                 for (const string arg : f.args()) {
                     string var = stage_name + arg;
                     Expr min = Variable::make(Int(32), var + ".min");
                     Expr max = Variable::make(Int(32), var + ".max");
-                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + std::to_string(k++));
-                    builder.mins.push_back(min);
-                    builder.extents.push_back(max - min + 1);
-                    builder.strides.push_back(stride);
+                    mins.push_back(min);
+                    extents.push_back(max - min + 1);
                 }
-                Expr output_buffer_t = builder.build();
+                args[3] = Call::make(Handle(), Call::make_struct, mins, Call::Intrinsic);
+                args[4] = Call::make(Handle(), Call::make_struct, extents, Call::Intrinsic);
+
+                output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args, Call::Extern);
 
                 string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
                 extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
