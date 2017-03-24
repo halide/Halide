@@ -50,7 +50,7 @@ public:
             case BlurGPUSchedule::Cache:
                 // - Cache blur_x calculation.
                 blur_y.gpu_tile(x, y, xi, yi, tile_x, tile_y);
-                blur_x.compute_at(blur_y, xi).gpu_threads(x, y);
+                blur_x.compute_at(blur_y, x).gpu_threads(x, y);
                 break;
             case BlurGPUSchedule::Slide: {
                 // - Instead caching blur_x calculation explicitly, the
