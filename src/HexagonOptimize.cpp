@@ -770,7 +770,6 @@ private:
             { "halide.hexagon.trunc_satuh_shr.vw.w", u16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
             { "halide.hexagon.trunc_sath_shr.vw.w",  i16_sat(wild_i32x/wild_i32), Pattern::DeinterleaveOp0 | Pattern::ExactLog2Op1 },
 
-
             // For some of the following narrowing casts, we have the choice of
             // non-interleaving or interleaving instructions. Because we don't
             // know which one we prefer during pattern matching, we match the
@@ -802,7 +801,6 @@ private:
             { "halide.hexagon.pack.vh", u8(wild_i16x) },
             { "halide.hexagon.pack.vh", i8(wild_u16x) },
             { "halide.hexagon.pack.vh", i8(wild_i16x) },
-            // { "halide.hexagon.pack.vw", u16(wild_u32x) },
             { "halide.hexagon.pack.vw", u16(wild_i32x) },
             { "halide.hexagon.pack.vw", i16(wild_u32x) },
             { "halide.hexagon.pack.vw", i16(wild_i32x) },
@@ -816,7 +814,6 @@ private:
             { "halide.hexagon.sxt.vb", i16(wild_i8x), Pattern::InterleaveResult },
             { "halide.hexagon.sxt.vh", u32(wild_i16x), Pattern::InterleaveResult },
             { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
-
         };
 
         bool is_v62 = target.has_feature(Halide::Target::HVX_v62);

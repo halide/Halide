@@ -349,7 +349,7 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat_dv), u16v2, "satuh_add.vuh.vuh.dv", {u16v2, u16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat_dv),  i16v2, "sath_add.vh.vh.dv",    {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat_dv),  i32v2, "satw_add.vw.vw.dv",    {i32v2, i32v2} },
-        
+
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsububsat),    u8v1,  "satub_sub.vub.vub",    {u8v1,  u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhsat),    u16v1, "satuh_sub.vuh.vuh",    {u16v1, u16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhsat),     i16v1, "sath_sub.vh.vh",       {i16v1, i16v1} },
@@ -530,6 +530,7 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u16v1, "not.vh",     {u16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u32v1, "not.vw",     {u32v1} },
 
+        // Broadcasts
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32v1,  "splat.w", {u32} },
 
         // Bit counting
@@ -554,7 +555,6 @@ void CodeGen_Hexagon::init_module() {
         intrinsic_wrappers.emplace_back(HvxIntrinsic{IPICK(is_128B, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat.h", {u16} });
     }
 
-
     // TODO: Many variants of the above functions are missing. They
     // need to be implemented in the runtime module, or via
     // fall-through to CodeGen_LLVM.
@@ -562,8 +562,6 @@ void CodeGen_Hexagon::init_module() {
         define_hvx_intrinsic(i.id, i.ret_type, i.name, i.arg_types,
                              i.flags & HvxIntrinsic::BroadcastScalarsToWords);
     }
-
-
 }
 
 void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm::Value *buffer) {
