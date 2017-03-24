@@ -16,7 +16,7 @@ public:
                 .reorder(c, x, y)
                 .bound(c, 0, 3)
                 .vectorize(c)
-                .gpu_tile(x, y, 4, 4);
+                .gpu_tile(x, y, xi, yi, 4, 4);
             output
                 .dim(0).set_stride(3)
                 .dim(2).set_bounds(0, 3).set_stride(1);
@@ -24,7 +24,7 @@ public:
     }
 
 private:
-    Var x, y, c;
+    Var x, y, xi, yi, c;
 };
 
 HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Init, "reaction_diffusion_2_init")
@@ -118,21 +118,21 @@ public:
             blur
                 .reorder(c, x, y)
                 .vectorize(c)
-                .compute_at(new_state, Var::gpu_threads());
+                .compute_at(new_state, xi);
 
-            new_state.gpu_tile(x, y, 8, 2);
+            new_state.gpu_tile(x, y, xi, yi, 8, 2);
 
             for (int i = 0; i <= 1; ++i) {
                 new_state.update(i)
                     .reorder(c, x)
                     .unroll(c)
-                    .gpu_tile(x, 8);
+                    .gpu_tile(x, xi, 8);
             }
             for (int i = 2; i <= 3; ++i) {
                 new_state.update(i)
                     .reorder(c, y)
                     .unroll(c)
-                    .gpu_tile(y, 8);
+                    .gpu_tile(y, yi, 8);
             }
             new_state.update(4)
                 .reorder(c, clobber.x)
@@ -164,7 +164,7 @@ public:
 
 private:
     Func blur_x, blur_y, blur, clamped;
-    Var x, y, c;
+    Var x, y, xi, yi, c;
     RDom clobber;
 };
 
@@ -218,7 +218,7 @@ public:
             render
                 .reorder(c, x, y)
                 .unroll(c)
-                .gpu_tile(x, y, 32, 4);
+                .gpu_tile(x, y, xi, yi, 32, 4);
         } else {
             Var yi;
             render
@@ -233,7 +233,7 @@ public:
     }
 
 private:
-    Var x, y, c;
+    Var x, y, c, xi, yi;
 };
 
 HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Render, "reaction_diffusion_2_render")
