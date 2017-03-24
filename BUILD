@@ -201,6 +201,12 @@ filegroup(
     ),
 )
 
+_ENABLED_COMPONENTS = get_llvm_enabled_components() + [
+    "WITH_METAL",
+    "WITH_OPENCL",
+    "WITH_OPENGL",
+]
+
 # Note that this target does *not* build a fully-static libHalide.a;
 # Bazel doesn't currently have a way to actually enforce that all static
 # dependencies are lumped in (e.g. LLVM in our case). We use some rather
@@ -218,13 +224,10 @@ cc_library(
     ],
     copts = [
         "-DCOMPILING_HALIDE",
-        "-DLLVM_VERSION=" + get_llvm_version()
+        "-DLLVM_VERSION=" + get_llvm_version(),
+    ] + [
+        "-D%s" % component for component in _ENABLED_COMPONENTS
     ] + halide_language_copts(),
-    defines = get_llvm_enabled_components() + [
-        "WITH_METAL",
-        "WITH_OPENCL",
-        "WITH_OPENGL",
-    ],
     linkstatic = 1,
     deps = ["@llvm//:llvm"],
 )
