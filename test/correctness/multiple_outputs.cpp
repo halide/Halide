@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     // An internal Func that produces multiple values.
     {
         Func f, g;
-        Var x;
+        Var x, xi;
         f(x) = {x, sin(x)};
 
         f.compute_root();
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
         g(x) = t[0] + t[1];
 
         if (use_gpu) {
-            g.gpu_tile(x, 8);
+            g.gpu_tile(x, xi, 8);
         }
 
         g.realize(100);
@@ -59,13 +59,13 @@ int main(int argc, char **argv) {
     // Now multiple output Funcs with different sizes
     {
         Func f, g;
-        Var x;
+        Var x, xi;
         f(x) = 100*x;
         g(x) = x;
 
         if (use_gpu) {
-            f.gpu_tile(x, 8);
-            g.gpu_tile(x, 8);
+            f.gpu_tile(x, xi, 8);
+            g.gpu_tile(x, xi, 8);
         }
 
         Buffer<int> f_im(100);
@@ -96,13 +96,13 @@ int main(int argc, char **argv) {
     // Now multiple output Funcs via inferred Realization
     {
         Func f, g;
-        Var x;
+        Var x, xi;
         f(x) = cast<float>(100*x);
         g(x) = Tuple(cast<uint8_t>(x), cast<int16_t>(x+1));
 
         if (use_gpu) {
-            f.gpu_tile(x, 8);
-            g.gpu_tile(x, 8);
+            f.gpu_tile(x, xi, 8);
+            g.gpu_tile(x, xi, 8);
         }
 
         Realization r = Pipeline({f, g}).realize(100);
@@ -135,14 +135,14 @@ int main(int argc, char **argv) {
     // Multiple output Funcs of different dimensionalities that call each other and some of them are Tuples.
     {
         Func f, g, h;
-        Var x, y;
+        Var x, y, xi, yi;
 
         f(x) = x;
         h(x) = {f(x) + 17, f(x) - 17};
         g(x, y) = {f(x + y) * 2, h(x)[0] * y, h(x)[1] - 2};
 
         if (get_jit_target_from_environment().has_gpu_feature()) {
-            g.gpu_tile(x, y, 1, 1);
+            g.gpu_tile(x, y, xi, yi, 1, 1);
         }
 
         Buffer<int> f_im(100), g_im0(20, 20), g_im1(20, 20), g_im2(20, 20), h_im0(50), h_im1(50);
