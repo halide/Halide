@@ -100,7 +100,7 @@ halide_buffer_t *_halide_buffer_init(halide_buffer_t *dst,
 HALIDE_BUFFER_HELPER_ATTRS
 halide_buffer_t *_halide_buffer_init_from_buffer(halide_buffer_t *dst,
                                                  halide_dimension_t *dst_shape,
-                                                 halide_buffer_t *src) {
+                                                 const halide_buffer_t *src) {
     dst->host = src->host;
     dst->device = src->device;
     dst->device_interface = src->device_interface;
@@ -111,6 +111,24 @@ halide_buffer_t *_halide_buffer_init_from_buffer(halide_buffer_t *dst,
     for (int i = 0; i < dst->dimensions; i++) {
         dst->dim[i] = src->dim[i];
     }
+    return dst;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+halide_buffer_t *_halide_buffer_crop(halide_buffer_t *dst,
+                                     halide_dimension_t *dst_shape,
+                                     const halide_buffer_t *src,
+                                     const int *min, const int *extent) {
+    *dst = *src;
+    dst->dim = dst_shape;
+    int64_t offset = 0;
+    for (int i = 0; i < dst->dimensions; i++) {
+        dst->dim[i] = src->dim[i];
+        dst->dim[i].min = min[i];
+        dst->dim[i].extent = extent[i];
+        offset += (min[i] - src->dim[i].min) * src->dim[i].stride;
+    }
+    dst->host += offset * src->type.bytes();
     return dst;
 }
 

@@ -284,7 +284,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(target) << err_str << "\n";
 
     TargetOptions options;
+    #if LLVM_VERSION < 50
     options.LessPreciseFPMADOption = true;
+    #endif
     options.PrintMachineCode = false;
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
@@ -350,7 +352,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     PassManagerBuilder b;
     b.OptLevel = 3;
+#if LLVM_VERSION >= 50
+    b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
+#else
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
+#endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
 
