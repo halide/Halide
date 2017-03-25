@@ -593,11 +593,19 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     got_sym.define(&got, 0, max_got_size);
     got_sym.set_type(Symbol::STT_OBJECT);
     got_sym.set_visibility(Symbol::STV_HIDDEN);
+    Symbol dynamic_sym("_DYNAMIC");
+    dynamic_sym.define(&got, 0, 4);
+    dynamic_sym.set_type(Symbol::STT_OBJECT);
+    got.append_contents((uint32_t)0);
+    // On some platforms, GOT slots 1 and 2 are also reserved.
+    got.append_contents((uint32_t)0);
+    got.append_contents((uint32_t)0);
 
     // Since we can't change the object, start a map of all of the
     // symbols that we can mutate. If a symbol from the object is a
     // key in this map, we use the mapped value instead.
     std::map<const Symbol *, const Symbol *> symbols;
+    symbols[&dynamic_sym] = &dynamic_sym;
     for (const Symbol &i : obj.symbols()) {
         if (i.get_name() == "_GLOBAL_OFFSET_TABLE_") {
             symbols[&i] = &got_sym;
