@@ -37,8 +37,8 @@ public:
             Expr input_stride = input.dim(1).stride();
             input.dim(1).set_stride((input_stride/vector_size) * vector_size);
 
-            Expr output_stride = output_buffer.dim(1).stride();
-            output_buffer.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            Expr output_stride = output.dim(1).stride();
+            output.dim(1).set_stride((output_stride/vector_size) * vector_size);
             bounded_input.compute_root();
             output
                 .hexagon()
