@@ -114,20 +114,28 @@ PipelineContext run_context(stack_alignment, stack_size);
 
 __attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
 
-int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
-                                                int use_shared_object,
-                                                handle_t *module_ptr) {
+static bool use_dlopenbuf() {
+    return dlopenbuf != NULL;
+}
+
+int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int codeLen, handle_t *module_ptr) {
     void *lib = NULL;
-    if (use_shared_object) {
-        lib = dlopenbuf("libhalide_hexagon_host_dlbuf.so", (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
+    if (use_dlopenbuf()) {
+        // We need a unique soname, or dlopenbuf will return a
+        // previously opened library.
+        static int unique_name = 0;
+        char soname[256];
+        sprintf(soname, "libhalide_kernels%d.so", __sync_add_and_fetch(&unique_name, 1));
+
+        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
         if (!lib) {
-            log_printf("dlopenbuf failed");
+            log_printf("dlopenbuf failed: %s\n", dlerror());
             return -1;
         }
     } else {
         lib = mmap_dlopen(code, codeLen);
         if (!lib) {
-            log_printf("mmap_dlopen failed");
+            log_printf("mmap_dlopen failed\n");
             return -1;
         }
     }
@@ -136,13 +144,13 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     // the implementations that need to do so here, and pass poiners
     // to them in here.
     set_runtime_t set_runtime;
-    if (use_shared_object) {
+    if (use_dlopenbuf()) {
         set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
     } else {
         set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
     }
     if (!set_runtime) {
-        if (use_shared_object) {
+        if (use_dlopenbuf()) {
             dlclose(lib);
         } else {
             mmap_dlclose(lib);
@@ -161,7 +169,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        if (use_shared_object) {
+        if (use_dlopenbuf()) {
             dlclose(lib);
         } else {
             mmap_dlclose(lib);
@@ -173,10 +181,6 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     *module_ptr = reinterpret_cast<handle_t>(lib);
 
     return 0;
-}
-
-handle_t halide_hexagon_remote_get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    return reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void*>(module_ptr), name));
 }
 
 volatile int power_ref_count = 0;
@@ -345,8 +349,8 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
                                                  latency);
 }
 
-int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t *sym_ptr) {
-    if (use_shared_object) {
+int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t *sym_ptr) {
+    if (use_dlopenbuf()) {
        *sym_ptr = reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void*>(module_ptr), name));
     } else {
         *sym_ptr= reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void*>(module_ptr), name));
@@ -407,8 +411,12 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     return result;
 }
 
-int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
-    mmap_dlclose(reinterpret_cast<void*>(module_ptr));
+int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
+    if (use_dlopenbuf()) {
+        dlclose(reinterpret_cast<void*>(module_ptr));
+    } else {
+        mmap_dlclose(reinterpret_cast<void*>(module_ptr));
+    }
     return 0;
 }
 

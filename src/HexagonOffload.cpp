@@ -766,13 +766,11 @@ class InjectHexagonRpc : public IRMutator {
             arg_flags.push_back(0x0);
         }
 
-        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
         // The argument list is terminated with an argument of size 0.
         arg_sizes.push_back(Expr((uint64_t) 0));
 
         std::string pipeline_name = hex_name + "_argv";
         std::vector<Expr> params;
-        params.push_back(use_shared_object);
         params.push_back(module_state());
         params.push_back(pipeline_name);
         params.push_back(state_var_ptr(hex_name, type_of<int>()));
@@ -847,13 +845,10 @@ public:
         std::vector<char> shared_object = obj->write_shared_object(&linker);
 
         // Wrap the statement in calls to halide_initialize_kernels.
-        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
         size_t code_size = shared_object.size();
         Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&shared_object[0]), code_size, "hexagon_code");
         Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                   {module_state_ptr(), code_ptr,
-                                                    Expr((uint64_t)code_size),
-                                                    Expr((uint32_t)use_shared_object)});
+                                                   {module_state_ptr(), code_ptr, Expr((uint64_t)code_size)});
         s = Block::make(init_kernels, s);
 
         return s;
@@ -879,7 +874,6 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
         Target::HVX_64,
         Target::HVX_128,
         Target::HVX_v62,
-        Target::HVX_shared_object,
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {

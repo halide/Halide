@@ -313,9 +313,7 @@ std::mutex mutex;
 
 extern "C" {
 
-int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int codeLen,
-                                                int use_shared_object,
-                                                handle_t *module_ptr) {
+int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int codeLen, handle_t *module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
     int ret = init_sim();
@@ -325,7 +323,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_shared_object, remote_module_ptr.data});
+    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, remote_module_ptr.data});
     if (ret != 0) return ret;
 
     // Get the module ptr.
@@ -333,7 +331,7 @@ int halide_hexagon_remote_initialize_kernels_v2(const unsigned char *code, int c
 
     return ret;
 }
-int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, int nameLen, int use_shared_object, handle_t* sym) {
+int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t* sym) {
     std::lock_guard<std::mutex> guard(mutex);
 
     assert(sim);
@@ -342,7 +340,7 @@ int halide_hexagon_remote_get_symbol_v3(handle_t module_ptr, const char* name, i
     remote_buffer remote_name(name, nameLen);
 
     // Run the init kernels command.
-    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_shared_object});
+    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen});
 
     return *sym != 0 ? 0 : -1;
 }
@@ -403,7 +401,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     return ret;
 }
 
-int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
+int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
     if (!sim) {
@@ -422,7 +420,7 @@ int halide_hexagon_remote_release_kernels(handle_t module_ptr, int codeLen) {
             printf("%s\n", Buf);
         }
     }
-    return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), codeLen});
+    return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr)});
 }
 
 void halide_hexagon_host_malloc_init() {
