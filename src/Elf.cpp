@@ -402,6 +402,8 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
             internal_assert(sh->sh_entsize == sizeof(Rela<T>));
             auto to_relocate = obj->find_section(name + 5);
             internal_assert(to_relocate != obj->sections_end());
+            // TODO: This assert should work, but it seems like this
+            // isn't a reliable test. We rely on the names intead.
             //internal_assert(&*to_relocate == section_map[sh->sh_link]);
             for (int i = 0; i < sh->sh_size / sh->sh_entsize; i++) {
                 const char *rela_ptr = data + sh->sh_offset + i*sh->sh_entsize;
@@ -465,7 +467,6 @@ Object::section_iterator Object::merge_sections(const std::vector<section_iterat
 
     std::vector<char> contents = merged->get_contents();
 
-    // Make a new .text section to merge all of the text sections into.
     for (auto i = to_merge.begin() + 1; i != to_merge.end(); ++i) {
         section_iterator s = *i;
         internal_assert(s->get_type() == merged->get_type());
@@ -498,7 +499,7 @@ Object::section_iterator Object::merge_sections(const std::vector<section_iterat
 
     merged->set_contents(contents.begin(), contents.end());
 
-    // Remove all of the sections we removed.
+    // Remove all of the sections we merged.
     for (auto i = to_merge.begin() + 1; i != to_merge.end(); ++i) {
         erase_section(*i);
     }
@@ -517,13 +518,6 @@ Object::section_iterator Object::merge_text_sections() {
     text->set_name(".text");
     return text;
 }
-
-template <typename T>
-struct ObjectWriter {
-    std::vector<char> output;
-    Ehdr<T> ehdr;
-    std::array<Phdr<T>, 3> phdrs;
-};
 
 template <typename T>
 std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::vector<std::string> &dependencies,
