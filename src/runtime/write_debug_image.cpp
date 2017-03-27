@@ -109,12 +109,12 @@ WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int3
     return ptr;
 }
 
-}}} // namespace Halide::Runtime::Internal
-
 // We need a helper function that converts the return value to bool.
-static bool write_helper(int fd, void *ptr, ssize_t size) {
+WEAK bool write_helper(int fd, void *ptr, ssize_t size) {
     return write(fd, ptr, size) == size;
 }
+
+}}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
                                              int32_t type_code, struct halide_buffer_t *buf) {
