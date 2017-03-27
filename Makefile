@@ -426,6 +426,7 @@ HEADER_FILES = \
   DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
+  Elf.h \
   EliminateBoolVectors.h \
   Error.h \
   Expr.h \
