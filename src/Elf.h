@@ -229,10 +229,9 @@ public:
     // Check to see if this relocation should go through the PLT.
     virtual bool needs_plt_entry(const Relocation &reloc) = 0;
 
-    // Add or get a PLT entry for a symbol defined externally. This function
-    // should define sym to point to the PLT, and declare a new
-    // extern_sym that the PLT entry calls.
-    virtual Symbol get_plt_entry(const Symbol &sym, Section &plt, Section &got,
+    // Add a PLT entry for a symbol sym defined externally. Returns a
+    // symbol representing the PLT entry.
+    virtual Symbol add_plt_entry(const Symbol &sym, Section &plt, Section &got,
                                  const Symbol &got_sym) = 0;
 
     // Perform a relocation.
