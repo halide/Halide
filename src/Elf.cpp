@@ -478,7 +478,7 @@ Object::section_iterator Object::merge_sections(const std::vector<section_iterat
         append_padding(contents, alignment);
         // The offset of the section in the new merged section.
         uint64_t offset = contents.size();
-        append(contents, s->get_contents().begin(), s->get_contents().end());
+        append(contents, s->contents_begin(), s->contents_end());
 
         for (auto j = s->relocations_begin(); j != s->relocations_end(); j++) {
             Elf::Relocation reloc = *j;
@@ -807,7 +807,9 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             }
             Relocation new_reloc = linker->relocate(fixup_offset, fixup_addr, r.get_type(), sym, sym_offset, r.get_addend(), got);
             if (new_reloc.get_type() != 0) {
-                // The linker wants a dynamic relocation here.
+                // The linker wants a dynamic relocation here. This
+                // section must be writable at runtime.
+                internal_assert(s.is_writable());
                 debug(2) << "Linker returned new relocation type " << new_reloc.get_type() << "\n";
                 new_reloc.set_offset(new_reloc.get_offset() - get_section_offset(got));
                 got.add_relocation(new_reloc);
@@ -822,8 +824,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     }
 
     // Now we can write the GOT.
-    internal_assert(got.get_contents().size() <= max_got_size);
-    memcpy(output.data() + get_section_offset(got), got.get_contents().data(), got.get_contents().size());
+    internal_assert(got.contents_size() <= max_got_size);
+    memcpy(output.data() + get_section_offset(got), got.contents_data(), got.contents_size());
 
     auto write_relocation_section = [&](const Section &s) {
         uint64_t alignment = 8;
@@ -857,19 +859,19 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     addr_t rela_got_idx = write_relocation_section(got);
 
-    // Add some strings we know we'll need in the string table, after we write the string table.
+    // Add some strings we know we'll need in the string table after we write it.
     strings.get(soname);
     for (const auto &i : dependencies) {
         strings.get(i);
     }
 
     Section dynamic(".dynamic", Section::SHT_DYNAMIC);
+    strings.get(dynamic.get_name());
     dynamic.set_alignment(4);
     dynamic.set_flag(Section::SHF_ALLOC);
     Section strtab(".strtab", Section::SHT_STRTAB);
-    strtab.set_flag(Section::SHF_ALLOC);
     strings.get(strtab.get_name());
-    strings.get(dynamic.get_name());
+    strtab.set_flag(Section::SHF_ALLOC);
     strtab.set_contents(strings.table);
     uint16_t strtab_idx = write_section(strtab);
 
@@ -981,28 +983,6 @@ std::vector<char> Object::write_shared_object(Linker *linker, const std::vector<
                                               const std::string &soname) {
     return write_shared_object_internal<Types<32>>(*this, linker, dependencies, soname);
 }
-
-
-void Object::dump() {
-    debug(0) << sections_size() << " sections:\n";
-    int count = 0;
-    for (auto i = sections_begin(); i != sections_end(); i++) {
-        debug(0) << count++ << ": " << i->get_name() << " " << i->get_size() << "\n";
-    }
-    debug(0) << "\n";
-
-    debug(0) << symbols_size() << " symbols:\n";
-    count = 0;
-    for (auto i = symbols_begin(); i != symbols_end(); i++) {
-        debug(0) << count++ << ": " << i->get_name() << " ";
-        if (i->get_section()) {
-            debug(0) << i->get_section()->get_name() << " " << i->get_offset() << " " << i->get_size() << " ";
-        }
-        debug(0) << "\n";
-    }
-    debug(0) << "\n";
-}
-
 
 }  // namespace Elf
 }  // namespace Internal
