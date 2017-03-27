@@ -594,6 +594,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     Section got(".got", Section::SHT_PROGBITS);
     got.set_alignment(4);
     got.set_size(max_got_size);
+    got.set_flags(Section::SHF_ALLOC);
     Symbol got_sym("_GLOBAL_OFFSET_TABLE_");
     got_sym.define(&got, 0, max_got_size);
     got_sym.set_type(Symbol::STT_OBJECT);
@@ -651,6 +652,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     // We need to build the PLT, so it can be positioned along with
     // the rest of the text sections.
     Section plt(".plt", Section::SHT_PROGBITS);
+    plt.set_alignment(16);
     plt.set_flags(Section::SHF_ALLOC | Section::SHF_EXECINSTR);
     std::list<Symbol> plt_symbols;
     std::map<const Symbol *, const Symbol *> plt_defs;
@@ -670,7 +672,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             }
 
             debug(2) << "Defining PLT entry for " << sym->get_name() << "\n";
-            plt_symbols.push_back(linker->get_plt_entry(*sym, plt, got, got_sym));
+            plt_symbols.push_back(linker->add_plt_entry(*sym, plt, got, got_sym));
 
             plt_def = &plt_symbols.back();
             symbols[plt_def] = plt_def;
@@ -836,7 +838,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         Shdr<T> shdr;
         safe_assign(shdr.sh_name, strings.get(".rela" + s.get_name()));
         shdr.sh_type = Section::SHT_RELA;
-        shdr.sh_flags = 0;
+        shdr.sh_flags = Section::SHF_ALLOC;
         safe_assign(shdr.sh_offset, offset);
         safe_assign(shdr.sh_addr, offset);
         safe_assign(shdr.sh_size, size);
