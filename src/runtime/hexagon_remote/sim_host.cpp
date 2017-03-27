@@ -14,6 +14,8 @@ typedef unsigned int handle_t;
 std::unique_ptr<HexagonWrapper> sim;
 
 bool debug_mode = false;
+bool use_dlopenbuf = true;
+
 int init_sim() {
     if (sim) return 0;
 
@@ -81,7 +83,7 @@ int init_sim() {
 
     // Configure use of debugger
     int pnum = 0;
-    char *s = getenv("HL_HEXAGON_SIM_DBG_PORT");
+    const char *s = getenv("HL_HEXAGON_SIM_DBG_PORT");
     if (s && (pnum = atoi(s))) {
         printf("Debugger port: %d\n", pnum);
         status = sim->ConfigureRemoteDebug(pnum);
@@ -91,6 +93,12 @@ int init_sim() {
         } else {
             debug_mode = true;
         }
+    }
+
+    // Control use of dlopenbuf.
+    const char *use = getenv("HL_HEXAGON_USE_DLOPENBUF");
+    if (use && !atoi(use)) {
+        use_dlopenbuf = false;
     }
 
     status = sim->EndOfConfiguration();
@@ -318,12 +326,16 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
 
     int ret = init_sim();
     if (ret != 0) return -1;
+
+    // Set the flag to use mmap. This is to enable testing mmap_dlopen
+    // when dlopenbuf is available.
+
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_code(code, codeLen);
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, remote_module_ptr.data});
+    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_dlopenbuf, remote_module_ptr.data});
     if (ret != 0) return ret;
 
     // Get the module ptr.
@@ -340,7 +352,7 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
     remote_buffer remote_name(name, nameLen);
 
     // Run the init kernels command.
-    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen});
+    *sym = send_message(Message::GetSymbol, {static_cast<int>(module_ptr), remote_name.data, nameLen, use_dlopenbuf});
 
     return *sym != 0 ? 0 : -1;
 }
@@ -420,7 +432,7 @@ int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
             printf("%s\n", Buf);
         }
     }
-    return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr)});
+    return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), use_dlopenbuf});
 }
 
 void halide_hexagon_host_malloc_init() {

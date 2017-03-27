@@ -2,16 +2,16 @@
 #include "Debug.h"
 #include "Util.h"
 #include "Error.h"
-#include "LLVM_Headers.h"
 
 #include <map>
 #include <memory>
 #include <iomanip>
-#include <fstream>
 
 namespace Halide {
 namespace Internal {
 namespace Elf {
+
+namespace {
 
 // http://www.skyfree.org/linux/references/ELF_Format.pdf
 
@@ -263,6 +263,52 @@ const char *assert_string_valid(const char *name, const char *data, size_t size)
 }
 
 template <typename T>
+void append_object(std::vector<char> &buf, const T &data) {
+    buf.insert(buf.end(), (const char *)&data, (const char *)(&data + 1));
+}
+
+template <typename It>
+void append(std::vector<char> &buf, It begin, It end) {
+    buf.reserve(buf.size() + std::distance(begin, end)*sizeof(*begin));
+    for (It i = begin; i != end; i++) {
+        append_object(buf, *i);
+    }
+}
+
+void append_zeros(std::vector<char> &buf, size_t count) {
+    buf.insert(buf.end(), count, (char)0);
+}
+
+void append_padding(std::vector<char> &buf, size_t alignment) {
+    buf.resize((buf.size() + alignment - 1) & ~(alignment - 1));
+}
+
+template <typename T, typename U>
+T safe_cast(U x) {
+    internal_assert(std::numeric_limits<T>::min() <= x && x <= std::numeric_limits<T>::max());
+    return static_cast<T>(x);
+}
+
+template <typename T, typename U>
+void safe_assign(T &dest, U src) {
+    dest = safe_cast<T>(src);
+}
+
+unsigned long elf_hash(const char *name) {
+    unsigned long h = 0;
+    unsigned long g;
+    for (char c = *name; c; c = *name++) {
+        h = (h << 4) + c;
+        g = h & 0xf0000000;
+        if (g != 0) {
+            h ^= g >> 24;
+        }
+        h &= ~g;
+    }
+    return h;
+}
+
+template <typename T>
 std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
     Ehdr<T> header = *(const Ehdr<T> *)data;
     internal_assert(memcmp(header.e_ident, elf_magic, sizeof(elf_magic)) == 0);
@@ -278,7 +324,8 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
 
     auto get_section_header = [&](int idx) -> const Shdr<T>* {
         const char *at = data + header.e_shoff + idx*header.e_shentsize;
-        internal_assert(data <= at && at + sizeof(Shdr<T>) <= data + size);
+        internal_assert(data <= at && at + sizeof(Shdr<T>) <= data + size)
+            << "Section header out of bounds.\n";
         return (const Shdr<T> *)at;
     };
 
@@ -287,12 +334,13 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
     for (int i = 0; i < header.e_shnum; i++) {
         const Shdr<T> *sh = get_section_header(i);
         if (sh->sh_type == Section::SHT_STRTAB) {
-            internal_assert(!strings);
+            internal_assert(!strings) << "Found more than one string table.\n";
             strings = data + sh->sh_offset;
             internal_assert(data <= strings && strings + sh->sh_size <= data + size);
         }
     }
-    internal_assert(strings);
+    internal_assert(strings)
+        << "String table not found.\n";
 
     // Load the rest of the sections.
     std::map<int, Section *> section_map;
@@ -345,7 +393,7 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
         if (sh->sh_type == Section::SHT_RELA) {
             const char *name = assert_string_valid(&strings[sh->sh_name], data, size);
             internal_assert(strncmp(name, ".rela.", 6) == 0);
-            internal_assert(sh->sh_entsize == sizeof(Rela<T>)) << sh->sh_entsize << " " << sizeof(Rela<T>);
+            internal_assert(sh->sh_entsize == sizeof(Rela<T>));
             auto to_relocate = obj->find_section(name + 5);
             internal_assert(to_relocate != obj->sections_end());
             //internal_assert(&*to_relocate == section_map[sh->sh_link]);
@@ -364,6 +412,12 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
     }
 
     return obj;
+}
+
+}  // namespace
+
+std::unique_ptr<Object> Object::parse_object(const char *data, size_t size) {
+    return parse_object_internal<Types<32>>(data, size);
 }
 
 Object::symbol_iterator Object::add_symbol(const std::string &name) {
@@ -401,31 +455,6 @@ Object::const_symbol_iterator Object::find_symbol(const std::string &name) const
         }
     }
     return symbols_end();
-}
-
-std::unique_ptr<Object> Object::parse_object(const char *data, size_t size) {
-    return parse_object_internal<Types<32>>(data, size);
-}
-
-template <typename T>
-void append_object(std::vector<char> &buf, const T &data) {
-    buf.insert(buf.end(), (const char *)&data, (const char *)(&data + 1));
-}
-
-template <typename It>
-void append(std::vector<char> &buf, It begin, It end) {
-    buf.reserve(buf.size() + std::distance(begin, end)*sizeof(*begin));
-    for (It i = begin; i != end; i++) {
-        append_object(buf, *i);
-    }
-}
-
-void append_zeros(std::vector<char> &buf, size_t count) {
-    buf.insert(buf.end(), count, (char)0);
-}
-
-void append_padding(std::vector<char> &buf, size_t alignment) {
-    buf.resize((buf.size() + alignment - 1) & ~(alignment - 1));
 }
 
 Object::section_iterator Object::merge_sections(const std::vector<section_iterator> &to_merge) {
@@ -487,12 +516,6 @@ Object::section_iterator Object::merge_text_sections() {
     return text;
 }
 
-template <typename T, typename U>
-T safe_cast(U x) {
-    internal_assert(std::numeric_limits<T>::min() <= x && x <= std::numeric_limits<T>::max());
-    return static_cast<T>(x);
-}
-
 template <typename T>
 struct ObjectWriter {
     std::vector<char> output;
@@ -500,22 +523,10 @@ struct ObjectWriter {
     std::array<Phdr<T>, 3> phdrs;
 };
 
-unsigned long elf_hash(const char *name) {
-    unsigned long h = 0;
-    unsigned long g;
-    for (char c = *name; c; c = *name++) {
-        h = (h << 4) + c;
-        g = h & 0xf0000000;
-        if (g != 0) {
-            h ^= g >> 24;
-        }
-        h &= ~g;
-    }
-    return h;
-}
-
 template <typename T>
-std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
+std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::string &soname) {
+    typedef typename T::addr_t addr_t;
+
     // The buffer we will be writing to.
     std::vector<char> output;
 
@@ -540,11 +551,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
 
     // Define a helper function to write a section to the shared
     // object, making a section header for it.
-    auto write_section = [&](const Section &s, uint32_t entsize = 0) {
+    auto write_section = [&](const Section &s, uint64_t entsize = 0) {
         uint64_t alignment = s.get_alignment();
-        if (s.get_type() == Section::SHT_NOBITS) {
-            alignment = 128;
-        }
 
         append_padding(output, alignment);
         uint64_t offset = output.size();
@@ -558,19 +566,16 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
 
         Shdr<T> shdr;
         shdr.sh_name = strings.get(s.get_name());
-        shdr.sh_type = s.get_type();
-        if (shdr.sh_type == Section::SHT_NOBITS) {
-            shdr.sh_type = Section::SHT_PROGBITS;
-        }
-        shdr.sh_flags = s.get_flags();
-        shdr.sh_offset = offset;
-        shdr.sh_addr = offset;
-        shdr.sh_size = s.get_size();
-        shdr.sh_addralign = alignment;
+        safe_assign(shdr.sh_type, s.get_type());
+        safe_assign(shdr.sh_flags, s.get_flags());
+        safe_assign(shdr.sh_offset, offset);
+        safe_assign(shdr.sh_addr, offset);
+        safe_assign(shdr.sh_size, s.get_size());
+        safe_assign(shdr.sh_addralign, alignment);
 
         shdr.sh_link = 0;
         shdr.sh_info = 0;
-        shdr.sh_entsize = entsize;
+        safe_assign(shdr.sh_entsize, entsize);
 
         uint16_t shndx = safe_cast<uint16_t>(shdrs.size());
         section_idxs[&s] = shndx;
@@ -585,7 +590,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     };
 
     // We need to define the GOT symbol.
-    uint32_t max_got_size = obj.symbols_size() * 2 * sizeof(uint32_t);
+    uint64_t max_got_size = obj.symbols_size() * 2 * sizeof(addr_t);
     Section got(".got", Section::SHT_PROGBITS);
     got.set_alignment(4);
     got.set_size(max_got_size);
@@ -596,10 +601,10 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     Symbol dynamic_sym("_DYNAMIC");
     dynamic_sym.define(&got, 0, 4);
     dynamic_sym.set_type(Symbol::STT_OBJECT);
-    got.append_contents((uint32_t)0);
+    got.append_contents((addr_t)0);
     // On some platforms, GOT slots 1 and 2 are also reserved.
-    got.append_contents((uint32_t)0);
-    got.append_contents((uint32_t)0);
+    got.append_contents((addr_t)0);
+    got.append_contents((addr_t)0);
 
     // Since we can't change the object, start a map of all of the
     // symbols that we can mutate. If a symbol from the object is a
@@ -685,8 +690,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     text_phdr.p_offset = 0;
     text_phdr.p_align = 4096;
 
-    uint16_t plt_idx = write_section(plt);
-    plt_idx = plt_idx;
+    write_section(plt);
     for (const Section &s : obj.sections()) {
         if (s.is_alloc() && !s.is_writable()) {
             write_section(s);
@@ -697,7 +701,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
 
     data_phdr.p_type = PT_LOAD;
     data_phdr.p_flags = PF_W | PF_R;
-    data_phdr.p_offset = output.size();
+    safe_assign(data_phdr.p_offset, output.size());
     data_phdr.p_align = 4096;
     for (const Section &s : obj.sections()) {
         if (s.is_alloc() && s.is_writable()) {
@@ -719,7 +723,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     syms.push_back(undef_sym);
     // TODO: This map with pointers as the key will lead to non-deterministic builds...
     std::map<const Symbol *, uint16_t> symbol_idxs;
-    int local_count = 0;
+    uint64_t local_count = 0;
     for (bool is_local : {true, false}) {
         for (const auto &i : symbols) {
             const Symbol *s = i.second;
@@ -732,15 +736,15 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
                 value += get_section_offset(*s->get_section());
             }
             Sym<T> sym;
-            sym.st_name = strings.get(s->get_name());
-            sym.st_value = value;
-            sym.st_size = s->get_size();
+            safe_assign(sym.st_name, strings.get(s->get_name()));
+            safe_assign(sym.st_value, value);
+            safe_assign(sym.st_size, s->get_size());
             sym.set_type(s->get_type());
             sym.set_binding(s->get_binding());
-            sym.st_other = s->get_visibility();
+            safe_assign(sym.st_other, s->get_visibility());
             sym.st_shndx = section_idxs[s->get_section()];
 
-            symbol_idxs[s] = syms.size();
+            safe_assign(symbol_idxs[s], syms.size());
             syms.push_back(sym);
         }
         if (is_local) {
@@ -749,7 +753,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     }
     symtab.set_contents(syms);
     uint16_t symtab_idx = write_section(symtab, sizeof(syms[0]));
-    shdrs[symtab_idx].sh_info = local_count;
+    safe_assign(shdrs[symtab_idx].sh_info, local_count);
 
     // Also write the symbol table as SHT_DYNSYM.
     Section dynsym = symtab;
@@ -762,18 +766,18 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     Section hash(".hash", Section::SHT_HASH);
     hash.set_alignment(4);
     hash.set_flag(Section::SHF_ALLOC);
-    uint32_t sym_count = syms.size();
-    uint32_t bucket_count = 1;
+    size_t sym_count = syms.size();
+    size_t bucket_count = 1;
     std::vector<uint32_t> hash_table(bucket_count + sym_count + 2);
-    hash_table[0] = bucket_count;
-    hash_table[1] = sym_count;
+    safe_assign(hash_table[0], bucket_count);
+    safe_assign(hash_table[1], sym_count);
     uint32_t *buckets = &hash_table[2];
     uint32_t *chains = buckets + bucket_count;
-    for (uint32_t i = 0; i < sym_count; i++) {
+    for (size_t i = 0; i < sym_count; i++) {
         const char *name = &strings.table[syms[i].st_name];
         uint32_t hash = elf_hash(name) % bucket_count;
         chains[i] = buckets[hash];
-        buckets[hash] = i;
+        safe_assign(buckets[hash], i);
     }
     hash.set_contents(hash_table);
     uint16_t hash_idx = write_section(hash, sizeof(hash_table[0]));
@@ -830,16 +834,16 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
         append_padding(output, alignment);
 
         Shdr<T> shdr;
-        shdr.sh_name = strings.get(".rela" + s.get_name());
+        safe_assign(shdr.sh_name, strings.get(".rela" + s.get_name()));
         shdr.sh_type = Section::SHT_RELA;
         shdr.sh_flags = 0;
-        shdr.sh_offset = offset;
-        shdr.sh_addr = offset;
-        shdr.sh_size = size;
-        shdr.sh_addralign = alignment;
+        safe_assign(shdr.sh_offset, offset);
+        safe_assign(shdr.sh_addr, offset);
+        safe_assign(shdr.sh_size, size);
+        safe_assign(shdr.sh_addralign, alignment);
 
-        shdr.sh_link = symtab_idx;
-        shdr.sh_info = section_idxs[&s];
+        safe_assign(shdr.sh_link, symtab_idx);
+        safe_assign(shdr.sh_info, section_idxs[&s]);
         shdr.sh_entsize = sizeof(Rela<T>);
 
         uint16_t shndx = safe_cast<uint16_t>(shdrs.size());
@@ -847,9 +851,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
         return shndx;
     };
 
-    uint32_t rela_got_idx = write_relocation_section(got);
-
-    std::string soname("libhalide_kernels.so");
+    addr_t rela_got_idx = write_relocation_section(got);
 
     Section dynamic(".dynamic", Section::SHT_DYNAMIC);
     dynamic.set_alignment(4);
@@ -863,14 +865,16 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     uint16_t strtab_idx = write_section(strtab);
 
     std::vector<Dyn<T>> dyn;
-    auto make_dyn = [](int32_t tag, uint32_t val = 0) {
+    auto make_dyn = [](int32_t tag, addr_t val = 0) {
         Dyn<T> d;
         d.d_tag = tag;
         d.d_val = val;
         return d;
     };
 
-    dyn.push_back(make_dyn(DT_SONAME, strings.get(soname)));
+    if (!soname.empty()) {
+        dyn.push_back(make_dyn(DT_SONAME, strings.get(soname)));
+    }
     dyn.push_back(make_dyn(DT_SYMBOLIC));
 
     // This is really required...
@@ -888,7 +892,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     dyn.push_back(make_dyn(DT_PLTGOT, get_section_offset(got)));
 
     // Relocations associated with the PLT.
-    uint32_t pltrelsz = sizeof(Rela<T>)*plt_symbols.size();
+    addr_t pltrelsz = sizeof(Rela<T>)*plt_symbols.size();
     dyn.push_back(make_dyn(DT_JMPREL, shdrs[rela_got_idx].sh_offset));
     dyn.push_back(make_dyn(DT_PLTREL, DT_RELA));
     dyn.push_back(make_dyn(DT_PLTRELSZ, pltrelsz));
@@ -907,7 +911,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
 
     // Null terminator.
     dynamic.append_contents((uint32_t)DT_NULL);
-    dynamic.append_contents((uint32_t)0);
+    dynamic.append_contents((addr_t)0);
 
     uint16_t dyn_idx = write_section(dynamic, sizeof(dyn[0]));
     dyn_phdr.p_type = PT_DYNAMIC;
@@ -918,7 +922,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     dyn_phdr.p_align = 4;
 
     append_padding(output, 4096);
-    data_phdr.p_filesz = output.size() - data_phdr.p_offset;
+    safe_assign(data_phdr.p_filesz, output.size() - data_phdr.p_offset);
 
     // Setup the section headers.
     shdrs[symtab_idx].sh_link = strtab_idx;
@@ -961,8 +965,8 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker) {
     return output;
 }
 
-std::vector<char> Object::write_shared_object(Linker *linker) {
-    return write_shared_object_internal<Types<32>>(*this, linker);
+std::vector<char> Object::write_shared_object(Linker *linker, const std::string &soname) {
+    return write_shared_object_internal<Types<32>>(*this, linker, soname);
 }
 
 

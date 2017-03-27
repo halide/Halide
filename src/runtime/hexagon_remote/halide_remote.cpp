@@ -123,10 +123,12 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
     if (use_dlopenbuf()) {
         // We need a unique soname, or dlopenbuf will return a
         // previously opened library.
-        static int unique_name = 0;
+        static int unique_id = 0;
         char soname[256];
-        sprintf(soname, "libhalide_kernels%d.so", __sync_add_and_fetch(&unique_name, 1));
+        sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
 
+        // We need to use RTLD_NOW, the libraries we build for Hexagon
+        // offloading do not support lazy binding.
         lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
         if (!lib) {
             log_printf("dlopenbuf failed: %s\n", dlerror());

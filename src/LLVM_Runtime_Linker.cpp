@@ -720,7 +720,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // These modules are always used and shared
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
             modules.push_back(get_initmod_tracing(c, bits_64, debug));
-            modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
             modules.push_back(get_initmod_cache(c, bits_64, debug));
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
 
@@ -730,6 +729,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
+            if (t.arch != Target::Hexagon) {
+                // Hexagon doesn't support fopen on 8998.
+                // TODO: Maybe it would work to implement
+                // write_debug_image using open/write instead of
+                // fopen/fwrite.
+                modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+            }
             if (t.arch != Target::MIPS && t.os != Target::NoOS) {
                 // MIPS doesn't support the atomics the profiler requires.
                 modules.push_back(get_initmod_profiler(c, bits_64, debug));

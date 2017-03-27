@@ -243,29 +243,29 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(void *, const char *));
 __attribute__ ((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
 
-static bool use_dlopenbuf() {
-    return dlopenbuf != NULL;
-}
-
 static void dllib_init() {
     // The simulator needs this call to enable dlopen to work...
     const char *builtin[] = {"libgcc.so", "libc.so", "libstdc++.so"};
     dlinit(3, const_cast<char**>(builtin));
 }
 
-int initialize_kernels(const unsigned char *code, int codeLen, handle_t *module_ptr) {
-
-    // Keep this false, even for dlbuf usage, as we do not yet have api for dlopenbuf from standalone.
+int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
     void *lib = NULL;
-    if (use_dlopenbuf()) {
+    if (use_dlopenbuf) {
+        if (!dlopenbuf) {
+            log_printf("dlopenbuf not available.\n");
+            return -1;
+        }
         // We need a unique soname, or dlopenbuf will return a
         // previously opened library.
-        static int unique_name = 0;
+        static int unique_id = 0;
         char soname[256];
-        sprintf(soname, "libhalide_kernels%d.so", __sync_add_and_fetch(&unique_name, 1));
+        sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
 
         // Open the library
         dllib_init();
+        // We need to use RTLD_NOW, the libraries we build for Hexagon
+        // offloading do not support lazy bindin.
         lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
         if (!lib) {
             halide_print(NULL, "dlopenbuf failed\n");
@@ -285,13 +285,13 @@ int initialize_kernels(const unsigned char *code, int codeLen, handle_t *module_
     // the implementations that need to do so here, and pass poiners
     // to them in here.
     set_runtime_t set_runtime;
-    if (use_dlopenbuf()) {
+    if (use_dlopenbuf) {
         set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
     } else {
         set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
     }
     if (!set_runtime) {
-        if (use_dlopenbuf()) {
+        if (use_dlopenbuf) {
             dlclose(lib);
         } else {
             mmap_dlclose(lib);
@@ -309,7 +309,7 @@ int initialize_kernels(const unsigned char *code, int codeLen, handle_t *module_
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        if (use_dlopenbuf()) {
+        if (use_dlopenbuf) {
             dlclose(lib);
         } else {
             mmap_dlclose(lib);
@@ -321,8 +321,8 @@ int initialize_kernels(const unsigned char *code, int codeLen, handle_t *module_
     return 0;
 }
 
-handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen) {
-    if (use_dlopenbuf()) {
+handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, bool use_dlopenbuf) {
+    if (use_dlopenbuf) {
         return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
     } else {
         return reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void *>(module_ptr), name));
@@ -370,8 +370,8 @@ int run(handle_t module_ptr, handle_t function,
     return pipeline(args);
 }
 
-int release_kernels(handle_t module_ptr) {
-    if (use_dlopenbuf()) {
+int release_kernels(handle_t module_ptr, bool use_dlopenbuf) {
+    if (use_dlopenbuf) {
         dlclose(reinterpret_cast<void *>(module_ptr));
     } else {
         mmap_dlclose(reinterpret_cast<void *>(module_ptr));
@@ -432,13 +432,15 @@ int main(int argc, const char **argv) {
             set_rpc_return(initialize_kernels(
                 reinterpret_cast<unsigned char*>(RPC_ARG(0)),
                 RPC_ARG(1),
-                reinterpret_cast<handle_t*>(RPC_ARG(2))));
+                RPC_ARG(2),
+                reinterpret_cast<handle_t*>(RPC_ARG(3))));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
                 static_cast<handle_t>(RPC_ARG(0)),
                 reinterpret_cast<const char *>(RPC_ARG(1)),
-                RPC_ARG(2)));
+                RPC_ARG(2),
+                RPC_ARG(3)));
             break;
         case Message::Run:
             set_rpc_return(run(
@@ -452,7 +454,9 @@ int main(int argc, const char **argv) {
                 RPC_ARG(7)));
             break;
         case Message::ReleaseKernels:
-            set_rpc_return(release_kernels(static_cast<handle_t>(RPC_ARG(0))));
+            set_rpc_return(release_kernels(
+                static_cast<handle_t>(RPC_ARG(0)),
+                RPC_ARG(1)));
             break;
         case Message::Break:
             return 0;
