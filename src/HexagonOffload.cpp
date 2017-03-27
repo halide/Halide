@@ -345,128 +345,113 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     bool needs_got_entry = false;
 
     switch (type) {
-    case 1:
-        // Address to fix up, mask, value, signed, verify
+    case R_HEX_B22_PCREL:
         do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) >> 2, _signed, verify);
         break;
-    case 2:
+    case R_HEX_B15_PCREL:
         // Untested
         do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) >> 2, _signed, verify);
         break;
-    case 3:
-        // Untested
+    case R_HEX_B7_PCREL:
         do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) >> 2, _signed, verify);
         break;
-    case 4:
-        // Untested
+    case R_HEX_LO16:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A), _unsigned, truncate);
         break;
-    case 5:
-        // Untested
+    case R_HEX_HI16:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_LO, uintptr_t(S + A) >> 16, _unsigned, truncate);
         break;
-    case 6:
+    case R_HEX_32:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32, intptr_t(S + A), _unsigned, truncate);
         break;
-    case 7:
-        // Untested
+    case R_HEX_16:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word16, uintptr_t(S + A), _unsigned, truncate);
         break;
-    case 8:
-        // Untested
+    case R_HEX_8:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word8, uintptr_t(S + A), _unsigned, truncate);
         break;
-    case 9:
+    case R_HEX_GPREL16_0:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP), _unsigned, verify);
         break;
-    case 10:
+    case R_HEX_GPREL16_1:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 1, _unsigned, verify);
         break;
-    case 11:
+    case R_HEX_GPREL16_2:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 2, _unsigned, verify);
         break;
-    case 12:
+    case R_HEX_GPREL16_3:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_GP, uintptr_t(S + A - GP) >> 3, _unsigned, verify);
         break;
-    case 13:
-        // Untested
+    case R_HEX_HL16:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr,   Word32_LO, uintptr_t(S + A) >> 16, _unsigned, truncate);
         do_reloc(fixup_addr+4, Word32_LO, uintptr_t(S + A), _unsigned, truncate);
         break;
-    case 14:
-        // Untested
+    case R_HEX_B13_PCREL:
         do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) >> 2, _signed, verify);
         break;
-    case 15:
-        // Untested
+    case R_HEX_B9_PCREL:
         do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) >> 2, _signed, verify);
         break;
-    case 16:
+    case R_HEX_B32_PCREL_X:
         do_reloc(fixup_addr, Word32_X26, intptr_t(S + A - P) >> 6, _signed, truncate);
         break;
-    case 17:
+    case R_HEX_32_6_X:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_X26, uintptr_t(S + A) >> 6, _unsigned, verify);
         break;
-    case 18:
-        // Untested
+    case R_HEX_B22_PCREL_X:
         do_reloc(fixup_addr, Word32_B22, intptr_t(S + A - P) & 0x3f, _signed, verify);
         break;
-    case 19:
-        // Untested
+    case R_HEX_B15_PCREL_X:
         do_reloc(fixup_addr, Word32_B15, intptr_t(S + A - P) & 0x3f, _signed, verify);
         break;
-    case 20:
-        // Untested
+    case R_HEX_B13_PCREL_X:
         do_reloc(fixup_addr, Word32_B13, intptr_t(S + A - P) & 0x3f, _signed, verify);
         break;
-    case 21:
-        // Untested
+    case R_HEX_B9_PCREL_X:
         do_reloc(fixup_addr, Word32_B9, intptr_t(S + A - P) & 0x3f, _signed, verify);
         break;
-    case 22:
-        // Untested
+    case R_HEX_B7_PCREL_X:
         do_reloc(fixup_addr, Word32_B7, intptr_t(S + A - P) & 0x3f, _signed, verify);
         break;
-    case 23:
+    case R_HEX_16_X:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A), _unsigned, truncate);
         break;
-    case 24:
+    case R_HEX_12_X:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_R6, uintptr_t(S + A), _unsigned, truncate);
         break;
-    case 25: // These ones all seem to mean the same thing. Only 30 is tested.
-    case 26:
-    case 27:
-    case 28:
-    case 29:
-    case 30:
+    case R_HEX_11_X:
+    case R_HEX_10_X:
+    case R_HEX_9_X:
+    case R_HEX_8_X:
+    case R_HEX_7_X:
+    case R_HEX_6_X:
         internal_error << "Not pic code " << type << "\n";
         do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A), _unsigned, truncate);
         break;
-    case 31:
-        // Untested
+    case R_HEX_32_PCREL:
         do_reloc(fixup_addr, Word32, intptr_t(S + A - P), _signed, verify);
         break;
-    case 65:
+    case R_HEX_6_PCREL_X:
         do_reloc(fixup_addr, Word32_U6, uintptr_t(S + A - P), _unsigned, truncate);
         break;
-    case 69:
+    case R_HEX_GOT_32_6_X:
         do_reloc(fixup_addr, Word32_X26, intptr_t(G) >> 6, _signed, truncate);
         needs_got_entry = true;
         break;
-    case 71:
+    case R_HEX_GOT_11_X:
         do_reloc(fixup_addr, Word32_U6, uintptr_t(G), _unsigned, truncate);
         needs_got_entry = true;
         break;
@@ -521,9 +506,7 @@ public:
         return maybe_branch_inst(r.get_type());
     }
 
-    // Add a PLT entry for the external symbol sym. plt_symbol gets
-    // the new symbol in the PLT.
-    Symbol get_plt_entry(const Symbol &sym, Section &plt, Section &got, const Symbol &got_sym) override {
+    Symbol add_plt_entry(const Symbol &sym, Section &plt, Section &got, const Symbol &got_sym) override {
         if (got.get_contents().empty()) {
             // The got hasn't been started, initialize it now.
             plt.set_alignment(16);
@@ -551,15 +534,15 @@ public:
         uint32_t plt_offset = plt.get_size();
         plt.append_contents(hexagon_plt1, hexagon_plt1 + sizeof(hexagon_plt1));
 
+        plt.add_relocation(Relocation(R_HEX_B32_PCREL_X, plt_offset + 0, got_offset, &got_sym));
+        plt.add_relocation(Relocation(R_HEX_6_PCREL_X, plt_offset + 4, got_offset + 4, &got_sym));
+
+        // Make a symbol for the PLT entry.
         Symbol plt_sym("plt_" + sym.get_name());
-        // Change sym to point to the PLT.
         plt_sym
             .set_type(Symbol::STT_FUNC)
             .set_binding(Symbol::STB_LOCAL)
             .define(&plt, plt_offset, sizeof(hexagon_plt1));
-
-        plt.add_relocation(Relocation(R_HEX_B32_PCREL_X, plt_offset + 0, got_offset, &got_sym));
-        plt.add_relocation(Relocation(R_HEX_6_PCREL_X, plt_offset + 4, got_offset + 4, &got_sym));
 
         return plt_sym;
     }
