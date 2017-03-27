@@ -524,7 +524,8 @@ struct ObjectWriter {
 };
 
 template <typename T>
-std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::string &soname) {
+std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, const std::vector<std::string> &dependencies,
+                                               const std::string &soname) {
     typedef typename T::addr_t addr_t;
 
     // The buffer we will be writing to.
@@ -855,12 +856,17 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     addr_t rela_got_idx = write_relocation_section(got);
 
+    // Add some strings we know we'll need in the string table, after we write the string table.
+    strings.get(soname);
+    for (const auto &i : dependencies) {
+        strings.get(i);
+    }
+
     Section dynamic(".dynamic", Section::SHT_DYNAMIC);
     dynamic.set_alignment(4);
     dynamic.set_flag(Section::SHF_ALLOC);
     Section strtab(".strtab", Section::SHT_STRTAB);
     strtab.set_flag(Section::SHF_ALLOC);
-    strings.get(soname);
     strings.get(strtab.get_name());
     strings.get(dynamic.get_name());
     strtab.set_contents(strings.table);
@@ -874,6 +880,9 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         return d;
     };
 
+    for (const auto &i : dependencies) {
+        dyn.push_back(make_dyn(DT_NEEDED, strings.get(i)));
+    }
     if (!soname.empty()) {
         dyn.push_back(make_dyn(DT_SONAME, strings.get(soname)));
     }
@@ -967,8 +976,9 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     return output;
 }
 
-std::vector<char> Object::write_shared_object(Linker *linker, const std::string &soname) {
-    return write_shared_object_internal<Types<32>>(*this, linker, soname);
+std::vector<char> Object::write_shared_object(Linker *linker, const std::vector<std::string> &dependencies,
+                                              const std::string &soname) {
+    return write_shared_object_internal<Types<32>>(*this, linker, dependencies, soname);
 }
 
 

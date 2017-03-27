@@ -830,7 +830,8 @@ public:
 
         // Link into a shared object.
         Elf::HexagonLinker linker(device_code.target());
-        std::vector<char> shared_object = obj->write_shared_object(&linker);
+        std::vector<std::string> dependencies = { "libhalide_hexagon_remote_skel.so" };
+        std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies);
 
         // Wrap the statement in calls to halide_initialize_kernels.
         size_t code_size = shared_object.size();

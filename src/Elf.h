@@ -291,7 +291,8 @@ public:
 
     static std::unique_ptr<Object> parse_object(const char *data, size_t size);
 
-    std::vector<char> write_shared_object(Linker *linker, const std::string &soname = "");
+    std::vector<char> write_shared_object(Linker *linker, const std::vector<std::string> &depedencies = {},
+                                          const std::string &soname = "");
 
     void dump();
 
