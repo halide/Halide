@@ -71,11 +71,11 @@ int main(int argc, char **argv) {
     handlers.custom_get_library_symbol = my_get_library_symbol_impl;
     Internal::JITSharedRuntime::set_default_handlers(handlers);
 
-    Var x, y;
+    Var x, y, xi, yi;
     Func f;
     f(x, y) = cast<int32_t>(x + y);
     Target target = get_jit_target_from_environment().with_feature(Target::OpenCL);
-    f.gpu_tile(x, y, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
+    f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
     f.set_error_handler(my_error_handler);
 
     Buffer<int32_t> out = f.realize(64, 64, target);
