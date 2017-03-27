@@ -304,9 +304,9 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
     *((uint32_t *)addr) = inst;
 }
 
-uint32_t do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
-                       const Symbol *sym, uint32_t sym_offset, int32_t addend,
-                       Elf::Section &got) {
+void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
+                   const Symbol *sym, uint32_t sym_offset, int32_t addend,
+                   Elf::Section &got) {
     // Hexagon relocations are specified in section 11.5 in
     // the Hexagon Application Binary Interface spec.
 
@@ -480,8 +480,6 @@ uint32_t do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         got.append_contents((uint32_t)0);
         got.add_relocation(Relocation(R_HEX_GLOB_DAT, G, 0, sym));
     }
-
-    return R_HEX_NONE;
 }
 
 class HexagonLinker : public Linker {
@@ -839,6 +837,13 @@ public:
 
         // Generate just one .text section.
         obj->merge_text_sections();
+
+        // Make .bss a real section.
+        auto bss = obj->find_section(".bss");
+        if (bss != obj->sections_end()) {
+            bss->set_alignment(128);
+            bss->set_type(Elf::Section::SHT_PROGBITS);
+        }
 
         // Link into a shared object.
         Elf::HexagonLinker linker(device_code.target());

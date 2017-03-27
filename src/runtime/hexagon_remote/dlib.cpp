@@ -69,7 +69,11 @@ struct Sym {
     uint16_t st_shndx;
 };
 
-// A relocation from a relocation section
+enum {
+    STN_UNDEF = 0,
+};
+
+// Hexagon shared object relocation types.
 enum {
     R_HEX_COPY = 32,
     R_HEX_GLOB_DAT = 33,
@@ -77,6 +81,7 @@ enum {
     R_HEX_RELATIVE = 35,
 };
 
+// A relocation from a relocation section
 struct Rela {
     elfaddr_t r_offset;
     uint32_t r_info;
@@ -148,13 +153,17 @@ struct hash_table {
     }
 
     uint32_t next_in_chain(uint32_t sym) {
-        return chains()[sym];
+        if (sym < chain_count()) {
+            return chains()[sym];
+        } else {
+            return STN_UNDEF;
+        }
     }
 };
 
 struct dlib_t {
     char *program;
-    size_t size;
+    size_t program_size;
 
     // Information about the symbols.
     const char *strtab;
@@ -162,19 +171,42 @@ struct dlib_t {
 
     hash_table hash;
 
+    bool assert_in_bounds(const void *begin, const void *end) {
+        if (program <= (char *)begin && (char *)end <= program + program_size) {
+            return true;
+        } else {
+            log_printf("Address range [%x, %x) out of bounds [%x, %x)\n",
+                       begin, end, program, program + program_size);
+            return false;
+        }
+    }
+
+    template <typename T>
+    bool assert_in_bounds(const T *x, size_t count = 1) {
+        return assert_in_bounds(x, x + count);
+    }
+
     bool do_relocations(const Rela *relocs, int count) {
         for (int i = 0; i < count; i++) {
             const Rela &r = relocs[i];
             uint32_t *fixup_addr = (uint32_t *)(program + r.r_offset);
+            if (!assert_in_bounds(fixup_addr)) return false;
             const char *S = NULL;
             const char *B = program;
             int32_t A = r.r_addend;
             if (r.r_sym() != 0) {
                 const Sym *sym = &symtab[r.r_sym()];
+                if (!assert_in_bounds(sym)) return false;
                 const char *sym_name = &strtab[sym->st_name];
+                if (!assert_in_bounds(sym_name)) return false;
+
                 //log_printf("Relocation of type %d for symbol %s\n", r.r_type(), sym_name);
 
                 if (sym->st_value == 0) {
+                    if (!sym_name) {
+                        log_printf("Symbol name not defined");
+                        return false;
+                    }
                     S = (const char *)halide_get_symbol(sym_name);
                     if (!S) {
                         log_printf("Unresolved external symbol %s\n", sym_name);
@@ -184,6 +216,7 @@ struct dlib_t {
                 } else {
                     S = program + sym->st_value;
                     //log_printf("Got internal symbol %d\n", sym->st_value);
+                    if (!assert_in_bounds(S, sym->st_size)) return false;
                 }
             }
 
@@ -318,27 +351,27 @@ struct dlib_t {
             log_printf("mmap failed %d\n", aligned_size);
             return false;
         }
-        memcpy(program, data, size);
+        program_size = size;
+        memcpy(program, data, program_size);
         ehdr = (const Ehdr *)program;
         const Phdr *phdrs = (Phdr *)(program + ehdr->e_phoff);
+        if (!assert_in_bounds(phdrs, ehdr->e_phnum)) return false;
         const Dyn *dynamic = NULL;
         for (int i = 0; i < ehdr->e_phnum; i++) {
-            if (phdrs[i].p_offset + phdrs[i].p_memsz > size) {
-                log_printf("Program out of bounds.\n");
-                return false;
-            }
+            char *program_i = program + phdrs[i].p_offset;
+            if (!assert_in_bounds(program_i, phdrs[i].p_memsz)) return false;
             if (phdrs[i].p_type == PT_LOAD) {
                 int prot = 0;
                 if (phdrs[i].p_flags & PF_R) prot |= PROT_READ;
                 if (phdrs[i].p_flags & PF_W) prot |= PROT_WRITE;
                 if (phdrs[i].p_flags & PF_X) prot |= PROT_EXEC;
-                int err = mprotect(program + phdrs[i].p_offset, phdrs[i].p_memsz, prot);
+                int err = mprotect(program_i, phdrs[i].p_memsz, prot);
                 if (err) {
-                    log_printf("mprotect failed %d %p %d\n", err, program + phdrs[i].p_offset, phdrs[i].p_filesz);
+                    log_printf("mprotect failed %d %p %d\n", err, program_i, phdrs[i].p_filesz);
                     return false;
                 }
             } else if (phdrs[i].p_type == PT_DYNAMIC) {
-                dynamic = (const Dyn *)(program + phdrs[i].p_offset);
+                dynamic = (const Dyn *)(program_i);
                 //log_printf("Found PT_DYNAMIC at %d, size %d\n", phdrs[i].p_offset, phdrs[i].p_filesz);
             }
         }
@@ -358,7 +391,7 @@ struct dlib_t {
         typedef int (*munmap_fn)(void *, size_t);
         munmap_fn munmap = (munmap_fn)halide_get_symbol("munmap");
         if (munmap) {
-            munmap(program, size);
+            munmap(program, program_size);
         }
     }
 
@@ -369,7 +402,9 @@ struct dlib_t {
 
     // Get the address of a symbol
     char *get_symbol_addr(const Sym *sym) {
-        return program + sym->st_value;
+        char *addr = program + sym->st_value;
+        if (!assert_in_bounds(addr, sym->st_size)) return NULL;
+        return addr;
     }
 
     // Look up a symbol by name
@@ -378,10 +413,12 @@ struct dlib_t {
 
         uint32_t i = hash.lookup_chain(name);
         while(i != 0) {
-            const Sym &sym = symtab[i];
-            const char *sym_name = &strtab[sym.st_name];
+            const Sym *sym = &symtab[i];
+            if (!assert_in_bounds(sym)) return NULL;
+            const char *sym_name = &strtab[sym->st_name];
+            if (!assert_in_bounds(sym_name)) return NULL;
             if (strncmp(sym_name, name, len+1) == 0) {
-                return &sym;
+                return sym;
             }
             i = hash.next_in_chain(i);
         }
