@@ -770,6 +770,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     hash.set_alignment(4);
     hash.set_flag(Section::SHF_ALLOC);
     size_t sym_count = syms.size();
+    // TODO: Fix non-trivial hash tables so they work with dlsym.
     size_t bucket_count = 1;
     std::vector<uint32_t> hash_table(bucket_count + sym_count + 2);
     safe_assign(hash_table[0], bucket_count);
