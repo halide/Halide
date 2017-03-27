@@ -38,7 +38,7 @@ public:
 /** Describes a symbol */
 class Symbol {
 public:
-    enum Binding {
+    enum Binding : uint8_t {
         STB_LOCAL = 0,
         STB_GLOBAL = 1,
         STB_WEAK = 2,
@@ -46,7 +46,7 @@ public:
         STB_HIPROC = 15,
     };
 
-    enum Type {
+    enum Type : uint8_t {
         STT_NOTYPE = 0,
         STT_OBJECT = 1,
         STT_FUNC = 2,
@@ -56,7 +56,7 @@ public:
         STT_HIPROC = 15,
     };
 
-    enum Visibility {
+    enum Visibility : uint8_t {
         STV_DEFAULT = 0,
         STV_INTERNAL = 1,
         STV_HIDDEN = 2,
@@ -157,7 +157,7 @@ public:
 /** Describes a section of an object file. */
 class Section {
 public:
-    enum Type {
+    enum Type : uint32_t {
         SHT_NULL = 0,
         SHT_PROGBITS = 1,
         SHT_SYMTAB = 2,
@@ -176,7 +176,7 @@ public:
         SHT_HIUSER = 0xffffffff,
     };
 
-    enum Flag {
+    enum Flag : uint32_t {
         SHF_WRITE = 0x1,
         SHF_ALLOC = 0x2,
         SHF_EXECINSTR = 0x4,
@@ -196,8 +196,8 @@ private:
     uint32_t flags = 0;
     std::vector<char> contents;
     // Sections may have a size larger than the contents.
-    uint32_t size = 0;
-    uint32_t alignment = 1;
+    uint64_t size = 0;
+    uint64_t alignment = 1;
     RelocationList relocs;
 
 public:
@@ -220,12 +220,12 @@ public:
     /** Get or set the size of the section. The size may be larger
      * than the content. */
     ///@{
-    Section &set_size(uint32_t size) { this->size = size; return *this; }
-    uint32_t get_size() const { return std::max(size, (uint32_t)contents.size()); }
+    Section &set_size(uint64_t size) { this->size = size; return *this; }
+    uint64_t get_size() const { return std::max(size, contents.size()); }
     ///@}
 
-    Section &set_alignment(uint32_t alignment) { this->alignment = alignment; return *this; }
-    uint32_t get_alignment() const { return alignment; }
+    Section &set_alignment(uint64_t alignment) { this->alignment = alignment; return *this; }
+    uint64_t get_alignment() const { return alignment; }
 
     Section &set_contents(std::vector<char> contents) { this->contents = std::move(contents); return *this; }
     template <typename It>
@@ -302,7 +302,7 @@ public:
 /** Holds all of the relevant sections and symbols for an object. */
 class Object {
 public:
-    enum Type {
+    enum Type : uint16_t {
         ET_NONE = 0,
         ET_REL = 1,
         ET_EXEC = 2,
