@@ -1448,6 +1448,8 @@ struct Test {
             hvx_width = 128;
         }
 
+        bool is_v62 = target.has_feature(Target::HVX_v62);
+
         // Verify that unaligned loads use the right instructions, and don't try to use
         // immediates of more than 3 bits.
         check("valign(v*,v*,#7)", hvx_width/1, in_u8(x + 7));
@@ -1493,7 +1495,12 @@ struct Test {
 
         check("vadd(v*.b,v*.b)", hvx_width/1, u8_1 + u8_2);
         check("vadd(v*.h,v*.h)", hvx_width/2, u16_1 + u16_2);
-        check("vadd(v*.w,v*.w)", hvx_width/4, u32_1 + u32_2);
+        if (is_v62) {
+            // v62 - 32 bit saturating add
+            check("vadd(v*.uw,v*.uw):sat", hvx_width/4, u32_1 + u32_2);
+        } else {
+            check("vadd(v*.w,v*.w)", hvx_width/4, u32_1 + u32_2);
+        }
         check("vadd(v*.b,v*.b)", hvx_width/1, i8_1 + i8_2);
         check("vadd(v*.h,v*.h)", hvx_width/2, i16_1 + i16_2);
         check("vadd(v*.w,v*.w)", hvx_width/4, i32_1 + i32_2);
@@ -1522,7 +1529,12 @@ struct Test {
         // Double vector versions of the above
         check("vadd(v*:*.b,v*:*.b)", hvx_width*2, u8_1 + u8_2);
         check("vadd(v*:*.h,v*:*.h)", hvx_width/1, u16_1 + u16_2);
-        check("vadd(v*:*.w,v*:*.w)", hvx_width/2, u32_1 + u32_2);
+        if (is_v62) {
+            // v62 - 32 bit saturating add for double vector
+            check("vadd(v*:*.uw,v*:*.uw):sat", hvx_width/2, u32_1 + u32_2);
+        } else {
+            check("vadd(v*:*.w,v*:*.w)", hvx_width/2, u32_1 + u32_2);
+        }
         check("vadd(v*:*.b,v*:*.b)", hvx_width*2, i8_1 + i8_2);
         check("vadd(v*:*.h,v*:*.h)", hvx_width/1, i16_1 + i16_2);
         check("vadd(v*:*.w,v*:*.w)", hvx_width/2, i32_1 + i32_2);
@@ -1755,8 +1767,14 @@ struct Test {
         check("vnot(v*)", hvx_width/2, ~u16_1);
         check("vnot(v*)", hvx_width/4, ~u32_1);
 
-        check("vsplat(r*)", hvx_width/1, in_u8(0));
-        check("vsplat(r*)", hvx_width/2, in_u16(0));
+        if (is_v62) {
+            // v62 - Broadcasting unsigned 8 bit and 16 bit scalers
+            check("v*.b = vsplat(r*)", hvx_width/1, in_u8(0));
+            check("v*.h = vsplat(r*)", hvx_width/2, in_u16(0));
+        } else {
+            check("vsplat(r*)", hvx_width/1, in_u8(0));
+            check("vsplat(r*)", hvx_width/2, in_u16(0));
+        }
         check("vsplat(r*)", hvx_width/4, in_u32(0));
 
         check("vmux(q*,v*,v*)", hvx_width/1, select(i8_1 == i8_2, i8_1, i8_2));
