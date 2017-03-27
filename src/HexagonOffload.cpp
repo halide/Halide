@@ -182,50 +182,48 @@ bool maybe_branch_inst(uint32_t reloc_type) {
 // Defined below.
 //extern std::vector<Instruction> instruction_encodings;
 
+std::string hex(uint32_t x) {
+    char buffer[100];
+    snprintf(buffer, sizeof(buffer), "0x%08x", x);
+    return buffer;
+}
+
 void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
     uint32_t inst = *((uint32_t *)addr);
-#if 0
-    log_printf("Fixup inside instruction at %lx:\n  %08lx\n",
-               (uint32_t)(addr - get_addr(get_section_offset(sec_text))), inst);
-    log_printf("val: 0x%08lx\n", (unsigned long)val);
-    log_printf("mask: 0x%08lx\n", mask);
-#endif
+    debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
+    debug(4) << "val: " << hex(val) << "\n";
+    debug(4) << "mask: " << hex(mask) << "\n";
 
     if (!mask) {
-
         // The mask depends on the instruction. To implement
         // relocations for new instructions see
         // instruction_encodings.txt
-#if 0
         // First print the bits so I can search for it in the
         // instruction encodings.
-        log_printf("Instruction bits: ");
+        debug(4) << "Instruction bits: ";
         for (int i = 31; i >=0; i--) {
-            log_printf("%d", (int)((inst >> i) & 1));
+            debug(4) << (int)((inst >> i) & 1);
         }
-        log_printf("\n");
-#endif
+        debug(4) << "\n";
 
         if ((inst & (3 << 14)) == 0) {
             // Some instructions are actually pairs of 16-bit
             // subinstructions. See section 3.7 in the
             // programmer's reference.
-            debug(0) << "Duplex!\n";
+            debug(4) << "Duplex!\n";
 
             int iclass = ((inst >> 29) << 1) | ((inst >> 13) & 1);
-#if 0
-            log_printf("Class: %x\n", iclass);
-            log_printf("Hi: ");
+            debug(4) << "Class: " << hex(iclass) << "\n";
+            debug(4) << "Hi: ";
             for (int i = 28; i >= 16; i--) {
-                log_printf("%d", (int)((inst >> i) & 1));
+                debug(4) << (int)((inst >> i) & 1);
             }
-            log_printf("\n");
-            log_printf("Lo: ");
+            debug(4) << "\n";
+            debug(4) << "Lo: ";
             for (int i = 12; i >= 0; i--) {
-                log_printf("%d", (int)((inst >> i) & 1));
+                debug(4) << (int)((inst >> i) & 1);
             }
-            log_printf("\n");
-#endif
+            debug(4) << "\n";
 
             // We only know how to do the ones where the high
             // subinstruction is an immediate assignment. (marked
@@ -247,15 +245,15 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
         } else if ((inst >> 24) == 72) {
             // Example instruction encoding that has this high byte (ignoring bits 1 and 2):
             // 0100 1ii0  000i iiii  PPit tttt  iiii iiii
-            debug(0) << "Instruction-specific case A\n";
+            debug(4) << "Instruction-specific case A\n";
             mask = 0x061f20ff;
         } else if ((inst >> 24) == 73) {
             // 0100 1ii1  000i iiii  PPii iiii  iiid dddd
-            debug(0) << "Instruction-specific case B\n";
+            debug(4) << "Instruction-specific case B\n";
             mask = 0x061f3fe0;
         } else if ((inst >> 24) == 120) {
             // 0111 1000  ii-i iiii  PPii iiii  iiid dddd
-            debug(0) << "Instruction-specific case C\n";
+            debug(4) << "Instruction-specific case C\n";
             mask = 0x00df3fe0;
         } else if ((inst >> 16) == 27209) {
             // 0110 1010  0100 1001  PP-i iiii  i--d dddd
@@ -280,7 +278,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
         }
     }
 
-    //uintptr_t old_val = val;
+    uintptr_t old_val = val;
     bool consumed_every_bit = false;
     for (int i = 0; i < 32; i++) {
         if (mask & (1 << i)) {
@@ -299,7 +297,11 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
         }
     }
 
-    internal_assert(!verify || consumed_every_bit);
+    internal_assert(!verify || consumed_every_bit)
+        << "Relocation overflow inst=" << hex(inst)
+        << "mask=" << hex(mask) << " val=" << hex(old_val) << "\n";
+
+    debug(4) << "Relocated instruction: " << hex(inst) << "\n";
 
     *((uint32_t *)addr) = inst;
 }
@@ -316,7 +318,7 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
     intptr_t A = addend;
     uint32_t GP = 0;
 
-    uint32_t G = got.get_contents().size();
+    uint32_t G = got.contents_size();
     for (const Relocation &r : got.relocations()) {
         if (r.get_symbol() == sym) {
             G = r.get_offset();
@@ -460,7 +462,7 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         internal_error << "Unhandled relocation type " << type << "\n";
     }
 
-    if (needs_got_entry && G == got.get_contents().size()) {
+    if (needs_got_entry && G == got.contents_size()) {
         debug(2) << "Adding GOT entry " << G << " for symbol " << sym->get_name() << "\n";
         got.append_contents((uint32_t)0);
         got.add_relocation(Relocation(R_HEX_GLOB_DAT, G, 0, sym));
@@ -496,7 +498,7 @@ public:
             }
         }
 
-        uint64_t got_offset = got.get_contents().size();
+        uint64_t got_offset = got.contents_size();
         got.append_contents((uint32_t)0);
         got.add_relocation(Elf::Relocation(R_HEX_GLOB_DAT, got_offset, 0, &sym));
         return got_offset;
@@ -507,8 +509,8 @@ public:
     }
 
     Symbol add_plt_entry(const Symbol &sym, Section &plt, Section &got, const Symbol &got_sym) override {
-        if (got.get_contents().empty()) {
-            // The got hasn't been started, initialize it now.
+        if (got.contents_empty()) {
+            // The PLT hasn't been started, initialize it now.
             plt.set_alignment(16);
 
             std::vector<char> padding(64, (char)0);
@@ -526,7 +528,7 @@ public:
         debug(2) << "Adding PLT entry for symbol " << sym.get_name() << "\n";
 
         // Add a GOT entry for this symbol.
-        uint64_t got_offset = got.get_contents().size();
+        uint64_t got_offset = got.contents_size();
         got.append_contents((uint32_t)0);
         got.add_relocation(Elf::Relocation(R_HEX_JMP_SLOT, got_offset, 0, &sym));
 
