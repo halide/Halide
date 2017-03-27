@@ -179,9 +179,6 @@ bool maybe_branch_inst(uint32_t reloc_type) {
     }
 }
 
-// Defined below.
-//extern std::vector<Instruction> instruction_encodings;
-
 std::string hex(uint32_t x) {
     char buffer[100];
     snprintf(buffer, sizeof(buffer), "0x%08x", x);
