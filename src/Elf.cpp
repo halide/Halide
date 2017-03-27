@@ -15,7 +15,7 @@ namespace {
 
 // http://www.skyfree.org/linux/references/ELF_Format.pdf
 
-enum {
+enum : uint32_t {
     PT_NULL = 0,
     PT_LOAD = 1,
     PT_DYNAMIC = 2,
@@ -27,7 +27,7 @@ enum {
     PT_HIPROC = 0x7fffffff,
 };
 
-enum {
+enum : uint32_t {
     PF_X = 1,
     PF_W = 2,
     PF_R = 4,
@@ -35,7 +35,7 @@ enum {
     PF_MASKPROC = 0xf0000000,
 };
 
-enum {
+enum : uint32_t {
     DT_NULL = 0,
     DT_NEEDED = 1,
     DT_PLTRELSZ = 2,
@@ -64,7 +64,7 @@ enum {
     DT_HIPROC = 0x7fffffff,
 };
 
-enum {
+enum : uint32_t {
     STN_UNDEF = 0
 };
 
@@ -234,7 +234,9 @@ struct Dyn {
 };
 
 class StringTable {
-    // TODO: We could be smarter and find substrings in the existing table.
+    // TODO: We could be smarter and find substrings in the existing
+    // table, not just whole strings. It would probably be fine to just
+    // put every substring of each new string into the cache.
     std::map<std::string, uint32_t> cache;
 
 public:
@@ -242,7 +244,8 @@ public:
 
     StringTable() {
         // For our cache to work, we need something in the table to
-        // start with so index 0 isn't valid.
+        // start with so index 0 isn't valid (it will be the empty
+        // string).
         table.push_back(0);
     }
 
@@ -283,12 +286,16 @@ void append_padding(std::vector<char> &buf, size_t alignment) {
     buf.resize((buf.size() + alignment - 1) & ~(alignment - 1));
 }
 
+// Cast one type to another, asserting that the type is in the range
+// of the target type.
 template <typename T, typename U>
 T safe_cast(U x) {
     internal_assert(std::numeric_limits<T>::min() <= x && x <= std::numeric_limits<T>::max());
     return static_cast<T>(x);
 }
 
+// Assign a type from a potentially different type, using safe_cast
+// above to validate the assignment.
 template <typename T, typename U>
 void safe_assign(T &dest, U src) {
     dest = safe_cast<T>(src);
@@ -312,8 +319,7 @@ template <typename T>
 std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
     Ehdr<T> header = *(const Ehdr<T> *)data;
     internal_assert(memcmp(header.e_ident, elf_magic, sizeof(elf_magic)) == 0);
-    internal_assert(header.e_type == Object::ET_REL ||
-                    header.e_type == Object::ET_DYN);
+    internal_assert(header.e_type == Object::ET_REL || header.e_type == Object::ET_DYN);
 
     std::unique_ptr<Object> obj(new Object());
     obj->set_type((Object::Type)header.e_type)
@@ -401,11 +407,7 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
                 const char *rela_ptr = data + sh->sh_offset + i*sh->sh_entsize;
                 internal_assert(data <= rela_ptr && rela_ptr + sizeof(Rela<T>) <= data + size);
                 const Rela<T> &rela = *(const Rela<T> *)rela_ptr;
-                Relocation reloc;
-                reloc.set_type(rela.r_type())
-                    .set_offset(rela.r_offset)
-                    .set_addend(rela.r_addend)
-                    .set_symbol(symbol_map[rela.r_sym()]);
+                Relocation reloc(rela.r_type(), rela.r_offset,  rela.r_addend, symbol_map[rela.r_sym()]);
                 to_relocate->add_relocation(reloc);
             }
         }
@@ -472,7 +474,7 @@ Object::section_iterator Object::merge_sections(const std::vector<section_iterat
         // satisfies all sections. This should be gcd, not max,
         // but we assume that all of the alignments are powers of
         // 2.
-        uint32_t alignment = std::max(merged->get_alignment(), s->get_alignment());
+        uint64_t alignment = std::max(merged->get_alignment(), s->get_alignment());
         merged->set_alignment(alignment);
 
         append_padding(contents, alignment);
@@ -540,9 +542,18 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     auto &data_phdr = phdrs[1];
     auto &dyn_phdr = phdrs[2];
 
+    // The text program header starts at the beginning of the object.
+    text_phdr.p_type = PT_LOAD;
+    text_phdr.p_flags = PF_X | PF_R;
+    text_phdr.p_offset = 0;
+    text_phdr.p_align = 4096;
+
+    // We need to build a string table as we go.
     StringTable strings;
 
+    // And build a list of section headers.
     std::vector<Shdr<T>> shdrs;
+    // Add the null section now.
     Shdr<T> sh_null;
     memset(&sh_null, 0, sizeof(sh_null));
     shdrs.push_back(sh_null);
@@ -688,11 +699,6 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     // We need to perform the relocations. To do that, we need to position the sections
     // where they will go in the final shared object.
-    text_phdr.p_type = PT_LOAD;
-    text_phdr.p_flags = PF_X | PF_R;
-    text_phdr.p_offset = 0;
-    text_phdr.p_align = 4096;
-
     write_section(plt);
     for (const Section &s : obj.sections()) {
         if (s.is_alloc() && !s.is_writable()) {
