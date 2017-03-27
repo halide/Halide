@@ -2347,7 +2347,7 @@ public:
 
     Realization realize(std::vector<int32_t> sizes) {
         check_scheduled("realize");
-        return produce_pipeline().realize(sizes, get_target());
+        return get_pipeline().realize(sizes, get_target());
     }
 
     // Only enable if none of the args are Realization; otherwise we can incorrectly
@@ -2355,13 +2355,20 @@ public:
     template <typename... Args, typename std::enable_if<NoRealizations<Args...>::value>::type * = nullptr>
     Realization realize(Args&&... args) {
         check_scheduled("realize");
-        return produce_pipeline().realize(std::forward<Args>(args)..., get_target());
+        return get_pipeline().realize(std::forward<Args>(args)..., get_target());
     }
 
     void realize(Realization r) {
         check_scheduled("realize");
-        produce_pipeline().realize(r, get_target());
+        get_pipeline().realize(r, get_target());
     }
+
+    // Return the Pipeline that has been built by the generate() method.
+    // This method can only be used from a Generator that has a generate()
+    // method (vs a build() method), and currently can only be called from
+    // the schedule() method. (This may be relaxed in the future to allow
+    // calling from generate() as long as all Outputs have been defined.)
+    EXPORT Pipeline get_pipeline();
 
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
@@ -2381,7 +2388,6 @@ protected:
     EXPORT void post_generate();
     EXPORT void pre_schedule();
     EXPORT void post_schedule();
-    EXPORT Pipeline produce_pipeline();
 
     template<typename T>
     using Input = GeneratorInput<T>;
@@ -2453,6 +2459,7 @@ private:
     std::shared_ptr<Internal::ValueTracker> value_tracker;
     bool inputs_set{false};
     std::string generator_name;
+    Pipeline pipeline;
 
     // Return our ParamInfo (lazy-initing as needed).
     EXPORT ParamInfo &param_info();
@@ -2742,7 +2749,7 @@ private:
     Pipeline build_pipeline_impl() {
         ((T *)this)->call_generate_impl();
         ((T *)this)->call_schedule_impl();
-        return produce_pipeline();
+        return get_pipeline();
     }
 
     // Implementations for call_generate_impl(), specialized on whether we
