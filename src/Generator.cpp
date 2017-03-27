@@ -742,16 +742,11 @@ std::string halide_type_to_c_type(const Type &t) {
     return m.at(encode(t));
 }
 
-LoopLevel get_halide_undefined_looplevel() {
-    static LoopLevel undefined(Func("__undefined_looplevel_func"), Var("__undefined_looplevel_var"));
-    return undefined;
-}
-
 const std::map<std::string, LoopLevel> &get_halide_looplevel_enum_map() {
     static const std::map<std::string, LoopLevel> halide_looplevel_enum_map{
         {"root", LoopLevel::root()},
-        {"undefined", get_halide_undefined_looplevel()},
-        {"inline", LoopLevel()},
+        {"undefined", LoopLevel()},
+        {"inline", LoopLevel::inlined()},
     };
     return halide_looplevel_enum_map;
 }
