@@ -358,21 +358,31 @@ struct dlib_t {
         if (!assert_in_bounds(phdrs, ehdr->e_phnum)) return false;
         const Dyn *dynamic = NULL;
         for (int i = 0; i < ehdr->e_phnum; i++) {
-            char *program_i = program + phdrs[i].p_offset;
-            if (!assert_in_bounds(program_i, phdrs[i].p_memsz)) return false;
+            size_t size_i = phdrs[i].p_memsz;
+            size_t offset_i = phdrs[i].p_offset;
+            if (size_i != phdrs[i].p_filesz) {
+                log_printf("Program header has mem size %d not equal to file size %d\n", size_i, phdrs[i].p_filesz);
+                return false;
+            }
+            char *program_i = program + offset_i;
+            if (!assert_in_bounds(program_i, size_i)) return false;
             if (phdrs[i].p_type == PT_LOAD) {
+                if (offset_i % alignment != 0 || size_i % alignment != 0) {
+                    log_printf("Cannot load program with unaligned range [%d, %d)\n", offset_i, offset_i + size_i);
+                    return false;
+                }
                 int prot = 0;
                 if (phdrs[i].p_flags & PF_R) prot |= PROT_READ;
                 if (phdrs[i].p_flags & PF_W) prot |= PROT_WRITE;
                 if (phdrs[i].p_flags & PF_X) prot |= PROT_EXEC;
-                int err = mprotect(program_i, phdrs[i].p_memsz, prot);
+                int err = mprotect(program_i, size_i, prot);
                 if (err) {
-                    log_printf("mprotect failed %d %p %d\n", err, program_i, phdrs[i].p_filesz);
+                    log_printf("mprotect failed %d %p %d\n", err, program_i, size_i);
                     return false;
                 }
             } else if (phdrs[i].p_type == PT_DYNAMIC) {
                 dynamic = (const Dyn *)(program_i);
-                //log_printf("Found PT_DYNAMIC at %d, size %d\n", phdrs[i].p_offset, phdrs[i].p_filesz);
+                //log_printf("Found PT_DYNAMIC at %d, size %d\n", offset_i, phdrs[i].p_filesz);
             }
         }
         if (!dynamic) {

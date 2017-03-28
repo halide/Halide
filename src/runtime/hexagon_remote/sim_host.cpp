@@ -95,7 +95,9 @@ int init_sim() {
         }
     }
 
-    // Control use of dlopenbuf.
+    // Control use of dlopenbuf. This is to enable testing of the
+    // custom implementation of dlopen, which is not used whenever
+    // dlopenbuf is available.
     const char *use = getenv("HL_HEXAGON_USE_DLOPENBUF");
     if (use && !atoi(use)) {
         use_dlopenbuf = false;
@@ -326,9 +328,6 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
 
     int ret = init_sim();
     if (ret != 0) return -1;
-
-    // Set the flag to use mmap. This is to enable testing mmap_dlopen
-    // when dlopenbuf is available.
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_code(code, codeLen);
