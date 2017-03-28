@@ -816,6 +816,7 @@ private:
             { "halide.hexagon.sxt.vh", i32(wild_i16x), Pattern::InterleaveResult },
         };
 
+
         bool is_v62 = target.has_feature(Halide::Target::HVX_v62);
         if (is_v62) {
             // v62 - Saturating narrowing cast
@@ -824,6 +825,7 @@ private:
             casts.emplace_back( "halide.hexagon.add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps );
         }
         casts.emplace_back( "halide.hexagon.pack.vw", u16(wild_u32x) );
+
         // To hit more of the patterns we want, rewrite "double casts"
         // as two stage casts. This also avoids letting vector casts
         // fall through to LLVM, which will generate large unoptimized
