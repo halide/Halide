@@ -274,7 +274,6 @@ inline std::string halide_type_to_enum_string(const Type &t) {
     return enum_to_string(get_halide_type_enum_map(), t);
 }
 
-EXPORT extern Halide::LoopLevel get_halide_undefined_looplevel();
 EXPORT extern const std::map<std::string, Halide::LoopLevel> &get_halide_looplevel_enum_map();
 inline std::string halide_looplevel_to_enum_string(const LoopLevel &loop_level){
     return enum_to_string(get_halide_looplevel_enum_map(), loop_level);
@@ -705,9 +704,9 @@ public:
     }
 
     std::string get_default_value() const override {
-        if (def == "undefined") return "Halide::Internal::get_halide_undefined_looplevel()";
+        if (def == "undefined") return "LoopLevel()";
         if (def == "root") return "LoopLevel::root()";
-        if (def == "inline") return "LoopLevel()";
+        if (def == "inline") return "LoopLevel::inlined()";
         user_error << "LoopLevel value " << def << " not found.\n";
         return "";
     }
@@ -717,7 +716,7 @@ public:
     }
 
     bool defined() const {
-        return this->value() != get_halide_undefined_looplevel();
+        return this->value().defined();
     }
 
 private:
