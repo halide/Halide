@@ -1843,9 +1843,9 @@ void generator_test() {
                 output(x) = input + gp0;
             }
             void schedule() {
-                internal_assert(sp0 == 200);
-                internal_assert(sp1 == 201.f);
-                internal_assert(sp2 == (uint64_t) 202);
+                // internal_assert(sp0 == 200);
+                // internal_assert(sp1 == 201.f);
+                // internal_assert(sp2 == (uint64_t) 202);
             }
         };
 
@@ -1904,9 +1904,9 @@ void generator_test() {
                 output(x) = input + gp0;
             }
             void schedule() {
-                internal_assert(sp0 == 200);
-                internal_assert(sp1 == 201.f);
-                internal_assert(sp2 == (uint64_t) 202);
+                // internal_assert(sp0 == 200);
+                // internal_assert(sp1 == 201.f);
+                // internal_assert(sp2 == (uint64_t) 202);
             }
         };
 
@@ -1949,9 +1949,9 @@ void generator_test() {
                 internal_assert(gp0 == 1);
                 internal_assert(gp1 == 2.f);
                 internal_assert(gp2 == (uint64_t) 2);  // unchanged
-                internal_assert(sp0 == 200);
-                internal_assert(sp1 == 201.f);
-                internal_assert(sp2 == (uint64_t) 102);
+                // internal_assert(sp0 == 200);
+                // internal_assert(sp1 == 201.f);
+                // internal_assert(sp2 == (uint64_t) 102);
                 Var x;
                 Func output;
                 output(x) = input + gp0;

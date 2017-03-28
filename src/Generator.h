@@ -733,121 +733,122 @@ public:
         : Internal::GeneratorParamImplBase<T>(name, value) {}
 };
 
-/** Addition between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator+ with T.
+
+/** Addition between GeneratorParam<T> and any type that supports operator+ with T.
  * Returns type of underlying operator+. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 + (typename T::type)0) operator+(const Other &a, const T &b) { return a + (typename T::type)b; }
+decltype((Other)0 + (T)0) operator+(const Other &a, const GeneratorParam<T> &b) { return a + (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 + (Other)0) operator+(const T &a, const Other & b) { return (typename T::type)a + b; }
+decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other & b) { return (T)a + b; }
 // @}
 
-/** Subtraction between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator- with T.
+/** Subtraction between GeneratorParam<T> and any type that supports operator- with T.
  * Returns type of underlying operator-. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 - (typename T::type)0) operator-(const Other & a, const T &b) { return a - (typename T::type)b; }
+decltype((Other)0 - (T)0) operator-(const Other & a, const GeneratorParam<T> &b) { return a - (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 - (Other)0)  operator-(const T &a, const Other & b) { return (typename T::type)a - b; }
+decltype((T)0 - (Other)0)  operator-(const GeneratorParam<T> &a, const Other & b) { return (T)a - b; }
 // @}
 
-/** Multiplication between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator* with T.
+/** Multiplication between GeneratorParam<T> and any type that supports operator* with T.
  * Returns type of underlying operator*. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 * (typename T::type)0) operator*(const Other &a, const T &b) { return a * (typename T::type)b; }
+decltype((Other)0 * (T)0) operator*(const Other &a, const GeneratorParam<T> &b) { return a * (T)b; }
 template <typename Other, typename T>
-decltype((Other)0 * (typename T::type)0) operator*(const T &a, const Other &b) { return (typename T::type)a * b; }
+decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) { return (T)a * b; }
 // @}
 
-/** Division between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator/ with T.
+/** Division between GeneratorParam<T> and any type that supports operator/ with T.
  * Returns type of underlying operator/. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 / (typename T::type)1) operator/(const Other &a, const T &b) { return a / (typename T::type)b; }
+decltype((Other)0 / (T)1) operator/(const Other &a, const GeneratorParam<T> &b) { return a / (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 / (Other)1) operator/(const T &a, const Other &b) { return (typename T::type)a / b; }
+decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) { return (T)a / b; }
 // @}
 
-/** Modulo between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator% with T.
+/** Modulo between GeneratorParam<T> and any type that supports operator% with T.
  * Returns type of underlying operator%. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 % (typename T::type)1) operator%(const Other &a, const T &b) { return a % (typename T::type)b; }
+decltype((Other)0 % (T)1) operator%(const Other &a, const GeneratorParam<T> &b) { return a % (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 % (Other)1) operator%(const T &a, const Other &b) { return (typename T::type)a % b; }
+decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) { return (T)a % b; }
 // @}
 
-/** Greater than comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator> with T.
+/** Greater than comparison between GeneratorParam<T> and any type that supports operator> with T.
  * Returns type of underlying operator>. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 > (typename T::type)1) operator>(const Other &a, const T &b) { return a > (typename T::type)b; }
+decltype((Other)0 > (T)1) operator>(const Other &a, const GeneratorParam<T> &b) { return a > (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 > (Other)1) operator>(const T &a, const Other &b) { return (typename T::type)a > b; }
+decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) { return (T)a > b; }
 // @}
 
-/** Less than comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator< with T.
+/** Less than comparison between GeneratorParam<T> and any type that supports operator< with T.
  * Returns type of underlying operator<. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 < (typename T::type)1) operator<(const Other &a, const T &b) { return a < (typename T::type)b; }
+decltype((Other)0 < (T)1) operator<(const Other &a, const GeneratorParam<T> &b) { return a < (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 < (Other)1) operator<(const T &a, const Other &b) { return (typename T::type)a < b; }
+decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) { return (T)a < b; }
 // @}
 
-/** Greater than or equal comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator>= with T.
+/** Greater than or equal comparison between GeneratorParam<T> and any type that supports operator>= with T.
  * Returns type of underlying operator>=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 >= (typename T::type)1) operator>=(const Other &a, const T &b) { return a >= (typename T::type)b; }
+decltype((Other)0 >= (T)1) operator>=(const Other &a, const GeneratorParam<T> &b) { return a >= (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 >= (Other)1) operator>=(const T &a, const Other &b) { return (typename T::type)a >= b; }
+decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b) { return (T)a >= b; }
 // @}
 
-/** Less than or equal comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator<= with T.
+/** Less than or equal comparison between GeneratorParam<T> and any type that supports operator<= with T.
  * Returns type of underlying operator<=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 <= (typename T::type)1) operator<=(const Other &a, const T &b) { return a <= (typename T::type)b; }
+decltype((Other)0 <= (T)1) operator<=(const Other &a, const GeneratorParam<T> &b) { return a <= (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 <= (Other)1) operator<=(const T &a, const Other &b) { return (typename T::type)a <= b; }
+decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b) { return (T)a <= b; }
 // @}
 
-/** Equality comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator== with T.
+/** Equality comparison between GeneratorParam<T> and any type that supports operator== with T.
  * Returns type of underlying operator==. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 == (typename T::type)1) operator==(const Other &a, const T &b) { return a == (typename T::type)b; }
+decltype((Other)0 == (T)1) operator==(const Other &a, const GeneratorParam<T> &b) { return a == (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 == (Other)1) operator==(const T &a, const Other &b) { return (typename T::type)a == b; }
+decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b) { return (T)a == b; }
 // @}
 
-/** Inequality comparison between between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator!= with T.
+/** Inequality comparison between between GeneratorParam<T> and any type that supports operator!= with T.
  * Returns type of underlying operator!=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 != (typename T::type)1) operator!=(const Other &a, const T &b) { return a != (typename T::type)b; }
+decltype((Other)0 != (T)1) operator!=(const Other &a, const GeneratorParam<T> &b) { return a != (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 != (Other)1) operator!=(const T &a, const Other &b) { return (typename T::type)a != b; }
+decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b) { return (T)a != b; }
 // @}
 
-/** Logical and between between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator&& with T.
+/** Logical and between between GeneratorParam<T> and any type that supports operator&& with T.
  * Returns type of underlying operator&&. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 && (typename T::type)1) operator&&(const Other &a, const T &b) { return a && (typename T::type)b; }
+decltype((Other)0 && (T)1) operator&&(const Other &a, const GeneratorParam<T> &b) { return a && (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 && (Other)1) operator&&(const T &a, const Other &b) { return (typename T::type)a && b; }
+decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, const Other &b) { return (T)a && b; }
 // @}
 
-/** Logical or between between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator&& with T.
+/** Logical or between between GeneratorParam<T> and any type that supports operator&& with T.
  * Returns type of underlying operator||. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 || (typename T::type)1) operator||(const Other &a, const T &b) { return a || (typename T::type)b; }
+decltype((Other)0 || (T)1) operator||(const Other &a, const GeneratorParam<T> &b) { return a || (T)b; }
 template <typename Other, typename T>
-decltype((typename T::type)0 || (Other)1) operator||(const T &a, const Other &b) { return (typename T::type)a || b; }
+decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, const Other &b) { return (T)a || b; }
 // @}
 
 /* min and max are tricky as the language support for these is in the std
@@ -860,46 +861,46 @@ using std::max;
 using std::min;
 
 template <typename Other, typename T>
-decltype(min((Other)0, (typename T::type)1)) min_forward(const Other &a, const T &b) { return min(a, (typename T::type)b); }
+decltype(min((Other)0, (T)1)) min_forward(const Other &a, const GeneratorParam<T> &b) { return min(a, (T)b); }
 template <typename Other, typename T>
-decltype(min((typename T::type)0, (Other)1)) min_forward(const T &a, const Other &b) { return min((typename T::type)a, b); }
+decltype(min((T)0, (Other)1)) min_forward(const GeneratorParam<T> &a, const Other &b) { return min((T)a, b); }
 
 template <typename Other, typename T>
-decltype(max((Other)0, (typename T::type)1)) max_forward(const Other &a, const T &b) { return max(a, (typename T::type)b); }
+decltype(max((Other)0, (T)1)) max_forward(const Other &a, const GeneratorParam<T> &b) { return max(a, (T)b); }
 template <typename Other, typename T>
-decltype(max((typename T::type)0, (Other)1)) max_forward(const T &a, const Other &b) { return max((typename T::type)a, b); }
+decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, const Other &b) { return max((T)a, b); }
 
 }}
 
-/** Compute minimum between GeneratorParam<T> or ScheduleParam<T> and any type that supports min with T.
+/** Compute minimum between GeneratorParam<T> and any type that supports min with T.
  * Will automatically import std::min. Returns type of underlying min call. */
 // @{
 template <typename Other, typename T>
-auto min(const Other &a, const T &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
+auto min(const Other &a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
     return Internal::GeneratorMinMax::min_forward(a, b);
 }
 template <typename Other, typename T>
-auto min(const T &a, const Other &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
+auto min(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
     return Internal::GeneratorMinMax::min_forward(a, b);
 }
 // @}
 
-/** Compute the maximum value between GeneratorParam<T> or ScheduleParam<T> and any type that supports max with T.
+/** Compute the maximum value between GeneratorParam<T> and any type that supports max with T.
  * Will automatically import std::max. Returns type of underlying max call. */
 // @{
 template <typename Other, typename T>
-auto max(const Other &a, const T &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
+auto max(const Other &a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
     return Internal::GeneratorMinMax::max_forward(a, b);
 }
 template <typename Other, typename T>
-auto max(const T &a, const Other &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
+auto max(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
     return Internal::GeneratorMinMax::max_forward(a, b);
 }
 // @}
 
 /** Not operator for GeneratorParam */
 template <typename T>
-decltype(!(typename T::type)0) operator!(const T &a) { return !(typename T::type)a; }
+decltype(!(T)0) operator!(const GeneratorParam<T> &a) { return !(T)a; }
 
 namespace Internal {
 
