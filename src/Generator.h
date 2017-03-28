@@ -204,6 +204,7 @@
 #include "Func.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
+#include "ScheduleParam.h"
 #include "Target.h"
 
 namespace Halide {
@@ -349,7 +350,6 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
 
@@ -389,14 +389,6 @@ protected:
         return get_default_value();
     }
 
-    virtual bool is_schedule_param() const {
-        return false;
-    }
-
-    virtual bool is_looplevel_param() const {
-        return false;
-    }
-
     virtual bool is_synthetic_param() const {
         return false;
     }
@@ -418,6 +410,8 @@ private:
 template<typename T>
 class GeneratorParamImpl : public GeneratorParamBase {
 public:
+    using type = T;
+
     GeneratorParamImpl(const std::string &name, const T &value) : GeneratorParamBase(name), value_(value) {}
 
     T value() const { check_value_readable(); return value_; }
@@ -440,17 +434,12 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
 
 #undef HALIDE_GENERATOR_PARAM_TYPED_SETTER
 
 protected:
-    bool is_looplevel_param() const override {
-        return std::is_same<T, LoopLevel>::value;
-    }
-
     virtual void set_impl(const T &new_value) { check_value_writable(); value_ = new_value; }
 
 private:
@@ -689,46 +678,10 @@ public:
 };
 
 template<typename T>
-class GeneratorParam_LoopLevel : public GeneratorParam_Enum<T> {
-public:
-    GeneratorParam_LoopLevel(const std::string &name, const std::string &def)
-        : GeneratorParam_Enum<T>(name, enum_from_string(get_halide_looplevel_enum_map(), def), get_halide_looplevel_enum_map()), def(def) {}
-
-    std::string call_to_string(const std::string &v) const override {
-        std::ostringstream oss;
-        oss << "Halide::Internal::halide_looplevel_to_enum_string(" << v << ")";
-        return oss.str();
-    }
-    std::string get_c_type() const override {
-        return "LoopLevel";
-    }
-
-    std::string get_default_value() const override {
-        if (def == "undefined") return "LoopLevel()";
-        if (def == "root") return "LoopLevel::root()";
-        if (def == "inline") return "LoopLevel::inlined()";
-        user_error << "LoopLevel value " << def << " not found.\n";
-        return "";
-    }
-
-    std::string get_type_decls() const override {
-        return "";
-    }
-
-    bool defined() const {
-        return this->value().defined();
-    }
-
-private:
-    const std::string def;
-};
-
-template<typename T>
 using GeneratorParamImplBase =
     typename select_type<
         cond<std::is_same<T, Target>::value,    GeneratorParam_Target<T>>,
         cond<std::is_same<T, Type>::value,      GeneratorParam_Type<T>>,
-        cond<std::is_same<T, LoopLevel>::value, GeneratorParam_LoopLevel<T>>,
         cond<std::is_same<T, bool>::value,      GeneratorParam_Bool<T>>,
         cond<std::is_arithmetic<T>::value,      GeneratorParam_Arithmetic<T>>,
         cond<std::is_enum<T>::value,            GeneratorParam_Enum<T>>
@@ -780,145 +733,121 @@ public:
         : Internal::GeneratorParamImplBase<T>(name, value) {}
 };
 
-/** ScheduleParam is similar to a GeneratorParam, with two important differences:
- *
- * (1) ScheduleParams are intended for use only within a Generator's schedule()
- * method (if any); if a Generator has no schedule() method, it should also have no
- * ScheduleParams
- *
- * (2) ScheduleParam can represent a LoopLevel, while GeneratorParam cannot.
- */
-template <typename T>
-class ScheduleParam : public GeneratorParam<T> {
-public:
-    ScheduleParam(const std::string &name, const T &value)
-        : GeneratorParam<T>(name, value) {}
-
-    ScheduleParam(const std::string &name, const T &value, const T &min, const T &max)
-        : GeneratorParam<T>(name, value, min, max) {}
-
-    ScheduleParam(const std::string &name, const std::string &value)
-        : GeneratorParam<T>(name, value) {}
-
-protected:
-    bool is_schedule_param() const override { return true; }
-};
-
-/** Addition between GeneratorParam<T> and any type that supports operator+ with T.
+/** Addition between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator+ with T.
  * Returns type of underlying operator+. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 + (T)0) operator+(const Other &a, const GeneratorParam<T> &b) { return a + (T)b; }
+decltype((Other)0 + (typename T::type)0) operator+(const Other &a, const T &b) { return a + (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 + (Other)0) operator+(const GeneratorParam<T> &a, const Other & b) { return (T)a + b; }
+decltype((typename T::type)0 + (Other)0) operator+(const T &a, const Other & b) { return (typename T::type)a + b; }
 // @}
 
-/** Subtraction between GeneratorParam<T> and any type that supports operator- with T.
+/** Subtraction between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator- with T.
  * Returns type of underlying operator-. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 - (T)0) operator-(const Other & a, const GeneratorParam<T> &b) { return a - (T)b; }
+decltype((Other)0 - (typename T::type)0) operator-(const Other & a, const T &b) { return a - (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 - (Other)0)  operator-(const GeneratorParam<T> &a, const Other & b) { return (T)a - b; }
+decltype((typename T::type)0 - (Other)0)  operator-(const T &a, const Other & b) { return (typename T::type)a - b; }
 // @}
 
-/** Multiplication between GeneratorParam<T> and any type that supports operator* with T.
+/** Multiplication between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator* with T.
  * Returns type of underlying operator*. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const Other &a, const GeneratorParam<T> &b) { return a * (T)b; }
+decltype((Other)0 * (typename T::type)0) operator*(const Other &a, const T &b) { return a * (typename T::type)b; }
 template <typename Other, typename T>
-decltype((Other)0 * (T)0) operator*(const GeneratorParam<T> &a, const Other &b) { return (T)a * b; }
+decltype((Other)0 * (typename T::type)0) operator*(const T &a, const Other &b) { return (typename T::type)a * b; }
 // @}
 
-/** Division between GeneratorParam<T> and any type that supports operator/ with T.
+/** Division between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator/ with T.
  * Returns type of underlying operator/. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 / (T)1) operator/(const Other &a, const GeneratorParam<T> &b) { return a / (T)b; }
+decltype((Other)0 / (typename T::type)1) operator/(const Other &a, const T &b) { return a / (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 / (Other)1) operator/(const GeneratorParam<T> &a, const Other &b) { return (T)a / b; }
+decltype((typename T::type)0 / (Other)1) operator/(const T &a, const Other &b) { return (typename T::type)a / b; }
 // @}
 
-/** Modulo between GeneratorParam<T> and any type that supports operator% with T.
+/** Modulo between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator% with T.
  * Returns type of underlying operator%. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 % (T)1) operator%(const Other &a, const GeneratorParam<T> &b) { return a % (T)b; }
+decltype((Other)0 % (typename T::type)1) operator%(const Other &a, const T &b) { return a % (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 % (Other)1) operator%(const GeneratorParam<T> &a, const Other &b) { return (T)a % b; }
+decltype((typename T::type)0 % (Other)1) operator%(const T &a, const Other &b) { return (typename T::type)a % b; }
 // @}
 
-/** Greater than comparison between GeneratorParam<T> and any type that supports operator> with T.
+/** Greater than comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator> with T.
  * Returns type of underlying operator>. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 > (T)1) operator>(const Other &a, const GeneratorParam<T> &b) { return a > (T)b; }
+decltype((Other)0 > (typename T::type)1) operator>(const Other &a, const T &b) { return a > (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 > (Other)1) operator>(const GeneratorParam<T> &a, const Other &b) { return (T)a > b; }
+decltype((typename T::type)0 > (Other)1) operator>(const T &a, const Other &b) { return (typename T::type)a > b; }
 // @}
 
-/** Less than comparison between GeneratorParam<T> and any type that supports operator< with T.
+/** Less than comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator< with T.
  * Returns type of underlying operator<. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 < (T)1) operator<(const Other &a, const GeneratorParam<T> &b) { return a < (T)b; }
+decltype((Other)0 < (typename T::type)1) operator<(const Other &a, const T &b) { return a < (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 < (Other)1) operator<(const GeneratorParam<T> &a, const Other &b) { return (T)a < b; }
+decltype((typename T::type)0 < (Other)1) operator<(const T &a, const Other &b) { return (typename T::type)a < b; }
 // @}
 
-/** Greater than or equal comparison between GeneratorParam<T> and any type that supports operator>= with T.
+/** Greater than or equal comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator>= with T.
  * Returns type of underlying operator>=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 >= (T)1) operator>=(const Other &a, const GeneratorParam<T> &b) { return a >= (T)b; }
+decltype((Other)0 >= (typename T::type)1) operator>=(const Other &a, const T &b) { return a >= (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 >= (Other)1) operator>=(const GeneratorParam<T> &a, const Other &b) { return (T)a >= b; }
+decltype((typename T::type)0 >= (Other)1) operator>=(const T &a, const Other &b) { return (typename T::type)a >= b; }
 // @}
 
-/** Less than or equal comparison between GeneratorParam<T> and any type that supports operator<= with T.
+/** Less than or equal comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator<= with T.
  * Returns type of underlying operator<=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 <= (T)1) operator<=(const Other &a, const GeneratorParam<T> &b) { return a <= (T)b; }
+decltype((Other)0 <= (typename T::type)1) operator<=(const Other &a, const T &b) { return a <= (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 <= (Other)1) operator<=(const GeneratorParam<T> &a, const Other &b) { return (T)a <= b; }
+decltype((typename T::type)0 <= (Other)1) operator<=(const T &a, const Other &b) { return (typename T::type)a <= b; }
 // @}
 
-/** Equality comparison between GeneratorParam<T> and any type that supports operator== with T.
+/** Equality comparison between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator== with T.
  * Returns type of underlying operator==. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 == (T)1) operator==(const Other &a, const GeneratorParam<T> &b) { return a == (T)b; }
+decltype((Other)0 == (typename T::type)1) operator==(const Other &a, const T &b) { return a == (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 == (Other)1) operator==(const GeneratorParam<T> &a, const Other &b) { return (T)a == b; }
+decltype((typename T::type)0 == (Other)1) operator==(const T &a, const Other &b) { return (typename T::type)a == b; }
 // @}
 
-/** Inequality comparison between between GeneratorParam<T> and any type that supports operator!= with T.
+/** Inequality comparison between between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator!= with T.
  * Returns type of underlying operator!=. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 != (T)1) operator!=(const Other &a, const GeneratorParam<T> &b) { return a != (T)b; }
+decltype((Other)0 != (typename T::type)1) operator!=(const Other &a, const T &b) { return a != (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 != (Other)1) operator!=(const GeneratorParam<T> &a, const Other &b) { return (T)a != b; }
+decltype((typename T::type)0 != (Other)1) operator!=(const T &a, const Other &b) { return (typename T::type)a != b; }
 // @}
 
-/** Logical and between between GeneratorParam<T> and any type that supports operator&& with T.
+/** Logical and between between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator&& with T.
  * Returns type of underlying operator&&. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 && (T)1) operator&&(const Other &a, const GeneratorParam<T> &b) { return a && (T)b; }
+decltype((Other)0 && (typename T::type)1) operator&&(const Other &a, const T &b) { return a && (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 && (Other)1) operator&&(const GeneratorParam<T> &a, const Other &b) { return (T)a && b; }
+decltype((typename T::type)0 && (Other)1) operator&&(const T &a, const Other &b) { return (typename T::type)a && b; }
 // @}
 
-/** Logical or between between GeneratorParam<T> and any type that supports operator&& with T.
+/** Logical or between between GeneratorParam<T> or ScheduleParam<T> and any type that supports operator&& with T.
  * Returns type of underlying operator||. */
 // @{
 template <typename Other, typename T>
-decltype((Other)0 || (T)1) operator||(const Other &a, const GeneratorParam<T> &b) { return a || (T)b; }
+decltype((Other)0 || (typename T::type)1) operator||(const Other &a, const T &b) { return a || (typename T::type)b; }
 template <typename Other, typename T>
-decltype((T)0 || (Other)1) operator||(const GeneratorParam<T> &a, const Other &b) { return (T)a || b; }
+decltype((typename T::type)0 || (Other)1) operator||(const T &a, const Other &b) { return (typename T::type)a || b; }
 // @}
 
 /* min and max are tricky as the language support for these is in the std
@@ -931,46 +860,46 @@ using std::max;
 using std::min;
 
 template <typename Other, typename T>
-decltype(min((Other)0, (T)1)) min_forward(const Other &a, const GeneratorParam<T> &b) { return min(a, (T)b); }
+decltype(min((Other)0, (typename T::type)1)) min_forward(const Other &a, const T &b) { return min(a, (typename T::type)b); }
 template <typename Other, typename T>
-decltype(min((T)0, (Other)1)) min_forward(const GeneratorParam<T> &a, const Other &b) { return min((T)a, b); }
+decltype(min((typename T::type)0, (Other)1)) min_forward(const T &a, const Other &b) { return min((typename T::type)a, b); }
 
 template <typename Other, typename T>
-decltype(max((Other)0, (T)1)) max_forward(const Other &a, const GeneratorParam<T> &b) { return max(a, (T)b); }
+decltype(max((Other)0, (typename T::type)1)) max_forward(const Other &a, const T &b) { return max(a, (typename T::type)b); }
 template <typename Other, typename T>
-decltype(max((T)0, (Other)1)) max_forward(const GeneratorParam<T> &a, const Other &b) { return max((T)a, b); }
+decltype(max((typename T::type)0, (Other)1)) max_forward(const T &a, const Other &b) { return max((typename T::type)a, b); }
 
 }}
 
-/** Compute minimum between GeneratorParam<T> and any type that supports min with T.
+/** Compute minimum between GeneratorParam<T> or ScheduleParam<T> and any type that supports min with T.
  * Will automatically import std::min. Returns type of underlying min call. */
 // @{
 template <typename Other, typename T>
-auto min(const Other &a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
+auto min(const Other &a, const T &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
     return Internal::GeneratorMinMax::min_forward(a, b);
 }
 template <typename Other, typename T>
-auto min(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
+auto min(const T &a, const Other &b) -> decltype(Internal::GeneratorMinMax::min_forward(a, b)) {
     return Internal::GeneratorMinMax::min_forward(a, b);
 }
 // @}
 
-/** Compute the maximum value between GeneratorParam<T> and any type that supports max with T.
+/** Compute the maximum value between GeneratorParam<T> or ScheduleParam<T> and any type that supports max with T.
  * Will automatically import std::max. Returns type of underlying max call. */
 // @{
 template <typename Other, typename T>
-auto max(const Other &a, const GeneratorParam<T> &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
+auto max(const Other &a, const T &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
     return Internal::GeneratorMinMax::max_forward(a, b);
 }
 template <typename Other, typename T>
-auto max(const GeneratorParam<T> &a, const Other &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
+auto max(const T &a, const Other &b) -> decltype(Internal::GeneratorMinMax::max_forward(a, b)) {
     return Internal::GeneratorMinMax::max_forward(a, b);
 }
 // @}
 
 /** Not operator for GeneratorParam */
 template <typename T>
-decltype(!(T)0) operator!(const GeneratorParam<T> &a) { return !(T)a; }
+decltype(!(typename T::type)0) operator!(const T &a) { return !(typename T::type)a; }
 
 namespace Internal {
 
@@ -2394,6 +2323,9 @@ protected:
     template<typename T>
     using Output = GeneratorOutput<T>;
 
+    template<typename T>
+    using ScheduleParam = ScheduleParam<T>;
+
     // A Generator's creation and usage must go in a certain phase to ensure correctness;
     // the state machine here is advanced and checked at various points to ensure
     // this is the case.
@@ -2430,18 +2362,24 @@ private:
     struct ParamInfo {
         EXPORT ParamInfo(GeneratorBase *generator, const size_t size);
 
-        // Ordered-list  of non-null ptrs to GeneratorParam<> fields.
+        // Ordered-list of non-null ptrs to GeneratorParam<> fields.
         std::vector<Internal::GeneratorParamBase *> generator_params;
 
-        // Ordered-list  of non-null ptrs to Input<>/Output<> fields; empty if old-style Generator.
+        // Ordered-list of non-null ptrs to ScheduleParam<> fields.
+        std::vector<Internal::ScheduleParamBase *> schedule_params;
+
+        // Ordered-list of non-null ptrs to Input<>/Output<> fields; empty if old-style Generator.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
         std::vector<Internal::GeneratorOutputBase *> filter_outputs;
 
         // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
         std::vector<Internal::Parameter *> filter_params;
 
-        // Convenience structure to look up GP/SP by name.
-        std::map<std::string, Internal::GeneratorParamBase *> params_by_name;
+        // Convenience structure to look up GP by name.
+        std::map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
+
+        // Convenience structure to look up SP by name.
+        std::map<std::string, Internal::ScheduleParamBase *> schedule_params_by_name;
 
     private:
         // list of synthetic GP's that we dynamically created; this list only exists to simplify
@@ -2463,17 +2401,8 @@ private:
     // Return our ParamInfo (lazy-initing as needed).
     EXPORT ParamInfo &param_info();
 
-    EXPORT Internal::GeneratorParamBase &find_param_by_name(const std::string &name);
-    Internal::GeneratorParamBase &find_generator_param_by_name(const std::string &name) {
-        auto &p = find_param_by_name(name);
-        internal_assert(!p.is_schedule_param());
-        return p;
-    }
-    Internal::GeneratorParamBase &find_schedule_param_by_name(const std::string &name) {
-        auto &p = find_param_by_name(name);
-        internal_assert(p.is_schedule_param());
-        return p;
-    }
+    EXPORT Internal::GeneratorParamBase &find_generator_param_by_name(const std::string &name);
+    EXPORT Internal::ScheduleParamBase &find_schedule_param_by_name(const std::string &name);
 
     EXPORT void check_scheduled(const char* m) const;
 

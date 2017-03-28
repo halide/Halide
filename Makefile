@@ -492,6 +492,7 @@ HEADER_FILES = \
   RemoveUndef.h \
   Schedule.h \
   ScheduleFunctions.h \
+  ScheduleParam.h \
   Scope.h \
   SelectGPUAPI.h \
   Simplify.h \
