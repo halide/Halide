@@ -74,9 +74,7 @@ public:
 
     void schedule() {
         intermediate.compute_at(intermediate_level);
-        if (vectorize) {
-            intermediate.vectorize(x, natural_vector_size<float>());
-        }
+        intermediate.vectorize(x, select(vectorize, natural_vector_size<float>(), 1));
     }
 
 private:

@@ -236,17 +236,22 @@ public:
 
 #undef HALIDE_SCHEDULE_PARAM_TYPED_SETTER
 
-    template <typename T2 = T, 
-              typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
-    operator T() const {
-        return scalar.get_scalar<T>();
-    }
+    // Note that we deliberately do not provide a way to retrieve the non-Expr value
+    // of ScheduleParam: this is because the value is probably inaccurate at the point
+    // you'd be tempted to examine it, since it won't be finalized until the start of lowering.
+    // Here's the code that we'd use to do so, if we find we need to:
 
-    template <typename T2 = T, 
-              typename std::enable_if<std::is_same<T2, LoopLevel>::value>::type * = nullptr>
-    operator T() const {
-        return loop_level;
-    }
+    // template <typename T2 = T, 
+    //           typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
+    // operator T() const {
+    //     return scalar.get_scalar<T>();
+    // }
+
+    // template <typename T2 = T, 
+    //           typename std::enable_if<std::is_same<T2, LoopLevel>::value>::type * = nullptr>
+    // operator T() const {
+    //     return loop_level;
+    // }
 };
 
 }  // namespace Halide
