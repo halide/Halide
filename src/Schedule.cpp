@@ -44,6 +44,13 @@ LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.name(), v.
 
 LoopLevel::LoopLevel(Func f, VarOrRVar v) : LoopLevel(f.function().name(), v.name(), v.is_rvar) {}
 
+void LoopLevel::copy_from(const LoopLevel &other) {
+    internal_assert(defined());
+    contents->func_name = other.contents->func_name;
+    contents->var_name = other.contents->var_name;
+    contents->is_rvar = other.contents->is_rvar;
+}
+
 bool LoopLevel::defined() const {
     return contents.defined();
 }

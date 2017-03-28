@@ -27,7 +27,7 @@ public:
                                         { "plastic", BagType::Plastic } } };
 
     ScheduleParam<bool> vectorize{ "vectorize", true };
-    ScheduleParam<LoopLevel> intermediate_level{ "intermediate_level", "undefined" };
+    ScheduleParam<LoopLevel> intermediate_level{ "intermediate_level", "root" };
 
     Input<Buffer<uint8_t>> typed_buffer_input{ "typed_buffer_input", 3 };
     Input<Buffer<>> untyped_buffer_input{ "untyped_buffer_input" };
@@ -73,11 +73,7 @@ public:
     }
 
     void schedule() {
-        if (intermediate_level.defined()) {
-            intermediate.compute_at(intermediate_level);
-        } else {
-            intermediate.compute_at(tuple_output, x);
-        }
+        intermediate.compute_at(intermediate_level);
         if (vectorize) {
             intermediate.vectorize(x, natural_vector_size<float>());
         }

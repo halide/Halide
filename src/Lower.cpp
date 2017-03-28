@@ -87,6 +87,11 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
         Func(f).compute_root().store_root();
     }
 
+    // Ensure that all ScheduleParams become well-defined constant Exprs.
+    for (auto &f : env) {
+        f.second.substitute_schedule_param_exprs();
+    }
+
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
 

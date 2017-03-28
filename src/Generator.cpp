@@ -251,12 +251,13 @@ public:
     StubEmitter(std::ostream &dest, 
                 const std::string &generator_name,
                 const std::vector<Internal::GeneratorParamBase *>& generator_params,
+                const std::vector<Internal::ScheduleParamBase *>& schedule_params,
                 const std::vector<Internal::GeneratorInputBase *>& inputs,
                 const std::vector<Internal::GeneratorOutputBase *>& outputs) 
         : stream(dest), 
           generator_name(generator_name), 
-          generator_params(filter_params(generator_params, false)), 
-          schedule_params(filter_params(generator_params, true)), 
+          generator_params(filter_params(generator_params)), 
+          schedule_params(schedule_params), 
           inputs(inputs), 
           outputs(outputs) {
     }
@@ -266,18 +267,17 @@ private:
     std::ostream &stream;
     const std::string generator_name;
     const std::vector<Internal::GeneratorParamBase *> generator_params;
-    const std::vector<Internal::GeneratorParamBase *> schedule_params;
+    const std::vector<Internal::GeneratorParamBase *> schedule_params_old;
+    const std::vector<Internal::ScheduleParamBase *> schedule_params;
     const std::vector<Internal::GeneratorInputBase *> inputs;
     const std::vector<Internal::GeneratorOutputBase *> outputs;
     int indent_level{0};
 
-    std::vector<Internal::GeneratorParamBase *> filter_params(const std::vector<Internal::GeneratorParamBase *> &in, 
-                                                              bool is_schedule_params) {
+    std::vector<Internal::GeneratorParamBase *> filter_params(const std::vector<Internal::GeneratorParamBase *> &in) {
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto p : in) {
             if (p->name == "target") continue;
             if (p->is_synthetic_param()) continue;
-            if (p->is_schedule_param() != is_schedule_params) continue;
             out.push_back(p);
         }
         return out;
@@ -287,7 +287,8 @@ private:
     std::string indent();
 
     void emit_inputs_struct();
-    void emit_params_struct(bool schedule_only);
+    void emit_generator_params_struct();
+    void emit_schedule_params_struct();
 };
 
 std::string StubEmitter::indent() {
@@ -298,9 +299,9 @@ std::string StubEmitter::indent() {
     return o.str();
 }
 
-void StubEmitter::emit_params_struct(bool is_schedule_params) {
-    const auto &v = is_schedule_params ? schedule_params : generator_params;
-    std::string name = is_schedule_params ? "ScheduleParams" : "GeneratorParams";
+void StubEmitter::emit_generator_params_struct() {
+    const auto &v = generator_params;
+    std::string name = "GeneratorParams";
     stream << indent() << "struct " << name << " final {\n";
     indent_level++;
     if (!v.empty()) {
@@ -339,7 +340,6 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
     indent_level++;
     stream << indent() << "std::map<std::string, std::string> m;\n";
     for (auto p : v) {
-        if (p->is_looplevel_param()) continue;
         stream << indent() << "if (" << p->name << " != " << p->get_default_value() << ") "
                         << "m[\"" << p->name << "\"] = " << p->call_to_string(p->name) << ";\n";
     }
@@ -347,20 +347,123 @@ void StubEmitter::emit_params_struct(bool is_schedule_params) {
     indent_level--;
     stream << indent() << "}\n";
 
-    if (is_schedule_params) {
-        stream << "\n";
-        stream << indent() << "inline NO_INLINE std::map<std::string, LoopLevel> to_looplevel_map() const {\n";
-        indent_level++;
-        stream << indent() << "std::map<std::string, LoopLevel> m;\n";
-        for (auto p : v) {
-            if (!p->is_looplevel_param()) continue;
-            stream << indent() << "if (" << p->name << " != " << p->get_default_value() << ") "
-                            << "m[\"" << p->name << "\"] = " << p->name << ";\n";
+    indent_level--;
+    stream << indent() << "};\n";
+    stream << "\n";
+}
+
+void StubEmitter::emit_schedule_params_struct() {
+    struct Info {
+        Internal::ScheduleParamBase *sp;
+        std::string name;
+        std::string c_type;
+        std::string def_val;
+        std::string call_to_string;
+    };
+    std::vector<Info> v;
+    for (auto *sp : schedule_params) {
+        Info info;
+        info.sp = sp;
+        info.name = sp->name();
+        if (sp->is_looplevel_param()) {
+            info.c_type = "LoopLevel";
+
+            LoopLevel def_val = *sp;
+            if (!def_val.defined()) info.def_val = "LoopLevel()";
+            else if (def_val.is_root()) info.def_val = "LoopLevel::root()";
+            else if (def_val.is_inline()) info.def_val = "LoopLevel::inlined()";
+            else user_error << "LoopLevel value for " << info.name << " not found.\n";
+
+            info.call_to_string = "Halide::Internal::halide_looplevel_to_enum_string(" + info.name + ")";
+        } else {
+            info.c_type = halide_type_to_c_type(sp->scalar_type());
+
+            Expr def_val = sp->parameter().get_scalar_expr();
+            const IntImm *int_imm = def_val.as<IntImm>();
+            const UIntImm *uint_imm = def_val.as<UIntImm>();
+            const FloatImm *float_imm = def_val.as<FloatImm>();
+            if (int_imm) {
+                info.def_val = std::to_string(int_imm->value);
+            } else if (uint_imm) {
+                info.def_val = uint_imm->type.bits() == 1 ?
+                    (uint_imm->value ? "true" : "false"):
+                    std::to_string(uint_imm->value);
+            } else if (float_imm) {
+                info.def_val = std::to_string(float_imm->value);
+                if (float_imm->type.bits() == 32) info.def_val += "f";
+            }
+            else {
+                user_error << "Unsupported value for " << info.name << ".\n";
+            }
+
+            info.call_to_string = sp->scalar_type().is_bool() ?
+                "(" + info.name + " ? \"true\" : \"false\")" :
+                "std::to_string(" + info.name + ")";
         }
-        stream << indent() << "return m;\n";
-        indent_level--;
-        stream << indent() << "}\n";
+        v.push_back(info);
     }
+
+
+    std::string name = "ScheduleParams";
+    stream << indent() << "struct " << name << " final {\n";
+    indent_level++;
+    if (!v.empty()) {
+        for (auto &i : v) {
+            stream << indent() << i.c_type << " " << i.name << "{ " << i.def_val << " };\n";
+        }
+        stream << "\n";
+    }
+
+    stream << indent() << name << "() {}\n";
+    stream << "\n";
+
+    if (!v.empty()) {
+        stream << indent() << name << "(\n";
+        indent_level++;
+        std::string comma = "";
+        for (auto &i : v) {
+            stream << indent() << comma << i.c_type << " " << i.name << "\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << ") : \n";
+        indent_level++;
+        comma = "";
+        for (auto &i : v) {
+            stream << indent() << comma << i.name << "(" << i.name << ")\n";
+            comma = ", ";
+        }
+        indent_level--;
+        stream << indent() << "{\n";
+        stream << indent() << "}\n";
+        stream << "\n";
+    }
+
+    stream << indent() << "inline NO_INLINE std::map<std::string, std::string> to_string_map() const {\n";
+    indent_level++;
+    stream << indent() << "std::map<std::string, std::string> m;\n";
+    for (auto &i : v) {
+        if (i.sp->is_looplevel_param()) continue;
+        auto def_val = i.name + "_DEFVAL";
+        stream << indent() << "if (" << i.name << " != " << i.def_val << ") "
+                        << "m[\"" << i.name << "\"] = " << i.call_to_string << ";\n";
+    }
+    stream << indent() << "return m;\n";
+    indent_level--;
+    stream << indent() << "}\n";
+
+    stream << "\n";
+    stream << indent() << "inline NO_INLINE std::map<std::string, LoopLevel> to_looplevel_map() const {\n";
+    indent_level++;
+    stream << indent() << "std::map<std::string, LoopLevel> m;\n";
+    for (auto &i : v) {
+        if (!i.sp->is_looplevel_param()) continue;
+        stream << indent() << "if (" << i.name << " != " << i.def_val << ") "
+                        << "m[\"" << i.name << "\"] = " << i.name << ";\n";
+    }
+    stream << indent() << "return m;\n";
+    indent_level--;
+    stream << indent() << "}\n";
 
     indent_level--;
     stream << indent() << "};\n";
@@ -493,19 +596,13 @@ void StubEmitter::emit() {
         stream << decl << "\n";
     }
 
-    for (auto p : schedule_params) {
-        std::string decl = p->get_type_decls();
-        if (decl.empty()) continue;
-        stream << decl << "\n";
-    }
-
     stream << indent() << "class " << class_name << " final : public Halide::Internal::GeneratorStub {\n";
     stream << indent() << "public:\n";
     indent_level++;
 
     emit_inputs_struct();
-    emit_params_struct(true);
-    emit_params_struct(false);
+    emit_generator_params_struct();
+    emit_schedule_params_struct();
 
     stream << indent() << class_name << "() {}\n";
     stream << "\n";
@@ -739,13 +836,13 @@ std::string halide_type_to_c_type(const Type &t) {
         { encode(Float(64)), "double" },
         { encode(Handle(64)), "void*" }
     };
+    internal_assert(m.count(encode(t))) << t << " " << encode(t);
     return m.at(encode(t));
 }
 
 const std::map<std::string, LoopLevel> &get_halide_looplevel_enum_map() {
     static const std::map<std::string, LoopLevel> halide_looplevel_enum_map{
         {"root", LoopLevel::root()},
-        {"undefined", LoopLevel()},
         {"inline", LoopLevel::inlined()},
     };
     return halide_looplevel_enum_map;
@@ -953,23 +1050,15 @@ GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_i
 
 void GeneratorParamBase::check_value_readable() const {
     internal_assert(generator);
-    if (is_schedule_param()) {
-        user_assert(generator->phase >= GeneratorBase::ScheduleCalled)  << "The ScheduleParam " << name << " cannot be read before schedule() is called.\n";
-    } else {
-        user_assert(generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
-    }
+    user_assert(generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
     // Allow writing when no Generator is set, to avoid having to special-case ctor initing code
     if (!generator) return;
-    if (is_schedule_param()) {
-        user_assert(generator->phase < GeneratorBase::ScheduleCalled)  << "The ScheduleParam " << name << " cannot be written after schedule() is called.\n";
-    } else {
-        // Special-case for legacy: allow 'target' to be writable. Yikes.
-        if (name == "target") return;
-        user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be written after build() or generate() is called.\n";
-    }
+    // Special-case for legacy: allow 'target' to be writable. Yikes.
+    if (name == "target") return;
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be written after build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
@@ -1135,12 +1224,26 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
         generator_params.push_back(param);
     }
 
+    // Do in separate loop so that synthetic params are also included
     for (auto *g : generator_params) {
-        params_by_name[g->name] = g;
+        generator_params_by_name[g->name] = g;
     }
 
     for (auto &g : owned_synthetic_params) {
         g->generator = generator;
+    }
+
+    std::vector<void *> vs = ObjectInstanceRegistry::instances_in_range(
+        generator, size, ObjectInstanceRegistry::ScheduleParam);
+    for (auto v : vs) {
+        auto *param = static_cast<ScheduleParamBase*>(v);
+        internal_assert(param != nullptr);
+        user_assert(!param->name().empty()) << "ScheduleParams must have explicit names when used in Generators.";
+        user_assert(is_valid_name(param->name())) << "Invalid ScheduleParam name: " << param->name();
+        user_assert(!names.count(param->name())) << "Duplicate ScheduleParam name: " << param->name();
+        names.insert(param->name());
+        schedule_params.push_back(param);
+        schedule_params_by_name[param->name()] = param;
     }
 }
 
@@ -1190,34 +1293,38 @@ std::vector<Func> GeneratorBase::get_output_vector(const std::string &n) {
     return {};
 }
 
-Internal::GeneratorParamBase &GeneratorBase::find_param_by_name(const std::string &name) {
+Internal::GeneratorParamBase &GeneratorBase::find_generator_param_by_name(const std::string &name) {
     ParamInfo &pi = param_info();
-    auto it = pi.params_by_name.find(name);
-    user_assert(it != pi.params_by_name.end()) << "Generator has no GeneratorParam named: " << name << "\n";
+    auto it = pi.generator_params_by_name.find(name);
+    user_assert(it != pi.generator_params_by_name.end()) << "Generator has no GeneratorParam named: " << name << "\n";
     internal_assert(it->second != nullptr);
     return *it->second;
 }
 
 void GeneratorBase::set_generator_param_values(const std::map<std::string, std::string> &params) {
     for (auto key_value : params) {
-        // We don't care about is_schedule_param here.
-        find_param_by_name(key_value.first).set_from_string(key_value.second);
+        find_generator_param_by_name(key_value.first).set_from_string(key_value.second);
     }
 }
+
+Internal::ScheduleParamBase &GeneratorBase::find_schedule_param_by_name(const std::string &name) {
+    ParamInfo &pi = param_info();
+    auto it = pi.schedule_params_by_name.find(name);
+    user_assert(it != pi.schedule_params_by_name.end()) << "Generator has no ScheduleParam named: " << name << "\n";
+    internal_assert(it->second != nullptr);
+    return *it->second;
+}
+
 
 void GeneratorBase::set_schedule_param_values(const std::map<std::string, std::string> &params, 
                                               const std::map<std::string, LoopLevel> &looplevel_params) {
     for (auto key_value : params) {
-        auto &p = find_param_by_name(key_value.first);
-        // It's not OK to set non-schedule params here.
-        user_assert(p.is_schedule_param()) << "GeneratorParam cannot be specified for: " << p.name;
+        auto &p = find_schedule_param_by_name(key_value.first);
         p.set_from_string(key_value.second);
     }
     for (auto key_value : looplevel_params) {
-        auto &p = find_param_by_name(key_value.first);
-        // It's not OK to set non-schedule params here.
-        user_assert(p.is_schedule_param()) << "GeneratorParam cannot be specified for: " << p.name;
-        static_cast<GeneratorParam<LoopLevel> *>(&p)->set(key_value.second);
+        auto &p = find_schedule_param_by_name(key_value.first);
+        static_cast<ScheduleParam<LoopLevel> *>(&p)->set(key_value.second);
     }
 }
 
@@ -1398,7 +1505,7 @@ void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_name, pi.generator_params, pi.filter_inputs, pi.filter_outputs);
+    StubEmitter emit(file, generator_name, pi.generator_params, pi.schedule_params, pi.filter_inputs, pi.filter_outputs);
     emit.emit();
 }
 
