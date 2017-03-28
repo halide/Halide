@@ -200,8 +200,6 @@ struct dlib_t {
                 const char *sym_name = &strtab[sym->st_name];
                 if (!assert_in_bounds(sym_name)) return false;
 
-                //log_printf("Relocation of type %d for symbol %s\n", r.r_type(), sym_name);
-
                 if (sym->st_value == 0) {
                     if (!sym_name) {
                         log_printf("Symbol name not defined");
@@ -212,10 +210,8 @@ struct dlib_t {
                         log_printf("Unresolved external symbol %s\n", sym_name);
                         return false;
                     }
-                    //log_printf("Resolved external symbol %x\n", S);
                 } else {
                     S = program + sym->st_value;
-                    //log_printf("Got internal symbol %d\n", sym->st_value);
                     if (!assert_in_bounds(S, sym->st_size)) return false;
                 }
             }
@@ -382,7 +378,6 @@ struct dlib_t {
                 }
             } else if (phdrs[i].p_type == PT_DYNAMIC) {
                 dynamic = (const Dyn *)(program_i);
-                //log_printf("Found PT_DYNAMIC at %d, size %d\n", offset_i, phdrs[i].p_filesz);
             }
         }
         if (!dynamic) {
