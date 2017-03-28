@@ -8,7 +8,6 @@
 #include "ScheduleFunctions.h"
 #include "Simplify.h"
 #include "SimplifySpecializations.h"
-#include "Target.h"
 #include "WrapCalls.h"
 
 #include <tuple>
@@ -158,8 +157,7 @@ private:
         }
     }
 };
-
-string print_loop_nest(const vector<Function> &output_funcs) {
+string print_loop_nest(const vector<Function> &output_funcs, Target &target) {
     // Do the first part of lowering:
 
     // Compute an environment
@@ -188,16 +186,6 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     // specializations' conditions
     simplify_specializations(env);
 
-    // For the purposes of printing the loop nest, we don't want to
-    // worry about which features are and aren't enabled.
-    Target target = get_host_target();
-    for (DeviceAPI api : all_device_apis) {
-        target.set_feature(target_feature_for_device_api(DeviceAPI(api)));
-    }
-    // target_feature_for_device_api doesn't handle DeviceAPI::Hexagon becuase
-    // it has a one-to-many mapping to HVX_64 or HVX_128. For the sake of
-    // being able to handle DeviceAPI::Hexagon, just add HVX_128.
-    target.set_feature(Target::HVX_128);
 
     bool any_memoized = false;
     // Schedule the functions.
@@ -208,6 +196,20 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     PrintLoopNest pln(sstr, env);
     s.accept(&pln);
     return sstr.str();
+}
+
+string print_loop_nest(const vector<Function> &output_funcs) {
+    // For the purposes of printing the loop nest, we don't want to
+    // worry about which features are and aren't enabled.
+    Target target = get_host_target();
+    for (DeviceAPI api : all_device_apis) {
+        target.set_feature(target_feature_for_device_api(DeviceAPI(api)));
+    }
+    // target_feature_for_device_api doesn't handle DeviceAPI::Hexagon becuase
+    // it has a one-to-many mapping to HVX_64 or HVX_128. For the sake of
+    // being able to handle DeviceAPI::Hexagon, just add HVX_128.
+    target.set_feature(Target::HVX_128);
+    return print_loop_nest(output_funcs, target);
 }
 
 }

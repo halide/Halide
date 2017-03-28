@@ -2843,6 +2843,10 @@ void Func::print_loop_nest() {
     pipeline().print_loop_nest();
 }
 
+void Func::print_loop_nest(Target &target) {
+    pipeline().print_loop_nest(target);
+}
+
 void Func::compile_to_file(const string &filename_prefix,
                            const vector<Argument> &args,
                            const std::string &fn_name,
