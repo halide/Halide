@@ -478,10 +478,10 @@ public:
         }
     }
 
-    uint16_t get_machine() { return EM_HEXAGON; }
-    uint32_t get_flags() { return flags; }
-    uint32_t get_version() { return EV_CURRENT; }
-    void append_dynamic(Section &dynamic) {
+    uint16_t get_machine() override { return EM_HEXAGON; }
+    uint32_t get_flags() override { return flags; }
+    uint32_t get_version() override { return EV_CURRENT; }
+    void append_dynamic(Section &dynamic) override {
         dynamic.append_contents((uint32_t)DT_HEXAGON_VER);
         dynamic.append_contents((uint32_t)0x3);
     }
@@ -548,7 +548,7 @@ public:
 
     Relocation relocate(uint64_t fixup_offset, char *fixup_addr, uint64_t type,
                         const Elf::Symbol *sym, uint64_t sym_offset, int64_t addend,
-                        Elf::Section &got) {
+                        Elf::Section &got) override {
         if (type == R_HEX_32) {
             // Don't do this relocation, generate a new R_HEX_RELATIVE relocation instead.
             return Relocation(R_HEX_RELATIVE, fixup_offset, sym_offset + addend, nullptr);

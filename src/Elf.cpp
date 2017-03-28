@@ -350,7 +350,7 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
 
     // Load the rest of the sections.
     std::map<int, Section *> section_map;
-    for (int i = 0; i < header.e_shnum; i++) {
+    for (uint16_t i = 0; i < header.e_shnum; i++) {
         const Shdr<T> *sh = get_section_header(i);
         if (sh->sh_type != Section::SHT_SYMTAB && sh->sh_type != Section::SHT_STRTAB &&
             sh->sh_type != Section::SHT_REL && sh->sh_type != Section::SHT_RELA) {
@@ -370,12 +370,12 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
 
     // Find and load the symbols.
     std::map<int, Symbol *> symbol_map;
-    for (int i = 0; i < header.e_shnum; i++) {
+    for (uint16_t i = 0; i < header.e_shnum; i++) {
         const Shdr<T> *sh = get_section_header(i);
         if (sh->sh_type == Section::SHT_SYMTAB) {
             internal_assert(sh->sh_entsize == sizeof(Sym<T>));
             // Skip symbol 0, which is a null symbol.
-            for (int j = 1; j < sh->sh_size / sizeof(Sym<T>); ++j) {
+            for (uint64_t j = 1; j < sh->sh_size / sizeof(Sym<T>); ++j) {
                 const char *sym_ptr = data + sh->sh_offset + j*sizeof(Sym<T>);
                 internal_assert(data <= sym_ptr && sym_ptr + sizeof(Sym<T>) <= data + size);
                 const Sym<T> &sym = *(const Sym<T> *)sym_ptr;
@@ -393,7 +393,7 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
     }
 
     // Load relocations.
-    for (int i = 0; i < header.e_shnum; i++) {
+    for (uint16_t i = 0; i < header.e_shnum; i++) {
         const Shdr<T> *sh = get_section_header(i);
         internal_assert(sh->sh_type != Section::SHT_REL) << "Section::SHT_REL not supported\n";
         if (sh->sh_type == Section::SHT_RELA) {
@@ -405,7 +405,7 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
             // TODO: This assert should work, but it seems like this
             // isn't a reliable test. We rely on the names intead.
             //internal_assert(&*to_relocate == section_map[sh->sh_link]);
-            for (int i = 0; i < sh->sh_size / sh->sh_entsize; i++) {
+            for (uint64_t i = 0; i < sh->sh_size / sh->sh_entsize; i++) {
                 const char *rela_ptr = data + sh->sh_offset + i*sh->sh_entsize;
                 internal_assert(data <= rela_ptr && rela_ptr + sizeof(Rela<T>) <= data + size);
                 const Rela<T> &rela = *(const Rela<T> *)rela_ptr;
