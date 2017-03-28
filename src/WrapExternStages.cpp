@@ -153,8 +153,10 @@ void wrap_legacy_extern_stages(Module m) {
     size_t num_functions = m.functions().size();
     for (size_t i = 0; i < num_functions; i++) {
         wrap.prefix = "_halide_wrapper_" + m.functions()[i].name + "_";
-        m.functions()[i].body = wrap.mutate(m.functions()[i].body);
-        debug(2) << "Body after wrapping extern calls:\n" << m.functions()[i].body << "\n\n";
+        Stmt old_body = m.functions()[i].body;
+        Stmt new_body = wrap.mutate(old_body);
+        m.functions()[i].body = new_body;
+        debug(2) << "Body after wrapping extern calls:\n" << new_body << "\n\n";
     }
 }
 

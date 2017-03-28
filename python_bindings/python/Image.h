@@ -1,7 +1,7 @@
 #ifndef IMAGE_H
 #define IMAGE_H
 
-#include "../../src/Buffer.h"
+#include "Halide.h"
 #include <boost/python.hpp>
 
 void defineBuffer();
