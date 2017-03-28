@@ -106,7 +106,7 @@ public:
     // @}
 
     /** Construct an undefined LoopLevel. Calling any method on an undefined
-     * LoopLevel (other than defined()) will assert. */
+     * LoopLevel (other than defined() or operator==) will assert. */
     LoopLevel() = default;
 
     /** Return true iff the LoopLevel is defined. */
