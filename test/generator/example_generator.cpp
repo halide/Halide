@@ -77,7 +77,7 @@ public:
     }
 
     void schedule() {
-        Func(output)
+        output
             .bound(c, 0, channels)
             .reorder(c, x, y)
             .unroll(c);
@@ -85,7 +85,7 @@ public:
             // Note that we can use the Generator method natural_vector_size()
             // here; this produces the width of the SIMD vector being targeted
             // divided by the width of the data type.
-            Func(output)
+            output
                 .vectorize(x, natural_vector_size(output.type()));
         }
     }
