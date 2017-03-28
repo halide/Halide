@@ -99,8 +99,8 @@ bool LoopLevel::match(const LoopLevel &other) const {
 }
 
 bool LoopLevel::operator==(const LoopLevel &other) const {
-    internal_assert(defined());
-    return contents->func_name == other.contents->func_name && 
+    return defined() == other.defined() &&
+           contents->func_name == other.contents->func_name && 
            contents->var_name == other.contents->var_name;
 }
 
