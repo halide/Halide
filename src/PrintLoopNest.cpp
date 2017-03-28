@@ -99,6 +99,15 @@ private:
             out << " in [" << min_val << ", " << max_val << "]";
         }
 
+        if (op->device_api != DeviceAPI::None) {
+          if (op->device_api == DeviceAPI::Host) {
+            out << "<Host>";
+          }
+          else {
+            out << op->device_api;
+          }
+        }
+
         out << ":\n";
         indent += 2;
         op->body.accept(this);
@@ -185,6 +194,10 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     for (DeviceAPI api : all_device_apis) {
         target.set_feature(target_feature_for_device_api(DeviceAPI(api)));
     }
+    // target_feature_for_device_api doesn't handle DeviceAPI::Hexagon becuase
+    // it has a one-to-many mapping to HVX_64 or HVX_128. For the sake of
+    // being able to handle DeviceAPI::Hexagon, just add HVX_128.
+    target.set_feature(Target::HVX_128);
 
     bool any_memoized = false;
     // Schedule the functions.
