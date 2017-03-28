@@ -443,7 +443,6 @@ int run(int argc, char **argv) {
     int i = 1;
     while (i < argc) {
         string next = argv[i];
-        fprintf(stderr, "Parsing %s\n", argv[i]);
         if (next == "--size") {
             expect(i + 2 < argc, i);
             frame_width = atoi(argv[++i]);
@@ -503,7 +502,6 @@ int run(int argc, char **argv) {
             expect(i + 1 < argc, i);
             config.store_cost = atoi(argv[++i]);
         } else if (next == "--strides") {
-            fprintf(stderr, "Parsing %s\n", argv[i+1]);
             config.dims = 0;
             while (i + 1 < argc) {
                 const char *next_arg = argv[i + 1];
@@ -511,7 +509,6 @@ int run(int argc, char **argv) {
                     next_arg[1] == '-') {
                     break;
                 }
-                fprintf(stderr, "Parsing %s\n", argv[i+1]);
                 expect(i + 2 < argc, i);
                 config.x_stride[config.dims] = atoi(argv[++i]);
                 config.y_stride[config.dims] = atoi(argv[++i]);
@@ -523,8 +520,6 @@ int run(int argc, char **argv) {
             char *text = argv[++i];
             int n = atoi(argv[++i]);
             Label l = {text, config.x, config.y, n};
-            fprintf(stderr, "Adding label %s to func %s\n",
-                    text, func);
             func_info[func].config.labels.push_back(l);
         } else if (next == "--timestep") {
             expect(i + 1 < argc, i);
