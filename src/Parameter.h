@@ -68,8 +68,8 @@ public:
     /** Return true iff the name was explicitly specified */
     EXPORT bool is_explicit_name() const;
 
-    /** Return true iff this Parameter is expected to be simplified
-     * away at the start of lowering, and thus should not be used to
+    /** Return true iff this Parameter is expected to be replaced with a 
+     * constant at the start of lowering, and thus should not be used to
      * infer arguments */
     EXPORT bool is_removed_before_lowering() const;
 

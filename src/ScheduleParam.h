@@ -122,7 +122,7 @@ protected:
  * value (or a well-defined LoopLevel) at that point. The value of 
  * should be bound to an actual value of type T using the set method
  * before you realize the function uses this. If you're statically
- * compiling, this param should appear in the argument list.
+ * compiling, this param should *not* appear in the argument list.
  */
 template <typename T>
 class ScheduleParam : public Internal::ScheduleParamBase {
