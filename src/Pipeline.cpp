@@ -576,14 +576,14 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         // from the old module.
         for (const LoweredFunc &fn : old_module.functions()) {
             if (fn.name == private_name) {
-                private_body = fn.body;
+                body = fn.body;
                 break;
             }
         }
         debug(2) << "Reusing old module\n";
     }
 
-    if (!private_body.defined()) {
+    if (!body.defined()) {
         vector<IRMutator *> custom_passes;
         for (CustomLoweringPass p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
