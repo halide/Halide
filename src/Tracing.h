@@ -8,6 +8,7 @@
 #include <map>
 
 #include "IR.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,7 +19,8 @@ namespace Internal {
  * all bounds inference. */
 Stmt inject_tracing(Stmt, const std::string &pipeline_name,
                     const std::map<std::string, Function> &env,
-                    const std::vector<Function> &outputs);
+                    const std::vector<Function> &outputs,
+                    const Target &Target);
 
 }
 }

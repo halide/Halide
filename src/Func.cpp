@@ -2312,7 +2312,7 @@ Func &Func::store_root() {
 }
 
 Func &Func::compute_inline() {
-    return compute_at(LoopLevel());
+    return compute_at(LoopLevel::inlined());
 }
 
 Func &Func::trace_loads() {
