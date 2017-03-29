@@ -359,7 +359,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             if (closure_args[i].is_buffer) {
                 // If it's a buffer, get the dev handle
                 Expr buf = Variable::make(type_of<buffer_t *>(), name + ".buffer");
-                Expr get_dev = Call::make(UInt(64), Call::buffer_get_dev, {buf}, Call::Extern);
+                Expr get_dev = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
                 val = codegen(get_dev);
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the

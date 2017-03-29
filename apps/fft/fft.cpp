@@ -384,7 +384,7 @@ ComplexFunc fft_dim1(ComplexFunc x,
 
         exchange.update().unroll(r_);
         // Remember this stage for scheduling later.
-        stages.push_back(std::make_pair(exchange, rs));
+        stages.push_back({ exchange, rs });
 
         x = exchange;
         S *= R;
@@ -433,7 +433,7 @@ std::pair<FuncType, FuncType> tiled_transpose(FuncType f, int max_tile_size,
     // transpose the tiles themselves (dense vector load/stores), then transpose
     // the data within each tile (stride 4 loads).
     if (target.arch != Target::ARM && !always_tile) {
-        return std::make_pair(transpose(f), FuncType());
+        return { transpose(f), FuncType() };
     }
 
     const int tile_size =
@@ -466,7 +466,7 @@ std::pair<FuncType, FuncType> tiled_transpose(FuncType f, int max_tile_size,
         .vectorize(x, tile_size)
         .unroll(y, tile_size);
 
-    return std::make_pair(fT, f_tiledT);
+    return { fT, f_tiledT };
 }
 
 }  // namespace

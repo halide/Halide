@@ -17,7 +17,7 @@ using std::sort;
 static ostringstream nil;
 
 CodeGen_Metal_Dev::CodeGen_Metal_Dev(Target t) :
-    metal_c(src_stream), target(t) {
+    metal_c(src_stream, t) {
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space) {

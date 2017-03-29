@@ -121,7 +121,7 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Injecting tracing...\n";
-    s = inject_tracing(s, pipeline_name, env, outputs);
+    s = inject_tracing(s, pipeline_name, env, outputs, t);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
@@ -238,6 +238,10 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     s = unify_duplicate_lets(s);
     s = remove_trivial_for_loops(s);
     debug(2) << "Lowering after second simplifcation:\n" << s << "\n\n";
+
+    debug(1) << "Reduce prefetch dimension...\n";
+    s = reduce_prefetch_dimension(s, t);
+    debug(2) << "Lowering after reduce prefetch dimension:\n" << s << "\n";
 
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);

@@ -7,24 +7,66 @@
 
 namespace Halide {
 
-LoopLevel::LoopLevel(const std::string &func_name,
-                     const std::string &var_name,
-                     bool is_rvar)
+namespace Internal {
+
+struct LoopLevelContents {
+    mutable RefCount ref_count;
+
+    // Note: func_ is empty for inline or root.
+    std::string func_name;
+    // TODO: these two fields should really be VarOrRVar,
+    // but cyclical include dependencies make this challenging.
+    std::string var_name;
+    bool is_rvar;
+
+    LoopLevelContents(const std::string &func_name,
+                      const std::string &var_name,
+                      bool is_rvar)
     : func_name(func_name), var_name(var_name), is_rvar(is_rvar) {}
+};
+
+template<>
+EXPORT RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) {
+    return p->ref_count;
+}
+
+template<>
+EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
+    delete p;
+}
+
+}  // namespace Internal
+
+LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar) 
+    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar)) {}
+
 LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.name(), v.name(), v.is_rvar) {}
+
 LoopLevel::LoopLevel(Func f, VarOrRVar v) : LoopLevel(f.function().name(), v.name(), v.is_rvar) {}
 
+bool LoopLevel::defined() const {
+    return contents.defined();
+}
+
 std::string LoopLevel::func() const {
-    return func_name;
+    internal_assert(defined());
+    return contents->func_name;
 }
 
 VarOrRVar LoopLevel::var() const {
+    internal_assert(defined());
     internal_assert(!is_inline() && !is_root());
-    return VarOrRVar(var_name, is_rvar);
+    return VarOrRVar(contents->var_name, contents->is_rvar);
+}
+
+/*static*/
+LoopLevel LoopLevel::inlined() {
+    return LoopLevel("", "", false);
 }
 
 bool LoopLevel::is_inline() const {
-    return var_name.empty();
+    internal_assert(defined());
+    return contents->var_name.empty();
 }
 
 /*static*/
@@ -33,27 +75,33 @@ LoopLevel LoopLevel::root() {
 }
 
 bool LoopLevel::is_root() const {
-    return var_name == "__root";
+    internal_assert(defined());
+    return contents->var_name == "__root";
 }
 
 std::string LoopLevel::to_string() const {
-    return func_name + "." + var_name;
+    internal_assert(defined());
+    return contents->func_name + "." + contents->var_name;
 }
 
 bool LoopLevel::match(const std::string &loop) const {
-    return Internal::starts_with(loop, func_name + ".") &&
-           Internal::ends_with(loop, "." + var_name);
+    internal_assert(defined());
+    return Internal::starts_with(loop, contents->func_name + ".") &&
+           Internal::ends_with(loop, "." + contents->var_name);
 }
 
 bool LoopLevel::match(const LoopLevel &other) const {
-    return (func_name == other.func_name &&
-            (var_name == other.var_name ||
-             Internal::ends_with(var_name, "." + other.var_name) ||
-             Internal::ends_with(other.var_name, "." + var_name)));
+    internal_assert(defined());
+    return (contents->func_name == other.contents->func_name &&
+            (contents->var_name == other.contents->var_name ||
+             Internal::ends_with(contents->var_name, "." + other.contents->var_name) ||
+             Internal::ends_with(other.contents->var_name, "." + contents->var_name)));
 }
 
 bool LoopLevel::operator==(const LoopLevel &other) const {
-    return func_name == other.func_name && var_name == other.var_name;
+    return defined() == other.defined() &&
+           contents->func_name == other.contents->func_name && 
+           contents->var_name == other.contents->var_name;
 }
 
 namespace Internal {
@@ -75,13 +123,14 @@ struct ScheduleContents {
     std::vector<Dim> dims;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
-    std::vector<Prefetch> prefetches;
+    std::vector<PrefetchDirective> prefetches;
     std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
     bool memoized;
     bool touched;
     bool allow_race_conditions;
 
-    ScheduleContents() : memoized(false), touched(false), allow_race_conditions(false) {};
+    ScheduleContents() : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()), 
+    memoized(false), touched(false), allow_race_conditions(false) {};
 
     // Pass an IRMutator through to all Exprs referenced in the ScheduleContents
     void mutate(IRMutator *mutator) {
@@ -112,7 +161,7 @@ struct ScheduleContents {
                 b.remainder = mutator->mutate(b.remainder);
             }
         }
-        for (Prefetch &p : prefetches) {
+        for (PrefetchDirective &p : prefetches) {
             if (p.offset.defined()) {
                 p.offset = mutator->mutate(p.offset);
             }
@@ -214,11 +263,11 @@ const std::vector<Bound> &Schedule::bounds() const {
     return contents->bounds;
 }
 
-std::vector<Prefetch> &Schedule::prefetches() {
+std::vector<PrefetchDirective> &Schedule::prefetches() {
     return contents->prefetches;
 }
 
-const std::vector<Prefetch> &Schedule::prefetches() const {
+const std::vector<PrefetchDirective> &Schedule::prefetches() const {
     return contents->prefetches;
 }
 
@@ -303,7 +352,7 @@ void Schedule::accept(IRVisitor *visitor) const {
             b.remainder.accept(visitor);
         }
     }
-    for (const Prefetch &p : prefetches()) {
+    for (const PrefetchDirective &p : prefetches()) {
         if (p.offset.defined()) {
             p.offset.accept(visitor);
         }

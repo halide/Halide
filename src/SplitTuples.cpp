@@ -9,8 +9,25 @@ using std::map;
 using std::string;
 using std::vector;
 using std::pair;
+using std::set;
 
 namespace {
+
+// Collect all value indices of internal halide calls.
+class FindCallValueIndices : public IRVisitor {
+public:
+    const string func;
+    map<string, set<int>> func_value_indices;
+
+    using IRVisitor::visit;
+
+    void visit(const Call *call) {
+        IRVisitor::visit(call);
+        if ((call->call_type == Call::Halide) && call->func.defined()) {
+            func_value_indices[call->name].insert(call->value_index);
+        }
+    }
+};
 
 // Visitor and helper function to test if a piece of IR uses an extern image.
 class UsesExternImage : public IRVisitor {
@@ -37,6 +54,8 @@ inline bool uses_extern_image(Stmt s) {
 class SplitTuples : public IRMutator {
     using IRMutator::visit;
 
+    map<string, set<int>> func_value_indices;
+
     void visit(const Realize *op) {
         realizations.push(op->name, 0);
         if (op->types.size() > 1) {
@@ -52,8 +71,39 @@ class SplitTuples : public IRMutator {
         realizations.pop(op->name);
     }
 
+    void visit(const For *op) {
+        map<string, set<int>> old_func_value_indices = func_value_indices;
+
+        FindCallValueIndices find;
+        op->body.accept(&find);
+
+        func_value_indices = find.func_value_indices;
+        IRMutator::visit(op);
+        func_value_indices = old_func_value_indices;
+    }
+
+    void visit(const Prefetch *op) {
+        if (!op->param.defined() && (op->types.size() > 1)) {
+            // Split the prefetch from a multi-dimensional halide tuple to
+            // prefetches of each tuple element. Keep only prefetches of
+            // elements that are actually used in the loop body.
+            const auto &indices = func_value_indices.find(op->name);
+            internal_assert(indices != func_value_indices.end());
+
+            auto it = indices->second.begin();
+            internal_assert((*it) < (int)op->types.size());
+            stmt = Prefetch::make(op->name + "." + std::to_string(*it), {op->types[(*it)]}, op->bounds);
+            for (++it; it != indices->second.end(); ++it) {
+                internal_assert((*it) < (int)op->types.size());
+                stmt = Block::make(stmt, Prefetch::make(op->name + "." + std::to_string(*it), {op->types[(*it)]}, op->bounds));
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const Call *op) {
-        if (op->call_type == Call::Halide) {            
+        if (op->call_type == Call::Halide) {
             auto it = env.find(op->name);
             internal_assert(it != env.end());
             Function f = it->second;
@@ -85,7 +135,7 @@ class SplitTuples : public IRMutator {
         // this we mean can we compute and store the values one at a
         // time (not atomic), or must we compute them all, and then
         // store them all (atomic).
-        bool atomic = false;        
+        bool atomic = false;
         if (!realizations.contains(op->name) &&
             uses_extern_image(op)) {
             // If the provide is an output (it's not inside a
@@ -122,13 +172,13 @@ class SplitTuples : public IRMutator {
             string var_name = name + ".value";
             Expr val = mutate(op->values[i]);
             if (!is_undef(val) && atomic) {
-                lets.push_back(make_pair(var_name, val));
+                lets.push_back({ var_name, val });
                 val = Variable::make(val.type(), var_name);
             }
             provides.push_back(Provide::make(name, {val}, args));
         }
 
-        Stmt result = Block::make(provides);        
+        Stmt result = Block::make(provides);
 
         while (!lets.empty()) {
             auto p = lets.back();
@@ -138,10 +188,10 @@ class SplitTuples : public IRMutator {
 
         stmt = result;
     }
-    
+
     const map<string, Function> &env;
     Scope<int> realizations;
-    
+
 public:
 
     SplitTuples(const map<string, Function> &e) : env(e) {}

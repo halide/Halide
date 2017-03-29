@@ -6,6 +6,7 @@
  */
 
 #include "Expr.h"
+#include "Parameter.h"
 
 #include <map>
 
@@ -17,6 +18,7 @@ struct VarOrRVar;
 namespace Internal {
 class Function;
 struct FunctionContents;
+struct LoopLevelContents;
 }  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
@@ -64,6 +66,26 @@ enum class TailStrategy {
     Auto
 };
 
+/** Different ways to handle accesses outside the original extents in a prefetch. */
+enum class PrefetchBoundStrategy {
+    /** Clamp the prefetched exprs by intersecting the prefetched region with
+     * the original extents. This may make the exprs of the prefetched region
+     * more complicated. */
+    Clamp,
+
+    /** Guard the prefetch with if-guards that ignores the prefetch if
+     * any of the prefetched region ever goes beyond the original extents
+     * (i.e. all or nothing). */
+    GuardWithIf,
+
+    /** Leave the prefetched exprs as are (no if-guards around the prefetch
+     * and no intersecting with the original extents). This makes the prefetch
+     * exprs simpler but this may cause prefetching of region outside the original
+     * extents. This is good if prefetch won't fault when accessing region
+     * outside the original extents. */
+    NonFaulting
+};
+
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
  * function is done by generating a loop nest that spans its
@@ -71,13 +93,9 @@ enum class TailStrategy {
  * recursively injecting realizations for them at particular sites
  * in this loop nest. A LoopLevel identifies such a site. */
 class LoopLevel {
-    // Note: func_ is nullptr for inline or root.
-    std::string func_name;
-    // TODO: these two fields should really be VarOrRVar,
-    // but cyclical include dependencies make this challenging.
-    std::string var_name;
-    bool is_rvar;
+    Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
+    explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
     EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar);
 
 public:
@@ -87,16 +105,22 @@ public:
     EXPORT LoopLevel(Func f, VarOrRVar v);
     // @}
 
-    /** Construct an empty LoopLevel, which is interpreted as
-     * 'inline'. This is a special LoopLevel value that implies
-     * that a function should be inlined away */
-    LoopLevel() : func_name(""), var_name(""), is_rvar(false) {}
+    /** Construct an undefined LoopLevel. Calling any method on an undefined
+     * LoopLevel (other than defined() or operator==) will assert. */
+    LoopLevel() = default;
+
+    /** Return true iff the LoopLevel is defined. */
+    EXPORT bool defined() const;
 
     /** Return the Func name. Asserts if the LoopLevel is_root() or is_inline(). */
     EXPORT std::string func() const;
 
     /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline(). */
     EXPORT VarOrRVar var() const;
+
+    /** inlined is a special LoopLevel value that implies
+     * that a function should be inlined away. */
+    EXPORT static LoopLevel inlined();
 
     /** Test if a loop level corresponds to inlining the function */
     EXPORT bool is_inline() const;
@@ -192,9 +216,13 @@ struct StorageDim {
     bool fold_forward;
 };
 
-struct Prefetch {
+struct PrefetchDirective {
+    std::string name;
     std::string var;
     Expr offset;
+    PrefetchBoundStrategy strategy;
+    // If it's a prefetch load from an image parameter, this points to that.
+    Parameter param;
 };
 
 struct FunctionContents;
@@ -282,8 +310,8 @@ public:
     /** You may perform prefetching in some of the dimensions of a
      * function. See \ref Func::prefetch */
     // @{
-    const std::vector<Prefetch> &prefetches() const;
-    std::vector<Prefetch> &prefetches();
+    const std::vector<PrefetchDirective> &prefetches() const;
+    std::vector<PrefetchDirective> &prefetches();
     // @}
 
     /** Mark calls of a function by 'f' to be replaced with its wrapper

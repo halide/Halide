@@ -44,7 +44,7 @@ protected:
 
     class CodeGen_OpenCL_C : public CodeGen_C {
     public:
-        CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
+        CodeGen_OpenCL_C(std::ostream &s, Target t) : CodeGen_C(s, t) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);

@@ -92,7 +92,7 @@ public:
             f.compute_at(root, y).reorder_storage(args[2], args[0], args[1]);
         }
         set_interleaved(root);
-        Func(root).reorder_storage(c, x, y);
+        root.reorder_storage(c, x, y);
     }
 
 private:

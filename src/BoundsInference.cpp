@@ -339,9 +339,9 @@ public:
                 if (!in_pipeline.empty()) {
                     // 3)
                     string outer_query_name = func.name() + ".outer_bounds_query";
-                    Expr outer_query = Variable::make(type_of<struct buffer_t *>(), outer_query_name);
+                    Expr outer_query = Variable::make(type_of<struct halide_buffer_t *>(), outer_query_name);
                     string inner_query_name = func.name() + ".o0.bounds_query";
-                    Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
+                    Expr inner_query = Variable::make(type_of<struct halide_buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::buffer_get_min,
                                                     {outer_query, i}, Call::Extern);
@@ -368,7 +368,7 @@ public:
 
                     // 1)
                     s = LetStmt::make(func.name() + ".outer_bounds_query",
-                                      Variable::make(type_of<struct buffer_t *>(), func.name() + ".o0.bounds_query"), s);
+                                      Variable::make(type_of<struct halide_buffer_t *>(), func.name() + ".o0.bounds_query"), s);
                 } else {
                     // If we're at the outermost loop, there is no
                     // bounds query result from one level up, but we
@@ -379,7 +379,7 @@ public:
 
                     // 2)
                     string inner_query_name = func.name() + ".o0.bounds_query";
-                    Expr inner_query = Variable::make(type_of<struct buffer_t *>(), inner_query_name);
+                    Expr inner_query = Variable::make(type_of<struct halide_buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr new_min = Call::make(Int(32), Call::buffer_get_min,
                                                   {inner_query, i}, Call::Extern);
@@ -500,26 +500,30 @@ public:
                         builder.dimensions = input.dimensions();
                         Expr buf = builder.build();
 
-                        lets.push_back(make_pair(name, buf));
-                        bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), name));
+                        lets.push_back({ name, buf });
+                        bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), name));
                         buffers_to_annotate.push_back(bounds_inference_args.back());
                     }
                 } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
                     Buffer<> b = args[j].buffer;
                     string name = args[j].is_image_param() ? p.name() : b.name();
+                    int dims = args[j].is_image_param() ? p.dimensions() : b.dimensions();
 
-                    Expr in_buf = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
+                    Expr in_buf = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
 
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
 
-                    Expr query_buf = Call::make(type_of<struct buffer_t *>(), Call::alloca,
-                                                {(int)sizeof(buffer_t)}, Call::Intrinsic);
-                    query_buf = Call::make(type_of<struct buffer_t *>(), Call::copy_memory,
-                                           {query_buf, in_buf, (int)sizeof(buffer_t)}, Call::Intrinsic);
-                    lets.push_back(make_pair(query_name, query_buf));
-                    Expr buf = Variable::make(type_of<struct buffer_t *>(), query_name, b, p, ReductionDomain());
+                    Expr query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
+                                                {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
+                    Expr query_shape = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
+                                                  {(int)sizeof(halide_dimension_t) * dims}, Call::Intrinsic);
+                    query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init_from_buffer,
+                                           {query_buf, query_shape, in_buf}, Call::Extern);
+
+                    lets.push_back({ query_name, query_buf });
+                    Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                     // Although we expect ImageParams to be properly initialized and sanitized by the caller,
                     // we create a copy with copy_memory (not msan-aware), so we need to annotate it as initialized.
@@ -546,11 +550,11 @@ public:
                 Expr output_buffer_t = builder.build();
 
                 string buf_name = func.name() + ".o" + std::to_string(j) + ".bounds_query";
-                bounds_inference_args.push_back(Variable::make(type_of<struct buffer_t *>(), buf_name));
+                bounds_inference_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer used for bounds inference,
                 // we need to mark it
                 buffers_to_annotate.push_back(bounds_inference_args.back());
-                lets.push_back(make_pair(buf_name, output_buffer_t));
+                lets.push_back({ buf_name, output_buffer_t });
             }
 
             Stmt annotate;
@@ -559,7 +563,7 @@ public:
                 for (const auto &buffer: buffers_to_annotate) {
                     // Return type is really 'void', but no way to represent that in our IR.
                     // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                    Expr sizeof_buffer_t((uint64_t) sizeof(buffer_t));
+                    Expr sizeof_buffer_t((uint64_t) sizeof(halide_buffer_t));
                     Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
                     if (annotate.defined()) {
                         annotate = Block::make(annotate, mark_buffer);
@@ -729,7 +733,7 @@ public:
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
-                            Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name);
+                            Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::buffer_get_min,
                                                   {buf, d}, Call::Extern);
                             Expr max = Call::make(Int(32), Call::buffer_get_max,
@@ -789,7 +793,7 @@ public:
                     */
 
 
-                    producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
+                    producer.bounds[{ consumer.name, consumer.stage }] = b;
                     producer.consumers.push_back((int)i);
                 }
             }
@@ -824,7 +828,7 @@ public:
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
                 if (!s.func.same_as(output)) continue;
-                s.bounds[make_pair(s.name, s.stage)] = output_box;
+                s.bounds[{ s.name, s.stage }] = output_box;
             }
         }
     }
@@ -847,7 +851,7 @@ public:
             }
 
             body = let->body;
-            lets.push_back(make_pair(let->name, let->value));
+            lets.push_back({ let->name, let->value });
         }
 
         // If there are no pipelines at this loop level, we can skip most of the work.
@@ -976,6 +980,7 @@ public:
         in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
     }
+
 };
 
 

@@ -48,14 +48,27 @@ struct LoweredFunc {
     /** Type of linkage a function can have. */
     enum LinkageType {
         External, ///< Visible externally.
+        ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
         Internal, ///< Not visible externally, similar to 'static' linkage in C.
     };
 
     /** The linkage of this function. */
     LinkageType linkage;
 
-    LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage);
-    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage);
+    /** The name-mangling choice for the function. Defaults to using
+     * the Target. */
+    NameMangling name_mangling;
+
+    LoweredFunc(const std::string &name,
+                const std::vector<LoweredArgument> &args,
+                Stmt body,
+                LinkageType linkage,
+                NameMangling mangling = NameMangling::Default);
+    LoweredFunc(const std::string &name,
+                const std::vector<Argument> &args,
+                Stmt body,
+                LinkageType linkage,
+                NameMangling mangling = NameMangling::Default);
 };
 
 }
@@ -82,6 +95,7 @@ public:
     // @{
     EXPORT const std::vector<Buffer<>> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
+    EXPORT std::vector<Internal::LoweredFunc> &functions();
     // @}
 
     /** Return the function with the given name. If no such function

@@ -496,8 +496,13 @@ class VectorSubs : public IRMutator {
                 // vector of distinct structs.
                 const Call *call = new_args[i].as<Call>();
                 internal_assert(call && call->is_intrinsic(Call::make_struct));
+                // Widen the call args to have the same lanes as the max lanes found
+                vector<Expr> call_args(call->args.size());
+                for (size_t i = 0; i < call_args.size(); i++) {
+                    call_args[i] = widen(call->args[i], max_lanes);
+                }
                 new_args[i] = Call::make(call->type.element_of(), Call::make_struct,
-                                         call->args, Call::Intrinsic);
+                                         call_args, Call::Intrinsic);
             }
             // One of the arguments to the trace helper
             // records the number of vector lanes in the type being
@@ -861,8 +866,9 @@ class VectorSubs : public IRMutator {
             s = LetStmt::make(l.first, l.second, s);
         }
 
-        int lanes = replacement.type().lanes();
-        s = For::make(var, 0, lanes, ForType::Serial, DeviceAPI::None, s);
+        const Ramp *r = replacement.as<Ramp>();
+        internal_assert(r) << "Expected replacement in VectorSubs to be a ramp\n";
+        s = For::make(var, r->base, r->lanes, ForType::Serial, DeviceAPI::None, s);
 
         return s;
     }
