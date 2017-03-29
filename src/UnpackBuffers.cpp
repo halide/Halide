@@ -79,20 +79,28 @@ Stmt unpack_buffers(Stmt s) {
         Expr host_val = Call::make(type_of<void *>(), Call::buffer_get_host, args, Call::Extern);
         lets.push_back({host_var, host_val});
 
-        string dev_var = name + ".dev";
-        Expr dev_val = Call::make(type_of<uint64_t>(), Call::buffer_get_dev, args, Call::Extern);
+        string dev_var = name + ".device";
+        Expr dev_val = Call::make(type_of<uint64_t>(), Call::buffer_get_device, args, Call::Extern);
         lets.push_back({dev_var, dev_val});
 
-        string elem_size_var = name + ".elem_size";
-        Expr elem_size_val = Call::make(Int(32), Call::buffer_get_elem_size, args, Call::Extern);
-        lets.push_back({elem_size_var, elem_size_val});
+        string type_code_var = name + ".type.code";
+        Expr type_code_val = Call::make(UInt(8), Call::buffer_get_type_code, args, Call::Extern);
+        lets.push_back({type_code_var, type_code_val});
+
+        string type_bits_var = name + ".type.bits";
+        Expr type_bits_val = Call::make(UInt(8), Call::buffer_get_type_bits, args, Call::Extern);
+        lets.push_back({type_bits_var, type_bits_val});
+
+        string type_lanes_var = name + ".type.lanes";
+        Expr type_lanes_val = Call::make(UInt(16), Call::buffer_get_type_lanes, args, Call::Extern);
+        lets.push_back({type_lanes_var, type_lanes_val});
 
         string host_dirty_var = name + ".host_dirty";
         Expr host_dirty_val = Call::make(Bool(), Call::buffer_get_host_dirty, args, Call::Extern);
         lets.push_back({host_dirty_var, host_dirty_val});
 
-        string dev_dirty_var = name + ".dev_dirty";
-        Expr dev_dirty_val = Call::make(Bool(), Call::buffer_get_dev_dirty, args, Call::Extern);
+        string dev_dirty_var = name + ".device_dirty";
+        Expr dev_dirty_val = Call::make(Bool(), Call::buffer_get_device_dirty, args, Call::Extern);
         lets.push_back({dev_dirty_var, dev_dirty_val});
 
         for (int i = 0; i < info.dimensions; i++) {
@@ -123,7 +131,7 @@ Stmt unpack_buffers(Stmt s) {
     // Create buffer is not null assertions
     for (auto &p : finder.buffers) {
         Expr buf = p.second.handle;
-        Expr cond = Call::make(Bool(), Call::buffer_is_not_null, {buf}, Call::Extern);
+        Expr cond = reinterpret<uint64_t>(buf) != 0;
         Expr error = Call::make(Int(32), "halide_error_buffer_argument_is_null",
                                 {p.first}, Call::Extern);
         Stmt check = AssertStmt::make(cond, error);
