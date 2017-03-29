@@ -272,6 +272,8 @@ public:
  * specific aspects of linking. */
 class Linker {
 public:
+    virtual ~Linker() {}
+
     virtual uint16_t get_machine() = 0;
     virtual uint32_t get_flags() = 0;
     virtual uint32_t get_version() = 0;
