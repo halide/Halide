@@ -606,7 +606,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     }
 
     // Add the lowered Func to the module.
-    module.append(LoweredFunc(new_fn_name, public_args, body, LoweredFunc::External));
+    module.append(LoweredFunc(new_fn_name, public_args, body, linkage_type));
 
     // Append a wrapper for this pipeline that accepts old buffer_ts
     // and upgrades them. It will use the same name, so it will
