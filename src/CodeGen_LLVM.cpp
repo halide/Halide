@@ -1073,7 +1073,6 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
     return symbol_table.contains(name);
 }
 
-
 Value *CodeGen_LLVM::codegen(Expr e) {
     internal_assert(e.defined());
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";

@@ -270,26 +270,26 @@ Stmt add_image_checks(Stmt s,
             string min_required_name = name + ".min." + dim + ".required";
             string extent_required_name = name + ".extent." + dim + ".required";
 
-                Expr min_required_var = Variable::make(Int(32), min_required_name);
-                Expr extent_required_var = Variable::make(Int(32), extent_required_name);
+            Expr min_required_var = Variable::make(Int(32), min_required_name);
+            Expr extent_required_var = Variable::make(Int(32), extent_required_name);
 
-                lets_required.push_back({ extent_required_name, extent_required });
-                lets_required.push_back({ min_required_name, min_required });
+            lets_required.push_back({ extent_required_name, extent_required });
+            lets_required.push_back({ min_required_name, min_required });
 
-                Expr actual_max = actual_min + actual_extent - 1;
-                Expr max_required = min_required_var + extent_required_var - 1;
+            Expr actual_max = actual_min + actual_extent - 1;
+            Expr max_required = min_required_var + extent_required_var - 1;
 
-                if (touched.maybe_unused()) {
-                    max_required = select(touched.used, max_required, actual_max);
-                }
+            if (touched.maybe_unused()) {
+                max_required = select(touched.used, max_required, actual_max);
+            }
 
-                Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
+            Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
-                Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
-                                            {error_name, j, min_required_var, max_required, actual_min, actual_max},
-                                            Call::Extern);
+            Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
+                                        {error_name, j, min_required_var, max_required, actual_min, actual_max},
+                                        Call::Extern);
 
-                asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
+            asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
 
 
             // Come up with a required stride to use in bounds
