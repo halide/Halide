@@ -324,7 +324,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         debug(2) << assembly.c_str() << "\n";
     }
 
-    // Dump the llvm module to a temp file as .ll
+    // Dump the llvm module to a temp file as .o
     TemporaryFile tmp_object("hex", ".o");
     TemporaryFile tmp_shared_object("hex", ".so");
 
