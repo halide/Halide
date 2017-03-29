@@ -28,8 +28,8 @@ public:
      * these in your subclass to mutate sub-expressions and
      * sub-statements.
      */
-    EXPORT virtual Expr mutate(const Expr &expr);
-    EXPORT virtual Stmt mutate(const Stmt &stmt);
+    EXPORT virtual Expr mutate(Expr expr);
+    EXPORT virtual Stmt mutate(Stmt stmt);
 
 protected:
 
@@ -82,6 +82,7 @@ protected:
     EXPORT virtual void visit(const IfThenElse *);
     EXPORT virtual void visit(const Evaluate *);
     EXPORT virtual void visit(const Shuffle *);
+    EXPORT virtual void visit(const Prefetch *);
 };
 
 
@@ -94,8 +95,8 @@ protected:
     std::map<Stmt, Stmt, Stmt::Compare> stmt_replacements;
 
 public:
-    EXPORT Stmt mutate(const Stmt &s) override;
-    EXPORT Expr mutate(const Expr &e) override;
+    EXPORT Stmt mutate(Stmt s);
+    EXPORT Expr mutate(Expr e);
 };
 
 

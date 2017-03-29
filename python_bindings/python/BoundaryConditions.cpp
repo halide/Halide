@@ -4,10 +4,7 @@
 #include <boost/python.hpp>
 #include <boost/python/stl_iterator.hpp>
 
-#include "../../src/BoundaryConditions.h"
-#include "../../src/Func.h"
-#include "../../src/ImageParam.h"
-#include "../../src/Lambda.h"  // needed by BoundaryConditions.h
+#include "Halide.h"
 
 #include <algorithm>
 #include <string>

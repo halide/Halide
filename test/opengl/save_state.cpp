@@ -7,10 +7,10 @@ int main() {
 }
 #else
 
+#include <cstring>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
-#include <cstring>
 
 #include "Halide.h"
 
@@ -47,15 +47,12 @@ extern "C" void glBindFramebuffer(GLenum, GLuint);
 extern "C" void glGenVertexArrays(GLsizei, GLuint *);
 extern "C" void glBindVertexArray(GLuint);
 extern "C" void glGetVertexAttribiv(GLuint, GLenum, GLint *);
-extern "C" const GLubyte* glGetString(GLenum name);
+extern "C" const GLubyte *glGetString(GLenum name);
 
 // Generates an arbitrary program.
-class Program
-{
-    public:
-
-    static GLuint handle()
-    {
+class Program {
+public:
+    static GLuint handle() {
         const char *vertexShader = " \
                                     attribute vec4 Position;  \
                                     attribute vec2 TexCoordIn; \
@@ -89,10 +86,8 @@ class Program
         return handle;
     }
 
-    private:
-
-    static GLuint compileShader(const char *label, const char *shaderString, GLenum shaderType)
-    {
+private:
+    static GLuint compileShader(const char *label, const char *shaderString, GLenum shaderType) {
         const GLuint handle = glCreateShader(shaderType);
         const int len = strlen(shaderString);
         glShaderSource(handle, 1, &shaderString, &len);
@@ -109,28 +104,21 @@ class Program
     }
 };
 
-
 // Encapsulates setting OpenGL's state to arbitrary values, and checking
 // whether the state matches those values.
-class KnownState
-{
-    private:
-
-    void gl_enable(GLenum cap, bool state)
-    {
+class KnownState {
+private:
+    void gl_enable(GLenum cap, bool state) {
         (state ? glEnable : glDisable)(cap);
     }
 
-    GLuint gl_gen(void (*fn)(GLsizei, GLuint *))
-    {
+    GLuint gl_gen(void (*fn)(GLsizei, GLuint *)) {
         GLuint val;
         (*fn)(1, &val);
         return val;
     }
 
-
-    void check_value(const char *operation, const char *label, GLenum pname, GLint initial)
-    {
+    void check_value(const char *operation, const char *label, GLenum pname, GLint initial) {
         GLint val;
         glGetIntegerv(pname, &val);
         if (val != initial) {
@@ -139,21 +127,23 @@ class KnownState
         }
     }
 
-    void check_value(const char *operation, const char *label, GLenum pname, GLenum initial)
-    {
-        check_value(operation, label, pname, (GLint) initial);
+    void check_value(const char *operation, const char *label, GLenum pname, GLenum initial) {
+        check_value(operation, label, pname, (GLint)initial);
     }
 
-    void check_value(const char *operation, const char *label, GLenum pname, GLint initial[], int n=4)
-    {
+    void check_value(const char *operation, const char *label, GLenum pname, GLint initial[], int n = 4) {
         GLint val[2048];
         glGetIntegerv(pname, val);
-        for (int i=0; i<n; i++) {
+        for (int i = 0; i < n; i++) {
             if (val[i] != initial[i]) {
                 fprintf(stderr, "%s did not restore %s: initial value was", operation, label);
-                for (int j=0; j<n; j++) fprintf(stderr, " %d", initial[j]);
+                for (int j = 0; j < n; j++) {
+                    fprintf(stderr, " %d", initial[j]);
+                }
                 fprintf(stderr, ", current value is");
-                for (int j=0; j<n; j++) fprintf(stderr, " %d", val[j]);
+                for (int j = 0; j < n; j++) {
+                    fprintf(stderr, " %d", val[j]);
+                }
                 fprintf(stderr, "\n");
                 errors = true;
                 return;
@@ -161,8 +151,7 @@ class KnownState
         }
     }
 
-    void check_value(const char *operation, const char *label, GLenum pname, bool initial)
-    {
+    void check_value(const char *operation, const char *label, GLenum pname, bool initial) {
         GLboolean val;
         glGetBooleanv(pname, &val);
         if (val != initial) {
@@ -171,8 +160,7 @@ class KnownState
         }
     }
 
-    void check_error(const char *label)
-    {
+    void check_error(const char *label) {
         GLenum err = glGetError();
         if (err != GL_NO_ERROR) {
             fprintf(stderr, "Error setting %s: OpenGL error %#x\n", label, err);
@@ -225,34 +213,32 @@ class KnownState
 
     GLuint initial_vertex_array_binding;
 
-    public:
-
-    bool errors{false};
-
+public:
+    bool errors{ false };
 
     // This sets most values to generated or arbitrary values, which the
     // halide calls would be unlikely to accidentally use.  But for boolean
     // values, we want to be sure that halide is really restoring the
     // initial value, not just setting it to true or false.  So we need to
     // be able to try both.
-    void setup(bool boolval)
-    {
+    void setup(bool boolval) {
         // parse the OpenGL version
         const char *version = (const char *)glGetString(GL_VERSION);
         parse_opengl_version(version, &gl_major_version, &gl_minor_version);
 
         glGenTextures(ntextures, initial_bound_textures);
-        for (int i=0; i<ntextures; i++) {
+        for (int i = 0; i < ntextures; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, initial_bound_textures[i]);
         }
         glActiveTexture(initial_active_texture = GL_TEXTURE3);
 
-        for (int i=0; i<nvertex_attribs; i++) {
-            if ( (initial_vertex_attrib_array_enabled[i] = boolval ) )
+        for (int i = 0; i < nvertex_attribs; i++) {
+            if ((initial_vertex_attrib_array_enabled[i] = boolval)) {
                 glEnableVertexAttribArray(i);
-            else
+            } else {
                 glDisableVertexAttribArray(i);
+            }
             char buf[256];
             sprintf(buf, "vertex attrib array %d state", i);
             check_error(buf);
@@ -274,8 +260,7 @@ class KnownState
         check_error("known state");
     }
 
-    void check(const char *operation)
-    {
+    void check(const char *operation) {
         check_value(operation, "ActiveTexture", GL_ACTIVE_TEXTURE, initial_active_texture);
         check_value(operation, "current program", GL_CURRENT_PROGRAM, initial_current_program);
         check_value(operation, "framebuffer binding", GL_FRAMEBUFFER_BINDING, initial_framebuffer_binding);
@@ -292,14 +277,14 @@ class KnownState
             fprintf(stderr, "Skipping vertex array binding tests because OpenGL version is %d.%d (<3.0)\n", gl_major_version, gl_minor_version);
         }
 
-        for (int i=0; i<ntextures; i++) {
+        for (int i = 0; i < ntextures; i++) {
             char buf[100];
             sprintf(buf, "bound texture (unit %d)", i);
             glActiveTexture(GL_TEXTURE0 + i);
             check_value(operation, buf, GL_TEXTURE_BINDING_2D, initial_bound_textures[i]);
         }
 
-        for (int i=0; i < nvertex_attribs; i++) {
+        for (int i = 0; i < nvertex_attribs; i++) {
             int initial = initial_vertex_attrib_array_enabled[i];
             GLint val;
             glGetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &val);
@@ -327,7 +312,7 @@ int main() {
     g(x, y, c) = input(x, y, c);
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
-    g.realize(out, target); // let Halide initialize OpenGL
+    g.realize(out, target);  // let Halide initialize OpenGL
 
     known_state.setup(true);
     g.realize(out, target);
@@ -346,7 +331,7 @@ int main() {
     known_state.check("copy_to_host");
 
     if (known_state.errors) {
-	return 1;
+        return 1;
     }
 
     printf("Success!\n");

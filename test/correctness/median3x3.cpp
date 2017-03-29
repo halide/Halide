@@ -8,13 +8,6 @@ using namespace Halide;
 // Then across rows, we find the maximum minimum, the minimum maximum, and the middle middle.
 // Then we take the middle of those three results.
 
-
-Expr max3(Expr a, Expr b, Expr c) {
-    return max(max(a, b), c);
-}
-Expr min3(Expr a, Expr b, Expr c) {
-    return min(min(a, b), c);
-}
 Expr mid3(Expr a, Expr b, Expr c) {
     return max(min(max(a, b), c), min(a, b));
 }
@@ -37,13 +30,13 @@ int main(int arch, char **argv) {
 
     // Algorithm.
     Func max_x("max_x"), min_x("min_x"), mid_x("mid_x");
-    max_x(x, y) = max3(input(x-1, y), input(x, y), input(x+1, y));
-    min_x(x, y) = min3(input(x-1, y), input(x, y), input(x+1, y));
+    max_x(x, y) = max(input(x - 1, y), input(x, y), input(x + 1, y));
+    min_x(x, y) = min(input(x - 1, y), input(x, y), input(x + 1, y));
     mid_x(x, y) = mid3(input(x-1, y), input(x, y), input(x+1, y));
 
     Func min_max("min_max"), max_min("max_min"), mid_mid("mid_mid");
-    min_max(x, y) = min3(max_x(x, y-1), max_x(x, y), max_x(x, y+1));
-    max_min(x, y) = max3(min_x(x, y-1), min_x(x, y), min_x(x, y+1));
+    min_max(x, y) = min(max_x(x, y - 1), max_x(x, y), max_x(x, y + 1));
+    max_min(x, y) = max(min_x(x, y - 1), min_x(x, y), min_x(x, y + 1));
     mid_mid(x, y) = mid3(mid_x(x, y-1), mid_x(x, y), mid_x(x, y+1));
 
     Func median3x3("median3x3");

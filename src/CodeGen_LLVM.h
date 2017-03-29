@@ -175,7 +175,13 @@ protected:
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
-    llvm::StructType *buffer_t_type, *metadata_t_type, *argument_t_type, *scalar_value_t_type;
+    llvm::StructType *buffer_t_type,
+        *type_t_type,
+        *dimension_t_type,
+        *metadata_t_type,
+        *argument_t_type,
+        *scalar_value_t_type,
+        *device_interface_t_type;
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -268,29 +274,9 @@ protected:
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);
 
-    #if 0
-    /** Given an llvm value representing a pointer to a buffer_t, extract various subfields.
-     * The *_ptr variants return a pointer to the struct element, while the basic variants
-     * load the actual value. */
-    // @{
-    llvm::Value *buffer_host(llvm::Value *);
-    llvm::Value *buffer_dev(llvm::Value *);
-    llvm::Value *buffer_host_dirty(llvm::Value *);
-    llvm::Value *buffer_dev_dirty(llvm::Value *);
-    llvm::Value *buffer_min(llvm::Value *, int);
-    llvm::Value *buffer_extent(llvm::Value *, int);
-    llvm::Value *buffer_stride(llvm::Value *, int);
-    llvm::Value *buffer_elem_size(llvm::Value *);
-    llvm::Value *buffer_host_ptr(llvm::Value *);
-    llvm::Value *buffer_dev_ptr(llvm::Value *);
-    llvm::Value *buffer_host_dirty_ptr(llvm::Value *);
-    llvm::Value *buffer_dev_dirty_ptr(llvm::Value *);
-    llvm::Value *buffer_min_ptr(llvm::Value *, int);
-    llvm::Value *buffer_extent_ptr(llvm::Value *, int);
-    llvm::Value *buffer_stride_ptr(llvm::Value *, int);
-    llvm::Value *buffer_elem_size_ptr(llvm::Value *);
-    // @}
-    #endif
+    // Convenience functions for manipulating the flags field in a buffer_t
+    llvm::Value *buffer_get_flag(llvm::Value *, halide_buffer_flags);
+    void buffer_set_flag(llvm::Value *, halide_buffer_flags, bool);
 
     /** Generate a pointer into a named buffer at a given index, of a
      * given type. The index counts according to the scalar type of
@@ -299,6 +285,9 @@ protected:
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
     // @}
+
+    /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
+    llvm::Value *make_halide_type_t(Type);
 
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
@@ -364,6 +353,7 @@ protected:
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Shuffle *);
+    virtual void visit(const Prefetch *);
     // @}
 
     /** Generate code for an allocate node. It has no default

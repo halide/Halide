@@ -75,13 +75,6 @@ Stmt add_image_checks(Stmt s,
 
     // Add the output buffer(s).
     for (Function f : outputs) {
-        // Check that their dimensionality
-        // doesn't exceed what buffer_t can handle.
-        user_assert(f.dimensions() <= 4)
-            << "Output Func " << f.name()
-            << " has " << f.dimensions()
-            << " dimensions. Output buffers may not currently have more than four dimensions.\n";
-
         for (size_t i = 0; i < f.values().size(); i++) {
             FindBuffers::Result output_buffer;
             output_buffer.type = f.values()[i].type();
@@ -124,7 +117,7 @@ Stmt add_image_checks(Stmt s,
     for (const pair<string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
 
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < buf.second.dimensions; i++) {
             string dim = std::to_string(i);
 
             Expr min_required = Variable::make(Int(32), name + ".min." + dim + ".required");
@@ -198,7 +191,7 @@ Stmt add_image_checks(Stmt s,
             for (size_t i = 0; i < extern_users.size(); i++) {
                 const string &extern_user = extern_users[i];
                 Box query_box;
-                Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
+                Expr query_buf = Variable::make(type_of<struct halide_buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::buffer_get_min,
@@ -224,17 +217,24 @@ Stmt add_image_checks(Stmt s,
         string error_name = (is_output_buffer ? "Output" : "Input");
         error_name += " buffer " + name;
 
-        // Check the elem size matches the internally-understood type
+        // Check the type matches the internally-understood type
         {
-            string elem_size_name = name + ".elem_size";
-            Expr elem_size = Variable::make(Int(32), elem_size_name, image, param, rdom);
-            int correct_size = type.bytes();
-            std::ostringstream type_name;
-            type_name << type;
-            Expr error = Call::make(Int(32), "halide_error_bad_elem_size",
-                                    {error_name, type_name.str(), elem_size, correct_size},
+            string type_code_name = name + ".type.code";
+            string type_bits_name = name + ".type.bits";
+            string type_lanes_name = name + ".type.lanes";
+            Expr type_code = Variable::make(UInt(8), type_code_name, image, param, rdom);
+            Expr type_bits = Variable::make(UInt(8), type_bits_name, image, param, rdom);
+            Expr type_lanes = Variable::make(UInt(16), type_lanes_name, image, param, rdom);
+            Expr error = Call::make(Int(32), "halide_error_bad_type",
+                                    {error_name,
+                                     type_code, make_const(UInt(8), (int)type.code()),
+                                     type_bits, make_const(UInt(8), type.bits()),
+                                     type_lanes, make_const(UInt(16), type.lanes())},
                                     Call::Extern);
-            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error));
+            asserts_elem_size.push_back(
+                AssertStmt::make((type_code == type.code()) &&
+                                 (type_bits == type.bits()) &&
+                                 (type_lanes == type.lanes()), error));
         }
 
         if (touched.maybe_unused()) {
@@ -273,8 +273,8 @@ Stmt add_image_checks(Stmt s,
                 Expr min_required_var = Variable::make(Int(32), min_required_name);
                 Expr extent_required_var = Variable::make(Int(32), extent_required_name);
 
-                lets_required.push_back(make_pair(extent_required_name, extent_required));
-                lets_required.push_back(make_pair(min_required_name, min_required));
+                lets_required.push_back({ extent_required_name, extent_required });
+                lets_required.push_back({ min_required_name, min_required });
 
                 Expr actual_max = actual_min + actual_extent - 1;
                 Expr max_required = min_required_var + extent_required_var - 1;
@@ -306,7 +306,7 @@ Stmt add_image_checks(Stmt s,
                 stride_required = (Variable::make(Int(32), name + ".stride." + last_dim + ".required") *
                                    Variable::make(Int(32), name + ".extent." + last_dim + ".required"));
             }
-            lets_required.push_back(make_pair(name + ".stride." + dim + ".required", stride_required));
+            lets_required.push_back({ name + ".stride." + dim + ".required", stride_required });
 
             // On 32-bit systems, insert checks to make sure the total
             // size of all input and output buffers is <= 2^31 - 1.
@@ -326,13 +326,13 @@ Stmt add_image_checks(Stmt s,
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
             if (!is_secondary_output_buffer) {
                 if (j == 0) {
-                    lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
+                    lets_overflow.push_back({ name + ".total_extent." + dim, cast<int64_t>(actual_extent) });
                 } else {
                     max_size = cast<int64_t>(max_size);
                     Expr last_dim = Variable::make(Int(64), name + ".total_extent." + std::to_string(j-1));
                     Expr this_dim = actual_extent * last_dim;
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
-                    lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
+                    lets_overflow.push_back({ name + ".total_extent." + dim, this_dim });
                     Expr error = Call::make(Int(32), "halide_error_buffer_extents_too_large",
                                             {name, this_dim_var, max_size}, Call::Extern);
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
@@ -349,7 +349,10 @@ Stmt add_image_checks(Stmt s,
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
         BufferBuilder builder;
-        builder.buffer_memory = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
+        builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+        builder.shape_memory = Call::make(type_of<struct halide_dimension_t *>(),
+                                          Call::buffer_get_shape, {builder.buffer_memory},
+                                          Call::Extern);
         builder.type = type;
         builder.dimensions = dimensions;
         for (int i = 0; i < dimensions; i++) {
@@ -429,27 +432,27 @@ Stmt add_image_checks(Stmt s,
             if (stride_constrained.defined()) {
                 // Come up with a suggested stride by passing the
                 // required region through this constraint.
-                constraints.push_back(make_pair(stride_orig, stride_constrained));
+                constraints.push_back({ stride_orig, stride_constrained});
                 stride_constrained = substitute(replace_with_required, stride_constrained);
-                lets_proposed.push_back(make_pair(stride_name + ".proposed", stride_constrained));
+                lets_proposed.push_back({ stride_name + ".proposed", stride_constrained });
             } else {
-                lets_proposed.push_back(make_pair(stride_name + ".proposed", stride_required));
+                lets_proposed.push_back({ stride_name + ".proposed", stride_required });
             }
 
             if (min_constrained.defined()) {
-                constraints.push_back(make_pair(min_orig, min_constrained));
+                constraints.push_back({ min_orig, min_constrained });
                 min_constrained = substitute(replace_with_required, min_constrained);
-                lets_proposed.push_back(make_pair(min_name + ".proposed", min_constrained));
+                lets_proposed.push_back({ min_name + ".proposed", min_constrained });
             } else {
-                lets_proposed.push_back(make_pair(min_name + ".proposed", min_required));
+                lets_proposed.push_back({ min_name + ".proposed", min_required });
             }
 
             if (extent_constrained.defined()) {
-                constraints.push_back(make_pair(extent_orig, extent_constrained));
+                constraints.push_back({ extent_orig, extent_constrained });
                 extent_constrained = substitute(replace_with_required, extent_constrained);
-                lets_proposed.push_back(make_pair(extent_name + ".proposed", extent_constrained));
+                lets_proposed.push_back({ extent_name + ".proposed", extent_constrained });
             } else {
-                lets_proposed.push_back(make_pair(extent_name + ".proposed", extent_required));
+                lets_proposed.push_back({ extent_name + ".proposed", extent_required });
             }
 
             // In bounds inference mode, make sure the proposed
@@ -484,7 +487,7 @@ Stmt add_image_checks(Stmt s,
 
             replace_with_constrained[name] = constrained_var;
 
-            lets_constrained.push_back(make_pair(name + ".constrained", constraints[i].second));
+            lets_constrained.push_back({ name + ".constrained", constraints[i].second });
 
             Expr error = Call::make(Int(32), "halide_error_constraint_violated",
                                     {name, var, constrained_var_str, constrained_var},

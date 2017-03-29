@@ -1,8 +1,5 @@
+#include "runtime_internal.h"
 #include "HalideRuntime.h"
-
-extern "C" void *fopen(const char *, const char *);
-extern "C" int fclose(void *);
-extern "C" size_t fwrite(const void *, size_t, size_t, void *);
 
 // Use TIFF because it meets the following criteria:
 // - Supports uncompressed data
@@ -112,19 +109,32 @@ WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int3
     return ptr;
 }
 
+// We need a helper function that converts the return value to bool.
+WEAK bool write_helper(int fd, void *ptr, ssize_t size) {
+    return write(fd, ptr, size) == size;
+}
+
 }}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
-                                             int32_t type_code, struct buffer_t *buf) {
+                                             int32_t type_code, struct halide_buffer_t *buf) {
+
+    if (buf->dimensions > 4) {
+        halide_error(user_context, "Can't debug_to_file a Func with more than four dimensions\n");
+        return -1;
+    }
 
     halide_copy_to_host(user_context, buf);
 
-    void *f = fopen(filename, "wb");
-    if (!f) return -1;
+    int f = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (f == -1) return -1;
 
-    int32_t s0 = max(1, buf->extent[0]), s1 = max(1, buf->extent[1]);
-    int32_t s2 = max(1, buf->extent[2]), s3 = max(1, buf->extent[3]);
-    int32_t bytes_per_element = buf->elem_size;
+    int32_t s0 = buf->dimensions > 0 ? buf->dim[0].extent : 1;
+    int32_t s1 = buf->dimensions > 1 ? buf->dim[1].extent : 1;
+    int32_t s2 = buf->dimensions > 2 ? buf->dim[2].extent : 1;
+    int32_t s3 = buf->dimensions > 3 ? buf->dim[3].extent : 1;
+
+    int32_t bytes_per_element = buf->type.bytes();
 
     size_t elts = s0;
     elts *= s1*s2*s3;
@@ -184,8 +194,8 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         header.height_resolution[0] = 1;
         header.height_resolution[1] = 1;
 
-        if (!fwrite((void *)(&header), sizeof(header), 1, f)) {
-            fclose(f);
+        if (!write_helper(f, (void *)(&header), sizeof(header))) {
+            close(f);
             return -2;
         }
 
@@ -193,24 +203,24 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
           int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
 
           for (int32_t i = 0; i < channels; i++) {
-              if (!fwrite((void*)(&offset), 4, 1, f)) {
-                  fclose(f);
+              if (write_helper(f, (void*)(&offset), 4)) {
+                  close(f);
                   return -2;
               }
               offset += s0 * s1 * depth * bytes_per_element;
           }
           int32_t count = s0 * s1 * depth;
           for (int32_t i = 0; i < channels; i++) {
-              if (!fwrite((void*)(&count), 4, 1, f)) {
-                  fclose(f);
+              if (!write_helper(f, (void*)(&count), 4)) {
+                  close(f);
                   return -2;
               }
           }
         }
     } else {
         int32_t header[] = {s0, s1, s2, s3, type_code};
-        if (!fwrite((void *)(&header[0]), sizeof(header), 1, f)) {
-            fclose(f);
+        if (!write_helper(f, (void *)(&header[0]), sizeof(header))) {
+            close(f);
             return -2;
         }
     }
@@ -226,14 +236,15 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
             for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
                 for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
                     counter++;
-                    uint8_t *loc = get_pointer_to_data(dim0, dim1, dim2, dim3, buf);
+                    int idx[] = {dim0, dim1, dim2, dim3};
+                    uint8_t *loc = buf->address_of(idx);
                     void *dst = temp + (counter-1)*bytes_per_element;
                     memcpy(dst, loc, bytes_per_element);
 
                     if (counter == max_elts) {
                         counter = 0;
-                        if (!fwrite((void *)temp, max_elts*bytes_per_element, 1, f)) {
-                            fclose(f);
+                        if (!write_helper(f, (void *)temp, max_elts*bytes_per_element)) {
+                            close(f);
                             return -1;
                         }
                     }
@@ -242,12 +253,12 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
     if (counter > 0) {
-        if (!fwrite((void *)temp, counter*bytes_per_element, 1, f)) {
-            fclose(f);
+        if (!write_helper(f, (void *)temp, counter*bytes_per_element)) {
+            close(f);
             return -1;
         }
     }
-    fclose(f);
+    close(f);
 
     return 0;
 }

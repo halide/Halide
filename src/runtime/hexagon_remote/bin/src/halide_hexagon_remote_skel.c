@@ -430,6 +430,7 @@ static const uint16_t methodStrings[37] = {120,304,167,284,262,84,22,250,254,360
 static const uint16_t methodStringsArrays[10] = {20,15,36,35,9,30,27,24,33,0};
 __QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {10,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HALIDE_HEXAGON_REMOTE_SLIM_H
+extern int adsp_mmap_fd_getinfo(int, uint32_t *);
 #ifdef __cplusplus
 extern "C" {
 #endif

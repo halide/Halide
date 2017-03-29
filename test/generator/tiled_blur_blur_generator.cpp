@@ -45,10 +45,10 @@ public:
         blur.dim(0).set_stride(Expr());
 
         // Add specialization for input and output buffers that are both planar.
-        Func(blur).specialize(is_planar(input) && is_planar(blur));
+        blur.specialize(is_planar(input) && is_planar(blur));
 
         // Add specialization for input and output buffers that are both interleaved.
-        Func(blur).specialize(is_interleaved(input) && is_interleaved(blur));
+        blur.specialize(is_interleaved(input) && is_interleaved(blur));
 
         // Note that other combinations (e.g. interleaved -> planar) will work
         // but be relatively unoptimized.

@@ -12,7 +12,6 @@ namespace Halide {
 namespace Internal {
 
 using std::pair;
-using std::make_pair;
 
 class StoreCollector : public IRMutator {
 public:
@@ -474,7 +473,9 @@ class Interleaver : public IRMutator {
     void visit(const Div *op) {
         const Ramp *r = op->a.as<Ramp>();
         for (int i = 2; i <= 4; ++i) {
-            if (r && is_const(op->b, i)) {
+            if (r &&
+                is_const(op->b, i) &&
+                (r->type.lanes() % i) == 0) {
                 should_deinterleave = true;
                 num_lanes = i;
                 break;

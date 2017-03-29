@@ -17,7 +17,7 @@ using std::vector;
 using std::sort;
 
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
-    clc(src_stream), target(t) {
+    clc(src_stream, t) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIfNeeded space) {

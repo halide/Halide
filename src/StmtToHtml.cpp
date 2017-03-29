@@ -483,6 +483,19 @@ private:
         scope.pop(op->name);
     }
 
+    void visit(const Prefetch *op) {
+        stream << open_span("Prefetch");
+        stream << keyword("prefetch") << " ";
+        stream << var(op->name);
+        stream << matched("(");
+        for (size_t i = 0; i < op->bounds.size(); i++) {
+            print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
+            if (i < op->bounds.size() - 1) stream << ", ";
+        }
+        stream << matched(")");
+        stream << close_span();
+    }
+
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
     void visit_block_stmt(Stmt stmt) {
         if (const Block *b = stmt.as<Block>()) {

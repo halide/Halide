@@ -88,6 +88,11 @@ extern int floor;
 extern int ceilf;
 extern int ceil;
 
+// These might not always be available.
+__attribute__((weak)) extern int mmap;
+__attribute__((weak)) extern int mprotect;
+__attribute__((weak)) extern int munmap;
+
 }  // extern "C"
 
 void log_printf(const char *fmt, ...) {
@@ -202,6 +207,9 @@ void *halide_get_symbol(const char *name) {
         {"floor", (char *)(&floor)},
         {"ceilf", (char *)(&ceilf)},
         {"ceil", (char *)(&ceil)},
+        {"mmap", (char *)(&mmap)},
+        {"mprotect", (char *)(&mprotect)},
+        {"munmap", (char *)(&munmap)},
         {NULL, NULL} // Null terminator.
     };
 
