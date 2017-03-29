@@ -258,6 +258,9 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    {"trace_loads", Target::TraceLoads},
+    {"trace_stores", Target::TraceStores},
+    {"trace_realizations", Target::TraceRealizations},
 };
 
 bool lookup_feature(const std::string &tok, Target::Feature &result) {
