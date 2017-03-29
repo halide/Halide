@@ -274,10 +274,6 @@ protected:
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);
 
-    // Convenience functions for manipulating the flags field in a buffer_t
-    llvm::Value *buffer_get_flag(llvm::Value *, halide_buffer_flags);
-    void buffer_set_flag(llvm::Value *, halide_buffer_flags, bool);
-
     /** Generate a pointer into a named buffer at a given index, of a
      * given type. The index counts according to the scalar type of
      * the type passed in. */

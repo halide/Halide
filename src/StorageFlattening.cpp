@@ -233,10 +233,10 @@ private:
         for (size_t i = 0; i < op->bounds.size(); i++) {
             prefetch_min[i] = mutate(op->bounds[i].min);
             prefetch_extent[i] = mutate(op->bounds[i].extent);
-            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i));
+            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->param);
         }
 
-        Expr base_index = mutate(flatten_args(op->name, prefetch_min));
+        Expr base_index = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->param));
         Expr base_load = Load::make(op->types[0], op->name, base_index, Buffer<>(),
                                     op->param, const_true(op->types[0].lanes()));
         Expr base_address = Call::make(Handle(), Call::address_of, {base_load}, Call::Intrinsic);

@@ -533,8 +533,8 @@ private:
 
             // Grab the host pointer argument
             const Variable *var = call->args[2].as<Variable>();
-            if (var && get_realization_name(load->name) == innermost_realization_name) {
-                // Everything matches, rewrite _halide_buffer_init to use a nullptr handle for address.
+            if (var && get_realization_name(var->name) == innermost_realization_name) {
+                // Rewrite _halide_buffer_init to use a nullptr handle for address.
                 std::vector<Expr> args = call->args;
                 args[2] = make_zero(Handle());
                 expr = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,

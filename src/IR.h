@@ -396,7 +396,8 @@ typedef std::vector<Range> Region;
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
  * (min, extent) pairs for each dimension. Allocation only occurs if
- * the condition evaluates to true. */
+ * the condition evaluates to true.
+ */
 struct Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
