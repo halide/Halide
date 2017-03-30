@@ -1027,12 +1027,16 @@ $(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o
 # stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
 # usage (the types can be inferred), but for AOT compilation, we must make the types
 # concrete via generator args.
+#
+# Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
+# that setting ScheduleParam via generator_args works properly.
 STUBTEST_GENERATOR_ARGS=\
     untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3 \
 	simple_input.type=float32 \
 	array_input.type=float32 array_input.size=2 \
 	int_arg.size=2 \
-	tuple_output.type=float32,float32
+	tuple_output.type=float32,float32 \
+	vectorize=true
 
 $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 	@mkdir -p $(FILTERS_DIR)
