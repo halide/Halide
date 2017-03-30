@@ -46,14 +46,17 @@ void pack_closure(llvm::StructType *type,
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
     for (const auto &v : closure.vars) {
-        llvm::Type *t = type->elements()[idx];            
+        llvm::Type *t = type->elements()[idx];
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
         Value *val = src.get(v.first);
         val = builder->CreateBitCast(val, t);
         builder->CreateStore(val, ptr);
     }
     for (const auto &b : closure.buffers) {
-        // For buffers we pass through .host symbol
+        // For buffers we pass through base address (the symbol with
+        // the same name as the buffer). If the inner code wants the
+        // .buffer symbol, it will have referred to it separately, so
+        // it will have been captured in the vars.
         llvm::Type *t = type->elements()[idx];
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
         Value *val = src.get(b.first);
