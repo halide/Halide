@@ -59,7 +59,9 @@ extern "C" void AnnotateMemoryIsInitialized(const char *file, int line,
 enum {
   expect_bounds_inference_buffer,
   expect_intermediate_buffer,
+  expect_intermediate_shape,
   expect_output_buffer,
+  expect_output_shape,
   expect_intermediate_contents,
   expect_output_contents,
 } annotate_stage = expect_bounds_inference_buffer;
@@ -99,10 +101,22 @@ extern "C" void halide_msan_annotate_memory_is_initialized(void *user_context, c
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int) len);
             exit(-1);
         }
+        annotate_stage = expect_intermediate_shape;
+    } else if (annotate_stage == expect_intermediate_shape) {
+        if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int) len);
+            exit(-1);
+        }
         annotate_stage = expect_output_buffer;
     } else if (annotate_stage == expect_output_buffer) {
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int) len);
+            exit(-1);
+        }
+        annotate_stage = expect_output_shape;
+    } else if (annotate_stage == expect_output_shape) {
+        if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int) len);
             exit(-1);
         }
         annotate_stage = expect_intermediate_contents;
