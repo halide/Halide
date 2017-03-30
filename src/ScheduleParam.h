@@ -15,6 +15,8 @@ namespace Halide {
 
 namespace Internal {
 
+class GeneratorBase;
+
 class ScheduleParamBase {
 public:
     const std::string &name() const {
@@ -39,14 +41,6 @@ public:
         user_assert(is_looplevel_param()) << "Only ScheduleParam<LoopLevel> can be converted to LoopLevel.";
         return loop_level;
     }
-
-    // This is provided only for StubEmitter; other code should not need to use it.
-    const Internal::Parameter &parameter() const { 
-        return scalar;
-    }
-
-    // This is provided only for StubEmitter; other code should not need to use it.
-    virtual void set_from_string(const std::string &new_value_string) = 0;
 
     // overload the set() function to call the right virtual method based on type.
     // This allows us to attempt to set a ScheduleParam via a
@@ -73,6 +67,8 @@ public:
 #undef HALIDE_SCHEDULE_PARAM_TYPED_SETTER
 
 protected:
+    friend class GeneratorBase;
+
     const std::string sp_name;
     const Type type;
 
@@ -105,6 +101,9 @@ protected:
     NO_INLINE ~ScheduleParamBase() {
         Internal::ObjectInstanceRegistry::unregister_instance(this);
     }
+
+    // This is provided only for GeneratorBase; other code should not need to use it.
+    virtual void set_from_string(const std::string &new_value_string) = 0;
 
     // No copy
     ScheduleParamBase(const ScheduleParamBase &) = delete;
@@ -199,6 +198,7 @@ class ScheduleParam : public Internal::ScheduleParamBase {
         set(t);
     }
 
+protected:
     void set_from_string(const std::string &new_value_string) override {
         set_from_string_impl(new_value_string);
     }
@@ -212,10 +212,6 @@ public:
 
     ScheduleParam(const std::string &name, const T &value) : Internal::ScheduleParamBase(get_param_type(), name) {
         set(value);
-    }
-
-    ScheduleParam(const std::string &name, const std::string &value) : Internal::ScheduleParamBase(get_param_type(), name) {
-        set_from_string(value);
     }
 
 #define HALIDE_SCHEDULE_PARAM_TYPED_SETTER(TYPE) \
