@@ -552,12 +552,12 @@ void CodeGen_Hexagon::init_module() {
 }
 
 void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm::Value *buffer, bool global) {
+    // Track this buffer name so that loads and stores from it don't
+    // try to be too aligned.
+    external_buffer.insert(name);
 
-    if (target.os == Target::QuRT) {
-        // We're running standalone hexagon code
-        CodeGen_LLVM::push_buffer(name, dimensions, buffer, global);
-    } else {
-        // We're using an offloaded hexagon kernel.
+    if (function->getName().startswith("offload_rpc.")) {
+        // We're a hexagon offload kernel.
 
         // Buffers come in to hexagon kernels as just a dev/host
         // pair. Other buffer fields (extents, strides, etc) were
@@ -567,10 +567,6 @@ void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm:
         buffer = builder->CreatePointerCast(buffer, type);
         Value *device_ptr = builder->CreateLoad(create_gep(struct_type, buffer, {0, 0}));
         Value *host_ptr = builder->CreateLoad(create_gep(struct_type, buffer, {0, 1}));
-
-        // Track this buffer name so that loads and stores from it
-        // don't try to be too aligned.
-        external_buffer.insert(name);
 
         // Push the buffer pointer as well, to pass through to
         // sub-functions. TODO: This might have nasty implications for
@@ -582,20 +578,23 @@ void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm:
         }
         sym_push(name + ".host", host_ptr);
         sym_push(name + ".device", device_ptr);
+    } else {
+        // We're running standalone hexagon code
+        CodeGen_LLVM::push_buffer(name, dimensions, buffer);
     }
 }
 
 void CodeGen_Hexagon::pop_buffer(const std::string &name, int dimensions, bool global) {
-    if (target.os == Target::QuRT) {
-        // We're running standalone hexagon code
-        CodeGen_LLVM::pop_buffer(name, dimensions, global);
-    } else  {
+    if (function->getName().startswith("offload_rpc.")) {
         // We're using an offloaded hexagon kernel.
         if (!global) {
             sym_pop(name + ".buffer");
         }
         sym_pop(name + ".host");
         sym_pop(name + ".device");
+    } else  {
+        // We're running standalone hexagon code
+        CodeGen_LLVM::pop_buffer(name, dimensions, global);
     }
 }
 

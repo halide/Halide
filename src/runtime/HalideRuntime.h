@@ -58,7 +58,7 @@ extern "C" {
 struct halide_buffer_t;
 struct buffer_t;
 
-/** Print a message to stderr. Main use is to support HL_TRACE
+/** Print a message to stderr. Main use is to support tracing
  * functionality, print, and print_when calls. Also called by the default
  * halide_error.  This function can be replaced in JITed code by using
  * halide_custom_print and providing an implementation of halide_print
@@ -909,7 +909,10 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
     halide_target_feature_hvx_use_shared_object = 42, ///< Build shared object code for Hexagon, and use dlopenbuf API.
-    halide_target_feature_end = 43 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_trace_loads = 43, ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
+    halide_target_feature_trace_stores = 44, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
+    halide_target_feature_trace_realizations = 45, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
+    halide_target_feature_end = 46 ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
