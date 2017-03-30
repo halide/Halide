@@ -18,6 +18,7 @@ struct VarOrRVar;
 namespace Internal {
 class Function;
 struct FunctionContents;
+struct LoopLevelContents;
 }  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
@@ -92,13 +93,9 @@ enum class PrefetchBoundStrategy {
  * recursively injecting realizations for them at particular sites
  * in this loop nest. A LoopLevel identifies such a site. */
 class LoopLevel {
-    // Note: func_ is nullptr for inline or root.
-    std::string func_name;
-    // TODO: these two fields should really be VarOrRVar,
-    // but cyclical include dependencies make this challenging.
-    std::string var_name;
-    bool is_rvar;
+    Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
+    explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
     EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar);
 
 public:
@@ -108,16 +105,22 @@ public:
     EXPORT LoopLevel(Func f, VarOrRVar v);
     // @}
 
-    /** Construct an empty LoopLevel, which is interpreted as
-     * 'inline'. This is a special LoopLevel value that implies
-     * that a function should be inlined away */
-    LoopLevel() : func_name(""), var_name(""), is_rvar(false) {}
+    /** Construct an undefined LoopLevel. Calling any method on an undefined
+     * LoopLevel (other than defined() or operator==) will assert. */
+    LoopLevel() = default;
+
+    /** Return true iff the LoopLevel is defined. */
+    EXPORT bool defined() const;
 
     /** Return the Func name. Asserts if the LoopLevel is_root() or is_inline(). */
     EXPORT std::string func() const;
 
     /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline(). */
     EXPORT VarOrRVar var() const;
+
+    /** inlined is a special LoopLevel value that implies
+     * that a function should be inlined away. */
+    EXPORT static LoopLevel inlined();
 
     /** Test if a loop level corresponds to inlining the function */
     EXPORT bool is_inline() const;

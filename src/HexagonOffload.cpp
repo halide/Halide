@@ -108,7 +108,11 @@ class InjectHexagonRpc : public IRMutator {
 
         // Unrolling or loop partitioning might generate multiple
         // loops with the same name, so we need to make them unique.
-        std::string hex_name = unique_name("hex_" + loop->name);
+        // There's a bit of a hack here: the offload_rpc. prefix is
+        // significant, it tells the Hexagon code generator to expect
+        // the arguments to be unpacked by the Hexagon remote-side RPC
+        // call, which doesn't work with standard buffers.
+        std::string hex_name = unique_name("offload_rpc." + loop->name);
 
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
@@ -324,7 +328,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         debug(2) << assembly.c_str() << "\n";
     }
 
-    // Dump the llvm module to a temp file as .ll
+    // Dump the llvm module to a temp file as .o
     TemporaryFile tmp_object("hex", ".o");
     TemporaryFile tmp_shared_object("hex", ".so");
 

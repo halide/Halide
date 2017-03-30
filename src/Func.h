@@ -179,8 +179,8 @@ public:
     EXPORT Stage &vectorize(VarOrRVar var);
     EXPORT Stage &unroll(VarOrRVar var);
     EXPORT Stage &parallel(VarOrRVar var, Expr task_size, TailStrategy tail = TailStrategy::Auto);
-    EXPORT Stage &vectorize(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
-    EXPORT Stage &unroll(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
+    EXPORT Stage &vectorize(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
+    EXPORT Stage &unroll(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
     EXPORT Stage &tile(VarOrRVar x, VarOrRVar y,
                        VarOrRVar xo, VarOrRVar yo,
                        VarOrRVar xi, VarOrRVar yi, Expr
@@ -263,16 +263,19 @@ public:
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    // Will be deprecated.
+    // If we mark these as deprecated, some build environments will complain
+    // about the internal-only calls. Since these are rarely used outside
+    // Func itself, we'll just comment them as deprecated for now.
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // Will be deprecated.
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // Will be deprecated.
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            Expr x_size, Expr y_size, Expr z_size,
                            TailStrategy tail = TailStrategy::Auto,
@@ -1141,14 +1144,14 @@ public:
      * inner dimension. This is how you vectorize a loop of unknown
      * size. The variable to be vectorized should be the innermost
      * one. After this call, var refers to the outer dimension of the
-     * split. */
-    EXPORT Func &vectorize(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
+     * split. 'factor' must be an integer. */
+    EXPORT Func &vectorize(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
 
     /** Split a dimension by the given factor, then unroll the inner
      * dimension. This is how you unroll a loop of unknown size by
      * some constant factor. After this call, var refers to the outer
-     * dimension of the split. */
-    EXPORT Func &unroll(VarOrRVar var, int factor, TailStrategy tail = TailStrategy::Auto);
+     * dimension of the split. 'factor' must be an integer. */
+    EXPORT Func &unroll(VarOrRVar var, Expr factor, TailStrategy tail = TailStrategy::Auto);
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
@@ -1401,19 +1404,6 @@ public:
      * touch a very small part of your Func. */
     EXPORT Func &gpu_single_thread(DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    /** \deprecated Old name for #gpu_threads. */
-    // @{
-    EXPORT Func &cuda_threads(VarOrRVar thread_x) {
-        return gpu_threads(thread_x);
-    }
-    EXPORT Func &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
-        return gpu_threads(thread_x, thread_y);
-    }
-    EXPORT Func &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
-        return gpu_threads(thread_x, thread_y, thread_z);
-    }
-    // @}
-
     /** Tell Halide that the following dimensions correspond to GPU
      * block indices. This is useful for scheduling stages that will
      * run serially within each GPU block. If the selected target is
@@ -1422,19 +1412,6 @@ public:
     EXPORT Func &gpu_blocks(VarOrRVar block_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // @}
-
-    /** \deprecated Old name for #gpu_blocks. */
-    // @{
-    EXPORT Func &cuda_blocks(VarOrRVar block_x) {
-        return gpu_blocks(block_x);
-    }
-    EXPORT Func &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
-        return gpu_blocks(block_x, block_y);
-    }
-    EXPORT Func &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
-        return gpu_blocks(block_x, block_y, block_z);
-    }
     // @}
 
     /** Tell Halide that the following dimensions correspond to GPU
@@ -1450,75 +1427,62 @@ public:
                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
-    /** \deprecated Old name for #gpu. */
-    // @{
-    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
-        return gpu(block_x, thread_x);
-    }
-    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar block_y,
-                      VarOrRVar thread_x, VarOrRVar thread_y) {
-        return gpu(block_x, thread_x, block_y, thread_y);
-    }
-    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
-        return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
-    }
-    // @}
-
     /** Short-hand for tiling a domain and mapping the tile indices
      * to GPU block indices and the coordinates within each tile to
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, int x_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, int x_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar tx, int x_size,
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
                           VarOrRVar bx, VarOrRVar by,
                           VarOrRVar tx, VarOrRVar ty,
-                          int x_size, int y_size,
+                          Expr x_size, Expr y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
                           VarOrRVar tx, Var ty,
-                          int x_size, int y_size,
+                          Expr x_size, Expr y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y,
                           VarOrRVar tx, RVar ty,
-                          int x_size, int y_size,
+                          Expr x_size, Expr y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                          int x_size, int y_size, int z_size,
+                          Expr x_size, Expr y_size, Expr z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                          int x_size, int y_size, int z_size,
+                          Expr x_size, Expr y_size, Expr z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    // Will be deprecated.
-    EXPORT Func &gpu_tile(VarOrRVar x, int x_size,
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
+    EXPORT Func &gpu_tile(VarOrRVar x, Expr x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size,
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                          int x_size, int y_size, int z_size,
+                          Expr x_size, Expr y_size, Expr z_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
