@@ -1201,9 +1201,20 @@ Internal::GeneratorParamBase &GeneratorBase::find_generator_param_by_name(const 
     return *it->second;
 }
 
-void GeneratorBase::set_generator_param_values(const std::map<std::string, std::string> &params) {
-    for (auto key_value : params) {
-        find_generator_param_by_name(key_value.first).set_from_string(key_value.second);
+void GeneratorBase::set_generator_and_schedule_param_values(const std::map<std::string, std::string> &params) {
+    ParamInfo &pi = param_info();
+    for (auto &key_value : params) {
+        auto gp = pi.generator_params_by_name.find(key_value.first);
+        if (gp != pi.generator_params_by_name.end()) {
+            gp->second->set_from_string(key_value.second);
+            continue;
+        }
+        auto sp = pi.schedule_params_by_name.find(key_value.first);
+        if (sp != pi.schedule_params_by_name.end()) {
+            sp->second->set_from_string(key_value.second);
+            continue;
+        }
+        user_error << "Generator has no GeneratorParam or ScheduleParam named: " << key_value.first << "\n";
     }
 }
 

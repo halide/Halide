@@ -2217,7 +2217,7 @@ public:
     Target get_target() const override { return target; }
 
     EXPORT void set_generator_param(const std::string &name, const std::string &value);
-    EXPORT void set_generator_param_values(const std::map<std::string, std::string> &params);
+    EXPORT void set_generator_and_schedule_param_values(const std::map<std::string, std::string> &params);
 
     template<typename T>
     GeneratorBase &set_generator_param(const std::string &name, const T &value) {
@@ -2590,7 +2590,7 @@ public:
         auto g = create_func(context);
         internal_assert(g.get() != nullptr);
         g->set_generator_name(generator_name);
-        g->set_generator_param_values(params);
+        g->set_generator_and_schedule_param_values(params);
         return g;
     }
 private:

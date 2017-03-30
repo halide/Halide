@@ -26,8 +26,8 @@ public:
                                       { { "paper", BagType::Paper },
                                         { "plastic", BagType::Plastic } } };
 
-    ScheduleParam<bool> vectorize{ "vectorize", true };
-    ScheduleParam<LoopLevel> intermediate_level{ "intermediate_level", "root" };
+    ScheduleParam<bool> vectorize{ "vectorize", true }; 
+    ScheduleParam<LoopLevel> intermediate_level{ "intermediate_level", LoopLevel::root() };
 
     Input<Buffer<uint8_t>> typed_buffer_input{ "typed_buffer_input", 3 };
     Input<Buffer<>> untyped_buffer_input{ "untyped_buffer_input" };
