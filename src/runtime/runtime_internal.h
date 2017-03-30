@@ -71,9 +71,9 @@ const char *strchr(const char* s, int c);
 void* memcpy(void* s1, const void* s2, size_t n);
 int memcmp(const void* s1, const void* s2, size_t n);
 void *memset(void *s, int val, size_t n);
-void *fopen(const char *, const char *);
 // Use fopen+fileno+fclose instead of open+close - the value of the
 // flags passed to open are different on every platform
+void *fopen(const char *, const char *);
 int fileno(void *); 
 int fclose(void *);
 int close(int);
