@@ -13,7 +13,7 @@ $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 	@-mkdir -p $(BIN)
 	@-mkdir -p $(BIN)/viz
-	HL_TRACE=3 $^ -o $(BIN)/viz target=$(HL_TARGET)
+	$^ -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
 
 $(BIN)/filter: $(BIN)/bilateral_grid.a filter.cpp
 	@-mkdir -p $(BIN)
