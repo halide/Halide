@@ -569,7 +569,7 @@ void add_underscore_to_posix_call(llvm::CallInst *call, llvm::Function *fn, llvm
  * of mcjit, so we just rewrite uses of these functions to include an
  * underscore. */
 void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
-    string posix_fns[] = {"vsnprintf", "open", "close", "write"};
+    string posix_fns[] = {"vsnprintf", "open", "close", "write", "fileno"};
 
     string *posix_fns_begin = posix_fns;
     string *posix_fns_end = posix_fns + sizeof(posix_fns) / sizeof(posix_fns[0]);
