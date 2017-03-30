@@ -2231,9 +2231,6 @@ public:
         return *this;
     }
 
-    EXPORT void set_schedule_param_values(const std::map<std::string, std::string> &params,
-                                          const std::map<std::string, LoopLevel> &looplevel_params);
-
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
     int natural_vector_size(Halide::Type t) const {
@@ -2771,9 +2768,16 @@ public:
 
     Target get_target() const { return generator->get_target(); }
 
-    // schedule method
-    EXPORT void schedule(const std::map<std::string, std::string> &schedule_params,
-                         const std::map<std::string, LoopLevel> &schedule_params_looplevels);
+   template<typename T>
+   GeneratorStub &set_schedule_param(const std::string &name, const T &value) {
+       generator->set_schedule_param(name, value);
+       return *this;
+   }
+
+   GeneratorStub &schedule() {
+       generator->call_schedule();
+       return *this;
+   }
 
     // Overloads for first output
     operator Func() const {
