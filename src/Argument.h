@@ -89,10 +89,12 @@ struct Argument {
 
     bool operator==(const Argument &rhs) const {
         return name == rhs.name &&
-        kind == rhs.kind &&
-        dimensions == rhs.dimensions &&
-        type == rhs.type &&
-        def.same_as(rhs.def) && min.same_as(rhs.min) && max.same_as(rhs.max);
+               kind == rhs.kind &&
+               dimensions == rhs.dimensions &&
+               type == rhs.type &&
+               def.same_as(rhs.def) &&
+               min.same_as(rhs.min) &&
+               max.same_as(rhs.max);
     }    
 };
 
