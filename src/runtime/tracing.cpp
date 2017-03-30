@@ -180,6 +180,9 @@ WEAK void halide_set_trace_file(int fd) {
 
 extern int errno;
 
+#define O_APPEND 1024
+#define O_CREAT 64
+#define O_WRONLY 1
 WEAK int halide_get_trace_file(void *user_context) {
     // Prevent multiple threads both trying to initialize the trace
     // file at the same time.
