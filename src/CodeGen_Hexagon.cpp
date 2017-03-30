@@ -231,7 +231,6 @@ void CodeGen_Hexagon::init_module() {
     CodeGen_Posix::init_module();
 
     bool is_128B = target.has_feature(Halide::Target::HVX_128);
-    bool is_v62 = target.has_feature(Halide::Target::HVX_v62);
 
     Type i8 = Int(8);
     Type i16 = Int(16);
@@ -293,6 +292,7 @@ void CodeGen_Hexagon::init_module() {
         // Downcast with saturation:
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsathub),  u8v1,  "trunc_satub.vh",  {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsatwh),   i16v1, "trunc_sath.vw",   {i32v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsatuwuh), u16v1, "trunc_satuh.vuw",   {u32v2} },    // v62 - Saturating narrowing cast
 
         { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhub), u8v1,  "trunc_satub_rnd.vh", {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhb),  i8v1,  "trunc_satb_rnd.vh",  {i16v2} },
@@ -343,10 +343,12 @@ void CodeGen_Hexagon::init_module() {
         // Adds/subtract of unsigned values with saturation.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat),    u8v1,  "satub_add.vub.vub",    {u8v1,  u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat),    u16v1, "satuh_add.vuh.vuh",    {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat),    u32v1, "satuw_add.vuw.vuw",    {u32v1, u32v1} },  // v62 - 32 bit saturating unsigned add
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat),     i16v1, "sath_add.vh.vh",       {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat),     i32v1, "satw_add.vw.vw",       {i32v1, i32v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat_dv), u8v2,  "satub_add.vub.vub.dv", {u8v2,  u8v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat_dv), u16v2, "satuh_add.vuh.vuh.dv", {u16v2, u16v2} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat_dv), u32v2, "satuw_add.vuw.vuw.dv", {u32v2, u32v2} },  // v62 - 32 bit saturating unsigned add
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat_dv),  i16v2, "sath_add.vh.vh.dv",    {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat_dv),  i32v2, "satw_add.vw.vw.dv",    {i32v2, i32v2} },
 
@@ -532,6 +534,8 @@ void CodeGen_Hexagon::init_module() {
 
         // Broadcasts
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32v1,  "splat.w", {u32} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatb), u8v1,   "splat.b", {u8}  },   // v62 - Broadcasts
+        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat.h", {u16} },   // v62 - Broadcasts
 
         // Bit counting
         { IPICK(is_128B, Intrinsic::hexagon_V6_vcl0h), u16v1, "clz.vh", {u16v1} },
@@ -543,17 +547,6 @@ void CodeGen_Hexagon::init_module() {
         // runtime module that uses popcounth, and horizontally add
         // each pair of lanes.
     };
-
-    if (is_v62) {
-        // v62 - Saturating narrowing cast
-        intrinsic_wrappers.emplace_back(HvxIntrinsic{IPICK(is_128B, Intrinsic::hexagon_V6_vsatuwuh), u16v1, "trunc_satuh.vuw",   {u32v2}});
-        // v62 - 32 bit saturating add
-        intrinsic_wrappers.emplace_back(HvxIntrinsic{IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat   ), u32v1, "add.vuw.vuw",    {u32v1, u32v1} });
-        intrinsic_wrappers.emplace_back(HvxIntrinsic{IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat_dv), u32v2, "add.vuw.vuw.dv", {u32v2, u32v2} });
-        // Broadcasts
-        intrinsic_wrappers.emplace_back(HvxIntrinsic{IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatb), u8v1,  "splat.b", {u8} });
-        intrinsic_wrappers.emplace_back(HvxIntrinsic{IPICK(is_128B, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat.h", {u16} });
-    }
 
     // TODO: Many variants of the above functions are missing. They
     // need to be implemented in the runtime module, or via
