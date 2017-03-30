@@ -19,7 +19,7 @@ namespace Internal {
 
 class IRMutator;
 
-/** Given a halide function with a schedule, create a Module that
+/** Given a vector of scheduled halide functions, create a Module that
  * evaluates it. Automatically pulls in all the functions f depends
  * on. Some stages of lowering may be target-specific. The Module may
  * contain submodules for computation offloaded to another execution
