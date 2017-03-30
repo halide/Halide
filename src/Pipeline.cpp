@@ -68,6 +68,9 @@ struct PipelineContents {
     // Cached lowered stmt
     Module module;
 
+    // Name of the generated function
+    string name;
+
     // Cached jit-compiled code
     JITModule jit_module;
     Target jit_target;
@@ -435,8 +438,18 @@ vector<Argument> Pipeline::infer_arguments(Stmt body) {
     // followed by all non-buffers (alphabetical by name).
     std::sort(contents->inferred_args.begin(), contents->inferred_args.end());
 
-    // Add the user context argument.
-    contents->inferred_args.push_back(contents->user_context_arg);
+    // Add the user context argument, or hook up our user context
+    // Parameter to any existing one.
+    bool has_user_context = false;
+    for (auto &arg : contents->inferred_args) {
+        if (arg.arg.name == contents->user_context_arg.arg.name) {
+            arg = contents->user_context_arg;
+            has_user_context = true;
+        }
+    }
+    if (!has_user_context) {
+        contents->inferred_args.push_back(contents->user_context_arg);
+    }
 
     // Return the inferred argument types, minus any constant images
     // (we'll embed those in the binary by default), and minus the user_context arg.
@@ -552,30 +565,18 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     internal_assert(!new_fn_name.empty()) << "new_fn_name cannot be empty\n";
     // TODO: Assert that the function name is legal
 
-    // TODO: This is a bit of a wart. Right now, IR cannot directly
-    // reference Buffers because neither CodeGen_LLVM nor
-    // CodeGen_C can generate the correct buffer unpacking code.
-
-    // To work around this, we generate two functions. The private
-    // function is one where every buffer referenced is an argument,
-    // and the public function is a wrapper that calls the private
-    // function, passing the global buffers to the private
-    // function. This works because the public function does not
-    // attempt to directly access any of the fields of the buffer.
-
     Stmt body;
 
     std::vector<std::string> namespaces;
     std::string simple_new_fn_name = extract_namespaces(new_fn_name, namespaces);
-    string private_name = "__" + simple_new_fn_name;
 
     const Module &old_module = contents->module;
     if (!old_module.functions().empty() &&
         old_module.target() == target) {
-        // We can avoid relowering and just reuse the private body
-        // from the old module.
+        // We can avoid relowering and just reuse the body from the
+        // old module.
         for (const LoweredFunc &fn : old_module.functions()) {
-            if (fn.name == private_name) {
+            if (fn.name == new_fn_name) {
                 body = fn.body;
                 break;
             }
@@ -956,15 +957,35 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
             << "\" has type " << type << ".\n";
     }
 
+
     // Come up with the void * arguments to pass to the argv function
-    const vector<InferredArgument> &input_args = contents->inferred_args;
     vector<const void *> arg_values;
 
-    // First the inputs
-    for (InferredArgument arg : input_args) {
-        if (arg.param.defined() && arg.param.is_buffer()) {
+    // Get the declared arguments to the function we'll be calling
+    // (via the argv wrapper)
+    const vector<LoweredArgument> &declared_args =
+        contents->module.functions().front().args;
+
+    // Get the list of argument-like things that have bound values
+    // we'll need to pass.
+    const vector<InferredArgument> &inferred_args = contents->inferred_args;
+
+    debug(1) << "Begin args\n";
+    for (Argument arg : declared_args) {
+        if (arg.is_output()) break; // Handled below
+
+        // Look up each declared argument in the inferred arguments
+        // list to get its bound value
+        auto it = std::find_if(inferred_args.begin(), inferred_args.end(),
+                               [&](const InferredArgument &a) {return a.arg.name == arg.name;});
+        internal_assert(it != inferred_args.end())
+            << "Could not find declared argument: " << arg.name
+            << " in inferred arguments list\n";
+        auto inferred_arg = *it;
+
+        if (inferred_arg.param.defined() && inferred_arg.param.is_buffer()) {
             // ImageParam arg
-            Buffer<> buf = arg.param.get_buffer();
+            Buffer<> buf = inferred_arg.param.get_buffer();
             if (buf.defined()) {
                 arg_values.push_back(buf.raw_buffer());
             } else {
@@ -972,17 +993,18 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
                 arg_values.push_back(nullptr);
             }
             debug(1) << "JIT input ImageParam argument ";
-        } else if (arg.param.defined()) {
-            arg_values.push_back(arg.param.get_scalar_address());
+        } else if (inferred_arg.param.defined()) {
+            arg_values.push_back(inferred_arg.param.get_scalar_address());
             debug(1) << "JIT input scalar argument ";
         } else {
             debug(1) << "JIT input Image argument ";
-            internal_assert(arg.buffer.defined());
-            arg_values.push_back(arg.buffer.raw_buffer());
+            internal_assert(inferred_arg.buffer.defined());
+            arg_values.push_back(inferred_arg.buffer.raw_buffer());
         }
         const void *ptr = arg_values.back();
-        debug(1) << arg.arg.name << " @ " << ptr << "\n";
+        debug(1) << inferred_arg.arg.name << " @ " << ptr << "\n";
     }
+    debug(1) << "End args\n";
 
     // Then the outputs
     for (size_t i = 0; i < dst.size(); i++) {
@@ -1067,16 +1089,6 @@ void Pipeline::realize(Realization dst, const Target &t) {
     }
 
     vector<const void *> args = prepare_jit_call_arguments(dst, target);
-
-    for (size_t i = 0; i < contents->inferred_args.size(); i++) {
-        const InferredArgument &arg = contents->inferred_args[i];
-        const void *arg_value = args[i];
-        if (arg.param.defined()) {
-            user_assert(arg_value != nullptr)
-                << "Can't realize a pipeline because ImageParam "
-                << arg.param.name() << " is not bound to a Buffer\n";
-        }
-    }
 
     // We need to make a context for calling the jitted function to
     // carry the the set of custom handlers. Here's how handlers get

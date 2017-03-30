@@ -128,15 +128,12 @@ public:
 // Set the host field of any buffer_init calls on the given buffer to null.
 class NullifyHostField : public IRMutator {
     using IRMutator::visit;
-    void visit(const Call *call) {
-        if (call->is_intrinsic(Call::address_of)) {
-            const Load *l = call->args[0].as<Load>();
-            if (l->name == buf_name) {
-                expr = make_zero(Handle());
-                return;
-            }
+    void visit(const Variable *op) {
+        if (op->name == buf_name) {
+            expr = make_zero(Handle());
+        } else {
+            expr = op;
         }
-        IRMutator::visit(call);
     }
     std::string buf_name;
 public:

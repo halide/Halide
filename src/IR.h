@@ -303,7 +303,7 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
 /** Store a 'value' to the buffer called 'name' at a given 'index' if
  * 'predicate' is true. The buffer is interpreted as an array of the
  * same type as 'value'. The name may be the name of an enclosing
- * allocation, an input or output buffer, or any other symbol of type
+ * Allocate node, an output buffer, or any other symbol of type
  * Handle(). */
 struct Store : public StmtNode<Store> {
     std::string name;
@@ -318,9 +318,10 @@ struct Store : public StmtNode<Store> {
 };
 
 /** This defines the value of a function at a multi-dimensional
- * location. You should think of it as a store to a
- * multi-dimensional array. It gets lowered to a conventional
- * Store node. */
+ * location. You should think of it as a store to a multi-dimensional
+ * array. It gets lowered to a conventional Store node. The name must
+ * correspond to an output buffer or the name of an enclosing Realize
+ * node. */
 struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
