@@ -22,6 +22,7 @@ using std::vector;
 
 namespace Elf {
 
+// Most of these constants were duplicated from LLVM's object parser code.
 enum {
     EV_CURRENT = 1,
 };
@@ -30,6 +31,7 @@ enum {
     EM_HEXAGON = 164,
 };
 
+// http://llvm.org/docs/doxygen/html/Support_2ELF_8h_source.html#l00558
 enum {
     EF_HEXAGON_MACH_V2 = 0x1,
     EF_HEXAGON_MACH_V3 = 0x2,
@@ -46,6 +48,7 @@ enum {
     DT_HEXAGON_VER = 0x70000001,
 };
 
+// https://llvm.org/svn/llvm-project/llvm/trunk/include/llvm/Support/ELFRelocs/Hexagon.def
 enum {
     R_HEX_NONE = 0,
     R_HEX_B22_PCREL = 1,
@@ -142,6 +145,7 @@ enum {
     R_HEX_LD_GOT_11_X = 93,
 };
 
+// This logic comes from support from Qualcomm.
 bool maybe_branch_inst(uint32_t reloc_type) {
     switch (reloc_type) {
     case R_HEX_PLT_B22_PCREL:
