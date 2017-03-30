@@ -569,10 +569,13 @@ void CodeGen_Hexagon::push_buffer(const std::string &name, int dimensions, llvm:
         Value *host_ptr = builder->CreateLoad(create_gep(struct_type, buffer, {0, 1}));
 
         // Push the buffer pointer as well, to pass through to
-        // sub-functions. TODO: This might have nasty implications for
-        // extern stages on hexagon that take buffers passed through from
-        // the input, but we are constrained by how the hexagon runtime
-        // (which is hard to update) chose to treat buffer arguments.
+        // sub-functions.
+        //
+        // TODO: A call to an extern stage that passes through an
+        // input or output of the RPC call will get passed a fake
+        // buffer pointer, not one to a full halide_buffer_t. This
+        // will result in a crash. This is a bit tricky to fix.
+        // See: https://github.com/halide/Halide/issues/1962
         if (!global) {
             sym_push(name + ".buffer", buffer);
         }
