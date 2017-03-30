@@ -392,8 +392,8 @@ void *Pipeline::compile_jit(const Target &target_arg) {
         args.push_back(arg.arg);
     }
 
-    // Compile to a module
-    Module module = compile_to_module(args, name, target);
+    // Compile to a module and also compile any submodules.
+    Module module = compile_to_module(args, name, target).resolve_submodules();
 
     // We need to infer the arguments again, because compiling (GPU
     // and offload targets) might have added new buffers we need to

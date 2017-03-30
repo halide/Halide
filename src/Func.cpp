@@ -1391,7 +1391,7 @@ Stage &Stage::parallel(VarOrRVar var, Expr factor, TailStrategy tail) {
     return *this;
 }
 
-Stage &Stage::vectorize(VarOrRVar var, int factor, TailStrategy tail) {
+Stage &Stage::vectorize(VarOrRVar var, Expr factor, TailStrategy tail) {
     if (var.is_rvar) {
         RVar tmp;
         split(var.rvar, var.rvar, tmp, factor, tail);
@@ -1404,7 +1404,7 @@ Stage &Stage::vectorize(VarOrRVar var, int factor, TailStrategy tail) {
     return *this;
 }
 
-Stage &Stage::unroll(VarOrRVar var, int factor, TailStrategy tail) {
+Stage &Stage::unroll(VarOrRVar var, Expr factor, TailStrategy tail) {
     if (var.is_rvar) {
         RVar tmp;
         split(var.rvar, var.rvar, tmp, factor, tail);
@@ -1896,13 +1896,13 @@ Func &Func::parallel(VarOrRVar var, Expr factor, TailStrategy tail) {
     return *this;
 }
 
-Func &Func::vectorize(VarOrRVar var, int factor, TailStrategy tail) {
+Func &Func::vectorize(VarOrRVar var, Expr factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).vectorize(var, factor, tail);
     return *this;
 }
 
-Func &Func::unroll(VarOrRVar var, int factor, TailStrategy tail) {
+Func &Func::unroll(VarOrRVar var, Expr factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).unroll(var, factor, tail);
     return *this;
@@ -2056,19 +2056,19 @@ Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVa
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, int x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, Var tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_tile(x, bx, tx, x_size, tail, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, int x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar bx, RVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_tile(x, bx, tx, x_size, tail, device_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar tx, int x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar tx, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_tile(x, tx, x_size, tail, device_api);
     return *this;
@@ -2077,7 +2077,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar tx, int x_size, TailStrategy tail, D
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
                      VarOrRVar bx, VarOrRVar by,
                      VarOrRVar tx, VarOrRVar ty,
-                     int x_size, int y_size,
+                     Expr x_size, Expr y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2088,7 +2088,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
                      VarOrRVar tx, Var ty,
-                     int x_size, int y_size,
+                     Expr x_size, Expr y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2099,7 +2099,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
                      VarOrRVar tx, RVar ty,
-                     int x_size, int y_size,
+                     Expr x_size, Expr y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2111,7 +2111,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                      VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
                      VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                     int x_size, int y_size, int z_size,
+                     Expr x_size, Expr y_size, Expr z_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2122,7 +2122,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                      VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-                     int x_size, int y_size, int z_size,
+                     Expr x_size, Expr y_size, Expr z_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2131,14 +2131,14 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, int x_size, TailStrategy tail, DeviceAPI device_api) {
+Func &Func::gpu_tile(VarOrRVar x, Expr x_size, TailStrategy tail, DeviceAPI device_api) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule().storage_dims()).gpu_tile(x, x_size, tail, device_api);
     return *this;
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
-                     int x_size, int y_size,
+                     Expr x_size, Expr y_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2147,7 +2147,7 @@ Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y,
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                     int x_size, int y_size, int z_size,
+                     Expr x_size, Expr y_size, Expr z_size,
                      TailStrategy tail,
                      DeviceAPI device_api) {
     invalidate_cache();
@@ -2312,7 +2312,7 @@ Func &Func::store_root() {
 }
 
 Func &Func::compute_inline() {
-    return compute_at(LoopLevel());
+    return compute_at(LoopLevel::inlined());
 }
 
 Func &Func::trace_loads() {

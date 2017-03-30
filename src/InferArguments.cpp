@@ -163,22 +163,6 @@ vector<InferredArgument> infer_arguments(Stmt body, const vector<Function> &outp
     // followed by all non-buffers (alphabetical by name).
     std::sort(inferred_args.begin(), inferred_args.end());
 
-#if 0
-    // Add the user context argument.
-    inferred_args.push_back(user_context_arg);
-
-    // Return the inferred argument types, minus any constant images
-    // (we'll embed those in the binary by default), and minus the user_context arg.
-    vector<Argument> result;
-    for (const InferredArgument &arg : inferred_args) {
-        debug(1) << "Inferred argument: " << arg.arg.type << " " << arg.arg.name << "\n";
-        if (!arg.buffer.defined() &&
-            arg.arg.name != user_context_arg.arg.name) {
-            result.push_back(arg.arg);
-        }
-    }
-#endif
-
     return inferred_args;
 }
 
