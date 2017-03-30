@@ -49,9 +49,6 @@ typedef int32_t intptr_t;
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
-#define O_RDONLY 0
-#define O_RDWR 2
-
 // Commonly-used extern functions
 extern "C" {
 void *halide_malloc(void *user_context, size_t x);
@@ -74,8 +71,13 @@ const char *strchr(const char* s, int c);
 void* memcpy(void* s1, const void* s2, size_t n);
 int memcmp(const void* s1, const void* s2, size_t n);
 void *memset(void *s, int val, size_t n);
-int open(const char *filename, int opts, int mode);
-int close(int fd);
+// Use fopen+fileno+fclose instead of open+close - the value of the
+// flags passed to open are different on every platform
+void *fopen(const char *, const char *);
+int fileno(void *); 
+int fclose(void *);
+int close(int);
+size_t fwrite(const void *, size_t, size_t, void *);
 ssize_t write(int fd, const void *buf, size_t bytes);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);

@@ -1,9 +1,5 @@
 #include "HalideRuntime.h"
 
-extern "C" void *fopen(const char *, const char *);
-extern "C" int fclose(void *);
-extern "C" size_t fwrite(const void *, size_t, size_t, void *);
-
 // Use TIFF because it meets the following criteria:
 // - Supports uncompressed data
 // - Supports 3D images as well as 2D
