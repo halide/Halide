@@ -118,6 +118,10 @@ public:
      * only supports LLVM based compilation, but should be extended to
      * handle source code backends. */
     EXPORT Buffer<uint8_t> compile_to_buffer() const;
+
+    /** Return a new module with all submodules compiled to buffers on
+     * on the result Module. */
+    EXPORT Module resolve_submodules() const;
 };
 
 /** Link a set of modules together into one module. */
