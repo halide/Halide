@@ -308,7 +308,7 @@ Stmt build_produce(Function f, const Target &target) {
         // Iterate through all of the input args to the extern
         // function building a suitable argument list for the
         // extern function call.
-        vector<Expr> buffers_to_annotate;
+        vector<pair<Expr, int>> buffers_to_annotate;
         vector<Expr> buffers_contents_to_annotate;
         for (const ExternFuncArgument &arg : args) {
             if (arg.is_expr()) {
@@ -323,7 +323,7 @@ Stmt build_produce(Function f, const Target &target) {
                     buf_name += ".buffer";
                     Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                     extern_call_args.push_back(buffer);
-                    buffers_to_annotate.push_back(buffer);
+                    buffers_to_annotate.push_back({buffer, input.dimensions()});
                     buffers_contents_to_annotate.push_back(buffer);
                 }
             } else if (arg.is_buffer()) {
@@ -332,7 +332,7 @@ Stmt build_produce(Function f, const Target &target) {
                 p.set_buffer(b);
                 Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
-                buffers_to_annotate.push_back(buf);
+                buffers_to_annotate.push_back({buf, b.dimensions()});
                 buffers_contents_to_annotate.push_back(buf);
             } else if (arg.is_image_param()) {
                 Parameter p = arg.image_param;
@@ -364,7 +364,7 @@ Stmt build_produce(Function f, const Target &target) {
                 extern_call_args.push_back(buffer);
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
-                buffers_to_annotate.push_back(buffer);
+                buffers_to_annotate.push_back({buffer, f.dimensions()});
             }
         } else {
             // Store level doesn't match compute level. Make an output
@@ -410,7 +410,7 @@ Stmt build_produce(Function f, const Target &target) {
                 extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
-                buffers_to_annotate.push_back(extern_call_args.back());
+                buffers_to_annotate.push_back({extern_call_args.back(), f.dimensions()});
                 lets.push_back({ buf_name, output_buffer_t });
             }
         }
@@ -418,11 +418,19 @@ Stmt build_produce(Function f, const Target &target) {
         Stmt annotate;
         if (target.has_feature(Target::MSAN)) {
             // Mark the buffers as initialized before calling out.
-            for (const auto &buffer: buffers_to_annotate) {
+            for (const auto &p: buffers_to_annotate) {
+                Expr buffer = p.first;
+                int dimensions = p.second;
                 // Return type is really 'void', but no way to represent that in our IR.
                 // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
                 Expr sizeof_buffer_t((uint64_t) sizeof(halide_buffer_t));
-                Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                Stmt mark_buffer = 
+                    Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer}, Call::Extern);
+                Expr shape_size = Expr((uint64_t)(sizeof(halide_dimension_t) * dimensions));
+                Stmt mark_shape = 
+                    Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {shape, shape_size}, Call::Extern));
+                mark_buffer = Block::make(mark_buffer, mark_shape);
                 if (annotate.defined()) {
                     annotate = Block::make(annotate, mark_buffer);
                 } else {
