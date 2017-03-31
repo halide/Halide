@@ -88,6 +88,8 @@ extern int floor;
 extern int ceilf;
 extern int ceil;
 
+extern int write;
+
 // These might not always be available.
 __attribute__((weak)) extern int mmap;
 __attribute__((weak)) extern int mprotect;
@@ -145,15 +147,36 @@ void *halide_get_symbol(const char *name) {
         char *addr;
     };
     static known_sym known_syms[] = {
-        {"close", (char *)(&close)},
         {"abort", (char *)(&abort)},
+        {"atoi", (char *)(&atoi)},
+        {"close", (char *)(&close)},
+        {"exit", (char *)(&exit)},
+        {"fclose", (char *)(&fclose)},
+        {"fileno", (char *)(&fileno)},
+        {"fopen", (char *)(&fopen)},
+        {"free", (char *)(&free)},
+        {"fwrite", (char *)(&fwrite)},
+        {"getenv", (char *)(&getenv)},
+        {"malloc", (char *)(&malloc)},
+        {"memcmp", (char *)(&memcmp)},
         {"memcpy", (char *)(&memcpy)},
         {"memmove", (char *)(&memmove)},
         {"memset", (char *)(&memset)},
+        {"mmap", (char *)(&mmap)},
+        {"mprotect", (char *)(&mprotect)},
+        {"munmap", (char *)(&munmap)},
+        {"strcmp", (char *)(&strcmp)},
+        {"strchr", (char *)(char *(*)(char *, int))(&strchr)},
+        {"strstr", (char *)(char *(*)(char *, const char *))(&strstr)},
+        {"strncmp", (char *)(&strncmp)},
+        {"strncpy", (char *)(&strncpy)},
+        {"write", (char *)(&write)},
+
         {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
         {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
         {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
         {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
+
         {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
         {"__hexagon_muldf3", (char *)(&__hexagon_muldf3)},
         {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
@@ -207,9 +230,6 @@ void *halide_get_symbol(const char *name) {
         {"floor", (char *)(&floor)},
         {"ceilf", (char *)(&ceilf)},
         {"ceil", (char *)(&ceil)},
-        {"mmap", (char *)(&mmap)},
-        {"mprotect", (char *)(&mprotect)},
-        {"munmap", (char *)(&munmap)},
         {NULL, NULL} // Null terminator.
     };
 

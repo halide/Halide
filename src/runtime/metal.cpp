@@ -382,13 +382,6 @@ WEAK int halide_metal_device_free(void *user_context, halide_buffer_t* buf) {
     #endif
 
     mtl_buffer *metal_buf = (mtl_buffer *)buf->device;
-    #ifdef DEBUG_RUNTIME
-    // If buf->host is not null, it should match the metal_buf's contents.
-    if (buf->host) {
-        uint8_t *metal_buf_host = (uint8_t *)buffer_contents(metal_buf);
-        halide_assert(user_context, buf->host == metal_buf_host);
-    }
-    #endif
     release_ns_object(metal_buf);
     buf->device = 0;
     buf->device_interface->release_module();
