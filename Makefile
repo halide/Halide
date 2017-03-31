@@ -294,6 +294,7 @@ SOURCE_FILES = \
   CSE.cpp \
   CanonicalizeGPUVars.cpp \
   Debug.cpp \
+  DebugArguments.cpp \
   DebugToFile.cpp \
   DeepCopy.cpp \
   Definition.cpp \
@@ -418,6 +419,7 @@ HEADER_FILES = \
   CSE.h \
   CanonicalizeGPUVars.h \
   Debug.h \
+  DebugArguments.h \
   DebugToFile.h \
   DeepCopy.h \
   Definition.h \
