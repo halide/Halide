@@ -158,10 +158,6 @@ public:
      * doing. */
     EXPORT void print_loop_nest();
 
-    /** Write out the loop nests specified by the schedule for this
-     * Function for the specified target. */
-    EXPORT void print_loop_nest(Target &target);
-
     /** Compile to object file and header pair, with the given
      * arguments. */
     EXPORT void compile_to_file(const std::string &filename_prefix,
