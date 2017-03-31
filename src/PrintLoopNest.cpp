@@ -99,14 +99,7 @@ private:
             out << " in [" << min_val << ", " << max_val << "]";
         }
 
-        if (op->device_api != DeviceAPI::None) {
-          if (op->device_api == DeviceAPI::Host) {
-            out << "<Host>";
-          }
-          else {
-            out << op->device_api;
-          }
-        }
+        out << op->device_api;
 
         out << ":\n";
         indent += 2;
