@@ -56,7 +56,8 @@ void pack_closure(llvm::StructType *type,
     for (const auto &b : closure.buffers) {
         // For buffers we pass through base address (the symbol with
         // the same name as the buffer), and the .buffer symbol (GPU
-        // code might implicit need it).
+        // code might implicitly need it).
+        // FIXME: This dependence should be explicitly encoded in the IR.
         {
             llvm::Type *t = type->elements()[idx];
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
