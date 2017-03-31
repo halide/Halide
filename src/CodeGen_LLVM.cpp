@@ -146,6 +146,7 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
 }
 
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
+    input_module(nullptr),
     function(nullptr), context(nullptr),
     builder(nullptr),
     value(nullptr),
@@ -474,6 +475,8 @@ MangledNames get_mangled_names(const LoweredFunc &f, const Target &target) {
 }  // namespace
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
+    input_module = &input;
+  
     init_module();
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -541,6 +544,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     // Optimize
     CodeGen_LLVM::optimize_module();
 
+    input_module = nullptr;
+
     // Disown the module and return it.
     return std::move(module);
 }
@@ -603,6 +608,12 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
 
+    // Put the global buffers in the symbol table.
+    for (const auto &buf : input_module->buffers()) {
+        llvm::Value *buf_ptr = sym_get(buf.name() + ".buffer");
+        push_buffer(buf.name(), buf.dimensions(), buf_ptr, true);
+    }
+
     // Put the arguments in the symbol table
     {
         size_t i = 0;
@@ -634,6 +645,11 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument>& args) {
         if (args[i].alignment.modulus != 0) {
             alignment_info.pop(args[i].name);
         }
+    }
+
+    // Remove the global buffers from the symbol table.
+    for (const auto &buf : input_module->buffers()) {
+        pop_buffer(buf.name(), buf.dimensions(), true);
     }
 
     llvm::raw_os_ostream os(std::cerr);
@@ -1070,11 +1086,13 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
-void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *buffer) {
-    // Make sure the buffer object itself is not null
-    create_assertion(builder->CreateIsNotNull(buffer),
-                     Call::make(Int(32), "halide_error_buffer_argument_is_null",
-                                {name}, Call::Extern));
+void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *buffer, bool global) {
+    if (!global) {
+        // Make sure the buffer object itself is not null
+        create_assertion(builder->CreateIsNotNull(buffer),
+                         Call::make(Int(32), "halide_error_buffer_argument_is_null",
+                                    {name}, Call::Extern));
+    }
 
     Value *host_ptr = buffer_host(buffer);
     Value *device_ptr = buffer_device(buffer);
@@ -1083,8 +1101,10 @@ void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *
     // don't try to be too aligned.
     external_buffer.insert(name);
 
-    // Push the buffer pointer as well, for backends that care.
-    sym_push(name + ".buffer", buffer);
+    if (!global) {
+        // Push the buffer pointer as well, for backends that care.
+        sym_push(name + ".buffer", buffer);
+    }
 
     sym_push(name + ".host", host_ptr);
     sym_push(name + ".device", device_ptr);
@@ -1102,8 +1122,10 @@ void CodeGen_LLVM::push_buffer(const string &name, int dimensions, llvm::Value *
     }
 }
 
-void CodeGen_LLVM::pop_buffer(const string &name, int dimensions) {
-    sym_pop(name + ".buffer");
+void CodeGen_LLVM::pop_buffer(const string &name, int dimensions, bool global) {
+    if (!global) {
+        sym_pop(name + ".buffer");
+    }
     sym_pop(name + ".host");
     sym_pop(name + ".device");
     sym_pop(name + ".host_dirty");
@@ -2524,6 +2546,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     } else {
                         buf_size += 14; // Scientific notation with 6 decimal places.
                     }
+                } else if (t == type_of<halide_buffer_t *>()) {
+                    // Not a strict upper bound (there isn't one), but ought to be enough for most buffers.
+                    buf_size += 512;
                 } else {
                     internal_assert(t.is_handle());
                     buf_size += 18; // 0x0123456789abcdef
@@ -2533,7 +2558,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             buf_size = ((buf_size + 15)/16)*16;
 
             // Clamp to at most 8k.
-            if (buf_size > 8192) buf_size = 8192;
+            if (buf_size > 8 * 1024) buf_size = 8 * 1024;
 
             // Allocate a stack array to hold the message.
             llvm::Value *buf = create_alloca_at_entry(i8_t, buf_size);
@@ -2546,12 +2571,14 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::Function *append_uint64  = module->getFunction("halide_uint64_to_string");
             llvm::Function *append_double  = module->getFunction("halide_double_to_string");
             llvm::Function *append_pointer = module->getFunction("halide_pointer_to_string");
+            llvm::Function *append_buffer  = module->getFunction("halide_buffer_to_string");
 
             internal_assert(append_string);
             internal_assert(append_int64);
             internal_assert(append_uint64);
             internal_assert(append_double);
             internal_assert(append_pointer);
+            internal_assert(append_buffer);
 
             for (size_t i = 0; i < op->args.size(); i++) {
                 const StringImm *s = op->args[i].as<StringImm>();
@@ -2583,6 +2610,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     // Use scientific notation for doubles
                     call_args.push_back(ConstantInt::get(i32_t, t.bits() == 64 ? 1 : 0));
                     dst = builder->CreateCall(append_double, call_args);
+                } else if (t == type_of<halide_buffer_t *>()) {
+                    call_args.push_back(codegen(op->args[i]));
+                    dst = builder->CreateCall(append_buffer, call_args);                    
                 } else {
                     internal_assert(t.is_handle());
                     call_args.push_back(codegen(op->args[i]));
