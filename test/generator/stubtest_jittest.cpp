@@ -80,8 +80,8 @@ int main(int argc, char **argv) {
     // This generator defaults intermediate_level to "undefined",
     // so we *must* specify something for it (else we'll crater at
     // Halide compile time). We'll use this:
-    gen.set_intermediate_level(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)))
-       .schedule();
+    gen.intermediate_level.set(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)));
+    gen.schedule();
 
     Halide::Realization simple_output_realized = gen.simple_output.realize(kSize, kSize, 3);
     Buffer<float> s0 = simple_output_realized;

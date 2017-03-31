@@ -69,48 +69,20 @@ public:
 protected:
     friend class GeneratorBase;
 
-    const std::string sp_name;
-    const Type type;
-
-    Internal::Parameter scalar;
+    std::string sp_name;
+    Type type;
+    Internal::Parameter scalar_parameter;
     Expr scalar_expr;
+    LoopLevel loop_level;
 
-    // We must use a not-undefined LoopLevel, so that if we later mutate it,
-    // references that use it will see the same content pointer.
-    // We choose to use an "invalid" possibility here so that if we neglect
-    // to set it, a scheduling error results; alternately, we could default
-    // to LoopLevel::root() or LoopLevel::inlined().
-    LoopLevel loop_level{"__invalid_func_name", "__invalid_var_name", false};
-
-    NO_INLINE explicit ScheduleParamBase(const Type &t)
-        : sp_name(""), type(t),
-          scalar(t, /*is_buffer*/ false, 0, "", /*is_explicit_name*/ false, 
-            /*register_instance*/ false, /*is_removed_before_lowering*/ true),
-          scalar_expr(Internal::Variable::make(t, scalar.name() + ".schedule_param_var", scalar)) {
-        Internal::ObjectInstanceRegistry::register_instance(this, 0, Internal::ObjectInstanceRegistry::ScheduleParam, this, nullptr);
-    }
-
-    NO_INLINE ScheduleParamBase(const Type &t, const std::string &name)
-        : sp_name(name), type(t),
-          scalar(t, /*is_buffer*/ false, 0, name + ".schedule_param_param", 
-            /*is_explicit_name*/ true, /*register_instance*/ false, /*is_removed_before_lowering*/ true),
-          scalar_expr(Internal::Variable::make(t, scalar.name() + ".schedule_param_var", scalar)) {
-        Internal::ObjectInstanceRegistry::register_instance(this, 0, Internal::ObjectInstanceRegistry::ScheduleParam, this, nullptr);
-    }
-
-    NO_INLINE ~ScheduleParamBase() {
-        Internal::ObjectInstanceRegistry::unregister_instance(this);
-    }
+    EXPORT ScheduleParamBase(const Type &t, const std::string &name, bool is_explicit_name);
+    EXPORT ~ScheduleParamBase();
 
     // This is provided only for GeneratorBase; other code should not need to use it.
     virtual void set_from_string(const std::string &new_value_string) = 0;
 
-    // No copy
-    ScheduleParamBase(const ScheduleParamBase &) = delete;
-    void operator=(const ScheduleParamBase &) = delete;
-    // No move
-    ScheduleParamBase(ScheduleParamBase&& that) = delete;
-    void operator=(ScheduleParamBase&& that) = delete;
+    EXPORT explicit ScheduleParamBase(const ScheduleParamBase &);
+    EXPORT ScheduleParamBase &operator=(const ScheduleParamBase &);
 };
 
 }  // namespace Internal
@@ -125,6 +97,8 @@ protected:
  */
 template <typename T>
 class ScheduleParam : public Internal::ScheduleParamBase {
+    using ScheduleParamBase = Internal::ScheduleParamBase;
+
     template <typename T2 = T,
               typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
     static Type get_param_type() { 
@@ -150,7 +124,7 @@ class ScheduleParam : public Internal::ScheduleParamBase {
                 user_error << "The ScheduleParam " << name() << " cannot be set with a value of type " << type << ".\n";
             }
         }
-        scalar.set_scalar<T>(value);
+        scalar_parameter.set_scalar<T>(value);
     }
 
     template <typename T2, typename std::enable_if<std::is_same<T2, LoopLevel>::value>::type * = nullptr>
@@ -204,15 +178,16 @@ protected:
     }
 
 public:
-    using type = T;
+    ScheduleParam() : ScheduleParamBase(get_param_type(), "", false) {}
 
-    ScheduleParam() : Internal::ScheduleParamBase(get_param_type()) {}
+    explicit ScheduleParam(const std::string &name) : ScheduleParamBase(get_param_type(), name, true) {}
 
-    explicit ScheduleParam(const std::string &name) : Internal::ScheduleParamBase(get_param_type(), name) {}
-
-    ScheduleParam(const std::string &name, const T &value) : Internal::ScheduleParamBase(get_param_type(), name) {
+    ScheduleParam(const std::string &name, const T &value) : ScheduleParamBase(get_param_type(), name, true) {
         set(value);
     }
+
+    // TODO hide?
+    explicit ScheduleParam(const ScheduleParamBase &that) : ScheduleParamBase(that) {}
 
 #define HALIDE_SCHEDULE_PARAM_TYPED_SETTER(TYPE) \
     void set(const TYPE &new_value) override { typed_setter_impl<TYPE>(new_value, #TYPE); }
@@ -240,7 +215,7 @@ public:
     // template <typename T2 = T, 
     //           typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
     // operator T() const {
-    //     return scalar.get_scalar<T>();
+    //     return scalar_parameter.get_scalar<T>();
     // }
 
     // template <typename T2 = T, 

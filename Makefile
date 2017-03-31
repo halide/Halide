@@ -360,6 +360,7 @@ SOURCE_FILES = \
   RemoveUndef.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
+  ScheduleParam.cpp \
   SelectGPUAPI.cpp \
   Simplify.cpp \
   SimplifySpecializations.cpp \

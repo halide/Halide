@@ -373,14 +373,15 @@ void StubEmitter::emit_schedule_params_setters() {
     indent_level--;
     stream << indent() << "}\n";
 
-    for (auto *sp : schedule_params) {
-        std::string c_type = sp->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(sp->scalar_type());
-        stream << indent() << class_name << " &set_" << sp->name() << "(const " << c_type << " &value) {\n";
-        indent_level++;
-        stream << indent() << "return set_schedule_param(\"" << sp->name() <<  "\", value);\n";
-        indent_level--;
-        stream << indent() << "}\n";
-    }
+    // TODO: do we still want these, now that we have ScheduleParams replicated?
+    // for (auto *sp : schedule_params) {
+    //     std::string c_type = sp->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(sp->scalar_type());
+    //     stream << indent() << class_name << " &set_" << sp->name() << "(const " << c_type << " &value) {\n";
+    //     indent_level++;
+    //     stream << indent() << "return set_schedule_param(\"" << sp->name() <<  "\", value);\n";
+    //     indent_level--;
+    //     stream << indent() << "}\n";
+    // }
     stream << "\n";
 }
 
@@ -507,7 +508,19 @@ void StubEmitter::emit() {
     emit_inputs_struct();
     emit_generator_params_struct();
 
-    stream << indent() << class_name << "() {}\n";
+    if (!schedule_params.empty()) {
+        stream << indent() << "NO_INLINE " << class_name << "() :\n";
+        indent_level++;
+        for (auto *sp : schedule_params) {
+            std::string comma = sp != schedule_params.back() ? "," : "";
+            stream << indent() << sp->name() << "(\"" << sp->name() << "\")" << comma << "\n";
+        }
+        indent_level--;
+        stream << indent() << "{}\n";
+
+    } else {
+        stream << indent() << class_name << "() {}\n";
+    }
     stream << "\n";
 
     stream << indent() << "NO_INLINE " << class_name << "(\n";
@@ -526,6 +539,9 @@ void StubEmitter::emit() {
     }
     indent_level--;
     stream << indent() << "})\n";
+    for (auto *sp : schedule_params) {
+        stream << indent() << ", " << sp->name() << "(get_schedule_param(\"" << sp->name() << "\"))\n";
+    }
     for (const auto &out : out_info) {
         stream << indent() << ", " << out.name << "(" << out.getter << ")\n";
     }
@@ -608,6 +624,9 @@ void StubEmitter::emit() {
     stream << indent() << class_name << "("<< class_name << "&& that)\n";
     indent_level++;
     stream << indent() << ": GeneratorStub(std::move(that))\n";
+    for (auto *sp : schedule_params) {
+        stream << indent() << ", " << sp->name() << "(std::move(that." << sp->name() << "))\n";
+    }
     for (const auto &out : out_info) {
         stream << indent() << ", " << out.name << "(std::move(that." << out.name << "))\n";
     }
@@ -620,12 +639,22 @@ void StubEmitter::emit() {
     stream << indent() << class_name << "& operator=("<< class_name << "&& that) {\n";
     indent_level++;
     stream << indent() << "GeneratorStub::operator=(std::move(that));\n";
+    for (auto *sp : schedule_params) {
+        stream << indent() << sp->name() << " = std::move(that." << sp->name() << ");\n";
+    }
     for (const auto &out : out_info) {
         stream << indent() << out.name << " = std::move(that." << out.name << ");\n";
     }
     stream << indent() << "return *this;\n";
     indent_level--;
     stream << indent() << "}\n";
+    stream << "\n";
+
+    stream << indent() << "// ScheduleParams(s)\n";
+    for (auto *sp : schedule_params) {
+        std::string c_type = sp->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(sp->scalar_type());
+        stream << indent() << "ScheduleParam<" << c_type << "> " << sp->name() << ";\n";
+    }
     stream << "\n";
 
     stream << indent() << "// Output(s)\n";
