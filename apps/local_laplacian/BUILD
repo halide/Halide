@@ -1,19 +1,13 @@
 load(
     "@halide//:halide.bzl",
     "halide_runtime_linkopts",
-    "halide_generator",
     "halide_library",
 )
 load("@halide//apps/support:exec_test.bzl", "exec_test")
 
-halide_generator(
-    name = "local_laplacian_generator",
-    srcs = ["local_laplacian_generator.cpp"],
-)
-
 halide_library(
     name = "local_laplacian",
-    generator = ":local_laplacian_generator",
+    srcs = ["local_laplacian_generator.cpp"],
     includes = ["."],
 )
 

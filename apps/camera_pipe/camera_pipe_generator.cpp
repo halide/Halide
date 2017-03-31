@@ -6,7 +6,7 @@ namespace {
 using namespace Halide;
 
 using Scheduler = std::function<void(Func processed)>;
-
+ 
 class CameraPipe : public Halide::Generator<CameraPipe> {
 public:
     // Parameterized output type, because LLVM PTX (GPU) backend does not

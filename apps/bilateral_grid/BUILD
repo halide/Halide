@@ -1,19 +1,13 @@
 load(
     "@halide//:halide.bzl",
-    "halide_runtime_linkopts",
-    "halide_generator",
     "halide_library",
+    "halide_runtime_linkopts",
 )
 load("@halide//apps/support:exec_test.bzl", "exec_test")
 
-halide_generator(
-    name = "bilateral_grid_generator",
-    srcs = ["bilateral_grid_generator.cpp"],
-)
-
 halide_library(
     name = "bilateral_grid",
-    generator = ":bilateral_grid_generator",
+    srcs = ["bilateral_grid_generator.cpp"],
     includes = ["."],
 )
 
