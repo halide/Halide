@@ -23,6 +23,7 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
     }
     for (const auto &b : closure.buffers) {
         res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
+        res.push_back(buffer_t->getPointerTo());
     }
     return res;
 }
@@ -54,14 +55,27 @@ void pack_closure(llvm::StructType *type,
     }
     for (const auto &b : closure.buffers) {
         // For buffers we pass through base address (the symbol with
-        // the same name as the buffer). If the inner code wants the
-        // .buffer symbol, it will have referred to it separately, so
-        // it will have been captured in the vars.
-        llvm::Type *t = type->elements()[idx];
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-        Value *val = src.get(b.first);
-        val = builder->CreateBitCast(val, t);
-        builder->CreateStore(val, ptr);
+        // the same name as the buffer), and the .buffer symbol (GPU
+        // code might implicit need it).
+        {
+            llvm::Type *t = type->elements()[idx];
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+            Value *val = src.get(b.first);
+            val = builder->CreateBitCast(val, t);
+            builder->CreateStore(val, ptr);
+        }
+        {
+            llvm::PointerType *t = buffer_t->getPointerTo();
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+            Value *val = nullptr;
+            if (src.contains(b.first + ".buffer")) {
+                val = src.get(b.first + ".buffer");
+                val = builder->CreateBitCast(val, t);
+            } else {
+                val = ConstantPointerNull::get(t);
+            }
+            builder->CreateStore(val, ptr);
+        }
     }
 }
 
@@ -79,10 +93,18 @@ void unpack_closure(const Closure& closure,
         load->setName(v.first);
     }
     for (const auto &b : closure.buffers) {
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-        LoadInst *load = builder->CreateLoad(ptr);
-        dst.push(b.first, load);
-        load->setName(b.first);
+        {
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            dst.push(b.first, load);
+            load->setName(b.first);
+        }
+        {
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            dst.push(b.first + ".buffer", load);
+            load->setName(b.first + ".buffer");
+        }
     }
 }
 
