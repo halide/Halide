@@ -2878,7 +2878,9 @@ private:
         return generator->get_first_output();
     }
     explicit GeneratorStub(const GeneratorStub &) = delete;
-    void operator=(const GeneratorStub &) = delete;
+    GeneratorStub &operator=(const GeneratorStub &) = delete;
+    explicit GeneratorStub(const GeneratorStub &&) = delete;
+    GeneratorStub &operator=(const GeneratorStub &&) = delete;
 };
 
 }  // namespace Internal
