@@ -86,6 +86,16 @@ struct Argument {
 
     bool is_input() const { return kind == InputScalar || kind == InputBuffer; }
     bool is_output() const { return kind == OutputBuffer; }
+
+    bool operator==(const Argument &rhs) const {
+        return name == rhs.name &&
+               kind == rhs.kind &&
+               dimensions == rhs.dimensions &&
+               type == rhs.type &&
+               def.same_as(rhs.def) &&
+               min.same_as(rhs.min) &&
+               max.same_as(rhs.max);
+    }    
 };
 
 }
