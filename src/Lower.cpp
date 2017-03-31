@@ -23,6 +23,7 @@
 #include "FuseGPUThreadLoops.h"
 #include "FuzzFloatStores.h"
 #include "HexagonOffload.h"
+#include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
 #include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
@@ -58,6 +59,7 @@
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 #include "WrapCalls.h"
+#include "WrapExternStages.h"
 
 namespace Halide {
 namespace Internal {
@@ -68,9 +70,14 @@ using std::string;
 using std::vector;
 using std::map;
 
-Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
-           const Target &t, const vector<IRMutator *> &custom_passes) {
+Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
+             vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
+             const vector<IRMutator *> &custom_passes) {
+    std::vector<std::string> namespaces;
+    std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
+    Module result_module(simple_pipeline_name, t);
+    
     // Compute an environment
     map<string, Function> env;
     for (Function f : output_funcs) {
@@ -120,7 +127,7 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Injecting tracing...\n";
-    s = inject_tracing(s, pipeline_name, env, outputs);
+    s = inject_tracing(s, pipeline_name, env, outputs, t);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
@@ -297,7 +304,7 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     debug(1) << "Splitting off Hexagon offload...\n";
-    s = inject_hexagon_rpc(s, t);
+    s = inject_hexagon_rpc(s, t, result_module);
     debug(2) << "Lowering after splitting off Hexagon offload:\n" << s << '\n';
 
     if (!custom_passes.empty()) {
@@ -308,7 +315,90 @@ Stmt lower(const vector<Function> &output_funcs, const string &pipeline_name,
         }
     }
 
-    return s;
+    vector<Argument> public_args = args;
+    for (const auto &out : outputs) {
+        for (Parameter buf : out.output_buffers()) {
+            public_args.push_back(Argument(buf.name(),
+                                           Argument::OutputBuffer,
+                                           buf.type(), buf.dimensions()));
+        }
+    }
+
+    vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
+    for (const InferredArgument &arg : inferred_args) {
+      if (arg.param.defined() && arg.param.name() == "__user_context") {
+            // The user context is always in the inferred args, but is
+            // not required to be in the args list.
+            continue;
+        }
+
+        internal_assert(arg.arg.is_input()) << "Expected only input Arguments here";
+
+        bool found = false;
+        for (Argument a : args) {
+            found |= (a.name == arg.arg.name);
+        }
+
+        if (arg.buffer.defined() && !found) {
+            // It's a raw Buffer used that isn't in the args
+            // list. Embed it in the output instead.
+            debug(1) << "Embedding image " << arg.buffer.name() << "\n";
+            result_module.append(arg.buffer);
+        } else if (!found) {
+            std::ostringstream err;
+            err << "Generated code refers to ";
+            if (arg.arg.is_buffer()) {
+                err << "image ";
+            }
+            err << "parameter " << arg.arg.name
+                << ", which was not found in the argument list.\n";
+
+            err << "\nArgument list specified: ";
+            for (size_t i = 0; i < args.size(); i++) {
+                err << args[i].name << " ";
+            }
+            err << "\n\nParameters referenced in generated code: ";
+            for (const InferredArgument &ia : inferred_args) {
+                if (ia.arg.name != "__user_context") {
+                    err << ia.arg.name << " ";
+                }
+            }
+            err << "\n\n";
+            user_error << err.str();
+        }
+    }
+
+    LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
+    result_module.append(main_func);
+
+    // Append a wrapper for this pipeline that accepts old buffer_ts
+    // and upgrades them. It will use the same name, so it will
+    // require C++ linkage. We don't need it when jitting.
+    if (!t.has_feature(Target::JIT)) {
+        add_legacy_wrapper(result_module, main_func);
+    }
+
+    // Also append any wrappers for extern stages that expect the old buffer_t
+    wrap_legacy_extern_stages(result_module);
+
+    return result_module;
+}
+
+EXPORT Stmt lower_main_stmt(const std::vector<Function> &output_funcs, const std::string &pipeline_name,
+                            const Target &t, const std::vector<IRMutator *> &custom_passes) {
+    // We really ought to start applying for appellation d'origine contrôlée
+    // status on types representing arguments in the Halide compiler.
+    vector<InferredArgument> inferred_args = infer_arguments(Stmt(), output_funcs);
+    vector<Argument> args;
+    for (const auto &ia : inferred_args) {
+        if (!ia.arg.name.empty() && ia.arg.is_input()) {
+            args.push_back(ia.arg);
+        }
+    }
+
+    Module module = lower(output_funcs, pipeline_name, t, args, Internal::LoweredFunc::External, custom_passes);
+
+    return module.functions().front().body;
 }
 
 }

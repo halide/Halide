@@ -410,6 +410,8 @@ struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     EXPORT static Stmt make(const Stmt &first, const Stmt &rest);
+    /** Construct zero or more Blocks to invoke a list of statements in order.
+     * This method may not return a Block statement if stmts.size() <= 1. */
     EXPORT static Stmt make(const std::vector<Stmt> &stmts);
 
     static const IRNodeType _type_info = IRNodeType::Block;

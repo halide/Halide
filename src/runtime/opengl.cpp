@@ -352,19 +352,7 @@ WEAK char *strstrip(char *str, size_t n) {
 }
 
 WEAK void debug_buffer(void *user_context, halide_buffer_t *buf) {
-    debug(user_context)
-        << "  device: " << buf->device << "\n"
-        << "  texture_id: " << (GLuint)buf->device << "\n"
-        << "  host: " << buf->host << "\n"
-        << "  extent: " << buf->dim[0].extent << " " << buf->dim[1].extent
-        << " " << buf->dim[2].extent << " " << buf->dim[3].extent <<  "\n"
-        << "  stride: " << buf->dim[0].stride << " " << buf->dim[1].stride
-        << " " << buf->dim[2].stride << " " << buf->dim[3].stride <<  "\n"
-        << "  min: " << buf->dim[0].min << " " << buf->dim[1].min
-        << " " << buf->dim[2].min << " " << buf->dim[3].min <<  "\n"
-        << "  type: " << buf->type << "\n"
-        << "  host_dirty: " << buf->host_dirty() << "\n"
-        << "  device_dirty: " << buf->device_dirty() << "\n";
+    debug(user_context) << *buf << "\n";
 }
 
 WEAK GLuint make_shader(void *user_context, GLenum type,
@@ -826,7 +814,7 @@ WEAK bool get_texture_format(void *user_context, halide_buffer_t *buf,
         return false;
     }
 
-    const int channels = buf->dim[2].extent;
+    const int channels = (buf->dimensions > 2) ? buf->dim[2].extent : 0;
 
     // GL_LUMINANCE and GL_LUMINANCE_ALPHA aren't color-renderable in ES2, period,
     // thus can't be read back via ReadPixels, thus are nearly useless to us.
@@ -911,8 +899,8 @@ WEAK bool get_texture_dimensions(void *user_context, halide_buffer_t *buf, GLint
     // GLES 2.0 supports GL_TEXTURE_2D (plus cube map), but not 1d or 3d. If we
     // end up with a buffer that has a zero extent, set the corresponding size
     // to one.
-    *height = (buf->dim[1].extent) ? buf->dim[1].extent : 1;
-    *channels = (buf->dim[2].extent) ? buf->dim[2].extent : 1;
+    *height = (buf->dimensions > 1) ? buf->dim[1].extent : 1;
+    *channels = (buf->dimensions > 2) ? buf->dim[2].extent : 1;
 
     return true;
 }
@@ -931,8 +919,8 @@ WEAK TextureInfo *new_texture_info(GLuint tex, const halide_buffer_t *buf, bool 
     TextureInfo *texinfo = (TextureInfo*)malloc(sizeof(TextureInfo));
     texinfo->id = tex;
     for (int i = 0; i < 3; i++) {
-        texinfo->min[i] = buf->dim[i].min;
-        texinfo->extent[i] = buf->dim[i].extent;
+        texinfo->min[i] = (buf->dimensions > i) ? buf->dim[i].min : 0;
+        texinfo->extent[i] = (buf->dimensions > i) ? buf->dim[i].extent : 0;
     }
     texinfo->halide_allocated = halide_allocated;
 
@@ -1116,12 +1104,12 @@ template <class T>
  __attribute__((always_inline))
  void halide_to_interleaved(const halide_buffer_t *src_buf, T *dst) {
     const T *src = reinterpret_cast<const T *>(src_buf->host);
-    int width = std_max<int>(1, src_buf->dim[0].extent);
-    int height = std_max<int>(1, src_buf->dim[1].extent);
-    int channels = std_max<int>(1, src_buf->dim[2].extent);
-    int x_stride = src_buf->dim[0].stride;
-    int y_stride = src_buf->dim[1].stride;
-    int c_stride = src_buf->dim[2].stride;
+    int width = (src_buf->dimensions > 0) ? src_buf->dim[0].extent : 1;
+    int height = (src_buf->dimensions > 1) ? src_buf->dim[1].extent : 1;
+    int channels = (src_buf->dimensions > 2) ? src_buf->dim[2].extent : 1;
+    int x_stride = (src_buf->dimensions > 0) ? src_buf->dim[0].stride : 0;
+    int y_stride = (src_buf->dimensions > 1) ? src_buf->dim[1].stride : 0;
+    int c_stride = (src_buf->dimensions > 2) ? src_buf->dim[2].stride : 0;
     for (int y = 0; y < height; y++) {
         int dstidx = y * width * channels;
         for (int x = 0; x < width; x++) {
@@ -1143,14 +1131,15 @@ template <class T>
 __attribute__((always_inline))
 void interleaved_to_halide(void *user_context, const T *src, int src_channels, halide_buffer_t *dst_buf) {
     T *dst = reinterpret_cast<T*>(dst_buf->host);
-    int width = std_max<int>(1, dst_buf->dim[0].extent);
-    int height = std_max<int>(1, dst_buf->dim[1].extent);
-    int dst_channels = std_max<int>(1, dst_buf->dim[2].extent);
-    int channels = std_min<int>(src_channels, dst_channels);
-    int x_stride = dst_buf->dim[0].stride;
-    int y_stride = dst_buf->dim[1].stride;
-    int c_stride = dst_buf->dim[2].stride;
+    int width = (dst_buf->dimensions > 0) ? dst_buf->dim[0].extent : 1;
+    int height = (dst_buf->dimensions > 1) ? dst_buf->dim[1].extent : 1;
+    int dst_channels = (dst_buf->dimensions > 2) ? dst_buf->dim[2].extent : 1;
+    int x_stride = (dst_buf->dimensions > 0) ? dst_buf->dim[0].stride : 0;
+    int y_stride = (dst_buf->dimensions > 1) ? dst_buf->dim[1].stride : 0;
+    int c_stride = (dst_buf->dimensions > 2) ? dst_buf->dim[2].stride : 0;
     int src_skip = std_max(0, src_channels - dst_channels);
+    int channels = std_min<int>(src_channels, dst_channels);
+
     for (int y = 0; y < height; y++) {
         int srcidx = y * width * src_channels;
         for (int x = 0; x < width; x++) {
@@ -1524,12 +1513,11 @@ WEAK int halide_opengl_run(void *user_context,
             halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
-            uint64_t dev = *(uint64_t *)args[i];
-            if (!dev) {
+            uint64_t handle = *(uint64_t *)args[i];
+            if (!handle) {
                 error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
                 return 1;
             }
-            uint64_t handle = halide_get_device_handle(dev);
             if (handle == HALIDE_OPENGL_RENDER_TARGET) {
                 bind_render_targets = false;
             }
@@ -1546,12 +1534,11 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
-            uint64_t dev = *(uint64_t *)args[i];
-            if (!dev) {
+            uint64_t handle = *(uint64_t *)args[i];
+            if (!handle) {
                 error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
                 return 1;
             }
-            uint64_t handle = halide_get_device_handle(dev);
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
             global_state.BindTexture(GL_TEXTURE_2D, handle == HALIDE_OPENGL_RENDER_TARGET ? 0 : (GLuint)handle);
             global_state.Uniform1iv(loc, 1, &num_active_textures);
@@ -1680,12 +1667,11 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        uint64_t dev = *(uint64_t *)args[i];
-        if (!dev) {
+        uint64_t handle = *(uint64_t *)args[i];
+        if (!handle) {
             error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
             return 1;
         }
-        uint64_t handle = halide_get_device_handle(dev);
         GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
 
         // Check to see if the object name is actually a FBO

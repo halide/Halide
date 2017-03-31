@@ -70,7 +70,7 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
 class InjectHexagonRpc : public IRMutator {
     std::map<std::string, Expr> state_vars;
 
-    Module device_code;
+    Module &device_code;
 
     // Alignment info for Int(32) variables in scope, so we don't lose
     // the information when creating Hexagon kernels.
@@ -118,7 +118,11 @@ class InjectHexagonRpc : public IRMutator {
 
         // Unrolling or loop partitioning might generate multiple
         // loops with the same name, so we need to make them unique.
-        std::string hex_name = unique_name("hex_" + loop->name);
+        // There's a bit of a hack here: the offload_rpc. prefix is
+        // significant, it tells the Hexagon code generator to expect
+        // the arguments to be unpacked by the Hexagon remote-side RPC
+        // call, which doesn't work with standard buffers.
+        std::string hex_name = unique_name("offload_rpc." + loop->name);
 
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
@@ -257,123 +261,33 @@ class InjectHexagonRpc : public IRMutator {
     }
 
 public:
-    InjectHexagonRpc(const Target &target) : device_code("hexagon", target) {}
+    InjectHexagonRpc(Module &device_code) : device_code(device_code) {}
 
     Stmt inject(Stmt s) {
         s = mutate(s);
 
-        // Skip if there are no device kernels.
-        if (device_code.functions().empty()) {
-            return s;
+        if (!device_code.functions().empty()) {
+            // Wrap the statement in calls to halide_initialize_kernels.
+            Expr buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "hexagon_code.buffer");
+            Expr code_size = Call::make(Int(32), Call::buffer_get_max, { buf_var, 0 }, Call::Extern);
+            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { buf_var }, Call::Extern);
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+                                                       {module_state_ptr(), code_ptr, code_size,
+                                                        Expr((uint32_t)device_code.target().has_feature(Target::HVX_shared_object))});
+            s = Block::make(init_kernels, s);
         }
-
-        // Compile the device code
+   
+        // TODO: This can probably go away due to general debug info at the submodule compile level.
         debug(1) << "Hexagon device code module: " << device_code << "\n";
 
-        llvm::LLVMContext context;
-        std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
-
-        // Determine relocation mode. if both are false, its object relocation.
-        bool use_shared_object = device_code.target().has_feature(Target::HVX_shared_object);
-
-        if (use_shared_object) {
-            // Dump the llvm module to a temp file as .ll
-            TemporaryFile tmp_bitcode("hex", ".ll");
-            TemporaryFile tmp_shared_object("hex", ".so");
-
-            std::unique_ptr<llvm::raw_fd_ostream> ostream =
-                make_raw_fd_ostream(tmp_bitcode.pathname());
-            compile_llvm_module_to_llvm_assembly(*llvm_module, *ostream);
-            ostream->flush();
-
-            // Shell out to hexagon clang to compile it.
-            string hex_command;
-
-            const char *path = getenv("HL_HEXAGON_CLANG");
-            if (path && path[0]) {
-                hex_command = path;
-            } else {
-                path = getenv("HL_HEXAGON_TOOLS");
-                if (path && path[0]) {
-                    hex_command = string(path) + "/bin/hexagon-clang";
-                } else {
-                    user_error << "Unable to find hexagon-clang: neither HL_HEXAGON_CLANG nor HL_HEXAGON_TOOLS are set properly.";
-                }
-            }
-
-            hex_command += " ";
-            hex_command += tmp_bitcode.pathname();
-            if (0) { // This path should also work, if we want to use PIC code
-                hex_command += " -fpic -O3 -Wno-override-module ";
-            } else {
-                hex_command += " -fpic -G 0 -mlong-calls -O3 -Wno-override-module -shared ";
-            }
-            if (device_code.target().has_feature(Target::HVX_128)) {
-                hex_command += " -mhvx-double";
-            } else {
-                hex_command += " -mhvx";
-            }
-            hex_command += " -o " + tmp_shared_object.pathname();
-
-            int result = system(hex_command.c_str());
-            internal_assert(result == 0) << "hexagon-clang failed\n";
-
-            // Check for a signing callout
-            const char *callout_env = getenv("HL_HEXAGON_CALLOUT");
-            if (callout_env && callout_env[0]) {
-               string callout_command;
-               callout_command = callout_env;
-               callout_command += " " + tmp_shared_object.pathname();
-               int result = system(callout_command.c_str());
-               internal_assert(result == 0) << "hexagon-callout failed\n";
-            }
-
-            // Read the compiled object back in and put it in a buffer in the module
-            std::ifstream so(tmp_shared_object.pathname(), std::ios::binary | std::ios::ate);
-            internal_assert(so.good()) << "failed to open temporary shared object.";
-            std::vector<uint8_t> object(so.tellg());
-            so.seekg(0, std::ios::beg);
-            so.read(reinterpret_cast<char*>(&object[0]), object.size());
-
-            // Wrap the statement in calls to halide_initialize_kernels.
-            size_t code_size = object.size();
-            Expr code_ptr = buffer_ptr(&object[0], code_size, "hexagon_code");
-            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                       {module_state_ptr(), code_ptr,
-                                                       Expr((uint64_t) code_size),
-                                                       Expr((uint32_t) use_shared_object)});
-            s = Block::make(init_kernels, s);
-
-        } else {
-            llvm::SmallVector<char, 4096> object;
-            llvm::raw_svector_ostream object_stream(object);
-            compile_llvm_module_to_object(*llvm_module, object_stream);
-
-            if (debug::debug_level() >= 2) {
-                debug(2) << "Hexagon device code assembly: " << "\n";
-                llvm::SmallString<4096> assembly;
-                llvm::raw_svector_ostream assembly_stream(assembly);
-                compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
-                debug(2) << assembly.c_str() << "\n";
-            }
-
-            // Wrap the statement in calls to halide_initialize_kernels.
-            size_t code_size = object.size();
-            Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&object[0]), code_size, "hexagon_code");
-
-            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                       {module_state_ptr(), code_ptr,
-                                                       Expr((uint64_t) code_size),
-                                                       Expr((uint32_t) use_shared_object)});
-            s = Block::make(init_kernels, s);
-        }
         return s;
     }
 };
 
 }
 
-Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
+Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
+                        Module &containing_module) {
     // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
 
@@ -397,10 +311,90 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
         }
     }
 
-    InjectHexagonRpc injector(target);
+    Module hexagon_module("hexagon_code", target);
+    InjectHexagonRpc injector(hexagon_module);
     s = injector.inject(s);
+
+    if (!hexagon_module.functions().empty()) {
+        containing_module.append(hexagon_module);
+    }
+
     return s;
 }
 
+Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_code) {
+    llvm::LLVMContext context;
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
+
+    llvm::SmallVector<char, 4096> object;
+    llvm::raw_svector_ostream object_stream(object);
+    compile_llvm_module_to_object(*llvm_module, object_stream);
+
+    if (debug::debug_level() >= 2) {
+        debug(2) << "Hexagon Submodule assembly for " << device_code.name() << ": " << "\n";
+        llvm::SmallString<4096> assembly;
+        llvm::raw_svector_ostream assembly_stream(assembly);
+        compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+        debug(2) << assembly.c_str() << "\n";
+    }
+
+    // Dump the llvm module to a temp file as .o
+    TemporaryFile tmp_object("hex", ".o");
+    TemporaryFile tmp_shared_object("hex", ".so");
+
+    std::ofstream out(tmp_object.pathname());
+    out.write(object.data(), object.size());
+    out.close();
+
+    // Shell out to hexagon clang to compile it.
+    string hex_command;
+
+    const char *path = getenv("HL_HEXAGON_CLANG");
+    if (path && path[0]) {
+        hex_command = path;
+    } else {
+        path = getenv("HL_HEXAGON_TOOLS");
+        if (path && path[0]) {
+            hex_command = string(path) + "/bin/hexagon-clang";
+        } else {
+            user_error << "Unable to find hexagon-clang: neither HL_HEXAGON_CLANG nor HL_HEXAGON_TOOLS are set properly.";
+        }
+    }
+
+    hex_command += " ";
+    hex_command += tmp_object.pathname();
+    hex_command += " -fpic -G 0 -mlong-calls -O3 -Wno-override-module -shared ";
+    if (device_code.target().has_feature(Target::HVX_128)) {
+        hex_command += " -mhvx-double";
+    } else {
+        hex_command += " -mhvx";
+    }
+    hex_command += " -o " + tmp_shared_object.pathname();
+
+    int result = system(hex_command.c_str());
+    internal_assert(result == 0) << "hexagon-clang failed\n";
+
+    // Check for a signing callout
+    const char *callout_env = getenv("HL_HEXAGON_CALLOUT");
+    if (callout_env && callout_env[0]) {
+       string callout_command;
+       callout_command = callout_env;
+       callout_command += " " + tmp_shared_object.pathname();
+       int result = system(callout_command.c_str());
+       internal_assert(result == 0) << "hexagon-callout failed\n";
+    }
+
+    // Read the compiled object back in and put it in a buffer in the module
+    std::ifstream so(tmp_shared_object.pathname(), std::ios::binary | std::ios::ate);
+    internal_assert(so.good()) << "failed to open temporary shared object.";
+
+    int32_t code_size = (int32_t)so.tellg();
+    Halide::Buffer<uint8_t> result_buf(code_size, device_code.name());
+    so.seekg(0, std::ios::beg);
+    so.read(reinterpret_cast<char*>(result_buf.data()), code_size);
+
+    return result_buf;
+}
+  
 }  // namespace Internal
 }  // namespace Halide
