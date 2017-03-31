@@ -2,6 +2,7 @@
 
 #include "Pipeline.h"
 #include "Argument.h"
+#include "DebugArguments.h"
 #include "Func.h"
 #include "IRVisitor.h"
 #include "LLVM_Headers.h"
@@ -630,6 +631,11 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     public_body = LetStmt::make(private_result_name, call_private, public_body);
 
     module.append(LoweredFunc(new_fn_name, public_args, public_body, linkage_type));
+
+    // If we're in debug mode, add code that prints the args.
+    if (target.has_feature(Target::Debug)) {
+        debug_arguments(&module.functions().back());
+    }
 
     // Append a wrapper for this pipeline that accepts old buffer_ts
     // and upgrades them. It will use the same name, so it will
