@@ -820,13 +820,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 modules.push_back(get_initmod_cuda(c, bits_64, debug));
             }
-        } else if (t.has_feature(Target::OpenCL)) {
+        } 
+        if (t.has_feature(Target::OpenCL)) {
             if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_opencl(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
-        } else if (t.has_feature(Target::OpenGL)) {
+        } 
+        if (t.has_feature(Target::OpenGL)) {
             modules.push_back(get_initmod_opengl(c, bits_64, debug));
             if (t.os == Target::Linux) {
                 modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));
@@ -837,7 +839,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
-        } else if (t.has_feature(Target::OpenGLCompute)) {
+        } 
+        if (t.has_feature(Target::OpenGLCompute)) {
             modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
             if (t.os == Target::Android) {
                 // Only platform that supports OpenGL Compute for now.
@@ -850,7 +853,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
 
-        } else if (t.has_feature(Target::Metal)) {
+        } 
+        if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
             if (t.arch == Target::ARM) {
                 modules.push_back(get_initmod_metal_objc_arm(c, bits_64, debug));
@@ -859,7 +863,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
-        } else if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } 
+        if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
         }
