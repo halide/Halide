@@ -19,9 +19,9 @@
 
 load(
     "@halide//:halide.bzl",
-    "halide_runtime_linkopts",
     "halide_generator",
-    "halide_library",
+    "halide_library_from_generator",
+    "halide_runtime_linkopts",
 )
 
 [halide_generator(
@@ -34,7 +34,7 @@ load(
     "render",
 ]]
 
-[halide_library(
+[halide_library_from_generator(
     name = "reaction_diffusion_2_%s" % phase,
     generator = ":reaction_diffusion_2_%s_generator" % phase,
     halide_target_features = ["user_context"],
@@ -46,7 +46,7 @@ load(
     "render",
 ]]
 
-[halide_library(
+[halide_library_from_generator(
     name = "reaction_diffusion_2_metal_%s" % phase,
     generator = ":reaction_diffusion_2_%s_generator" % phase,
     halide_target_features = ["metal", "user_context"],

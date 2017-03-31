@@ -1,10 +1,10 @@
 load(
     "@halide//:halide.bzl",
+    "halide_generator",
     "halide_language_copts",
     "halide_language_linkopts",
+    "halide_library_from_generator",
     "halide_runtime_linkopts",
-    "halide_generator",
-    "halide_library",
 )
 load(":exec_test.bzl", "exec_test")
 
@@ -100,8 +100,8 @@ cc_binary(
     ],
 )
 
-# For Lesson 15, we manurally build and use a Generator.
-# (You normally would use the halide_generator()/halide_library() rules to do this for you.)
+# For Lesson 15, we manually build and use a Generator.
+# (You normally would use the halide_generator()/halide_library_from_generator() rules to do this for you.)
 cc_binary(
     name = "lesson_15_generate",
     srcs = ["lesson_15_generators.cpp"],
@@ -124,14 +124,14 @@ sh_binary(
     data = [":lesson_15_generate"],
 )
 
-# For Lesson 16, we use halide_generator()/halide_library() to simplify Generator usage
+# For Lesson 16, we use halide_generator()/halide_library_from_generator() to simplify Generator usage
 halide_generator(
     name = "brighten_generator",
     srcs = ["lesson_16_rgb_generate.cpp"],
     includes = ["."],
 )
 
-[halide_library(
+[halide_library_from_generator(
     name = "brighten_%s" % layout,
     generator = ":brighten_generator",
     generator_args = "layout=%s" % layout,

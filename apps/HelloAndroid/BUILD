@@ -6,19 +6,13 @@
 
 load(
     "@halide//:halide.bzl",
-    "halide_runtime_linkopts",
-    "halide_generator",
     "halide_library",
-)
-
-halide_generator(
-    name = "hello_generator",
-    srcs = ["jni/hello_generator.cpp"],
+    "halide_runtime_linkopts",
 )
 
 halide_library(
     name = "hello",
-    generator = ":hello_generator",
+    srcs = ["jni/hello_generator.cpp"],
     includes = ["."],
 )
 

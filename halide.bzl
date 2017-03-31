@@ -164,10 +164,10 @@ def _halide_host_config_settings():
 
 
 def halide_config_settings():
-  """Define config_settings for halide_library.
+  """Define config_settings for halide_library_from_generator.
 
        These settings are used to distinguish build targets for
-       halide_library() based on target CPU and configs. This is provided
+       halide_library_from_generator() based on target CPU and configs. This is provided
        to allow algorithmic generation of the config_settings based on
        internal data structures; it should not be used outside of Halide.
 
@@ -330,7 +330,6 @@ def _gengen_impl(ctx):
 
   env = {
       "HL_DEBUG_CODEGEN": str(ctx.attr.debug_codegen_level),
-      "HL_TRACE": str(ctx.attr.trace_level),
   }
   ctx.action(
       # If you need to force the tools to run locally (e.g. for experimentation),
@@ -371,8 +370,6 @@ _gengen = rule(
             attr.string_list(),
         "sanitizer":
             attr.string(),
-        "trace_level":
-            attr.int(),
     },
     outputs=_gengen_outputs,
     output_to_genfiles=True)
@@ -451,11 +448,9 @@ def halide_generator(name,
                      copts=[],
                      deps=[],
                      generator_name="",
+                     includes=[],
                      tags=[],
-                     visibility=None,
-                     includes=[]):
-  # TODO: this enforcement may be overkill, but enforcing rather
-  # than declaring it "best practice" may simplify the world
+                     visibility=None):
   if not name.endswith("_generator"):
     fail("halide_generator rules must end in _generator")
 
@@ -467,7 +462,7 @@ def halide_generator(name,
       srcs=srcs,
       alwayslink=1,
       copts=copts + halide_language_copts(),
-      deps=["@halide//:language"] + deps,
+      deps=set(["@halide//:language"] + deps),
       tags=tags,
       visibility=["//visibility:private"])
 
@@ -515,26 +510,25 @@ def halide_generator(name,
       deps=[
           ":%s_library" % name,
           "@halide//:language"
-        ],
+      ],
       includes=includes,
       visibility=visibility,
       tags=tags)
 
 
-def halide_library(name,
-                   debug_codegen_level=0,
-                   deps=[],
-                   extra_outputs=[],
-                   function_name=None,
-                   generator=None,
-                   generator_args="",
-                   halide_target_features=[],
-                   halide_target_map=halide_library_default_target_map(),
-                   includes=[],
-                   namespace=None,
-                   tags=[],
-                   trace_level=0,
-                   visibility=None):
+def halide_library_from_generator(name,
+                                  generator,
+                                  debug_codegen_level=0,
+                                  deps=[],
+                                  extra_outputs=[],
+                                  function_name=None,
+                                  generator_args="",
+                                  halide_target_features=[],
+                                  halide_target_map=halide_library_default_target_map(),
+                                  includes=[],
+                                  namespace=None,
+                                  tags=[],
+                                  visibility=None):
   if not function_name:
     function_name = name
 
@@ -579,7 +573,6 @@ def halide_library(name,
         }),
         debug_codegen_level=debug_codegen_level,
         tags=tags,
-        trace_level=trace_level,
         outputs=outputs)
     libname = "halide_internal_%s_%s" % (name, arch)
     if "static_library" in outputs:
@@ -593,7 +586,7 @@ def halide_library(name,
       if len(multitarget) > 1:
         fail(
             'can only request .cpp output if no multitargets are selected. Try' +
-            ' adding halide_target_map={"*":["*"]} to your halide_library ' +
+            ' adding halide_target_map={"*":["*"]} to your halide_library_from_generator ' +
             'rule.'
         )
       native.cc_library(
@@ -633,45 +626,48 @@ def halide_library(name,
   native.cc_library(
       name=name,
       hdrs=[":%s_header" % name],
-      deps=["@halide//:runtime"] + select(condition_deps) + deps,
+      deps=select(condition_deps) + deps + ["@halide//:runtime"],
       includes=includes,
       tags=tags,
       visibility=visibility)
 
+  # Return the fully-qualified built target name.
+  return "//%s:%s" % (PACKAGE_NAME, name)
 
-# TODO: we probably don't want to keep this; leaving it here temporarily just in case
-#
-# def halide_gen_and_lib(name,
-#                    visibility=None,
-#                    namespace=None,
-#                    function_name=None,
-#                    generator_args="",
-#                    debug_codegen_level=0,
-#                    trace_level=0,
-#                    halide_target_features=[],
-#                    halide_target_map=halide_library_default_target_map(),
-#                    extra_outputs=[],
-#                    includes=[],
-#                    srcs=None,
-#                    filter_deps=[],
-#                    generator_deps=[],
-#                    generator_name=""):
-#   halide_generator(name="%s_generator" % name,
-#                    srcs=srcs,
-#                    generator_name=generator_name,
-#                    deps=generator_deps,
-#                    includes=includes,
-#                    visibility=["//visibility:private"])
-#   halide_library(name=name,
-#                  generator=":%s_generator" % name,
-#                  deps=filter_deps,
-#                  visibility=visibility,
-#                  namespace=namespace,
-#                  function_name=function_name,
-#                  generator_args=generator_args,
-#                  debug_codegen_level=debug_codegen_level,
-#                  trace_level=trace_level,
-#                  halide_target_features=halide_target_features,
-#                  halide_target_map=halide_target_map,
-#                  extra_outputs=extra_outputs,
-#                  includes=includes)
+def halide_library(name,
+                   srcs,
+                   copts=[],
+                   debug_codegen_level=0,
+                   extra_outputs=[],  # "stmt" and/or "assembly" are useful for debugging
+                   filter_deps=[],
+                   function_name=None,
+                   generator_args="",
+                   generator_deps=[],
+                   generator_name=None,
+                   halide_target_features=[],
+                   halide_target_map=halide_library_default_target_map(),
+                   includes=[],
+                   namespace=None,
+                   visibility=None):
+  halide_generator(
+      name="%s_generator" % name,
+      srcs=srcs,
+      generator_name=generator_name,
+      deps=generator_deps,
+      includes=includes,
+      copts=copts,
+      visibility=visibility)
+
+  return halide_library_from_generator(
+      name=name,
+      generator=":%s_generator" % name,
+      deps=filter_deps,
+      visibility=visibility,
+      namespace=namespace,
+      includes=includes,
+      function_name=function_name,
+      generator_args=generator_args,
+      debug_codegen_level=debug_codegen_level,
+      halide_target_features=halide_target_features,
+      halide_target_map=halide_target_map,
+      extra_outputs=extra_outputs)

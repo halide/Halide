@@ -3,7 +3,7 @@ load(
     "halide_language_copts",
     "halide_language_linkopts",
     "halide_generator",
-    "halide_library",
+    "halide_library_from_generator",
     "halide_runtime_linkopts",
 )
 
@@ -51,10 +51,10 @@ halide_generator(
     deps = [":stubtest_generator"],
 )
 
-# ----------------- halide_library
+# ----------------- halide_library_from_generator
 
 # Libraries that don't require any generator args, features, etc
-[halide_library(
+[halide_library_from_generator(
     name = gen,
     generator = ":%s_generator" % gen,
     includes = ["."],
@@ -78,14 +78,14 @@ halide_generator(
 ]]
 
 # Generators that need extra args, etc
-halide_library(
+halide_library_from_generator(
     name = "cxx_mangling",
     generator = ":cxx_mangling_generator",
     includes = ["."],
     namespace = "HalideTest",
 )
 
-halide_library(
+halide_library_from_generator(
     name = "cxx_mangling_gpu",
     generator = ":cxx_mangling_generator",
     halide_target_features = ["cuda"],
@@ -93,7 +93,7 @@ halide_library(
     namespace = "HalideTest",
 )
 
-halide_library(
+halide_library_from_generator(
     name = "cxx_mangling_define_extern",
     generator = ":cxx_mangling_define_extern_generator",
     halide_target_features = ["user_context"],
@@ -102,7 +102,7 @@ halide_library(
     deps = [":cxx_mangling"],  # referenced via define_extern
 )
 
-halide_library(
+halide_library_from_generator(
     name = "matlab",
     generator = ":matlab_generator",
     halide_target_features = ["matlab"],
@@ -130,7 +130,7 @@ _METADATA_TESTER_GENERATOR_ARGS = " ".join([
     "array_outputs.size=2",
 ])
 
-halide_library(
+halide_library_from_generator(
     name = "metadata_tester",
     generator = ":metadata_tester_generator",
     generator_args = _METADATA_TESTER_GENERATOR_ARGS,
@@ -141,7 +141,7 @@ halide_library(
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "metadata_tester_ucon",
     generator = ":metadata_tester_generator",
     generator_args = _METADATA_TESTER_GENERATOR_ARGS,
@@ -153,14 +153,14 @@ halide_library(
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "msan",
     generator = ":msan_generator",
     halide_target_features = ["msan"],
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "multitarget",
     generator = ":multitarget_generator",
     halide_target_map = {"*": [
@@ -171,7 +171,7 @@ halide_library(
     namespace = "HalideTest",
 )
 
-[halide_library(
+[halide_library_from_generator(
     name = "nested_externs_%s" % gen_name,
     generator = ":nested_externs_%s_generator" % gen_name,
     includes = ["."],
@@ -180,7 +180,7 @@ halide_library(
     "leaf",
 ]]
 
-halide_library(
+halide_library_from_generator(
     name = "nested_externs_inner",
     generator = ":nested_externs_inner_generator",
     includes = ["."],
@@ -190,7 +190,7 @@ halide_library(
     ],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "nested_externs_root",
     generator = ":nested_externs_root_generator",
     includes = ["."],
@@ -200,14 +200,14 @@ halide_library(
     ],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "pyramid",
     generator = ":pyramid_generator",
     generator_args = "levels=10",
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "stubtest",
     generator = ":stubtest_generator",
     generator_args = " ".join([
@@ -222,20 +222,20 @@ halide_library(
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "stubuser",
     generator = ":stubuser_generator",
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "user_context",
     generator = ":user_context_generator",
     halide_target_features = ["user_context"],
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "user_context_insanity",
     generator = ":user_context_insanity_generator",
     halide_target_features = ["user_context"],
@@ -260,7 +260,7 @@ halide_library(
 
 # ----------------- AOT Tests
 
-# Simple AOT tests that predictably depend on a single halide_library of the same name
+# Simple AOT tests that predictably depend on a single halide_library_from_generator of the same name
 [cc_test(
     name = "%s_aottest" % test,
     srcs = ["%s_aottest.cpp" % test],

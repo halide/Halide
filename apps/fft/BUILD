@@ -1,9 +1,9 @@
 load(
     "@halide//:halide.bzl",
+    "halide_generator",
     "halide_language_copts",
     "halide_language_linkopts",
-    "halide_generator",
-    "halide_library",
+    "halide_library_from_generator",
     "halide_runtime_linkopts",
 )
 load("@halide//apps/support:exec_test.bzl", "exec_test")
@@ -58,28 +58,28 @@ halide_generator(
     deps = [":fft"],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "fft_forward_r2c",
     generator = ":fft_generator",
     generator_args = "direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=real output_number_type=complex",
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "fft_inverse_c2r",
     generator = ":fft_generator",
     generator_args = "direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=real",
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "fft_forward_c2c",
     generator = ":fft_generator",
     generator_args = "direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=complex output_number_type=complex",
     includes = ["."],
 )
 
-halide_library(
+halide_library_from_generator(
     name = "fft_inverse_c2c",
     generator = ":fft_generator",
     generator_args = "direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=complex",
