@@ -60,9 +60,17 @@ void HostClosure::visit(const Call *op) {
                    op->name == Call::image_store) {
             ref.write = true;
         }
+
+        // The Func's name and the associated .buffer are mentioned in the
+        // argument lists, but don't treat them as free variables.
+        ignore.push(bufname, 0);
+        ignore.push(bufname + ".buffer", 0);
+        Internal::Closure::visit(op);
+        ignore.pop(bufname + ".buffer");
+        ignore.pop(bufname);
+    } else {
+        Internal::Closure::visit(op);
     }
-    
-    Internal::Closure::visit(op);
 }
 
 void HostClosure::visit(const For *loop) {
