@@ -262,11 +262,11 @@ public:
             Expr code_size = Call::make(Int(32), Call::buffer_get_max, { buf_var, 0 }, Call::Extern);
             Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { buf_var }, Call::Extern);
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                       {module_state_ptr(), code_ptr, code_size,
-                                                        Expr((uint32_t)device_code.target().has_feature(Target::HVX_shared_object))});
+                                                       { module_state_ptr(), code_ptr, cast<uint64_t>(code_size),
+                                                         Expr((uint32_t)device_code.target().has_feature(Target::HVX_shared_object)) });
             s = Block::make(init_kernels, s);
         }
-   
+
         // TODO: This can probably go away due to general debug info at the submodule compile level.
         debug(1) << "Hexagon device code module: " << device_code << "\n";
 
