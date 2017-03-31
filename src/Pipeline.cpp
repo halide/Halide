@@ -3,13 +3,13 @@
 #include "Pipeline.h"
 #include "Argument.h"
 #include "Func.h"
+#include "InferArguments.h"
 #include "IRVisitor.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Outputs.h"
 #include "PrintLoopNest.h"
-#include "WrapExternStages.h"
 
 using namespace Halide::Internal;
 
@@ -40,27 +40,6 @@ Outputs static_library_outputs(const string &filename_prefix, const Target &targ
 }
 
 }  // namespace
-
-/** An inferred argument. Inferred args are either Params,
- * ImageParams, or Buffers. The first two are handled by the param
- * field, and global images are tracked via the buf field. These
- * are used directly when jitting, or used for validation when
- * compiling with an explicit argument list. */
-struct InferredArgument {
-    Argument arg;
-    Parameter param;
-    Buffer<> buffer;
-
-    bool operator<(const InferredArgument &other) const {
-        if (arg.is_buffer() && !other.arg.is_buffer()) {
-            return true;
-        } else if (other.arg.is_buffer() && !arg.is_buffer()) {
-            return false;
-        } else {
-            return arg.name < other.arg.name;
-        }
-    }
-};
 
 struct PipelineContents {
     mutable RefCount ref_count;
@@ -99,7 +78,9 @@ struct PipelineContents {
     /** A set of custom passes to use when lowering this Func. */
     vector<CustomLoweringPass> custom_lowering_passes;
 
-    /** The inferred arguments. */
+    /** The inferred arguments. Also the arguments to the main
+     * function in the jit_module above. The two must be updated
+     * together. */
     vector<InferredArgument> inferred_args;
 
     /** List of C funtions and Funcs to satisfy HalideExtern* and
@@ -285,160 +266,10 @@ void Pipeline::compile_to_file(const string &filename_prefix,
     m.compile(outputs);
 }
 
-namespace Internal {
-
-class InferArguments : public IRGraphVisitor {
-public:
-    vector<InferredArgument> &args;
-
-    InferArguments(vector<InferredArgument> &a, const vector<Function> &o, Stmt body)
-        : args(a), outputs(o) {
-        args.clear();
-        for (const Function &f : outputs) {
-            visit_function(f);
-        }
-        if (body.defined()) {
-            body.accept(this);
-        }
-    }
-
-private:
-    vector<Function> outputs;
-    set<string> visited_functions;
-
-    using IRGraphVisitor::visit;
-
-    bool already_have(const string &name) {
-        // Ignore dependencies on the output buffers
-        for (const Function &output : outputs) {
-            if (name == output.name() || starts_with(name, output.name() + ".")) {
-                return true;
-            }
-        }
-        for (const InferredArgument &arg : args) {
-            if (arg.arg.name == name) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void visit_exprs(const std::vector<Expr>& v) {
-        for (Expr i : v) {
-            visit_expr(i);
-        }
-    }
-
-    void visit_expr(Expr e) {
-        if (!e.defined()) return;
-        e.accept(this);
-    }
-
-    void visit_function(const Function& func) {
-        if (visited_functions.count(func.name())) return;
-        visited_functions.insert(func.name());
-
-        func.accept(this);
-
-        // Function::accept hits all the Expr children of the
-        // Function, but misses the buffers and images that might be
-        // extern arguments.
-        if (func.has_extern_definition()) {
-            for (const ExternFuncArgument &extern_arg : func.extern_arguments()) {
-                if (extern_arg.is_func()) {
-                    visit_function(Function(extern_arg.func));
-                } else if (extern_arg.is_buffer()) {
-                    include_buffer(extern_arg.buffer);
-                } else if (extern_arg.is_image_param()) {
-                    include_parameter(extern_arg.image_param);
-                }
-            }
-        }
-    }
-
-    void include_parameter(Parameter p) {
-        if (!p.defined()) return;
-        if (already_have(p.name())) return;
-
-        Expr def, min, max;
-        if (!p.is_buffer()) {
-            def = p.get_scalar_expr();
-            min = p.get_min_value();
-            max = p.get_max_value();
-        }
-
-        InferredArgument a = {
-            Argument(p.name(),
-                     p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                     p.type(), p.dimensions(), def, min, max),
-            p,
-            Buffer<>()};
-        args.push_back(a);
-
-        // Visit child expressions
-        if (!p.is_buffer()) {
-            visit_expr(def);
-            visit_expr(min);
-            visit_expr(max);
-        } else {
-            for (int i = 0; i < p.dimensions(); i++) {
-                visit_expr(p.min_constraint(i));
-                visit_expr(p.extent_constraint(i));
-                visit_expr(p.stride_constraint(i));
-            }
-        }
-    }
-
-    void include_buffer(Buffer<> b) {
-        if (!b.defined()) return;
-        if (already_have(b.name())) return;
-
-        InferredArgument a = {
-            Argument(b.name(), Argument::InputBuffer, b.type(), b.dimensions()),
-            Parameter(),
-            b};
-        args.push_back(a);
-    }
-
-    void visit(const Load *op) {
-        IRGraphVisitor::visit(op);
-        include_parameter(op->param);
-        include_buffer(op->image);
-    }
-
-    void visit(const Variable *op) {
-        IRGraphVisitor::visit(op);
-        include_parameter(op->param);
-        include_buffer(op->image);
-    }
-
-    void visit(const Call *op) {
-        IRGraphVisitor::visit(op);
-        if (op->func.defined()) {
-            Function fn(op->func);
-            visit_function(fn);
-        }
-        include_buffer(op->image);
-        include_parameter(op->param);
-    }
-};
-
-} // namespace Internal
-
 vector<Argument> Pipeline::infer_arguments(Stmt body) {
+    contents->inferred_args = ::infer_arguments(body, contents->outputs);
 
-    user_assert(defined()) << "Can't infer arguments on an undefined Pipeline\n";
-
-    // Infer an arguments vector by walking the IR
-    InferArguments infer_args(contents->inferred_args,
-                              contents->outputs,
-                              body);
-
-    // Sort the Arguments with all buffers first (alphabetical by name),
-    // followed by all non-buffers (alphabetical by name).
-    std::sort(contents->inferred_args.begin(), contents->inferred_args.end());
-
-    // Add the user context argument, or hook up our user context
+    // Add the user context argument if it's not already there, or hook up our user context
     // Parameter to any existing one.
     bool has_user_context = false;
     for (auto &arg : contents->inferred_args) {
@@ -470,89 +301,6 @@ vector<Argument> Pipeline::infer_arguments() {
     return infer_arguments(Stmt());
 }
 
-/** Check that all the necessary arguments are in an args vector. Any
- * images in the source that aren't in the args vector are returned. */
-vector<Buffer<>> Pipeline::validate_arguments(const vector<Argument> &args, Stmt body) {
-    infer_arguments(body);
-
-    vector<Buffer<>> images_to_embed;
-
-    for (const InferredArgument &arg : contents->inferred_args) {
-
-        if (arg.param.same_as(contents->user_context_arg.param)) {
-            // The user context is always in the inferred args, but is
-            // not required to be in the args list.
-            continue;
-        }
-
-        internal_assert(arg.arg.is_input()) << "Expected only input Arguments here";
-
-        bool found = false;
-        for (Argument a : args) {
-            found |= (a.name == arg.arg.name);
-        }
-
-        if (arg.buffer.defined() && !found) {
-            // It's a raw Buffer used that isn't in the args
-            // list. Embed it in the output instead.
-            images_to_embed.push_back(arg.buffer);
-            debug(1) << "Embedding image " << arg.buffer.name() << "\n";
-        } else if (!found) {
-            std::ostringstream err;
-            err << "Generated code refers to ";
-            if (arg.arg.is_buffer()) {
-                err << "image ";
-            }
-            err << "parameter " << arg.arg.name
-                << ", which was not found in the argument list.\n";
-
-            err << "\nArgument list specified: ";
-            for (size_t i = 0; i < args.size(); i++) {
-                err << args[i].name << " ";
-            }
-            err << "\n\nParameters referenced in generated code: ";
-            for (const InferredArgument &ia : contents->inferred_args) {
-                if (ia.arg.name != contents->user_context_arg.arg.name) {
-                    err << ia.arg.name << " ";
-                }
-            }
-            err << "\n\n";
-            user_error << err.str();
-        }
-    }
-
-    return images_to_embed;
-}
-
-vector<Argument> Pipeline::build_public_args(const vector<Argument> &args, const Target &target) const {
-    // Get all the arguments/global images referenced in this function.
-    vector<Argument> public_args = args;
-
-    // If the target specifies user context but it's not in the args
-    // vector, add it at the start (the jit path puts it in there
-    // explicitly).
-    const bool requires_user_context = target.has_feature(Target::UserContext);
-    bool has_user_context = false;
-    for (Argument arg : args) {
-        if (arg.name == contents->user_context_arg.arg.name) {
-            has_user_context = true;
-        }
-    }
-    if (requires_user_context && !has_user_context) {
-        public_args.insert(public_args.begin(), contents->user_context_arg.arg);
-    }
-
-    // Add the output buffer arguments
-    for (Function out : contents->outputs) {
-        for (Parameter buf : out.output_buffers()) {
-            public_args.push_back(Argument(buf.name(),
-                                           Argument::OutputBuffer,
-                                           buf.type(), buf.dimensions()));
-        }
-    }
-    return public_args;
-}
-
 Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target,
@@ -565,63 +313,56 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     internal_assert(!new_fn_name.empty()) << "new_fn_name cannot be empty\n";
     // TODO: Assert that the function name is legal
 
-    Stmt body;
+    vector<Argument> lowering_args(args);
 
-    std::vector<std::string> namespaces;
-    std::string simple_new_fn_name = extract_namespaces(new_fn_name, namespaces);
-
-    const Module &old_module = contents->module;
-    if (!old_module.functions().empty() &&
-        old_module.target() == target) {
-        // We can avoid relowering and just reuse the body from the
-        // old module.
-        for (const LoweredFunc &fn : old_module.functions()) {
-            if (fn.name == new_fn_name) {
-                body = fn.body;
-                break;
-            }
+    // If the target specifies user context but it's not in the args
+    // vector, add it at the start (the jit path puts it in there
+    // explicitly).
+    const bool requires_user_context = target.has_feature(Target::UserContext);
+    bool has_user_context = false;
+    for (Argument arg : lowering_args) {
+        if (arg.name == contents->user_context_arg.arg.name) {
+            has_user_context = true;
         }
-        debug(2) << "Reusing old module\n";
+    }
+    if (requires_user_context && !has_user_context) {
+        lowering_args.insert(lowering_args.begin(), contents->user_context_arg.arg);
     }
 
-    if (!body.defined()) {
+    const Module &old_module = contents->module;
+
+    bool same_compile = !old_module.functions().empty() && old_module.target() == target;
+    // Either generated name or one of the LoweredFuncs in the existing module has the same name.
+    same_compile = same_compile && fn_name.empty();
+    bool found_name = false;
+    for (const auto &lf : old_module.functions()) {
+        if (lf.name == fn_name) {
+            found_name = true;
+            break;
+        }
+    }
+    same_compile = same_compile && found_name;
+    // Number of args + number of outputs is the same as total args in existing LoweredFunc
+    same_compile = same_compile && (lowering_args.size() + outputs().size()) == old_module.functions().front().args.size();
+    // The initial args are the same.
+    same_compile = same_compile && std::equal(lowering_args.begin(), lowering_args.end(), old_module.functions().front().args.begin());
+    // Linkage is the same.
+    same_compile = same_compile && old_module.functions().front().linkage == linkage_type;
+    // The outputs of a Pipeline cannot change, so no need to test them.
+
+    if (same_compile) {
+        // We can avoid relowering and just reuse the existing module.
+        debug(2) << "Reusing old module\n";
+    } else {
         vector<IRMutator *> custom_passes;
         for (CustomLoweringPass p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
-        body = lower(contents->outputs, fn_name, target, custom_passes);
+        contents->module = lower(contents->outputs, new_fn_name, target, lowering_args, linkage_type, custom_passes);
     }
 
-    // Get all the arguments/global images referenced in this function.
-    vector<Argument> public_args = build_public_args(args, target);
-
-    vector<Buffer<>> global_images = validate_arguments(public_args, body);
-
-    // Create a module.
-    Module module(simple_new_fn_name, target);
-
-    // Add all the global images to the module.
-    for (Buffer<> buf : global_images) {
-        module.append(buf);
-    }
-
-    // Add the lowered Func to the module.
-    module.append(LoweredFunc(new_fn_name, public_args, body, linkage_type));
-
-    // Append a wrapper for this pipeline that accepts old buffer_ts
-    // and upgrades them. It will use the same name, so it will
-    // require C++ linkage. We don't need it when jitting.
-    if (!target.has_feature(Target::JIT)) {
-        add_legacy_wrapper(module, module.functions().back());
-    }
-
-    // Also append any wrappers for extern stages that expect the old buffer_t
-    wrap_legacy_extern_stages(module);
-
-    contents->module = module;
-
-    return module;
+    return contents->module;
 }
 
 std::string Pipeline::generate_function_name() const {
@@ -658,24 +399,24 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // Infer an arguments vector
     infer_arguments();
 
-    // Come up with a name for the generated function
-    string name = generate_function_name();
-
+    // Don't actually use the return value - it embeds all constant
+    // images and we don't want to do that when jitting. Instead
+    // use the vector of parameters found to make a more complete
+    // arguments list.
     vector<Argument> args;
     for (const InferredArgument &arg : contents->inferred_args) {
         args.push_back(arg.arg);
     }
 
-    // Compile to a module
-    Module module = compile_to_module(args, name, target);
+    // Come up with a name for the generated function
+    string name = generate_function_name();
 
-    // We need to infer the arguments again, because compiling (GPU
-    // and offload targets) might have added new buffers we need to
-    // embed.
+    // Compile to a module and also compile any submodules.
+    Module module = compile_to_module(args, name, target).resolve_submodules();
     auto f = module.get_function_by_name(name);
-    infer_arguments(f.body);
 
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+
     // Compile to jit module
     JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
 
@@ -961,31 +702,11 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     // Come up with the void * arguments to pass to the argv function
     vector<const void *> arg_values;
 
-    // Get the declared arguments to the function we'll be calling
-    // (via the argv wrapper)
-    const vector<LoweredArgument> &declared_args =
-        contents->module.functions().front().args;
-
-    // Get the list of argument-like things that have bound values
-    // we'll need to pass.
-    const vector<InferredArgument> &inferred_args = contents->inferred_args;
-
     debug(1) << "Begin args\n";
-    for (Argument arg : declared_args) {
-        if (arg.is_output()) break; // Handled below
-
-        // Look up each declared argument in the inferred arguments
-        // list to get its bound value
-        auto it = std::find_if(inferred_args.begin(), inferred_args.end(),
-                               [&](const InferredArgument &a) {return a.arg.name == arg.name;});
-        internal_assert(it != inferred_args.end())
-            << "Could not find declared argument: " << arg.name
-            << " in inferred arguments list\n";
-        auto inferred_arg = *it;
-
-        if (inferred_arg.param.defined() && inferred_arg.param.is_buffer()) {
+    for (const InferredArgument &arg : contents->inferred_args) {
+        if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
-            Buffer<> buf = inferred_arg.param.get_buffer();
+            Buffer<> buf = arg.param.get_buffer();
             if (buf.defined()) {
                 arg_values.push_back(buf.raw_buffer());
             } else {
@@ -993,16 +714,16 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
                 arg_values.push_back(nullptr);
             }
             debug(1) << "JIT input ImageParam argument ";
-        } else if (inferred_arg.param.defined()) {
-            arg_values.push_back(inferred_arg.param.get_scalar_address());
+        } else if (arg.param.defined()) {
+            arg_values.push_back(arg.param.get_scalar_address());
             debug(1) << "JIT input scalar argument ";
         } else {
             debug(1) << "JIT input Image argument ";
-            internal_assert(inferred_arg.buffer.defined());
-            arg_values.push_back(inferred_arg.buffer.raw_buffer());
+            internal_assert(arg.buffer.defined());
+            arg_values.push_back(arg.buffer.raw_buffer());
         }
         const void *ptr = arg_values.back();
-        debug(1) << inferred_arg.arg.name << " @ " << ptr << "\n";
+        debug(1) << arg.arg.name << " @ " << ptr << "\n";
     }
     debug(1) << "End args\n";
 

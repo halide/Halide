@@ -96,7 +96,7 @@ public:
      * const. */
     template<typename T,
              typename ...Args,
-             typename = std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>>
+             typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
     Realization(Buffer<T> &a, Args&&... args) {
         images = std::vector<Buffer<>>({a, args...});
     }
