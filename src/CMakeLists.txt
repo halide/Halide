@@ -498,6 +498,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveUndef.cpp
   Schedule.cpp
   ScheduleFunctions.cpp
+  ScheduleParam.cpp
   SelectGPUAPI.cpp
   Simplify.cpp
   SimplifySpecializations.cpp

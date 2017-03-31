@@ -2819,6 +2819,10 @@ protected:
                   const std::map<std::string, std::string> &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
 
+    ScheduleParamBase &get_schedule_param(const std::string &n) const {
+        return generator->find_schedule_param_by_name(n);
+    }
+
     // Output(s)
     // TODO: identify vars used
     Func get_output(const std::string &n) const {

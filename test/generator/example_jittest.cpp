@@ -49,8 +49,8 @@ int main(int argc, char **argv) {
 
         // We'll set "vectorize=false" in the ScheduleParams, just to
         // show that we can:
-        gen.set_vectorize(false)
-           .schedule();
+        gen.vectorize.set(false);
+        gen.schedule();
 
         Halide::Buffer<int32_t> img(kSize, kSize, 3);
         gen.realize(img);
