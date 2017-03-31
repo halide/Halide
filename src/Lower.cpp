@@ -13,6 +13,7 @@
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "Debug.h"
+#include "DebugArguments.h"
 #include "DebugToFile.h"
 #include "DeepCopy.h"
 #include "Deinterleave.h"
@@ -77,7 +78,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
     Module result_module(simple_pipeline_name, t);
-    
+
     // Compute an environment
     map<string, Function> env;
     for (Function f : output_funcs) {
@@ -369,6 +370,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     }
 
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
+
+    // If we're in debug mode, add code that prints the args.
+    if (t.has_feature(Target::Debug)) {
+        debug_arguments(&main_func);
+    }
+
     result_module.append(main_func);
 
     // Append a wrapper for this pipeline that accepts old buffer_ts
