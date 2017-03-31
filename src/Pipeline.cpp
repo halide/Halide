@@ -263,7 +263,7 @@ void Pipeline::compile_to_file(const string &filename_prefix,
 
 vector<Argument> Pipeline::infer_arguments(Stmt body) {
     contents->inferred_args = ::infer_arguments(body, contents->outputs);
-    
+
     // Add the user context argument.
     contents->inferred_args.push_back(contents->user_context_arg);
 
