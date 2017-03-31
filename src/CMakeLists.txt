@@ -283,6 +283,7 @@ set(HEADER_FILES
   ConciseCasts.h
   CPlusPlusMangle.h
   Debug.h
+  DebugArguments.h
   DebugToFile.h
   DeepCopy.h
   Definition.h
@@ -313,6 +314,7 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   ImageParam.h
+  InferArguments.h
   Interval.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
@@ -429,7 +431,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CSE.cpp
   CanonicalizeGPUVars.cpp
   Debug.cpp
-  Debug.cpp
+  DebugArguments.cpp
   DebugToFile.cpp
   DeepCopy.cpp
   Definition.cpp
@@ -457,6 +459,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   ImageParam.cpp
+  InferArguments.cpp
   Interval.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
