@@ -82,7 +82,7 @@ protected:
     // to LoopLevel::root() or LoopLevel::inlined().
     LoopLevel loop_level{"__invalid_func_name", "__invalid_var_name", false};
 
-    NO_INLINE ScheduleParamBase(const Type &t)
+    NO_INLINE explicit ScheduleParamBase(const Type &t)
         : sp_name(""), type(t),
           scalar(t, /*is_buffer*/ false, 0, "", /*is_explicit_name*/ false, 
             /*register_instance*/ false, /*is_removed_before_lowering*/ true),
@@ -90,7 +90,7 @@ protected:
         Internal::ObjectInstanceRegistry::register_instance(this, 0, Internal::ObjectInstanceRegistry::ScheduleParam, this, nullptr);
     }
 
-    NO_INLINE explicit ScheduleParamBase(const Type &t, const std::string &name)
+    NO_INLINE ScheduleParamBase(const Type &t, const std::string &name)
         : sp_name(name), type(t),
           scalar(t, /*is_buffer*/ false, 0, name + ".schedule_param_param", 
             /*is_explicit_name*/ true, /*register_instance*/ false, /*is_removed_before_lowering*/ true),
