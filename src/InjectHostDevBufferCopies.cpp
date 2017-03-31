@@ -572,7 +572,8 @@ class InjectBufferCopies : public IRMutator {
             debug(4) << "Eliding host alloc for " << op->name << "\n";
             stmt = Allocate::make(op->name, op->type, op->extents, const_false(), op->body);
         } else if (on_single_device &&
-                   buf_info.dev_touched) {
+                   buf_info.dev_touched &&
+                   buf_info.device_first_touched != DeviceAPI::None) {
             debug(4) << "Making combined host/device alloc for " << op->name << "\n";
             Stmt inner_body = op->body;
             std::vector<const LetStmt *> body_lets;
@@ -694,6 +695,8 @@ class InjectBufferCopies : public IRMutator {
             if (then_state.device_first_touched == else_state.device_first_touched) {
                 merged_state.device_first_touched = then_state.device_first_touched;
             } else {
+                // Forbid a single shared host/dev allocation. Might
+                // result in allocating device memory pointlessly.
                 merged_state.device_first_touched = DeviceAPI::None;
             }
 
