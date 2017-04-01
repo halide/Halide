@@ -13,11 +13,13 @@ package(
 )
 
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
-load("@halide//:halide.bzl", "halide_config_settings", "halide_language_copts")
+load("@halide//:halide.bzl", "halide_config_settings", "halide_language_copts", "halide_library_runtimes")
 load("@halide//:tools/halide_internal_build_defs.bzl", "gen_runtime_targets", "runtime_srcs")
 load("@llvm//:llvm_internal_build_defs.bzl", "get_llvm_version", "get_llvm_enabled_components", "get_llvm_linkopts")
 
 halide_config_settings()
+
+halide_library_runtimes()
 
 filegroup(
     name = "runtime_headers",
