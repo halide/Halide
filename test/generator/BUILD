@@ -88,7 +88,7 @@ halide_library_from_generator(
 halide_library_from_generator(
     name = "cxx_mangling_gpu",
     generator = ":cxx_mangling_generator",
-    halide_target_features = ["cuda"],
+    #halide_target_features = ["cuda"],     # TODO
     includes = ["."],
     namespace = "HalideTest",
 )
@@ -267,7 +267,6 @@ halide_library_from_generator(
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":%s" % test,
-        "@halide//:language",
     ],
 ) for test in [
     "acquire_release",
@@ -299,7 +298,6 @@ cc_test(
     srcs = ["cleanup_on_error_aottest.cpp"],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        "@halide//:language",
         ":cleanup_on_error",
         "//:device_interface",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
@@ -310,7 +308,6 @@ cc_test(
     srcs = ["cxx_mangling_aottest.cpp"],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        "@halide//:language",
         ":cxx_mangling",
         ":cxx_mangling_gpu",
     ],
@@ -321,7 +318,6 @@ cc_test(
     srcs = ["metadata_tester_aottest.cpp"],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        "@halide//:language",
         ":metadata_tester",
         ":metadata_tester_ucon",
     ],
@@ -332,7 +328,6 @@ cc_test(
     srcs = ["gpu_object_lifetime_aottest.cpp"],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        "@halide//:language",
         ":gpu_object_lifetime",
         "//test/common:gpu_object_lifetime_tracker",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
@@ -343,7 +338,6 @@ cc_test(
     srcs = ["nested_externs_aottest.cpp"],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        "@halide//:language",
         ":nested_externs_root",
     ],
 )
@@ -355,6 +349,5 @@ cc_test(
     deps = [
         ":tiled_blur",
         ":tiled_blur_blur",
-        "@halide//:language",
     ],
 )
