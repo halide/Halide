@@ -294,6 +294,7 @@ SOURCE_FILES = \
   CSE.cpp \
   CanonicalizeGPUVars.cpp \
   Debug.cpp \
+  DebugArguments.cpp \
   DebugToFile.cpp \
   DeepCopy.cpp \
   Definition.cpp \
@@ -379,6 +380,7 @@ SOURCE_FILES = \
   Type.cpp \
   UnifyDuplicateLets.cpp \
   UniquifyVariableNames.cpp \
+  UnpackBuffers.cpp \
   UnrollLoops.cpp \
   Util.cpp \
   Var.cpp \
@@ -420,6 +422,7 @@ HEADER_FILES = \
   CSE.h \
   CanonicalizeGPUVars.h \
   Debug.h \
+  DebugArguments.h \
   DebugToFile.h \
   DeepCopy.h \
   Definition.h \
@@ -516,6 +519,7 @@ HEADER_FILES = \
   Type.h \
   UnifyDuplicateLets.h \
   UniquifyVariableNames.h \
+  UnpackBuffers.h \
   UnrollLoops.h \
   Util.h \
   Var.h \

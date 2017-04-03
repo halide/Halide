@@ -530,7 +530,8 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
         << "Value index out of range in call to halide function\n";
     internal_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Call to undefined halide function\n";
-    return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer<>(), Parameter());
+    return make(func.output_types()[(size_t)idx], func.name(), args, Halide,
+                func.get_contents(), idx, Buffer<>(), Parameter());
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
@@ -815,6 +816,8 @@ Call::ConstString Call::select_mask = "select_mask";
 Call::ConstString Call::extract_mask_element = "extract_mask_element";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
+Call::ConstString Call::buffer_get_extent = "_halide_buffer_get_extent";
+Call::ConstString Call::buffer_get_stride = "_halide_buffer_get_stride";
 Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
 Call::ConstString Call::buffer_get_device = "_halide_buffer_get_device";
@@ -822,6 +825,9 @@ Call::ConstString Call::buffer_get_device_interface = "_halide_buffer_get_device
 Call::ConstString Call::buffer_get_shape = "_halide_buffer_get_shape";
 Call::ConstString Call::buffer_get_host_dirty = "_halide_buffer_get_host_dirty";
 Call::ConstString Call::buffer_get_device_dirty = "_halide_buffer_get_device_dirty";
+Call::ConstString Call::buffer_get_type_code = "_halide_buffer_get_type_code";
+Call::ConstString Call::buffer_get_type_bits = "_halide_buffer_get_type_bits";
+Call::ConstString Call::buffer_get_type_lanes = "_halide_buffer_get_type_lanes";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
 Call::ConstString Call::buffer_set_device_dirty = "_halide_buffer_set_device_dirty";
 Call::ConstString Call::buffer_is_bounds_query = "_halide_buffer_is_bounds_query";

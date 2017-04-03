@@ -92,11 +92,16 @@ char *strncpy(char *dst, const char *src, size_t n);
 // arg to dst. Does not write to pointer end or beyond. Returns
 // pointer to one beyond the last character written so that calls can
 // be chained.
+
+struct halide_buffer_t;
+struct halide_type_t;
 WEAK char *halide_string_to_string(char *dst, char *end, const char *arg);
 WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scientific);
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits);
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int digits);
 WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
+WEAK char *halide_buffer_to_string(char *dst, char *end, const halide_buffer_t *arg);
+WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *arg);
 
 // Search the current process for a symbol with the given name.
 WEAK void *halide_get_symbol(const char *name);
