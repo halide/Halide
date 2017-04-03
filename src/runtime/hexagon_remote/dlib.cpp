@@ -431,8 +431,6 @@ struct dlib_t {
     }
 };
 
-// dlopen a relocatable (but not yet relocated) object file in
-// memory. The object should be compiled with -fno-pic.
 void *mmap_dlopen(const void *code, size_t size) {
     dlib_t *dlib = (dlib_t *)malloc(sizeof(dlib_t));
     if (!dlib) {
@@ -449,7 +447,6 @@ void *mmap_dlopen(const void *code, size_t size) {
     return dlib;
 }
 
-// Find a symbol in a handle returned by obj_dlopen_mem
 void *mmap_dlsym(void *from, const char *name) {
     if (!from) return NULL;
 
@@ -460,7 +457,6 @@ void *mmap_dlsym(void *from, const char *name) {
     return (void *)dlib->get_symbol_addr(sym);
 }
 
-// Release an object opened by obj_dlopen_mem
 int mmap_dlclose(void *dlib) {
     // TODO: Should we run .dtors?
 
