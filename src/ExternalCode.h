@@ -88,7 +88,7 @@ public:
      * it is generic llvm bitcode. If the OS is OSUnknown, it applies
      * to all operationg systems. The bit width must match.
      *
-     * Ignoring feature flags isn't too important since generaly
+     * Ignoring feature flags isn't too important since generally
      * ExternalCode will be constructed in a Generator which has
      * access to the feature flags in effect and can select code
      * qppropriately. */
