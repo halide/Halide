@@ -40,13 +40,10 @@ int main(int argc, char **argv) {
 
     Internal::JITModule jit_module(module, forty_two, {});
     
-    auto argv_wrapper = jit_module.argv_function();
-
+    auto main_function = (int (*)(halide_buffer_t *buf))jit_module.main_function();
     Buffer<int32_t> buf(16, 16);
-    const void *args[1];
-    args[0] = buf.raw_buffer();
- 
-    int ret_code = argv_wrapper(args);
+
+    int ret_code = main_function(buf.raw_buffer());
 
     assert(ret_code == 0);
     for (int i = 0; i < 16; i++) {
