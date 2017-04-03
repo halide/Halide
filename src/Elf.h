@@ -17,7 +17,10 @@ namespace Elf {
 // symbols, etc.) with a weakly referenced graph of pointers. The
 // Object datastructure owns all of the objects. This namespace exists
 // because it is very difficult to use LLVM's object parser to modify
-// an object (it's fine for parsing only).
+// an object (it's fine for parsing only). This was built using
+// http://www.skyfree.org/linux/references/ELF_Format.pdf as a reference
+// for the ELF structs and constants.
+
 
 class Object;
 class Symbol;
@@ -78,13 +81,19 @@ public:
 
     /** Accesses the name of this symbol. */
     ///@{
-    Symbol &set_name(const std::string &name) { this->name = name; return *this; }
+    Symbol &set_name(const std::string &name) {
+        this->name = name;
+        return *this;
+    }
     const std::string &get_name() const { return name; }
     ///@}
 
     /** Accesses the type of this symbol. */
     ///@{
-    Symbol &set_type(Type type) { this->type = type; return *this; }
+    Symbol &set_type(Type type) {
+        this->type = type;
+        return *this;
+    }
     Type get_type() const { return type; }
     ///@}
 
@@ -134,21 +143,33 @@ public:
     /** The type of relocation to be applied. The meaning of this
      * value depends on the machine of the object. */
     ///@{
-    Relocation &set_type(uint32_t type) { this->type = type; return *this; }
+    Relocation &set_type(uint32_t type) {
+        this->type = type;
+        return *this;
+    }
     uint32_t get_type() const { return type; }
     ///@}
 
     /** Where to apply the relocation. This is relative to the section
      * the relocation belongs to. */
     ///@{
-    Relocation &set_offset(uint64_t offset) { this->offset = offset; return *this; }
+    Relocation &set_offset(uint64_t offset) {
+        this->offset = offset;
+        return *this;
+    }
     uint64_t get_offset() const { return offset; }
     ///@}
 
     /** The value to replace with the relocation is the address of the symbol plus the addend. */
     ///@{
-    Relocation &set_symbol(const Symbol *symbol) { this->symbol = symbol; return *this; }
-    Relocation &set_addend(int64_t addend) { this->addend = addend; return *this; }
+    Relocation &set_symbol(const Symbol *symbol) {
+        this->symbol = symbol;
+        return *this;
+    }
+    Relocation &set_addend(int64_t addend) {
+        this->addend = addend;
+        return *this;
+    }
     const Symbol *get_symbol() const { return symbol; }
     int64_t get_addend() const { return addend; }
     ///@}
@@ -204,15 +225,29 @@ public:
     Section() {}
     Section(const std::string &name, Type type) : name(name), type(type) {}
 
-    Section &set_name(const std::string &name) { this->name = name; return *this; }
+    Section &set_name(const std::string &name) {
+        this->name = name;
+        return *this;
+    }
     const std::string &get_name() const { return name; }
 
-    Section &set_type(Type type) { this->type = type; return *this; }
+    Section &set_type(Type type) {
+        this->type = type;
+        return *this;
+    }
     Type get_type() const { return type; }
 
-    Section &set_flag(Flag flag) { this->flags |= flag; return *this; }
-    Section &remove_flag(Flag flag) { this->flags &= ~flag; return *this; }
-    Section &set_flags(uint32_t flags) { this->flags = flags; return *this; }
+    Section &set_flag(Flag flag) {
+        this->flags |= flag;
+        return *this; }
+    Section &remove_flag(Flag flag) {
+        this->flags &= ~flag;
+        return *this;
+    }
+    Section &set_flags(uint32_t flags) {
+        this->flags = flags;
+        return *this;
+    }
     uint32_t get_flags() const { return flags; }
     bool is_alloc() const { return (flags & SHF_ALLOC) != 0; }
     bool is_writable() const { return (flags & SHF_WRITE) != 0; }
@@ -220,16 +255,28 @@ public:
     /** Get or set the size of the section. The size may be larger
      * than the content. */
     ///@{
-    Section &set_size(uint64_t size) { this->size = size; return *this; }
+    Section &set_size(uint64_t size) {
+        this->size = size;
+        return *this;
+    }
     uint64_t get_size() const { return std::max(size, contents.size()); }
     ///@}
 
-    Section &set_alignment(uint64_t alignment) { this->alignment = alignment; return *this; }
+    Section &set_alignment(uint64_t alignment) {
+        this->alignment = alignment;
+        return *this;
+    }
     uint64_t get_alignment() const { return alignment; }
 
-    Section &set_contents(std::vector<char> contents) { this->contents = std::move(contents); return *this; }
+    Section &set_contents(std::vector<char> contents) {
+        this->contents = std::move(contents);
+        return *this;
+    }
     template <typename It>
-    Section &set_contents(It begin, It end) { this->contents.assign(begin, end); return *this; }
+    Section &set_contents(It begin, It end) {
+        this->contents.assign(begin, end);
+        return *this;
+    }
     template <typename It>
     Section &append_contents(It begin, It end) {
         this->contents.insert(this->contents.end(), begin, end);
@@ -255,9 +302,15 @@ public:
     size_t contents_size() const { return contents.size(); }
     bool contents_empty() const { return contents.empty(); }
 
-    Section &set_relocations(std::vector<Relocation> relocs) { this->relocs = std::move(relocs); return *this; }
+    Section &set_relocations(std::vector<Relocation> relocs) {
+        this->relocs = std::move(relocs);
+        return *this;
+    }
     template <typename It>
-    Section &set_relocations(It begin, It end) { this->relocs.assign(begin, end); return *this; }
+    Section &set_relocations(It begin, It end) {
+        this->relocs.assign(begin, end);
+        return *this;
+    }
     void add_relocation(const Relocation &reloc) { relocs.push_back(reloc); }
     relocation_iterator relocations_begin() { return relocs.begin(); }
     relocation_iterator relocations_end() { return relocs.end(); }
@@ -346,11 +399,26 @@ public:
     uint64_t get_entry() const { return entry; }
     uint32_t get_flags() const { return flags; }
 
-    Object &set_type(Type type) { this->type = type; return *this; }
-    Object &set_machine(uint16_t machine) { this->machine = machine; return *this; }
-    Object &set_version(uint32_t version) { this->version = version; return *this; }
-    Object &set_entry(uint64_t entry) { this->entry = entry; return *this; }
-    Object &set_flags(uint32_t flags) { this->flags = flags; return *this; }
+    Object &set_type(Type type) {
+        this->type = type;
+        return *this;
+    }
+    Object &set_machine(uint16_t machine) {
+        this->machine = machine;
+        return *this;
+    }
+    Object &set_version(uint32_t version) {
+        this->version = version;
+        return *this;
+    }
+    Object &set_entry(uint64_t entry) {
+        this->entry = entry;
+        return *this;
+    }
+    Object &set_flags(uint32_t flags) {
+        this->flags = flags;
+        return *this;
+    }
 
     /** Parse an object in memory to an Object. */
     static std::unique_ptr<Object> parse_object(const char *data, size_t size);

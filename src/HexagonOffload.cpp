@@ -831,7 +831,6 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
                         Module &containing_module) {
     // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
-    target = target.with_feature(Target::NoAsserts);
 
     // These feature flags are propagated from the host target to the
     // device module.
