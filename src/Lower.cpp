@@ -13,6 +13,7 @@
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
 #include "Debug.h"
+#include "DebugArguments.h"
 #include "DebugToFile.h"
 #include "DeepCopy.h"
 #include "Deinterleave.h"
@@ -55,6 +56,7 @@
 #include "TrimNoOps.h"
 #include "UnifyDuplicateLets.h"
 #include "UniquifyVariableNames.h"
+#include "UnpackBuffers.h"
 #include "UnrollLoops.h"
 #include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
@@ -77,7 +79,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
 
     Module result_module(simple_pipeline_name, t);
-    
+
     // Compute an environment
     map<string, Function> env;
     for (Function f : output_funcs) {
@@ -200,6 +202,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
+
+    debug(1) << "Unpacking buffer arguments...\n";
+    s = unpack_buffers(s);
+    debug(2) << "Lowering after unpacking buffer arguments...\n";
 
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
@@ -369,6 +375,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     }
 
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
+
+    // If we're in debug mode, add code that prints the args.
+    if (t.has_feature(Target::Debug)) {
+        debug_arguments(&main_func);
+    }
+
     result_module.append(main_func);
 
     // Append a wrapper for this pipeline that accepts old buffer_ts
