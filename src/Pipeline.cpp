@@ -702,7 +702,6 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
     // Come up with the void * arguments to pass to the argv function
     vector<const void *> arg_values;
 
-    debug(1) << "Begin args\n";
     for (const InferredArgument &arg : contents->inferred_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
@@ -725,7 +724,6 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
         const void *ptr = arg_values.back();
         debug(1) << arg.arg.name << " @ " << ptr << "\n";
     }
-    debug(1) << "End args\n";
 
     // Then the outputs
     for (size_t i = 0; i < dst.size(); i++) {
