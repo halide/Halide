@@ -283,6 +283,7 @@ set(HEADER_FILES
   ConciseCasts.h
   CPlusPlusMangle.h
   Debug.h
+  DebugArguments.h
   DebugToFile.h
   DeepCopy.h
   Definition.h
@@ -314,6 +315,7 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   ImageParam.h
+  InferArguments.h
   Interval.h
   InjectHostDevBufferCopies.h
   InjectImageIntrinsics.h
@@ -376,6 +378,7 @@ set(HEADER_FILES
   Type.h
   UnifyDuplicateLets.h
   UniquifyVariableNames.h
+  UnpackBuffers.h
   UnrollLoops.h
   Util.h
   Var.h
@@ -430,7 +433,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CSE.cpp
   CanonicalizeGPUVars.cpp
   Debug.cpp
-  Debug.cpp
+  DebugArguments.cpp
   DebugToFile.cpp
   DeepCopy.cpp
   Definition.cpp
@@ -459,6 +462,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   IRPrinter.cpp
   IRVisitor.cpp
   ImageParam.cpp
+  InferArguments.cpp
   Interval.cpp
   InjectHostDevBufferCopies.cpp
   InjectImageIntrinsics.cpp
@@ -515,6 +519,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Type.cpp
   UnifyDuplicateLets.cpp
   UniquifyVariableNames.cpp
+  UnpackBuffers.cpp
   UnrollLoops.cpp
   Util.cpp
   Var.cpp

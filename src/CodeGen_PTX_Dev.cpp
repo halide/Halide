@@ -85,12 +85,6 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         for (auto &fn_arg : function->args()) {
 
             string arg_sym_name = args[i].name;
-            if (args[i].is_buffer) {
-                // HACK: codegen expects a load from foo to use base
-                // address 'foo.host', so we store the device pointer
-                // as foo.host in this scope.
-                arg_sym_name += ".host";
-            }
             sym_push(arg_sym_name, &fn_arg);
             fn_arg.setName(arg_sym_name);
             arg_sym_names.push_back(arg_sym_name);
@@ -192,12 +186,12 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
-        sym_push(alloc->name + ".host", shared_base);
+        sym_push(alloc->name, shared_base);
     } else {
 
         debug(2) << "Allocate " << alloc->name << " on device\n";
 
-        string allocation_name = alloc->name + ".host";
+        string allocation_name = alloc->name;
         debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
         // Jump back to the entry and generate an alloca. Note that by
@@ -221,7 +215,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 }
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
-    sym_pop(f->name + ".host");
+    sym_pop(f->name);
 }
 
 void CodeGen_PTX_Dev::visit(const AssertStmt *op) {

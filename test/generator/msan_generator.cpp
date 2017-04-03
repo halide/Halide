@@ -11,7 +11,7 @@ public:
         input(x, y, c) = cast<int32_t>(x + y + c);
 
         // This just makes an exact copy
-        msan_extern_stage.define_extern("msan_extern_stage", {input}, Int(32), 3);
+        msan_extern_stage.define_extern("msan_extern_stage", {input}, Int(32), 3, NameMangling::C);
 
         RDom r(0, 4);
         msan_output(x, y, c) = sum(msan_extern_stage(r, y, c));
