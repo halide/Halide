@@ -27,8 +27,10 @@ llvm::StructType *build_closure_type(const Closure& closure, llvm::StructType *b
  * referenced state. Requires you to pass it a type and struct to fill in,
  * a scope to retrieve the llvm values from and a builder to place
  * the packing code. */
-void pack_closure(llvm::Type *type, llvm::Value *dst,
-                  const Closure& closure, const Scope<llvm::Value *> &src,
+void pack_closure(llvm::StructType *type,
+                  llvm::Value *dst,
+                  const Closure& closure,
+                  const Scope<llvm::Value *> &src,
                   llvm::StructType *buffer_t,
                   llvm::IRBuilder<> *builder);
 
@@ -36,8 +38,10 @@ void pack_closure(llvm::Type *type, llvm::Value *dst,
  * referenced state into a symbol table. Requires you to pass it a
  * state struct type and value, a scope to fill, and a builder to place the
  * unpacking code. */
-void unpack_closure(const Closure& closure, Scope<llvm::Value *> &dst,
-                    llvm::Type *type, llvm::Value *src,
+void unpack_closure(const Closure& closure,
+                    Scope<llvm::Value *> &dst,
+                    llvm::StructType *type,
+                    llvm::Value *src,
                     llvm::IRBuilder<> *builder);
 
 /** Get the llvm type equivalent to a given halide type */

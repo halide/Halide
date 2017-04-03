@@ -517,6 +517,7 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
     case DeviceAPI::GLSL:          return Target::OpenGL;
     case DeviceAPI::OpenGLCompute: return Target::OpenGLCompute;
     case DeviceAPI::Metal:         return Target::Metal;
+    case DeviceAPI::Hexagon:       return Target::HVX_128;
     default:                       return Target::FeatureEnd;
     }
 }

@@ -83,9 +83,6 @@ public:
 
     /** External allocations referenced. */
     std::map<std::string, Buffer> buffers;
-
-    /** The Halide names of the external symbols (in the same order as llvm_types). */
-    std::vector<std::string> names() const;
 };
 
 }}

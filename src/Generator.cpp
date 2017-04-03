@@ -545,6 +545,7 @@ void StubEmitter::emit() {
     indent_level++;
     stream << indent() << ": " << class_name << "(*context, inputs, params) {}\n";
     stream << "\n";
+    indent_level--;
 
     if (!generator_params.empty()) {
         stream << indent() << "// templated construction method with inputs\n";
@@ -587,7 +588,6 @@ void StubEmitter::emit() {
         indent_level--;
         stream << indent() << ");\n";
         stream << indent() << "return " << class_name << "(context, inputs, gp);\n";
-        indent_level--;
         indent_level--;
         stream << indent() << "}\n";
         stream << "\n";
