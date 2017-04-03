@@ -47,6 +47,9 @@ struct PipelineContents {
     // Cached lowered stmt
     Module module;
 
+    // Name of the generated function
+    string name;
+
     // Cached jit-compiled code
     JITModule jit_module;
     Target jit_target;
@@ -75,7 +78,9 @@ struct PipelineContents {
     /** A set of custom passes to use when lowering this Func. */
     vector<CustomLoweringPass> custom_lowering_passes;
 
-    /** The inferred arguments. */
+    /** The inferred arguments. Also the arguments to the main
+     * function in the jit_module above. The two must be updated
+     * together. */
     vector<InferredArgument> inferred_args;
 
     /** List of C funtions and Funcs to satisfy HalideExtern* and
@@ -263,9 +268,19 @@ void Pipeline::compile_to_file(const string &filename_prefix,
 
 vector<Argument> Pipeline::infer_arguments(Stmt body) {
     contents->inferred_args = ::infer_arguments(body, contents->outputs);
-    
-    // Add the user context argument.
-    contents->inferred_args.push_back(contents->user_context_arg);
+
+    // Add the user context argument if it's not already there, or hook up our user context
+    // Parameter to any existing one.
+    bool has_user_context = false;
+    for (auto &arg : contents->inferred_args) {
+        if (arg.arg.name == contents->user_context_arg.arg.name) {
+            arg = contents->user_context_arg;
+            has_user_context = true;
+        }
+    }
+    if (!has_user_context) {
+        contents->inferred_args.push_back(contents->user_context_arg);
+    }
 
     // Return the inferred argument types, minus any constant images
     // (we'll embed those in the binary by default), and minus the user_context arg.
@@ -384,24 +399,24 @@ void *Pipeline::compile_jit(const Target &target_arg) {
     // Infer an arguments vector
     infer_arguments();
 
-    // Come up with a name for the generated function
-    string name = generate_function_name();
-
+    // Don't actually use the return value - it embeds all constant
+    // images and we don't want to do that when jitting. Instead
+    // use the vector of parameters found to make a more complete
+    // arguments list.
     vector<Argument> args;
     for (const InferredArgument &arg : contents->inferred_args) {
         args.push_back(arg.arg);
     }
 
+    // Come up with a name for the generated function
+    string name = generate_function_name();
+
     // Compile to a module and also compile any submodules.
     Module module = compile_to_module(args, name, target).resolve_submodules();
-
-    // We need to infer the arguments again, because compiling (GPU
-    // and offload targets) might have added new buffers we need to
-    // embed.
     auto f = module.get_function_by_name(name);
-    infer_arguments(f.body);
 
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+
     // Compile to jit module
     JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
 
@@ -683,12 +698,11 @@ vector<const void *> Pipeline::prepare_jit_call_arguments(Realization dst, const
             << "\" has type " << type << ".\n";
     }
 
+
     // Come up with the void * arguments to pass to the argv function
-    const vector<InferredArgument> &input_args = contents->inferred_args;
     vector<const void *> arg_values;
 
-    // First the inputs
-    for (InferredArgument arg : input_args) {
+    for (const InferredArgument &arg : contents->inferred_args) {
         if (arg.param.defined() && arg.param.is_buffer()) {
             // ImageParam arg
             Buffer<> buf = arg.param.get_buffer();
@@ -794,16 +808,6 @@ void Pipeline::realize(Realization dst, const Target &t) {
     }
 
     vector<const void *> args = prepare_jit_call_arguments(dst, target);
-
-    for (size_t i = 0; i < contents->inferred_args.size(); i++) {
-        const InferredArgument &arg = contents->inferred_args[i];
-        const void *arg_value = args[i];
-        if (arg.param.defined()) {
-            user_assert(arg_value != nullptr)
-                << "Can't realize a pipeline because ImageParam "
-                << arg.param.name() << " is not bound to a Buffer\n";
-        }
-    }
 
     // We need to make a context for calling the jitted function to
     // carry the the set of custom handlers. Here's how handlers get
