@@ -599,8 +599,11 @@ public:
     template<typename T2, int D2>
     Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
         assert_can_convert_from(other);
-        std::swap(alloc, other.alloc);
-        std::swap(dev_ref_count, other.dev_ref_count);
+        decref();
+        alloc = other.alloc;
+        other.alloc = nullptr;
+        dev_ref_count = other.dev_ref_count;
+        other.dev_ref_count = nullptr;
         free_shape_storage();
         buf = other.buf;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
@@ -609,8 +612,11 @@ public:
 
     /** Standard move-assignment operator */
     Buffer<T, D> &operator=(Buffer<T, D> &&other) {
-        std::swap(alloc, other.alloc);
-        std::swap(dev_ref_count, other.dev_ref_count);
+        decref();
+        alloc = other.alloc;
+        other.alloc = nullptr;
+        dev_ref_count = other.dev_ref_count;
+        other.dev_ref_count = nullptr;
         free_shape_storage();
         buf = other.buf;
         move_shape_from(std::forward<Buffer<T, D>>(other));
