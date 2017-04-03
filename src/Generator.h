@@ -2187,8 +2187,21 @@ public:
     virtual ~GeneratorContext() {};
     virtual Target get_target() const = 0;
 
-    // TODO: naming, exact contents of map
     using ExternsMap = std::map<std::string, ExternalCode>;
+
+    /** Generators can register ExternalCode objects onto
+     * themselves. The Generator infrastructure will arrange to have
+     * this ExternalCode appended to the Module that is finally
+     * compiled using the Generator. This allows encapsulating
+     * functionality that depends on external libraries or handwritten
+     * code for various targets. The name argument should match the
+     * name of the ExternalCode block and is used to ensure the same
+     * code block is not duplicated in the output. Halide does not do
+     * anything other than to compare names for equality. To guarantee
+     * uniqueness in public code, we suggest using a Java style
+     * inverted domain name followed by organization specific
+     * naming. E.g.:
+     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7 */
     virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
 
 protected:

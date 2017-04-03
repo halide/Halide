@@ -281,7 +281,7 @@ Module Module::resolve_submodules() const {
     for (const auto &m : submodules()) {
         Module copy(m.resolve_submodules());
 
-        // Propgate external code blocks.
+        // Propagate external code blocks.
         for (const auto &ec : external_code()) {
             // TODO(zalman): Is this the right thing to do?
             bool already_in_list = false;
