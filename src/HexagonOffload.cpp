@@ -603,27 +603,28 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
 }
 
 class InjectHexagonRpc : public IRMutator {
-    std::map<std::string, Expr> state_vars;
+    std::map<std::string, Expr> state_bufs;
 
-    Module device_code;
+    Module &device_code;
 
     // Alignment info for Int(32) variables in scope, so we don't lose
     // the information when creating Hexagon kernels.
     Scope<ModulusRemainder> alignment_info;
 
     Expr state_var(const std::string& name, Type type) {
-        Expr& var = state_vars[name];
-        if (!var.defined()) {
-            auto storage = Buffer<void *>::make_scalar(name + "_buf");
-            storage() = nullptr;
-            var = Load::make(type_of<void*>(), storage.name(), 0, storage, Parameter(), const_true());
-        }
-        return var;
+        return Let::make(name, state_var_ptr(name, type),
+                         Load::make(type_of<void*>(), name, 0,
+                                    Buffer<>(), Parameter(), const_true()));
     }
 
     Expr state_var_ptr(const std::string& name, Type type) {
-        Expr var = state_var(name, type);
-        return Call::make(Handle(), Call::address_of, {var}, Call::Intrinsic);
+        Expr &buf = state_bufs[name];
+        if (!buf.defined()) {
+            auto storage = Buffer<void *>::make_scalar(name + "_buf");
+            storage() = nullptr;
+            buf = Variable::make(type_of<halide_buffer_t *>(), storage.name() + ".buffer", storage);
+        }
+        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
     Expr module_state() {
@@ -639,8 +640,8 @@ class InjectHexagonRpc : public IRMutator {
     Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
         Buffer<uint8_t> code((int)size, name);
         memcpy(code.data(), buffer, (int)size);
-        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter(), const_true());
-        return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
+        Expr buf = Variable::make(type_of<halide_buffer_t *>(), string(name) + ".buffer", code);
+        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
     using IRMutator::visit;
@@ -701,11 +702,19 @@ class InjectHexagonRpc : public IRMutator {
             // Add an assert to the body that validates the
             // alignment of the buffer.
             if (!device_code.target().has_feature(Target::NoAsserts)) {
-                Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first + ".host"));
+                Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first));
                 Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
                                         {i.first, alignment}, Call::Extern);
                 body = Block::make(AssertStmt::make(host_ptr % alignment == 0, error), body);
             }
+
+            // Unpack buffer parameters into the scope. They come in as host/dev struct pairs.
+            Expr buf = Variable::make(Handle(), i.first + ".buffer");
+            Expr host_ptr = Call::make(Handle(), "_halide_hexagon_buffer_get_host", {buf}, Call::Extern);
+            Expr device_ptr = Call::make(Handle(), "_halide_hexagon_buffer_get_device", {buf}, Call::Extern);
+            body = LetStmt::make(i.first + ".device", device_ptr, body);
+            body = LetStmt::make(i.first, host_ptr, body);
+
         }
         body = replace_params(body, replacement_params);
 
@@ -794,58 +803,23 @@ class InjectHexagonRpc : public IRMutator {
     }
 
 public:
-    InjectHexagonRpc(const Target &target) : device_code("hexagon", target) {}
+    InjectHexagonRpc(Module &device_code) : device_code(device_code) {}
 
     Stmt inject(Stmt s) {
         s = mutate(s);
 
-        // Skip if there are no device kernels.
-        if (device_code.functions().empty()) {
-            return s;
+        if (!device_code.functions().empty()) {
+            // Wrap the statement in calls to halide_initialize_kernels.
+            Expr buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "hexagon_code.buffer");
+            Expr code_size = Call::make(Int(32), Call::buffer_get_max, { buf_var, 0 }, Call::Extern);
+            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { buf_var }, Call::Extern);
+            Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
+                                                       { module_state_ptr(), code_ptr, cast<uint64_t>(code_size) });
+            s = Block::make(init_kernels, s);
         }
 
-        // Compile the device code
+        // TODO: This can probably go away due to general debug info at the submodule compile level.
         debug(1) << "Hexagon device code module: " << device_code << "\n";
-
-        llvm::LLVMContext context;
-        std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
-
-        llvm::SmallVector<char, 4096> object;
-        llvm::raw_svector_ostream object_stream(object);
-        compile_llvm_module_to_object(*llvm_module, object_stream);
-
-        if (debug::debug_level() >= 2) {
-            debug(2) << "Hexagon device code assembly: " << "\n";
-            llvm::SmallString<4096> assembly;
-            llvm::raw_svector_ostream assembly_stream(assembly);
-            compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
-            debug(2) << assembly.c_str() << "\n";
-        }
-
-        auto obj = Elf::Object::parse_object(object.data(), object.size());
-        internal_assert(obj);
-
-        // Generate just one .text section.
-        obj->merge_text_sections();
-
-        // Make .bss a real section.
-        auto bss = obj->find_section(".bss");
-        if (bss != obj->sections_end()) {
-            bss->set_alignment(128);
-            bss->set_type(Elf::Section::SHT_PROGBITS);
-        }
-
-        // Link into a shared object.
-        Elf::HexagonLinker linker(device_code.target());
-        std::vector<std::string> dependencies = { "libhalide_hexagon_remote_skel.so" };
-        std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies);
-
-        // Wrap the statement in calls to halide_initialize_kernels.
-        size_t code_size = shared_object.size();
-        Expr code_ptr = buffer_ptr(reinterpret_cast<uint8_t*>(&shared_object[0]), code_size, "hexagon_code");
-        Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                   {module_state_ptr(), code_ptr, Expr((uint64_t)code_size)});
-        s = Block::make(init_kernels, s);
 
         return s;
     }
@@ -853,7 +827,8 @@ public:
 
 }  // namespace
 
-Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
+Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
+                        Module &containing_module) {
     // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
     target = target.with_feature(Target::NoAsserts);
@@ -877,9 +852,55 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target) {
         }
     }
 
-    InjectHexagonRpc injector(target);
+    Module hexagon_module("hexagon_code", target);
+    InjectHexagonRpc injector(hexagon_module);
     s = injector.inject(s);
+
+    if (!hexagon_module.functions().empty()) {
+        containing_module.append(hexagon_module);
+    }
+
     return s;
+}
+
+Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_code) {
+    llvm::LLVMContext context;
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
+
+    llvm::SmallVector<char, 4096> object;
+    llvm::raw_svector_ostream object_stream(object);
+    compile_llvm_module_to_object(*llvm_module, object_stream);
+
+    if (debug::debug_level() >= 2) {
+        debug(0) << "Hexagon device code assembly: " << "\n";
+        llvm::SmallString<4096> assembly;
+        llvm::raw_svector_ostream assembly_stream(assembly);
+        compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+        debug(0) << assembly.c_str() << "\n";
+    }
+
+    auto obj = Elf::Object::parse_object(object.data(), object.size());
+    internal_assert(obj);
+
+    // Generate just one .text section.
+    obj->merge_text_sections();
+
+    // Make .bss a real section.
+    auto bss = obj->find_section(".bss");
+    if (bss != obj->sections_end()) {
+        bss->set_alignment(128);
+        bss->set_type(Elf::Section::SHT_PROGBITS);
+    }
+
+    // Link into a shared object.
+    Elf::HexagonLinker linker(device_code.target());
+    std::vector<std::string> dependencies = { "libhalide_hexagon_remote_skel.so" };
+    std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies);
+
+    Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());
+    memcpy(result_buf.data(), shared_object.data(), shared_object.size());
+
+    return result_buf;
 }
 
 }  // namespace Internal

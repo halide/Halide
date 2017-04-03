@@ -128,19 +128,5 @@ void Closure::visit(const Variable *op) {
     }
 }
 
-vector<string> Closure::names() const {
-    vector<string> res;
-    for (const pair<string, Type> &i : vars) {
-        debug(2) << "vars:  " << i.first << "\n";
-        res.push_back(i.first);
-    }
-    for (const pair<string, Buffer> &i : buffers) {
-        debug(2) << "buffers: " << i.first << "\n";
-        res.push_back(i.first + ".host");
-        res.push_back(i.first + ".buffer");
-    }
-    return res;
-}
-
 }
 }

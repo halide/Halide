@@ -34,7 +34,10 @@ int main(int argc, char **argv) {
     u.set(17);
     Buffer<int> out_17 = f.realize(1024, target);
 
-    u.set(123);
+    // Copied Params should still refer to the same underlying Parameter,
+    // so setting the copy should be equivalent to setting the original.
+    Param<int> u_alias = u;
+    u_alias.set(123);
     Buffer<int> out_123 = f.realize(1024, target);
 
     for (int i = 0; i < 1024; i++) {

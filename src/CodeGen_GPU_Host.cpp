@@ -268,7 +268,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             // Look up the allocation for the vertex buffer and cast it to the
             // right type
-            gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
+            gpu_vertex_buffer = codegen(Variable::make(type_of<float *>(), "glsl.vertex_buffer"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
                                                            CodeGen_LLVM::f32_t->getPointerTo());
         }
@@ -357,8 +357,10 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             Value *val;
 
             if (closure_args[i].is_buffer) {
-                // If it's a buffer, dereference the dev handle
-                val = buffer_device(sym_get(name + ".buffer"));
+                // If it's a buffer, get the dev handle
+                Expr buf = Variable::make(type_of<buffer_t *>(), name + ".buffer");
+                Expr get_dev = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
+                val = codegen(get_dev);
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the
                 // expression mesh. Pass a non-nullptr value in the argument array

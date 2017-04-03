@@ -294,6 +294,7 @@ SOURCE_FILES = \
   CSE.cpp \
   CanonicalizeGPUVars.cpp \
   Debug.cpp \
+  DebugArguments.cpp \
   DebugToFile.cpp \
   DeepCopy.cpp \
   Definition.cpp \
@@ -315,13 +316,14 @@ SOURCE_FILES = \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
-  Interval.cpp \
+  InferArguments.cpp \
   InjectHostDevBufferCopies.cpp \
   InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
   IntegerDivisionTable.cpp \
+  Interval.cpp \
   Introspection.cpp \
   IR.cpp \
   IREquality.cpp \
@@ -378,6 +380,7 @@ SOURCE_FILES = \
   Type.cpp \
   UnifyDuplicateLets.cpp \
   UniquifyVariableNames.cpp \
+  UnpackBuffers.cpp \
   UnrollLoops.cpp \
   Util.cpp \
   Var.cpp \
@@ -419,6 +422,7 @@ HEADER_FILES = \
   CSE.h \
   CanonicalizeGPUVars.h \
   Debug.h \
+  DebugArguments.h \
   DebugToFile.h \
   DeepCopy.h \
   Definition.h \
@@ -445,13 +449,14 @@ HEADER_FILES = \
   runtime/HalideRuntime.h \
   runtime/HalideBuffer.h \
   ImageParam.h \
-  Interval.h \
+  InferArguments.h \
   InjectHostDevBufferCopies.h \
   InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
   IntegerDivisionTable.h \
+  Interval.h \
   Introspection.h \
   IntrusivePtr.h \
   IREquality.h \
@@ -514,6 +519,7 @@ HEADER_FILES = \
   Type.h \
   UnifyDuplicateLets.h \
   UniquifyVariableNames.h \
+  UnpackBuffers.h \
   UnrollLoops.h \
   Util.h \
   Var.h \
@@ -1029,12 +1035,16 @@ $(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o
 # stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
 # usage (the types can be inferred), but for AOT compilation, we must make the types
 # concrete via generator args.
+#
+# Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
+# that setting ScheduleParam via generator_args works properly.
 STUBTEST_GENERATOR_ARGS=\
     untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3 \
 	simple_input.type=float32 \
 	array_input.type=float32 array_input.size=2 \
 	int_arg.size=2 \
-	tuple_output.type=float32,float32
+	tuple_output.type=float32,float32 \
+	vectorize=true
 
 $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 	@mkdir -p $(FILTERS_DIR)
