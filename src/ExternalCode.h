@@ -91,7 +91,7 @@ public:
      * Ignoring feature flags isn't too important since generally
      * ExternalCode will be constructed in a Generator which has
      * access to the feature flags in effect and can select code
-     * qppropriately. */
+     * appropriately. */
     bool is_for_cpu_target(const Target &host) const {
         return kind == LLVMBitcode &&
             (llvm_target.arch == Target::ArchUnknown || llvm_target.arch == host.arch) &&
