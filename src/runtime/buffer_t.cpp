@@ -40,6 +40,16 @@ int _halide_buffer_get_max(const halide_buffer_t *buf, int d) {
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
+int _halide_buffer_get_extent(const halide_buffer_t *buf, int d) {
+    return buf->dim[d].extent;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+int _halide_buffer_get_stride(const halide_buffer_t *buf, int d) {
+    return buf->dim[d].stride;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
 int _halide_buffer_set_host_dirty(halide_buffer_t *buf, bool val) {
     buf->set_host_dirty(val);
     return 0;
@@ -67,8 +77,23 @@ halide_dimension_t *_halide_buffer_get_shape(halide_buffer_t *buf) {
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
-bool _halide_buffer_is_bounds_query(halide_buffer_t *buf) {
+bool _halide_buffer_is_bounds_query(const halide_buffer_t *buf) {
     return buf->host == NULL && buf->device == 0;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+uint8_t _halide_buffer_get_type_code(const halide_buffer_t *buf) {
+    return buf->type.code;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+uint8_t _halide_buffer_get_type_bits(const halide_buffer_t *buf) {
+    return buf->type.bits;
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+uint16_t _halide_buffer_get_type_lanes(const halide_buffer_t *buf) {
+    return buf->type.lanes;
 }
 
 HALIDE_BUFFER_HELPER_ATTRS

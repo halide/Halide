@@ -61,8 +61,9 @@ private:
     }
 
     void visit(const Variable *var) {
-        if (starts_with(var->name, func + ".") &&
-            (ends_with(var->name, ".buffer") || ends_with(var->name, ".host"))) {
+        if (var->name == func || var->name == func + ".buffer") {
+            // Don't free the allocation while a buffer that may refer
+            // to it is still in use.
             last_use = containing_stmt;
         }
     }

@@ -58,7 +58,7 @@ Stmt replace_params(Stmt s, const std::map<std::string, Parameter> &replacements
 }
 
 class InjectHexagonRpc : public IRMutator {
-    std::map<std::string, Expr> state_vars;
+    std::map<std::string, Expr> state_bufs;
 
     Module &device_code;
 
@@ -67,18 +67,19 @@ class InjectHexagonRpc : public IRMutator {
     Scope<ModulusRemainder> alignment_info;
 
     Expr state_var(const std::string& name, Type type) {
-        Expr& var = state_vars[name];
-        if (!var.defined()) {
-            auto storage = Buffer<void *>::make_scalar(name + "_buf");
-            storage() = nullptr;
-            var = Load::make(type_of<void*>(), storage.name(), 0, storage, Parameter(), const_true());
-        }
-        return var;
+        return Let::make(name, state_var_ptr(name, type),
+                         Load::make(type_of<void*>(), name, 0,
+                                    Buffer<>(), Parameter(), const_true()));
     }
 
     Expr state_var_ptr(const std::string& name, Type type) {
-        Expr var = state_var(name, type);
-        return Call::make(Handle(), Call::address_of, {var}, Call::Intrinsic);
+        Expr &buf = state_bufs[name];
+        if (!buf.defined()) {
+            auto storage = Buffer<void *>::make_scalar(name + "_buf");
+            storage() = nullptr;
+            buf = Variable::make(type_of<halide_buffer_t *>(), storage.name() + ".buffer", storage);
+        }
+        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
     Expr module_state() {
@@ -94,8 +95,8 @@ class InjectHexagonRpc : public IRMutator {
     Expr buffer_ptr(const uint8_t* buffer, size_t size, const char* name) {
         Buffer<uint8_t> code((int)size, name);
         memcpy(code.data(), buffer, (int)size);
-        Expr ptr_0 = Load::make(type_of<uint8_t>(), name, 0, code, Parameter(), const_true());
-        return Call::make(Handle(), Call::address_of, {ptr_0}, Call::Intrinsic);
+        Expr buf = Variable::make(type_of<halide_buffer_t *>(), string(name) + ".buffer", code);
+        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
     }
 
     using IRMutator::visit;
@@ -156,11 +157,19 @@ class InjectHexagonRpc : public IRMutator {
             // Add an assert to the body that validates the
             // alignment of the buffer.
             if (!device_code.target().has_feature(Target::NoAsserts)) {
-                Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first + ".host"));
+                Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first));
                 Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
                                         {i.first, alignment}, Call::Extern);
                 body = Block::make(AssertStmt::make(host_ptr % alignment == 0, error), body);
             }
+
+            // Unpack buffer parameters into the scope. They come in as host/dev struct pairs.
+            Expr buf = Variable::make(Handle(), i.first + ".buffer");
+            Expr host_ptr = Call::make(Handle(), "_halide_hexagon_buffer_get_host", {buf}, Call::Extern);
+            Expr device_ptr = Call::make(Handle(), "_halide_hexagon_buffer_get_device", {buf}, Call::Extern);
+            body = LetStmt::make(i.first + ".device", device_ptr, body);
+            body = LetStmt::make(i.first, host_ptr, body);
+
         }
         body = replace_params(body, replacement_params);
 
