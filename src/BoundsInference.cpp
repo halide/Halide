@@ -808,12 +808,13 @@ public:
                 buffer_name += ".0";
             }
             for (int d = 0; d < output.dimensions(); d++) {
-                Expr min = Variable::make(Int(32), buffer_name + ".min." + std::to_string(d));
-                Expr extent = Variable::make(Int(32), buffer_name + ".extent." + std::to_string(d));
+                Parameter buf = output.output_buffers()[0];
+                Expr min = Variable::make(Int(32), buffer_name + ".min." + std::to_string(d), buf);
+                Expr extent = Variable::make(Int(32), buffer_name + ".extent." + std::to_string(d), buf);
 
                 // Respect any output min and extent constraints
-                Expr min_constraint = output.output_buffers()[0].min_constraint(d);
-                Expr extent_constraint = output.output_buffers()[0].extent_constraint(d);
+                Expr min_constraint = buf.min_constraint(d);
+                Expr extent_constraint = buf.extent_constraint(d);
 
                 if (min_constraint.defined()) {
                     min = min_constraint;
