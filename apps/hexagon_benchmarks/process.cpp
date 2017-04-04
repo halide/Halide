@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "process.h"
 
 void usage(char *prg_name) {
