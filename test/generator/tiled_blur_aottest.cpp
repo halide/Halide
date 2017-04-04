@@ -40,7 +40,14 @@ Buffer<> buffer_factory_interleaved(halide_type_t t, int w, int h, int c) {
 void test(Buffer<> (*factory)(halide_type_t, int w, int h, int c)) {
     Buffer<uint8_t> input = factory(halide_type_of<uint8_t>(), W, H, 3);
     input.for_each_element([&](int x, int y, int c) {
-        input(x, y, c) = (uint8_t)(x + y + c);
+        // Just an arbitrary color pattern with enough variation to notice the brighten + blur
+        if (c == 0) {
+            input(x, y, c) = (uint8_t)((x % 7) + (y % 3));
+        } else if (c == 1) {
+            input(x, y, c) = (uint8_t)(x + y);
+        } else {
+            input(x, y, c) = (uint8_t)((x * 5) + (y * 2));
+        }
     });
     Buffer<uint8_t> output = factory(halide_type_of<uint8_t>(), W, H, 3);
 
