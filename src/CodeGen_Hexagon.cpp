@@ -533,9 +533,9 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vnot),  u32v1, "not.vw",     {u32v1} },
 
         // Broadcasts
+        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatb), u8v1,   "splat_v62.b", {u8}  },   // v62 - Broadcasts
+        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat_v62.h", {u16} },   // v62 - Broadcasts
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32v1,  "splat.w", {u32} },
-        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatb), u8v1,   "splat.b", {u8}  },   // v62 - Broadcasts
-        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat.h", {u16} },   // v62 - Broadcasts
 
         // Bit counting
         { IPICK(is_128B, Intrinsic::hexagon_V6_vcl0h), u16v1, "clz.vh", {u16v1} },
@@ -1584,8 +1584,12 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
         CodeGen_Posix::visit(op);
     } else {
         // TODO: Use vd0?
+        string v62_suffix = "";
+        if (target.has_feature(Target::HVX_v62) && (op->value.type().bits() == 8 || op->value.type().bits() == 16))
+            v62_suffix = "_v62";
+
         value = call_intrin(op->type,
-                            "halide.hexagon.splat" + type_suffix(op->value, false),
+                            "halide.hexagon.splat" + v62_suffix + type_suffix(op->value, false),
                             {op->value});
     }
 }

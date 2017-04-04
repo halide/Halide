@@ -172,7 +172,7 @@ Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 // successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
 // with op_mutator.
-Expr apply_patterns(Expr x, const vector<Pattern> &patterns, Target target, IRMutator *op_mutator) {
+Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &target, IRMutator *op_mutator) {
     debug(3) << "apply_patterns " << x << "\n";
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
@@ -271,7 +271,7 @@ Expr lossless_negate(Expr x) {
 }
 
 template <typename T>
-Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, Target target, IRMutator *mutator) {
+Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator *mutator) {
     Expr ret = apply_patterns(op, patterns, target, mutator);
     if (!ret.same_as(op)) return ret;
 
@@ -788,6 +788,7 @@ private:
             { "halide.hexagon.pack_satb.vh", i8_sat(wild_i16x) },
             { "halide.hexagon.pack_sath.vw", i16_sat(wild_i32x) },
 
+            // We don't have a vpack equivalent to this one, so we match it directly.
             { "halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0 | Pattern::v62 },
 
             // Narrowing casts. These may interleave later with trunclo.

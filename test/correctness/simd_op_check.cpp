@@ -1769,8 +1769,14 @@ struct Test {
         check("vnot(v*)", hvx_width/2, ~u16_1);
         check("vnot(v*)", hvx_width/4, ~u32_1);
 
-        check("vsplat(r*)", hvx_width/1, in_u8(0));
-        check("vsplat(r*)", hvx_width/2, in_u16(0));
+        if (is_v62) {
+            // v62 - Broadcasting unsigned 8 bit and 16 bit scalers
+            check("v*.b = vsplat(r*)", hvx_width/1, in_u8(0));
+            check("v*.h = vsplat(r*)", hvx_width/2, in_u16(0));
+        } else {
+            check("vsplat(r*)", hvx_width/1, in_u8(0));
+            check("vsplat(r*)", hvx_width/2, in_u16(0));
+        }
         check("vsplat(r*)", hvx_width/4, in_u32(0));
 
         check("vmux(q*,v*,v*)", hvx_width/1, select(i8_1 == i8_2, i8_1, i8_2));
