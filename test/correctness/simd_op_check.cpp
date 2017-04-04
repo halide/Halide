@@ -1507,7 +1507,6 @@ struct Test {
         check("vadd(v*.h,v*.h):sat", hvx_width/2, i16_sat(i32(i16_1 + i32(i16_2))));
         check("vadd(v*.w,v*.w):sat", hvx_width/4, i32_sat(i64(i32_1 + i64(i32_2))));
         if (is_v62) {
-            // v62 - 32 bit saturating add
             check("vadd(v*.uw,v*.uw):sat", hvx_width/4, u32_sat(u64(u32_1 + u64(u32_2))));
         }
 
@@ -1537,7 +1536,6 @@ struct Test {
         check("vadd(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1 + i32(i16_2))));
         check("vadd(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1 + i64(i32_2))));
         if (is_v62) {
-            // v62 - 32 bit saturating add
             check("vadd(v*:*.uw,v*:*.uw):sat", hvx_width/2, u32_sat(u64(u32_1 + u64(u32_2))));
         }
 
@@ -1770,7 +1768,7 @@ struct Test {
         check("vnot(v*)", hvx_width/4, ~u32_1);
 
         if (is_v62) {
-            // v62 - Broadcasting unsigned 8 bit and 16 bit scalers
+            // v62 - Broadcasting unsigned 8 bit and 16 bit scalars
             check("v*.b = vsplat(r*)", hvx_width/1, in_u8(0));
             check("v*.h = vsplat(r*)", hvx_width/2, in_u16(0));
         } else {
