@@ -12,7 +12,8 @@ Halide::Expr is_planar(const T &p, int channels = 3) {
     return p.dim(0).stride() == 1 && p.dim(2).extent() == channels;
 }
 
-class TiledBlurBlur : public Halide::Generator<TiledBlurBlur> {
+// A trivial 2x2 blur.
+class Blur2x2 : public Halide::Generator<Blur2x2> {
 public:
     Input<Buffer<float>> input{ "input", 3 };
     Input<int32_t> width{ "width" };
@@ -22,13 +23,13 @@ public:
 
     void generate() {
         // We pass in parameters to tell us where the boundary
-        // condition kicks in. This is decoupled from the size of the
-        // input tile.
+        // condition kicks in; this allows us to decouple from the size of the
+        // input tile (if any).
 
-        // In fact, clamping accesses to lie within the input tile
-        // using input.min() and input.extent() would tell the calling
-        // kernel we can cope with any size input, so it would always
-        // pass us 1x1 tiles.
+        // (In fact, if we are being used as an extern stage for tiled processing,
+        // clamping accesses to lie within the input tile using input.min() and 
+        // input.extent() would tell the calling kernel we can cope with any size 
+        // input, so it would always pass us 1x1 tiles.)
 
         Func input_clamped = Halide::BoundaryConditions::repeat_edge(
             input, 0, width, 0, height);
@@ -59,6 +60,6 @@ private:
     Var x{"x"}, y{"y"}, c{"c"};
 };
 
-HALIDE_REGISTER_GENERATOR(TiledBlurBlur, "tiled_blur_blur")
+HALIDE_REGISTER_GENERATOR(Blur2x2, "blur2x2")
 
 }  // namespace
