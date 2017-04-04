@@ -10,8 +10,8 @@ namespace {
 class ExternalCode : public Halide::Generator<ExternalCode> {
 public:
     Input<Buffer<int32_t>> input{ "input", 2 };
-    Output<Buffer<int32_t>> output{ "output", 2 };
-    HalidePureExtern_1(int32_t, gen_extern_tester, int32_t);
+    Output<Buffer<float>> output{ "output", 2 };
+    HalidePureExtern_1(float, gen_extern_tester, float);
  
     void generate() {
         Var x("x"), y("y");
@@ -32,7 +32,7 @@ public:
         get_externs_map()->insert({"org.halide-lang.extern_code_extern",
               Halide::ExternalCode::bitcode_wrapper(target, code_vector, "org.halide-lang.extern_code_extern")});
         
-        output(x, y) = gen_extern_tester(input(x, y));
+        output(x, y) = gen_extern_tester(cast<float>(input(x, y)));
     }
 
     void schedule() {
