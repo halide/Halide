@@ -912,6 +912,18 @@ $(BIN_DIR)/%.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
 
+$(BUILD_DIR)/external_code_extern_bitcode_32.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
+	$(CLANG) $(CXX_WARNING_FLAGS) -I$(INCLUDE_DIR) -O3 -c -m32 -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.o
+	./$(BIN_DIR)/binary2cpp external_code_extern_32 < $(BUILD_DIR)/external_code_extern_32.o > $@
+
+$(BUILD_DIR)/external_code_extern_bitcode_64.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
+	$(CLANG) $(CXX_WARNING_FLAGS) -I$(INCLUDE_DIR) -O3 -c -m64 -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.o
+	./$(BIN_DIR)/binary2cpp external_code_extern_64 < $(BUILD_DIR)/external_code_extern_64.o > $@
+
+$(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/external_code_generator.o $(BUILD_DIR)/external_code_extern_bitcode_32.cpp $(BUILD_DIR)/external_code_extern_bitcode_64.cpp
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
+
 NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
 
 # By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.

@@ -2201,7 +2201,9 @@ public:
      * uniqueness in public code, we suggest using a Java style
      * inverted domain name followed by organization specific
      * naming. E.g.:
-     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7 */
+     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
+     *
+     * See test/generator/external_code_generator.cpp for example use. */
     virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
 
 protected:
