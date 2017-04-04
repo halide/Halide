@@ -201,7 +201,7 @@ private:
 }  // namespace Halide
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<Halide::float16_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<Halide::float16_t>() {
     return halide_type_t(halide_type_float, 16);
 }
 
