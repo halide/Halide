@@ -2397,7 +2397,7 @@ public:
 
     // Return a map in which to register external code this Generator requires
     // at link time.
-    std::shared_ptr<ExternsMap> get_externs_map() const override;
+    EXPORT std::shared_ptr<ExternsMap> get_externs_map() const override;
 
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
