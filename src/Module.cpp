@@ -113,6 +113,7 @@ struct ModuleContents {
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
+    std::vector<ExternalCode> external_code;
 };
 
 template<>
@@ -177,6 +178,10 @@ const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
 }
 
+const std::vector<ExternalCode> &Module::external_code() const {
+    return contents->external_code;
+}
+
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
@@ -197,6 +202,10 @@ void Module::append(const Internal::LoweredFunc &function) {
 
 void Module::append(const Module &module) {
     contents->submodules.push_back(module);
+}
+ 
+void Module::append(const ExternalCode &external_code) {
+    contents->external_code.push_back(external_code);
 }
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
@@ -266,8 +275,27 @@ Module Module::resolve_submodules() const {
     for (const auto &buf : buffers()) {
         lowered_module.append(buf);
     }
+    for (const auto &ec : external_code()) {
+        lowered_module.append(ec);
+    }
     for (const auto &m : submodules()) {
         Module copy(m.resolve_submodules());
+
+        // Propagate external code blocks.
+        for (const auto &ec : external_code()) {
+            // TODO(zalman): Is this the right thing to do?
+            bool already_in_list = false;
+            for (const auto &ec_sub : copy.external_code()) {
+                if (ec_sub.name() == ec.name()) {
+                    already_in_list = true;
+                    break;
+                }
+            }
+            if (!already_in_list) {
+                copy.append(ec);
+            }
+        }
+
         auto buf = m.compile_to_buffer();
         lowered_module.append(buf);
     }
