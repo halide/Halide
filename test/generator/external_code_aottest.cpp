@@ -21,7 +21,7 @@ int main()
         }
     }
       
-    Buffer<int32_t> out(10, 10);
+    Buffer<float> out(10, 10);
     int ret_code = external_code(buf.raw_buffer(), out.raw_buffer());
 
     assert(ret_code == 0);
