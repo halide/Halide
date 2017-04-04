@@ -1502,12 +1502,12 @@ struct Test {
         check("v*.h = vadd(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) + u16(u8_2));
         check("v*.w = vadd(v*.uh,v*.uh)", hvx_width/2, u32(u16_1) + u32(u16_2));
         check("v*.w = vadd(v*.h,v*.h)", hvx_width/2, i32(i16_1) + i32(i16_2));
-        check("vadd(v*.ub,v*.ub):sat", hvx_width/1, u8_sat(u16(u8_1 + u16(u8_2))));
-        check("vadd(v*.uh,v*.uh):sat", hvx_width/2, u16_sat(u32(u16_1 + u32(u16_2))));
-        check("vadd(v*.h,v*.h):sat", hvx_width/2, i16_sat(i32(i16_1 + i32(i16_2))));
-        check("vadd(v*.w,v*.w):sat", hvx_width/4, i32_sat(i64(i32_1 + i64(i32_2))));
+        check("vadd(v*.ub,v*.ub):sat", hvx_width/1, u8_sat(u16(u8_1) + u16(u8_2)));
+        check("vadd(v*.uh,v*.uh):sat", hvx_width/2, u16_sat(u32(u16_1) + u32(u16_2)));
+        check("vadd(v*.h,v*.h):sat", hvx_width/2, i16_sat(i32(i16_1) + i32(i16_2)));
+        check("vadd(v*.w,v*.w):sat", hvx_width/4, i32_sat(i64(i32_1) + i64(i32_2)));
         if (is_v62) {
-            check("vadd(v*.uw,v*.uw):sat", hvx_width/4, u32_sat(u64(u32_1 + u64(u32_2))));
+            check("vadd(v*.uw,v*.uw):sat", hvx_width/4, u32_sat(u64(u32_1) + u64(u32_2)));
         }
 
         check("vsub(v*.b,v*.b)", hvx_width/1, u8_1 - u8_2);
@@ -1519,10 +1519,10 @@ struct Test {
         check("v*.h = vsub(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) - u16(u8_2));
         check("v*.w = vsub(v*.uh,v*.uh)", hvx_width/2, u32(u16_1) - u32(u16_2));
         check("v*.w = vsub(v*.h,v*.h)", hvx_width/2, i32(i16_1) - i32(i16_2));
-        check("vsub(v*.ub,v*.ub):sat", hvx_width/1, u8_sat(i16(u8_1 - i16(u8_2))));
-        check("vsub(v*.uh,v*.uh):sat", hvx_width/2, u16_sat(i32(u16_1 - i32(u16_2))));
-        check("vsub(v*.h,v*.h):sat", hvx_width/2, i16_sat(i32(i16_1 - i32(i16_2))));
-        check("vsub(v*.w,v*.w):sat", hvx_width/4, i32_sat(i64(i32_1 - i64(i32_2))));
+        check("vsub(v*.ub,v*.ub):sat", hvx_width/1, u8_sat(i16(u8_1) - i16(u8_2)));
+        check("vsub(v*.uh,v*.uh):sat", hvx_width/2, u16_sat(i32(u16_1) - i32(u16_2)));
+        check("vsub(v*.h,v*.h):sat", hvx_width/2, i16_sat(i32(i16_1) - i32(i16_2)));
+        check("vsub(v*.w,v*.w):sat", hvx_width/4, i32_sat(i64(i32_1) - i64(i32_2)));
 
         // Double vector versions of the above
         check("vadd(v*:*.b,v*:*.b)", hvx_width*2, u8_1 + u8_2);
@@ -1531,12 +1531,12 @@ struct Test {
         check("vadd(v*:*.b,v*:*.b)", hvx_width*2, i8_1 + i8_2);
         check("vadd(v*:*.h,v*:*.h)", hvx_width/1, i16_1 + i16_2);
         check("vadd(v*:*.w,v*:*.w)", hvx_width/2, i32_1 + i32_2);
-        check("vadd(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8_sat(u16(u8_1 + u16(u8_2))));
-        check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16_sat(u32(u16_1 + u32(u16_2))));
-        check("vadd(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1 + i32(i16_2))));
-        check("vadd(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1 + i64(i32_2))));
+        check("vadd(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8_sat(u16(u8_1) + u16(u8_2)));
+        check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16_sat(u32(u16_1) + u32(u16_2)));
+        check("vadd(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1) + i32(i16_2)));
+        check("vadd(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1) + i64(i32_2)));
         if (is_v62) {
-            check("vadd(v*:*.uw,v*:*.uw):sat", hvx_width/2, u32_sat(u64(u32_1 + u64(u32_2))));
+            check("vadd(v*:*.uw,v*:*.uw):sat", hvx_width/2, u32_sat(u64(u32_1) + u64(u32_2)));
         }
 
         check("vsub(v*:*.b,v*:*.b)", hvx_width*2, u8_1 - u8_2);
@@ -1545,10 +1545,10 @@ struct Test {
         check("vsub(v*:*.b,v*:*.b)", hvx_width*2, i8_1 - i8_2);
         check("vsub(v*:*.h,v*:*.h)", hvx_width/1, i16_1 - i16_2);
         check("vsub(v*:*.w,v*:*.w)", hvx_width/2, i32_1 - i32_2);
-        check("vsub(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8_sat(i16(u8_1 - i16(u8_2))));
-        check("vsub(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16_sat(i32(u16_1 - i32(u16_2))));
-        check("vsub(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1 - i32(i16_2))));
-        check("vsub(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1 - i64(i32_2))));
+        check("vsub(v*:*.ub,v*:*.ub):sat", hvx_width*2, u8_sat(i16(u8_1) - i16(u8_2)));
+        check("vsub(v*:*.uh,v*:*.uh):sat", hvx_width/1, u16_sat(i32(u16_1) - i32(u16_2)));
+        check("vsub(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1) - i32(i16_2)));
+        check("vsub(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1) - i64(i32_2)));
 
         check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
         check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
