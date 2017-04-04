@@ -24,7 +24,8 @@ int main(int argc, char **argv) {
     bitcode_stream.seekg(0, std::ios::beg);
     bitcode_stream.read(reinterpret_cast<char *>(&bitcode[0]), bitcode.size());
 
-    ExternalCode external_code = ExternalCode::bitcode_wrapper(get_target_from_environment(), bitcode, "extern");
+    ExternalCode external_code =
+        ExternalCode::bitcode_wrapper(get_jit_target_from_environment(), bitcode, "extern");
 
     Func f_extern;
     f_extern.define_extern("extern", { }, type_of<int32_t>(), 2);
