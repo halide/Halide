@@ -912,13 +912,17 @@ $(BIN_DIR)/%.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
 
+# It is not always possible to cross compile between 32-bit and 64-bit via the clang build as part of llvm
+# These next two rules can fail the compilationa nd produce zero length bitcode blobs.
+# If the zero length blob is actually used, the test will fail anyway, but usually only the bitness
+# of the target is used.
 $(BUILD_DIR)/external_code_extern_bitcode_32.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.o
-	./$(BIN_DIR)/binary2cpp external_code_extern_32 < $(BUILD_DIR)/external_code_extern_32.o > $@
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.bc || echo -n > $(BUILD_DIR)/external_code_extern_32.bc
+	./$(BIN_DIR)/binary2cpp external_code_extern_32 < $(BUILD_DIR)/external_code_extern_32.bc > $@
 
 $(BUILD_DIR)/external_code_extern_bitcode_64.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.o
-	./$(BIN_DIR)/binary2cpp external_code_extern_64 < $(BUILD_DIR)/external_code_extern_64.o > $@
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.bc || echo -n > $(BUILD_DIR)/external_code_extern_64.bc
+	./$(BIN_DIR)/binary2cpp external_code_extern_64 < $(BUILD_DIR)/external_code_extern_64.bc > $@
 
 $(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/external_code_generator.o $(BUILD_DIR)/external_code_extern_bitcode_32.cpp $(BUILD_DIR)/external_code_extern_bitcode_64.cpp
 	@mkdir -p $(BIN_DIR)
