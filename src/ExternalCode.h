@@ -56,6 +56,9 @@ public:
      *     Metal: Metal source code
      *     Hexagon: llvm bitcode for Hexagon
      *
+     * At present, this API is not fully working. See Issue:
+     *     https://github.com/halide/Halide/issues/1971
+     *
      * The name is used as a unique identifier for the external code
      * and duplicates will be reduced to a single instance. Halide
      * does not do anything other than to compare names for
@@ -69,12 +72,17 @@ public:
 
     /** Construct an ExternalCode container from C++ source code. This
      * container can be used to insert its code into C++ output from
-     * Halide. The name is used as a unique identifier for the
-     * external code and duplicates will be reduced to a single
-     * instance. Halide does not do anything other than to
-     * compare names for equality. To guarantee uniqueness in public
-     * code, we suggest using a Java style inverted domain name
-     * followed by organization specific naming. E.g.:
+     * Halide.
+     *
+     * At present, this API is not fully working. See Issue:
+     *     https://github.com/halide/Halide/issues/1971
+     *
+     * The name is used as a unique identifier for the external code
+     * and duplicates will be reduced to a single instance. Halide
+     * does not do anything other than to compare names for
+     * equality. To guarantee uniqueness in public code, we suggest
+     * using a Java style inverted domain name followed by
+     * organization specific naming. E.g.:
      *     com.cyberdyne.skynet.78ad6c411d313f050f172cd3d440f23fdd797d0d */
     static ExternalCode c_plus_plus_code_wrapper(const std::vector<uint8_t> &code, const std::string &name) {
         return ExternalCode(CPlusPlusSource, Target(), DeviceAPI::None, code, name);
