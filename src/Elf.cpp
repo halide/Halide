@@ -3,6 +3,7 @@
 #include "Util.h"
 #include "Error.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <iomanip>
