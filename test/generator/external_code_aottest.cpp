@@ -17,7 +17,7 @@ int main()
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
-            buf(i, j) = i * 65536 * j * 256;
+            buf(i, j) = i * 65536 + j * 256;
         }
     }
       
@@ -28,7 +28,7 @@ int main()
     
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
-            assert(out(i, j) == i * 65536 * j * 256 + 42);
+            assert(out(i, j) == i * 65536 + j * 256 + 42);
         }
     }
     printf("Success!\n");
