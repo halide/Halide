@@ -674,6 +674,7 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              const std::map<std::string, std::string> &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : generator(generator_factory(context, generator_params)) {
+    generator->externs_map = context.get_externs_map();
     generator->set_inputs_vector(inputs);
     generator->call_generate();
 }
@@ -1050,6 +1051,14 @@ GeneratorBase::~GeneratorBase() {
     ObjectInstanceRegistry::unregister_instance(this); 
 }
 
+std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::get_externs_map() const {
+    // Lazily create the ExternsMap.
+    if (externs_map == nullptr) {
+        externs_map = std::make_shared<ExternsMap>();
+    }
+    return externs_map;
+}
+
 GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size) {
     std::set<std::string> names;
     std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
@@ -1388,7 +1397,15 @@ Module GeneratorBase::build_module(const std::string &function_name,
             filter_arguments.push_back(to_argument(p));
         }
     }
-    return pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
+
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
+    std::shared_ptr<ExternsMap> externs_map = get_externs_map();
+    if (externs_map) {
+        for (const auto &map_entry : *externs_map) {
+            result.append(map_entry.second);
+        }
+    }
+    return result;
 }
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {

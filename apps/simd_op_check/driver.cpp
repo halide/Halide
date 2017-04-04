@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <HalideRuntime.h>
 #include "filter_headers.h"
 
 #ifndef __APPLE__
