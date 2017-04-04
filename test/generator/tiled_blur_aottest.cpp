@@ -38,13 +38,11 @@ Buffer<> buffer_factory_interleaved(halide_type_t t, int w, int h, int c) {
 }
 
 void test(Buffer<> (*factory)(halide_type_t, int w, int h, int c)) {
-    Buffer<int> input = factory(halide_type_of<int>(), W, H, 3);
-    for (int y = 0; y < input.height(); y++) {
-        for (int x = 0; x < input.width(); x++) {
-            input(x, y) = (int)(x * y);
-        }
-    }
-    Buffer<float> output = factory(halide_type_of<float>(), W, H, 3);
+    Buffer<uint8_t> input = factory(halide_type_of<uint8_t>(), W, H, 3);
+    input.for_each_element([&](int x, int y, int c) {
+        input(x, y, c) = (uint8_t)(x + y + c);
+    });
+    Buffer<uint8_t> output = factory(halide_type_of<uint8_t>(), W, H, 3);
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
     tiled_blur(input, output);
