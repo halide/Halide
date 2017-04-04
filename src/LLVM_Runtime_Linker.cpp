@@ -962,7 +962,7 @@ void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
     #if LLVM_VERSION >= 38
     bool failed = llvm::Linker::linkModules(module, std::move(add_in));
     #else
-    bool failed = llvm::Linker::LinkModules(module, add_in.release());
+    bool failed = llvm::Linker::LinkModules(&module, add_in.release());
     #endif
 
     if (failed) {
