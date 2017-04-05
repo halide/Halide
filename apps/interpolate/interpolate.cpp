@@ -5,10 +5,11 @@ using namespace Halide;
 #include <iostream>
 #include <limits>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 using std::vector;
 
