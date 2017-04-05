@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     halide_hexagon_power_hvx_on(NULL);
 
     printf("Running pipeline...\n");
-    double time = benchmark(iterations, 10, [&]() {
+    double time = Halide::Tools::benchmark(iterations, 10, [&]() {
         int result = pipeline(in, out);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);
