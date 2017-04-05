@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
         gradient.trace_stores();
 
         // Now that we can both split and reorder, we can do tiled
-        // evaluation. Let's split both x and y by a factor of two,
+        // evaluation. Let's split both x and y by a factor of four,
         // and then reorder the vars to express a tiled traversal.
         //
         // A tiled traversal splits the domain into small rectangular
