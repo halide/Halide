@@ -7,13 +7,14 @@
 #include <cstdio>
 #include <vector>
 #include "fft.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 #ifdef WITH_FFTW
 #include <fftw3.h>
 #endif
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 Var x("x"), y("y");
 

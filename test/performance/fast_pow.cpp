@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <cstdio>
 #include <algorithm>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 // 32-bit windows defines powf as a macro, which won't work for us.
 #ifdef _WIN32
