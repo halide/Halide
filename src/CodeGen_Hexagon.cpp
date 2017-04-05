@@ -1282,11 +1282,12 @@ string CodeGen_Hexagon::mcpu() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
-    std::stringstream attrs("+hvx");
+    std::stringstream attrs;
     if (target.has_feature(Halide::Target::HVX_128)) {
-        attrs << ",+hvx-double";
+        attrs << "+hvx-double";
+    } else {
+        attrs << "+hvx";
     }
-    attrs.seekp(0, std::ios_base::end);
     attrs << ",+long-calls";
     return attrs.str();
 }
