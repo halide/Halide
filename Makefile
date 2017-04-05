@@ -917,11 +917,11 @@ $(BIN_DIR)/%.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 # If the zero length blob is actually used, the test will fail anyway, but usually only the bitness
 # of the target is used.
 $(BUILD_DIR)/external_code_extern_bitcode_32.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.bc || echo -n > $(BUILD_DIR)/external_code_extern_32.bc
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -target $(RUNTIME_TRIPLE_32) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.bc || echo -n > $(BUILD_DIR)/external_code_extern_32.bc
 	./$(BIN_DIR)/binary2cpp external_code_extern_32 < $(BUILD_DIR)/external_code_extern_32.bc > $@
 
 $(BUILD_DIR)/external_code_extern_bitcode_64.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.bc || echo -n > $(BUILD_DIR)/external_code_extern_64.bc
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -target $(RUNTIME_TRIPLE_64) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.bc || echo -n > $(BUILD_DIR)/external_code_extern_64.bc
 	./$(BIN_DIR)/binary2cpp external_code_extern_64 < $(BUILD_DIR)/external_code_extern_64.bc > $@
 
 $(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/external_code_generator.o $(BUILD_DIR)/external_code_extern_bitcode_32.cpp $(BUILD_DIR)/external_code_extern_bitcode_64.cpp
