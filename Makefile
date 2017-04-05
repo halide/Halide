@@ -1037,9 +1037,9 @@ $(FILTERS_DIR)/matlab.a: $(BIN_DIR)/matlab.generator
 # (1) Ensuring the extra _generator.cpp is built into the .generator.
 # (2) Ensuring the extra .a is linked into the final output.
 
-# TODO(srj): we really want to say "anything that depends on tiled_blur.a also depends on tiled_blur_blur.a";
+# TODO(srj): we really want to say "anything that depends on tiled_blur.a also depends on blur2x2.a";
 # is there a way to specify that in Make?
-$(BIN_DIR)/$(TARGET)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.a
+$(BIN_DIR)/$(TARGET)/generator_aot_tiled_blur: $(FILTERS_DIR)/blur2x2.a
 $(BIN_DIR)/$(TARGET)/generator_aot_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_gpu.a
 $(BIN_DIR)/$(TARGET)/generator_aot_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.a
 
