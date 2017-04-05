@@ -1286,6 +1286,7 @@ string CodeGen_Hexagon::mattrs() const {
     if (target.has_feature(Halide::Target::HVX_128)) {
         attrs << ",+hvx-double";
     }
+    attrs.seekp(0, std::ios_base::end);
     attrs << ",+long-calls";
     return attrs.str();
 }
