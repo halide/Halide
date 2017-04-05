@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include "../support/benchmark.h"
+#include "halide_benchmark.h"
 
 #include "pipeline_cpu.h"
 #include "pipeline_hvx64.h"
