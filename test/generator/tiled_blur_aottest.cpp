@@ -14,6 +14,11 @@
 #include "halide_image_io.h"
 #endif
 
+#define RUN_BENCHMARKS 0
+#if RUN_BENCHMARKS
+#include "halide_benchmark.h"
+#endif
+
 using namespace Halide::Runtime;
 
 const int W = 80, H = 80;
@@ -61,6 +66,14 @@ void test(Buffer<uint8_t> (*factory)(int w, int h, int c)) {
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n", W, H);
     tiled_blur(input, output);
+
+#if RUN_BENCHMARKS
+    double t = Halide::Tools::benchmark(5, 10, [&]() {
+        tiled_blur(input, output);
+    });
+    const float megapixels = (W * H) / (1024.f * 1024.f);
+    printf("Benchmark: %d %d -> %f s/mpix\n", W, H, t / megapixels);
+#endif
 
 #if SAVE_IMAGES
     static int x = 0;
