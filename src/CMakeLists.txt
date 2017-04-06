@@ -291,6 +291,7 @@ set(HEADER_FILES
   DeviceArgument.h
   DeviceInterface.h
   EarlyFree.h
+  Elf.h
   EliminateBoolVectors.h
   Error.h
   Expr.h
@@ -377,6 +378,7 @@ set(HEADER_FILES
   Type.h
   UnifyDuplicateLets.h
   UniquifyVariableNames.h
+  UnpackBuffers.h
   UnrollLoops.h
   Util.h
   Var.h
@@ -439,6 +441,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   DeviceArgument.cpp
   DeviceInterface.cpp
   EarlyFree.cpp
+  Elf.cpp
   EliminateBoolVectors.cpp
   Error.cpp
   FastIntegerDivide.cpp
@@ -516,6 +519,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Type.cpp
   UnifyDuplicateLets.cpp
   UniquifyVariableNames.cpp
+  UnpackBuffers.cpp
   UnrollLoops.cpp
   Util.cpp
   Var.cpp

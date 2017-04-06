@@ -72,7 +72,7 @@ public:
 
 void set_alignment_host_ptr(ImageParam &i, int align, std::map<string, int> &m) {
     i.set_host_alignment(align);
-    m.insert(std::pair<string, int>(i.name()+".host", align));
+    m.insert(std::pair<string, int>(i.name(), align));
 }
 
 int count_host_alignment_asserts(Func f, std::map<string, int> m) {
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
     Func f("f");
     f(x) = i1(x) + i2(x) + i3(x);
     f.output_buffer().set_host_alignment(128);
-    m.insert(std::pair<string, int>("f.host", 128));
+    m.insert(std::pair<string, int>("f", 128));
     int cnt = count_host_alignment_asserts(f, m);
     if (cnt != 3) {
         printf("Error: expected 3 host alignment assertions in code, but got %d\n", cnt);

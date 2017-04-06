@@ -18,11 +18,11 @@ namespace {
 
 vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_t, LLVMContext &context) {
     vector<llvm::Type *> res;
-    for (const pair<string, Type> &i : closure.vars) {
-        res.push_back(llvm_type_of(&context, i.second));
+    for (const auto &v : closure.vars) {
+        res.push_back(llvm_type_of(&context, v.second));
     }
-    for (const pair<string, Closure::Buffer> &i : closure.buffers) {
-        res.push_back(llvm_type_of(&context, i.second.type)->getPointerTo());
+    for (const auto &b : closure.buffers) {
+        res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
     return res;
@@ -30,13 +30,15 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
 
 }  // namespace
 
-StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_t, LLVMContext *context) {
+StructType *build_closure_type(const Closure& closure,
+                               llvm::StructType *buffer_t,
+                               LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
     struct_t->setBody(llvm_types(closure, buffer_t, *context), false);
     return struct_t;
 }
 
-void pack_closure(llvm::Type *type,
+void pack_closure(llvm::StructType *type,
                   Value *dst,
                   const Closure& closure,
                   const Scope<Value *> &src,
@@ -44,39 +46,66 @@ void pack_closure(llvm::Type *type,
                   IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    LLVMContext &context = builder->getContext();
-    vector<string> nm = closure.names();
-    vector<llvm::Type*> ty = llvm_types(closure, buffer_t, context);
-    for (size_t i = 0; i < nm.size(); i++) {
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
-        Value *val;
-        if (!ends_with(nm[i], ".buffer") || src.contains(nm[i])) {
-            val = src.get(nm[i]);
-            if (val->getType() != ty[i]) {
-                val = builder->CreateBitCast(val, ty[i]);
-            }
-        } else {
-            // Skip over buffers not in the symbol table. They must not be needed.
-            val = ConstantPointerNull::get(buffer_t->getPointerTo());
-        }
+    for (const auto &v : closure.vars) {
+        llvm::Type *t = type->elements()[idx];
+        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+        Value *val = src.get(v.first);
+        val = builder->CreateBitCast(val, t);
         builder->CreateStore(val, ptr);
-        idx++;
+    }
+    for (const auto &b : closure.buffers) {
+        // For buffers we pass through base address (the symbol with
+        // the same name as the buffer), and the .buffer symbol (GPU
+        // code might implicitly need it).
+        // FIXME: This dependence should be explicitly encoded in the IR.
+        {
+            llvm::Type *t = type->elements()[idx];
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+            Value *val = src.get(b.first);
+            val = builder->CreateBitCast(val, t);
+            builder->CreateStore(val, ptr);
+        }
+        {
+            llvm::PointerType *t = buffer_t->getPointerTo();
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+            Value *val = nullptr;
+            if (src.contains(b.first + ".buffer")) {
+                val = src.get(b.first + ".buffer");
+                val = builder->CreateBitCast(val, t);
+            } else {
+                val = ConstantPointerNull::get(t);
+            }
+            builder->CreateStore(val, ptr);
+        }
     }
 }
 
 void unpack_closure(const Closure& closure,
                     Scope<Value *> &dst,
-                    llvm::Type *type,
+                    llvm::StructType *type,
                     Value *src,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    vector<string> nm = closure.names();
-    for (size_t i = 0; i < nm.size(); i++) {
+    for (const auto &v : closure.vars) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr);
-        dst.push(nm[i], load);
-        load->setName(nm[i]);
+        dst.push(v.first, load);
+        load->setName(v.first);
+    }
+    for (const auto &b : closure.buffers) {
+        {
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            dst.push(b.first, load);
+            load->setName(b.first);
+        }
+        {
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            dst.push(b.first + ".buffer", load);
+            load->setName(b.first + ".buffer");
+        }
     }
 }
 
