@@ -291,6 +291,9 @@ bool save_png(ImageType &im, const std::string &filename) {
 
     // im.copyToHost(); // in case the image is on the gpu
 
+    int c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
+    typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
+
     for (int y = 0; y < im.height(); y++) {
         uint8_t *dstPtr = (uint8_t *)(row_pointers.p[y]);
         if (bit_depth == 16) {
@@ -298,19 +301,21 @@ bool save_png(ImageType &im, const std::string &filename) {
             for (int x = 0; x < im.width(); x++) {
                 for (int c = 0; c < im.channels(); c++) {
                     uint16_t out;
-                    Internal::convert(im(x, y, c), out);
+                    Internal::convert(srcPtr[c*c_stride], out);
                     *dstPtr++ = out >> 8;
                     *dstPtr++ = out & 0xff;
                 }
+                srcPtr++;
             }
         } else if (bit_depth == 8) {
             // convert to uint8_t
             for (int x = 0; x < im.width(); x++) {
                 for (int c = 0; c < im.channels(); c++) {
                     uint8_t out;
-                    Internal::convert(im(x, y, c), out);
+                    Internal::convert(srcPtr[c*c_stride], out);
                     *dstPtr++ = out;
                 }
+                srcPtr++;
             }
         } else {
             if (!check(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.")) return false;
