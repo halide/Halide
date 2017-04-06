@@ -21,7 +21,7 @@ def _binary2cpp(name, srcs):
     name = "%s_binary2cpp" % name,
     tools = [ "@halide//tools:binary2cpp" ],
     srcs = srcs,
-    cmd = "$(location @halide//tools:binary2cpp) %s < $< > $@" % name,
+    cmd = "$(location @halide//tools:binary2cpp) halide_internal_%s < $< > $@" % name,
     outs = [ "%s.cpp" % name ],
     visibility = [ "//visibility:private" ],
   )
