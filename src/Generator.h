@@ -2487,10 +2487,6 @@ private:
 
     std::shared_ptr<Internal::ValueTracker> value_tracker;
 
-    bool params_built{false};
-    bool generator_params_set{false};
-    bool schedule_params_set{false};
-
     mutable std::shared_ptr<ExternsMap> externs_map;
 
     bool inputs_set{false};
