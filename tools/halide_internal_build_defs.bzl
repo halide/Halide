@@ -2,7 +2,32 @@
 #  Private Skylark helper functions for building Halide.
 #  Should not be used by code outside of Halide itself.
 
-def _gen_runtime_cpp_component_1(component_file, bits, suffix, opts) :
+def _ll2bc(name, srcs):
+  if len(srcs) != 1:
+    fail("_ll2bc requires exactly one src")
+  native.genrule(
+    name = "%s_ll2bc" % name,
+    tools = [ "@llvm//:llvm-as" ],
+    srcs = srcs,
+    cmd = "$(location @llvm//:llvm-as) $< -o $@",
+    outs = [ "%s.bc" % name ],
+    visibility = [ "//visibility:private" ],
+  )
+
+def _binary2cpp(name, srcs):
+  if len(srcs) != 1:
+    fail("_binary2cpp requires exactly one src")
+  native.genrule(
+    name = "%s_binary2cpp" % name,
+    tools = [ "@halide//tools:binary2cpp" ],
+    srcs = srcs,
+    cmd = "$(location @halide//tools:binary2cpp) %s < $< > $@" % name,
+    outs = [ "%s.cpp" % name ],
+    visibility = [ "//visibility:private" ],
+  )
+  return "%s.cpp" % name
+
+def _gen_runtime_cpp_component(component_file, bits, suffix, opts) :
   # Pick the appropriate generic target triple
   if bits == "32":
     if component_file.startswith("windows_"):
@@ -15,120 +40,72 @@ def _gen_runtime_cpp_component_1(component_file, bits, suffix, opts) :
       triple = "le32-unknown-nacl-unknown"
   else:
     triple = "le64-unknown-unknown-unknown"
+  name = "{0}_{1}{2}".format(component_file, bits, suffix)
   native.genrule(
-    name = "initmod.{0}_{1}{2}.ll".format(component_file, bits, suffix),
+    name = "initmod.{0}.ll".format(name),
     tools = [ "@llvm//:clang" ],
-    srcs = [ "src/runtime/{0}.cpp".format(component_file),
-             ":runtime_files",
-           ],
+    srcs = [ 
+      "src/runtime/{0}.cpp".format(component_file),
+      ":runtime_files",
+    ],
     cmd = ("$(location @llvm//:clang) " +
-           "-ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m{1} " +
            "-target " + triple + " " +
-           "-DCOMPILING_HALIDE_RUNTIME -DBITS_{1} -emit-llvm -S " +
+           "-ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m{1} " +
+           "-DCOMPILING_HALIDE_RUNTIME -DBITS_{1} -emit-llvm {2} -S " +
            "$(location src/runtime/{0}.cpp) -o $@").format(component_file, bits, opts),
-    outs = [ "initmod_{0}_{1}{2}.ll".format(component_file, bits, suffix), ]
+    outs = [ "initmod_{0}.ll".format(name) ],
+    visibility = [ "//visibility:private" ],
   )
 
-def _gen_runtime_cpp_component_2(component_file, bits, suffix = "") :
-  native.genrule(
-    name = "initmod.{0}_{1}{2}.bc".format(component_file, bits, suffix),
-    tools = [ "@llvm//:llvm-as" ],
-    srcs = [ "initmod.{0}_{1}{2}.ll".format(component_file, bits, suffix) ],
-    cmd = "$(location @llvm//:llvm-as) $< -o $@",
-    outs = [ "initmod_{0}_{1}{2}.bc".format(component_file, bits, suffix), ]
-  )
+  _ll2bc(name = "initmod_{0}".format(name),
+         srcs = [ ":initmod.{0}.ll".format(name) ])
 
-def _gen_runtime_cpp_component_3(component_file, bits, suffix = "") :
-  native.genrule(
-    name = "initmod.{0}_{1}{2}.cpp".format(component_file, bits, suffix),
-    tools = [ "@halide//tools:binary2cpp" ],
-    srcs = [ "initmod.{0}_{1}{2}.bc".format(component_file, bits, suffix), ],
-    cmd = "$(location @halide//tools:binary2cpp) initmod_{0}_{1}{2} < $< > $@".format(component_file, bits, suffix),
-    outs = [ "initmod_{0}_{1}{2}.cpp".format(component_file, bits, suffix), ]
-  )
+  return _binary2cpp(name = "initmod_{0}".format(name),
+                     srcs = ["initmod_{0}.bc".format(name)])
 
-def _gen_runtime_ll_component_1(component_file) :
-  native.genrule(
-    name = "initmod.{0}_ll.bc".format(component_file),
-    tools = [ "@llvm//:llvm-as" ],
-    srcs = [ "src/runtime/{0}.ll".format(component_file), ],
-    cmd = "$(location @llvm//:llvm-as) $< -o $@",
-    outs = [ "initmod_{0}_ll.bc".format(component_file), ]
-  )
+def _gen_runtime_ll_component(component_file) :
+  _ll2bc(name = "initmod_{0}_ll".format(component_file),
+         srcs = [ "src/runtime/{0}.ll".format(component_file) ])
 
-def _gen_runtime_ll_component_2(component_file) :
-  native.genrule(
-    name = "initmod.{0}_ll.cpp".format(component_file),
-    tools = [ "@halide//tools:binary2cpp" ],
-    srcs = [ "initmod.{0}_ll.bc".format(component_file), ],
-    cmd = "$(location @halide//tools:binary2cpp) initmod_{0}_ll < $< > $@".format(component_file),
-    outs = [ "initmod_{0}_ll.cpp".format(component_file) ]
-  )
+  return _binary2cpp(name = "initmod_{0}_ll".format(component_file),
+                     srcs = ["initmod_{0}_ll.bc".format(component_file)])
 
 def _gen_runtime_nvidia_bitcode_component(component_file) :
-  native.genrule(
-    name = "initmod_ptx.{0}_ll.cpp".format(component_file),
-    tools = [ "@halide//tools:binary2cpp" ],
-    srcs = native.glob(["src/runtime/nvidia_libdevice_bitcode/libdevice.{0}.*.bc".format(component_file)], exclude = []),
-    cmd = "$(location @halide//tools:binary2cpp) initmod_ptx_{0}_ll < $< > $@".format(component_file),
-    outs = [ "initmod_ptx_{0}_ll.cpp".format(component_file) ]
-  )
+  return _binary2cpp(name = "initmod_ptx_{0}_ll".format(component_file),
+                     srcs = native.glob(["src/runtime/nvidia_libdevice_bitcode/libdevice.{0}.*.bc".format(component_file)]))
 
-def _get_runtime_header_component(component_file) :
-  native.genrule(
-    name = "initmod.{0}_h.cpp".format(component_file),
-    tools = [ "@halide//tools:binary2cpp" ],
-    srcs = [ "src/runtime/{0}.h".format(component_file) ],
-    cmd = "$(location @halide//tools:binary2cpp) runtime_header_{0}_h < $< > $@".format(component_file),
-    outs = [ "initmod_{0}_h.cpp".format(component_file) ]
-  )
+def _gen_runtime_header_component(component_file) :
+  return _binary2cpp(name = "runtime_header_{0}_h".format(component_file),
+                     srcs = [ "src/runtime/{0}.h".format(component_file) ])
 
-def _get_inlined_c_component(srcs):
-  native.genrule(
-    name = "initmod.inlined_c.cpp",
-    tools = [ "@halide//tools:binary2cpp" ],
-    srcs = ["src/runtime/{0}.cpp".format(src) for src in srcs],
-    cmd = "$(location @halide//tools:binary2cpp) initmod_inlined_c < $< > $@",
-    outs = [ "initmod_inlined_c.cpp" ]
-  )
+def _gen_inlined_c_component(srcs):
+  return _binary2cpp(name = "initmod_inlined_c",
+                     srcs = ["src/runtime/{0}.cpp".format(src) for src in srcs])
 
-def gen_runtime_targets(runtime_cpp_components, 
-                        runtime_ll_components, 
-                        runtime_nvidia_bitcode_components, 
-                        runtime_header_components, 
-                        runtime_inlined_c_components):
-  for component in runtime_cpp_components:
-    for bits in [ "32", "64" ]:
-      for suffix, opts in [ ("", "-O3"), ("_debug", "-DDEBUG_RUNTIME") ]:
-        _gen_runtime_cpp_component_1(component, bits, suffix,  opts)
-        _gen_runtime_cpp_component_2(component, bits, suffix)
-        _gen_runtime_cpp_component_3(component, bits, suffix)
-  for component in runtime_ll_components:
-    _gen_runtime_ll_component_1(component)
-    _gen_runtime_ll_component_2(component)
-  for component in runtime_nvidia_bitcode_components:
+def gen_runtime(name,
+                runtime_cpp_components, 
+                runtime_ll_components, 
+                runtime_nvidia_bitcode_components, 
+                runtime_header_components, 
+                runtime_inlined_c_components):
+  srcs = [
+    _gen_runtime_cpp_component(component, bits, suffix,  opts)
+    for component in runtime_cpp_components
+    for bits in [ "32", "64" ]
+    for suffix, opts in [ ("", "-O3"), ("_debug", "-DDEBUG_RUNTIME") ]
+  ] + [
+    _gen_runtime_ll_component(component)
+    for component in runtime_ll_components
+  ] + [
     _gen_runtime_nvidia_bitcode_component(component)
-  for component in runtime_header_components:
-    _get_runtime_header_component(component)
-  _get_inlined_c_component(runtime_inlined_c_components)
+    for component in runtime_nvidia_bitcode_components
+  ] + [
+    _gen_runtime_header_component(component)
+    for component in runtime_header_components
+  ] + [
+    _gen_inlined_c_component(runtime_inlined_c_components)
+  ]
+  native.cc_library(name = name, srcs = srcs)
 
-def runtime_srcs(runtime_cpp_components, 
-                 runtime_ll_components, 
-                 runtime_nvidia_bitcode_components, 
-                 runtime_header_components, 
-                 runtime_inlined_c_components):
-  result = []
-  for component in runtime_cpp_components:
-    for bits in [ "32", "64" ]:
-      for suffix in [ "", "_debug" ]:
-        result = result + [":initmod_{0}_{1}{2}.cpp".format(component, bits, suffix)]
-  for component in runtime_ll_components:
-    result = result + [":initmod_%s_ll.cpp" % component]
-  for component in runtime_nvidia_bitcode_components:
-    result = result + [":initmod_ptx_%s_ll.cpp" % component]
-  for component in runtime_header_components:
-    result = result + [":initmod_%s_h.cpp" % component]
-  result = result + [":initmod_inlined_c.cpp"]
-  return result
 
 
