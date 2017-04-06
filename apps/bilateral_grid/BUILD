@@ -19,7 +19,7 @@ cc_binary(
         "@halide//:runtime",
         "@halide//tools:halide_image_io",
         ":bilateral_grid",
-        "//apps/support:benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
+        "//tools:halide_benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
 )
 

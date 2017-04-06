@@ -17,6 +17,7 @@ load(
 ) for gen in glob(
     ["*_generator.cpp"],
     exclude = [
+        "external_code*",  # TODO
         "nested_externs*",
         "stubtest*",
         "stubuser*",
@@ -61,6 +62,7 @@ halide_generator(
 ) for gen in [
     "acquire_release",
     "argvcall",
+    "blur2x2",
     "can_use_target",
     "cleanup_on_error",
     "embed_image",
@@ -72,7 +74,6 @@ halide_generator(
     "image_from_array",
     "mandelbrot",
     "memory_profiler_mandelbrot",
-    "tiled_blur_blur",
     "tiled_blur",
     "variable_num_threads",
 ]]
@@ -347,7 +348,7 @@ cc_test(
     srcs = ["tiled_blur_aottest.cpp"],
     linkopts = halide_runtime_linkopts(),
     deps = [
+        ":blur2x2",
         ":tiled_blur",
-        ":tiled_blur_blur",
     ],
 )

@@ -18,7 +18,7 @@ cc_test(
     deps = [
         "@halide//:runtime",
         ":halide_blur",
-        "//apps/support:benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
+        "//tools:halide_benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
     # TODO: detect whether the C++ compiler supports this.
     # copts = ["-fopenmp"]

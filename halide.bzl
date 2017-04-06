@@ -477,6 +477,7 @@ def _define_halide_library_runtime(halide_target_features = []):
             "//conditions:default": "",
         }),
         outputs=["o"],
+        tags=["manual"],
         visibility=[
             "@halide//:__subpackages__",
         ]
@@ -486,6 +487,7 @@ def _define_halide_library_runtime(halide_target_features = []):
   native.cc_library(
       name=target_name,
       srcs=select(condition_deps),
+      tags=["manual"],
       visibility=["//visibility:public"])
 
   return target_name
@@ -493,12 +495,15 @@ def _define_halide_library_runtime(halide_target_features = []):
 def _standard_library_runtime_features():
   standard_features = [
       [],
+      ["c_plus_plus_name_mangling"],
       ["cuda"],
       ["cuda", "matlab"],
       ["hvx_64"],
       ["hvx_128"],
       ["matlab"],
+      ["metal"],
       ["msan"],
+      ["opengl"],
   ]
   return [f for f in standard_features] + [f + ["debug"] for f in standard_features]
 
@@ -764,3 +769,4 @@ def halide_library(name,
       halide_target_features=halide_target_features,
       halide_target_map=halide_target_map,
       extra_outputs=extra_outputs)
+
