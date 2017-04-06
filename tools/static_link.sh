@@ -8,7 +8,7 @@
 # TODO: Replace this with cc_export() if/when the tracking issue
 # (https://github.com/bazelbuild/bazel/issues/1920) is
 
-set -eu
+set -eux
 
 # $1 = scratch directory
 # $2 = .a to use for linkage baseline (e.g. libHalide.a)

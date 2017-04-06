@@ -74,7 +74,6 @@ halide_generator(
     "image_from_array",
     "mandelbrot",
     "memory_profiler_mandelbrot",
-    "tiled_blur",
     "variable_num_threads",
 ]]
 
@@ -227,6 +226,13 @@ halide_library_from_generator(
     name = "stubuser",
     generator = ":stubuser_generator",
     includes = ["."],
+)
+
+halide_library_from_generator(
+    name = "tiled_blur",
+    generator = ":tiled_blur_generator",
+    includes = ["."],
+    deps = [":blur2x2"],  # referenced via define_extern
 )
 
 halide_library_from_generator(
