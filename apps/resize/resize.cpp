@@ -5,8 +5,8 @@ using namespace Halide;
 #include <iostream>
 #include <limits>
 
-#include <halide_image_io.h>
-#include <benchmark.h>
+#include "halide_image_io.h"
+#include "halide_benchmark.h"
 
 enum InterpolationType {
     BOX, LINEAR, CUBIC, LANCZOS
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
            out_width, out_height,
            kernelInfo[interpolationType].name);
 
-    double min = benchmark(10, 1, [&]() { final.realize(out); });
+    double min = Tools::benchmark(10, 1, [&]() { final.realize(out); });
     std::cout << " took min=" << min * 1000 << " msec." << std::endl;
 
     Tools::save_image(out, outfile);
