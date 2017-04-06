@@ -14,7 +14,7 @@ package(
 
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 load("@halide//:halide.bzl", "halide_config_settings", "halide_language_copts", "halide_library_runtimes")
-load("@halide//:tools/halide_internal_build_defs.bzl", "gen_runtime_targets", "runtime_srcs")
+load("@halide//:tools/halide_internal_build_defs.bzl", "gen_runtime")
 load("@llvm//:llvm_internal_build_defs.bzl", "get_llvm_version", "get_llvm_enabled_components", "get_llvm_linkopts")
 
 halide_config_settings()
@@ -184,23 +184,13 @@ _RUNTIME_INLINED_C_COMPONENTS = [
     "buffer_t",
 ]
 
-gen_runtime_targets(
+gen_runtime(
+    "halide_runtime_components",
     _RUNTIME_CPP_COMPONENTS, 
     _RUNTIME_LL_COMPONENTS, 
     _RUNTIME_NVIDIA_BITCODE_COMPONENTS, 
     _RUNTIME_HEADER_COMPONENTS, 
     _RUNTIME_INLINED_C_COMPONENTS
-)
-
-filegroup(
-    name = "runtime_components",
-    srcs = runtime_srcs(
-        _RUNTIME_CPP_COMPONENTS, 
-        _RUNTIME_LL_COMPONENTS, 
-        _RUNTIME_NVIDIA_BITCODE_COMPONENTS, 
-        _RUNTIME_HEADER_COMPONENTS, 
-        _RUNTIME_INLINED_C_COMPONENTS
-    ),
 )
 
 _ENABLED_COMPONENTS = get_llvm_enabled_components() + [
@@ -222,7 +212,6 @@ cc_library(
         ],
     ) + [
         ":runtime_headers",
-        ":runtime_components",
     ],
     copts = [
         "-DCOMPILING_HALIDE",
@@ -231,7 +220,7 @@ cc_library(
         "-D%s" % component for component in _ENABLED_COMPONENTS
     ] + halide_language_copts(),
     linkstatic = 1,
-    deps = ["@llvm//:llvm"],
+    deps = [":halide_runtime_components", "@llvm//:llvm"],
 )
 
 genrule(
