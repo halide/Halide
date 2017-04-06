@@ -1,6 +1,7 @@
 #ifndef HALIDE_ELF_H
 #define HALIDE_ELF_H
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 #include <list>
@@ -259,7 +260,7 @@ public:
         this->size = size;
         return *this;
     }
-    uint64_t get_size() const { return std::max(size, contents.size()); }
+    uint64_t get_size() const { return std::max((uint64_t) size, (uint64_t) contents.size()); }
     ///@}
 
     Section &set_alignment(uint64_t alignment) {
