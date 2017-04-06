@@ -31,7 +31,7 @@ public:
         tiled_blur.define_extern(
             "blur2x2",
             { brightened, input.dim(0).extent(), input.dim(1).extent() },
-            Float(32), 3, NameMangling::C);
+            Float(32), 3);
 
         Expr tiled_blur_brightened = tiled_blur(x, y, c) * 1.2f;
 
