@@ -1,5 +1,5 @@
 #include "bin/mat_mul.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "HalideBuffer.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>

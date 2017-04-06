@@ -190,9 +190,11 @@ struct Select : public ExprNode<Select> {
     static const IRNodeType _type_info = IRNodeType::Select;
 };
 
-/** Load a value from a named buffer if predicate is true. The buffer is treated
- * as an array of the 'type' of this Load node. That is, the buffer has
- * no inherent type. */
+/** Load a value from a named symbol if predicate is true. The buffer
+ * is treated as an array of the 'type' of this Load node. That is,
+ * the buffer has no inherent type. The name may be the name of an
+ * enclosing allocation, an input or output buffer, or any other
+ * symbol of type Handle(). */
 struct Load : public ExprNode<Load> {
     std::string name;
 
@@ -298,9 +300,11 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
     static const IRNodeType _type_info = IRNodeType::ProducerConsumer;
 };
 
-/** Store a 'value' to the buffer called 'name' at a given 'index' if 'predicate'
- * is true. The buffer is interpreted as an array of the same type as
- * 'value'. */
+/** Store a 'value' to the buffer called 'name' at a given 'index' if
+ * 'predicate' is true. The buffer is interpreted as an array of the
+ * same type as 'value'. The name may be the name of an enclosing
+ * Allocate node, an output buffer, or any other symbol of type
+ * Handle(). */
 struct Store : public StmtNode<Store> {
     std::string name;
     Expr predicate, value, index;
@@ -314,9 +318,10 @@ struct Store : public StmtNode<Store> {
 };
 
 /** This defines the value of a function at a multi-dimensional
- * location. You should think of it as a store to a
- * multi-dimensional array. It gets lowered to a conventional
- * Store node. */
+ * location. You should think of it as a store to a multi-dimensional
+ * array. It gets lowered to a conventional Store node. The name must
+ * correspond to an output buffer or the name of an enclosing Realize
+ * node. */
 struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
@@ -331,7 +336,9 @@ struct Provide : public StmtNode<Provide> {
  * size. The buffer lives for at most the duration of the body
  * statement, within which it is freed. It is an error for an allocate
  * node not to contain a free node of the same buffer. Allocation only
- * occurs if the condition evaluates to true. */
+ * occurs if the condition evaluates to true. Within the body of the
+ * allocation, defines a symbol with the given name and the type
+ * Handle(). */
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
@@ -390,7 +397,8 @@ typedef std::vector<Range> Region;
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
  * (min, extent) pairs for each dimension. Allocation only occurs if
- * the condition evaluates to true. */
+ * the condition evaluates to true.
+ */
 struct Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
@@ -511,6 +519,8 @@ struct Call : public ExprNode<Call> {
     // magic string constants and the potential risk of typos.
     EXPORT static ConstString
         buffer_get_min,
+        buffer_get_extent,
+        buffer_get_stride,
         buffer_get_max,
         buffer_get_host,
         buffer_get_device,
@@ -518,6 +528,9 @@ struct Call : public ExprNode<Call> {
         buffer_get_shape,
         buffer_get_host_dirty,
         buffer_get_device_dirty,
+        buffer_get_type_code,
+        buffer_get_type_bits,
+        buffer_get_type_lanes,
         buffer_set_host_dirty,
         buffer_set_device_dirty,
         buffer_is_bounds_query,

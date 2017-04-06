@@ -138,6 +138,7 @@ struct Pattern {
         NarrowUnsignedOp2 = 1 << 17,
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
 
+        v62 = 1 << 20,  // Pattern should be matched only for v62 target
    };
 
     string intrin;        // Name of the intrinsic
@@ -171,10 +172,14 @@ Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 // successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
 // with op_mutator.
-Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutator) {
+Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &target, IRMutator *op_mutator) {
     debug(3) << "apply_patterns " << x << "\n";
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
+
+        if ((p.flags & (Pattern::v62)) && !target.has_feature(Target::HVX_v62))
+            continue;
+
         if (expr_match(p.pattern, x, matches)) {
             debug(3) << "matched " << p.pattern << "\n";
             debug(3) << "matches:\n";
@@ -266,13 +271,13 @@ Expr lossless_negate(Expr x) {
 }
 
 template <typename T>
-Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IRMutator *mutator) {
-    Expr ret = apply_patterns(op, patterns, mutator);
+Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, const Target &target, IRMutator *mutator) {
+    Expr ret = apply_patterns(op, patterns, target, mutator);
     if (!ret.same_as(op)) return ret;
 
     // Try commuting the op
     Expr commuted = T::make(op->b, op->a);
-    ret = apply_patterns(commuted, patterns, mutator);
+    ret = apply_patterns(commuted, patterns, target, mutator);
     if (!ret.same_as(commuted)) return ret;
 
     return op;
@@ -284,8 +289,10 @@ class OptimizePatterns : public IRMutator {
 private:
     using IRMutator::visit;
 
+    Target target;
+
     void visit(const Mul *op) {
-        static vector<Pattern> scalar_muls = {
+        static const vector<Pattern> scalar_muls = {
             // Vector by scalar widening multiplies.
             { "halide.hexagon.mpy.vub.ub", wild_u16x*bc(wild_u16), Pattern::InterleaveResult | Pattern::NarrowOps },
             { "halide.hexagon.mpy.vub.b",  wild_i16x*bc(wild_i16), Pattern::InterleaveResult | Pattern::NarrowUnsignedOp0 | Pattern::NarrowOp1 },
@@ -309,7 +316,7 @@ private:
             // 32 bits.
         };
 
-        static vector<Pattern> muls = {
+        static const vector<Pattern> muls = {
             // Widening multiplication
             { "halide.hexagon.mpy.vub.vub", wild_u16x*wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
             { "halide.hexagon.mpy.vuh.vuh", wild_u32x*wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
@@ -333,13 +340,13 @@ private:
         };
 
         if (op->type.is_vector()) {
-            Expr new_expr = apply_commutative_patterns(op, scalar_muls, this);
+            Expr new_expr = apply_commutative_patterns(op, scalar_muls, target, this);
             if (!new_expr.same_as(op)) {
                 expr = new_expr;
                 return;
             }
 
-            new_expr = apply_commutative_patterns(op, muls, this);
+            new_expr = apply_commutative_patterns(op, muls, target, this);
             if (!new_expr.same_as(op)) {
                 expr = new_expr;
                 return;
@@ -587,7 +594,7 @@ private:
             }
         }
 
-        static vector<Pattern> adds = {
+        static const vector<Pattern> adds = {
             // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
             { "halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0),  ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
             { "halide.hexagon.acc_add_2mpy.vw.vh.vh.b.b",   wild_i32x + halide_hexagon_add_2mpy(Int(32, 0),  ".vh.vh.b.b", wild_i16x, wild_i16x, wild_i8, wild_i8), Pattern::ReinterleaveOp0 },
@@ -654,7 +661,7 @@ private:
         };
 
         if (op->type.is_vector()) {
-            Expr new_expr = apply_commutative_patterns(op, adds, this);
+            Expr new_expr = apply_commutative_patterns(op, adds, target, this);
             if (!new_expr.same_as(op)) {
                 expr = new_expr;
                 return;
@@ -671,7 +678,7 @@ private:
                 expr = mutate(op->a + neg_b);
                 return;
             } else {
-                static vector<Pattern> subs = {
+                static const vector<Pattern> subs = {
                     // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
                     // To differentiate those from the widening ones, we encode the return type in the name here.
                     { "halide.hexagon.sub_vuh.vub.vub", wild_u16x - wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
@@ -679,7 +686,7 @@ private:
                     { "halide.hexagon.sub_vw.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
                 };
 
-                Expr new_expr = apply_patterns(op, subs, this);
+                Expr new_expr = apply_patterns(op, subs, target, this);
                 if (!new_expr.same_as(op)) {
                     expr = new_expr;
                     return;
@@ -696,7 +703,7 @@ private:
             // This pattern is weird (two operands must match, result
             // needs 1 added) and we're unlikely to need another
             // pattern for max, so just match it directly.
-            static pair<string, Expr> cl[] = {
+            static const pair<string, Expr> cl[] = {
                 { "halide.hexagon.cls.vh", max(count_leading_zeros(wild_i16x), count_leading_zeros(~wild_i16x)) },
                 { "halide.hexagon.cls.vw", max(count_leading_zeros(wild_i32x), count_leading_zeros(~wild_i32x)) },
             };
@@ -712,7 +719,7 @@ private:
 
     void visit(const Cast *op) {
 
-        static vector<Pattern> casts = {
+        static const vector<Pattern> casts = {
             // Averaging
             { "halide.hexagon.avg.vub.vub", u8((wild_u16x + wild_u16x)/2), Pattern::NarrowOps },
             { "halide.hexagon.avg.vuh.vuh", u16((wild_u32x + wild_u32x)/2), Pattern::NarrowOps },
@@ -732,6 +739,7 @@ private:
             // Saturating add/subtract
             { "halide.hexagon.satub_add.vub.vub", u8_sat(wild_u16x + wild_u16x), Pattern::NarrowOps },
             { "halide.hexagon.satuh_add.vuh.vuh", u16_sat(wild_u32x + wild_u32x), Pattern::NarrowOps },
+            { "halide.hexagon.satuw_add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps | Pattern::v62 },
             { "halide.hexagon.sath_add.vh.vh", i16_sat(wild_i32x + wild_i32x), Pattern::NarrowOps },
             { "halide.hexagon.satw_add.vw.vw", i32_sat(wild_i64x + wild_i64x), Pattern::NarrowOps },
 
@@ -780,6 +788,9 @@ private:
             { "halide.hexagon.pack_satb.vh", i8_sat(wild_i16x) },
             { "halide.hexagon.pack_sath.vw", i16_sat(wild_i32x) },
 
+            // We don't have a vpack equivalent to this one, so we match it directly.
+            { "halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0 | Pattern::v62 },
+
             // Narrowing casts. These may interleave later with trunclo.
             { "halide.hexagon.packhi.vh", u8(wild_u16x/256) },
             { "halide.hexagon.packhi.vh", u8(wild_i16x/256) },
@@ -820,7 +831,7 @@ private:
         // as two stage casts. This also avoids letting vector casts
         // fall through to LLVM, which will generate large unoptimized
         // shuffles.
-        static vector<pair<Expr, Expr>> cast_rewrites = {
+        static const vector<pair<Expr, Expr>> cast_rewrites = {
             // Saturating narrowing
             { u8_sat(wild_u32x), u8_sat(u16_sat(wild_u32x)) },
             { u8_sat(wild_i32x), u8_sat(i16_sat(wild_i32x)) },
@@ -843,7 +854,7 @@ private:
         if (op->type.is_vector()) {
             Expr cast = op;
 
-            Expr new_expr = apply_patterns(cast, casts, this);
+            Expr new_expr = apply_patterns(cast, casts, target, this);
             if (!new_expr.same_as(cast)) {
                 expr = new_expr;
                 return;
@@ -895,7 +906,9 @@ private:
     }
 
 public:
-    OptimizePatterns() {}
+    OptimizePatterns(Target t) {
+        target = t;
+    }
 };
 
 // Attempt to cancel out redundant interleave/deinterleave pairs. The
@@ -1186,7 +1199,7 @@ class EliminateInterleaves : public IRMutator {
     static bool is_interleavable(const Call *op) {
         // These calls can have interleaves moved from operands to the
         // result...
-        static set<string> interleavable = {
+        static const set<string> interleavable = {
             Call::bitwise_and,
             Call::bitwise_not,
             Call::bitwise_xor,
@@ -1202,7 +1215,7 @@ class EliminateInterleaves : public IRMutator {
         // ...these calls cannot. Furthermore, these calls have the
         // same return type as the arguments, which means our test
         // below will be inaccurate.
-        static set<string> not_interleavable = {
+        static const set<string> not_interleavable = {
             "halide.hexagon.interleave.vb",
             "halide.hexagon.interleave.vh",
             "halide.hexagon.interleave.vw",
@@ -1447,7 +1460,7 @@ class FuseInterleaves : public IRMutator {
     void visit(const Call *op) {
         // This is a list of {f, g} pairs that if the first operation
         // is interleaved, interleave(f(x)) is equivalent to g(x).
-        static std::vector<std::pair<string, string>> non_deinterleaving_alts = {
+        static const std::vector<std::pair<string, string>> non_deinterleaving_alts = {
             { "halide.hexagon.zxt.vub", "halide.hexagon.unpack.vub" },
             { "halide.hexagon.sxt.vb", "halide.hexagon.unpack.vb" },
             { "halide.hexagon.zxt.vuh", "halide.hexagon.unpack.vuh" },
@@ -1615,13 +1628,13 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     return OptimizeShuffles(lut_alignment).mutate(s);
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, int native_vector_bytes) {
+Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
-    s = OptimizePatterns().mutate(s);
+    s = OptimizePatterns(t).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
-    s = EliminateInterleaves(native_vector_bytes*8).mutate(s);
+    s = EliminateInterleaves(t.natural_vector_size(Int(8))*8).mutate(s);
 
     // There may be interleaves left over that we can fuse with other
     // operations.

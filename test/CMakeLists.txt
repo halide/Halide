@@ -216,7 +216,7 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(stubuser
                      GENERATOR_NAME stubuser
                      STUB_DEPS stubtest.generator)
-  add_test_generator(tiled_blur_blur)
+  add_test_generator(blur2x2)
   add_test_generator(tiled_blur)
   add_test_generator(user_context)
   add_test_generator(user_context_insanity)
@@ -327,8 +327,8 @@ if (WITH_TEST_GENERATORS)
 
   halide_define_aot_test(tiled_blur)
   halide_add_aot_test_dependency(tiled_blur
-                                 GENERATOR_TARGET tiled_blur_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_blur)
+                                 GENERATOR_TARGET blur2x2
+                                 AOT_LIBRARY_TARGET blur2x2)
 
   halide_define_aot_test(cxx_mangling_define_extern
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-user_context

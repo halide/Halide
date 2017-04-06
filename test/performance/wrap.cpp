@@ -1,7 +1,8 @@
 #include "Halide.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 /* Both 'build' and 'build_wrap' run the same stencil algorithm, albeit with different
  * schedules. 'build(true)' stages the input data (the compute_root() 'host' Func) into
