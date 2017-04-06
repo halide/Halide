@@ -14,6 +14,13 @@ cc_library(
 )
 
 cc_library(
+    name = "halide_benchmark",
+    hdrs = ["halide_benchmark.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "halide_malloc_trace",
     hdrs = ["halide_malloc_trace.h"],
     includes = ["."],

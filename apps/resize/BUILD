@@ -11,7 +11,7 @@ cc_binary(
     deps = [
         "@halide//:language",
         "@halide//tools:halide_image_io",
-        "//apps/support:benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
+        "//tools:halide_benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
 )
 
