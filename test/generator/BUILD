@@ -265,6 +265,7 @@ halide_library_from_generator(
 [cc_test(
     name = "%s_aottest" % test,
     srcs = ["%s_aottest.cpp" % test],
+    copts = ["-UNDEBUG"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":%s" % test,
@@ -297,6 +298,7 @@ halide_library_from_generator(
 cc_test(
     name = "cleanup_on_error_aottest",
     srcs = ["cleanup_on_error_aottest.cpp"],
+    copts = ["-UNDEBUG"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":cleanup_on_error",
@@ -307,6 +309,7 @@ cc_test(
 cc_test(
     name = "cxx_mangling_aottest",
     srcs = ["cxx_mangling_aottest.cpp"],
+    copts = ["-UNDEBUG"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":cxx_mangling",
@@ -317,6 +320,7 @@ cc_test(
 cc_test(
     name = "metadata_tester_aottest",
     srcs = ["metadata_tester_aottest.cpp"],
+    copts = ["-UNDEBUG"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":metadata_tester",
@@ -327,6 +331,7 @@ cc_test(
 cc_test(
     name = "gpu_object_lifetime_aottest",
     srcs = ["gpu_object_lifetime_aottest.cpp"],
+    copts = ["-UNDEBUG"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":gpu_object_lifetime",
@@ -337,6 +342,7 @@ cc_test(
 cc_test(
     name = "nested_externs_aottest",
     srcs = ["nested_externs_aottest.cpp"],
+    copts = ["-UNDEBUG"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":nested_externs_root",
@@ -346,6 +352,7 @@ cc_test(
 cc_test(
     name = "tiled_blur_aottest",
     srcs = ["tiled_blur_aottest.cpp"],
+    copts = ["-UNDEBUG"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":blur2x2",
