@@ -295,6 +295,7 @@ halide_library_from_generator(
     "pyramid",
     "stubtest",
     "stubuser",
+    "tiled_blur",
     "user_context",
     "user_context_insanity",
     "variable_num_threads",
@@ -352,16 +353,5 @@ cc_test(
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":nested_externs_root",
-    ],
-)
-
-cc_test(
-    name = "tiled_blur_aottest",
-    srcs = ["tiled_blur_aottest.cpp"],
-    copts = ["-UNDEBUG"],
-    linkopts = halide_runtime_linkopts(),
-    deps = [
-        ":blur2x2",
-        ":tiled_blur",
     ],
 )
