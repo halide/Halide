@@ -1,6 +1,7 @@
 #ifndef HALIDE_ELF_H
 #define HALIDE_ELF_H
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 #include <list>
