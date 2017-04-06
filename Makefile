@@ -302,6 +302,7 @@ SOURCE_FILES = \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   EarlyFree.cpp \
+  Elf.cpp \
   EliminateBoolVectors.cpp \
   Error.cpp \
   FastIntegerDivide.cpp \
@@ -429,6 +430,7 @@ HEADER_FILES = \
   DeviceArgument.h \
   DeviceInterface.h \
   EarlyFree.h \
+  Elf.h \
   EliminateBoolVectors.h \
   Error.h \
   Expr.h \
