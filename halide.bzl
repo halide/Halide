@@ -770,3 +770,38 @@ def halide_library(name,
       halide_target_map=halide_target_map,
       extra_outputs=extra_outputs)
 
+def halide_binary_to_cc_library(name, 
+                                srcs, 
+                                identifier, 
+                                copts=None, 
+                                visibility=None, 
+                                alwayslink=False,
+                                linkstatic=False):
+  """Convenient wrapper around the binary2cpp tool to convert a single binary file to a cc_library."""
+  if len(srcs) != 1:
+    fail("halide_binary_to_cc_library requires exactly one source file.")
+
+  native.genrule(
+      name = "%s_cpp" % name,
+      tools = [ "@halide//tools:binary2cpp" ],
+      srcs = srcs,
+      cmd = "$(location @halide//tools:binary2cpp) %s < $< > $@" % identifier,
+      outs = [ "%s.cpp" % name ],
+      visibility=["//visibility:private"]
+  )
+  native.genrule(
+      name = "%s_h" % name,
+      tools = [ "@halide//tools:binary2cpp" ],
+      cmd = "$(location @halide//tools:binary2cpp) %s -header > $@" % identifier,
+      outs = [ "%s.h" % name ],
+      visibility=["//visibility:private"]
+  )
+  native.cc_library(
+      name=name,
+      srcs=[":%s_cpp" % name],
+      hdrs=[":%s_h" % name],
+      copts=copts,
+      visibility=visibility,
+      alwayslink=alwayslink,
+      linkstatic=linkstatic
+  )

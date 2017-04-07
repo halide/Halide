@@ -1,4 +1,9 @@
 """Private Skylark helper functions for building Halide."""
+load(
+    "@halide//:halide.bzl",
+    "halide_binary_to_cc_library",
+)
+
 def _ll2bc(name, srcs):
   if len(srcs) != 1:
     fail("_ll2bc requires exactly one src")
@@ -12,17 +17,14 @@ def _ll2bc(name, srcs):
   )
 
 def _binary2cpp(name, srcs):
-  if len(srcs) != 1:
-    fail("_binary2cpp requires exactly one src")
-  native.genrule(
-      name = "%s_binary2cpp" % name,
-      tools = [ "@halide//tools:binary2cpp" ],
+  halide_binary_to_cc_library(
+      name = "%s_b2clib" % name,
       srcs = srcs,
-      cmd = "$(location @halide//tools:binary2cpp) halide_internal_%s < $< > $@" % name,
-      outs = [ "%s.cpp" % name ],
+      identifier = "halide_internal_%s" % name,
       visibility = [ "//visibility:private" ],
+      linkstatic = True
   )
-  return "%s.cpp" % name
+  return ":%s_b2clib" % name
 
 def _gen_runtime_cpp_component(component_file, bits, suffix, opts) :
   # Pick the appropriate generic target triple
@@ -86,7 +88,7 @@ def gen_runtime(name,
                 runtime_header_components, 
                 runtime_inlined_c_components):
   """Build the Halide runtime libraries."""
-  srcs = [
+  deps = [
       _gen_runtime_cpp_component(component, bits, suffix,  opts)
       for component in runtime_cpp_components
       for bits in [ "32", "64" ]
@@ -103,7 +105,9 @@ def gen_runtime(name,
   ] + [
       _gen_inlined_c_component(runtime_inlined_c_components)
   ]
-  native.cc_library(name = name, srcs = srcs)
+  native.cc_library(name = name, 
+                    deps = deps,
+                    linkstatic = True)
 
 
 
