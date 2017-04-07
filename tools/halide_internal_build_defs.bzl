@@ -1,29 +1,26 @@
-# Description:
-#  Private Skylark helper functions for building Halide.
-#  Should not be used by code outside of Halide itself.
-
+"""Private Skylark helper functions for building Halide."""
 def _ll2bc(name, srcs):
   if len(srcs) != 1:
     fail("_ll2bc requires exactly one src")
   native.genrule(
-    name = "%s_ll2bc" % name,
-    tools = [ "@llvm//:llvm-as" ],
-    srcs = srcs,
-    cmd = "$(location @llvm//:llvm-as) $< -o $@",
-    outs = [ "%s.bc" % name ],
-    visibility = [ "//visibility:private" ],
+      name = "%s_ll2bc" % name,
+      tools = [ "@llvm//:llvm-as" ],
+      srcs = srcs,
+      cmd = "$(location @llvm//:llvm-as) $< -o $@",
+      outs = [ "%s.bc" % name ],
+      visibility = [ "//visibility:private" ],
   )
 
 def _binary2cpp(name, srcs):
   if len(srcs) != 1:
     fail("_binary2cpp requires exactly one src")
   native.genrule(
-    name = "%s_binary2cpp" % name,
-    tools = [ "@halide//tools:binary2cpp" ],
-    srcs = srcs,
-    cmd = "$(location @halide//tools:binary2cpp) halide_internal_%s < $< > $@" % name,
-    outs = [ "%s.cpp" % name ],
-    visibility = [ "//visibility:private" ],
+      name = "%s_binary2cpp" % name,
+      tools = [ "@halide//tools:binary2cpp" ],
+      srcs = srcs,
+      cmd = "$(location @halide//tools:binary2cpp) halide_internal_%s < $< > $@" % name,
+      outs = [ "%s.cpp" % name ],
+      visibility = [ "//visibility:private" ],
   )
   return "%s.cpp" % name
 
@@ -42,19 +39,19 @@ def _gen_runtime_cpp_component(component_file, bits, suffix, opts) :
     triple = "le64-unknown-unknown-unknown"
   name = "{0}_{1}{2}".format(component_file, bits, suffix)
   native.genrule(
-    name = "initmod.{0}.ll".format(name),
-    tools = [ "@llvm//:clang" ],
-    srcs = [ 
-      "src/runtime/{0}.cpp".format(component_file),
-      ":runtime_files",
-    ],
-    cmd = ("$(location @llvm//:clang) " +
-           "-target " + triple + " " +
-           "-ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m{1} " +
-           "-DCOMPILING_HALIDE_RUNTIME -DBITS_{1} -emit-llvm {2} -S " +
-           "$(location src/runtime/{0}.cpp) -o $@").format(component_file, bits, opts),
-    outs = [ "initmod_{0}.ll".format(name) ],
-    visibility = [ "//visibility:private" ],
+      name = "initmod.{0}.ll".format(name),
+      tools = [ "@llvm//:clang" ],
+      srcs = [ 
+        "src/runtime/{0}.cpp".format(component_file),
+        ":runtime_files",
+      ],
+      cmd = ("$(location @llvm//:clang) " +
+             "-target " + triple + " " +
+             "-ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m{1} " +
+             "-DCOMPILING_HALIDE_RUNTIME -DBITS_{1} -emit-llvm {2} -S " +
+             "$(location src/runtime/{0}.cpp) -o $@").format(component_file, bits, opts),
+      outs = [ "initmod_{0}.ll".format(name) ],
+      visibility = [ "//visibility:private" ],
   )
 
   _ll2bc(name = "initmod_{0}".format(name),
@@ -88,22 +85,23 @@ def gen_runtime(name,
                 runtime_nvidia_bitcode_components, 
                 runtime_header_components, 
                 runtime_inlined_c_components):
+  """Build the Halide runtime libraries."""
   srcs = [
-    _gen_runtime_cpp_component(component, bits, suffix,  opts)
-    for component in runtime_cpp_components
-    for bits in [ "32", "64" ]
-    for suffix, opts in [ ("", "-O3"), ("_debug", "-DDEBUG_RUNTIME") ]
+      _gen_runtime_cpp_component(component, bits, suffix,  opts)
+      for component in runtime_cpp_components
+      for bits in [ "32", "64" ]
+      for suffix, opts in [ ("", "-O3"), ("_debug", "-DDEBUG_RUNTIME") ]
   ] + [
-    _gen_runtime_ll_component(component)
-    for component in runtime_ll_components
+      _gen_runtime_ll_component(component)
+      for component in runtime_ll_components
   ] + [
-    _gen_runtime_nvidia_bitcode_component(component)
-    for component in runtime_nvidia_bitcode_components
+      _gen_runtime_nvidia_bitcode_component(component)
+      for component in runtime_nvidia_bitcode_components
   ] + [
-    _gen_runtime_header_component(component)
-    for component in runtime_header_components
+      _gen_runtime_header_component(component)
+      for component in runtime_header_components
   ] + [
-    _gen_inlined_c_component(runtime_inlined_c_components)
+      _gen_inlined_c_component(runtime_inlined_c_components)
   ]
   native.cc_library(name = name, srcs = srcs)
 
