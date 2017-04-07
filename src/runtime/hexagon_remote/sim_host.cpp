@@ -9,6 +9,12 @@
 
 #include "sim_protocol.h"
 
+#ifdef _MSC_VER
+#define HALIDE_EXPORT __declspec(dllexport)
+#else
+#define HALIDE_EXPORT
+#endif
+
 typedef unsigned int handle_t;
 
 std::unique_ptr<HexagonWrapper> sim;
