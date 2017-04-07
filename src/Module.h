@@ -126,6 +126,12 @@ public:
     /** Return a new module with all submodules compiled to buffers on
      * on the result Module. */
     EXPORT Module resolve_submodules() const;
+
+    /** Return a pair of Modules: the first is the input Module, minus all ExternalCode blocks
+     * (including those from submodules); the second is a new Module that contains
+     * only the ExternalCode blocks from the first.
+     */
+    EXPORT std::pair<Module, Module> split_external_code() const;
 };
 
 /** Link a set of modules together into one module. */

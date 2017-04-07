@@ -154,6 +154,26 @@ Module::Module(const std::string &name, const Target &target) :
     contents->target = target;
 }
 
+std::pair<Module, Module> Module::split_external_code() const {
+    Module first(name(), target());
+    Module second(name() + "_external_code", target());
+    for (const auto &b : buffers()) {
+        first.append(b);
+    }
+    for (const auto &f : functions()) {
+        first.append(f);
+    }
+    for (const auto &m : submodules()) {
+        auto sub = m.split_external_code();
+        first.append(sub.first);
+        second.append(sub.second);
+    }
+    for (const auto &x : external_code()) {
+        second.append(x);
+    }
+    return { first, second };
+}
+
 const Target &Module::target() const {
     return contents->target;
 }
@@ -427,6 +447,7 @@ void compile_multitarget(const std::string &fn_name,
     TemporaryObjectFileDir temp_dir;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
+    std::map<std::string, ExternalCode> external_code;
     for (const Target &target : targets) {
         // arch-bits-os must be identical across all targets.
         if (target.os != base_target.os ||
@@ -467,7 +488,13 @@ void compile_multitarget(const std::string &fn_name,
             sub_fn_target = sub_fn_target.without_feature(Target::Matlab);
         }
 
-        Module sub_module = module_producer(sub_fn_name, sub_fn_target);
+        auto sub_module_pair = module_producer(sub_fn_name, sub_fn_target).split_external_code();
+        Module sub_module = sub_module_pair.first;
+        // Add the ExternalCode to a map by name, to de-dupe as we go along.
+        for (auto &ec : sub_module_pair.second.external_code()) {
+            external_code.insert({ec.name(), ec});
+        }
+
         // Re-assign every time -- should be the same across all targets anyway,
         // but base_target is always the last one we encounter.
         base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
@@ -491,6 +518,21 @@ void compile_multitarget(const std::string &fn_name,
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.push_back(sub_fn_name);
+    }
+
+    if (!external_code.empty()) {
+        Module external_code_module(fn_name + "_external_code", base_target);
+        for (auto &ec : external_code) {
+            external_code_module.append(ec.second);
+        }
+        std::string suffix = "_external_code";
+        Outputs sub_out = add_suffixes(output_files, suffix);
+        internal_assert(sub_out.object_name.empty());
+        sub_out.object_name = temp_dir.add_temp_object_file(output_files.static_library_name, suffix, base_target);
+        futures.emplace_back(pool.async([](Module m, Outputs o) {
+            debug(1) << "compile_multitarget: compile_external_code_module " << o.object_name << "\n";
+            m.compile(o);
+        }, std::move(external_code_module), std::move(sub_out)));
     }
 
     // If we haven't specified "no runtime", build a runtime with the base target
