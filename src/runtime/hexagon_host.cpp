@@ -112,8 +112,8 @@ WEAK int init_hexagon_runtime(void *user_context) {
     // code execution based on the runtime; devices with Hexagon hardware will
     // simply provide conduits for execution on that hardware, while test/desktop/etc
     // environments can instead connect a simulator via the API.
-    // If we are a windows hosted simulator, then we need to load the dll file.
-    // Otherwise if we are a linux hosted simulator we need the .so.
+    // Load the .so for Linux or Android, and if that fails try the .dll
+    // as we may be running the windows hosted simulator.
     void *host_lib = halide_load_library("libhalide_hexagon_host.so");
     if (!host_lib) {
         host_lib = halide_load_library("libhalide_hexagon_host.dll");
