@@ -9,6 +9,7 @@ namespace Internal {
 using std::vector;
 using std::map;
 using std::string;
+using std::pair;
 
 struct TraceEventBuilder {
     string func;
@@ -181,7 +182,23 @@ private:
                                                  {trace, value_var}, Call::PureIntrinsic));
             }
 
-            stmt = Provide::make(op->name, traces, op->args);
+            // Lift the args out into lets so that the order of
+            // evaluation is right for scatters. Otherwise the store
+            // is traced before any loads in the index.
+            vector<Expr> args = op->args;
+            vector<pair<string, Expr>> lets;
+            for (size_t i = 0; i < args.size(); i++) {
+                if (!args[i].as<Variable>() && !is_const(args[i])) {
+                    string name = unique_name('t');
+                    lets.push_back({name, args[i]});
+                    args[i] = Variable::make(args[i].type(), name);
+                }
+            }
+
+            stmt = Provide::make(op->name, traces, args);
+            for (const auto &p : lets) {
+                stmt = LetStmt::make(p.first, p.second, stmt);
+            }
         }
     }
 
