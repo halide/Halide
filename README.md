@@ -131,7 +131,7 @@ The makefile method above should work from inside a "mingw64" shell
 
 #### If all else fails...
 
-Do what the build-bots do: https://buildbot.halide-lang.org/master/waterfall
+Do what the build-bots do: https://buildbot.halide-lang.org/master/#/builders
 
 If the column that best matches your system is red, then maybe things
 aren't just broken for you. If it's green, then you can click the

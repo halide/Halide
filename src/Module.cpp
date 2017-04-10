@@ -113,6 +113,7 @@ struct ModuleContents {
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
+    std::vector<ExternalCode> external_code;
 };
 
 template<>
@@ -177,6 +178,10 @@ const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
 }
 
+const std::vector<ExternalCode> &Module::external_code() const {
+    return contents->external_code;
+}
+
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
@@ -197,6 +202,10 @@ void Module::append(const Internal::LoweredFunc &function) {
 
 void Module::append(const Module &module) {
     contents->submodules.push_back(module);
+}
+ 
+void Module::append(const ExternalCode &external_code) {
+    contents->external_code.push_back(external_code);
 }
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
@@ -227,30 +236,7 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 
 Buffer<uint8_t> Module::compile_to_buffer() const {
     // TODO: This Hexagon specific code should be removed as soon as possible.
-    bool use_shared_object = target().has_feature(Target::HVX_shared_object);
-
-    if (use_shared_object) {
-        return compile_module_to_hexagon_shared_object(*this);
-    } else {
-        llvm::LLVMContext context;
-        std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
-
-        llvm::SmallVector<char, 4096> object;
-        llvm::raw_svector_ostream object_stream(object);
-        compile_llvm_module_to_object(*llvm_module, object_stream);
-
-        if (debug::debug_level() >= 2) {
-            debug(2) << "Submodule assembly for " << name() << ": " << "\n";
-            llvm::SmallString<4096> assembly;
-            llvm::raw_svector_ostream assembly_stream(assembly);
-            compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
-            debug(2) << assembly.c_str() << "\n";
-        }
-
-        Buffer<uint8_t> result(object.size(), name());
-        memcpy(result.data(), reinterpret_cast<uint8_t*>(&object[0]), object.size());
-        return result;
-    }
+    return compile_module_to_hexagon_shared_object(*this);
 }
 
 Module Module::resolve_submodules() const {
@@ -266,9 +252,28 @@ Module Module::resolve_submodules() const {
     for (const auto &buf : buffers()) {
         lowered_module.append(buf);
     }
+    for (const auto &ec : external_code()) {
+        lowered_module.append(ec);
+    }
     for (const auto &m : submodules()) {
         Module copy(m.resolve_submodules());
-        auto buf = m.compile_to_buffer();
+
+        // Propagate external code blocks.
+        for (const auto &ec : external_code()) {
+            // TODO(zalman): Is this the right thing to do?
+            bool already_in_list = false;
+            for (const auto &ec_sub : copy.external_code()) {
+                if (ec_sub.name() == ec.name()) {
+                    already_in_list = true;
+                    break;
+                }
+            }
+            if (!already_in_list) {
+                copy.append(ec);
+            }
+        }
+
+        auto buf = copy.compile_to_buffer();
         lowered_module.append(buf);
     }
 
