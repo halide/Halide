@@ -24,8 +24,7 @@ WEAK void *halide_get_symbol_impl(const char *name) {
 
 WEAK void *halide_load_library_impl(const char *name) {
     // Suppress dialog windows during library open.
-    unsigned old_mode = SetErrorMode(0);
-    SetErrorMode(old_mode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+    unsigned old_mode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     void *lib = LoadLibraryA(name);
     SetErrorMode(old_mode);
     return lib;
