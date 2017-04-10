@@ -16,7 +16,9 @@ namespace Internal {
 
 /** Try to simplify the RHS/LHS of a function's definition based on its
  * specializations. */
-void simplify_specializations(std::map<std::string, Function> &env);
+EXPORT void simplify_specializations(std::map<std::string, Function> &env);
+
+EXPORT void simplify_specializations_test();
 
 }
 }
