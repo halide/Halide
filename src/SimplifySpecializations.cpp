@@ -5,8 +5,6 @@
 #include "Substitute.h"
 #include "Definition.h"
 #include "IREquality.h"
-#include "Param.h"
-#include "Func.h"
 
 #include <set>
 
@@ -159,85 +157,7 @@ int my_trace(void *user_context, const halide_trace_event_t *ev) {
 }  // namespace
 
 void simplify_specializations_test() {
-    Var x, y;
-    Param<int> p;
-    Expr const_false = Expr(0) == Expr(1);
-    Expr const_true = Expr(0) == Expr(0);
-    Expr different_const_true = Expr(1) == Expr(1);
 
-    {
-        // Check that we aggressively prune specialize(const-false)
-        Func f;
-        f(x) = x;
-        f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
-        f.specialize(const_false).vectorize(x, 8);  // will be pruned
-        f.vectorize(x, 4);                          // default case, not a specialization
-
-        internal_assert(f.function().definition().specializations().size() == 2);
-
-        map<string, Function> env;
-        env.insert({f.function().name(), f.function()});
-        simplify_specializations(env);
-
-        const auto &s = f.function().definition().specializations();
-        internal_assert(s.size() == 1);
-        // should be (something) == 0
-        internal_assert(s[0].condition.as<EQ>() && is_zero(s[0].condition.as<EQ>()->b));
-
-        f.set_custom_trace(&my_trace);
-        f.trace_stores();
-
-        vector_store_lanes = 0;
-        p.set(0);
-        f.realize(100);
-        internal_assert(vector_store_lanes == 32);
-
-        vector_store_lanes = 0;
-        p.set(42);  // just a nonzero value
-        f.realize(100);
-        internal_assert(vector_store_lanes == 4);
-    }
-    {
-        // Check that we aggressively prune all specializations after specialize(const-true)
-        // except for other occurrences of specialize(const-true)
-        Func f;
-        f(x) = x;
-        f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
-        f.specialize(const_true).vectorize(x, 16);  // will *not* be pruned
-        f.specialize(const_false).vectorize(x, 4);  // will be pruned
-        f.specialize(p == 42).vectorize(x, 8);      // will be pruned
-        f.specialize(const_true);                   // dupe of call above, won't add new specialization
-        // Note that specialize() will return the same schedule for subsequent
-        // calls with the same Expr, but doesn't guarantee that all Exprs
-        // that evaluate to the same value collapse. Use a deliberately-
-        // different Expr here to check that we do elide these.
-        f.specialize(different_const_true);         // will be pruned
-
-        internal_assert(f.function().definition().specializations().size() == 5);
-
-        map<string, Function> env;
-        env.insert({f.function().name(), f.function()});
-        simplify_specializations(env);
-
-        const auto &s = f.function().definition().specializations();
-        internal_assert(s.size() == 2);
-        // should be (something) == 0
-        internal_assert(s[0].condition.as<EQ>() && is_zero(s[0].condition.as<EQ>()->b));
-        internal_assert(is_one(s[1].condition));
-
-        f.set_custom_trace(&my_trace);
-        f.trace_stores();
-
-        vector_store_lanes = 0;
-        p.set(42);  // Chosen to ensure pruned branch is pruned
-        f.realize(100);
-        internal_assert(vector_store_lanes == 16);
-
-        vector_store_lanes = 0;
-        p.set(0);
-        f.realize(100);
-        internal_assert(vector_store_lanes == 32);
-    }
 
     std::cout << "SimplifySpecializations test passed" << std::endl;
 }
