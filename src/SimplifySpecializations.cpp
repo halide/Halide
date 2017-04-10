@@ -139,28 +139,5 @@ void simplify_specializations(map<string, Function> &env) {
     }
 }
 
-namespace {
-
-uint16_t vector_store_lanes = 0;
-
-int my_trace(void *user_context, const halide_trace_event_t *ev) {
-    if (ev->event == halide_trace_store) {
-        if (ev->type.lanes > 1) {
-            vector_store_lanes = ev->type.lanes;
-        } else {
-            vector_store_lanes = 0;
-        }
-    }
-    return 0;
-}
-
-}  // namespace
-
-void simplify_specializations_test() {
-
-
-    std::cout << "SimplifySpecializations test passed" << std::endl;
-}
-
 }
 }
