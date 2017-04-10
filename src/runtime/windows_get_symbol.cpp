@@ -23,12 +23,12 @@ WEAK void *halide_get_symbol_impl(const char *name) {
 }
 
 WEAK void *halide_load_library_impl(const char *name) {
-    // Suppress dialogoe windows during library open.
-    unsigned oldMode = SetErrorMode(0);
-    SetErrorMode(oldMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-    void * Lib = LoadLibraryA(name);
-    SetErrorMode(oldMode);
-    return Lib;
+    // Suppress dialog windows during library open.
+    unsigned old_mode = SetErrorMode(0);
+    SetErrorMode(old_mode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+    void *lib = LoadLibraryA(name);
+    SetErrorMode(old_mode);
+    return lib;
 }
 
 WEAK void *halide_get_library_symbol_impl(void *lib, const char *name) {
