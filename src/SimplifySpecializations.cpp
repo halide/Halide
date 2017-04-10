@@ -80,25 +80,21 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     // during later phases.
     // -- Once we encounter a Specialization that is const-true, no subsequent
     // Specializations can ever trigger (since we evaluate them in order), 
-    // so erase them. (Note however that it is legal to call specialize(true)
-    // multiple times, which is required to return the same handle, so leave in
-    // subsequent true specializations; since this is an odd edge case, don't
-    // bother trying to combine them into a single Definition here.)
+    // so erase them.
     bool seen_const_true = false;
     for (auto it = specializations.begin(); it != specializations.end(); /*no-increment*/) {
         Expr old_c = it->condition;
         Expr c = simplify(it->condition);
         // Go ahead and save the simplified condition now
         it->condition = c;
-        bool is_const_true = is_one(c);
-        if (is_zero(c) || (seen_const_true && !is_const_true)) {
+        if (is_zero(c) || seen_const_true) {
             debug(1) << "Erasing unreachable specialization (" 
                 << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
             it = specializations.erase(it);
         } else {
             it++;
         }
-        seen_const_true |= is_const_true;
+        seen_const_true |= is_one(c);
     }
 
     for (size_t i = specializations.size(); i > 0; i--) {
@@ -214,8 +210,8 @@ void simplify_specializations_test() {
         // Note that specialize() will return the same schedule for subsequent
         // calls with the same Expr, but doesn't guarantee that all Exprs
         // that evaluate to the same value collapse. Use a deliberately-
-        // different Expr here to check that we don't elide these.
-        f.specialize(different_const_true);         // will *not* be pruned
+        // different Expr here to check that we do elide these.
+        f.specialize(different_const_true);         // will be pruned
 
         internal_assert(f.function().definition().specializations().size() == 5);
 
@@ -224,11 +220,10 @@ void simplify_specializations_test() {
         simplify_specializations(env);
 
         const auto &s = f.function().definition().specializations();
-        internal_assert(s.size() == 3);
+        internal_assert(s.size() == 2);
         // should be (something) == 0
         internal_assert(s[0].condition.as<EQ>() && is_zero(s[0].condition.as<EQ>()->b));
         internal_assert(is_one(s[1].condition));
-        internal_assert(is_one(s[2].condition));
 
         f.set_custom_trace(&my_trace);
         f.trace_stores();
