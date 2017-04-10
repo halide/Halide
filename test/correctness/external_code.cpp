@@ -14,8 +14,10 @@ int main(int argc, char **argv) {
 
     f(x, y) = 42;
 
+    Target target = get_jit_target_from_environment();
+    
     std::string bitcode_file = Internal::get_test_tmp_dir() + "extern.bc";
-    f.compile_to_bitcode(bitcode_file, {}, "extern");
+    f.compile_to_bitcode(bitcode_file, {}, "extern", target);
 
     std::vector<uint8_t> bitcode;
     std::ifstream bitcode_stream(bitcode_file, std::ios::in | std::ios::binary);
@@ -25,7 +27,7 @@ int main(int argc, char **argv) {
     bitcode_stream.read(reinterpret_cast<char *>(&bitcode[0]), bitcode.size());
 
     ExternalCode external_code =
-        ExternalCode::bitcode_wrapper(get_jit_target_from_environment(), bitcode, "extern");
+        ExternalCode::bitcode_wrapper(target, bitcode, "extern");
 
     Func f_extern;
     f_extern.define_extern("extern", { }, type_of<int32_t>(), 2);
@@ -33,7 +35,7 @@ int main(int argc, char **argv) {
     Func result;
     result(x, y) = f_extern(x, y);
 
-    Module module = result.compile_to_module({}, "forty_two");
+    Module module = result.compile_to_module({}, "forty_two", target);
 
     module.append(external_code);
 

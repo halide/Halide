@@ -416,7 +416,7 @@ void CodeGen_LLVM::add_external_code(const Module &halide_module) {
         }
     }
 }
-  
+
 CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
 }
@@ -623,7 +623,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
             if (args[i].is_buffer()) {
                 // Track this buffer name so that loads and stores from it
                 // don't try to be too aligned.
-                external_buffer.insert(name);
+                external_buffer.insert(args[i].name);
                 sym_push(args[i].name + ".buffer", &arg);
             } else {
                 sym_push(args[i].name, &arg);

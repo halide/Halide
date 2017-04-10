@@ -19,7 +19,7 @@ HL_JIT_TARGET=host-trace_stores-trace_loads-trace_realizations HL_TRACE_FILE=$(p
 ls tmp/trace.bin
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz \
---size 400 236 --timestep 1 --decay 10000 --hold 4 \
+--size 400 236 --timestep 1 --decay 256 256 --hold 4 \
 --min -1 --max 1 --gray --strides 1 0 0 1 --zoom 32 \
 --move 32 48 --func producer_root \
 --move 32 40 --label producer_root producer 1 \
@@ -30,7 +30,7 @@ cat tmp/trace.bin | ../../bin/HalideTraceViz \
 make_gif lesson_08_compute_root.gif 15
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz \
---size 400 236 --timestep 1 --decay 10000 --hold 4 \
+--size 400 236 --timestep 1 --decay 256 256 --hold 4 \
 --min -1 --max 1 --gray --strides 1 0 0 1 --zoom 32 \
 --move 32 48 --func producer_y \
 --move 32 40 --label producer_y producer 1 \
@@ -41,7 +41,7 @@ cat tmp/trace.bin | ../../bin/HalideTraceViz \
 make_gif lesson_08_compute_y.gif 20
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz \
---size 400 236 --timestep 1 --decay 10000 --hold 4 \
+--size 400 236 --timestep 1 --decay 256 256 --hold 4 \
 --min -1 --max 1 --gray --strides 1 0 0 1 --zoom 32 \
 --move 32 48 --func producer_root_y \
 --move 32 40 --label producer_root_y producer 1 \
@@ -52,7 +52,7 @@ cat tmp/trace.bin | ../../bin/HalideTraceViz \
 make_gif lesson_08_store_root_compute_y.gif 20
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz \
---size 400 236 --timestep 1 --decay 10000 --hold 4 \
+--size 400 236 --timestep 1 --decay 256 256 --hold 4 \
 --min -1 --max 1 --gray --strides 1 0 0 1 --zoom 32 \
 --move 32 48 --func producer_root_x \
 --move 32 40 --label producer_root_x producer 1 \
@@ -63,7 +63,7 @@ cat tmp/trace.bin | ../../bin/HalideTraceViz \
 make_gif lesson_08_store_root_compute_x.gif 20
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz \
---size 400 236 --timestep 1 --decay 10000 --hold 4 \
+--size 400 236 --timestep 1 --decay 256 256 --hold 4 \
 --min -1 --max 1 --gray --strides 1 0 0 1 --zoom 32 \
 --move 32 48 --func producer_tile \
 --move 32 40 --label producer_tile producer 1 \
@@ -76,7 +76,7 @@ make_gif lesson_08_tile.gif 10
 rm -f lesson_08_mixed.mp4
 
 cat tmp/trace.bin | ../../bin/HalideTraceViz \
---size 800 400 --timestep 200 --decay 3 --hold 30 \
+--size 800 400 --timestep 200 --decay 1 3 --hold 30 \
 --min -1.5 --max 1.5 --gray --strides 1 0 0 1 --zoom 2 \
 --move 40 48 --func producer_mixed \
 --move 40 40 --label producer_mixed producer 1 \
