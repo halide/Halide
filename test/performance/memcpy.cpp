@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include <cstdio>
 #include <chrono>
 
 using namespace Halide;
-
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     ImageParam src(UInt(8), 1);

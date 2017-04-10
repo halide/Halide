@@ -3,10 +3,11 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "HalideBuffer.h"
 
 using namespace Halide::Runtime;
+using namespace Halide::Tools;
 
 //#define cimg_display 0
 //#include "CImg.h"

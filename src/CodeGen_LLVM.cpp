@@ -402,12 +402,19 @@ void CodeGen_LLVM::init_context() {
     f64x4 = VectorType::get(f64_t, 4);
 }
 
-
 void CodeGen_LLVM::init_module() {
     init_context();
 
     // Start with a module containing the initial module for this target.
     module = get_initial_module_for_target(target, context);
+}
+
+void CodeGen_LLVM::add_external_code(const Module &halide_module) {
+    for (const ExternalCode &code_blob : halide_module.external_code()) {
+        if (code_blob.is_for_cpu_target(get_target())) {
+            add_bitcode_to_module(context, *module, code_blob.contents(), code_blob.name());
+        }
+    }
 }
 
 CodeGen_LLVM::~CodeGen_LLVM() {
@@ -422,7 +429,6 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
-
 
 namespace {
 
@@ -512,6 +518,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     device_interface_t_type = module->getTypeByName("struct.halide_device_interface_t");
     internal_assert(scalar_value_t_type) << "Did not find halide_device_interface_t in initial module";
+
+    add_external_code(input);
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
@@ -615,7 +623,7 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
             if (args[i].is_buffer()) {
                 // Track this buffer name so that loads and stores from it
                 // don't try to be too aligned.
-                external_buffer.insert(name);
+                external_buffer.insert(args[i].name);
                 sym_push(args[i].name + ".buffer", &arg);
             } else {
                 sym_push(args[i].name, &arg);

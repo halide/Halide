@@ -416,7 +416,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
 
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
-        string err_msg;
         #if LLVM_VERSION >= 38
         bool failed = llvm::Linker::linkModules(*modules[0],
                                                 std::move(modules[i]));
@@ -426,7 +425,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
         #endif
 
         if (failed) {
-            internal_error << "Failure linking initial modules: " << err_msg << "\n";
+            internal_error << "Failure linking initial modules\n";
         }
     }
 
@@ -955,6 +954,22 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 }
 #endif
 
+void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
+                           const std::vector<uint8_t> &bitcode, const std::string &name) {
+    llvm::StringRef sb = llvm::StringRef((const char *)&bitcode[0], bitcode.size());
+    std::unique_ptr<llvm::Module> add_in = parse_bitcode_file(sb, context, name.c_str());
+
+    #if LLVM_VERSION >= 38
+    bool failed = llvm::Linker::linkModules(module, std::move(add_in));
+    #else
+    bool failed = llvm::Linker::LinkModules(&module, add_in.release());
+    #endif
+
+    if (failed) {
+        internal_error << "Failure linking in additional module: " << name << "\n";
+    }
+}
+  
 }  // namespace Internal
 
 }
