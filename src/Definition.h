@@ -66,32 +66,32 @@ public:
     }
 
     /** Is this an init definition; otherwise it's an update definition */
-    bool is_init() const;
+    EXPORT bool is_init() const;
 
     /** Pass an IRVisitor through to all Exprs referenced in the
      * definition. */
-    void accept(IRVisitor *) const;
+    EXPORT void accept(IRVisitor *) const;
 
     /** Pass an IRMutator through to all Exprs referenced in the
      * definition. */
-    void mutate(IRMutator *);
+    EXPORT void mutate(IRMutator *);
 
     /** Get the default (no-specialization) arguments (left-hand-side) of the definition */
     // @{
-    const std::vector<Expr> &args() const;
-    std::vector<Expr> &args();
+    EXPORT const std::vector<Expr> &args() const;
+    EXPORT std::vector<Expr> &args();
     // @}
 
     /** Get the default (no-specialization) right-hand-side of the definition */
     // @{
-    const std::vector<Expr> &values() const;
-    std::vector<Expr> &values();
+    EXPORT const std::vector<Expr> &values() const;
+    EXPORT std::vector<Expr> &values();
     // @}
 
     /** Get the predicate on the definition */
     // @{
-    const Expr &predicate() const;
-    Expr &predicate();
+    EXPORT const Expr &predicate() const;
+    EXPORT Expr &predicate();
     // @}
 
     /** Split predicate into vector of ANDs. If there is no predicate (i.e. this
@@ -100,17 +100,17 @@ public:
 
     /** Get the default (no-specialization) schedule associated with this definition. */
     // @{
-    const Schedule &schedule() const;
-    Schedule &schedule();
+    EXPORT const Schedule &schedule() const;
+    EXPORT Schedule &schedule();
     // @}
 
     /** You may create several specialized versions of a func with
      * different schedules. They trigger when the condition is
      * true. See \ref Func::specialize */
     // @{
-    const std::vector<Specialization> &specializations() const;
-    std::vector<Specialization> &specializations();
-    const Specialization &add_specialization(Expr condition);
+    EXPORT const std::vector<Specialization> &specializations() const;
+    EXPORT std::vector<Specialization> &specializations();
+    EXPORT const Specialization &add_specialization(Expr condition);
     // @}
 
 };
