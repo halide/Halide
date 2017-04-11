@@ -95,6 +95,23 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         seen_const_true |= is_one(c);
     }
 
+    // If the final Specialization is const-true, then the default schedule
+    // for the definition will never be run: replace the definition's main
+    // schedule with the one from the final Specialization and prune it from 
+    // the list. This may leave the list of Specializations empty.
+    if (!specializations.empty() && is_one(specializations.back().condition)) {
+        debug(1) << "Replacing default Schedule with const-true specialization for function \"" << name << "\"\n";
+        const Definition s_def = specializations.back().definition;
+        specializations.pop_back();
+
+        def.predicate() = s_def.predicate();
+        def.values() = s_def.values();
+        def.args() = s_def.args();
+        def.schedule() = s_def.schedule();
+        // Append our sub-specializations to the Definition's list
+        specializations.insert(specializations.end(), s_def.specializations().begin(), s_def.specializations().end());
+    }
+
     for (size_t i = specializations.size(); i > 0; i--) {
         Expr c = specializations[i-1].condition;
         Definition &s_def = specializations[i-1].definition;

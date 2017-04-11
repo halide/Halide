@@ -560,6 +560,7 @@ int main(int argc, char **argv) {
         f.realize(100);
         _halide_user_assert(vector_store_lanes == 4);
     }
+
     {
         Var x, y;
         Param<int> p;
@@ -589,10 +590,11 @@ int main(int argc, char **argv) {
         simplify_specializations(env);
 
         const auto &s = f.function().definition().specializations();
-        _halide_user_assert(s.size() == 2);
+        // Note that this is 1 (rather than 2) because the final const-true
+        // Specialization will be hoisted into the main Schdule.
+        _halide_user_assert(s.size() == 1);
         // should be (something) == 0
         _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_zero(s[0].condition.as<Internal::EQ>()->b));
-        _halide_user_assert(is_one(s[1].condition));
 
         f.set_custom_trace(&my_trace);
         f.trace_stores();
