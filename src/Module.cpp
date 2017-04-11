@@ -273,7 +273,7 @@ Module Module::resolve_submodules() const {
             }
         }
 
-        auto buf = m.compile_to_buffer();
+        auto buf = copy.compile_to_buffer();
         lowered_module.append(buf);
     }
 
