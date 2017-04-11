@@ -590,7 +590,7 @@ int main(int argc, char **argv) {
 
         const auto &s = f.function().definition().specializations();
         // Note that this is 1 (rather than 2) because the final const-true
-        // Specialization will be hoisted into the main Schdule.
+        // Specialization will be hoisted into the main Schedule.
         _halide_user_assert(s.size() == 1);
         // should be (something) == 0
         _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_zero(s[0].condition.as<Internal::EQ>()->b));
