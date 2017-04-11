@@ -41,7 +41,7 @@ public:
             output.dim(1).set_stride((output_stride/vector_size) * vector_size);
             output
                 .hexagon()
-                .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
+                .tile(x, y, xi, yi, vector_size*2, 4, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
             rows.compute_at(Func(output), y)
