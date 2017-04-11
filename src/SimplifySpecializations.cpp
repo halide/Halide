@@ -65,6 +65,15 @@ void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
     }
 }
 
+bool equal(const std::vector<Expr> &a, const std::vector<Expr> &b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (!equal(a[i], b[i])) return false;
+    }
+    return true;
+}
+
+
 vector<Definition> propagate_specialization_in_definition(Definition &def, const string &name) {
     vector<Definition> result;
 
@@ -105,8 +114,9 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         specializations.pop_back();
 
         def.predicate() = s_def.predicate();
-        def.values() = s_def.values();
-        def.args() = s_def.args();
+        // values and args should be identical -- if not, something is badly wrong.
+        internal_assert(equal(def.values(), s_def.values()));
+        internal_assert(equal(def.args(), s_def.args()));
         def.schedule() = s_def.schedule();
         // Append our sub-specializations to the Definition's list
         specializations.insert(specializations.end(), s_def.specializations().begin(), s_def.specializations().end());
