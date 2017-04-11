@@ -569,7 +569,6 @@ int main(int argc, char **argv) {
         Expr different_const_true = Expr(1) == Expr(1);
 
         // Check that we aggressively prune all specializations after specialize(const-true)
-        // except for other occurrences of specialize(const-true)
         Func f;
         f(x) = x;
         f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
