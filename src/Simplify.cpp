@@ -1037,16 +1037,16 @@ private:
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
-                                   ramp_a->stride - ramp_b->stride, ramp_a->lanes));
+                                     ramp_a->stride - ramp_b->stride, ramp_a->lanes));
         } else if (ramp_a && broadcast_b) {
             // Ramp - Broadcast
             expr = mutate(Ramp::make(ramp_a->base - broadcast_b->value,
-                                   ramp_a->stride, ramp_a->lanes));
+                                     ramp_a->stride, ramp_a->lanes));
         } else if (broadcast_a && ramp_b) {
             // Broadcast - Ramp
             expr = mutate(Ramp::make(broadcast_a->value - ramp_b->base,
-                                   make_zero(ramp_b->stride.type())- ramp_b->stride,
-                                   ramp_b->lanes));
+                                     make_zero(ramp_b->stride.type())- ramp_b->stride,
+                                     ramp_b->lanes));
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
@@ -1299,22 +1299,26 @@ private:
                    equal(max_a->b, max_b->a)) {
             // max(a, b) - max(b, a) -> 0
             expr = make_zero(op->type);
-        } else if (min_a &&
+        } else if (no_overflow(op->type) &&
+                   min_a &&
                    min_b &&
                    is_zero(mutate((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
             // min(a, b) - min(c, d) where a-b == c-d -> b - d
             expr = mutate(min_a->b - min_b->b);
-        } else if (max_a &&
+        } else if (no_overflow(op->type) &&
+                   max_a &&
                    max_b &&
                    is_zero(mutate((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
             // max(a, b) - max(c, d) where a-b == c-d -> b - d
             expr = mutate(max_a->b - max_b->b);
-        } else if (min_a &&
+        } else if (no_overflow(op->type) &&
+                   min_a &&
                    min_b &&
                    is_zero(mutate((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
             // min(a, b) - min(c, d) where a-b == d-c -> b - c
             expr = mutate(min_a->b - min_b->a);
-        } else if (max_a &&
+        } else if (no_overflow(op->type) &&
+                   max_a &&
                    max_b &&
                    is_zero(mutate((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
@@ -6438,6 +6442,16 @@ void simplify_test() {
         // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
         r3 = max(one, Expr(two), one);
         internal_assert(r3.type() == halide_type_of<int>());
+    }
+
+    {
+        Expr x = Variable::make(UInt(32), "x");
+        Expr y = Variable::make(UInt(32), "y");
+        // This is used to get simplified into broadcast(x - y, 2) which is
+        // incorrect when there is overflow.
+        Expr e = simplify(max(ramp(x, y, 2), broadcast(x, 2)) - max(broadcast(y, 2), ramp(y, y, 2)));
+        Expr expected = max(ramp(x, y, 2), broadcast(x, 2)) - max(ramp(y, y, 2), broadcast(y, 2));
+        check(e, expected);
     }
 
     std::cout << "Simplify test passed" << std::endl;
