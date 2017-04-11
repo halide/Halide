@@ -1022,7 +1022,7 @@ typedef struct halide_buffer_t {
     /** Convenience methods for accessing the flags */
     // @{
     HALIDE_ALWAYS_INLINE bool get_flag(halide_buffer_flags flag) const {
-        return flags & flag;
+        return (flags & flag) != 0;
     }
 
     HALIDE_ALWAYS_INLINE void set_flag(halide_buffer_flags flag, bool value) {
