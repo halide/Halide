@@ -17,21 +17,19 @@ void debug_arguments(LoweredFunc *func) {
         Expr buffer_var = Variable::make(type_of<halide_buffer_t *>(), arg.name + ".buffer");
         Expr value;
         switch (arg.kind) {
-        case Argument::InputScalar: {
+        case Argument::InputScalar:
             name << " Input " << arg.type << ' ' << arg.name << ':';
             value = scalar_var;
             break;
-        }
-        case Argument::InputBuffer: {
+        case Argument::InputBuffer:
             name << " Input Buffer " << arg.name << ':';
             value = buffer_var;
             break;
-        }
-        case Argument::OutputBuffer: {
+        case Argument::OutputBuffer:
             name << " Output Buffer " << arg.name << ':';
             value = buffer_var;
             break;
-        }                                                                  }
+        }
         stmts.push_back(Evaluate::make(print(name.str(), value)));
     }
     stmts.push_back(func->body);
