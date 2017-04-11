@@ -268,6 +268,7 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
+  AssociativeOpsTable.cpp \
   Associativity.cpp \
   BoundaryConditions.cpp \
   Bounds.cpp \
@@ -397,6 +398,7 @@ HEADER_FILES = \
   AllocationBoundsInference.h \
   ApplySplit.h \
   Argument.h \
+  AssociativeOpsTable.h \
   Associativity.h \
   BoundaryConditions.h \
   Bounds.h \
