@@ -1,4 +1,5 @@
 #include "DebugArguments.h"
+#include "IROperator.h"
 #include "Module.h"
 
 namespace Halide {
@@ -9,41 +10,30 @@ using std::vector;
 void debug_arguments(LoweredFunc *func) {
     internal_assert(func);
     vector<Stmt> stmts;
-    Expr header = Call::make(Int(32), "halide_print", {Expr("Entering Pipeline " + func->name + "\n")}, Call::Extern);
-    stmts.push_back(Evaluate::make(header));
+    stmts.push_back(Evaluate::make(print("Entering Pipeline " + func->name)));
     for (LoweredArgument arg : func->args) {
-        vector<Expr> print_args;
+        std::ostringstream name;
+        Expr scalar_var = Variable::make(arg.type, arg.name);
+        Expr buffer_var = Variable::make(type_of<halide_buffer_t *>(), arg.name + ".buffer");
+        Expr value;
         switch (arg.kind) {
-        case Argument::InputScalar: {
-            std::ostringstream type;
-            type << arg.type;
-            print_args.push_back(Expr(" Input " + type.str() + " " + arg.name + ": "));
-            print_args.push_back(Variable::make(arg.type, arg.name));
-            print_args.push_back(Expr("\n"));
+        case Argument::InputScalar:
+            name << " Input " << arg.type << ' ' << arg.name << ':';
+            value = scalar_var;
+            break;
+        case Argument::InputBuffer:
+            name << " Input Buffer " << arg.name << ':';
+            value = buffer_var;
+            break;
+        case Argument::OutputBuffer:
+            name << " Output Buffer " << arg.name << ':';
+            value = buffer_var;
             break;
         }
-        case Argument::InputBuffer: {
-            print_args.push_back(Expr(" Input Buffer " + arg.name + ": "));
-            print_args.push_back(Variable::make(type_of<halide_buffer_t *>(), arg.name + ".buffer"));
-            print_args.push_back(Expr("\n"));
-            break;
-        }
-        case Argument::OutputBuffer: {
-            print_args.push_back(Expr(" Output Buffer " + arg.name + ": "));
-            print_args.push_back(Variable::make(type_of<halide_buffer_t *>(), arg.name + ".buffer"));
-            print_args.push_back(Expr("\n"));
-            break;
-        }                                                                  }
-        Expr str = Call::make(type_of<char *>(), Call::stringify, print_args, Call::Intrinsic);
-        Expr p = Call::make(Int(32), "halide_print", {str}, Call::Extern);
-        stmts.push_back(Evaluate::make(p));
-    }    
-
+        stmts.push_back(Evaluate::make(print(name.str(), value)));
+    }
     stmts.push_back(func->body);
-
-    Expr footer = Call::make(Int(32), "halide_print", {Expr("Exiting Pipeline " + func->name + "\n")}, Call::Extern);   
-    stmts.push_back(Evaluate::make(footer));
-
+    stmts.push_back(Evaluate::make(print("Exiting Pipeline " + func->name)));
     func->body = Block::make(stmts);
 }
 
