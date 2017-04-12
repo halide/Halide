@@ -41,7 +41,6 @@ public:
             output.dim(1).set_stride((output_stride/vector_size) * vector_size);
             bounded_input
                 .compute_at(Func(output), y)
-                .store_at(Func(output), y)
                 .align_storage(x, 128)
                 .vectorize(x, vector_size, TailStrategy::RoundUp);
             output
