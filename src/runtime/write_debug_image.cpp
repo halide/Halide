@@ -97,17 +97,6 @@ WEAK bool has_tiff_extension(const char *filename) {
     return *f == '\0';
 }
 
-// Get a pointer to the pixel data in a buffer, relative to the min
-// coordinate, not in absolute coordinates.
-WEAK uint8_t *get_pointer_to_data(int32_t dim0, int32_t dim1, int32_t dim2, int32_t dim3,
-                                  const struct buffer_t *buf) {
-    uint8_t *ptr = buf->host + buf->elem_size * (dim0 * buf->stride[0] +
-                                                 dim1 * buf->stride[1] +
-                                                 dim2 * buf->stride[2] +
-                                                 dim3 * buf->stride[3]);
-    return ptr;
-}
-
 }}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename,
@@ -123,28 +112,31 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     void *f = fopen(filename, "wb");
     if (!f) return -1;
 
-    int32_t s0 = buf->dimensions > 0 ? buf->dim[0].extent : 1;
-    int32_t s1 = buf->dimensions > 1 ? buf->dim[1].extent : 1;
-    int32_t s2 = buf->dimensions > 2 ? buf->dim[2].extent : 1;
-    int32_t s3 = buf->dimensions > 3 ? buf->dim[3].extent : 1;
-
+    size_t elts = 1;
+    halide_dimension_t shape[4];
+    for (int i = 0; i < buf->dimensions && i < 4; i++) {
+        shape[i] = buf->dim[i];
+        elts *= shape[i].extent;
+    }
+    for (int i = buf->dimensions; i < 4; i++) {
+        shape[i].min = 0;
+        shape[i].extent = 1;
+        shape[i].stride = 0;
+    }
     int32_t bytes_per_element = buf->type.bytes();
-
-    size_t elts = s0;
-    elts *= s1*s2*s3;
 
     if (has_tiff_extension(filename)) {
         int32_t channels;
-        int32_t width = s0;
-        int32_t height = s1;
+        int32_t width = shape[0].extent;
+        int32_t height = shape[1].extent;
         int32_t depth;
 
-        if ((s3 == 0 || s3 == 1) && (s2 < 5)) {
-            channels = s2;
+        if ((shape[3].extent == 0 || shape[3].extent == 1) && (shape[2].extent < 5)) {
+            channels = shape[2].extent;
             depth = 1;
         } else {
-            channels = s3;
-            depth = s2;
+            channels = shape[3].extent;
+            depth = shape[2].extent;
         }
 
         struct halide_tiff_header header;
@@ -166,7 +158,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         tag++->assign16(262, 1, channels >= 3 ? 2 : 1);          // PhotometricInterpretation -- black is zero or RGB
         tag++->assign32(273, channels, sizeof(header));          // Rows per strip
         tag++->assign16(277, 1, int16_t(channels));              // Samples per pixel
-        tag++->assign32(278, 1, s1);                             // Rows per strip
+        tag++->assign32(278, 1, shape[1].extent);                // Rows per strip
         tag++->assign32(279, channels,
                         (channels == 1) ?
                             elts * bytes_per_element :
@@ -194,25 +186,29 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
 
         if (channels > 1) {
-          int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
+            int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
 
-          for (int32_t i = 0; i < channels; i++) {
-              if (!fwrite((void*)(&offset), 4, 1, f)) {
-                  fclose(f);
-                  return -2;
-              }
-              offset += s0 * s1 * depth * bytes_per_element;
-          }
-          int32_t count = s0 * s1 * depth;
-          for (int32_t i = 0; i < channels; i++) {
-              if (!fwrite((void*)(&count), 4, 1, f)) {
-                  fclose(f);
-                  return -2;
-              }
-          }
+            for (int32_t i = 0; i < channels; i++) {
+                if (!fwrite((void*)(&offset), 4, 1, f)) {
+                    fclose(f);
+                    return -2;
+                }
+                offset += shape[0].extent * shape[1].extent * depth * bytes_per_element;
+            }
+            int32_t count = shape[0].extent * shape[1].extent * depth;
+            for (int32_t i = 0; i < channels; i++) {
+                if (!fwrite((void*)(&count), 4, 1, f)) {
+                    fclose(f);
+                    return -2;
+                }
+            }
         }
     } else {
-        int32_t header[] = {s0, s1, s2, s3, type_code};
+        int32_t header[] = {shape[0].extent,
+                            shape[1].extent,
+                            shape[2].extent,
+                            shape[3].extent,
+                            type_code};
         if (!fwrite((void *)(&header[0]), sizeof(header), 1, f)) {
             fclose(f);
             return -2;
@@ -225,10 +221,10 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     int max_elts = TEMP_SIZE/bytes_per_element;
     int counter = 0;
 
-    for (int32_t dim3 = 0; dim3 < s3; ++dim3) {
-        for (int32_t dim2 = 0; dim2 < s2; ++dim2) {
-            for (int32_t dim1 = 0; dim1 < s1; ++dim1) {
-                for (int32_t dim0 = 0; dim0 < s0; ++dim0) {
+    for (int32_t dim3 = shape[3].min; dim3 < shape[3].extent + shape[3].min; ++dim3) {
+        for (int32_t dim2 = shape[2].min; dim2 < shape[2].extent + shape[2].min; ++dim2) {
+            for (int32_t dim1 = shape[1].min; dim1 < shape[1].extent + shape[1].min; ++dim1) {
+                for (int32_t dim0 = shape[0].min; dim0 < shape[0].extent + shape[0].min; ++dim0) {
                     counter++;
                     int idx[] = {dim0, dim1, dim2, dim3};
                     uint8_t *loc = buf->address_of(idx);
@@ -237,7 +233,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
 
                     if (counter == max_elts) {
                         counter = 0;
-                        if (!fwrite((void *)temp, max_elts*bytes_per_element, 1, f)) {
+                        if (!fwrite((void *)temp, max_elts * bytes_per_element, 1, f)) {
                             fclose(f);
                             return -1;
                         }
@@ -247,7 +243,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
     }
     if (counter > 0) {
-        if (!fwrite((void *)temp, counter*bytes_per_element, 1, f)) {
+        if (!fwrite((void *)temp, counter * bytes_per_element, 1, f)) {
             fclose(f);
             return -1;
         }
