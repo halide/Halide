@@ -179,7 +179,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
-    simplify_specializations(env);
+    simplify_specializations(outputs, env);
 
     // For the purposes of printing the loop nest, we don't want to
     // worry about which features are and aren't enabled.
