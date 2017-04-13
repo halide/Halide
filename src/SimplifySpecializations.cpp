@@ -65,7 +65,7 @@ void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
     }
 }
 
-vector<Definition> propagate_specialization_in_definition(Definition &def, const string &name) {
+vector<Definition> propagate_specialization_in_definition(Definition &def, const string &name, bool is_output) {
     vector<Definition> result;
 
     result.push_back(def);
@@ -96,7 +96,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     }
 
     // If the final Specialization is const-true, then the default schedule
-    // for the definition will never be run: replace the definition's main
+    // for the definition will never be used, so replace the definition's main
     // schedule with the one from the final Specialization and prune it from 
     // the list. This may leave the list of Specializations empty.
     if (!specializations.empty() && is_one(specializations.back().condition)) {
@@ -107,7 +107,21 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         def.predicate() = s_def.predicate();
         def.values() = s_def.values();
         def.args() = s_def.args();
+
+        LoopLevel compute_at = def.schedule().compute_level();
+        LoopLevel store_at = def.schedule().store_level();
+
         def.schedule() = s_def.schedule();
+        if (is_output) {
+            // A trailing specialize(true) may have the default compute/store level of inline;
+            // if we promote this specialized schedule to the main schedule, we must also maintain the 
+            // compute/store level that was already set. This will be "root" for calls to from lower()
+            // (which is by-far-the-most-common case), but can be other values from certain tests,
+            // so preserve the status quo rather than setting to root.
+            def.schedule().compute_level() = compute_at;
+            def.schedule().store_level() = store_at;
+        }
+
         // Append our sub-specializations to the Definition's list
         specializations.insert(specializations.end(), s_def.specializations().begin(), s_def.specializations().end());
     }
@@ -118,7 +132,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 
-        vector<Definition> s_result = propagate_specialization_in_definition(s_def, name);
+        vector<Definition> s_result = propagate_specialization_in_definition(s_def, name, is_output);
 
         if (var && eq) {
             // Then case
@@ -149,10 +163,14 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
 
 
 
-void simplify_specializations(map<string, Function> &env) {
+void simplify_specializations(const vector<Function> &outputs, map<string, Function> &env) {
     for (auto &iter : env) {
         Function &func = iter.second;
-        propagate_specialization_in_definition(func.definition(), func.name());
+        bool is_output = false;
+        for (Function o : outputs) {
+            is_output |= o.same_as(func);
+        }
+        propagate_specialization_in_definition(func.definition(), func.name(), is_output);
     }
 }
 

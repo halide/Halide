@@ -104,7 +104,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
-    simplify_specializations(env);
+    simplify_specializations(outputs, env);
 
     bool any_memoized = false;
 
