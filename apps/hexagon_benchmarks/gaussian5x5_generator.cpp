@@ -8,7 +8,6 @@ public:
     Output<Buffer<uint8_t>> output{"output", 2};
 
     void generate() {
-        Func bounded_input{"bounded_input"};
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
         Func input_16("input_16");
@@ -35,13 +34,17 @@ public:
             input.dim(1).set_stride((input_stride/vector_size) * vector_size);
 
             Expr output_stride = output.dim(1).stride();
+            bounded_input
+                .compute_at(Func(output), y)
+                .align_storage(x, 128)
+                .vectorize(x, vector_size, TailStrategy::RoundUp);
             output.dim(1).set_stride((output_stride/vector_size) * vector_size);
             output
                 .hexagon()
-                .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
+                .tile(x, y, xi, yi, vector_size*2, 4, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
-            rows.compute_at(output, y)
+            rows.compute_at(Func(output), y)
                 .tile(x, y, x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
@@ -53,7 +56,7 @@ public:
         }
     }
 private:
-    Func rows{"rows"}, cols{"cols"};
+    Func rows{"rows"}, cols{"cols"}, bounded_input{"bounded_input"};
     Var x{"x"}, y{"y"};
 };
 
