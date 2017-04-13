@@ -91,11 +91,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     vector<Function> outputs;
     std::tie(outputs, env) = deep_copy(output_funcs, env);
 
-    // Output functions should all be computed and stored at root.
-    for (Function f: outputs) {
-        Func(f).compute_root().store_root();
-    }
-
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
 
@@ -105,6 +100,12 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
     simplify_specializations(env);
+
+    // Output functions should all be computed and stored at root.
+    // (Must do this *after* simplify_specializations.)
+    for (Function f: outputs) {
+        Func(f).compute_root().store_root();
+    }
 
     bool any_memoized = false;
 
