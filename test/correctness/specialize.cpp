@@ -613,8 +613,7 @@ int main(int argc, char **argv) {
         Var x;
         Param<int> p;
 
-        // Check that if we promote a final const-true specialize, we keep the
-        // implicit compute/store_root required for outputs.
+        // Check that specialize_fail() is correctly skipped.
         Func f;
         f(x) = x;
         f.specialize(p == 0);
