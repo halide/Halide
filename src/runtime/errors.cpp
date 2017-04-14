@@ -98,7 +98,7 @@ WEAK int halide_error_constraint_violated(void *user_context, const char *var, i
                                           const char *constrained_var, int constrained_val) {
     error(user_context)
         << "Constraint violated: " << var << " (" << val
-        << ") == " << constrained_var << " (" << constrained_var << ")";
+        << ") == " << constrained_var << " (" << constrained_val << ")";
     return halide_error_code_constraint_violated;
 }
 

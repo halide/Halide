@@ -83,6 +83,11 @@ Stmt unpack_buffers(Stmt s) {
         Expr dev_val = Call::make(type_of<uint64_t>(), Call::buffer_get_device, args, Call::Extern);
         lets.push_back({dev_var, dev_val});
 
+        string dev_interface_var = name + ".device_interface";
+        Expr dev_interface_val = Call::make(type_of<const halide_device_interface_t *>(),
+                                            Call::buffer_get_device_interface, args, Call::Extern);
+        lets.push_back({dev_interface_var, dev_interface_val});
+
         string type_code_var = name + ".type.code";
         Expr type_code_val = Call::make(UInt(8), Call::buffer_get_type_code, args, Call::Extern);
         lets.push_back({type_code_var, type_code_val});
