@@ -116,6 +116,7 @@ Definition Definition::deep_copy(
         Specialization s_copy;
         s_copy.condition = s.condition;
         s_copy.definition = s.definition.deep_copy(copied_map);
+        s_copy.failure_message = s.failure_message;
         copy.contents->specializations.push_back(std::move(s_copy));
     }
     return copy;

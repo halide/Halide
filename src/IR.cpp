@@ -297,13 +297,14 @@ Stmt LetStmt::make(const std::string &name, const Expr &value, const Stmt &body)
     return node;
 }
 
-Stmt AssertStmt::make(const Expr &condition, const Expr &message) {
+Stmt AssertStmt::make(const Expr &condition, const Expr &message, bool const_false_conditions_expected) {
     internal_assert(condition.defined()) << "AssertStmt of undefined\n";
     internal_assert(message.type() == Int(32)) << "AssertStmt message must be an int:" << message << "\n";
 
     AssertStmt *node = new AssertStmt;
     node->condition = condition;
     node->message = message;
+    node->const_false_conditions_expected = const_false_conditions_expected;
     return node;
 }
 

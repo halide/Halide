@@ -118,6 +118,7 @@ public:
 struct Specialization {
     Expr condition;
     Definition definition;
+    std::string failure_message;  // If non-empty, this specialization always assert-fails with this message.
 };
 
 }}
