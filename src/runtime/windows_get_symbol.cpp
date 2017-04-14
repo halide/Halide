@@ -10,6 +10,9 @@ extern "C" {
 
 WIN32API void *LoadLibraryA(const char *);
 WIN32API void *GetProcAddress(void *, const char *);
+WIN32API unsigned SetErrorMode(unsigned);
+#define SEM_FAILCRITICALERRORS 0x0001
+#define SEM_NOOPENFILEERRORBOX 0x8000
 
 }  // extern "C"
 
@@ -20,7 +23,11 @@ WEAK void *halide_get_symbol_impl(const char *name) {
 }
 
 WEAK void *halide_load_library_impl(const char *name) {
-    return LoadLibraryA(name);
+    // Suppress dialog windows during library open.
+    unsigned old_mode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+    void *lib = LoadLibraryA(name);
+    SetErrorMode(old_mode);
+    return lib;
 }
 
 WEAK void *halide_get_library_symbol_impl(void *lib, const char *name) {
