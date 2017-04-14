@@ -270,8 +270,15 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
     Expr message;
+    // Normally, passing a const-false-at-compile-time condition to assert
+    // will generate a warning; for some internal usage, we deliberately
+    // want to use const-false (to issue a runtime failure that will cleanly
+    // exit and propagate error conditions); in that case, set this value
+    // to true to suppress warnings.
+    bool const_false_conditions_expected;
 
-    EXPORT static Stmt make(const Expr &condition, const Expr &message);
+    EXPORT static Stmt make(const Expr &condition, const Expr &message, 
+                            bool const_false_conditions_expected = false);
 
     static const IRNodeType _type_info = IRNodeType::AssertStmt;
 };

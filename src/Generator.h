@@ -1710,6 +1710,7 @@ public:
     HALIDE_OUTPUT_FORWARD(serial)
     HALIDE_OUTPUT_FORWARD(shader)
     HALIDE_OUTPUT_FORWARD(specialize)
+    HALIDE_OUTPUT_FORWARD(specialize_fail)
     HALIDE_OUTPUT_FORWARD(split)
     HALIDE_OUTPUT_FORWARD(store_at)
     HALIDE_OUTPUT_FORWARD(store_root)
