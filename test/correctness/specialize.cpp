@@ -620,7 +620,7 @@ int main(int argc, char **argv) {
         Func f("foof");
         f(x) = x;
         f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
-        f.specialize(const_true);                   // dupe of call above, won't add new specialization
+        f.specialize(const_true).vectorize(x, 16);  // dupe of call above, won't add new specialization
 
         f.set_custom_trace(&my_trace);
         f.trace_stores();
@@ -628,7 +628,7 @@ int main(int argc, char **argv) {
         vector_store_lanes = 0;
         p.set(42);  // arbitrary nonzero value
         f.realize(100);
-        _halide_user_assert(vector_store_lanes == 0);
+        _halide_user_assert(vector_store_lanes == 16);
 
         vector_store_lanes = 0;
         p.set(0);
