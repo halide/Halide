@@ -620,7 +620,7 @@ int main(int argc, char **argv) {
         Func f("foof");
         f(x) = x;
         f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
-        f.specialize(const_true).vectorize(x, 16);  // dupe of call above, won't add new specialization
+        f.specialize(const_true).vectorize(x, 16);
 
         f.set_custom_trace(&my_trace);
         f.trace_stores();
