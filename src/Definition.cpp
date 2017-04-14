@@ -195,6 +195,8 @@ const Specialization &Definition::add_specialization(Expr condition) {
     s.definition.contents->schedule.dims()             = contents->schedule.dims();
     s.definition.contents->schedule.storage_dims()     = contents->schedule.storage_dims();
     s.definition.contents->schedule.bounds()           = contents->schedule.bounds();
+    s.definition.contents->schedule.prefetches()       = contents->schedule.prefetches();
+    s.definition.contents->schedule.wrappers()         = contents->schedule.wrappers();
     s.definition.contents->schedule.memoized()         = contents->schedule.memoized();
     s.definition.contents->schedule.touched()          = contents->schedule.touched();
     s.definition.contents->schedule.allow_race_conditions() = contents->schedule.allow_race_conditions();
