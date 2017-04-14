@@ -166,11 +166,6 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     vector<Function> outputs;
     std::tie(outputs, env) = deep_copy(output_funcs, env);
 
-    // Output functions should all be computed and stored at root.
-    for (Function f: outputs) {
-        Func(f).compute_root().store_root();
-    }
-
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
 
@@ -180,6 +175,12 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
     simplify_specializations(env);
+
+    // Output functions should all be computed and stored at root.
+    // (Must do this *after* simplify_specializations.)
+    for (Function f: outputs) {
+        Func(f).compute_root().store_root();
+    }
 
     // For the purposes of printing the loop nest, we don't want to
     // worry about which features are and aren't enabled.
