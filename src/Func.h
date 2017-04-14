@@ -96,7 +96,7 @@ public:
 
     /** Calling rfactor() on an associative update definition a Func will split
      * the update into an intermediate which computes the partial results and
-     * replace the current update definition with a new definition which merges
+     * replaces the current update definition with a new definition which merges
      * the partial results. If called on a init/pure definition, this will
      * throw an error. rfactor() will automatically infer the associative reduction
      * operator and identity of the operator. If it can't prove the operation
@@ -111,8 +111,8 @@ public:
      * 'preserved') are made pure in the intermediate Func. The intermediate Func's
      * update definition inherits all scheduling directives (e.g. split,fuse, etc.)
      * applied to the original Func's update definition. The loop order of the
-     * intermediate Func's update definition is the same as the original, albeit
-     * the lifted RVars are replaced by the new pure Vars. The loop order of the
+     * intermediate Func's update definition is the same as the original, although
+     * the RVars in 'preserved' are replaced by the new pure Vars. The loop order of the
      * intermediate Func's init definition from innermost to outermost is the args'
      * order of the original Func's init definition followed by the new pure Vars.
      *

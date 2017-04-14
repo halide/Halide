@@ -315,7 +315,7 @@ public:
     Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(AddressOf::make(key_allocation_name, 0, type_of<uint8_t>()));
+        args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
@@ -336,7 +336,7 @@ public:
     Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(AddressOf::make(key_allocation_name, 0, type_of<uint8_t>()));
+        args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
@@ -536,11 +536,9 @@ private:
                 << "RewriteMemoizedAllocations: _halide_buffer_init call with fewer than two args.\n";
 
             // Grab the host pointer argument
-            // FIXME: Mutating the buffer_init call in this way is gross.
-            const AddressOf *arg2 = call->args[2].as<AddressOf>();
-            if (arg2 && is_zero(arg2->index) &&
-                (get_realization_name(arg2->name) == innermost_realization_name)) {
-                // Everything matches, rewrite _halide_buffer_init to use a nullptr handle for address.
+            const Variable *var = call->args[2].as<Variable>();
+            if (var && get_realization_name(var->name) == innermost_realization_name) {
+                // Rewrite _halide_buffer_init to use a nullptr handle for address.
                 std::vector<Expr> args = call->args;
                 args[2] = make_zero(Handle());
                 expr = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,

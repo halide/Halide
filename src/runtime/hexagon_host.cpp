@@ -24,19 +24,14 @@ struct _remote_buffer__seq_octet {
    int dataLen;
 };
 
-typedef int (*remote_initialize_kernels_v2_fn)(const unsigned char* codeptr,
-                                               int codesize,
-                                               int use_shared_object,
-                                               halide_hexagon_handle_t*);
 typedef int (*remote_initialize_kernels_fn)(const unsigned char* codeptr,
                                             int codesize,
                                             halide_hexagon_handle_t*);
-typedef halide_hexagon_handle_t (*remote_get_symbol_v3_fn)(halide_hexagon_handle_t, const char*, int, int, halide_hexagon_handle_t*);
-typedef halide_hexagon_handle_t (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int);
+typedef int (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int, halide_hexagon_handle_t*);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
                              remote_buffer*, int);
-typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t, int);
+typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
 typedef int (*remote_power_fn)();
@@ -47,9 +42,7 @@ typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
 typedef void (*host_free_fn)(void *);
 
-WEAK remote_initialize_kernels_v2_fn remote_initialize_kernels_v2 = NULL;
 WEAK remote_initialize_kernels_fn remote_initialize_kernels = NULL;
-WEAK remote_get_symbol_v3_fn remote_get_symbol_v3 = NULL;
 WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
 WEAK remote_release_kernels_fn remote_release_kernels = NULL;
@@ -110,8 +103,7 @@ __attribute__((always_inline)) void get_symbol(void *user_context, void *host_li
 
 // Load the hexagon remote runtime.
 WEAK int init_hexagon_runtime(void *user_context) {
-    if ((remote_initialize_kernels_v2 || remote_initialize_kernels)
-         && remote_run && remote_release_kernels) {
+    if (remote_initialize_kernels && remote_run && remote_release_kernels) {
         // Already loaded.
         return 0;
     }
@@ -120,20 +112,24 @@ WEAK int init_hexagon_runtime(void *user_context) {
     // code execution based on the runtime; devices with Hexagon hardware will
     // simply provide conduits for execution on that hardware, while test/desktop/etc
     // environments can instead connect a simulator via the API.
+    // Load the .so for Linux or Android, and if that fails try the .dll
+    // as we may be running the windows hosted simulator.
     void *host_lib = halide_load_library("libhalide_hexagon_host.so");
+    if (!host_lib) {
+        host_lib = halide_load_library("libhalide_hexagon_host.dll");
+    }
+
 
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Get the symbols we need from the library.
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels_v2", remote_initialize_kernels_v2, /* required */ false);
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels", remote_initialize_kernels, /* required */ false);
-    if (!remote_initialize_kernels_v2 && !remote_initialize_kernels) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_v3", remote_get_symbol_v3, /* required */ false);
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol", remote_get_symbol, /* required */ false);
-    if (!remote_get_symbol && !remote_get_symbol_v3) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_initialize_kernels_v3", remote_initialize_kernels);
+    if (!remote_initialize_kernels) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_v4", remote_get_symbol);
+    if (!remote_get_symbol) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels", remote_release_kernels);
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels_v2", remote_release_kernels);
     if (!remote_release_kernels) return -1;
 
     get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_init", host_malloc_init);
@@ -184,16 +180,14 @@ WEAK bool halide_is_hexagon_available(void *user_context) {
 }
 
 WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
-                                           const uint8_t *code, uint64_t code_size,
-                                           uint32_t use_shared_object) {
+                                           const uint8_t *code, uint64_t code_size) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) return result;
     debug(user_context) << "Hexagon: halide_hexagon_initialize_kernels (user_context: " << user_context
                         << ", state_ptr: " << state_ptr
                         << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
-                        << ", code_size: " << (int)code_size
-                        << ", use_shared_object: " << use_shared_object << ")\n";
+                        << ", code_size: " << (int)code_size << ")\n";
     halide_assert(user_context, state_ptr != NULL);
 
     #ifdef DEBUG_RUNTIME
@@ -223,16 +217,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     if (!(*state)->module) {
         debug(user_context) << "    halide_remote_initialize_kernels -> ";
         halide_hexagon_handle_t module = 0;
-        if (remote_initialize_kernels_v2) {
-            result = remote_initialize_kernels_v2(code, code_size, use_shared_object, &module);
-        } else {
-            halide_assert(user_context, remote_initialize_kernels != NULL);
-            if (use_shared_object) {
-                error(user_context) << "Hexagon runtime does not support shared objects.\n";
-                return -1;
-            }
-            result = remote_initialize_kernels(code, code_size, &module);
-        }
+        result = remote_initialize_kernels(code, code_size, &module);
         poll_log(user_context);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
@@ -287,7 +272,6 @@ WEAK int map_arguments(void *user_context, int arg_count,
 }  // namespace
 
 WEAK int halide_hexagon_run(void *user_context,
-                            uint32_t use_shared_object,
                             void *state_ptr,
                             const char *name,
                             halide_hexagon_handle_t* function,
@@ -301,7 +285,6 @@ WEAK int halide_hexagon_run(void *user_context,
 
     halide_hexagon_handle_t module = state_ptr ? ((module_state *)state_ptr)->module : 0;
     debug(user_context) << "Hexagon: halide_hexagon_run ("
-                        << "use_shared_object: " << use_shared_object << ", "
                         << "user_context: " << user_context << ", "
                         << "state_ptr: " << state_ptr << " (" << module << "), "
                         << "name: " << name << ", "
@@ -310,14 +293,9 @@ WEAK int halide_hexagon_run(void *user_context,
     // If we haven't gotten the symbol for this function, do so now.
     if (*function == 0) {
         debug(user_context) << "    halide_hexagon_remote_get_symbol" << name << " -> ";
-        if (remote_get_symbol_v3) {
-            halide_hexagon_handle_t sym = 0;
-            int result = remote_get_symbol_v3(module, name, strlen(name) + 1, use_shared_object, &sym);
-            *function = result == 0 ? sym : 0;
-        } else {
-            halide_assert(user_context, remote_get_symbol != NULL);
-            *function = remote_get_symbol(module, name, strlen(name) + 1);
-        }
+        halide_hexagon_handle_t sym = 0;
+        int result = remote_get_symbol(module, name, strlen(name) + 1, &sym);
+        *function = result == 0 ? sym : 0;
         poll_log(user_context);
         debug(user_context) << "        " << *function << "\n";
         if (*function == 0) {
@@ -398,7 +376,7 @@ WEAK int halide_hexagon_device_release(void *user_context) {
         if (state->module) {
             debug(user_context) << "    halide_remote_release_kernels " << state
                                 << " (" << state->module << ") -> ";
-            int result = remote_release_kernels(state->module, state->size);
+            int result = remote_release_kernels(state->module);
             poll_log(user_context);
             debug(user_context) << "        " << result << "\n";
             state->module = 0;

@@ -545,6 +545,7 @@ void StubEmitter::emit() {
     indent_level++;
     stream << indent() << ": " << class_name << "(*context, inputs, params) {}\n";
     stream << "\n";
+    indent_level--;
 
     if (!generator_params.empty()) {
         stream << indent() << "// templated construction method with inputs\n";
@@ -587,7 +588,6 @@ void StubEmitter::emit() {
         indent_level--;
         stream << indent() << ");\n";
         stream << indent() << "return " << class_name << "(context, inputs, gp);\n";
-        indent_level--;
         indent_level--;
         stream << indent() << "}\n";
         stream << "\n";
@@ -674,6 +674,7 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              const std::map<std::string, std::string> &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : generator(generator_factory(context, generator_params)) {
+    generator->externs_map = context.get_externs_map();
     generator->set_inputs_vector(inputs);
     generator->call_generate();
 }
@@ -952,11 +953,10 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 void GeneratorParamBase::check_value_readable() const {
-    internal_assert(generator);
     if (is_schedule_param()) {
-        user_assert(generator->phase >= GeneratorBase::ScheduleCalled)  << "The ScheduleParam " << name << " cannot be read before schedule() is called.\n";
+        user_assert(generator && generator->phase >= GeneratorBase::ScheduleCalled)  << "The ScheduleParam " << name << " cannot be read before schedule() is called.\n";
     } else {
-        user_assert(generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
+        user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
     }
 }
 
@@ -1048,6 +1048,14 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
 
 GeneratorBase::~GeneratorBase() { 
     ObjectInstanceRegistry::unregister_instance(this); 
+}
+
+std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::get_externs_map() const {
+    // Lazily create the ExternsMap.
+    if (externs_map == nullptr) {
+        externs_map = std::make_shared<ExternsMap>();
+    }
+    return externs_map;
 }
 
 GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size) {
@@ -1388,7 +1396,15 @@ Module GeneratorBase::build_module(const std::string &function_name,
             filter_arguments.push_back(to_argument(p));
         }
     }
-    return pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
+
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
+    std::shared_ptr<ExternsMap> externs_map = get_externs_map();
+    if (externs_map) {
+        for (const auto &map_entry : *externs_map) {
+            result.append(map_entry.second);
+        }
+    }
+    return result;
 }
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {

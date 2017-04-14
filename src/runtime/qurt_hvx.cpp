@@ -79,4 +79,19 @@ WEAK int _halide_prefetch(const void *ptr, int size) {
     return 0;
 }
 
+struct hexagon_buffer_t_arg {
+    uint64_t device;
+    uint8_t* host;
+};
+
+__attribute__((always_inline))
+WEAK uint8_t *_halide_hexagon_buffer_get_host(const hexagon_buffer_t_arg *buf) {
+    return buf->host;
+}
+
+__attribute__((always_inline))
+WEAK uint64_t _halide_hexagon_buffer_get_device(const hexagon_buffer_t_arg *buf) {
+    return buf->device;
+}
+
 }

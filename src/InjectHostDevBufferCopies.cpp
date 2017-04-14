@@ -136,9 +136,11 @@ public:
 // Set the host field of any buffer_init calls on the given buffer to null.
 class NullifyHostField : public IRMutator {
     using IRMutator::visit;
-    void visit(const AddressOf *op) {
+    void visit(const Variable *op) {
         if (op->name == buf_name) {
             expr = make_zero(Handle());
+        } else {
+            expr = op;
         }
     }
     std::string buf_name;
@@ -168,14 +170,14 @@ class InjectBufferCopies : public IRMutator {
 
         // List of devices, including host, reading buffer in visited
         // scope (cleared whenever copies are done).
-        std::set<DeviceAPI> devices_reading; 
+        std::set<DeviceAPI> devices_reading;
 
         // List of devices, including host, writing buffer in visited
         // scope (cleared whenever copies are done).
-        std::set<DeviceAPI> devices_writing; 
+        std::set<DeviceAPI> devices_writing;
 
         // List of devices, including host, ever accessing this buffer (never cleared).
-        std::set<DeviceAPI> devices_touched; 
+        std::set<DeviceAPI> devices_touched;
 
         BufferInfo() : host_touched(false),
                        dev_touched(false),
@@ -553,8 +555,8 @@ class InjectBufferCopies : public IRMutator {
         }
 
         // Was this buffer touched by multiple different gpu apis
-        bool on_single_device = ((buf_info.devices_touched.size() < 2) || 
-                                 (buf_info.devices_touched.size() == 2 && 
+        bool on_single_device = ((buf_info.devices_touched.size() < 2) ||
+                                 (buf_info.devices_touched.size() == 2 &&
                                   buf_info.devices_touched.count(DeviceAPI::Host)));
 
         // If this buffer is only ever touched on gpu, nuke the host-side allocation.
@@ -744,7 +746,9 @@ class InjectBufferCopies : public IRMutator {
                 device_api = old_device_api;
             }
             internal_assert(device_api != DeviceAPI::None);
+
             IRMutator::visit(op);
+
             device_api = old_device_api;
         } else {
             IRMutator::visit(op);

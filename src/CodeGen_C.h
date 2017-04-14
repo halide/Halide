@@ -113,12 +113,6 @@ protected:
     /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
     void close_scope(const std::string &comment);
 
-    /** Unpack a buffer into its constituent parts and push it on the allocations stack. */
-    void push_buffer(Type t, int dimensions, const std::string &buffer_name);
-
-    /** Pop a buffer from the stack. */
-    void pop_buffer(const std::string &buffer_name);
-
     struct Allocation {
         Type type;
         std::string free_function;

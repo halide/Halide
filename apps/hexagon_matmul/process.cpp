@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <malloc.h>
 
-#include "../support/benchmark.h"
+#include "halide_benchmark.h"
 
 #include "pipeline_cpu.h"
 #include "pipeline_hvx64.h"
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     halide_hexagon_power_hvx_on(nullptr);
 
     printf("Running pipeline...\n");
-    double time = benchmark(iterations, 1, [&]() {
+    double time = Halide::Tools::benchmark(iterations, 1, [&]() {
         int result = pipeline(mat_a, mat_b, mat_ab);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);

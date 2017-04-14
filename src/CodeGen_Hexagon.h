@@ -24,9 +24,6 @@ protected:
 
     void init_module();
 
-    void push_buffer(const std::string &name, int dimensions, llvm::Value *buffer, bool global = false);
-    void pop_buffer(const std::string &name, int dimensions, bool global = false);
-
     Expr mulhi_shr(Expr a, Expr b, int shr);
     Expr sorted_avg(Expr a, Expr b);
 

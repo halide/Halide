@@ -143,6 +143,9 @@ struct Label {
 
 // A struct specifying how a single Func will get visualized.
 struct FuncInfo {
+
+    bool configured = false;
+
     // Configuration for how the func should be drawn
     struct Config {
         int zoom = 0;
@@ -156,6 +159,7 @@ struct FuncInfo {
         float min = 0.0f, max = 0.0f;
         vector<Label> labels;
         bool blank_on_end_realization = false;
+        uint32_t uninitialized_memory_color = 0xff000000;
 
         void dump(const char *name) {
             fprintf(stderr,
@@ -270,10 +274,17 @@ struct FuncInfo {
 // Composite a single pixel of b over a single pixel of a, writing the result into dst
 void composite(uint8_t *a, uint8_t *b, uint8_t *dst) {
     uint8_t alpha = b[3];
-    dst[0] = (alpha * b[0] + (256 - alpha) * a[0]) >> 8;
-    dst[1] = (alpha * b[1] + (256 - alpha) * a[1]) >> 8;
-    dst[2] = (alpha * b[2] + (256 - alpha) * a[2]) >> 8;
-    dst[3] = 0xff;
+    // alpha is almost always 0 or 255.
+    if (alpha == 0) {
+        ((uint32_t *)dst)[0] = ((uint32_t *)a)[0];
+    } else if (alpha == 255) {
+        ((uint32_t *)dst)[0] = ((uint32_t *)b)[0];
+    } else {
+        dst[0] = (alpha * b[0] + (255 - alpha) * a[0]) / 255;
+        dst[1] = (alpha * b[1] + (255 - alpha) * a[1]) / 255;
+        dst[2] = (alpha * b[2] + (255 - alpha) * a[2]) / 255;
+        dst[3] = 255 - (((255 - a[3]) * (255 - alpha)) / 255);
+    }
 }
 
 #define FONT_W 12
@@ -334,8 +345,16 @@ parameters should be set zero or one times:
  --timestep timestep: How many Halide computations should be covered
      by each frame. Defaults to 10000.
 
- --decay factor: How quickly should the yellow and blue highlights
-     decay over time\n"
+ --decay A B: How quickly should the yellow and blue highlights decay
+     over time. This is a two-stage exponential decay with a knee in
+     it. A controls the rate at which they decay while a value is in
+     the process of being computed, and B controls the rate at which
+     they decay over time after the corresponding value has finished
+     being computed. 1 means never decay, 2 means halve in opacity
+     every frame, and 256 or larger means instant decay. The default
+     values for A and B are 1 and 2 respectively, which means that the
+     highlight holds while the value is being computed, and then
+     decays slowly.
 
  --hold frames: How many frames to output after the end of the
     trace. Defaults to 250.
@@ -392,6 +411,9 @@ Funcs.
      coordinates, the second one maps to screen-space y coordinates,
      and the third one does not affect screen-space coordinates.
 
+ --uninit r g b : Specifies the on-screen color corresponding to
+   uninitialized memory. Defaults to black.
+
  --func name: Mark a Func to be visualized. Uses the currently set
      values of the parameters above to specify how.
 
@@ -413,10 +435,43 @@ void expect(bool cond, int i) {
     }
 }
 
+// See all boxes corresponding to positions in a Func's allocation to
+// the given color. Recursive to handle arbitrary
+// dimensionalities. Used by begin and end realization events.
+void fill_realization(uint32_t *image, int image_width, uint32_t color, const FuncInfo &fi,
+                      Packet &p, int current_dimension = 0, int x_off = 0, int y_off = 0) {
+    assert(p.dimensions >= 2 * fi.config.dims);
+    if (2 * current_dimension == p.dimensions) {
+        int x_min = x_off * fi.config.zoom + fi.config.x;
+        int y_min = y_off * fi.config.zoom + fi.config.y;
+        for (int y = 0; y < fi.config.zoom; y++) {
+            for (int x = 0; x < fi.config.zoom; x++) {
+                int idx = (y_min + y) * image_width + (x_min + x);
+                image[idx] = color;
+            }
+        }
+    } else {
+        int min = p.get_coord(current_dimension * 2 + 0);
+        int extent = p.get_coord(current_dimension * 2 + 1);
+        x_off += fi.config.x_stride[current_dimension] * min;
+        y_off += fi.config.y_stride[current_dimension] * min;
+        for (int i = min; i < min + extent; i++) {
+            fill_realization(image, image_width, color, fi, p, current_dimension + 1, x_off, y_off);
+            x_off += fi.config.x_stride[current_dimension];
+            y_off += fi.config.y_stride[current_dimension];
+        }
+    }
+}
+
 int run(int argc, char **argv) {
+    if (argc == 1) {
+        usage();
+        return 0;
+    }
+
     // State that determines how different funcs get drawn
     int frame_width = 1920, frame_height = 1080;
-    int decay_factor = 2;
+    float decay_factor[2] = {1, 2};
     map<string, FuncInfo> func_info;
 
     int timestep = 10000;
@@ -436,6 +491,7 @@ int run(int argc, char **argv) {
     config.y_stride[0] = 0;
     config.x_stride[1] = 0;
     config.y_stride[1] = 1;
+    config.uninitialized_memory_color = 255 << 24;
 
     vector<pair<int, int>> pos_stack;
 
@@ -454,6 +510,7 @@ int run(int argc, char **argv) {
             fi.config.labels.swap(config.labels);
             fi.config = config;
             fi.config.dump(func);
+            fi.configured = true;
         } else if (next == "--min") {
             expect(i + 1 < argc, i);
             config.min = atof(argv[++i]);
@@ -525,11 +582,18 @@ int run(int argc, char **argv) {
             expect(i + 1 < argc, i);
             timestep = atoi(argv[++i]);
         } else if (next == "--decay") {
-            expect(i + 1 < argc, i);
-            decay_factor = atoi(argv[++i]);
+            expect(i + 2 < argc, i);
+            decay_factor[0] = atof(argv[++i]);
+            decay_factor[1] = atof(argv[++i]);
         } else if (next == "--hold") {
             expect(i + 1 < argc, i);
             hold_frames = atoi(argv[++i]);
+        } else if (next == "--uninit") {
+            expect(i + 3 < argc, i);
+            int r = atoi(argv[++i]);
+            int g = atoi(argv[++i]);
+            int b = atoi(argv[++i]);
+            config.uninitialized_memory_color = (255 << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
         } else {
             expect(false, i);
         }
@@ -548,6 +612,9 @@ int run(int argc, char **argv) {
 
     uint32_t *anim = new uint32_t[frame_width * frame_height];
     memset(anim, 0, 4 * frame_width * frame_height);
+
+    uint32_t *anim_decay = new uint32_t[frame_width * frame_height];
+    memset(anim_decay, 0, 4 * frame_width * frame_height);
 
     uint32_t *text = new uint32_t[frame_width * frame_height];
     memset(text, 0, 4 * frame_width * frame_height);
@@ -573,35 +640,61 @@ int run(int argc, char **argv) {
             }
         }
 
-        while (halide_clock >= video_clock) {
-            // Composite text over anim over image
-            for (int i = 0; i < frame_width * frame_height; i++) {
-                uint8_t *anim_px  = (uint8_t *)(anim + i);
-                uint8_t *image_px = (uint8_t *)(image + i);
-                uint8_t *text_px  = (uint8_t *)(text + i);
-                uint8_t *blend_px = (uint8_t *)(blend + i);
-                composite(image_px, anim_px, blend_px);
-                composite(blend_px, text_px, blend_px);
+        if (halide_clock >= video_clock) {
+            const ssize_t frame_bytes = 4 * frame_width * frame_height;
+
+            while (halide_clock >= video_clock) {
+                // Composite text over anim over image
+                for (int i = 0; i < frame_width * frame_height; i++) {
+                    uint8_t *anim_decay_px  = (uint8_t *)(anim_decay + i);
+                    uint8_t *anim_px  = (uint8_t *)(anim + i);
+                    uint8_t *image_px = (uint8_t *)(image + i);
+                    uint8_t *text_px  = (uint8_t *)(text + i);
+                    uint8_t *blend_px = (uint8_t *)(blend + i);
+                    // anim over anim_decay
+                    composite(anim_decay_px, anim_px, anim_decay_px);
+                    // anim_decay over image
+                    composite(image_px, anim_decay_px, blend_px);
+                    // text over image
+                    composite(blend_px, text_px, blend_px);
+                }
+
+                // Dump the frame
+                ssize_t bytes_written = write(1, blend, frame_bytes);
+                if (bytes_written < frame_bytes) {
+                    fprintf(stderr, "Could not write frame to stdout.\n");
+                    return -1;
+                }
+
+                video_clock += timestep;
+
+                // Decay the anim_decay
+                if (decay_factor[1] != 1) {
+                    const uint32_t inv_d1 = (1 << 24) / decay_factor[1];
+                    for (int i = 0; i < frame_width * frame_height; i++) {
+                        uint32_t color = anim_decay[i];
+                        uint32_t rgb = color & 0x00ffffff;
+                        uint32_t alpha = (color >> 24);
+                        alpha *= inv_d1;
+                        alpha &= 0xff000000;
+                        anim_decay[i] = alpha | rgb;
+                    }
+                }
+
+                // Also decay the anim
+                const uint32_t inv_d0 = (1 << 24) / decay_factor[0];
+                for (int i = 0; i < frame_width * frame_height; i++) {
+                    uint32_t color = anim[i];
+                    uint32_t rgb = color & 0x00ffffff;
+                    uint32_t alpha = (color >> 24);
+                    alpha *= inv_d0;
+                    alpha &= 0xff000000;
+                    anim[i] = alpha | rgb;
+                }
             }
 
-            // Dump the frame
-            ssize_t bytes = 4 * frame_width * frame_height;
-            ssize_t bytes_written = write(1, blend, bytes);
-            if (bytes_written < bytes) {
-                fprintf(stderr, "Could not write frame to stdout.\n");
-                return -1;
-            }
-
-            video_clock += timestep;
-
-            // Decay the alpha channel on the anim
-            for (int i = 0; i < frame_width * frame_height; i++) {
-                uint32_t color = anim[i];
-                uint32_t rgb = color & 0x00ffffff;
-                uint8_t alpha = (color >> 24);
-                alpha /= decay_factor;
-                anim[i] = (alpha << 24) | rgb;
-            }
+            // Blank anim
+            memset(anim, 0, frame_bytes);
         }
 
         // Read a tracing packet
@@ -623,6 +716,16 @@ int run(int argc, char **argv) {
 
         PipelineInfo pipeline = pipeline_info[p.parent_id];
 
+        if (p.event == halide_trace_begin_realization ||
+            p.event == halide_trace_produce ||
+            p.event == halide_trace_consume) {
+            pipeline_info[p.id] = pipeline;
+        } else if (p.event == halide_trace_end_realization ||
+                   p.event == halide_trace_end_produce ||
+                   p.event == halide_trace_end_consume) {
+            pipeline_info.erase(p.parent_id);
+        }
+
         string qualified_name = pipeline.name + ":" + p.func();
 
         if (func_info.find(qualified_name) == func_info.end()) {
@@ -631,11 +734,13 @@ int run(int argc, char **argv) {
                 func_info.erase(p.func());
             } else {
                 fprintf(stderr, "Warning: ignoring func %s event %d    \n", qualified_name.c_str(), p.event);
+                fprintf(stderr, "Parent event %d %s\n", p.parent_id, pipeline.name.c_str());
             }
         }
 
         // Draw the event
         FuncInfo &fi = func_info[qualified_name];
+        if (!fi.configured) continue;
 
         if (fi.stats.first_draw_time == 0) {
             fi.stats.first_draw_time = halide_clock;
@@ -646,23 +751,23 @@ int run(int argc, char **argv) {
             fi.stats.qualified_name = qualified_name;
         }
 
+        int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
+
+        for (size_t i = 0; i < fi.config.labels.size(); i++) {
+            const Label &label = fi.config.labels[i];
+            if (frames_since_first_draw <= label.n) {
+                uint32_t color = ((1 + frames_since_first_draw) * 255) / label.n;
+                if (color > 255) color = 255;
+                color *= 0x10101;
+
+                draw_text(label.text, label.x, label.y, color, text, frame_width, frame_height);
+            }
+        }
+
         switch (p.event) {
         case halide_trace_load:
         case halide_trace_store:
         {
-            int frames_since_first_draw = (halide_clock - fi.stats.first_draw_time) / timestep;
-
-            for (size_t i = 0; i < fi.config.labels.size(); i++) {
-                const Label &label = fi.config.labels[i];
-                if (frames_since_first_draw <= label.n) {
-                    uint32_t color = ((1 + frames_since_first_draw) * 255) / label.n;
-                    if (color > 255) color = 255;
-                    color *= 0x10101;
-
-                    draw_text(label.text, label.x, label.y, color, text, frame_width, frame_height);
-                }
-            }
-
             if (p.event == halide_trace_store) {
                 // Stores take time proportional to the number of
                 // items stored times the cost of the func.
@@ -745,44 +850,19 @@ int run(int argc, char **argv) {
         }
         case halide_trace_begin_realization:
             fi.stats.num_realizations++;
-            pipeline_info[p.id] = pipeline;
+            fill_realization(image, frame_width, fi.config.uninitialized_memory_color, fi, p);
             break;
         case halide_trace_end_realization:
             if (fi.config.blank_on_end_realization) {
-                assert(p.dimensions >= 2 * fi.config.dims);
-                int x_min = fi.config.x, y_min = fi.config.y;
-                int x_extent = 0, y_extent = 0;
-                for (int d = 0; d < fi.config.dims; d++) {
-                    int m = p.get_coord(d * 2 + 0);
-                    int e = p.get_coord(d * 2 + 1);
-                    x_min += fi.config.zoom * fi.config.x_stride[d] * m;
-                    y_min += fi.config.zoom * fi.config.y_stride[d] * m;
-                    x_extent += fi.config.zoom * fi.config.x_stride[d] * e;
-                    y_extent += fi.config.zoom * fi.config.y_stride[d] * e;
-                }
-                if (x_extent == 0) x_extent = fi.config.zoom;
-                if (y_extent == 0) y_extent = fi.config.zoom;
-                for (int y = y_min; y < y_min + y_extent; y++) {
-                    for (int x = x_min; x < x_min + x_extent; x++) {
-                        image[y * frame_width + x] = 0;
-                    }
-                }
+                fill_realization(image, frame_width, 0, fi, p);
             }
-            pipeline_info.erase(p.parent_id);
             break;
         case halide_trace_produce:
-            pipeline_info[p.id] = pipeline;
             fi.stats.num_productions++;
             break;
         case halide_trace_end_produce:
-            pipeline_info.erase(p.parent_id);
-            break;
         case halide_trace_consume:
-            pipeline_info[p.id] = pipeline;
-            break;
         case halide_trace_end_consume:
-            pipeline_info.erase(p.parent_id);
-            break;
         case halide_trace_begin_pipeline:
         case halide_trace_end_pipeline:
             break;

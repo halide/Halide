@@ -19,10 +19,12 @@ template<typename T> struct halide_handle_traits;
 extern "C" {
 #endif
 
+// Note that you should not use "inline" along with HALIDE_ALWAYS_INLINE;
+// it is not necessary, and may produce warnings for some build configurations.
 #ifdef _MSC_VER
 #define HALIDE_ALWAYS_INLINE __forceinline
 #else
-#define HALIDE_ALWAYS_INLINE __attribute__((always_inline))
+#define HALIDE_ALWAYS_INLINE __attribute__((always_inline)) inline
 #endif
 
 /** \file
@@ -908,7 +910,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_knl = 39, ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake = 40, ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake = 41, ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
-    halide_target_feature_hvx_use_shared_object = 42, ///< Build shared object code for Hexagon, and use dlopenbuf API.
+    halide_target_feature_hvx_use_shared_object = 42, ///< Deprecated
     halide_target_feature_trace_loads = 43, ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores = 44, ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
     halide_target_feature_trace_realizations = 45, ///< Trace all realizations done by the pipeline. Equivalent to calling Func::trace_realizations on every non-inlined Func.
@@ -1020,7 +1022,7 @@ typedef struct halide_buffer_t {
     /** Convenience methods for accessing the flags */
     // @{
     HALIDE_ALWAYS_INLINE bool get_flag(halide_buffer_flags flag) const {
-        return flags & flag;
+        return (flags & flag) != 0;
     }
 
     HALIDE_ALWAYS_INLINE void set_flag(halide_buffer_flags flag, bool value) {
@@ -1396,7 +1398,7 @@ template<typename T> struct check_is_pointer<T *> {};
 
 /** Construct the halide equivalent of a C type */
 template<typename T>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of() {
     // Create a compile-time error if T is not a pointer (without
     // using any includes - this code goes into the runtime).
     check_is_pointer<T> check;
@@ -1405,57 +1407,57 @@ HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of() {
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<float>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<float>() {
     return halide_type_t(halide_type_float, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<double>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<double>() {
     return halide_type_t(halide_type_float, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<bool>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<bool>() {
     return halide_type_t(halide_type_uint, 1);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<uint8_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint8_t>() {
     return halide_type_t(halide_type_uint, 8);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<uint16_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint16_t>() {
     return halide_type_t(halide_type_uint, 16);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<uint32_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint32_t>() {
     return halide_type_t(halide_type_uint, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<uint64_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint64_t>() {
     return halide_type_t(halide_type_uint, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<int8_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int8_t>() {
     return halide_type_t(halide_type_int, 8);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<int16_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int16_t>() {
     return halide_type_t(halide_type_int, 16);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<int32_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int32_t>() {
     return halide_type_t(halide_type_int, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE inline halide_type_t halide_type_of<int64_t>() {
+HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
 

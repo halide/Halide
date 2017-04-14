@@ -289,9 +289,11 @@ bool save_png(ImageType &im, const std::string &filename) {
 
     Internal::PngRowPointers row_pointers(im.height(), png_get_rowbytes(png_ptr, info_ptr));
 
-    // im.copyToHost(); // in case the image is on the gpu
-
+    // We don't require that the image type provided has any
+    // particular way to get at the strides, so take differences of
+    // addresses of pixels to compute them.
     int c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
+    int x_stride = (int)((&im(1, 0, 0)) - (&im(0, 0, 0)));
     typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
 
     for (int y = 0; y < im.height(); y++) {
@@ -305,7 +307,7 @@ bool save_png(ImageType &im, const std::string &filename) {
                     *dstPtr++ = out >> 8;
                     *dstPtr++ = out & 0xff;
                 }
-                srcPtr++;
+                srcPtr += x_stride;
             }
         } else if (bit_depth == 8) {
             // convert to uint8_t
@@ -315,7 +317,7 @@ bool save_png(ImageType &im, const std::string &filename) {
                     Internal::convert(srcPtr[c*c_stride], out);
                     *dstPtr++ = out;
                 }
-                srcPtr++;
+                srcPtr += x_stride;
             }
         } else {
             if (!check(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.")) return false;

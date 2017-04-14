@@ -234,9 +234,7 @@ private:
         // allocation.
         varying.push(op->name, 0);
         varying.push(op->name + ".buffer", 0);
-        varying.push(op->name + ".host", 0);
         IRVisitor::visit(op);
-        varying.pop(op->name + ".host");
         varying.pop(op->name + ".buffer");
         varying.pop(op->name);
     }

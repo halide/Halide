@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include "../support/benchmark.h"
+#include "halide_benchmark.h"
 
 #include "pipeline_cpu.h"
 #include "pipeline_hvx64.h"
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     halide_hexagon_power_hvx_on(NULL);
 
     printf("Running pipeline...\n");
-    double time = benchmark(iterations, 10, [&]() {
+    double time = Halide::Tools::benchmark(iterations, 10, [&]() {
         int result = pipeline(in, out);
         if (result != 0) {
             printf("pipeline failed! %d\n", result);

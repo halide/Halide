@@ -111,7 +111,15 @@ uint16_t getBitsFrom(int64_t value, RoundingMode roundingMode, const char *typeN
 #else
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
 #endif
+#if LLVM_VERSION >= 50
+    // A comment in LLVM's APFloat.h indicates we should perhaps use
+    // llvm::APInt::WordType directly. However this type matches the
+    // prototype of the method it is passed to below, so it seems more
+    // correct. This code will likely have to change again.
+    llvm::APFloatBase::integerPart asIP = value;
+#else
     llvm::integerPart asIP = value;
+#endif
     llvm::APFloat::opStatus status = convertedValue.convertFromSignExtendedInteger(
         &asIP,
         /*srcCount=*/1, // All bits are contained within a single int64_t
