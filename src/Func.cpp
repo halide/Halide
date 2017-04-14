@@ -1127,7 +1127,7 @@ Stage Stage::specialize(Expr condition) {
 
     // Can't add any more specializations after specialize_fail().
     for (size_t i = 0; i < specializations.size(); i++) {
-        user_assert(specializations[i].failure_message.empty()) << "Cannot add new specializations after specialiation_fail().";
+        user_assert(specializations[i].failure_message.empty()) << "Cannot add new specializations after specialize_fail().";
     }
     const Specialization &s = definition.add_specialization(condition);
 
