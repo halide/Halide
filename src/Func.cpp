@@ -1126,19 +1126,18 @@ Stage Stage::specialize(Expr condition) {
     }
 
     // Can't add any more specializations after specialize_fail().
-    for (size_t i = 0; i < specializations.size(); i++) {
-        user_assert(specializations[i].failure_message.empty()) << "Cannot add new specializations after specialize_fail().";
-    }
+    user_assert(specializations.empty() || specializations.back().failure_message.empty()) 
+        << "Cannot add new specializations after specialize_fail().";
     const Specialization &s = definition.add_specialization(condition);
 
     return Stage(s.definition, stage_name, dim_vars, storage_dims);
 }
 
 void Stage::specialize_fail(const std::string &message) {
+    user_assert(!message.empty()) << "Argument passed to specialize_fail() must not be empty.\n";
     const vector<Specialization> &specializations = definition.specializations();
-    for (size_t i = 0; i < specializations.size(); i++) {
-        user_assert(specializations[i].failure_message.empty()) << "Only one specialize_fail() may be defined per Stage.";
-    }
+    user_assert(specializations.empty() || specializations.back().failure_message.empty()) 
+        << "Only one specialize_fail() may be defined per Stage.";
     (void) definition.add_specialization(const_true());
     Specialization &s = definition.specializations().back();
     s.failure_message = message;
