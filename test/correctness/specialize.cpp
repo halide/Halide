@@ -562,7 +562,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        Var x, y;
+        Var x;
         Param<int> p;
         Expr const_false = Expr(0) == Expr(1);
         Expr const_true = Expr(0) == Expr(0);
@@ -609,7 +609,33 @@ int main(int argc, char **argv) {
         _halide_user_assert(vector_store_lanes == 32);
     }
 
+    {
+        Var x;
+        Param<int> p;
+        Expr const_true = Expr(0) == Expr(0);
+        Expr different_const_true = Expr(1) == Expr(1);
+
+        // Check that if we promote a final const-true specialize, we keep the
+        // implicit compute/store_root required for outputs.
+        Func f("foof");
+        f(x) = x;
+        f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
+        f.specialize(const_true).vectorize(x, 16);
+
+        f.set_custom_trace(&my_trace);
+        f.trace_stores();
+
+        vector_store_lanes = 0;
+        p.set(42);  // arbitrary nonzero value
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 16);
+
+        vector_store_lanes = 0;
+        p.set(0);
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 32);
+    }
+
     printf("Success!\n");
     return 0;
-
 }
