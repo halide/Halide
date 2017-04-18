@@ -46,10 +46,13 @@ public:
         blur.dim(0).set_stride(Expr());
 
         // Add specialization for input and output buffers that are both planar.
-        blur.specialize(is_planar(input) && is_planar(blur));
+        blur.specialize(is_planar(input) && is_planar(blur))
+            .vectorize(x, natural_vector_size<float>());
 
         // Add specialization for input and output buffers that are both interleaved.
-        blur.specialize(is_interleaved(input) && is_interleaved(blur));
+        blur.specialize(is_interleaved(input) && is_interleaved(blur))
+            .reorder(c, x, y)
+            .vectorize(c);
 
         // Note that other combinations (e.g. interleaved -> planar) will work
         // but be relatively unoptimized.
