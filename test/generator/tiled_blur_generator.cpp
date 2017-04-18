@@ -55,7 +55,8 @@ public:
         output.dim(0).set_stride(Expr());
 
         // Add specialization for input and output buffers that are both planar.
-        output.specialize(is_planar(input) && is_planar(output));
+        output.specialize(is_planar(input) && is_planar(output))
+            .vectorize(xi, natural_vector_size<float>());
 
         // Add specialization for input and output buffers that are both interleaved.
         output.specialize(is_interleaved(input) && is_interleaved(output));
