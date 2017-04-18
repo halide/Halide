@@ -896,6 +896,43 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     std::vector<std::string> dependencies = { "libhalide_hexagon_remote_skel.so" };
     std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies);
 
+    std::string signer = get_env_variable("HL_HEXAGON_CODE_SIGNER");
+    if (!signer.empty()) {
+        // If signer is specified, shell out to a tool/script that will
+        // sign the Hexagon code in a specific way. The tool is expected
+        // to be of the form
+        //
+        //     signer /path/to/unsigned.so /path/to/signed.so
+        //
+        // where unsigned and signed paths must not be the same file.
+        // If the signed file already exists, it will be overwritten.
+
+        TemporaryFile input("hvx_unsigned", ".so");
+        TemporaryFile output("hvx_signed", ".so");
+
+        debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
+
+        FILE *f = fopen(input.pathname().c_str(), "wb");
+        internal_assert(f);
+        internal_assert(fwrite((void *) shared_object.data(), 1, shared_object.size(), f) == shared_object.size());
+        internal_assert(fflush(f) == 0);
+        internal_assert(fclose(f) == 0);
+
+        debug(1) << "Signing tool: (" << signer << ")\n";
+        std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
+        internal_assert(system(cmd.c_str()) == 0);
+
+        f = fopen(output.pathname().c_str(), "rb");
+        internal_assert(f);
+        internal_assert(fseek(f, 0L, SEEK_END) == 0);
+        size_t signed_size = ftell(f);
+        internal_assert(signed_size > 0);
+        internal_assert(fseek(f, 0L, SEEK_SET) == 0);
+        shared_object.resize(signed_size);
+        internal_assert(fread(shared_object.data(), 1, signed_size, f) == signed_size);
+        internal_assert(fclose(f) == 0);
+    }
+
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());
     memcpy(result_buf.data(), shared_object.data(), shared_object.size());
 
