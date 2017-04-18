@@ -8,7 +8,7 @@ ScheduleParamBase::ScheduleParamBase(const Type &t, const std::string &name, boo
     : sp_name(name), 
       type(t),
       scalar_parameter(t, /*is_buffer*/ false, 0, is_explicit_name ? name + ".schedule_param_param" : "", 
-          is_explicit_name, /*register_instance*/ false, /*is_removed_before_lowering*/ true),
+          is_explicit_name, /*register_instance*/ false, /*is_bound_before_lowering*/ true),
       scalar_expr(Variable::make(t, scalar_parameter.name() + ".schedule_param_var", scalar_parameter)),
       // We must use a not-undefined LoopLevel, so that if we later mutate it,
       // references that use it will see the same content pointer.

@@ -23,11 +23,11 @@ struct ParameterContents {
     const bool is_buffer;
     const bool is_explicit_name;
     const bool is_registered;
-    const bool is_removed_before_lowering;
-    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r, bool is_removed_before_lowering)
+    const bool is_bound_before_lowering;
+    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r, bool is_bound_before_lowering)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
           host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r),
-          is_removed_before_lowering(is_removed_before_lowering) {
+          is_bound_before_lowering(is_bound_before_lowering) {
 
         min_constraint.resize(dimensions);
         extent_constraint.resize(dimensions);
@@ -79,8 +79,8 @@ Parameter::Parameter(Type t, bool is_buffer, int d) :
     }
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance, bool is_removed_before_lowering) :
-    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance, is_removed_before_lowering)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance, bool is_bound_before_lowering) :
+    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance, is_bound_before_lowering)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     if (contents.defined() && contents->is_registered) {
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
@@ -142,9 +142,9 @@ bool Parameter::is_buffer() const {
     return contents->is_buffer;
 }
 
-bool Parameter::is_removed_before_lowering() const {
+bool Parameter::is_bound_before_lowering() const {
     check_defined();
-    return contents->is_removed_before_lowering;
+    return contents->is_bound_before_lowering;
 }
 
 Expr Parameter::get_scalar_expr() const {
