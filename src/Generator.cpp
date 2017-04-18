@@ -953,11 +953,10 @@ GeneratorParamBase::GeneratorParamBase(const std::string &name) : name(name) {
 GeneratorParamBase::~GeneratorParamBase() { ObjectInstanceRegistry::unregister_instance(this); }
 
 void GeneratorParamBase::check_value_readable() const {
-    internal_assert(generator);
     if (is_schedule_param()) {
-        user_assert(generator->phase >= GeneratorBase::ScheduleCalled)  << "The ScheduleParam " << name << " cannot be read before schedule() is called.\n";
+        user_assert(generator && generator->phase >= GeneratorBase::ScheduleCalled)  << "The ScheduleParam " << name << " cannot be read before schedule() is called.\n";
     } else {
-        user_assert(generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
+        user_assert(generator && generator->phase >= GeneratorBase::GenerateCalled)  << "The GeneratorParam " << name << " cannot be read before build() or generate() is called.\n";
     }
 }
 
