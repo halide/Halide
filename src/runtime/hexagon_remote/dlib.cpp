@@ -36,6 +36,7 @@ struct Ehdr {
 };
 
 enum {
+    PT_NULL = 0,
     PT_LOAD = 1,
     PT_DYNAMIC = 2,
 };
@@ -354,6 +355,10 @@ struct dlib_t {
         if (!assert_in_bounds(phdrs, ehdr->e_phnum)) return false;
         const Dyn *dynamic = NULL;
         for (int i = 0; i < ehdr->e_phnum; i++) {
+            if (phdrs[i].p_type == PT_NULL) {
+                // PT_NULL should be ignored entirely.
+                continue;
+            }
             size_t size_i = phdrs[i].p_memsz;
             size_t offset_i = phdrs[i].p_offset;
             if (size_i != phdrs[i].p_filesz) {
