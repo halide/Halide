@@ -84,10 +84,9 @@ public:
         // Note that we can use the Generator method natural_vector_size()
         // here; this produces the width of the SIMD vector being targeted
         // divided by the width of the data type.
-        // Use '1' as the 'no vectorize' case.
-        // TODO: this is awkward, there should be a more idiomatic way.
         output
-            .vectorize(x, select(vectorize, natural_vector_size(output.type()), 1));
+            .specialize(vectorize)
+            .vectorize(x, natural_vector_size(output.type()));
     }
 
 private:
