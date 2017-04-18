@@ -10,8 +10,12 @@ extern void free(void *);
 namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK void *default_malloc(void *user_context, size_t x) {
-    // Allocate enough space for aligning the pointer we return.
     const size_t alignment = 128;
+
+    // The size should also be aligned.
+    x = (x + alignment - 1) & ~(alignment - 1);
+
+    // Allocate enough space for aligning the pointer we return.
     void *orig = malloc(x + alignment);
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
