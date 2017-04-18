@@ -13,12 +13,14 @@
 namespace Halide {
 
 class Func;
+template <typename T> class ScheduleParam;
 struct VarOrRVar;
 
 namespace Internal {
 class Function;
 struct FunctionContents;
 struct LoopLevelContents;
+class ScheduleParamBase;
 }  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
@@ -93,10 +95,18 @@ enum class PrefetchBoundStrategy {
  * recursively injecting realizations for them at particular sites
  * in this loop nest. A LoopLevel identifies such a site. */
 class LoopLevel {
+    template <typename T> friend class ScheduleParam;
+    friend class ::Halide::Internal::ScheduleParamBase;
+
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
     EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar);
+
+    /** Mutate our contents to match the contents of 'other'. This is a potentially
+     * dangerous operation to do if you aren't careful, and exists solely to make
+     * ScheduleParam<LoopLevel> easy to implement; hence its private status. */
+    EXPORT void copy_from(const LoopLevel &other);
 
 public:
     /** Identify the loop nest corresponding to some dimension of some function */

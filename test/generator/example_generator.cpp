@@ -81,13 +81,12 @@ public:
             .bound(c, 0, channels)
             .reorder(c, x, y)
             .unroll(c);
-        if (vectorize) {
-            // Note that we can use the Generator method natural_vector_size()
-            // here; this produces the width of the SIMD vector being targeted
-            // divided by the width of the data type.
-            output
-                .vectorize(x, natural_vector_size(output.type()));
-        }
+        // Note that we can use the Generator method natural_vector_size()
+        // here; this produces the width of the SIMD vector being targeted
+        // divided by the width of the data type.
+        output
+            .specialize(vectorize)
+            .vectorize(x, natural_vector_size(output.type()));
     }
 
 private:
