@@ -193,7 +193,7 @@ struct dlib_t {
     bool do_relocations(const Rela *relocs, int count) {
         for (int i = 0; i < count; i++) {
             const Rela &r = relocs[i];
-            uint32_t *fixup_addr = (uint32_t *)(program + r.r_offset);
+            uint32_t *fixup_addr = (uint32_t *)(base_vaddr + r.r_offset);
             if (!assert_in_bounds(fixup_addr)) return false;
             const char *S = NULL;
             const char *B = program;
@@ -247,10 +247,10 @@ struct dlib_t {
             const Dyn &d = dynamic[i];
             switch (d.tag) {
             case DT_HASH:
-                hash.table = (const uint32_t *)(program + d.value);
+                hash.table = (const uint32_t *)(base_vaddr + d.value);
                 break;
             case DT_SYMTAB:
-                symtab = (const Sym *)(program + d.value);
+                symtab = (const Sym *)(base_vaddr + d.value);
                 break;
             case DT_SYMENT:
                 if (d.value != sizeof(Sym)) {
@@ -259,14 +259,14 @@ struct dlib_t {
                 }
                 break;
             case DT_STRTAB:
-                strtab = (const char *)(program + d.value);
+                strtab = (const char *)(base_vaddr + d.value);
                 break;
             case DT_STRSZ:
                 break;
             case DT_PLTGOT:
                 break;
             case DT_JMPREL:
-                jmprel = (const Rela *)(program + d.value);
+                jmprel = (const Rela *)(base_vaddr + d.value);
                 break;
             case DT_PLTREL:
                 if (d.value != DT_RELA) {
@@ -278,7 +278,7 @@ struct dlib_t {
                 jmprel_count = d.value / sizeof(Rela);
                 break;
             case DT_RELA:
-                rel = (const Rela *)(program + d.value);
+                rel = (const Rela *)(base_vaddr + d.value);
                 break;
             case DT_RELASZ:
                 rel_count = d.value / sizeof(Rela);
