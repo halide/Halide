@@ -1,4 +1,5 @@
 #include "AssociativeOpsTable.h"
+#include "IRPrinter.h"
 
 using std::map;
 using std::string;

@@ -67,7 +67,7 @@ int one_d_max() {
     double improve = t_ref / t;
     printf("Improvement: %f\n\n", improve);
 
-    return 0;
+    return (improve > 0.9) ? 0 : -1;
 }
 
 int two_d_histogram() {
@@ -123,7 +123,7 @@ int two_d_histogram() {
     double improve = t_ref / t;
     printf("Improvement: %f\n\n", improve);
 
-    return 0;
+    return (improve > 0.9) ? 0 : -1;
 }
 
 int four_d_argmin() {
@@ -195,7 +195,7 @@ int four_d_argmin() {
     double improve = t_ref / t;
     printf("Improvement: %f\n\n", improve);
 
-    return 0;
+    return (improve > 0.9) ? 0 : -1;
 }
 
 int complex_multiply() {
@@ -264,7 +264,7 @@ int complex_multiply() {
     double improve = t_ref / t;
     printf("Improvement: %f\n\n", improve);
 
-    return 0;
+    return (improve > 0.9) ? 0 : -1;
 }
 
 int dot_product() {
@@ -332,7 +332,7 @@ int dot_product() {
     double improve = t_ref / t;
     printf("Improvement: %f\n\n", improve);
 
-    return 0;
+    return (improve > 0.9) ? 0 : -1;
 }
 
 int kitchen_sink() {
@@ -407,7 +407,7 @@ int kitchen_sink() {
     double improve = t_ref / t;
     printf("Improvement: %f\n\n", improve);
 
-    return 0;
+    return (improve > 0.9) ? 0 : -1;
 }
 
 int main(int argc, char **argv) {
