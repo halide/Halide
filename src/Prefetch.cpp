@@ -244,7 +244,7 @@ class ReducePrefetchDimension : public IRMutator {
             }
 
             vector<Expr> args = {base, new_offset};
-            for (size_t i = 1; i < max_arg_size; ++i) {
+            for (size_t i = 2; i < max_arg_size; ++i) {
                 args.push_back(call->args[i]);
             }
 
