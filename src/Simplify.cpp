@@ -4762,7 +4762,14 @@ private:
 
         const AssertStmt *a = stmt.as<AssertStmt>();
         if (a && is_zero(a->condition)) {
-            if (!a->const_false_conditions_expected) {
+            // Usually, assert(const-false) should generate a warning;
+            // in at least one case (specialize_fail()), we want to suppress
+            // the warning, because the assertion is generated internally
+            // by Halide and is expected to always fail.
+            const Call *call = a->message.as<Call>();
+            const bool const_false_conditions_expected = 
+                call && call->name == "halide_error_specialize_fail";
+            if (!const_false_conditions_expected) {
                 user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
                              << stmt << "\n";
             }

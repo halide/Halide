@@ -290,8 +290,7 @@ Stmt build_provide_loop_nest(string func_name,
                                      "halide_error_specialize_fail",
                                      {StringImm::make(s.failure_message)},
                                      Internal::Call::Extern);
-            then_case = AssertStmt::make(const_false(), specialize_fail_error, 
-                                         /*const_false_conditions_expected*/ true);
+            then_case = AssertStmt::make(const_false(), specialize_fail_error);
         }
         stmt = IfThenElse::make(c, then_case, stmt);
     }
