@@ -15,14 +15,6 @@ def halide_language_copts():
       "/MD",
   ]
   return select({
-      # "@halide//:halide_host_config_x64_windows_msvc":
-      #     _msvc_opts,
-      # "@halide//:halide_host_config_x64_windows":
-      #     ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
-      # "@halide//:halide_host_config_darwin":
-      #     _clangy_opts,
-      # "@halide//:halide_host_config_darwin_x86_64":
-      #     _clangy_opts,
       "@halide//:halide_platform_config_x64_windows_msvc":
           _msvc_opts,
       "@halide//:halide_platform_config_x64_windows":
@@ -46,19 +38,8 @@ def halide_language_linkopts():
      "-Wl,-stack_size", 
       "-Wl,1000000"
   ]
-  _msvc_opts = [
-      # TODO
-      #"/VERBOSE:lib",
-  ]
+  _msvc_opts = []  # TODO
   return select({
-      # "@halide//:halide_host_config_x64_windows_msvc":
-      #     _msvc_opts,
-      # "@halide//:halide_host_config_x64_windows":
-      #     ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
-      # "@halide//:halide_host_config_darwin":
-      #     _osx_opts,
-      # "@halide//:halide_host_config_darwin_x86_64":
-      #     _osx_opts,
       "@halide//:halide_platform_config_x64_windows_msvc":
           _msvc_opts,
       "@halide//:halide_platform_config_x64_windows":
@@ -195,16 +176,9 @@ def halide_config_settings():
       "x64_windows",
   ]
   for cpu in cpus:
-    # native.config_setting(
-    #     name="halide_host_config_%s" % cpu,
-    #     values={"host_cpu": cpu},
-    #     visibility=["//visibility:public"]
-    # )
-    # TODO hokey, improve, this isn't really right in general
     native.config_setting(
         name="halide_platform_config_%s" % cpu,
         values={
-            # "crosstool_top": "//tools/osx/crosstool",
             "cpu": cpu,
         },
         visibility=["//visibility:public"])
