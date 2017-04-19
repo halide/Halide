@@ -912,25 +912,28 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
 
-        FILE *f = fopen(input.pathname().c_str(), "wb");
-        internal_assert(f);
-        internal_assert(fwrite((void *) shared_object.data(), 1, shared_object.size(), f) == shared_object.size());
-        internal_assert(fflush(f) == 0);
-        internal_assert(fclose(f) == 0);
+        {
+            std::ofstream f(input.pathname());
+            f.write(shared_object.data(), shared_object.size());
+            f.flush();
+            internal_assert(f.good());
+            f.close();
+        }
 
         debug(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
         internal_assert(system(cmd.c_str()) == 0);
 
-        f = fopen(output.pathname().c_str(), "rb");
-        internal_assert(f);
-        internal_assert(fseek(f, 0L, SEEK_END) == 0);
-        size_t signed_size = ftell(f);
-        internal_assert(signed_size > 0);
-        internal_assert(fseek(f, 0L, SEEK_SET) == 0);
-        shared_object.resize(signed_size);
-        internal_assert(fread(shared_object.data(), 1, signed_size, f) == signed_size);
-        internal_assert(fclose(f) == 0);
+        {
+            std::ifstream f(output.pathname());
+            f.seekg(0, std::ifstream::end);
+            size_t signed_size = f.tellg();
+            shared_object.resize(signed_size);
+            f.seekg(0, std::ifstream::beg);
+            f.read(shared_object.data(), shared_object.size());
+            internal_assert(f.good());
+            f.close();
+        }
     }
 
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());
