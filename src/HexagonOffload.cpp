@@ -896,6 +896,46 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     std::vector<std::string> dependencies = { "libhalide_hexagon_remote_skel.so" };
     std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies);
 
+    std::string signer = get_env_variable("HL_HEXAGON_CODE_SIGNER");
+    if (!signer.empty()) {
+        // If signer is specified, shell out to a tool/script that will
+        // sign the Hexagon code in a specific way. The tool is expected
+        // to be of the form
+        //
+        //     signer /path/to/unsigned.so /path/to/signed.so
+        //
+        // where unsigned and signed paths must not be the same file.
+        // If the signed file already exists, it will be overwritten.
+
+        TemporaryFile input("hvx_unsigned", ".so");
+        TemporaryFile output("hvx_signed", ".so");
+
+        debug(1) << "Signing Hexagon code: " << input.pathname() << " -> " << output.pathname() << "\n";
+
+        {
+            std::ofstream f(input.pathname());
+            f.write(shared_object.data(), shared_object.size());
+            f.flush();
+            internal_assert(f.good());
+            f.close();
+        }
+
+        debug(1) << "Signing tool: (" << signer << ")\n";
+        std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
+        internal_assert(system(cmd.c_str()) == 0);
+
+        {
+            std::ifstream f(output.pathname());
+            f.seekg(0, std::ifstream::end);
+            size_t signed_size = f.tellg();
+            shared_object.resize(signed_size);
+            f.seekg(0, std::ifstream::beg);
+            f.read(shared_object.data(), shared_object.size());
+            internal_assert(f.good());
+            f.close();
+        }
+    }
+
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());
     memcpy(result_buf.data(), shared_object.data(), shared_object.size());
 
