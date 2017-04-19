@@ -71,6 +71,7 @@ cc_library(
     name = "single_language_header_lib",
     srcs = [":build_single_language_header"],
     includes = ["generated"],
+    copts = halide_language_copts(),
     linkstatic = 1,
 )
 
@@ -262,6 +263,7 @@ cc_binary(
 cc_library(
     name = "language",
     visibility = ["//visibility:public"],
+    copts = halide_language_copts(),
     deps = [
         ":lib_halide_internal",
         ":runtime",
@@ -285,6 +287,7 @@ cc_library(
     name = "runtime",
     hdrs = [":runtime_headers"],
     includes = ["src/runtime"],
+    copts = halide_language_copts(),
     linkopts = select({
         # There isn't (yet) a good way to make a config that is "Any Android",
         # so we're forced to specialize on all supported Android CPU configs.
@@ -378,6 +381,7 @@ pkg_tar(
 cc_library(
     name = "mini_opengl",
     testonly = 1,
+    copts = halide_language_copts(),
     hdrs = ["src/runtime/mini_opengl.h"],
     includes = [
         "src",
@@ -390,6 +394,7 @@ cc_library(
 cc_library(
     name = "device_interface",
     testonly = 1,
+    copts = halide_language_copts(),
     hdrs = ["src/runtime/device_interface.h"],
     includes = ["src/runtime"],
     visibility = ["//test:__subpackages__"],  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
@@ -398,6 +403,7 @@ cc_library(
 cc_library(
     name = "internal_test_includes",
     testonly = 1,
+    copts = halide_language_copts(),
     hdrs = [
         ":language_headers",
         ":runtime_headers",
@@ -409,6 +415,7 @@ cc_library(
 cc_library(
     name = "internal_halide_generator_glue",
     srcs = ["@halide//tools:gengen"],
+    copts = halide_language_copts(),
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [

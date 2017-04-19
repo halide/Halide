@@ -16,6 +16,7 @@ libjpegturbo_copts = select({
         "/Ox",
         "/w14711",  # function 'function' selected for inline expansion
         "/w14710",  # 'function' : function not inlined
+        "-D_CRT_SECURE_NO_WARNINGS",
     ],
     "//conditions:default": [
         "-O3",

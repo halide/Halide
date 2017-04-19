@@ -3,7 +3,6 @@ _components_map = {
   "arm" : "WITH_ARM",
   "hexagon" : "WITH_HEXAGON",
   "mips" : "WITH_MIPS",
-  "nacltransforms" : "WITH_NATIVE_CLIENT",
   "nvptx" : "WITH_PTX",
   "powerpc" : "WITH_POWERPC",
   "x86" : "WITH_X86",

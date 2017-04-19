@@ -1,3 +1,8 @@
+load(
+    "@halide//:halide.bzl",
+    "halide_language_copts",
+)
+
 cc_library(
     name = "halide_image_info",
     hdrs = ["halide_image_info.h"],
@@ -44,6 +49,7 @@ cc_library(
     srcs = [
         "GenGen.cpp",
     ],
+    copts = halide_language_copts(),
     visibility = ["//visibility:public"],
     deps = [
         "@halide//:language",

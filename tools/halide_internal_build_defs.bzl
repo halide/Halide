@@ -2,6 +2,7 @@
 load(
     "@halide//:halide.bzl",
     "halide_binary_to_cc_library",
+    "halide_language_copts",
 )
 
 def _ll2bc(name, srcs):
@@ -20,6 +21,7 @@ def _binary2cpp(name, srcs):
   halide_binary_to_cc_library(
       name = "%s_b2clib" % name,
       srcs = srcs,
+      copts = halide_language_copts(),
       identifier = "halide_internal_%s" % name,
       visibility = [ "//visibility:private" ],
       linkstatic = True
@@ -107,6 +109,7 @@ def gen_runtime(name,
   ]
   native.cc_library(name = name, 
                     deps = deps,
+                    copts = halide_language_copts(),
                     linkstatic = True)
 
 

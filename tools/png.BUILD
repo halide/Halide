@@ -26,6 +26,7 @@ cc_library(
         "pngconf.h",
     ],
     includes = ["."],
+    copts = ["-D_CRT_SECURE_NO_WARNINGS"]
     linkopts = ["-lm"],
     visibility = ["//visibility:public"],
     deps = ["@zlib_archive//:zlib"],
