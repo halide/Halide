@@ -166,6 +166,9 @@ struct dlib_t {
     char *program;
     size_t program_size;
 
+    // Pointer to virtual address 0.
+    char *base_vaddr;
+
     // Information about the symbols.
     const char *strtab;
     const Sym *symtab;
@@ -212,7 +215,7 @@ struct dlib_t {
                         return false;
                     }
                 } else {
-                    S = program + sym->st_value;
+                    S = base_vaddr + sym->st_value;
                     if (!assert_in_bounds(S, sym->st_size)) return false;
                 }
             }
@@ -349,6 +352,7 @@ struct dlib_t {
             return false;
         }
         program_size = size;
+        base_vaddr = NULL;
         memcpy(program, data, program_size);
         ehdr = (const Ehdr *)program;
         const Phdr *phdrs = (Phdr *)(program + ehdr->e_phoff);
@@ -368,6 +372,12 @@ struct dlib_t {
             char *program_i = program + offset_i;
             if (!assert_in_bounds(program_i, size_i)) return false;
             if (phdrs[i].p_type == PT_LOAD) {
+                if (!base_vaddr) {
+                    base_vaddr = program + offset_i - phdrs[i].p_vaddr;
+                } else if (base_vaddr != program + offset_i - phdrs[i].p_vaddr) {
+                    log_printf("Cannot load program with non-contiguous virtual address space\n");
+                    return false;
+                }
                 if (offset_i % alignment != 0 || size_i % alignment != 0) {
                     log_printf("Cannot load program with unaligned range [%d, %d)\n", offset_i, offset_i + size_i);
                     return false;
@@ -412,7 +422,7 @@ struct dlib_t {
 
     // Get the address of a symbol
     char *get_symbol_addr(const Sym *sym) {
-        char *addr = program + sym->st_value;
+        char *addr = base_vaddr + sym->st_value;
         if (!assert_in_bounds(addr, sym->st_size)) return NULL;
         return addr;
     }
