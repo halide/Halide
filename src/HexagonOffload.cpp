@@ -811,7 +811,7 @@ public:
         if (!device_code.functions().empty()) {
             // Wrap the statement in calls to halide_initialize_kernels.
             Expr buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "hexagon_code.buffer");
-            Expr code_size = Call::make(Int(32), Call::buffer_get_max, { buf_var, 0 }, Call::Extern);
+            Expr code_size = Call::make(Int(32), Call::buffer_get_extent, { buf_var, 0 }, Call::Extern);
             Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { buf_var }, Call::Extern);
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
                                                        { module_state_ptr(), code_ptr, cast<uint64_t>(code_size) });
