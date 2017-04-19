@@ -5,6 +5,7 @@
 #include "IROperator.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IRPrinter.h"
 #include "Solve.h"
 #include "Substitute.h"
 #include "Simplify.h"
@@ -254,9 +255,9 @@ void add_transitive_dependencies(vector<set<int>> &dependencies) {
                 if (i == j) {
                     continue;
                 }
-                if (dependencies[i].find(j) != dependencies[i].end()) {
+                if (dependencies[i].count(j)) {
                     for (const auto &idx : dependencies[j]) {
-                        if (dependencies[i].find(idx) == dependencies[i].end()) {
+                        if (dependencies[i].count(idx) == 0) {
                             dependencies[i].insert(idx);
                             change = false;
                         }
@@ -356,7 +357,7 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
 
     vector<set<int>> subgraphs;
     if (!all_independent) {
-        debug(5) << "There is cross-dependencies. Need to prove associativity in bulk.\n";
+        debug(5) << "There are cross-dependencies. Need to prove associativity in bulk.\n";
         // Find all transitive dependencies and add them to the graph
         add_transitive_dependencies(dependencies);
         // Decompose the tuple into subgraphs and solve for each separately

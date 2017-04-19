@@ -14,12 +14,26 @@
 namespace Halide {
 namespace Internal {
 
-// Represent an associative op with its identity. The op may be multi-dimensional,
-// e.g. complex multiplication. 'is_commutative' is set to true if the op is also
-// commutative in addition to being associative.
+/**
+ * Represent an associative op with its identity. The op may be multi-dimensional,
+ * e.g. complex multiplication. 'is_commutative' is set to true if the op is also
+ * commutative in addition to being associative.
+ *
+ * For example, complex multiplication is represented as:
+ \code
+ AssociativePattern pattern(
+    {x0 * y0 - x1 * y1, x1 * y0 + x0 * y1},
+    {one, zero},
+    true
+ );
+ \endcode
+ */
 struct AssociativePattern {
+    /** Contain the binary operators for each dimension of the associative op. */
     std::vector<Expr> ops;
+    /** Contain the identities for each dimension of the associative op. */
     std::vector<Expr> identities;
+    /** Indicate if the associative op is also commutative. */
     bool is_commutative;
 
     AssociativePattern() : is_commutative(false) {}
@@ -43,16 +57,6 @@ struct AssociativePattern {
     bool operator!=(const AssociativePattern &other) const { return !(*this == other); }
     size_t size() const { return ops.size(); }
     bool commutative() const { return is_commutative; }
-
-    friend std::ostream& operator<<(std::ostream &stream, const AssociativePattern &p) {
-        stream << "{\n";
-        for (size_t i = 0; i < p.ops.size(); ++i) {
-            stream << "  op_" << i << " ->" << p.ops[i] << ", id_" << i << " -> " << p.identities[i] << "\n";
-        }
-        stream << "  commutative? " << p.is_commutative << "\n";
-        stream << "}\n";
-        return stream;
-    }
 };
 
 const std::vector<AssociativePattern> &get_ops_table(const std::vector<Expr> &exprs);
