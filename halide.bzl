@@ -9,36 +9,63 @@ def halide_language_copts():
       "-fvisibility-inlines-hidden", 
       "-std=c++11", 
   ]
-  _msvc_opts = []  # TODO
+  _msvc_opts = [
+      "-D_CRT_SECURE_NO_WARNINGS",
+      # Linking with LLVM on Windows requires multithread+DLL CRT
+      "/MD",
+  ]
   return select({
-      "@halide//:halide_host_config_x64_windows_msvc":
+      # "@halide//:halide_host_config_x64_windows_msvc":
+      #     _msvc_opts,
+      # "@halide//:halide_host_config_x64_windows":
+      #     ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
+      # "@halide//:halide_host_config_darwin":
+      #     _clangy_opts,
+      # "@halide//:halide_host_config_darwin_x86_64":
+      #     _clangy_opts,
+      "@halide//:halide_platform_config_x64_windows_msvc":
           _msvc_opts,
-      "@halide//:halide_host_config_x64_windows_msys2":
-          _msvc_opts,
-      "@halide//:halide_host_config_x64_windows":
-          _msvc_opts,
-      "@halide//:halide_host_config_darwin":
+      "@halide//:halide_platform_config_x64_windows":
+          ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
+      "@halide//:halide_platform_config_darwin":
           _clangy_opts,
-      "@halide//:halide_host_config_darwin_x86_64":
+      "@halide//:halide_platform_config_darwin_x86_64":
           _clangy_opts,
       "//conditions:default":
           _clangy_opts,
   })
 
 def halide_language_linkopts():
-  _linux_opts = ["-rdynamic", "-ldl", "-lpthread", "-lz"]
-  _osx_opts = ["-Wl,-stack_size", "-Wl,1000000"]
-  _msvc_opts = []  # TODO
+  _linux_opts = [
+     "-rdynamic", 
+     "-ldl", 
+     "-lpthread", 
+     "-lz"
+  ]
+  _osx_opts = [
+     "-Wl,-stack_size", 
+      "-Wl,1000000"
+  ]
+  _msvc_opts = [
+      # TODO
+      #"/VERBOSE:lib",
+  ]
   return select({
-      "@halide//:halide_host_config_x64_windows_msvc":
+      # "@halide//:halide_host_config_x64_windows_msvc":
+      #     _msvc_opts,
+      # "@halide//:halide_host_config_x64_windows":
+      #     ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
+      # "@halide//:halide_host_config_darwin":
+      #     _osx_opts,
+      # "@halide//:halide_host_config_darwin_x86_64":
+      #     _osx_opts,
+      "@halide//:halide_platform_config_x64_windows_msvc":
           _msvc_opts,
-      "@halide//:halide_host_config_x64_windows_msys2":
-          _msvc_opts,
-      "@halide//:halide_host_config_x64_windows":
-          _msvc_opts,
-      "@halide//:halide_host_config_darwin":
+      "@halide//:halide_platform_config_x64_windows":
+          ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
+      "@halide//:halide_platform_config_darwin":
           _osx_opts,
-      "@halide//:halide_host_config_darwin_x86_64":
+      "@halide//:halide_platform_config_darwin_x86_64":
           _osx_opts,
       "//conditions:default":
           _linux_opts,
@@ -54,6 +81,8 @@ def halide_runtime_linkopts():
   return select({
       "@halide//:halide_platform_config_x64_windows_msvc":
           _msvc_opts,
+      "@halide//:halide_platform_config_x64_windows":
+          ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
       "@halide//:halide_platform_config_darwin":
           _clangy_opts,
       "@halide//:halide_platform_config_darwin_x86_64":
@@ -70,6 +99,8 @@ def halide_opengl_linkopts():
   return select({
       "@halide//:halide_platform_config_x64_windows_msvc":
           _msvc_opts,
+      "@halide//:halide_platform_config_x64_windows":
+          ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
       "@halide//:halide_platform_config_darwin":
           _osx_opts,
       "@halide//:halide_platform_config_darwin_x86_64":
@@ -97,6 +128,8 @@ _HALIDE_TARGET_CONFIG_INFO = [
     ("powerpc-64-linux", "ppc", None, None),
     ("x86-64-linux", "k8", None, None),
     ("x86-32-linux", "piii", None, None),
+    # Windows
+    ("x86-64-windows", "x64_windows_msvc", None, None),
     # Special case: Android-ARMEABI. Note that we are using an illegal Target
     # string for Halide; this is intentional. It allows us to add another
     # config_setting to match the armeabi-without-v7a required for certain build
@@ -108,7 +141,7 @@ _HALIDE_TARGET_CONFIG_INFO = [
     # than allowing certain builds to complete.
     ("armeabi-32-android", "armeabi", "armeabi", None),
 ]
-# TODO: add conditions appropriate for other targets/cpus: Windows, etc.
+# TODO: add conditions appropriate for other targets/cpus
 
 _HALIDE_TARGET_MAP_DEFAULT = {
     "x86-64-osx": [
@@ -117,6 +150,12 @@ _HALIDE_TARGET_MAP_DEFAULT = {
         "x86-64-osx-sse41",
         "x86-64-osx",
     ],
+    # "x86-64-windows": [
+    #     "x86-64-windows-sse41-avx-avx2-fma",
+    #     "x86-64-windows-sse41-avx",
+    #     "x86-64-windows-sse41",
+    #     "x86-64-windows",
+    # ],
     "x86-64-linux": [
         "x86-64-linux-sse41-avx-avx2-fma",
         "x86-64-linux-sse41-avx",
@@ -140,29 +179,6 @@ _HALIDE_RUNTIME_OVERRIDES = {
 }
 
 
-def _halide_host_config_settings():
-  _host_cpus = [
-      "darwin",
-      "darwin_x86_64",
-      "x64_windows_msvc",
-      "x64_windows",
-      "x64_windows_msys2",
-  ]
-  for host_cpu in _host_cpus:
-    native.config_setting(
-        name="halide_host_config_%s" % host_cpu,
-        values={"host_cpu": host_cpu},
-        visibility=["//visibility:public"])
-    # TODO hokey, improve, this isn't really right in general
-    native.config_setting(
-        name="halide_platform_config_%s" % host_cpu,
-        values={
-            # "crosstool_top": "//tools/osx/crosstool",
-            "cpu": host_cpu,
-        },
-        visibility=["//visibility:public"])
-
-
 def halide_config_settings():
   """Define config_settings for halide_library.
 
@@ -172,7 +188,27 @@ def halide_config_settings():
        internal data structures; it should not be used outside of Halide.
 
   """
-  _halide_host_config_settings()
+  cpus = [
+      "darwin",
+      "darwin_x86_64",
+      "x64_windows_msvc",
+      "x64_windows",
+  ]
+  for cpu in cpus:
+    # native.config_setting(
+    #     name="halide_host_config_%s" % cpu,
+    #     values={"host_cpu": cpu},
+    #     visibility=["//visibility:public"]
+    # )
+    # TODO hokey, improve, this isn't really right in general
+    native.config_setting(
+        name="halide_platform_config_%s" % cpu,
+        values={
+            # "crosstool_top": "//tools/osx/crosstool",
+            "cpu": cpu,
+        },
+        visibility=["//visibility:public"])
+
   for base_target, cpu, android_cpu, ios_cpu in _HALIDE_TARGET_CONFIG_INFO:
     if android_cpu == None:
       # "armeabi" is the default value for --android_cpu and isn't considered legal
@@ -586,6 +622,7 @@ def halide_generator(name,
           ":%s_library" % name,
           "@halide//:language"
       ],
+      copts=copts + halide_language_copts(),
       includes=includes,
       visibility=visibility,
       tags=["manual"] + tags)

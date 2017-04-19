@@ -35,6 +35,7 @@ cc_library(
     copts = [
         "-Wno-implicit-function-declaration",
         "-Wno-shift-negative-value",
+        "-D_CRT_SECURE_NO_WARNINGS",
     ],
     includes = ["."],
     visibility = ["//visibility:public"],
