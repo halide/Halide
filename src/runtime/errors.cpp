@@ -226,5 +226,11 @@ WEAK int halide_error_requirement_failed(void *user_context, const char *conditi
     return halide_error_code_requirement_failed;
 }
 
+WEAK int halide_error_specialize_fail(void *user_context, const char *message) {
+    error(user_context)
+        << "A schedule specialized with specialize_fail() was chosen: " << message;
+    return halide_error_code_specialize_fail;
+}
+
 
 }  // extern "C"
