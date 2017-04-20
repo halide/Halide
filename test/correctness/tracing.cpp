@@ -165,9 +165,9 @@ int main(int argc, char **argv) {
 
     int n = n_trace > correct_trace_length ? n_trace : correct_trace_length;
     for (int i = 0; i < n; i++) {
-        event recorded;
+        event recorded = {0};
         if (i < n_trace) recorded = trace[i];
-        event correct;
+        event correct = {0};
         if (i < correct_trace_length) correct = correct_trace[i];
 
         if (!events_match(recorded, correct)) {
