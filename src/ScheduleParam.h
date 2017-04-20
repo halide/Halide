@@ -76,7 +76,7 @@ protected:
     LoopLevel loop_level;
 
     EXPORT ScheduleParamBase(const Type &t, const std::string &name, bool is_explicit_name);
-    EXPORT ~ScheduleParamBase();
+    EXPORT virtual ~ScheduleParamBase();
 
     // This is provided only for GeneratorBase; other code should not need to use it.
     virtual void set_from_string(const std::string &new_value_string) = 0;
