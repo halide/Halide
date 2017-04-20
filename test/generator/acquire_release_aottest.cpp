@@ -24,6 +24,7 @@ const int W = 256, H = 256;
 #if defined(TEST_OPENCL)
 // Implement OpenCL custom context.
 
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #ifdef __APPLE__
 #include <OpenCL/cl.h>
 #else
