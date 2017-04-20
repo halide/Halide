@@ -201,6 +201,7 @@ public:
 
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
+    EXPORT void specialize_fail(const std::string &message);
 
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -1385,6 +1386,48 @@ public:
      * When it is false, this is equivalent to g.compute_at(f,x).
      */
     EXPORT Stage specialize(Expr condition);
+
+    /** Add a specialization to a Func that always terminates execution
+     * with a call to halide_error(). By itself, this is of limited use,
+     * but can be useful to terminate chains of specialize() calls where
+     * no "default" case is expected (thus avoiding unnecessary code generation).
+     *
+     * For instance, say we want to optimize a pipeline to process images
+     * in planar and interleaved format; we might typically do something like:
+     \code
+     ImageParam im(UInt(8), 3);
+     Func f = do_something_with(im);
+     f.specialize(im.dim(0).stride() == 1).vectorize(x, 8);  // planar
+     f.specialize(im.dim(2).stride() == 1).reorder(c, x, y).vectorize(c);  // interleaved
+     \endcode
+     * This code will vectorize along rows for the planar case, and across pixel
+     * components for the interleaved case... but there is an implicit "else"
+     * for the unhandled cases, which generates unoptimized code. If we never
+     * anticipate passing any other sort of images to this, we code streamline
+     * our code by adding specialize_fail():
+     \code
+     ImageParam im(UInt(8), 3);
+     Func f = do_something(im);
+     f.specialize(im.dim(0).stride() == 1).vectorize(x, 8);  // planar
+     f.specialize(im.dim(2).stride() == 1).reorder(c, x, y).vectorize(c);  // interleaved
+     f.specialize_fail("Unhandled image format");
+     \endcode
+     * Conceptually, this produces codes like:
+     \code
+     if (im.dim(0).stride() == 1) {
+        do_something_planar();
+     } else if (im.dim(2).stride() == 1) {
+        do_something_interleaved();
+     } else {
+        halide_error("Unhandled image format");
+     }
+     \endcode
+     *
+     * Note that calling specialize_fail() terminates the specialization chain
+     * for a given Func; you cannot create new specializations for the Func
+     * afterwards (though you can retrieve handles to previous specializations).
+     */
+    EXPORT void specialize_fail(const std::string &message);
 
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer

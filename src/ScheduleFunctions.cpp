@@ -12,6 +12,7 @@
 #include "IRPrinter.h"
 #include "Func.h"
 #include "ApplySplit.h"
+#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {
@@ -274,12 +275,23 @@ Stmt build_provide_loop_nest(string func_name,
     // Make any specialized copies
     const vector<Specialization> &specializations = def.specializations();
     for (size_t i = specializations.size(); i > 0; i--) {
-        Expr c = specializations[i-1].condition;
-        const Definition &s_def = specializations[i-1].definition;
-
-        Stmt then_case =
-            build_provide_loop_nest(func_name, prefix, dims, s_def, is_update);
-
+        const Specialization &s = specializations[i-1];
+        Expr c = s.condition;
+        const Definition &s_def = s.definition;
+        Stmt then_case;
+        if (s.failure_message.empty()) {
+            then_case = build_provide_loop_nest(func_name, prefix, dims, s_def, is_update);
+        } else {
+            internal_assert(equal(c, const_true()));
+            // specialize_fail() should only be possible on the final specialization
+            internal_assert(i == specializations.size());
+            Expr specialize_fail_error =
+                Internal::Call::make(Int(32),
+                                     "halide_error_specialize_fail",
+                                     {StringImm::make(s.failure_message)},
+                                     Internal::Call::Extern);
+            then_case = AssertStmt::make(const_false(), specialize_fail_error);
+        }
         stmt = IfThenElse::make(c, then_case, stmt);
     }
 
