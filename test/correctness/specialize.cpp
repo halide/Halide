@@ -636,6 +636,31 @@ int main(int argc, char **argv) {
         _halide_user_assert(vector_store_lanes == 32);
     }
 
+    {
+        Var x;
+        Param<int> p;
+
+        // Check that specialize_fail() is correctly skipped.
+        Func f;
+        f(x) = x;
+        f.specialize(p == 0);
+        f.specialize_fail("Unhandled Param value encountered.");
+        // It's OK to retrieve an existing specialization after specialize_fail()...
+        f.specialize(p == 0).vectorize(x, 32);
+        // ...but it's *not* ok to create a new specialization after specialize_fail()
+        // f.specialize(p == 1);  -- would fail
+        // Also not ok to have duplicate specialize_fail() calls.
+        // f.specialize_fail("This is bad.");  -- would fail
+
+        f.set_custom_trace(&my_trace);
+        f.trace_stores();
+
+        vector_store_lanes = 0;
+        p.set(0);
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 32);
+    }
+
     printf("Success!\n");
     return 0;
 }

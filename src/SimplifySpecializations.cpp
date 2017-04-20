@@ -99,7 +99,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
     // for the definition will never be run: replace the definition's main
     // schedule with the one from the final Specialization and prune it from
     // the list. This may leave the list of Specializations empty.
-    if (!specializations.empty() && is_one(specializations.back().condition)) {
+    if (!specializations.empty() && is_one(specializations.back().condition) && specializations.back().failure_message.empty()) {
         debug(1) << "Replacing default Schedule with const-true specialization for function \"" << name << "\"\n";
         const Definition s_def = specializations.back().definition;
         specializations.pop_back();
