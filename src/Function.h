@@ -277,6 +277,10 @@ public:
     EXPORT Function &substitute_calls(const std::map<Function, Function, Compare> &substitutions);
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
     // @}
+
+    /** Find all Vars that are placeholders for ScheduleParams and substitute in
+     * the corresponding constant value. */
+    EXPORT Function &substitute_schedule_param_exprs();
 };
 
 }}

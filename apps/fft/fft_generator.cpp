@@ -146,9 +146,16 @@ public:
 
         output.dim(0).set_stride(output_comps)
               .dim(2).set_min(0).set_extent(output_comps).set_stride(1);
+	
+        if (output_comps != 1) {
+            output.reorder(c, x, y).unroll(c);
+        }
 
         if (real_result.defined()) {
-            real_result.compute_at(output, y);
+            real_result.compute_at(output, Var::outermost());
+        } else {
+            assert(complex_result.defined());
+            complex_result.compute_at(output, Var::outermost());
         }
     }
 private:

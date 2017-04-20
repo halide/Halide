@@ -30,8 +30,10 @@ int my_halide_trace(void *user_context, const halide_trace_event_t *ev) {
         int min_y = ev->coordinates[2], height = ev->coordinates[3];
         int max_x = min_x + width - 1;
         int max_y = min_y + height - 1;
+#if !RUN_BENCHMARKS
         printf("Using %d x %d input tile over [%d - %d] x [%d - %d]\n", width, height, min_x, max_x,
                min_y, max_y);
+#endif
         assert(min_x >= 0 && min_y >= 0 && max_x < W && max_y < H);
 
         // The input is large enough that the boundary condition could
@@ -68,11 +70,11 @@ void test(Buffer<uint8_t> (*factory)(int w, int h, int c)) {
     tiled_blur(input, output);
 
 #if RUN_BENCHMARKS
-    double t = Halide::Tools::benchmark(5, 10, [&]() {
+    double t = Halide::Tools::benchmark(10, 100, [&]() {
         tiled_blur(input, output);
     });
     const float megapixels = (W * H) / (1024.f * 1024.f);
-    printf("Benchmark: %d %d -> %f s/mpix\n", W, H, t / megapixels);
+    printf("Benchmark: %d %d -> %f mpix/s\n", W, H, megapixels / t);
 #endif
 
 #if SAVE_IMAGES

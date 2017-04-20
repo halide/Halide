@@ -98,7 +98,7 @@ WEAK int halide_error_constraint_violated(void *user_context, const char *var, i
                                           const char *constrained_var, int constrained_val) {
     error(user_context)
         << "Constraint violated: " << var << " (" << val
-        << ") == " << constrained_var << " (" << constrained_var << ")";
+        << ") == " << constrained_var << " (" << constrained_val << ")";
     return halide_error_code_constraint_violated;
 }
 
@@ -224,6 +224,12 @@ WEAK int halide_error_requirement_failed(void *user_context, const char *conditi
     error(user_context)
         << "Requirement Failed: (" << condition << ") " << message;
     return halide_error_code_requirement_failed;
+}
+
+WEAK int halide_error_specialize_fail(void *user_context, const char *message) {
+    error(user_context)
+        << "A schedule specialized with specialize_fail() was chosen: " << message;
+    return halide_error_code_specialize_fail;
 }
 
 

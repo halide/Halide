@@ -1124,9 +1124,23 @@ Stage Stage::specialize(Expr condition) {
             return Stage(specializations[i].definition, stage_name, dim_vars, storage_dims);
         }
     }
+
+    // Can't add any more specializations after specialize_fail().
+    user_assert(specializations.empty() || specializations.back().failure_message.empty()) 
+        << "Cannot add new specializations after specialize_fail().";
     const Specialization &s = definition.add_specialization(condition);
 
     return Stage(s.definition, stage_name, dim_vars, storage_dims);
+}
+
+void Stage::specialize_fail(const std::string &message) {
+    user_assert(!message.empty()) << "Argument passed to specialize_fail() must not be empty.\n";
+    const vector<Specialization> &specializations = definition.specializations();
+    user_assert(specializations.empty() || specializations.back().failure_message.empty()) 
+        << "Only one specialize_fail() may be defined per Stage.";
+    (void) definition.add_specialization(const_true());
+    Specialization &s = definition.specializations().back();
+    s.failure_message = message;
 }
 
 Stage &Stage::purify(VarOrRVar old_var, VarOrRVar new_var) {
@@ -1864,6 +1878,11 @@ Func &Func::memoize() {
 Stage Func::specialize(Expr c) {
     invalidate_cache();
     return Stage(func.definition(), name(), args(), func.schedule().storage_dims()).specialize(c);
+}
+
+void Func::specialize_fail(const std::string &message) {
+    invalidate_cache();
+    (void) Stage(func.definition(), name(), args(), func.schedule().storage_dims()).specialize_fail(message);
 }
 
 Func &Func::serial(VarOrRVar var) {
