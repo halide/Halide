@@ -36,6 +36,7 @@ struct Ehdr {
 };
 
 enum {
+    PT_NULL = 0,
     PT_LOAD = 1,
     PT_DYNAMIC = 2,
 };
@@ -165,6 +166,9 @@ struct dlib_t {
     char *program;
     size_t program_size;
 
+    // Pointer to virtual address 0.
+    char *base_vaddr;
+
     // Information about the symbols.
     const char *strtab;
     const Sym *symtab;
@@ -189,7 +193,7 @@ struct dlib_t {
     bool do_relocations(const Rela *relocs, int count) {
         for (int i = 0; i < count; i++) {
             const Rela &r = relocs[i];
-            uint32_t *fixup_addr = (uint32_t *)(program + r.r_offset);
+            uint32_t *fixup_addr = (uint32_t *)(base_vaddr + r.r_offset);
             if (!assert_in_bounds(fixup_addr)) return false;
             const char *S = NULL;
             const char *B = program;
@@ -211,7 +215,7 @@ struct dlib_t {
                         return false;
                     }
                 } else {
-                    S = program + sym->st_value;
+                    S = base_vaddr + sym->st_value;
                     if (!assert_in_bounds(S, sym->st_size)) return false;
                 }
             }
@@ -243,10 +247,10 @@ struct dlib_t {
             const Dyn &d = dynamic[i];
             switch (d.tag) {
             case DT_HASH:
-                hash.table = (const uint32_t *)(program + d.value);
+                hash.table = (const uint32_t *)(base_vaddr + d.value);
                 break;
             case DT_SYMTAB:
-                symtab = (const Sym *)(program + d.value);
+                symtab = (const Sym *)(base_vaddr + d.value);
                 break;
             case DT_SYMENT:
                 if (d.value != sizeof(Sym)) {
@@ -255,14 +259,14 @@ struct dlib_t {
                 }
                 break;
             case DT_STRTAB:
-                strtab = (const char *)(program + d.value);
+                strtab = (const char *)(base_vaddr + d.value);
                 break;
             case DT_STRSZ:
                 break;
             case DT_PLTGOT:
                 break;
             case DT_JMPREL:
-                jmprel = (const Rela *)(program + d.value);
+                jmprel = (const Rela *)(base_vaddr + d.value);
                 break;
             case DT_PLTREL:
                 if (d.value != DT_RELA) {
@@ -274,7 +278,7 @@ struct dlib_t {
                 jmprel_count = d.value / sizeof(Rela);
                 break;
             case DT_RELA:
-                rel = (const Rela *)(program + d.value);
+                rel = (const Rela *)(base_vaddr + d.value);
                 break;
             case DT_RELASZ:
                 rel_count = d.value / sizeof(Rela);
@@ -348,12 +352,17 @@ struct dlib_t {
             return false;
         }
         program_size = size;
+        base_vaddr = NULL;
         memcpy(program, data, program_size);
         ehdr = (const Ehdr *)program;
         const Phdr *phdrs = (Phdr *)(program + ehdr->e_phoff);
         if (!assert_in_bounds(phdrs, ehdr->e_phnum)) return false;
         const Dyn *dynamic = NULL;
         for (int i = 0; i < ehdr->e_phnum; i++) {
+            if (phdrs[i].p_type == PT_NULL) {
+                // PT_NULL should be ignored entirely.
+                continue;
+            }
             size_t size_i = phdrs[i].p_memsz;
             size_t offset_i = phdrs[i].p_offset;
             if (size_i != phdrs[i].p_filesz) {
@@ -363,6 +372,12 @@ struct dlib_t {
             char *program_i = program + offset_i;
             if (!assert_in_bounds(program_i, size_i)) return false;
             if (phdrs[i].p_type == PT_LOAD) {
+                if (!base_vaddr) {
+                    base_vaddr = program + offset_i - phdrs[i].p_vaddr;
+                } else if (base_vaddr != program + offset_i - phdrs[i].p_vaddr) {
+                    log_printf("Cannot load program with non-contiguous virtual address space\n");
+                    return false;
+                }
                 if (offset_i % alignment != 0 || size_i % alignment != 0) {
                     log_printf("Cannot load program with unaligned range [%d, %d)\n", offset_i, offset_i + size_i);
                     return false;
@@ -407,7 +422,7 @@ struct dlib_t {
 
     // Get the address of a symbol
     char *get_symbol_addr(const Sym *sym) {
-        char *addr = program + sym->st_value;
+        char *addr = base_vaddr + sym->st_value;
         if (!assert_in_bounds(addr, sym->st_size)) return NULL;
         return addr;
     }

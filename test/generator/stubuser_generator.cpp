@@ -60,8 +60,8 @@ public:
     }
 
     void schedule() {
-        const bool vectorize = true;
-        stub.schedule({ vectorize, LoopLevel(calculated_output, Var("y")) });
+        stub.vectorize.set(true);
+        stub.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
     }
 
 private:

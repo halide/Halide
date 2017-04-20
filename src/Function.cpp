@@ -911,6 +911,21 @@ public:
         : substitutions(substitutions) {}
 };
 
+class SubstituteScheduleParamExprs : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const Variable *v) override {
+        IRMutator::visit(v);
+        if (v->param.defined() && v->param.is_bound_before_lowering()) {
+            expr = mutate(v->param.get_scalar_expr());
+        }
+    }
+
+public:
+    SubstituteScheduleParamExprs() = default;
+};
+
+
 } // anonymous namespace
 
 Function &Function::substitute_calls(const map<Function, Function, Compare> &substitutions) {
@@ -928,6 +943,12 @@ Function &Function::substitute_calls(const Function &orig, const Function &subst
     map<Function, Function, Compare> substitutions;
     substitutions.emplace(orig, substitute);
     return substitute_calls(substitutions);
+}
+
+Function &Function::substitute_schedule_param_exprs() {
+    SubstituteScheduleParamExprs sub_schedule_params;
+    contents->mutate(&sub_schedule_params);
+    return *this;
 }
 
 }
