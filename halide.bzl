@@ -1,20 +1,24 @@
 def halide_language_copts():
-  _clangy_opts = [
-      "$(STACK_FRAME_UNLIMITED)", 
+  _common_opts = [
       "-DGOOGLE_PROTOBUF_NO_RTTI",
       "-fPIC",
-      "-fno-exceptions", 
       "-fno-rtti", 
+      "-std=c++11", 
+      "-Wno-conversion",
+      "-Wno-sign-compare",
+  ]
+  _clangy_opts = [
+      "$(STACK_FRAME_UNLIMITED)", 
+      "-fno-exceptions", 
       "-funwind-tables",
       "-fvisibility-inlines-hidden", 
-      "-std=c++11", 
   ]
   _msvc_opts = [
       "-D_CRT_SECURE_NO_WARNINGS",
       # Linking with LLVM on Windows requires multithread+DLL CRT
       "/MD",
   ]
-  return select({
+  return _common_opts + select({
       "@halide//:halide_platform_config_x64_windows_msvc":
           _msvc_opts,
       "@halide//:halide_platform_config_x64_windows":
