@@ -17,7 +17,7 @@
 #include "Pipeline.h"
 
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
 #endif
 #ifdef _WIN32
