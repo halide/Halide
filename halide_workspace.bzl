@@ -1,8 +1,12 @@
 load("//:tools/llvm_repository.bzl", "llvm_repository")
 
 def _check_version(x):
-  if native.bazel_version < x:
-    fail("Current Bazel version is {}, expected at least {}".format(native.bazel_version, x))
+  if not native.bazel_version:
+    print("\nCurrent Bazel is not a release version, cannot check for compatibility.")
+    print("Make sure that you are running at least Bazel {}.\n".format(x))
+  else:
+    if native.bazel_version < x:
+      fail("Current Bazel version is {}, expected at least {}".format(native.bazel_version, x))
 
 def halide_workspace():
   _check_version("0.4.5")
