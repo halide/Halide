@@ -4,6 +4,7 @@
 
 #include "Prefetch.h"
 #include "Bounds.h"
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "Scope.h"
 #include "Simplify.h"
@@ -100,18 +101,65 @@ private:
         buffer_bounds.pop(op->name);
     }
 
+    // To prevent combinatorial code explosion when calling the
+    // bounds_of_expr_in_scope, we only substitute the let's value
+    // directly if it is either a constant or a variable.
+    bool should_substitute_let(Expr e) {
+        return is_const(e) || ( e.as<Variable>() != nullptr);
+    }
+
+    template<typename LetOrLetStmt, typename T>
+    T visit_let(const LetOrLetStmt *op) {
+        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
+
+        bool fixed = value_bounds.min.same_as(value_bounds.max);
+        value_bounds.min = simplify(value_bounds.min);
+        value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
+
+        if (should_substitute_let(value_bounds.min) &&
+            (fixed || should_substitute_let(value_bounds.max))) {
+            scope.push(op->name, value_bounds);
+            IRMutator::visit(op);
+            scope.pop(op->name);
+        } else {
+            string max_name = unique_name('t');
+            string min_name = unique_name('t');
+
+            scope.push(op->name, Interval(Variable::make(op->value.type(), min_name),
+                                          Variable::make(op->value.type(), max_name)));
+            IRMutator::visit(op);
+            scope.pop(op->name);
+
+            bool is_stmt = std::is_same<T, Stmt>::value;
+            op = is_stmt ? stmt.as<LetOrLetStmt>() : expr.as<LetOrLetStmt>();
+            internal_assert(op);
+            T body = op->body;
+
+            if (stmt_or_expr_uses_var(body, max_name)) {
+                body = LetOrLetStmt::make(max_name, value_bounds.max, body);
+            }
+            if (stmt_or_expr_uses_var(body, min_name)) {
+                body = LetOrLetStmt::make(min_name, value_bounds.min, body);
+            }
+            if (!body.same_as(op->body)) {
+                return LetOrLetStmt::make(op->name, op->value, body);
+            }
+        }
+        return T();
+    }
+
     void visit(const Let *op) {
-        Interval in = bounds_of_expr_in_scope(op->value, scope);
-        scope.push(op->name, in);
-        IRMutator::visit(op);
-        scope.pop(op->name);
+        Expr let = visit_let<Let, Expr>(op);
+        if (let.defined()) {
+            expr = let;
+        }
     }
 
     void visit(const LetStmt *op) {
-        Interval in = bounds_of_expr_in_scope(op->value, scope);
-        scope.push(op->name, in);
-        IRMutator::visit(op);
-        scope.pop(op->name);
+        Stmt let_stmt = visit_let<LetStmt, Stmt>(op);
+        if (let_stmt.defined()) {
+            stmt = let_stmt;
+        }
     }
 
     Stmt add_prefetch(string buf_name, const Parameter &param, const Box &box, Stmt body) {
