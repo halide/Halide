@@ -118,7 +118,10 @@ WEAK int init_hexagon_runtime(void *user_context) {
     if (!host_lib) {
         host_lib = halide_load_library("libhalide_hexagon_host.dll");
     }
-
+    if (!host_lib) {
+        error(user_context) << "Unable to load libhalide_hexagon_host.\n";
+        return -1;
+    }
 
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
