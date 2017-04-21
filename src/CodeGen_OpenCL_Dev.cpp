@@ -572,7 +572,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
             }
 
             if (constant != constants.end()) {
-                stream << "#if " << constant->size << " < MAX_CONSTANT_BUFFER_SIZE && "
+                stream << "#if " << constant->size << " <= MAX_CONSTANT_BUFFER_SIZE && "
                        << constant - constants.begin() << " < MAX_CONSTANT_ARGS\n";
                 stream << "#define " << get_memory_space(args[i].name) << " __constant\n";
                 stream << "#else\n";
