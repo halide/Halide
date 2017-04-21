@@ -136,10 +136,10 @@ struct QualsState {
     QualsState(const Type &type, const std::string &base_mode) : type(type), base_mode(base_mode) { }
 
     void handle_modifier(uint8_t modifier) {
-        bool is_pointer = modifier & halide_handle_cplusplus_type::Pointer;
-        bool last_is_const = modifier & halide_handle_cplusplus_type::Const;
-        bool last_is_volatile = modifier & halide_handle_cplusplus_type::Volatile;
-        bool last_is_restrict = modifier & halide_handle_cplusplus_type::Restrict;
+        bool is_pointer = (modifier & halide_handle_cplusplus_type::Pointer) != 0;
+        bool last_is_const = (modifier & halide_handle_cplusplus_type::Const) != 0;
+        bool last_is_volatile = (modifier & halide_handle_cplusplus_type::Volatile) != 0;
+        bool last_is_restrict = (modifier & halide_handle_cplusplus_type::Restrict) != 0;
 
         if (finished ||
             (!is_pointer && !last_is_pointer &&
