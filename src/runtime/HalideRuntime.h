@@ -1123,6 +1123,8 @@ extern "C" {
 
 /** The old buffer_t, included for compatibility with old code. Don't
  * use it. */
+#ifndef BUFFER_T_DEFINED
+#define BUFFER_T_DEFINED
 typedef struct buffer_t {
     uint64_t dev;
     uint8_t* host;
@@ -1134,6 +1136,7 @@ typedef struct buffer_t {
     HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;
     HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
 } buffer_t;
+#endif // BUFFER_T_DEFINED
 
 /** Copies host pointer, mins, extents, strides, and device state from
  * an old-style buffer_t into a new-style halide_buffer_t. The
