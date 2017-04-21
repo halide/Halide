@@ -129,10 +129,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(1) << "Skipping injecting memoization...\n";
     }
 
-    debug(1) << "Injecting prefetches...\n";
-    s = inject_prefetch(s, env);
-    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
-
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs, t);
     debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
@@ -181,6 +177,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
+
+    debug(1) << "Injecting prefetches...\n";
+    s = inject_prefetch(s, env);
+    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
