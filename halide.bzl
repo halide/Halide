@@ -305,6 +305,8 @@ def _gengen_impl(ctx):
 
   remaps = [".s=.s.txt"]
   halide_target = ctx.attr.halide_target
+  if "windows" in halide_target and not "mingw" in halide_target:
+    remaps += [".obj=.o", ".lib=.a"]
   if ctx.attr.sanitizer:
     halide_target = []
     for t in ctx.attr.halide_target:
