@@ -112,7 +112,7 @@ private:
     T visit_let(const LetOrLetStmt *op) {
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
 
-        bool fixed = value_bounds.min.same_as(value_bounds.max);
+        bool fixed = value_bounds.is_single_point();
         value_bounds.min = simplify(value_bounds.min);
         value_bounds.max = fixed ? value_bounds.min : simplify(value_bounds.max);
 
