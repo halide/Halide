@@ -1,7 +1,7 @@
 #include "fcam/Demosaic.h"
 #include "fcam/Demosaic_ARM.h"
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "camera_pipe.h"
 #include "HalideBuffer.h"
 #include "halide_image_io.h"

@@ -47,7 +47,7 @@ public:
 
         schedule = [=]() mutable {
             // Require the input and output to have 3 channels.
-            Func(blur).bound(c, 0, 3);
+            blur.bound(c, 0, 3);
             input.dim(2).set_bounds(0, 3);
 
             if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
@@ -58,9 +58,9 @@ public:
                 // blur in y at each chunk. We use the RoundUp tail strategy to
                 // keep the last chunk's memory accesses aligned.
                 Var yo("yo");
-                Func(blur).compute_root()
+                blur.compute_root()
                     .hexagon()
-                    .prefetch(y, 2)
+                    .prefetch(input, y, 2)
                     .split(y, yo, y, 128).parallel(yo)
                     .vectorize(x, vector_size * 2, TailStrategy::RoundUp);
                 blur_y
@@ -87,11 +87,11 @@ public:
             } else {
                 const int vector_size = natural_vector_size<uint8_t>();
 
-                Func(blur).compute_root()
-                .parallel(y, 16)
-                .vectorize(x, vector_size);
+                blur.compute_root()
+                    .parallel(y, 16)
+                    .vectorize(x, vector_size);
                 blur_y.compute_at(blur, y)
-                .vectorize(x, vector_size);
+                    .vectorize(x, vector_size);
             }
         };
     }

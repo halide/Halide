@@ -459,6 +459,23 @@ Stmt Realize::make(const std::string &name, const std::vector<Type> &types, cons
     return node;
 }
 
+Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Parameter param) {
+    for (size_t i = 0; i < bounds.size(); i++) {
+        internal_assert(bounds[i].min.defined()) << "Prefetch of undefined\n";
+        internal_assert(bounds[i].extent.defined()) << "Prefetch of undefined\n";
+        internal_assert(bounds[i].min.type().is_scalar()) << "Prefetch of vector size\n";
+        internal_assert(bounds[i].extent.type().is_scalar()) << "Prefetch of vector size\n";
+    }
+    internal_assert(!types.empty()) << "Prefetch has empty type\n";
+
+    Prefetch *node = new Prefetch;
+    node->name = name;
+    node->types = types;
+    node->bounds = bounds;
+    node->param = param;
+    return node;
+}
+
 Stmt Block::make(const Stmt &first, const Stmt &rest) {
     internal_assert(first.defined()) << "Block of undefined\n";
     internal_assert(rest.defined()) << "Block of undefined\n";
@@ -513,7 +530,8 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
         << "Value index out of range in call to halide function\n";
     internal_assert(func.has_pure_definition() || func.has_extern_definition())
         << "Call to undefined halide function\n";
-    return make(func.output_types()[(size_t)idx], func.name(), args, Halide, func.get_contents(), idx, Buffer<>(), Parameter());
+    return make(func.output_types()[(size_t)idx], func.name(), args, Halide,
+                func.get_contents(), idx, Buffer<>(), Parameter());
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
@@ -752,6 +770,7 @@ template<> void StmtNode<Realize>::accept(IRVisitor *v) const { v->visit((const 
 template<> void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Block *)this); }
 template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
 template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
+template<> void StmtNode<Prefetch>::accept(IRVisitor *v) const { v->visit((const Prefetch *)this); }
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::reinterpret = "reinterpret";
@@ -789,7 +808,6 @@ Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";
 Call::ConstString Call::prefetch = "prefetch";
-Call::ConstString Call::prefetch_2d = "prefetch_2d";
 Call::ConstString Call::signed_integer_overflow = "signed_integer_overflow";
 Call::ConstString Call::indeterminate_expression = "indeterminate_expression";
 Call::ConstString Call::bool_to_mask = "bool_to_mask";
@@ -798,14 +816,24 @@ Call::ConstString Call::select_mask = "select_mask";
 Call::ConstString Call::extract_mask_element = "extract_mask_element";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
+Call::ConstString Call::buffer_get_extent = "_halide_buffer_get_extent";
+Call::ConstString Call::buffer_get_stride = "_halide_buffer_get_stride";
 Call::ConstString Call::buffer_get_max = "_halide_buffer_get_max";
 Call::ConstString Call::buffer_get_host = "_halide_buffer_get_host";
-Call::ConstString Call::buffer_get_dev = "_halide_buffer_get_dev";
+Call::ConstString Call::buffer_get_device = "_halide_buffer_get_device";
+Call::ConstString Call::buffer_get_device_interface = "_halide_buffer_get_device_interface";
+Call::ConstString Call::buffer_get_shape = "_halide_buffer_get_shape";
 Call::ConstString Call::buffer_get_host_dirty = "_halide_buffer_get_host_dirty";
-Call::ConstString Call::buffer_get_dev_dirty = "_halide_buffer_get_dev_dirty";
+Call::ConstString Call::buffer_get_device_dirty = "_halide_buffer_get_device_dirty";
+Call::ConstString Call::buffer_get_type_code = "_halide_buffer_get_type_code";
+Call::ConstString Call::buffer_get_type_bits = "_halide_buffer_get_type_bits";
+Call::ConstString Call::buffer_get_type_lanes = "_halide_buffer_get_type_lanes";
 Call::ConstString Call::buffer_set_host_dirty = "_halide_buffer_set_host_dirty";
-Call::ConstString Call::buffer_set_dev_dirty = "_halide_buffer_set_dev_dirty";
+Call::ConstString Call::buffer_set_device_dirty = "_halide_buffer_set_device_dirty";
+Call::ConstString Call::buffer_is_bounds_query = "_halide_buffer_is_bounds_query";
 Call::ConstString Call::buffer_init = "_halide_buffer_init";
+Call::ConstString Call::buffer_init_from_buffer = "_halide_buffer_init_from_buffer";
+Call::ConstString Call::buffer_crop = "_halide_buffer_crop";
 Call::ConstString Call::trace = "halide_trace_helper";
 
 }

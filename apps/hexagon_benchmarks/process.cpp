@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "process.h"
 
 void usage(char *prg_name) {
@@ -87,10 +87,12 @@ int main(int argc, char **argv) {
             p->init();
             printf ("Running %s...\n", p->name());
 
-            halide_hexagon_set_performance_mode(NULL, halide_hvx_power_turbo);
+            // To avoid the cost of powering HVX on in each call of the
+            // pipeline, power it on once now. Also, set Hexagon performance to turbo.
+            halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_turbo);
             halide_hexagon_power_hvx_on(NULL);
 
-            double time = benchmark(iterations, 10, [&]() {
+            double time = Halide::Tools::benchmark(iterations, 10, [&]() {
                     int result = p->run(m);
                     if (result != 0) {
                         printf("pipeline failed! %d\n", result);
@@ -98,8 +100,10 @@ int main(int argc, char **argv) {
                 });
             printf("Done, time (%s): %g s %s\n", p->name(), time, to_string(m));
 
-            // We're done with HVX, power it off.
+            // We're done with HVX, power it off, and reset the performance mode
+            // to default to save power.
             halide_hexagon_power_hvx_off(NULL);
+            halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_default);
 
             if (!p->verify(W, H)) {
                 abort();

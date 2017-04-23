@@ -49,9 +49,8 @@ int main(int argc, char **argv) {
 
         // We'll set "vectorize=false" in the ScheduleParams, just to
         // show that we can:
-        example::ScheduleParams sp;
-        sp.vectorize = false;
-        gen.schedule(sp);
+        gen.vectorize.set(false);
+        gen.schedule();
 
         Halide::Buffer<int32_t> img(kSize, kSize, 3);
         gen.realize(img);

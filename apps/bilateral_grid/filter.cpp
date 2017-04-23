@@ -4,7 +4,7 @@
 
 #include "bilateral_grid.h"
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 

@@ -5,8 +5,10 @@ using namespace Halide;
 
 bool vector_store;
 bool scalar_store;
+uint16_t vector_store_lanes;
 
 void reset_trace() {
+    vector_store_lanes = 0;
     vector_store = scalar_store = false;
 }
 
@@ -16,6 +18,7 @@ int my_trace(void *user_context, const halide_trace_event_t *ev) {
     if (ev->event == halide_trace_store) {
         if (ev->type.lanes > 1) {
             vector_store = true;
+            vector_store_lanes = ev->type.lanes;
         } else {
             scalar_store = true;
         }
@@ -519,7 +522,145 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        Var x, y;
+        Param<int> p;
+        Expr const_false = Expr(0) == Expr(1);
+        Expr const_true = Expr(0) == Expr(0);
+        Expr different_const_true = Expr(1) == Expr(1);
+
+        // Check that we aggressively prune specialize(const-false)
+        Func f;
+        f(x) = x;
+        f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
+        f.specialize(const_false).vectorize(x, 8);  // will be pruned
+        f.vectorize(x, 4);                          // default case, not a specialization
+
+        _halide_user_assert(f.function().definition().specializations().size() == 2);
+
+        std::map<std::string, Internal::Function> env;
+        env.insert({f.function().name(), f.function()});
+        simplify_specializations(env);
+
+        const auto &s = f.function().definition().specializations();
+        _halide_user_assert(s.size() == 1);
+        // should be (something) == 0
+        _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_zero(s[0].condition.as<Internal::EQ>()->b));
+
+        f.set_custom_trace(&my_trace);
+        f.trace_stores();
+
+        vector_store_lanes = 0;
+        p.set(0);
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 32);
+
+        vector_store_lanes = 0;
+        p.set(42);  // just a nonzero value
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 4);
+    }
+
+    {
+        Var x;
+        Param<int> p;
+        Expr const_false = Expr(0) == Expr(1);
+        Expr const_true = Expr(0) == Expr(0);
+        Expr different_const_true = Expr(1) == Expr(1);
+
+        // Check that we aggressively prune all specializations after specialize(const-true)
+        Func f;
+        f(x) = x;
+        f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
+        f.specialize(const_true).vectorize(x, 16);  // will *not* be pruned
+        f.specialize(const_false).vectorize(x, 4);  // will be pruned
+        f.specialize(p == 42).vectorize(x, 8);      // will be pruned
+        f.specialize(const_true);                   // dupe of call above, won't add new specialization
+        // Note that specialize() will return the same schedule for subsequent
+        // calls with the same Expr, but doesn't guarantee that all Exprs
+        // that evaluate to the same value collapse. Use a deliberately-
+        // different Expr here to check that we do elide these.
+        f.specialize(different_const_true);         // will be pruned
+
+        _halide_user_assert(f.function().definition().specializations().size() == 5);
+
+        std::map<std::string, Internal::Function> env;
+        env.insert({f.function().name(), f.function()});
+        simplify_specializations(env);
+
+        const auto &s = f.function().definition().specializations();
+        // Note that this is 1 (rather than 2) because the final const-true
+        // Specialization will be hoisted into the main Schedule.
+        _halide_user_assert(s.size() == 1);
+        // should be (something) == 0
+        _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_zero(s[0].condition.as<Internal::EQ>()->b));
+
+        f.set_custom_trace(&my_trace);
+        f.trace_stores();
+
+        vector_store_lanes = 0;
+        p.set(42);  // Chosen to ensure pruned branch is pruned
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 16);
+
+        vector_store_lanes = 0;
+        p.set(0);
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 32);
+    }
+
+    {
+        Var x;
+        Param<int> p;
+        Expr const_true = Expr(0) == Expr(0);
+        Expr different_const_true = Expr(1) == Expr(1);
+
+        // Check that if we promote a final const-true specialize, we keep the
+        // implicit compute/store_root required for outputs.
+        Func f("foof");
+        f(x) = x;
+        f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
+        f.specialize(const_true).vectorize(x, 16);
+
+        f.set_custom_trace(&my_trace);
+        f.trace_stores();
+
+        vector_store_lanes = 0;
+        p.set(42);  // arbitrary nonzero value
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 16);
+
+        vector_store_lanes = 0;
+        p.set(0);
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 32);
+    }
+
+    {
+        Var x;
+        Param<int> p;
+
+        // Check that specialize_fail() is correctly skipped.
+        Func f;
+        f(x) = x;
+        f.specialize(p == 0);
+        f.specialize_fail("Unhandled Param value encountered.");
+        // It's OK to retrieve an existing specialization after specialize_fail()...
+        f.specialize(p == 0).vectorize(x, 32);
+        // ...but it's *not* ok to create a new specialization after specialize_fail()
+        // f.specialize(p == 1);  -- would fail
+        // Also not ok to have duplicate specialize_fail() calls.
+        // f.specialize_fail("This is bad.");  -- would fail
+
+        f.set_custom_trace(&my_trace);
+        f.trace_stores();
+
+        vector_store_lanes = 0;
+        p.set(0);
+        f.realize(100);
+        _halide_user_assert(vector_store_lanes == 32);
+    }
+
     printf("Success!\n");
     return 0;
-
 }

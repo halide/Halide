@@ -11,6 +11,7 @@ using std::vector;
 using std::string;
 using std::map;
 using std::pair;
+using std::make_pair;
 
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
@@ -45,8 +46,7 @@ public:
     }
 
     void visit(const Variable *op) {
-        if (ends_with(op->name, ".buffer") &&
-            op->param.defined() &&
+        if (op->param.defined() &&
             op->param.is_buffer() &&
             buffers.find(op->param.name()) == buffers.end()) {
             Result r;
@@ -75,13 +75,6 @@ Stmt add_image_checks(Stmt s,
 
     // Add the output buffer(s).
     for (Function f : outputs) {
-        // Check that their dimensionality
-        // doesn't exceed what buffer_t can handle.
-        user_assert(f.dimensions() <= 4)
-            << "Output Func " << f.name()
-            << " has " << f.dimensions()
-            << " dimensions. Output buffers may not currently have more than four dimensions.\n";
-
         for (size_t i = 0; i < f.values().size(); i++) {
             FindBuffers::Result output_buffer;
             output_buffer.type = f.values()[i].type();
@@ -124,7 +117,7 @@ Stmt add_image_checks(Stmt s,
     for (const pair<string, FindBuffers::Result> &buf : bufs) {
         const string &name = buf.first;
 
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < buf.second.dimensions; i++) {
             string dim = std::to_string(i);
 
             Expr min_required = Variable::make(Int(32), name + ".min." + dim + ".required");
@@ -198,7 +191,7 @@ Stmt add_image_checks(Stmt s,
             for (size_t i = 0; i < extern_users.size(); i++) {
                 const string &extern_user = extern_users[i];
                 Box query_box;
-                Expr query_buf = Variable::make(type_of<struct buffer_t *>(),
+                Expr query_buf = Variable::make(type_of<struct halide_buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::buffer_get_min,
@@ -211,30 +204,37 @@ Stmt add_image_checks(Stmt s,
             }
         }
 
-        // An expression returning whether or not we're in inference mode
         ReductionDomain rdom;
-        Expr host_ptr = Variable::make(Handle(), name + ".host", image, param, rdom);
-        Expr dev = Variable::make(UInt(64), name + ".dev", image, param, rdom);
-        Expr inference_mode = (host_ptr == make_zero(host_ptr.type()) &&
-                               dev == make_zero(dev.type()));
 
+        // An expression returning whether or not we're in inference mode
+        Expr handle = Variable::make(type_of<buffer_t *>(), name + ".buffer",
+                                     image, param, rdom);
+        Expr inference_mode = Call::make(Bool(), Call::buffer_is_bounds_query,
+                                         {handle}, Call::Extern);
         maybe_return_condition = maybe_return_condition || inference_mode;
 
         // Come up with a name to refer to this buffer in the error messages
         string error_name = (is_output_buffer ? "Output" : "Input");
         error_name += " buffer " + name;
 
-        // Check the elem size matches the internally-understood type
+        // Check the type matches the internally-understood type
         {
-            string elem_size_name = name + ".elem_size";
-            Expr elem_size = Variable::make(Int(32), elem_size_name, image, param, rdom);
-            int correct_size = type.bytes();
-            std::ostringstream type_name;
-            type_name << type;
-            Expr error = Call::make(Int(32), "halide_error_bad_elem_size",
-                                    {error_name, type_name.str(), elem_size, correct_size},
+            string type_code_name = name + ".type.code";
+            string type_bits_name = name + ".type.bits";
+            string type_lanes_name = name + ".type.lanes";
+            Expr type_code = Variable::make(UInt(8), type_code_name, image, param, rdom);
+            Expr type_bits = Variable::make(UInt(8), type_bits_name, image, param, rdom);
+            Expr type_lanes = Variable::make(UInt(16), type_lanes_name, image, param, rdom);
+            Expr error = Call::make(Int(32), "halide_error_bad_type",
+                                    {error_name,
+                                     type_code, make_const(UInt(8), (int)type.code()),
+                                     type_bits, make_const(UInt(8), type.bits()),
+                                     type_lanes, make_const(UInt(16), type.lanes())},
                                     Call::Extern);
-            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error));
+            asserts_elem_size.push_back(
+                AssertStmt::make((type_code == type.code()) &&
+                                 (type_bits == type.bits()) &&
+                                 (type_lanes == type.lanes()), error));
         }
 
         if (touched.maybe_unused()) {
@@ -244,7 +244,6 @@ Stmt add_image_checks(Stmt s,
         // Check that the region passed in (after applying constraints) is within the region used
         debug(3) << "In image " << name << " region touched is:\n";
 
-
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);
             string actual_min_name = name + ".min." + dim;
@@ -253,14 +252,15 @@ Stmt add_image_checks(Stmt s,
             Expr actual_min = Variable::make(Int(32), actual_min_name, image, param, rdom);
             Expr actual_extent = Variable::make(Int(32), actual_extent_name, image, param, rdom);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name, image, param, rdom);
-            if (!touched[j].is_bounded()) {
+
+            if (!touched.empty() && !touched[j].is_bounded()) {
                 user_error << "Buffer " << name
                            << " may be accessed in an unbounded way in dimension "
                            << j << "\n";
             }
 
-            Expr min_required = touched[j].min;
-            Expr extent_required = touched[j].max + 1 - touched[j].min;
+            Expr min_required = touched.empty() ? actual_min : touched[j].min;
+            Expr extent_required = touched.empty() ? actual_extent : (touched[j].max + 1 - touched[j].min);
 
             if (touched.maybe_unused()) {
                 min_required = select(touched.used, min_required, actual_min);
@@ -290,6 +290,7 @@ Stmt add_image_checks(Stmt s,
                                         Call::Extern);
 
             asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
+
 
             // Come up with a required stride to use in bounds
             // inference mode. We don't assert it. It's just used to
@@ -348,7 +349,10 @@ Stmt add_image_checks(Stmt s,
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
         BufferBuilder builder;
-        builder.buffer_memory = Variable::make(type_of<struct buffer_t *>(), name + ".buffer");
+        builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), name + ".buffer");
+        builder.shape_memory = Call::make(type_of<struct halide_dimension_t *>(),
+                                          Call::buffer_get_shape, {builder.buffer_memory},
+                                          Call::Extern);
         builder.type = type;
         builder.dimensions = dimensions;
         for (int i = 0; i < dimensions; i++) {
@@ -363,7 +367,7 @@ Stmt add_image_checks(Stmt s,
         buffer_rewrites.push_back(rewrite);
 
         // Build the constraints tests and proposed sizes.
-        vector<pair<string, Expr>> constraints;
+        vector<pair<Expr, Expr>> constraints;
         for (int i = 0; i < dimensions; i++) {
             string dim = std::to_string(i);
             string min_name = name + ".min." + dim;
@@ -428,7 +432,7 @@ Stmt add_image_checks(Stmt s,
             if (stride_constrained.defined()) {
                 // Come up with a suggested stride by passing the
                 // required region through this constraint.
-                constraints.push_back({ stride_name, stride_constrained });
+                constraints.push_back({ stride_orig, stride_constrained});
                 stride_constrained = substitute(replace_with_required, stride_constrained);
                 lets_proposed.push_back({ stride_name + ".proposed", stride_constrained });
             } else {
@@ -436,7 +440,7 @@ Stmt add_image_checks(Stmt s,
             }
 
             if (min_constrained.defined()) {
-                constraints.push_back({ min_name, min_constrained });
+                constraints.push_back({ min_orig, min_constrained });
                 min_constrained = substitute(replace_with_required, min_constrained);
                 lets_proposed.push_back({ min_name + ".proposed", min_constrained });
             } else {
@@ -444,7 +448,7 @@ Stmt add_image_checks(Stmt s,
             }
 
             if (extent_constrained.defined()) {
-                constraints.push_back({ extent_name, extent_constrained });
+                constraints.push_back({ extent_orig, extent_constrained });
                 extent_constrained = substitute(replace_with_required, extent_constrained);
                 lets_proposed.push_back({ extent_name + ".proposed", extent_constrained });
             } else {
@@ -473,27 +477,27 @@ Stmt add_image_checks(Stmt s,
 
         // Assert all the conditions, and set the new values
         for (size_t i = 0; i < constraints.size(); i++) {
-            Expr var = Variable::make(Int(32), constraints[i].first);
-            Expr constrained_var = Variable::make(Int(32), constraints[i].first + ".constrained");
+            Expr var = constraints[i].first;
+            const string &name = var.as<Variable>()->name;
+            Expr constrained_var = Variable::make(Int(32), name + ".constrained");
 
-            const string &var_str = constraints[i].first;
             std::ostringstream ss;
             ss << constraints[i].second;
             string constrained_var_str = ss.str();
 
-            replace_with_constrained[var_str] = constrained_var;
+            replace_with_constrained[name] = constrained_var;
 
-            lets_constrained.push_back({ var_str + ".constrained", constraints[i].second });
+            lets_constrained.push_back({ name + ".constrained", constraints[i].second });
 
             Expr error = Call::make(Int(32), "halide_error_constraint_violated",
-                                    {var_str, var, constrained_var_str, constrained_var},
+                                    {name, var, constrained_var_str, constrained_var},
                                     Call::Extern);
 
             // Check the var passed in equals the constrained version (when not in inference mode)
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error));
         }
         if (param.defined() && param.host_alignment() != param.type().bytes()) {
-            string host_name = name + ".host";
+            string host_name = name;
             int alignment_required = param.host_alignment();
             Expr host_ptr = Variable::make(Handle(), host_name);
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
