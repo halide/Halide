@@ -537,7 +537,7 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                 IntrusivePtr<FunctionContents> func, int value_index,
                 Buffer<> image, Parameter param) {
-    if (name == Call::prefetch) {
+    if (name == Call::prefetch && call_type == Call::Intrinsic) {
         internal_assert(args.size() % 2 == 0)
             << "Number of args to a prefetch call should be even: {base, offset, extent0, min0, ...}\n";
     }
