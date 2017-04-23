@@ -21,19 +21,28 @@ namespace {
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, pair<Function, int>> &e, const Target &t)
-        : env(e), target(t) {}
+    FlattenDimensions(const map<string, pair<Function, int>> &e,
+                      const vector<Function> &o,
+                      const Target &t)
+        : env(e), target(t) {
+        for (auto &f : o) {
+            outputs.insert(f.name());
+        }
+    }
     Scope<int> scope;
 private:
     const map<string, pair<Function, int>> &env;
+    set<string> outputs;
     const Target &target;
     Scope<int> realizations;
 
-    Expr flatten_args(const string &name, const vector<Expr> &args) {
+    Expr flatten_args(const string &name, const vector<Expr> &args,
+                      const Buffer<> &buf, const Parameter &param) {
         bool internal = realizations.contains(name);
         Expr idx = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
+        ReductionDomain rdom;
         for (size_t i = 0; i < args.size(); i++) {
             string dim = std::to_string(i);
             string stride_name = name + ".stride." + dim;
@@ -46,8 +55,8 @@ private:
             if (scope.contains(min_name_constrained)) {
                 min_name = min_name_constrained;
             }
-            strides[i] = Variable::make(Int(32), stride_name);
-            mins[i] = Variable::make(Int(32), min_name);
+            strides[i] = Variable::make(Int(32), stride_name, buf, param, rdom);
+            mins[i] = Variable::make(Int(32), min_name, buf, param, rdom);
         }
 
         if (internal) {
@@ -91,7 +100,7 @@ private:
         Stmt body = mutate(op->body);
 
         // Compute the size
-        std::vector<Expr> extents;
+        vector<Expr> extents;
         for (size_t i = 0; i < op->bounds.size(); i++) {
             extents.push_back(op->bounds[i].extent);
             extents[i] = mutate(extents[i]);
@@ -103,8 +112,8 @@ private:
         vector<int> storage_permutation;
         {
             auto iter = env.find(op->name);
-            Function f = iter->second.first;
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+            Function f = iter->second.first;
             const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
             const vector<string> &args = f.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
@@ -143,20 +152,16 @@ private:
         }
 
         // Create a buffer_t object for this allocation.
-        if (dims <= 4) {
-            BufferBuilder builder;
-            Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter(),
-                                         const_true(op->types[0].lanes()));
-            builder.host = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
-            builder.type = op->types[0];
-            builder.dimensions = dims;
-            for (int i = 0; i < dims; i++) {
-                builder.mins.push_back(min_var[i]);
-                builder.extents.push_back(extent_var[i]);
-                builder.strides.push_back(stride_var[i]);
-            }
-            stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
+        BufferBuilder builder;
+        builder.host = Variable::make(Handle(), op->name);
+        builder.type = op->types[0];
+        builder.dimensions = dims;
+        for (int i = 0; i < dims; i++) {
+            builder.mins.push_back(min_var[i]);
+            builder.extents.push_back(extent_var[i]);
+            builder.strides.push_back(stride_var[i]);
         }
+        stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
         // Make the allocation node
         stmt = Allocate::make(op->name, op->types[0], extents, condition, stmt);
@@ -185,21 +190,91 @@ private:
     void visit(const Provide *op) {
         internal_assert(op->values.size() == 1);
 
-        Expr idx = mutate(flatten_args(op->name, op->args));
+        Parameter output_buf;
+        auto it = env.find(op->name);
+        if (it != env.end()) {
+            const Function &f = it->second.first;
+            int idx = it->second.second;
+
+            // We only want to do this for actual pipeline outputs,
+            // even though every Function has an output buffer. Any
+            // constraints you set on the output buffer of a Func that
+            // isn't actually an output is ignored. This is a language
+            // wart.
+            if (outputs.count(f.name())) {
+                output_buf = f.output_buffers()[idx];
+            }
+        }
+
+        Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
         Expr value = mutate(op->values[0]);
-        stmt = Store::make(op->name, value, idx, Parameter(), const_true(value.type().lanes()));
+        stmt = Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
     }
 
     void visit(const Call *op) {
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
             internal_assert(op->value_index == 0);
-            Expr idx = mutate(flatten_args(op->name, op->args));
+            Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
             expr = Load::make(op->type, op->name, idx, op->image, op->param,
                               const_true(op->type.lanes()));
         } else {
             IRMutator::visit(op);
         }
+    }
+
+    void visit(const Prefetch *op) {
+        internal_assert(op->types.size() == 1)
+            << "Prefetch from multi-dimensional halide tuple should have been split\n";
+
+        vector<Expr> prefetch_min(op->bounds.size());
+        vector<Expr> prefetch_extent(op->bounds.size());
+        vector<Expr> prefetch_stride(op->bounds.size());
+        for (size_t i = 0; i < op->bounds.size(); i++) {
+            prefetch_min[i] = mutate(op->bounds[i].min);
+            prefetch_extent[i] = mutate(op->bounds[i].extent);
+            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->param);
+        }
+
+        Expr base_index = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->param));
+        Expr base_load = Load::make(op->types[0], op->name, base_index, Buffer<>(),
+                                    op->param, const_true(op->types[0].lanes()));
+        Expr base_address = Call::make(Handle(), Call::address_of, {base_load}, Call::Intrinsic);
+        vector<Expr> args = {base_address};
+
+        auto iter = env.find(op->name);
+        if (iter != env.end()) {
+            // Order the <min, extent> args based on the storage dims (i.e. innermost
+            // dimension should be first in args)
+            vector<int> storage_permutation;
+            {
+                Function f = iter->second.first;
+                const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
+                const vector<string> &args = f.args();
+                for (size_t i = 0; i < storage_dims.size(); i++) {
+                    for (size_t j = 0; j < args.size(); j++) {
+                        if (args[j] == storage_dims[i].var) {
+                            storage_permutation.push_back((int)j);
+                        }
+                    }
+                    internal_assert(storage_permutation.size() == i+1);
+                }
+            }
+            internal_assert(storage_permutation.size() == op->bounds.size());
+
+            for (size_t i = 0; i < op->bounds.size(); i++) {
+                internal_assert(storage_permutation[i] < (int)op->bounds.size());
+                args.push_back(prefetch_extent[storage_permutation[i]]);
+                args.push_back(prefetch_stride[storage_permutation[i]]);
+            }
+        } else {
+            for (size_t i = 0; i < op->bounds.size(); i++) {
+                args.push_back(prefetch_extent[i]);
+                args.push_back(prefetch_stride[i]);
+            }
+        }
+
+        stmt = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
     }
 
     void visit(const LetStmt *let) {
@@ -274,46 +349,6 @@ class PromoteToMemoryType : public IRMutator {
     }
 };
 
-// Connect Store nodes to their output buffers
-class ConnectOutputBuffers : public IRMutator {
-    using IRMutator::visit;
-
-    void visit(const Store *op) {
-        Parameter output_buf;
-        auto it = env.find(op->name);
-        if (it != env.end()) {
-            const Function &f = it->second.first;
-            int idx = it->second.second;
-
-            // We only want to do this for actual pipeline outputs,
-            // even though every Function has an output buffer. Any
-            // constraints you set on the output buffer of a Func that
-            // isn't actually an output is ignored. This is a language
-            // wart.
-            if (outputs.count(f.name())) {
-                output_buf = f.output_buffers()[idx];
-            }
-        }
-
-        if (output_buf.defined()) {
-            stmt = Store::make(op->name, op->value, op->index, output_buf, const_true());
-        } else {
-            stmt = op;
-        }
-    }
-
-    const map<string, pair<Function, int>> &env;
-    set<string> outputs;
-
-public:
-    ConnectOutputBuffers(const std::map<string, pair<Function, int>> &e,
-                         const vector<Function> &o) : env(e) {
-        for (auto &f : o) {
-            outputs.insert(f.name());
-        }
-    }
-};
-
 }  // namespace
 
 Stmt storage_flattening(Stmt s,
@@ -334,9 +369,8 @@ Stmt storage_flattening(Stmt s,
         }
     }
 
-    s = FlattenDimensions(tuple_env, target).mutate(s);
+    s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
     s = PromoteToMemoryType().mutate(s);
-    s = ConnectOutputBuffers(tuple_env, outputs).mutate(s);
     return s;
 }
 

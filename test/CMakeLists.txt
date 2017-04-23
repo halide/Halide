@@ -216,7 +216,7 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(stubuser
                      GENERATOR_NAME stubuser
                      STUB_DEPS stubtest.generator)
-  add_test_generator(tiled_blur_blur)
+  add_test_generator(blur2x2)
   add_test_generator(tiled_blur)
   add_test_generator(user_context)
   add_test_generator(user_context_insanity)
@@ -285,12 +285,16 @@ if (WITH_TEST_GENERATORS)
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
+  #
+  # Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
+  # that setting ScheduleParam via generator_args works properly.
   set(STUBTEST_GENERATOR_ARGS
       untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3
       simple_input.type=float32
       array_input.type=float32 array_input.size=2
       int_arg.size=2
       tuple_output.type=float32,float32
+      vectorize=true
   )
   halide_define_aot_test(stubtest
                          GENERATOR_NAME StubNS1::StubNS2::StubTest
@@ -323,8 +327,8 @@ if (WITH_TEST_GENERATORS)
 
   halide_define_aot_test(tiled_blur)
   halide_add_aot_test_dependency(tiled_blur
-                                 GENERATOR_TARGET tiled_blur_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_blur)
+                                 GENERATOR_TARGET blur2x2
+                                 AOT_LIBRARY_TARGET blur2x2)
 
   halide_define_aot_test(cxx_mangling_define_extern
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-user_context

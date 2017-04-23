@@ -10,6 +10,7 @@
 #include <atomic>
 
 #include "IR.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -167,20 +168,23 @@ EXPORT Expr raise_to_integer_power(const Expr &a, int64_t b);
  * return an empty vector. */
 EXPORT void split_into_ands(const Expr &cond, std::vector<Expr> &result);
 
-/** A builder to help create Exprs representing buffer_t structs
- * (e.g. foo.buffer) via calls to halide_buffer_init. Fill out the
- * fields and then call build. The resulting Expr will be a call to
- * halide_buffer_init with the struct members as arguments. If the
+/** A builder to help create Exprs representing halide_buffer_t
+ * structs (e.g. foo.buffer) via calls to halide_buffer_init. Fill out
+ * the fields and then call build. The resulting Expr will be a call
+ * to halide_buffer_init with the struct members as arguments. If the
  * buffer_memory field is undefined, it uses a call to alloca to make
- * some stack memory for the buffer. Other unitialized fields will
- * take on a value of zero in the constructed buffer. */
+ * some stack memory for the buffer. If the shape_memory field is
+ * undefined, it similarly uses stack memory for the shape. If the
+ * shape_memory field is null, it uses the dim field already in the
+ * buffer. Other unitialized fields will take on a value of zero in
+ * the constructed buffer. */
 struct BufferBuilder {
-    Expr buffer_memory;
-    Expr host, dev;
+    Expr buffer_memory, shape_memory;
+    Expr host, device, device_interface;
     Type type;
     int dimensions = 0;
     std::vector<Expr> mins, extents, strides;
-    Expr host_dirty, dev_dirty;
+    Expr host_dirty, device_dirty;
     EXPORT Expr build() const;
 };
 
@@ -678,26 +682,21 @@ inline Expr max(int a, const Expr &b) {
     return Internal::Max::make(Internal::make_const(b.type(), a), b);
 }
 
+inline Expr max(float a, const Expr &b) {return max(Expr(a), b);}
+inline Expr max(const Expr &a, float b) {return max(a, Expr(b));}
+
 /** Returns an expression representing the greater of an expressions
  * vector, after doing any necessary type coersion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
- * The expressions are folded from left ie. max(.., max(.., ..)). */
-inline Expr max(std::vector<Expr> vec) {
-    for (auto &e : vec) {
-        user_assert(e.defined()) << "max of undefined Expr\n";
-    }
-    return Internal::fold_right(vec,
-                                [](Expr lhs, Expr rhs) -> Expr {
-                                    Internal::match_types(lhs, rhs);
-                                    return Internal::Max::make(lhs, rhs);
-                                });
+ * The expressions are folded from right ie. max(.., max(.., ..)). 
+ * The arguments can be any mix of types but must all be convertible to Expr. */
+template<typename A, typename B, typename C, typename... Rest,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type* = nullptr>
+inline Expr max(const A &a, const B &b, const C &c, Rest&&... rest) {
+    return max(a, max(b, c, std::forward<Rest>(rest)...));
 }
 
-/** Returns an expression representing the lesser of the two
- * arguments, after doing any necessary type coercion using
- * \ref Internal::match_types. Vectorizes cleanly on most platforms
- * (with the exception of integer types on x86 without SSE4). */
 inline Expr min(Expr a, Expr b) {
     user_assert(a.defined() && b.defined())
         << "min of undefined Expr\n";
@@ -727,21 +726,19 @@ inline Expr min(int a, const Expr &b) {
     return Internal::Min::make(Internal::make_const(b.type(), a), b);
 }
 
+inline Expr min(float a, const Expr &b) {return min(Expr(a), b);}
+inline Expr min(const Expr &a, float b) {return min(a, Expr(b));}
+
 /** Returns an expression representing the lesser of an expressions
  * vector, after doing any necessary type coersion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4).
- * The expressions are folded from right ie. min(.., min(.., ..)). */
-inline Expr min(std::vector<Expr> vec) {
-    for (auto &e : vec) {
-        user_assert(e.defined()) << "min of undefined Expr\n";
-    }
-    return Internal::fold_right(vec,
-                                [](const Expr &lhs, const Expr &rhs) -> Expr {
-                                    user_assert(lhs.type() == rhs.type())
-                                        << "min of mismatched Expr types\n";
-                                    return Internal::Min::make(lhs, rhs);
-                                });
+ * The expressions are folded from right ie. min(.., min(.., ..)).
+ * The arguments can be any mix of types but must all be convertible to Expr. */
+template<typename A, typename B, typename C, typename... Rest,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type* = nullptr>
+inline Expr min(const A &a, const B &b, const C &c, Rest&&... rest) {
+    return min(a, min(b, c, std::forward<Rest>(rest)...));
 }
 
 /** Operators on floats treats those floats as Exprs. Making these
@@ -770,10 +767,6 @@ inline Expr operator==(const Expr &a, float b) {return a == Expr(b);}
 inline Expr operator==(float a, const Expr &b) {return Expr(a) == b;}
 inline Expr operator!=(const Expr &a, float b) {return a != Expr(b);}
 inline Expr operator!=(float a, const Expr &b) {return Expr(a) != b;}
-inline Expr min(float a, const Expr &b) {return min(Expr(a), b);}
-inline Expr min(const Expr &a, float b) {return min(a, Expr(b));}
-inline Expr max(float a, const Expr &b) {return max(Expr(a), b);}
-inline Expr max(const Expr &a, float b) {return max(a, Expr(b));}
 // @}
 
 /** Clamps an expression to lie within the given bounds. The bounds
@@ -862,134 +855,11 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
  * which can accept multiple conditions and values in pairs. Evaluates
  * to the first value for which the condition is true. Returns the
  * final value if all conditions are false. */
-// @{
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  select(c2, v2, default_val));
+template<typename... Args,
+         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type* = nullptr>
+inline Expr select(const Expr &c0, const Expr &v0, const Expr &c1, const Expr &v1, Args&&... args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
 }
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &c3, const Expr &v3,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  select(c3, v3, default_val));
-}
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &c3, const Expr &v3,
-                   const Expr &c4, const Expr &v4,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  select(c4, v4, default_val));
-}
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &c3, const Expr &v3,
-                   const Expr &c4, const Expr &v4,
-                   const Expr &c5, const Expr &v5,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  select(c5, v5, default_val));
-}
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &c3, const Expr &v3,
-                   const Expr &c4, const Expr &v4,
-                   const Expr &c5, const Expr &v5,
-                   const Expr &c6, const Expr &v6,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  select(c6, v6, default_val));
-}
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &c3, const Expr &v3,
-                   const Expr &c4, const Expr &v4,
-                   const Expr &c5, const Expr &v5,
-                   const Expr &c6, const Expr &v6,
-                   const Expr &c7, const Expr &v7,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  c6, v6,
-                  select(c7, v7, default_val));
-}
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &c3, const Expr &v3,
-                   const Expr &c4, const Expr &v4,
-                   const Expr &c5, const Expr &v5,
-                   const Expr &c6, const Expr &v6,
-                   const Expr &c7, const Expr &v7,
-                   const Expr &c8, const Expr &v8,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  c6, v6,
-                  c7, v7,
-                  select(c8, v8, default_val));
-}
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &c3, const Expr &v3,
-                   const Expr &c4, const Expr &v4,
-                   const Expr &c5, const Expr &v5,
-                   const Expr &c6, const Expr &v6,
-                   const Expr &c7, const Expr &v7,
-                   const Expr &c8, const Expr &v8,
-                   const Expr &c9, const Expr &v9,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  c6, v6,
-                  c7, v7,
-                  c8, v8,
-                  select(c9, v9, default_val));
-}
-inline Expr select(const Expr &c1, const Expr &v1,
-                   const Expr &c2, const Expr &v2,
-                   const Expr &c3, const Expr &v3,
-                   const Expr &c4, const Expr &v4,
-                   const Expr &c5, const Expr &v5,
-                   const Expr &c6, const Expr &v6,
-                   const Expr &c7, const Expr &v7,
-                   const Expr &c8, const Expr &v8,
-                   const Expr &c9, const Expr &v9,
-                   const Expr &c10, const Expr &v10,
-                   const Expr &default_val) {
-    return select(c1, v1,
-                  c2, v2,
-                  c3, v3,
-                  c4, v4,
-                  c5, v5,
-                  c6, v6,
-                  c7, v7,
-                  c8, v8,
-                  c9, v9,
-                  select(c10, v10, default_val));
-}
-// @}
 
 // TODO: Implement support for *_f16 external functions in various backends.
 // No backend supports these yet.

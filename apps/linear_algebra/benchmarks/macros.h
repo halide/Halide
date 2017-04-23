@@ -1,10 +1,10 @@
-#include "../support/benchmark.h"
+#include "halide_benchmark.h"
 
 #define time_it(code)                                        \
     double elapsed = 0;                                      \
     for (int iters = 1; ; iters *= 2) {                      \
         /* Best of 5 */                                      \
-        elapsed = 1e6 * benchmark(5, iters, [&]() {code;});  \
+        elapsed = 1e6 * Halide::Tools::benchmark(5, iters, [&]() {code;});  \
         /* spend at least 5x20ms benchmarking */             \
         if (elapsed * iters > 20000) {                       \
             break;                                           \

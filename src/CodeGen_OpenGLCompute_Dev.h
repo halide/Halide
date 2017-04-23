@@ -41,9 +41,8 @@ protected:
 
     class CodeGen_OpenGLCompute_C : public CodeGen_GLSLBase {
     public:
-        CodeGen_OpenGLCompute_C(std::ostream &s) : CodeGen_GLSLBase(s) {}
+        CodeGen_OpenGLCompute_C(std::ostream &s, Target t) : CodeGen_GLSLBase(s, t) {}
         void add_kernel(Stmt stmt,
-                        Target target,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
     protected:
@@ -72,7 +71,6 @@ protected:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     CodeGen_OpenGLCompute_C glc;
-    Target target;
 };
 
 }}

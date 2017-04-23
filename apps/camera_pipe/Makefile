@@ -14,7 +14,7 @@ $(BIN)/camera_pipe.a: $(BIN)/camera_pipe_exec
 
 $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe_exec
 	@-mkdir -p $(BIN)/viz
-	HL_TRACE=3 $^ -o $(BIN)/viz target=$(HL_TARGET)
+	$^ -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
 
 $(BIN)/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@
@@ -34,7 +34,7 @@ $(BIN)/out.png: $(BIN)/process
 ../../bin/HalideTraceViz:
 	$(MAKE) -C ../../ bin/HalideTraceViz
 
-$(BIN)/camera_pipe.avi: $(BIN)/viz/process viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
+$(BIN)/camera_pipe.mp4: $(BIN)/viz/process viz.sh $(HALIDE_TRACE_VIZ) ../../bin/HalideTraceViz
 	bash viz.sh $(BIN)
 
 clean:

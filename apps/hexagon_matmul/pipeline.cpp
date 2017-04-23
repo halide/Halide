@@ -60,16 +60,17 @@ public:
                 use_hexagon = true;
             }
             int vector_size_u32 = vector_size_u8 / 4;
-
+            int tile_rows = 4;
             if (use_hexagon) {
                 Var xo("xo"), yo("yo");
 
                 // Split the output into tiles, traversed in columns of tiles
                 // that we parallelize over.
-                Func(output).compute_root()
+                output.compute_root()
                     .hexagon()
-                    .tile(x, y, xo, yo, x, y, vector_size_u8, 4, TailStrategy::RoundUp)
-                    .reorder(yo, xo)
+                    .tile(x, y, xo, yo, x, y, vector_size_u8, tile_rows, TailStrategy::RoundUp)
+                    .reorder(x, y, yo, xo)
+                    .prefetch(A, yo, 1)
                     .vectorize(x)
                     .unroll(y)
                     .parallel(xo);
@@ -99,8 +100,8 @@ public:
                 constexpr int kBlockSize = 32;
                 const int kBlockSizeXi = 8;
 
-                Func(output).compute_root()
-                    .tile(x, y, x, y, xi, yi, vector_size_u8, 4, TailStrategy::RoundUp)
+                output.compute_root()
+                    .tile(x, y, x, y, xi, yi, vector_size_u8, tile_rows, TailStrategy::RoundUp)
                     .reorder(xi, yi, x, y)
                     .vectorize(xi)
                     .unroll(yi)
@@ -122,12 +123,12 @@ public:
                     .unroll(yii);
             }
 
-            // Require scanlines of the input and output to be aligned.
+            // Require scanlines of the input and output to be aligned where necessary.
             A.dim(0)
                 .set_bounds(0, (k_extent/vector_size_u8)*vector_size_u8);
             A.dim(1)
-                .set_bounds(0, (A.dim(1).extent()/vector_size_u8)*vector_size_u8)
-                .set_stride((A.dim(1).stride()/vector_size_u8)*vector_size_u8);
+               .set_bounds(0, (A.dim(1).extent()/tile_rows)*tile_rows)
+               .set_stride((A.dim(1).stride()/vector_size_u8)*vector_size_u8);
             B.dim(0)
                 .set_bounds(0, (B.dim(0).extent()/vector_size_u8)*vector_size_u8);
             B.dim(1)
@@ -136,9 +137,8 @@ public:
             output.dim(0)
                 .set_bounds(0, (output.dim(0).extent()/vector_size_u32)*vector_size_u32);
             output.dim(1)
-                .set_bounds(0, (output.dim(1).extent()/vector_size_u32)*vector_size_u32)
+                .set_bounds(0, (output.dim(1).extent()/tile_rows)*tile_rows)
                 .set_stride((output.dim(1).stride()/vector_size_u32)*vector_size_u32);
-
         };
     }
 };

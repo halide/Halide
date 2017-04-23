@@ -236,6 +236,26 @@ private:
     Scope<pair<int64_t, int64_t>> bounds_info;
     Scope<ModulusRemainder> alignment_info;
 
+    // If we encounter a reference to a buffer (a Load, Store, Call,
+    // or Provide), there's an implicit dependence on some associated
+    // symbols.
+    void found_buffer_reference(const string &name, size_t dimensions = 0) {
+        for (size_t i = 0; i < dimensions; i++) {
+            string stride = name + ".stride." + std::to_string(i);
+            if (var_info.contains(stride)) {
+                var_info.ref(stride).old_uses++;
+            }
+
+            string min = name + ".min." + std::to_string(i);
+            if (var_info.contains(min)) {
+                var_info.ref(min).old_uses++;
+            }
+        }
+
+        if (var_info.contains(name)) {
+            var_info.ref(name).old_uses++;
+        }
+    }
 
     using IRMutator::visit;
 
@@ -1017,16 +1037,16 @@ private:
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
-                                   ramp_a->stride - ramp_b->stride, ramp_a->lanes));
+                                     ramp_a->stride - ramp_b->stride, ramp_a->lanes));
         } else if (ramp_a && broadcast_b) {
             // Ramp - Broadcast
             expr = mutate(Ramp::make(ramp_a->base - broadcast_b->value,
-                                   ramp_a->stride, ramp_a->lanes));
+                                     ramp_a->stride, ramp_a->lanes));
         } else if (broadcast_a && ramp_b) {
             // Broadcast - Ramp
             expr = mutate(Ramp::make(broadcast_a->value - ramp_b->base,
-                                   make_zero(ramp_b->stride.type())- ramp_b->stride,
-                                   ramp_b->lanes));
+                                     make_zero(ramp_b->stride.type())- ramp_b->stride,
+                                     ramp_b->lanes));
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
@@ -1279,22 +1299,26 @@ private:
                    equal(max_a->b, max_b->a)) {
             // max(a, b) - max(b, a) -> 0
             expr = make_zero(op->type);
-        } else if (min_a &&
+        } else if (no_overflow(op->type) &&
+                   min_a &&
                    min_b &&
                    is_zero(mutate((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
             // min(a, b) - min(c, d) where a-b == c-d -> b - d
             expr = mutate(min_a->b - min_b->b);
-        } else if (max_a &&
+        } else if (no_overflow(op->type) &&
+                   max_a &&
                    max_b &&
                    is_zero(mutate((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
             // max(a, b) - max(c, d) where a-b == c-d -> b - d
             expr = mutate(max_a->b - max_b->b);
-        } else if (min_a &&
+        } else if (no_overflow(op->type) &&
+                   min_a &&
                    min_b &&
                    is_zero(mutate((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
             // min(a, b) - min(c, d) where a-b == d-c -> b - c
             expr = mutate(min_a->b - min_b->a);
-        } else if (max_a &&
+        } else if (no_overflow(op->type) &&
+                   max_a &&
                    max_b &&
                    is_zero(mutate((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
@@ -3949,6 +3973,8 @@ private:
     }
 
     void visit(const Load *op) {
+        found_buffer_reference(op->name);
+
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
@@ -3969,26 +3995,9 @@ private:
     }
 
     void visit(const Call *op) {
-        // Calls implicitly depend on mins and strides of the buffer referenced
+        // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                {
-                    ostringstream oss;
-                    oss << op->name << ".stride." << i;
-                    string stride = oss.str();
-                    if (var_info.contains(stride)) {
-                        var_info.ref(stride).old_uses++;
-                    }
-                }
-                {
-                    ostringstream oss;
-                    oss << op->name << ".min." << i;
-                    string min = oss.str();
-                    if (var_info.contains(min)) {
-                        var_info.ref(min).old_uses++;
-                    }
-                }
-            }
+            found_buffer_reference(op->name, op->args.size());
         }
 
         if (op->is_intrinsic(Call::shift_left) ||
@@ -4239,6 +4248,49 @@ private:
             } else {
                 expr = op;
             }
+        } else if (op->is_intrinsic(Call::prefetch)) {
+            // Collapse the prefetched region into lower dimension whenever is possible.
+            // TODO(psuriana): Deal with negative strides and overlaps.
+
+            vector<Expr> args(op->args);
+            bool changed = false;
+            for (size_t i = 0; i < op->args.size(); ++i) {
+                args[i] = mutate(op->args[i]);
+                if (!args[i].same_as(op->args[i])) {
+                    changed = true;
+                }
+            }
+
+            // The {extent, stride} args in the prefetch call are sorted
+            // based on the storage dimension in ascending order (i.e. innermost
+            // first and outermost last), so, it is enough to check for the upper
+            // triangular pairs to see if any contiguous addresses exist.
+            for (size_t i = 1; i < args.size(); i += 2) {
+                Expr extent_0 = args[i];
+                Expr stride_0 = args[i + 1];
+                for (size_t j = i + 2; j < args.size(); j += 2) {
+                    Expr extent_1 = args[j];
+                    Expr stride_1 = args[j + 1];
+
+                    if (can_prove(extent_0 * stride_0 == stride_1)) {
+                        Expr new_extent = mutate(extent_0 * extent_1);
+                        Expr new_stride = stride_0;
+                        args.erase(args.begin() + j, args.begin() + j + 2);
+                        args[i] = new_extent;
+                        args[i + 1] = new_stride;
+                        i -= 2;
+                        break;
+                    }
+                }
+            }
+            internal_assert(args.size() <= op->args.size());
+
+            if (changed || (args.size() != op->args.size())) {
+                expr = Call::make(op->type, Call::prefetch, args, Call::Intrinsic);
+            } else {
+                expr = op;
+            }
+
         } else {
             IRMutator::visit(op);
         }
@@ -4270,31 +4322,28 @@ private:
             new_vectors.push_back(new_vector);
         }
 
-        // Only try to simplify shuffles of loads that aren't concats
-        // of vectors. This is a bit of a hacky heuristic to avoid
-        // undoing the work of AlignLoads for Hexagon.
-        if (!op->is_concat() || new_vectors[0].type().is_scalar()) {
-            // Try to convert a load with shuffled indices into a
-            // shuffle of a dense load.
-            if (const Load *first_load = new_vectors[0].as<Load>()) {
-                vector<Expr> load_predicates;
-                vector<Expr> load_indices;
-                bool unpredicated = true;
-                for (Expr e : new_vectors) {
-                    const Load *load = e.as<Load>();
-                    if (load && load->name == first_load->name) {
-                        load_predicates.push_back(load->predicate);
-                        load_indices.push_back(load->index);
-                        unpredicated = unpredicated && is_one(load->predicate);
-                    } else {
-                        break;
-                    }
+        // Try to convert a load with shuffled indices into a
+        // shuffle of a dense load.
+        if (const Load *first_load = new_vectors[0].as<Load>()) {
+            vector<Expr> load_predicates;
+            vector<Expr> load_indices;
+            bool unpredicated = true;
+            for (Expr e : new_vectors) {
+                const Load *load = e.as<Load>();
+                if (load && load->name == first_load->name) {
+                    load_predicates.push_back(load->predicate);
+                    load_indices.push_back(load->index);
+                    unpredicated = unpredicated && is_one(load->predicate);
+                } else {
+                    break;
                 }
+            }
 
-                if (load_indices.size() == new_vectors.size()) {
-                    Type t = load_indices[0].type().with_lanes(op->indices.size());
-                    Expr shuffled_index = Shuffle::make(load_indices, op->indices);
-                    shuffled_index = mutate(shuffled_index);
+            if (load_indices.size() == new_vectors.size()) {
+                Type t = load_indices[0].type().with_lanes(op->indices.size());
+                Expr shuffled_index = Shuffle::make(load_indices, op->indices);
+                shuffled_index = mutate(shuffled_index);
+                if (shuffled_index.as<Ramp>()) {
                     Expr shuffled_predicate;
                     if (unpredicated) {
                         shuffled_predicate = const_true(t.lanes());
@@ -4302,13 +4351,11 @@ private:
                         shuffled_predicate = Shuffle::make(load_predicates, op->indices);
                         shuffled_predicate = mutate(shuffled_predicate);
                     }
-                    if (shuffled_index.as<Ramp>()) {
-                        t = first_load->type;
-                        t = t.with_lanes(op->indices.size());
-                        expr = Load::make(t, first_load->name, shuffled_index, first_load->image,
-                                          first_load->param, shuffled_predicate);
-                        return;
-                    }
+                    t = first_load->type;
+                    t = t.with_lanes(op->indices.size());
+                    expr = Load::make(t, first_load->name, shuffled_index, first_load->image,
+                                      first_load->param, shuffled_predicate);
+                    return;
                 }
             }
         }
@@ -4715,8 +4762,17 @@ private:
 
         const AssertStmt *a = stmt.as<AssertStmt>();
         if (a && is_zero(a->condition)) {
-            user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
-                         << stmt << "\n";
+            // Usually, assert(const-false) should generate a warning;
+            // in at least one case (specialize_fail()), we want to suppress
+            // the warning, because the assertion is generated internally
+            // by Halide and is expected to always fail.
+            const Call *call = a->message.as<Call>();
+            const bool const_false_conditions_expected = 
+                call && call->name == "halide_error_specialize_fail";
+            if (!const_false_conditions_expected) {
+                user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
+                             << stmt << "\n";
+            }
         } else if (a && is_one(a->condition)) {
             stmt = Evaluate::make(0);
         }
@@ -4754,30 +4810,13 @@ private:
     }
 
     void visit(const Provide *op) {
-        // Provides implicitly depend on mins and strides of the buffer referenced
-        for (size_t i = 0; i < op->args.size(); i++) {
-            {
-                ostringstream oss;
-                oss << op->name << ".stride." << i;
-                string stride = oss.str();
-                if (var_info.contains(stride)) {
-                    var_info.ref(stride).old_uses++;
-                }
-            }
-            {
-                ostringstream oss;
-                oss << op->name << ".min." << i;
-                string min = oss.str();
-                if (var_info.contains(min)) {
-                    var_info.ref(min).old_uses++;
-                }
-            }
-        }
-
+        found_buffer_reference(op->name, op->args.size());
         IRMutator::visit(op);
     }
 
     void visit(const Store *op) {
+        found_buffer_reference(op->name);
+
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
@@ -4833,6 +4872,28 @@ private:
             stmt = Allocate::make(op->name, op->type, new_extents,
                                   condition, body,
                                   new_expr, op->free_function);
+        }
+    }
+
+    void visit(const Evaluate *op) {
+        Expr value = mutate(op->value);
+
+        // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
+        vector<pair<string, Expr>> lets;
+        while (const Let *let = value.as<Let>()) {
+            value = let->body;
+            lets.push_back({let->name, let->value});
+        }
+
+        if (value.same_as(op->value)) {
+            internal_assert(lets.empty());
+            stmt = op;
+        } else {
+            // Rewrap the lets outside the evaluate node
+            stmt = Evaluate::make(value);
+            for (size_t i = lets.size(); i > 0; i--) {
+                stmt = LetStmt::make(lets[i-1].first, lets[i-1].second, stmt);
+            }
         }
     }
 
@@ -6215,6 +6276,10 @@ void simplify_test() {
     check(Let::make("x", 3*y*y*y, 4), 4);
     check(Let::make("x", 0, 0), 0);
 
+    // Check that lets inside an evaluate node get lifted
+    check(Evaluate::make(Let::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Let::make("y", 10, x + y + 2))),
+          LetStmt::make("x", Call::make(Int(32), "dummy", {3, x, 4}, Call::Extern), Evaluate::make(x + 12)));
+
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
@@ -6225,6 +6290,14 @@ void simplify_test() {
 
     check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, string(", "), 3.4f}, Call::Intrinsic),
           Call::make(type_of<const char *>(), Call::stringify, {string("3"), x, string("4, 3.400000")}, Call::Intrinsic));
+
+    {
+        // Check that contiguous prefetch call get collapsed
+        Expr load = Load::make(Int(32), "buf", x, Buffer<>(), Parameter(), const_true());
+        Expr base = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        check(Call::make(Int(32), Call::prefetch, {base, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+              Call::make(Int(32), Call::prefetch, {base, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+    }
 
     // Check min(x, y)*max(x, y) gets simplified into x*y
     check(min(x, y)*max(x, y), x*y);
@@ -6353,6 +6426,41 @@ void simplify_test() {
         Expr value = Load::make(index.type(), "f", index, Buffer<>(), Parameter(), const_true(index.type().lanes()));
         Stmt stmt = Store::make("f", value, index, Parameter(), pred);
         check(stmt, Evaluate::make(0));
+    }
+
+    {
+        // Verify that integer types passed to min() and max() are coerced to match
+        // Exprs, rather than being promoted to int first. (TODO: This doesn't really
+        // belong in the test for Simplify, but IROperator has no test unit of its own.)
+        Expr one = cast<uint16_t>(1);
+        const int two = 2;  // note that type is int, not uint16_t
+        Expr r1, r2, r3;
+
+        r1 = min(one, two);
+        internal_assert(r1.type() == halide_type_of<uint16_t>());
+        r2 = min(one, two, one);
+        internal_assert(r2.type() == halide_type_of<uint16_t>());
+        // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
+        r3 = min(one, Expr(two), one);
+        internal_assert(r3.type() == halide_type_of<int>());
+
+        r1 = max(one, two);
+        internal_assert(r1.type() == halide_type_of<uint16_t>());
+        r2 = max(one, two, one);
+        internal_assert(r2.type() == halide_type_of<uint16_t>());
+        // Explicitly passing 'two' as an Expr, rather than an int, will defeat this logic.
+        r3 = max(one, Expr(two), one);
+        internal_assert(r3.type() == halide_type_of<int>());
+    }
+
+    {
+        Expr x = Variable::make(UInt(32), "x");
+        Expr y = Variable::make(UInt(32), "y");
+        // This is used to get simplified into broadcast(x - y, 2) which is
+        // incorrect when there is overflow.
+        Expr e = simplify(max(ramp(x, y, 2), broadcast(x, 2)) - max(broadcast(y, 2), ramp(y, y, 2)));
+        Expr expected = max(ramp(x, y, 2), broadcast(x, 2)) - max(ramp(y, y, 2), broadcast(y, 2));
+        check(e, expected);
     }
 
     std::cout << "Simplify test passed" << std::endl;

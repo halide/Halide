@@ -86,9 +86,9 @@ class FindBuffersToTrack : public IRVisitor {
     }
 
     void visit(const LetStmt *op) {
-        // The let that defines the buffer_t is not interesting, and
-        // nothing before that let could be interesting either
-        // (because the buffer doesn't exist yet).
+        // The let that defines the halide_buffer_t is not
+        // interesting, and nothing before that let could be
+        // interesting either (because the buffer doesn't exist yet).
         const Call *c = op->value.as<Call>();
         if (ends_with(op->name, ".buffer") &&
             c && c->name == Call::buffer_init) {
@@ -125,6 +125,21 @@ public:
     FindBuffersToTrack(const Target &t) : target(t), device_api(DeviceAPI::Host) {}
 };
 
+// Set the host field of any buffer_init calls on the given buffer to null.
+class NullifyHostField : public IRMutator {
+    using IRMutator::visit;
+    void visit(const Variable *op) {
+        if (op->name == buf_name) {
+            expr = make_zero(Handle());
+        } else {
+            expr = op;
+        }
+    }
+    std::string buf_name;
+public:
+    NullifyHostField(const std::string &b) : buf_name(b) {}
+};
+
 class InjectBufferCopies : public IRMutator {
     using IRMutator::visit;
 
@@ -136,8 +151,7 @@ class InjectBufferCopies : public IRMutator {
             host_current,   // Is the data known to be up-to-date on the host?
             dev_current,    // Is the data known to be up-to-date on the device?
             internal,       // Did Halide allocate this buffer?
-            dev_allocated,  // Has the buffer been allocated?
-            on_single_device; // Used to track whether zero copy is allowed for an internal allocation.
+            dev_allocated;  // Has the buffer been allocated?
 
         // The compute_at loop level for this buffer. It's at this
         // loop level that all copies should occur. Empty string for
@@ -145,8 +159,17 @@ class InjectBufferCopies : public IRMutator {
         string loop_level;
         DeviceAPI device_first_touched;      // First device to read or write in
         DeviceAPI current_device;            // Valid if dev_current is true
-        std::set<DeviceAPI> devices_reading; // List of devices, including host, reading buffer in visited scope
-        std::set<DeviceAPI> devices_writing; // List of devices, including host, writing buffer in visited scope
+
+        // List of devices, including host, reading buffer in visited
+        // scope (cleared whenever copies are done).
+        std::set<DeviceAPI> devices_reading;
+
+        // List of devices, including host, writing buffer in visited
+        // scope (cleared whenever copies are done).
+        std::set<DeviceAPI> devices_writing;
+
+        // List of devices, including host, ever accessing this buffer (never cleared).
+        std::set<DeviceAPI> devices_touched;
 
         BufferInfo() : host_touched(false),
                        dev_touched(false),
@@ -154,9 +177,8 @@ class InjectBufferCopies : public IRMutator {
                        dev_current(false),
                        internal(false),
                        dev_allocated(true),  // This is true unless we know for sure it is not allocated (this BufferInfo is from an Allocate node).
-                       on_single_device(false),
                        device_first_touched(DeviceAPI::None), // Meaningless initial value
-                       current_device(DeviceAPI::Host) {}
+                       current_device(DeviceAPI::None) {}
     };
 
     map<string, BufferInfo> state;
@@ -195,7 +217,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api, bool is_device_and_host) {
-        Expr buf = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
+        Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name + ".buffer");
         Expr device_interface = make_device_interface_call(target_device_api);
         Stmt device_malloc = call_extern_and_assert(is_device_and_host ? "halide_device_and_host_malloc"
                                                                        : "halide_device_malloc",
@@ -216,7 +238,7 @@ class InjectBufferCopies : public IRMutator {
     Stmt make_buffer_copy(CopyDirection direction, string buf_name, DeviceAPI target_device_api) {
         internal_assert(direction == ToHost || direction == ToDevice) << "make_buffer_copy caller logic error.\n";
         std::vector<Expr> args;
-        Expr buffer = Variable::make(type_of<struct buffer_t *>(), buf_name + ".buffer");
+        Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name + ".buffer");
         args.push_back(buffer);
         if (direction == ToDevice) {
             args.push_back(make_device_interface_call(target_device_api));
@@ -279,6 +301,8 @@ class InjectBufferCopies : public IRMutator {
                 }
             }
 
+
+
             // Ideally this will support multi-device buffers someday, but not now.
             internal_assert(non_host_devices_reading_count <= 1);
             internal_assert(non_host_devices_writing_count <= 1);
@@ -321,7 +345,8 @@ class InjectBufferCopies : public IRMutator {
                 direction = ToDevice;
                 // If the buffer will need to be moved from one device to another,
                 // a host allocation will be required.
-                buf.host_touched = buf.host_touched || (buf.current_device != touching_device);
+                buf.host_touched = buf.host_touched || (buf.current_device != DeviceAPI::None &&
+                                                        buf.current_device != touching_device);
                 buf.dev_current = true;
                 buf.current_device = touching_device;
                 buf.host_current = buf.host_current && !device_wrote;
@@ -333,7 +358,7 @@ class InjectBufferCopies : public IRMutator {
                 debug(4) << "Invalidating host_current\n";
             }
 
-            Expr buffer = Variable::make(type_of<struct buffer_t *>(), i.first + ".buffer");
+            Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), i.first + ".buffer");
 
             if (host_wrote) {
                 debug(4) << "Setting host dirty for " << i.first << "\n";
@@ -345,9 +370,9 @@ class InjectBufferCopies : public IRMutator {
 
             if (device_wrote) {
                 // If we just invalidated the host pointer, we need to set the dev dirty bit.
-                Expr set_dev_dirty = Call::make(Int(32), Call::buffer_set_dev_dirty,
-                                                {buffer, const_true()}, Call::Extern);
-                s = Block::make(s, Evaluate::make(set_dev_dirty));
+                Expr set_device_dirty = Call::make(Int(32), Call::buffer_set_device_dirty,
+                                                   {buffer, const_true()}, Call::Extern);
+                s = Block::make(s, Evaluate::make(set_device_dirty));
             }
 
             // Clear the pending action bits.
@@ -358,11 +383,6 @@ class InjectBufferCopies : public IRMutator {
                 internal_assert(s.defined());
                 s = Block::make(make_buffer_copy(direction, i.first, touching_device), s);
             }
-
-            buf.on_single_device =
-                (non_host_devices_reading_count <= 1) &&
-                (non_host_devices_writing_count <= 1) &&
-                buf.device_first_touched != DeviceAPI::None;
 
             // Inject a dev_malloc if needed.
             if (!buf.dev_allocated &&
@@ -395,6 +415,7 @@ class InjectBufferCopies : public IRMutator {
 
         debug(4) << "Device " << static_cast<int>(device_api) << " writes buffer " << op->name << "\n";
         state[op->name].devices_writing.insert(device_api);
+        state[op->name].devices_touched.insert(device_api);
     }
 
     void visit(const Load *op) {
@@ -406,6 +427,7 @@ class InjectBufferCopies : public IRMutator {
 
         debug(4) << "Device " << static_cast<int>(device_api) << " reads buffer " << op->name << "\n";
         state[op->name].devices_reading.insert(device_api);
+        state[op->name].devices_touched.insert(device_api);
     }
 
     void visit(const Call *op) {
@@ -431,6 +453,7 @@ class InjectBufferCopies : public IRMutator {
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
             debug(4) << "Adding image read via image_load for " << buffer_var->name << "\n";
             state[buf_name].devices_reading.insert(device_api);
+            state[buf_name].devices_touched.insert(device_api);
             IRMutator::visit(op);
         } else if (op->is_intrinsic(Call::image_store)) {
             // counts as a device store
@@ -441,6 +464,7 @@ class InjectBufferCopies : public IRMutator {
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
             debug(4) << "Adding image write via image_store for " << buffer_var->name << "\n";
             state[buf_name].devices_writing.insert(device_api);
+            state[buf_name].devices_touched.insert(device_api);
             IRMutator::visit(op);
         } else {
             IRMutator::visit(op);
@@ -535,12 +559,18 @@ class InjectBufferCopies : public IRMutator {
                 << " cannot be used on the GPU, because it has more than four dimensions.\n";
         }
 
+        // Was this buffer touched by multiple different gpu apis
+        bool on_single_device = ((buf_info.devices_touched.size() < 2) ||
+                                 (buf_info.devices_touched.size() == 2 &&
+                                  buf_info.devices_touched.count(DeviceAPI::Host)));
+
         // If this buffer is only ever touched on gpu, nuke the host-side allocation.
         if (!buf_info.host_touched) {
             debug(4) << "Eliding host alloc for " << op->name << "\n";
             stmt = Allocate::make(op->name, op->type, op->extents, const_false(), op->body);
-        } else if (buf_info.on_single_device &&
-                   buf_info.dev_touched) {
+        } else if (on_single_device &&
+                   buf_info.dev_touched &&
+                   buf_info.device_first_touched != DeviceAPI::None) {
             debug(4) << "Making combined host/device alloc for " << op->name << "\n";
             Stmt inner_body = op->body;
             std::vector<const LetStmt *> body_lets;
@@ -562,13 +592,13 @@ class InjectBufferCopies : public IRMutator {
             // creation, use the host pointer as the allocation and
             // set the destructor to a nop.  (The Allocation
             // destructor cannot be used as it takes the host pointer
-            // as it's argument and we need the complete buffer_t.  it
+            // as it's argument and we need the complete buffer_t. It
             // would be possible to keep a map between host pointers
             // and dev ones to facilitate this, but it seems better to
             // just register a destructor with the buffer creation.)
             inner_body = Allocate::make(op->name, op->type, op->extents, op->condition, inner_body,
                                         Call::make(Handle(), Call::buffer_get_host,
-                                                   { Variable::make(type_of<struct buffer_t *>(), op->name + ".buffer") },
+                                                   { Variable::make(type_of<struct halide_buffer_t *>(), op->name + ".buffer") },
                                                    Call::Extern),
                                         "halide_device_host_nop_free"); // TODO: really should not have to introduce this routine to get a nop free
             // Wrap combined malloc around Allocate.
@@ -578,16 +608,13 @@ class InjectBufferCopies : public IRMutator {
             std::vector<Expr> create_buffer_args;
             internal_assert(buffer_init_let) << "Could not find definition of " << op->name << ".buffer\n";
 
-            const Call *possible_create_buffer = buffer_init_let->value.as<Call>();
-            if (possible_create_buffer != nullptr &&
-                possible_create_buffer->name == Call::buffer_init) {
-                // Use the same args, but with a zero host pointer.
-                create_buffer_args = possible_create_buffer->args;
-                create_buffer_args[1] = make_zero(Handle());
-            }
-
-            Expr buf = Call::make(type_of<struct buffer_t *>(), Call::buffer_init,
-                                  create_buffer_args, Call::Extern);
+            // The original buffer_init call uses address_of on the
+            // allocate node.  We want it to be initially null and let
+            // the device_and_host_malloc fill it in instead. The
+            // Allocate node was just rewritten to just grab this
+            // pointer out of the buffer after the combined
+            // allocation, so no memory is dropped.
+            Expr buf = NullifyHostField(op->name).mutate(buffer_init_let->value);
             stmt = LetStmt::make(op->name + ".buffer", buf, inner_body);
 
             // Rebuild any wrapped lets outside the one for the _halide_buffer_init
@@ -614,14 +641,9 @@ class InjectBufferCopies : public IRMutator {
                 return;
             }
 
-            Expr value = op->value;
             if (!state[buf_name].host_touched) {
                 // Use null as a host pointer if there's no host allocation
-                const Call *create_buffer = op->value.as<Call>();
-                internal_assert(create_buffer && create_buffer->name == Call::buffer_init);
-                vector<Expr> args = create_buffer->args;
-                args[1] = make_zero(Handle());
-                value = Call::make(type_of<struct buffer_t *>(), Call::buffer_init, args, Call::Extern);
+                Expr value = NullifyHostField(buf_name).mutate(op->value);
                 stmt = LetStmt::make(op->name, value, op->body);
             }
         }
@@ -668,10 +690,10 @@ class InjectBufferCopies : public IRMutator {
                                         then_state.current_device == else_state.current_device;
 
             if (then_state.device_first_touched == else_state.device_first_touched) {
-                merged_state.on_single_device = then_state.on_single_device && else_state.on_single_device;
                 merged_state.device_first_touched = then_state.device_first_touched;
             } else {
-                merged_state.on_single_device = false;
+                // Forbid a single shared host/dev allocation. Might
+                // result in allocating device memory pointlessly.
                 merged_state.device_first_touched = DeviceAPI::None;
             }
 
@@ -682,6 +704,9 @@ class InjectBufferCopies : public IRMutator {
             merged_state.devices_writing = then_state.devices_writing;
             merged_state.devices_writing.insert(else_state.devices_writing.begin(),
                                                 else_state.devices_writing.end());
+            merged_state.devices_touched = then_state.devices_touched;
+            merged_state.devices_touched.insert(else_state.devices_touched.begin(),
+                                                else_state.devices_touched.end());
 
             state[buf_name] = merged_state;
         }
@@ -726,7 +751,9 @@ class InjectBufferCopies : public IRMutator {
                 device_api = old_device_api;
             }
             internal_assert(device_api != DeviceAPI::None);
+
             IRMutator::visit(op);
+
             device_api = old_device_api;
         } else {
             IRMutator::visit(op);

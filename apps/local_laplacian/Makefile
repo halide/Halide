@@ -23,7 +23,7 @@ $(BIN)/out.png: $(BIN)/process
 # Build rules for generating a visualization of the pipeline using HalideTraceViz
 $(BIN)/viz/local_laplacian.a: $(BIN)/local_laplacian_exec
 	@-mkdir -p $(BIN)/viz
-	HL_TRACE=3 $^ -o $(BIN)/viz target=$(HL_TARGET) pyramid_levels=6
+	$^ -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations pyramid_levels=6
 
 $(BIN)/process_viz: process.cpp $(BIN)/viz/local_laplacian.a
 	@-mkdir -p $(BIN)/viz

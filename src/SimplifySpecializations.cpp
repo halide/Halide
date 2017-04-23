@@ -65,19 +65,69 @@ void simplify_using_fact(Expr fact, vector<Definition> &definitions) {
     }
 }
 
-vector<Definition> propagate_specialization_in_definition(Definition &def) {
+vector<Definition> propagate_specialization_in_definition(Definition &def, const string &name) {
     vector<Definition> result;
 
     result.push_back(def);
 
     vector<Specialization> &specializations = def.specializations();
+
+    // Prune specializations based on constants:
+    // -- Any Specializations that have const-false as a condition
+    // can never trigger; go ahead and prune them now to save time & energy
+    // during later phases.
+    // -- Once we encounter a Specialization that is const-true, no subsequent
+    // Specializations can ever trigger (since we evaluate them in order),
+    // so erase them.
+    bool seen_const_true = false;
+    for (auto it = specializations.begin(); it != specializations.end(); /*no-increment*/) {
+        Expr old_c = it->condition;
+        Expr c = simplify(it->condition);
+        // Go ahead and save the simplified condition now
+        it->condition = c;
+        if (is_zero(c) || seen_const_true) {
+            debug(1) << "Erasing unreachable specialization ("
+                << old_c << ") -> (" << c << ") for function \"" << name << "\"\n";
+            it = specializations.erase(it);
+        } else {
+            it++;
+        }
+        seen_const_true |= is_one(c);
+    }
+
+    // If the final Specialization is const-true, then the default schedule
+    // for the definition will never be run: replace the definition's main
+    // schedule with the one from the final Specialization and prune it from
+    // the list. This may leave the list of Specializations empty.
+    if (!specializations.empty() && is_one(specializations.back().condition) && specializations.back().failure_message.empty()) {
+        debug(1) << "Replacing default Schedule with const-true specialization for function \"" << name << "\"\n";
+        const Definition s_def = specializations.back().definition;
+        specializations.pop_back();
+
+        // The values/args needs to be copied over since they might have
+        // been simplified based on the predicate of the specialization.
+        def.values() = s_def.values();
+        def.args() = s_def.args();
+
+        // Only some parts of the schedule need to be copied over. The rests
+        // are only mutable from the default definition.
+        def.schedule().splits() = s_def.schedule().splits();
+        def.schedule().dims() = s_def.schedule().dims();
+        def.schedule().prefetches() = s_def.schedule().prefetches();
+        def.schedule().touched() = s_def.schedule().touched();
+        def.schedule().allow_race_conditions() = s_def.schedule().allow_race_conditions();
+
+        // Append our sub-specializations to the Definition's list
+        specializations.insert(specializations.end(), s_def.specializations().begin(), s_def.specializations().end());
+    }
+
     for (size_t i = specializations.size(); i > 0; i--) {
         Expr c = specializations[i-1].condition;
         Definition &s_def = specializations[i-1].definition;
         const EQ *eq = c.as<EQ>();
         const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
 
-        vector<Definition> s_result = propagate_specialization_in_definition(s_def);
+        vector<Definition> s_result = propagate_specialization_in_definition(s_def, name);
 
         if (var && eq) {
             // Then case
@@ -111,7 +161,7 @@ vector<Definition> propagate_specialization_in_definition(Definition &def) {
 void simplify_specializations(map<string, Function> &env) {
     for (auto &iter : env) {
         Function &func = iter.second;
-        propagate_specialization_in_definition(func.definition());
+        propagate_specialization_in_definition(func.definition(), func.name());
     }
 }
 

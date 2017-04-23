@@ -1,12 +1,13 @@
 #include "Halide.h"
 #include <cstdio>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 const int W = 4000, H = 2400;
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;
+using namespace Halide::Tools;
 
 Target target;
 

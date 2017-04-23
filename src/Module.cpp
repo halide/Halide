@@ -7,12 +7,14 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
+#include "HexagonOffload.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "IROperator.h"
 #include "Outputs.h"
 #include "StmtToHtml.h"
+#include "WrapExternStages.h"
 #include "ThreadPool.h"
 
 using Halide::Internal::debug;
@@ -110,6 +112,8 @@ struct ModuleContents {
     Target target;
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
+    std::vector<Module> submodules;
+    std::vector<ExternalCode> external_code;
 };
 
 template<>
@@ -122,11 +126,19 @@ EXPORT void destroy<ModuleContents>(const ModuleContents *f) {
     delete f;
 }
 
-LoweredFunc::LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage)
-    : name(name), args(args), body(body), linkage(linkage) {}
+LoweredFunc::LoweredFunc(const std::string &name,
+                         const std::vector<LoweredArgument> &args,
+                         Stmt body,
+                         LinkageType linkage,
+                         NameMangling name_mangling)
+    : name(name), args(args), body(body), linkage(linkage), name_mangling(name_mangling) {}
 
-LoweredFunc::LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
-    : name(name), body(body), linkage(linkage) {
+LoweredFunc::LoweredFunc(const std::string &name,
+                         const std::vector<Argument> &args,
+                         Stmt body,
+                         LinkageType linkage,
+                         NameMangling name_mangling)
+    : name(name), body(body), linkage(linkage), name_mangling(name_mangling) {
     for (const Argument &i : args) {
         this->args.push_back(i);
     }
@@ -158,6 +170,18 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
+std::vector<Internal::LoweredFunc> &Module::functions() {
+    return contents->functions;
+}
+
+const std::vector<Module> &Module::submodules() const {
+    return contents->submodules;
+}
+
+const std::vector<ExternalCode> &Module::external_code() const {
+    return contents->external_code;
+}
+
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
@@ -174,6 +198,14 @@ void Module::append(const Buffer<> &buffer) {
 
 void Module::append(const Internal::LoweredFunc &function) {
     contents->functions.push_back(function);
+}
+
+void Module::append(const Module &module) {
+    contents->submodules.push_back(module);
+}
+ 
+void Module::append(const ExternalCode &external_code) {
+    contents->external_code.push_back(external_code);
 }
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
@@ -202,7 +234,61 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
     return output;
 }
 
+Buffer<uint8_t> Module::compile_to_buffer() const {
+    // TODO: This Hexagon specific code should be removed as soon as possible.
+    return compile_module_to_hexagon_shared_object(*this);
+}
+
+Module Module::resolve_submodules() const {
+    if (submodules().empty()) {
+        return *this;
+    }
+
+    Module lowered_module(name(), target());
+
+    for (const auto &f : functions()) {
+        lowered_module.append(f);
+    }
+    for (const auto &buf : buffers()) {
+        lowered_module.append(buf);
+    }
+    for (const auto &ec : external_code()) {
+        lowered_module.append(ec);
+    }
+    for (const auto &m : submodules()) {
+        Module copy(m.resolve_submodules());
+
+        // Propagate external code blocks.
+        for (const auto &ec : external_code()) {
+            // TODO(zalman): Is this the right thing to do?
+            bool already_in_list = false;
+            for (const auto &ec_sub : copy.external_code()) {
+                if (ec_sub.name() == ec.name()) {
+                    already_in_list = true;
+                    break;
+                }
+            }
+            if (!already_in_list) {
+                copy.append(ec);
+            }
+        }
+
+        auto buf = copy.compile_to_buffer();
+        lowered_module.append(buf);
+    }
+
+    return lowered_module;
+}
+
 void Module::compile(const Outputs &output_files) const {
+    // If there are submodules, recursively lower submodules to
+    // buffers on a copy of the module being compiled, then compile
+    // the copied module.
+    if (!submodules().empty()) {
+        resolve_submodules().compile(output_files);
+        return;
+    }
+
     if (!output_files.object_name.empty() || !output_files.assembly_name.empty() ||
         !output_files.bitcode_name.empty() || !output_files.llvm_assembly_name.empty() ||
         !output_files.static_library_name.empty()) {
@@ -218,7 +304,7 @@ void Module::compile(const Outputs &output_files) const {
             // To simplify the code, we always create a temporary object output
             // here, even if output_files.object_name was also set: in practice,
             // no real-world code ever sets both object_name and static_library_name
-            // at the same time, so there is no meaningful performance advantage 
+            // at the same time, so there is no meaningful performance advantage
             // to be had.
             TemporaryObjectFileDir temp_dir;
             {
@@ -252,6 +338,7 @@ void Module::compile(const Outputs &output_files) const {
         debug(1) << "Module.compile(): c_header_name " << output_files.c_header_name << "\n";
         std::ofstream file(output_files.c_header_name);
         Internal::CodeGen_C cg(file,
+                               target(),
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
                                output_files.c_header_name);
@@ -261,6 +348,7 @@ void Module::compile(const Outputs &output_files) const {
         debug(1) << "Module.compile(): c_source_name " << output_files.c_source_name << "\n";
         std::ofstream file(output_files.c_source_name);
         Internal::CodeGen_C cg(file,
+                               target(),
                                target().has_feature(Target::CPlusPlusMangling) ?
                                Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
@@ -328,7 +416,7 @@ void compile_multitarget(const std::string &fn_name,
     // For safety, the runtime must be built only with features common to all
     // of the targets; given an unusual ordering like
     //
-    //     x86-64-linux,x86-64-sse41 
+    //     x86-64-linux,x86-64-sse41
     //
     // we should still always be *correct*: this ordering would never select sse41
     // (since x86-64-linux would be selected first due to ordering), but could
@@ -395,8 +483,8 @@ void compile_multitarget(const std::string &fn_name,
         const uint64_t cur_target_mask = target_feature_mask(target);
         Expr can_use = (target == base_target) ?
                         IntImm::make(Int(32), 1) :
-                        Call::make(Int(32), "halide_can_use_target_features", 
-                                   {UIntImm::make(UInt(64), cur_target_mask)}, 
+                        Call::make(Int(32), "halide_can_use_target_features",
+                                   {UIntImm::make(UInt(64), cur_target_mask)},
                                    Call::Extern);
 
         runtime_features_mask &= cur_target_mask;
@@ -455,7 +543,11 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         Module wrapper_module(fn_name, wrapper_target);
-        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::External));
+        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LoweredFunc::ExternalPlusMetadata));
+
+        // Add a wrapper to accept old buffer_ts
+        add_legacy_wrapper(wrapper_module, wrapper_module.functions().back());
+
         Outputs wrapper_out = Outputs().object(
             temp_dir.add_temp_object_file(output_files.static_library_name, "_wrapper", base_target, /* in_front*/ true));
         futures.emplace_back(pool.async([](Module m, Outputs o) {
@@ -466,7 +558,7 @@ void compile_multitarget(const std::string &fn_name,
 
     if (!output_files.c_header_name.empty()) {
         Module header_module(fn_name, base_target);
-        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::External));
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LoweredFunc::ExternalPlusMetadata));
         Outputs header_out = Outputs().c_header(output_files.c_header_name);
         futures.emplace_back(pool.async([](Module m, Outputs o) {
             debug(1) << "compile_multitarget: c_header_name " << o.c_header_name << "\n";

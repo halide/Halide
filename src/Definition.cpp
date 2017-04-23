@@ -116,6 +116,7 @@ Definition Definition::deep_copy(
         Specialization s_copy;
         s_copy.condition = s.condition;
         s_copy.definition = s.definition.deep_copy(copied_map);
+        s_copy.failure_message = s.failure_message;
         copy.contents->specializations.push_back(std::move(s_copy));
     }
     return copy;
@@ -195,6 +196,8 @@ const Specialization &Definition::add_specialization(Expr condition) {
     s.definition.contents->schedule.dims()             = contents->schedule.dims();
     s.definition.contents->schedule.storage_dims()     = contents->schedule.storage_dims();
     s.definition.contents->schedule.bounds()           = contents->schedule.bounds();
+    s.definition.contents->schedule.prefetches()       = contents->schedule.prefetches();
+    s.definition.contents->schedule.wrappers()         = contents->schedule.wrappers();
     s.definition.contents->schedule.memoized()         = contents->schedule.memoized();
     s.definition.contents->schedule.touched()          = contents->schedule.touched();
     s.definition.contents->schedule.allow_race_conditions() = contents->schedule.allow_race_conditions();

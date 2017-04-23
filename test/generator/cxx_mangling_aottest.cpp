@@ -6,9 +6,7 @@
 #include <string.h>
 
 #include "cxx_mangling.h"
-#if WITH_PTX
 #include "cxx_mangling_gpu.h"
-#endif
 
 using namespace Halide::Runtime;
 
@@ -58,12 +56,24 @@ int main(int argc, char **argv) {
     std::string *string_ptr = nullptr;
     const std::string *const_string_ptr = nullptr;
 
-#if WITH_PTX
     // Don't bother calling this (we haven't linked in the CUDA support it needs),
     // just force a reference to ensure it is linked in.
-    auto f = HalideTest::cxx_mangling_gpu;
+    int (*f)(halide_buffer_t *,
+             int8_t, uint8_t,
+             int16_t, uint16_t,
+             int32_t, uint32_t,
+             int64_t, uint64_t,
+             bool,
+             float, double,
+             int32_t *, int32_t const *,
+             void *, void const *,
+             void *, void const *,
+             ::my_namespace::my_class const *, 
+             struct ::my_namespace::my_subnamespace::my_struct const *, 
+             my_union const *,
+             halide_buffer_t *) = HalideTest::cxx_mangling_gpu;
+
     printf("HalideTest::cxx_mangling is at: %p\n", (void*) f);
-#endif
 
     my_namespace::my_class mc;
     my_namespace::my_subnamespace::my_struct ms;

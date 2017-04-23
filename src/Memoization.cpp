@@ -311,21 +311,19 @@ public:
     Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true())},
-                                  Call::PureIntrinsic));
+        args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
-        args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
+        args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
-            buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+            buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
-        args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
+        args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
         return Call::make(Int(32), "halide_memoization_cache_lookup", args, Call::Extern);
     }
@@ -334,21 +332,19 @@ public:
     Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true())},
-                                  Call::PureIntrinsic));
+        args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
-        args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
+        args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
         std::vector<Expr> buffers;
         if (tuple_count == 1) {
-            buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+            buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<halide_buffer_t *>(), storage_base_name + "." + std::to_string(i) + ".buffer"));
             }
         }
-        args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
+        args.push_back(Call::make(type_of<halide_buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
         return Evaluate::make(Call::make(Int(32), "halide_memoization_cache_store", args, Call::Extern));
@@ -532,32 +528,23 @@ private:
     void visit(const Call *call) {
         if (!innermost_realization_name.empty() &&
             call->name == Call::buffer_init) {
-            internal_assert(call->args.size() >= 2)
+            internal_assert(call->args.size() >= 3)
                 << "RewriteMemoizedAllocations: _halide_buffer_init call with fewer than two args.\n";
 
             // Grab the host pointer argument
-            const Call *arg1 = call->args[1].as<Call>();
-            if (arg1 != nullptr && arg1->is_intrinsic(Call::address_of)) {
-                internal_assert(!arg1->args.empty()) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
-                const Load *load = arg1->args[0].as<Load>();
-                if (load != nullptr) {
-                    const IntImm *index = load->index.as<IntImm>();
-
-                    if (index != nullptr && index->value == 0 &&
-                        get_realization_name(load->name) == innermost_realization_name) {
-                        // Everything matches, rewrite _halide_buffer_init to use a nullptr handle for address.
-                        std::vector<Expr> args = call->args;
-                        args[1] = make_zero(Handle());
-                        expr = Call::make(type_of<struct buffer_t *>(), Call::buffer_init,
-                                          args, Call::Extern);
-                        return;
-                    }
-                }
+            const Variable *var = call->args[2].as<Variable>();
+            if (var && get_realization_name(var->name) == innermost_realization_name) {
+                // Rewrite _halide_buffer_init to use a nullptr handle for address.
+                std::vector<Expr> args = call->args;
+                args[2] = make_zero(Handle());
+                expr = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,
+                                  args, Call::Extern);
+                return;
             }
-      }
+        }
 
-      // If any part of the match failed, do default mutator action.
-      IRMutator::visit(call);
+        // If any part of the match failed, do default mutator action.
+        IRMutator::visit(call);
     }
 
     void visit(const LetStmt *let) {
@@ -573,7 +560,7 @@ private:
                 // Make the allocation node
                 body = Allocate::make(allocation->name, allocation->type, allocation->extents, allocation->condition, body,
                                       Call::make(Handle(), Call::buffer_get_host,
-                                                 { Variable::make(type_of<struct buffer_t *>(), allocation->name + ".buffer") }, Call::Extern),
+                                                 { Variable::make(type_of<struct halide_buffer_t *>(), allocation->name + ".buffer") }, Call::Extern),
                                       "halide_memoization_cache_release");
             }
 

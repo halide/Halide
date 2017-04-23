@@ -205,12 +205,17 @@ public:
     EXPORT Expr make_call_to_extern_definition(const std::vector<Expr> &args,
                                                const Target &t) const;
 
+    /** Check if the extern function being called expects the legacy
+     * buffer_t type. */
+    EXPORT bool extern_definition_uses_old_buffer_t() const;
+
     /** Add an external definition of this Func. */
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
                               int dimensionality,
-                              NameMangling mangling);
+                              NameMangling mangling,
+                              bool uses_old_buffer_t);
 
     /** Retrive the arguments of the extern definition. */
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;
@@ -272,6 +277,10 @@ public:
     EXPORT Function &substitute_calls(const std::map<Function, Function, Compare> &substitutions);
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
     // @}
+
+    /** Find all Vars that are placeholders for ScheduleParams and substitute in
+     * the corresponding constant value. */
+    EXPORT Function &substitute_schedule_param_exprs();
 };
 
 }}
