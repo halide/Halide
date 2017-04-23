@@ -96,6 +96,11 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         Func(f).compute_root().store_root();
     }
 
+    // Ensure that all ScheduleParams become well-defined constant Exprs.
+    for (auto &f : env) {
+        f.second.substitute_schedule_param_exprs();
+    }
+
     // Substitute in wrapper Funcs
     env = wrap_func_calls(env);
 
@@ -123,10 +128,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     } else {
         debug(1) << "Skipping injecting memoization...\n";
     }
-
-    debug(1) << "Injecting prefetches...\n";
-    s = inject_prefetch(s, env);
-    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs, t);
@@ -184,6 +185,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
     s = simplify(s, false);
     debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
+
+    debug(1) << "Injecting prefetches...\n";
+    s = inject_prefetch(s, env);
+    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
