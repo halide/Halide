@@ -573,6 +573,16 @@ class ReplaceParams : public IRMutator {
 
     using IRMutator::visit;
 
+    void visit(const AddressOf *op) {
+        auto i = replacements.find(op->name);
+        if (i != replacements.end()) {
+            expr = AddressOf::make(op->name, mutate(op->index), op->elem_type,
+                                   op->image, i->second);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const Load *op) {
         auto i = replacements.find(op->name);
         if (i != replacements.end()) {

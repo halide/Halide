@@ -64,6 +64,12 @@ public:
         }
     }
 
+    void visit(const AddressOf *address) {
+        if (address->param.defined()) {
+            record(address->param);
+        }
+        IRGraphVisitor::visit(address);
+    }
 
     void visit(const Load *load) {
         if (load->param.defined()) {
@@ -181,9 +187,7 @@ class KeyInfo {
 #define USE_FULL_NAMES_IN_KEY 0
 #if USE_FULL_NAMES_IN_KEY
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
-        Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(UInt(8), key_name, index, Buffer<>(), Parameter(), const_true())},
-                               Call::PureIntrinsic);
+        Expr dest = AddressOf::make(key_name, index, UInt(8), Buffer<>(), Parameter());
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
 

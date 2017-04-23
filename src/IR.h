@@ -487,7 +487,6 @@ struct Call : public ExprNode<Call> {
         count_leading_zeros,
         count_trailing_zeros,
         undef,
-        address_of,
         return_second,
         if_then_else,
         glsl_texture_load,
@@ -731,6 +730,27 @@ struct Prefetch : public StmtNode<Prefetch> {
                             const Region &bounds, Parameter param = Parameter());
 
     static const IRNodeType _type_info = IRNodeType::Prefetch;
+};
+
+/** Equivalent to a Load node, but this represents the address that would be
+ * loaded from rather than the value. */
+struct AddressOf : public ExprNode<AddressOf> {
+    std::string name;
+    Expr index;
+    Type elem_type;
+
+    // If it's an address of an image argument or compiled-in constant
+    // image, this will point to that
+    Buffer<> image;
+
+    // If it's an address of an image parameter, this points to that
+    Parameter param;
+
+    EXPORT static Expr make(const std::string &name, const Expr &index,
+                            Type elem_type, Buffer<> image = Buffer<>(),
+                            Parameter param = Parameter());
+
+    static const IRNodeType _type_info = IRNodeType::AddressOf;
 };
 
 }

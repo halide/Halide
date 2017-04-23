@@ -137,6 +137,11 @@ class Inliner : public IRMutator {
         found = old_found;
     }
 
+    void visit(const AddressOf *op) {
+        internal_assert(op->name != func.name())
+            << "Address of an inlined function \"" << func.name() << "\" is undefined\n";
+    }
+
 public:
     bool found;
 

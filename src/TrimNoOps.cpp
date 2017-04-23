@@ -41,6 +41,14 @@ class StripIdentities : public IRMutator {
 class LoadsFromBuffer : public IRVisitor {
     using IRVisitor::visit;
 
+    void visit(const AddressOf *op) {
+        if (op->name == buffer) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
     void visit(const Load *op) {
         if (op->name == buffer) {
             result = true;

@@ -229,6 +229,15 @@ class ExprUsesInvalidBuffers : public IRVisitor {
             IRVisitor::visit(op);
         }
     }
+
+    void visit(const AddressOf *op) {
+        if (invalid_buffers.contains(op->name)) {
+            invalid = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
 public:
     ExprUsesInvalidBuffers(const Scope<int> &buffers) : invalid_buffers(buffers), invalid(false) {}
     bool invalid;

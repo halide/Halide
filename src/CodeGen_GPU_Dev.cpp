@@ -78,6 +78,16 @@ class IsBufferConstant : public IRVisitor {
         }
     }
 
+    void visit(const AddressOf *op) {
+        if (op->name == buffer &&
+            !CodeGen_GPU_Dev::is_block_uniform(op->index)) {
+            result = false;
+        }
+        if (result) {
+            IRVisitor::visit(op);
+        }
+    }
+
 public:
     bool result;
     const std::string &buffer;

@@ -146,6 +146,10 @@ class ExprIsPure : public IRVisitor {
         }
     }
 
+    void visit(const AddressOf *op) {
+        result = false;
+    }
+
     void visit(const Load *op) {
         if (!op->image.defined() && !op->param.defined()) {
             // It's a load from an internal buffer, which could
@@ -6293,8 +6297,7 @@ void simplify_test() {
 
     {
         // Check that contiguous prefetch call get collapsed
-        Expr load = Load::make(Int(32), "buf", x, Buffer<>(), Parameter(), const_true());
-        Expr base = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
+        Expr base = AddressOf::make("buf", x, Int(32));
         check(Call::make(Int(32), Call::prefetch, {base, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
               Call::make(Int(32), Call::prefetch, {base, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }

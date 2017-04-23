@@ -723,6 +723,7 @@ protected:
     virtual void visit(const Block *);
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
+    virtual void visit(const AddressOf *);
 };
 
 Stmt IRFilter::mutate(Expr e) {
@@ -800,6 +801,10 @@ void IRFilter::visit(const Select *op)  {
 
 void IRFilter::visit(const Load *op) {
     mutate_operator(this, op, op->predicate, op->index, &stmt);
+}
+
+void IRFilter::visit(const AddressOf *op) {
+    mutate_operator(this, op, op->index, &stmt);
 }
 
 void IRFilter::visit(const Ramp *op) {
