@@ -1519,18 +1519,16 @@ void CodeGen_Hexagon::visit(const Call *op) {
         internal_assert((op->args.size() == 4) || (op->args.size() == 6))
             << "Hexagon only supports 1D or 2D prefetch\n";
 
-        const Variable *base = op->args[0].as<Variable>();
-        internal_assert(base && base->type.is_handle());
-
         vector<llvm::Value *> args;
-        args.push_back(codegen_buffer_pointer(base->name, op->type, op->args[1]));
+        args.push_back(codegen_buffer_pointer(codegen(op->args[0]), op->type, op->args[1]));
+
         Expr extent_0_bytes = op->args[2] * op->args[3] * op->type.bytes();
         args.push_back(codegen(extent_0_bytes));
 
         llvm::Function *prefetch_fn = nullptr;
-        if (op->args.size() == 4) { // 1D prefetch: {base address, offset, extent0, stride0}
+        if (op->args.size() == 4) { // 1D prefetch: {base, offset, extent0, stride0}
             prefetch_fn = module->getFunction("_halide_prefetch");
-        } else { // 2D prefetch: {base address, offset, extent0, stride0, extent1, stride1}
+        } else { // 2D prefetch: {base, offset, extent0, stride0, extent1, stride1}
             prefetch_fn = module->getFunction("_halide_prefetch_2d");
             args.push_back(codegen(op->args[4]));
             Expr stride_1_bytes = op->args[5] * op->type.bytes();
