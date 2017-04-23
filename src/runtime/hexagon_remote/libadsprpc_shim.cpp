@@ -1,5 +1,6 @@
 #include <dlfcn.h>
 #include <stdint.h>
+#include <sys/stat.h>
 #include <android/log.h>
 
 // This is a shim to look like we linked to libadsprpc.so, but without
@@ -10,7 +11,23 @@
 
 namespace {
 
-void *libadsprpc = dlopen("libadsprpc.so", RTLD_LAZY | RTLD_LOCAL);
+bool has_cdsp() {
+    const char *cdsp_location = "/dev/subsys_cdsp";
+    #ifdef _MSC_VER
+    struct _stat a;
+    if (_stat(cdsp_location, &a) != 0) {
+        return false;
+    }
+    #else
+    struct stat a;
+    if (::stat(cdsp_location, &a) != 0) {
+        return false;
+    }
+    #endif
+    return true;
+}
+
+void *libadsprpc = dlopen(has_cdsp() ? "libcdsprpc.so" : "libadsprpc.so", RTLD_LAZY | RTLD_LOCAL);
 
 template <typename T>
 T get_libadsprpc_symbol(const char *sym) {
