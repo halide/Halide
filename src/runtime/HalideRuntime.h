@@ -780,6 +780,9 @@ enum halide_error_code_t {
      * can't be expressed in the old buffer_t. */
     halide_error_code_failed_to_downgrade_buffer_t = -30,
 
+    /** A specialize_fail() schedule branch was selected at runtime. */
+    halide_error_code_specialize_fail = -31,
+
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -848,6 +851,7 @@ extern int halide_error_bad_fold(void *user_context, const char *func_name, cons
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);
 extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
+extern int halide_error_specialize_fail(void *user_context, const char *message);
 
 // @}
 
@@ -1119,6 +1123,8 @@ extern "C" {
 
 /** The old buffer_t, included for compatibility with old code. Don't
  * use it. */
+#ifndef BUFFER_T_DEFINED
+#define BUFFER_T_DEFINED
 typedef struct buffer_t {
     uint64_t dev;
     uint8_t* host;
@@ -1130,6 +1136,7 @@ typedef struct buffer_t {
     HALIDE_ATTRIBUTE_ALIGN(1) bool dev_dirty;
     HALIDE_ATTRIBUTE_ALIGN(1) uint8_t _padding[10 - sizeof(void *)];
 } buffer_t;
+#endif // BUFFER_T_DEFINED
 
 /** Copies host pointer, mins, extents, strides, and device state from
  * an old-style buffer_t into a new-style halide_buffer_t. The

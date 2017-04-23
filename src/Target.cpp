@@ -96,12 +96,12 @@ Target calculate_host_target() {
 
     int info[4];
     cpuid(info, 1, 0);
-    bool have_sse41  = info[2] & (1 << 19);
-    bool have_sse2   = info[3] & (1 << 26);
-    bool have_avx    = info[2] & (1 << 28);
-    bool have_f16c   = info[2] & (1 << 29);
-    bool have_rdrand = info[2] & (1 << 30);
-    bool have_fma    = info[2] & (1 << 12);
+    bool have_sse41  = (info[2] & (1 << 19)) != 0;
+    bool have_sse2   = (info[3] & (1 << 26)) != 0;
+    bool have_avx    = (info[2] & (1 << 28)) != 0;
+    bool have_f16c   = (info[2] & (1 << 29)) != 0;
+    bool have_rdrand = (info[2] & (1 << 30)) != 0;
+    bool have_fma    = (info[2] & (1 << 12)) != 0;
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
