@@ -236,7 +236,30 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 
 Buffer<uint8_t> Module::compile_to_buffer() const {
     // TODO: This Hexagon specific code should be removed as soon as possible.
-    return compile_module_to_hexagon_shared_object(*this);
+    // This may involve adding more general support for post-processing and
+    // a way of specifying to use it.
+    if (target().arch == Target::Hexagon) {
+        return compile_module_to_hexagon_shared_object(*this);
+    }
+    
+    llvm::LLVMContext context;
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
+
+    llvm::SmallVector<char, 4096> object;
+    llvm::raw_svector_ostream object_stream(object);
+    compile_llvm_module_to_object(*llvm_module, object_stream);
+
+    if (debug::debug_level() >= 2) {
+        debug(2) << "Submodule assembly for " << name() << ": " << "\n";
+        llvm::SmallString<4096> assembly;
+        llvm::raw_svector_ostream assembly_stream(assembly);
+        compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+        debug(2) << assembly.c_str() << "\n";
+    }
+
+    Buffer<uint8_t> result(object.size(), name());
+    memcpy(result.data(), reinterpret_cast<uint8_t*>(&object[0]), object.size());
+    return result;
 }
 
 Module Module::resolve_submodules() const {
