@@ -431,20 +431,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     void visit(const Call *op) {
-        if (op->is_intrinsic(Call::address_of)) {
-            // We're after storage flattening, so the sole arg should be a load.
-            internal_assert(op->args.size() == 1);
-            const Load *l = op->args[0].as<Load>();
-            internal_assert(l);
-            Expr new_index = mutate(l->index);
-            if (l->index.same_as(new_index)) {
-                expr = op;
-            } else {
-                Expr new_load = Load::make(l->type, l->name, new_index, Buffer<>(),
-                                           Parameter(), const_true(l->type.lanes()));
-                expr = Call::make(op->type, op->name, {new_load}, Call::Intrinsic);
-            }
-        } else if (op->is_intrinsic(Call::image_load)) {
+        if (op->is_intrinsic(Call::image_load)) {
             // counts as a device read
             internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
@@ -609,7 +596,7 @@ class InjectBufferCopies : public IRMutator {
             internal_assert(buffer_init_let) << "Could not find definition of " << op->name << ".buffer\n";
 
             // The original buffer_init call uses address_of on the
-            // allocate node.  We want it to be initially null and let
+            // allocate node. We want it to be initially null and let
             // the device_and_host_malloc fill it in instead. The
             // Allocate node was just rewritten to just grab this
             // pointer out of the buffer after the combined
