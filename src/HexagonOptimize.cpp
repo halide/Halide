@@ -1520,18 +1520,8 @@ class OptimizeShuffles : public IRMutator {
     int lut_alignment;
     Scope<Interval> bounds;
     std::vector<std::pair<string, Expr>> lets;
-    bool inside_address_of = false;
 
     using IRMutator::visit;
-
-    void visit(const Call *op) {
-        bool old_inside_address_of = inside_address_of;
-        if (op->is_intrinsic(Call::address_of)) {
-            inside_address_of = true;
-        }
-        IRMutator::visit(op);
-        inside_address_of = old_inside_address_of;
-    }
 
     template <typename T>
     void visit_let(const T *op) {
@@ -1553,11 +1543,6 @@ class OptimizeShuffles : public IRMutator {
     void visit(const LetStmt *op) { visit_let(op); }
 
     void visit(const Load *op) {
-        if (inside_address_of) {
-            // We shouldn't mess with load inside an address_of.
-            IRMutator::visit(op);
-            return;
-        }
         if (!is_one(op->predicate)) {
             // TODO(psuriana): We shouldn't mess with predicated load for now.
             IRMutator::visit(op);
