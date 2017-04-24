@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
         // already created by the first call, it doesn't make a new one.
 
         h.realize(8, 8);
-        // See figures/lesson_18_wrapper_vary_schedule.mp4 for a
+        // See figures/lesson_19_wrapper_vary_schedule.mp4 for a
         // visualization.
 
         // Note that because f is inlined into its two wrappers, it is
