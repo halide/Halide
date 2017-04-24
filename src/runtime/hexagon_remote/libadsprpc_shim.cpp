@@ -3,9 +3,9 @@
 #include <sys/stat.h>
 #include <android/log.h>
 
-// This is a shim to look like we linked to libadsprpc.so, but without
-// actually linking to it. The android loader seems to have problems
-// with loading libhalide_hexagon_host.so unless we do this.
+// This is a shim to allow dynamic loading of either libcdsprpc.so which
+// supports a compute DSP node on hexagon (SDM660 for example) with HVX.
+// Or an Audio DSP node which supports HVX on 8996/8998 devices (legacy mode).
 
 #define WEAK __attribute__((weak))
 
@@ -13,17 +13,10 @@ namespace {
 
 bool has_cdsp() {
     const char *cdsp_location = "/dev/subsys_cdsp";
-    #ifdef _MSC_VER
-    struct _stat a;
-    if (_stat(cdsp_location, &a) != 0) {
-        return false;
-    }
-    #else
     struct stat a;
     if (::stat(cdsp_location, &a) != 0) {
         return false;
     }
-    #endif
     return true;
 }
 
@@ -89,35 +82,35 @@ extern "C" {
 // replaced by those in libadsprpc.so, that's fine, that's what we're
 // trying to do anyways.
 WEAK int remote_handle_open(const char *name, remote_handle *h) {
-    return handle_open_fn(name, h);
+    return handle_open_fn ? handle_open_fn(name, h) : -1;
 }
 
 WEAK int remote_handle64_open(const char *name, remote_handle64 *h) {
-    return handle64_open_fn(name, h);
+    return handle64_open_fn ? handle64_open_fn(name, h) : -1;
 }
 
 WEAK int remote_handle_invoke(remote_handle h, uint32_t scalars, remote_arg *args) {
-    return handle_invoke_fn(h, scalars, args);
+    return handle_invoke_fn ? handle_invoke_fn(h, scalars, args) : -1;
 }
 
 WEAK int remote_handle64_invoke(remote_handle64 h, uint32_t scalars, remote_arg *args) {
-    return handle64_invoke_fn(h, scalars, args);
+    return handle64_invoke_fn ? handle64_invoke_fn(h, scalars, args) : -1;
 }
 
 WEAK int remote_handle_close(remote_handle h) {
-    return handle_close_fn(h);
+    return handle_close_fn ? handle_close_fn(h) : -1;
 }
 
 WEAK int remote_handle64_close(remote_handle64 h) {
-    return handle64_close_fn(h);
+    return handle64_close_fn ? handle64_close_fn(h) : -1;
 }
 
 WEAK int remote_mmap(int fd, uint32_t flags, uint32_t addr, int size, uint32_t *result) {
-    return mmap_fn(fd, flags, addr, size, result);
+    return mmap_fn ? mmap_fn(fd, flags, addr, size, result) : -1;
 }
 
 WEAK int remote_munmap(uint32_t addr, int size) {
-    return munmap_fn(addr, size);
+    return munmap_fn ? munmap_fn(addr, size) : -1;
 }
 
 WEAK void remote_register_buf(void *buf, int size, int fd) {
@@ -128,7 +121,7 @@ WEAK void remote_register_buf(void *buf, int size, int fd) {
 }
 
 WEAK int remote_set_mode(uint32_t mode) {
-    return set_mode_fn(mode);
+    return set_mode_fn ? set_mode_fn(mode) : -1;
 }
 
 }  // extern "C"
