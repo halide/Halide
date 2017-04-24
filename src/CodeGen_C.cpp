@@ -977,8 +977,9 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::alloca)) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->type.is_handle());
+        const Call *call = op->args[0].as<Call>();
         if (op->type == type_of<struct halide_buffer_t *>() &&
-            is_const(op->args[0], (int)sizeof(halide_buffer_t))) {
+            call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
             do_indent();
             string buf_name = unique_name('b');
             stream << "halide_buffer_t " << buf_name << ";\n";
@@ -1100,6 +1101,8 @@ void CodeGen_C::visit(const Call *op) {
             << " + " << print_expr(op->args[1]) << "), 1)";
     } else if (op->is_intrinsic(Call::indeterminate_expression)) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
+    } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
+        rhs << "(sizeof(halide_buffer_t))";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         // TODO: other intrinsics
