@@ -4252,6 +4252,8 @@ private:
             // Collapse the prefetched region into lower dimension whenever is possible.
             // TODO(psuriana): Deal with negative strides and overlaps.
 
+            internal_assert(op->args.size() % 2 == 0); // Format: {base, offset, extent0, min0, ...}
+
             vector<Expr> args(op->args);
             bool changed = false;
             for (size_t i = 0; i < op->args.size(); ++i) {
@@ -4265,7 +4267,7 @@ private:
             // based on the storage dimension in ascending order (i.e. innermost
             // first and outermost last), so, it is enough to check for the upper
             // triangular pairs to see if any contiguous addresses exist.
-            for (size_t i = 1; i < args.size(); i += 2) {
+            for (size_t i = 2; i < args.size(); i += 2) {
                 Expr extent_0 = args[i];
                 Expr stride_0 = args[i + 1];
                 for (size_t j = i + 2; j < args.size(); j += 2) {
@@ -6293,10 +6295,9 @@ void simplify_test() {
 
     {
         // Check that contiguous prefetch call get collapsed
-        Expr load = Load::make(Int(32), "buf", x, Buffer<>(), Parameter(), const_true());
-        Expr base = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
-        check(Call::make(Int(32), Call::prefetch, {base, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
-              Call::make(Int(32), Call::prefetch, {base, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+        Expr base = Variable::make(Handle(), "buf");
+        check(Call::make(Int(32), Call::prefetch, {base, x, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+              Call::make(Int(32), Call::prefetch, {base, x, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }
 
     // Check min(x, y)*max(x, y) gets simplified into x*y
