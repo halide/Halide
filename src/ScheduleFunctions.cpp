@@ -455,7 +455,7 @@ Stmt build_produce(Function f, const Target &target) {
                 int dimensions = p.second;
                 // Return type is really 'void', but no way to represent that in our IR.
                 // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Expr sizeof_buffer_t = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
+                Expr sizeof_buffer_t = cast<uint64_t>(Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
                 Stmt mark_buffer =
                     Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                               {buffer, sizeof_buffer_t}, Call::Extern));
