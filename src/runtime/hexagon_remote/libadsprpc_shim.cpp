@@ -49,8 +49,6 @@ typedef union {
     remote_handle64 handle64;
 } remote_arg;
 
-// Due to some ridiculous Android dlopen behavior, we need to dlopen
-// and dlsym the symbols from libadsprpc.so ourselves.
 typedef int (*remote_handle_open_fn)(const char *, remote_handle *);
 typedef int (*remote_handle64_open_fn)(const char *, remote_handle64 *);
 typedef int (*remote_handle_invoke_fn)(remote_handle, uint32_t, remote_arg *pra);
