@@ -1096,7 +1096,7 @@ public:
      * this Func by any other Func. If a global wrapper already
      * exists, returns it. The global wrapper is only used by callers
      * for which no custom wrapper has been specified.
-    */
+     */
     EXPORT Func in();
 
     /** Split a dimension into inner and outer subdimensions with the
