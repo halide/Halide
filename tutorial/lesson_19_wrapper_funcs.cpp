@@ -1,8 +1,8 @@
 // Halide tutorial lesson 19: Wrapper Funcs
 
 // This lesson demonstrates how to use Func::in and ImageParam::in to
-// schedule a Func differently in different places and to stage loads from
-// a Func or an ImageParam.
+// schedule a Func differently in different places, and to stage loads
+// from a Func or an ImageParam.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_19*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_19 -std=c++11
@@ -15,8 +15,7 @@
 // If you have the entire Halide source tree, you can also build it by
 // running:
 //    make tutorial_lesson_19_staging_func_or_image_param
-// in a shell with the current directory at the top of the halide
-// source tree.
+// in a shell at the top of the halide source tree.
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.
 #include "Halide.h"
@@ -46,7 +45,7 @@ int main(int argc, char **argv) {
         //     f(x, y) = x + y
         // for y:
         //   for x:
-        //     g(x, y) = 2 * f(x, y)
+        //     g(x, y) = 2 * f(x, y) + 3
 
         // Using Func::in, we can interpose a new Func in between f
         // and g using the schedule alone:
@@ -65,12 +64,11 @@ int main(int argc, char **argv) {
         //     f_in_g(x, y) = f(x, y)
         // for y:
         //   for x:
-        //     g(x, y) = 2 * f_in_g(x, y)
+        //     g(x, y) = 2 * f_in_g(x, y) + 3
 
         g.realize(5, 5);
 
-        // See figures/lesson_19_wrapper_local.mp4 for a
-        // visualization of what this did.
+        // See figures/lesson_19_wrapper_local.mp4 for a visualization.
 
         // The schedule directive f.in(g) replaces all calls to 'f'
         // inside 'g' with a wrapper Func and then returns that
@@ -236,12 +234,11 @@ int main(int argc, char **argv) {
         Func f_tile = f.in(g);
 
         // We now have a three stage pipeline:
-        // f -> f_transpose -> g
+        // f -> f_tile -> g
 
-        // f_tile will be responsible for loading from f into
-        // registers, f_tile_transpose will load vectors of f, and
-        // store them transposed. g will then write this data back to
-        // main memory.
+        // f_tile will load vectors of f, and store them transposed
+        // into registers. g will then write this data back to main
+        // memory.
         g.tile(x, y, xo, yo, xi, yi, 4, 4)
             .vectorize(xi)
             .unroll(yi);
@@ -287,10 +284,10 @@ int main(int argc, char **argv) {
         // _0 and _1 to gpu threads.
         img.in(blur).compute_at(blur, xo).gpu_threads(_0, _1);
 
-        // Without Func::in, an 8x8 tile of f would do 8x8x9 loads to
-        // global memory. With Func::in, the wrapper does 10x10 loads
-        // to global memory up front, and then f does 8x8x9 loads to
-        // shared/local memory.
+        // Without Func::in, computing an 8x8 tile of blur would do
+        // 8*8*9 loads to global memory. With Func::in, the wrapper
+        // does 10*10 loads to global memory up front, and then blur
+        // does 8*8*9 loads to shared/local memory.
 
         // Select an appropriate GPU API, as we did in lesson 12
         Target target = get_host_target();
@@ -335,8 +332,11 @@ int main(int argc, char **argv) {
         // pipeline, which computes a value per pixel, then sweeps
         // from left to right and back across each scanline.
         Func f("f_group"), g("g_group"), h("h_group");
+
+        // Initialize f
         f(x, y) = sin(x - y);
         RDom r(1, 7);
+
         // Sweep from left to right
         f(r, y) = (f(r, y) + f(r - 1, y)) / 2;
 
@@ -353,7 +353,7 @@ int main(int argc, char **argv) {
 
         // for y:
         //   for x:
-        //     f(x, y) = x + y
+        //     f(x, y) = sin(x - y)
         // for y:
         //   for r:
         //     f(r, y) = (f(r, y) + f(r - 1, y)) / 2
