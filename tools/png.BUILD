@@ -26,10 +26,7 @@ cc_library(
         "pngconf.h",
     ],
     includes = ["."],
-    copts = [
-        "-Wno-conversion",
-        "-Wno-sign-compare",
-    ],
+    copts = ["-w"],
     linkopts = ["-lm"],
     visibility = ["//visibility:public"],
     deps = ["@zlib_archive//:zlib"],
