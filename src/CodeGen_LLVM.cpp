@@ -2434,21 +2434,26 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() > 0);
         value = codegen(op->args[0]);
     } else if (op->is_intrinsic(Call::alloca)) {
-        // The argument is the number of bytes. It must be const for now.
+        // The argument is the number of bytes. For now it must be
+        // const, or a call to size_of_halide_buffer_t.
         internal_assert(op->args.size() == 1);
-        const int64_t *sz = as_const_int(op->args[0]);
-        internal_assert(sz);
 
         // We can generate slightly cleaner IR with fewer alignment
         // restrictions if we recognize the most common types we
         // expect to get alloca'd.
-        if (op->type == type_of<struct halide_buffer_t *>()) {
-            value = create_alloca_at_entry(buffer_t_type, *sz / sizeof(halide_buffer_t));
-        } else if (op->type == type_of<struct halide_dimension_t *>()) {
-            value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
+        const Call *call = op->args[0].as<Call>();
+        if (op->type == type_of<struct halide_buffer_t *>() &&
+            call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
+            value = create_alloca_at_entry(buffer_t_type, 1);
         } else {
-            // Just use an i8* and make the users bitcast it.
-            value = create_alloca_at_entry(i8_t, *sz);
+            const int64_t *sz = as_const_int(op->args[0]);
+            internal_assert(sz);
+            if (op->type == type_of<struct halide_dimension_t *>()) {
+                value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
+            } else {
+                // Just use an i8* and make the users bitcast it.
+                value = create_alloca_at_entry(i8_t, *sz);
+            }
         }
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
@@ -2629,6 +2634,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             " Halide.\n";
     } else if (op->is_intrinsic(Call::indeterminate_expression)) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
+    } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
+        llvm::DataLayout d(module.get());
+        value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";

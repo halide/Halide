@@ -515,10 +515,11 @@ public:
                     // Copy the input buffer into a query buffer to mutate.
                     string query_name = name + ".bounds_query." + func.name();
 
+                    Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
                     Expr query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
-                                                {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
+                                                {alloca_size}, Call::Intrinsic);
                     Expr query_shape = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
-                                                  {(int)sizeof(halide_dimension_t) * dims}, Call::Intrinsic);
+                                                  {(int)(sizeof(halide_dimension_t) * dims)}, Call::Intrinsic);
                     query_buf = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init_from_buffer,
                                            {query_buf, query_shape, in_buf}, Call::Extern);
 
@@ -563,8 +564,11 @@ public:
                 for (const auto &buffer: buffers_to_annotate) {
                     // Return type is really 'void', but no way to represent that in our IR.
                     // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                    Expr sizeof_buffer_t((uint64_t) sizeof(halide_buffer_t));
-                    Stmt mark_buffer = Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                    Expr sizeof_buffer_t =
+                        cast<uint64_t>(Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
+                    Stmt mark_buffer =
+                        Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
+                                                  {buffer, sizeof_buffer_t}, Call::Extern));
                     if (annotate.defined()) {
                         annotate = Block::make(annotate, mark_buffer);
                     } else {
