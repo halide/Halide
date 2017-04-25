@@ -292,7 +292,7 @@ WEAK int halide_hexagon_run(void *user_context,
 
     // If we haven't gotten the symbol for this function, do so now.
     if (*function == 0) {
-        debug(user_context) << "    halide_hexagon_remote_get_symbol" << name << " -> ";
+        debug(user_context) << "    halide_hexagon_remote_get_symbol " << name << " -> ";
         halide_hexagon_handle_t sym = 0;
         int result = remote_get_symbol(module, name, strlen(name) + 1, &sym);
         *function = result == 0 ? sym : 0;

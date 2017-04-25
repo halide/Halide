@@ -178,10 +178,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = storage_folding(s, env);
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
-    debug(1) << "Injecting prefetches...\n";
-    s = inject_prefetch(s, env);
-    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
-
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
@@ -189,6 +185,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
     s = simplify(s, false);
     debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
+
+    debug(1) << "Injecting prefetches...\n";
+    s = inject_prefetch(s, env);
+    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);

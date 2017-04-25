@@ -414,8 +414,9 @@ Stmt build_produce(Function f, const Target &target) {
                 src_buf_name += ".buffer";
                 Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
 
+                Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
                 Expr output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
-                                                  {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
+                                                  {alloca_size}, Call::Intrinsic);
 
                 vector<Expr> args(5);
                 args[0] = output_buffer_t;
@@ -454,13 +455,15 @@ Stmt build_produce(Function f, const Target &target) {
                 int dimensions = p.second;
                 // Return type is really 'void', but no way to represent that in our IR.
                 // Precedent (from halide_print, etc) is to use Int(32) and ignore the result.
-                Expr sizeof_buffer_t((uint64_t) sizeof(halide_buffer_t));
+                Expr sizeof_buffer_t = cast<uint64_t>(Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic));
                 Stmt mark_buffer =
-                    Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {buffer, sizeof_buffer_t}, Call::Extern));
+                    Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
+                                              {buffer, sizeof_buffer_t}, Call::Extern));
                 Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer}, Call::Extern);
                 Expr shape_size = Expr((uint64_t)(sizeof(halide_dimension_t) * dimensions));
                 Stmt mark_shape =
-                    Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized", {shape, shape_size}, Call::Extern));
+                    Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
+                                              {shape, shape_size}, Call::Extern));
                 mark_buffer = Block::make(mark_buffer, mark_shape);
                 if (annotate.defined()) {
                     annotate = Block::make(annotate, mark_buffer);

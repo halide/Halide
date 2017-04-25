@@ -4,6 +4,8 @@
 #include "IRPrinter.h"
 #include "IROperator.h"
 #include "Module.h"
+#include "AssociativeOpsTable.h"
+#include "Associativity.h"
 
 namespace Halide {
 
@@ -142,6 +144,27 @@ void IRPrinter::test() {
 
     }
     std::cout << "IRPrinter test passed\n";
+}
+
+ostream& operator<<(ostream &stream, const AssociativePattern &p) {
+    stream << "{\n";
+    for (size_t i = 0; i < p.ops.size(); ++i) {
+        stream << "  op_" << i << " ->" << p.ops[i] << ", id_" << i << " -> " << p.identities[i] << "\n";
+    }
+    stream << "  is commutative? " << p.is_commutative << "\n";
+    stream << "}\n";
+    return stream;
+}
+
+ostream& operator<<(ostream &stream, const AssociativeOp &op) {
+    stream << "Pattern:\n" << op.pattern;
+    stream << "is associative? " << op.is_associative << "\n";
+    for (size_t i = 0; i < op.xs.size(); ++i) {
+        stream << "  " << op.xs[i].var << " -> " << op.xs[i].expr << "\n";
+        stream << "  " << op.ys[i].var << " -> " << op.ys[i].expr << "\n";
+    }
+    stream << "\n";
+    return stream;
 }
 
 ostream &operator<<(ostream &out, const ForType &type) {

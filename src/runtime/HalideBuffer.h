@@ -1280,7 +1280,7 @@ public:
     }
 
     bool has_device_allocation() const {
-        return buf.device;
+        return buf.device != 0;
     }
     // @}
 
