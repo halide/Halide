@@ -5,6 +5,11 @@
 #include <algorithm>
 #include <future>
 
+#ifdef _MSC_VER
+// Silence a warning that is obscure, harmless, and painful to work around
+#pragma warning(disable:4146)  // unary minus operator applied to unsigned type, result still unsigned
+#endif
+
 using namespace Halide;
 using Halide::Internal::Call;
 
