@@ -747,9 +747,61 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
     return 0;
 }
 
-int subtraction_rfactor_test() {
+int complex_multiply_rfactor_test() {
     Func f("f"), g("g"), ref("ref");
     Var x("x"), y("y");
+
+    f(x, y) = Tuple(x + y, x - y);
+    f.compute_root();
+
+    Param<int> inner_extent, outer_extent;
+    RDom r(10, inner_extent, 30, outer_extent);
+    inner_extent.set(20);
+    outer_extent.set(40);
+
+    ref(x, y) = Tuple(10, 20);
+    ref(x, y) = Tuple(ref(x, y)[0]*f(r.x, r.y)[0] - ref(x, y)[1]*f(r.x, r.y)[1],
+                      ref(x, y)[0]*f(r.x, r.y)[1] + ref(x, y)[1]*f(r.x, r.y)[0]);
+
+    g(x, y) = Tuple(10, 20);
+    g(x, y) = Tuple(g(x, y)[0]*f(r.x, r.y)[0] - g(x, y)[1]*f(r.x, r.y)[1],
+                    g(x, y)[0]*f(r.x, r.y)[1] + g(x, y)[1]*f(r.x, r.y)[0]);
+
+    RVar rxi("rxi"), rxo("rxo");
+    g.update(0).split(r.x, rxo, rxi, 2);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(rxo, u);
+    intm.compute_root();
+    intm.update(0).vectorize(u, 2);
+
+    Realization ref_rn = ref.realize(80, 80);
+    Buffer<int> ref_im1(ref_rn[0]);
+    Buffer<int> ref_im2(ref_rn[1]);
+    Realization rn = g.realize(80, 80);
+    Buffer<int> im1(rn[0]);
+    Buffer<int> im2(rn[1]);
+
+    auto func1 = [&ref_im1](int x, int y, int z) {
+        return ref_im1(x, y);
+    };
+    if (check_image(im1, func1)) {
+        return -1;
+    }
+
+    auto func2 = [&ref_im2](int x, int y, int z) {
+        return ref_im2(x, y);
+    };
+    if (check_image(im2, func2)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int argmin_rfactor_test() {
+    Func f("f"), g("g"), ref("ref");
+    Var x("x"), y("y"), z("z");
 
     f(x, y) = x + y;
     f.compute_root();
@@ -759,31 +811,54 @@ int subtraction_rfactor_test() {
     inner_extent.set(20);
     outer_extent.set(40);
 
-    ref(x, y) = 40;
-    ref(x, y) -= f(r.x, r.y);
+    ref() = Tuple(10, 20, 30);
+    ref() = Tuple(min(ref()[0], f(r.x, r.y)),
+                  select(ref()[0] < f(r.x, r.y), ref()[1], r.x),
+                  select(ref()[0] < f(r.x, r.y), ref()[2], r.y));
 
-    g(x, y) = 40;
-    g(x, y) -= f(r.x, r.y);
+    g() = Tuple(10, 20, 30);
+    g() = Tuple(min(g()[0], f(r.x, r.y)),
+                select(g()[0] < f(r.x, r.y), g()[1], r.x),
+                select(g()[0] < f(r.x, r.y), g()[2], r.y));
 
-    RVar ryi("ryi"), ryo("ryo");
-    g.update(0).split(r.y, ryo, ryi, 2);
+    RVar rxi("rxi"), rxo("rxo");
+    g.update(0).split(r.x, rxo, rxi, 2);
 
-    // rfactoring the outermost dimension "ryo" is okay since subtraction is
-    // associative. However, rfactoring "ryi" without "ryo" or "r.x" without
-    // "ryi" and "ryo" is not okay since subtraction is non-commutative.
     Var u("u");
-    Func intm = g.update(0).rfactor(ryo, u);
+    Func intm = g.update(0).rfactor(rxo, u);
     intm.compute_root();
     intm.update(0).vectorize(u, 2);
 
-    Buffer<int> im_ref = ref.realize(80, 80);
-    Buffer<int> im = g.realize(80, 80);
-    auto func = [&im_ref](int x, int y, int z) {
-        return im_ref(x, y);
+    Realization ref_rn = ref.realize();
+    Buffer<int> ref_im1(ref_rn[0]);
+    Buffer<int> ref_im2(ref_rn[1]);
+    Buffer<int> ref_im3(ref_rn[2]);
+    Realization rn = g.realize();
+    Buffer<int> im1(rn[0]);
+    Buffer<int> im2(rn[1]);
+    Buffer<int> im3(rn[2]);
+
+    auto func1 = [&ref_im1](int x, int y, int z) {
+        return ref_im1(x, y);
     };
-    if (check_image(im, func)) {
+    if (check_image(im1, func1)) {
         return -1;
     }
+
+    auto func2 = [&ref_im2](int x, int y, int z) {
+        return ref_im2(x, y);
+    };
+    if (check_image(im2, func2)) {
+        return -1;
+    }
+
+    auto func3 = [&ref_im3](int x, int y, int z) {
+        return ref_im3(x, y);
+    };
+    if (check_image(im3, func3)) {
+        return -1;
+    }
+
     return 0;
 }
 
@@ -969,15 +1044,13 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    printf("Running subtraction rfactor test\n");
-    printf("    checking output img correctness...\n");
-    if (subtraction_rfactor_test() != 0) {
+    printf("Running parallel dot product rfactor test\n");
+    printf("    checking call graphs...\n");
+    if (parallel_dot_product_rfactor_test(true) != 0) {
         return -1;
     }
-
-    printf("Running subtraction rfactor test\n");
     printf("    checking output img correctness...\n");
-    if (subtraction_rfactor_test() != 0) {
+    if (parallel_dot_product_rfactor_test(false) != 0) {
         return -1;
     }
 
@@ -989,6 +1062,16 @@ int main(int argc, char **argv) {
     printf("Running rfactor tile reorder test\n");
     printf("    checking output img correctness...\n");
     if (rfactor_tile_reorder_test() != 0) {
+        return -1;
+    }
+
+    printf("Running complex multiply rfactor test\n");
+    if (complex_multiply_rfactor_test() != 0) {
+        return -1;
+    }
+
+    printf("Running argmin rfactor test\n");
+    if (argmin_rfactor_test() != 0) {
         return -1;
     }
 

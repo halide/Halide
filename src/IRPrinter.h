@@ -38,6 +38,17 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
 namespace Internal {
 
+struct AssociativePattern;
+struct AssociativeOp;
+
+/** Emit a halide associative pattern on an output stream (such as std::cout)
+ * in a human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
+
+/** Emit a halide associative op on an output stream (such as std::cout) in a
+ * human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
+
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
