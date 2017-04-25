@@ -277,6 +277,10 @@ _ANDROID_RUNTIME_LINKOPTS = [
     "-llog",
 ]
 
+_WINDOWS_RUNTIME_LINKOPTS = [
+    # Nothing
+]
+
 _DEFAULT_RUNTIME_LINKOPTS = [
     "-ldl",
 ]
@@ -295,6 +299,7 @@ cc_library(
         "@halide//:halide_config_arm_64_android": _ANDROID_RUNTIME_LINKOPTS,
         "@halide//:halide_config_x86_32_android": _ANDROID_RUNTIME_LINKOPTS,
         "@halide//:halide_config_x86_64_android": _ANDROID_RUNTIME_LINKOPTS,
+        "@halide//:halide_config_x86_64_windows": _WINDOWS_RUNTIME_LINKOPTS,
         "//conditions:default": _DEFAULT_RUNTIME_LINKOPTS,
     }),
     visibility = ["//visibility:public"],
