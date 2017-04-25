@@ -32,12 +32,7 @@ cc_library(
         "zutil.h",
     ],
     hdrs = ["zlib.h"],
-    copts = [
-        "-Wno-conversion",
-        "-Wno-implicit-function-declaration",
-        "-Wno-shift-negative-value",
-        "-Wno-sign-compare",
-    ],
+    copts = ["-w"],
     includes = ["."],
     visibility = ["//visibility:public"],
 )
