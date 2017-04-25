@@ -26,8 +26,17 @@ cc_library(
         "pngconf.h",
     ],
     includes = ["."],
-    copts = ["-w"],
-    linkopts = ["-lm"],
+    copts = [
+        "-w",
+        "-Wno-conversion",
+        "-Wno-implicit-function-declaration",
+        "-Wno-shift-negative-value",
+        "-Wno-sign-compare",
+    ],
+    linkopts = select({
+        "@halide//:halide_config_x86_64_windows": [],
+        "//conditions:default":["-lm"],
+    }),
     visibility = ["//visibility:public"],
     deps = ["@zlib_archive//:zlib"],
 )
