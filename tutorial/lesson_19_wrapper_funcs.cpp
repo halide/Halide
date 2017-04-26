@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
             Func f_in_g("f_in_g"), f("f"), g("g");
             f(x, y) = x + y;
             f_in_g(x, y) = f(x, y);
-            g(x, y) = 2 * f_in_g(x, y);
+            g(x, y) = 2 * f_in_g(x, y) + 3;
 
             f.compute_root();
             f_in_g.compute_root();
