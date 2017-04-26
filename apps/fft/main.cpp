@@ -16,6 +16,8 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
+namespace {
+
 Var x("x"), y("y");
 
 template <typename T>
@@ -35,6 +37,8 @@ ComplexFunc make_complex(const Buffer<T> &re) {
 double log2(double x) {
     return log(x)/log(2.0);
 }
+
+}  // namespace
 
 int main(int argc, char **argv) {
     int W = 32;
