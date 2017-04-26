@@ -163,6 +163,11 @@ private:
             // can only really prove that this is the case if they're
             // constants, so try to make the constants first.
 
+            // First constant-fold
+            a.min = simplify(a.min);
+            a.max = simplify(a.max);
+
+            // Then try to strip off junk mins and maxes.
             Expr lower_bound = find_constant_bound(a.min, Direction::Lower);
             Expr upper_bound = find_constant_bound(a.max, Direction::Upper);
 
@@ -1490,6 +1495,8 @@ void bounds_test() {
                  make_const(Int(8), -128), make_const(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
+    check(scope, cast<uint16_t>(x / 2), make_const(UInt(16), 0), make_const(UInt(16), 5));
+    check(scope, cast<uint16_t>((x + 10) / 2), make_const(UInt(16), 5), make_const(UInt(16), 10));
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
