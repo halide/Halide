@@ -620,7 +620,8 @@ Expr BufferBuilder::build() const {
     if (buffer_memory.defined()) {
         args[0] = buffer_memory;
     } else {
-        args[0] = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca, {(int)sizeof(halide_buffer_t)}, Call::Intrinsic);
+        Expr sz = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
+        args[0] = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca, {sz}, Call::Intrinsic);
     }
 
     std::string shape_var_name = unique_name('t');

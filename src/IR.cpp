@@ -816,6 +816,7 @@ Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
 Call::ConstString Call::extract_mask_element = "extract_mask_element";
+Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
 Call::ConstString Call::buffer_get_extent = "_halide_buffer_get_extent";
