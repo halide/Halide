@@ -479,8 +479,8 @@ class InjectBufferCopies : public IRMutator {
             if (op->call_type == Call::Extern && op->func.defined()) {
                 Function f(op->func);
 
-                debug(4) << "Handling possible extern call " << op->name << " arguments " << op->args.size() << " extern arguments " << f.extern_arguments().size() << " outputs " << f.outputs() << ".\n" << "    " << Expr(op) << "\n";
-                internal_assert((f.extern_arguments().size() + f.outputs()) == op->args.size()) << "Mismatch between args size and extern_arguments size in call to " << op->name << "\n";
+                internal_assert((f.extern_arguments().size() + f.outputs()) == op->args.size()) <<
+                    "Mismatch between args size and extern_arguments size in call to " << op->name << "\n";
 
                 std::vector<Expr> new_args(op->args.size());
                 bool changed = false;
@@ -489,7 +489,8 @@ class InjectBufferCopies : public IRMutator {
                     DeviceAPI old_extern_device_api = extern_device_api;
                     if (i >= (op->args.size() - f.outputs())) {
                         extern_device_api = f.extern_function_device_api();
-                        debug(4) << "Switched extern_device_api from " << (int)old_extern_device_api << " to " << (int)extern_device_api << "\n";
+                        debug(4) << "Call to " << op->name << " switched extern_device_api from "
+                                 << (int)old_extern_device_api << " to " << (int)extern_device_api << "\n";
                     }
 
                     Expr old_arg = op->args[i];
@@ -498,7 +499,8 @@ class InjectBufferCopies : public IRMutator {
                     new_args[i] = new_arg;
 
                     if (i >= (op->args.size() - f.outputs())) {
-                        debug(4) << "Switched extern_device_api back to " << (int)old_extern_device_api << " from " << (int)extern_device_api << "\n";
+                        debug(4) << "Return from " << op-> name << " switched extern_device_api back to "
+                                 << (int)old_extern_device_api << " from " << (int)extern_device_api << "\n";
                         extern_device_api = old_extern_device_api;
                     }
                 }
