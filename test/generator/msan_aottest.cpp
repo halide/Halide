@@ -1,4 +1,4 @@
-#if defined(__MINGW32__) || defined(_MSC_VER)
+#ifdef _WIN32
 #include <stdio.h>
 // MSAN isn't supported for any Windows variant
 int main(int argc, char **argv) {
