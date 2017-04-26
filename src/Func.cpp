@@ -164,9 +164,10 @@ void Func::define_extern(const std::string &function_name,
                          const std::vector<Type> &types,
                          int dimensionality,
                          NameMangling mangling,
-                         bool uses_old_buffer_t) {
+                         bool uses_old_buffer_t,
+                         DeviceAPI device_api) {
     func.define_extern(function_name, args, types, dimensionality,
-                       mangling, uses_old_buffer_t);
+                       mangling, uses_old_buffer_t, device_api);
 }
 
 /** Get the types of the buffers returned by an extern definition. */

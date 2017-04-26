@@ -936,9 +936,10 @@ public:
                               Type t,
                               int dimensionality,
                               NameMangling mangling = NameMangling::Default,
-                              bool uses_old_buffer_t = false) {
+                              bool uses_old_buffer_t = false,
+                              DeviceAPI device_api = DeviceAPI::Host) {
         define_extern(function_name, params, std::vector<Type>{t},
-                      dimensionality, mangling, uses_old_buffer_t);
+                      dimensionality, mangling, uses_old_buffer_t, device_api);
     }
 
     EXPORT void define_extern(const std::string &function_name,
@@ -946,7 +947,8 @@ public:
                               const std::vector<Type> &types,
                               int dimensionality,
                               NameMangling mangling = NameMangling::Default,
-                              bool uses_old_buffer_t = false);
+                              bool uses_old_buffer_t = false,
+                              DeviceAPI device_api = DeviceAPI::Host);
     // @}
 
     /** Get the types of the outputs of this Func. */

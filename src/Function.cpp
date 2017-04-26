@@ -47,6 +47,7 @@ struct FunctionContents {
     std::string extern_function_name;
     NameMangling extern_mangling;
     bool extern_uses_old_buffer_t;
+    DeviceAPI extern_function_device_api;
 
     bool trace_loads, trace_stores, trace_realizations;
 
@@ -54,6 +55,7 @@ struct FunctionContents {
 
     FunctionContents() : extern_mangling(NameMangling::Default),
                          extern_uses_old_buffer_t(false),
+                         extern_function_device_api(DeviceAPI::Host),
                          trace_loads(false),
                          trace_stores(false),
                          trace_realizations(false),
@@ -309,6 +311,7 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->debug_file = src->debug_file;
     dst->extern_function_name = src->extern_function_name;
     dst->extern_mangling = src->extern_mangling;
+    dst->extern_function_device_api = src->extern_function_device_api;
     dst->extern_uses_old_buffer_t = src->extern_uses_old_buffer_t;
     dst->trace_loads = src->trace_loads;
     dst->trace_stores = src->trace_stores;
@@ -683,7 +686,8 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality,
                              NameMangling mangling,
-                             bool use_old_buffer_t) {
+                             bool use_old_buffer_t,
+                             DeviceAPI device_api) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -698,6 +702,7 @@ void Function::define_extern(const std::string &function_name,
     contents->output_types = types;
     contents->extern_mangling = mangling;
     contents->extern_uses_old_buffer_t = use_old_buffer_t;
+    contents->extern_function_device_api = device_api;
 
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
@@ -840,6 +845,10 @@ const std::vector<ExternFuncArgument> &Function::extern_arguments() const {
 
 const std::string &Function::extern_function_name() const {
     return contents->extern_function_name;
+}
+
+DeviceAPI Function::extern_function_device_api() const {
+    return contents->extern_function_device_api;
 }
 
 const std::string &Function::debug_file() const {
