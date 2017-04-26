@@ -50,6 +50,7 @@ cc_library(
         "funct.h",
     ],
     deps = ["@halide//:language"],
+    copts = halide_language_copts(),
 )
 
 halide_generator(
@@ -89,6 +90,7 @@ halide_library_from_generator(
 cc_test(
     name = "fft_aot_test",
     srcs = ["fft_aot_test.cpp"],
+    copts = ["-w"],
     linkopts = halide_runtime_linkopts(),
     deps = [
         ":fft_forward_c2c",
