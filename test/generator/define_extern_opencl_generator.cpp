@@ -30,4 +30,3 @@ public:
 }
 
 HALIDE_REGISTER_GENERATOR(DefineExternOpenCLOutput, "define_extern_opencl")
-

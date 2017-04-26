@@ -120,9 +120,9 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     if (input->host == nullptr) {
         printf("gpu_input: Bounds query for output size %d\n", output->dim[0].extent);
         input->type = output->type;
-	input->dimensions = 1;
-	input->dim[0] = output->dim[0];
-	return 0;
+        input->dimensions = 1;
+        input->dim[0] = output->dim[0];
+        return 0;
     }
 
     printf("gpu_input: Called to compute on size %d\n", input->dim[0].extent);
@@ -138,11 +138,11 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     cl_device_id devices[] = { cl_dev };
     error = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
     if (error == CL_BUILD_PROGRAM_FAILURE) {
-	size_t msg_size;
-	clGetProgramBuildInfo(program, cl_dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &msg_size);
-	char *msg = (char *)malloc(msg_size);
-	clGetProgramBuildInfo(program, cl_dev, CL_PROGRAM_BUILD_LOG, msg_size, msg, NULL);
-	printf("Error message %s\n", msg);
+        size_t msg_size;
+        clGetProgramBuildInfo(program, cl_dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &msg_size);
+        char *msg = (char *)malloc(msg_size);
+        clGetProgramBuildInfo(program, cl_dev, CL_PROGRAM_BUILD_LOG, msg_size, msg, NULL);
+        printf("Error message %s\n", msg);
     }
     assert(error == CL_SUCCESS);
 
