@@ -713,16 +713,35 @@ class InjectBufferCopies : public IRMutator {
             return;
         }
 
-        Stmt first = mutate(op->first);
-        first = do_copies(first);
+        // If there are no device transitions, treat the block as a
+        // single unit to avoid pointlessly marking things as dirty
+        // inside of it (it interferes with passes that coalesce
+        // adjacent stores).
+        class AnyDeviceTransitions : public IRVisitor {
+        public:
+            bool result = false;
+        private:
+            using IRVisitor::visit;
+            void visit(const For *op) {
+                if (op->device_api != DeviceAPI::Host &&
+                    op->device_api != DeviceAPI::None) {
+                    result = true;
+                } else {
+                    IRVisitor::visit(op);
+                }
+            }
+        };
 
-        Stmt rest = op->rest;
-        if (rest.defined()) {
-            rest = mutate(rest);
-            rest = do_copies(rest);
+        AnyDeviceTransitions d;
+        op->accept(&d);
+
+        if (d.result) {
+            Stmt first = do_copies(mutate(op->first));
+            Stmt rest = do_copies(mutate(op->rest));
+            stmt = Block::make(first, rest);
+        } else {
+            IRMutator::visit(op);
         }
-
-        stmt = Block::make(first, rest);
     }
 
     void visit(const For *op) {

@@ -68,6 +68,7 @@ struct buffer_t;
  */
 // @{
 extern void halide_print(void *user_context, const char *);
+extern void halide_default_print(void *user_context, const char *);
 typedef void (*halide_print_t)(void *, const char *);
 extern halide_print_t halide_set_custom_print(halide_print_t print);
 // @}
@@ -81,6 +82,7 @@ extern halide_print_t halide_set_custom_print(halide_print_t print);
  */
 // @{
 extern void halide_error(void *user_context, const char *);
+extern void halide_default_error(void *user_context, const char *);
 typedef void (*halide_error_handler_t)(void *, const char *);
 extern halide_error_handler_t halide_set_error_handler(halide_error_handler_t handler);
 // @}
@@ -140,6 +142,16 @@ extern int halide_do_task(void *user_context, halide_task_t f, int idx,
                           uint8_t *closure);
 //@}
 
+/** The default versions of do_task and do_par_for. Can be convenient
+ * to call from overrides in certain circumstances. */
+// @{
+extern int halide_default_do_par_for(void *user_context,
+                                     halide_task_t task,
+                                     int min, int size, uint8_t *closure);
+extern int halide_default_do_task(void *user_context, halide_task_t f, int idx,
+                                  uint8_t *closure);
+// @}
+
 struct halide_thread;
 
 /** Spawn a thread. Returns a handle to the thread for the purposes of
@@ -174,6 +186,10 @@ extern int halide_set_num_threads(int n);
  * linking), simply define these functions yourself. In JIT-compiled
  * code use Func::set_custom_allocator.
  *
+ * If you override them, and find yourself wanting to call the default
+ * implementation from within your override, use
+ * halide_default_malloc/free.
+ *
  * Note that halide_malloc must return a pointer aligned to the
  * maximum meaningful alignment for the platform for the purpose of
  * vector loads and stores. The default implementation uses 32-byte
@@ -184,6 +200,8 @@ extern int halide_set_num_threads(int n);
 //@{
 extern void *halide_malloc(void *user_context, size_t x);
 extern void halide_free(void *user_context, void *ptr);
+extern void *halide_default_malloc(void *user_context, size_t x);
+extern void halide_default_free(void *user_context, void *ptr);
 typedef void *(*halide_malloc_t)(void *, size_t);
 typedef void (*halide_free_t)(void *, void *);
 extern halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc);
@@ -204,6 +222,9 @@ extern halide_free_t halide_set_custom_free(halide_free_t user_free);
 extern void *halide_get_symbol(const char *name);
 extern void *halide_load_library(const char *name);
 extern void *halide_get_library_symbol(void *lib, const char *name);
+extern void *halide_default_get_symbol(const char *name);
+extern void *halide_default_load_library(const char *name);
+extern void *halide_default_get_library_symbol(void *lib, const char *name);
 typedef void *(*halide_get_symbol_t)(const char *name);
 typedef void *(*halide_load_library_t)(const char *name);
 typedef void *(*halide_get_library_symbol_t)(void *lib, const char *name);
@@ -384,6 +405,7 @@ struct halide_trace_event_t {
  */
 // @}
 extern int32_t halide_trace(void *user_context, const struct halide_trace_event_t *event);
+extern int32_t halide_default_trace(void *user_context, const struct halide_trace_event_t *event);
 typedef int32_t (*halide_trace_t)(void *user_context, const struct halide_trace_event_t *);
 extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}

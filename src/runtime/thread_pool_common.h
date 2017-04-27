@@ -59,11 +59,6 @@ struct work_queue_t {
 };
 WEAK work_queue_t work_queue;
 
-WEAK int default_do_task(void *user_context, halide_task_t f, int idx,
-                        uint8_t *closure) {
-    return f(user_context, idx, closure);
-}
-
 WEAK int clamp_num_threads(int desired_num_threads) {
     if (desired_num_threads > MAX_THREADS) {
         desired_num_threads = MAX_THREADS;
@@ -154,15 +149,25 @@ WEAK void worker_thread_already_locked(work *owned_job) {
     }
 }
 
-
 WEAK void worker_thread(void *) {
     halide_mutex_lock(&work_queue.mutex);
     worker_thread_already_locked(NULL);
     halide_mutex_unlock(&work_queue.mutex);
 }
 
-WEAK int default_do_par_for(void *user_context, halide_task_t f,
-                            int min, int size, uint8_t *closure) {
+}}}  // namespace Halide::Runtime::Internal
+
+using namespace Halide::Runtime::Internal;
+
+extern "C" {
+
+WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
+                                uint8_t *closure) {
+    return f(user_context, idx, closure);
+}
+
+WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
+                                   int min, int size, uint8_t *closure) {
     // Grab the lock. If it hasn't been initialized yet, then the
     // field will be zero-initialized because it's a static global.
     halide_mutex_lock(&work_queue.mutex);
@@ -242,12 +247,6 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
     // status of one of the failing jobs (whichever one failed last).
     return job.exit_status;
 }
-
-}}} // namespace Halide::Runtime::Internal
-
-using namespace Halide::Runtime::Internal;
-
-extern "C" {
 
 WEAK int halide_set_num_threads(int n) {
     if (n < 0) {
