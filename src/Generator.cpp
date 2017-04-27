@@ -701,6 +701,54 @@ void StubEmitter::emit() {
     stream << indent() << "#endif  // " << guard.str() << "\n";
 }
 
+Returnable::Returnable(std::shared_ptr<GeneratorBase> generator, GeneratorOutputBase * const out) : generator(generator), out(out) {
+    generator->check_min_phase(GeneratorBase::GenerateCalled);
+}
+
+// Output<Func> -> Func
+Returnable::operator Func() const {
+    const auto k = out->kind();
+    user_assert(k == Internal::IOKind::Buffer || k == Internal::IOKind::Function)
+        << "Output type mismatch for " << out->name();
+    user_assert(!out->is_array())
+        << "Output type mismatch for " << out->name();
+    return out->funcs().at(0);
+}
+
+// Output<Func[]> -> vector<Func>
+Returnable::operator std::vector<Func>() const {
+    const auto k = out->kind();
+    user_assert(k == Internal::IOKind::Buffer || k == Internal::IOKind::Function)
+        << "Output type mismatch for " << out->name();
+    user_assert(out->is_array())
+        << "Output type mismatch for " << out->name();
+    return out->funcs();
+}
+
+// Output<Buffer<>> -> StubOutputBuffer (i.e., only assignment to another Output<Buffer<>>)
+Returnable::operator StubOutputBuffer<>() const {
+    const auto k = out->kind();
+    user_assert(k == Internal::IOKind::Buffer)
+        << "Output type mismatch for " << out->name();
+    user_assert(!out->is_array())
+        << "Output type mismatch for " << out->name();
+    return StubOutputBuffer<>(out->funcs().at(0), generator);
+}
+
+// Output<AnyNonArray> -> Realizable
+Returnable::operator Realizable() const {
+    user_assert(!out->is_array())
+        << "Output type mismatch for " << out->name();
+    return Realizable(out->funcs().at(0), generator->get_target());
+}
+
+// Output<AnyArray[]> -> Realizable
+Realizable Returnable::operator[](size_t j) const {
+    user_assert(out->is_array())
+        << "Output type mismatch for " << out->name();
+    return Realizable(out->funcs().at(j), generator->get_target());
+}
+
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              GeneratorFactory generator_factory,
                              const std::map<std::string, std::string> &generator_params,
@@ -721,6 +769,24 @@ void GeneratorStub::verify_same_funcs(const std::vector<Func>& a, const std::vec
     for (size_t i = 0; i < a.size(); ++i) {
         verify_same_funcs(a[i], b[i]);
     }
+}
+
+Returnable GeneratorStub::operator[](size_t i) const {
+    auto &outs = generator->param_info().filter_outputs;
+    user_assert(i < outs.size()) << "Output " << i << " must be in range (0.." << outs.size()-1 << ").\n";
+    return Returnable(generator, outs.at(i));
+}
+
+Returnable GeneratorStub::operator[](const std::string &name) const {
+    // TODO: linear search is suboptimal but probably OK since outputs are usually very few
+    auto &outs = generator->param_info().filter_outputs;
+    for (auto *out : outs) {
+        if (out->name() == name) {
+            return Returnable(generator, out);
+        }
+    }
+    user_error << "Output " << name << " not found.\n";
+    return Returnable(nullptr, nullptr);
 }
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {

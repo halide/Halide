@@ -998,6 +998,7 @@ template<typename T = void>
 class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2> friend class GeneratorOutput_Buffer;
     friend class GeneratorStub;
+    friend class Returnable;
     explicit StubOutputBuffer(const Func &f, std::shared_ptr<GeneratorBase> generator) : StubOutputBufferBase(f, generator) {}
 public:
     StubOutputBuffer() {}
@@ -2385,6 +2386,8 @@ private:
     friend class GeneratorInputBase;
     friend class GeneratorOutputBase;
     friend class GeneratorStub;
+    friend class Returnable;
+    friend class Realizable;
     friend class SimpleGeneratorFactory;
     friend class StubOutputBufferBase;
 
@@ -2786,6 +2789,92 @@ public:
 
 namespace Internal {
 
+class Returnable;
+
+/** A Realizable is just a wrapped Func-and-Target; it's intended for usage
+ * in situations where the caller should not be able to mutate the Func,
+ * but should be allowed to realize it. */
+class Realizable {
+    friend class Returnable;
+    Func f;
+    Target t;
+
+    inline Realizable(Func f, Target t) : f(f), t(t) {}
+public:
+    inline Realization realize(std::vector<int32_t> sizes) {
+        return f.realize(sizes, t);
+    }
+
+    template <typename... Args>
+    inline Realization realize(Args&&... args) {
+        return f.realize(std::forward<Args>(args)..., t);
+    }
+
+    template<typename Dst>
+    inline void realize(Dst dst) {
+        f.realize(dst, t);
+    }
+
+    // Move, yes; Copy; No.
+    Realizable(Realizable &&) = default;
+    Realizable &operator=(Realizable &&) = default;
+
+    Realizable(const Realizable &) = delete;
+    Realizable &operator=(const Realizable &) = delete;
+};
+
+/** Returnable is a class that allows us to fake specializing on the return type
+ * of a function: we'd like GeneratorStub::operator[] to be able to return a
+ * Func, vector<Func>, Buffer, or Realizable, depending on the calling context.
+ * This class exists just as an interposition to allow various cast operators
+ * to work their magic. This is a little awkward, but effective. */
+// Can't specialize on return type, so we workaround: return a temporary
+// struct that has multiple cast overloads to do the dirty work for us.
+class Returnable {
+    friend class GeneratorStub;
+    std::shared_ptr<GeneratorBase> const generator;
+    GeneratorOutputBase * const out;
+
+    EXPORT Returnable(std::shared_ptr<GeneratorBase> generator, GeneratorOutputBase * const out);
+public:
+    // Output<Func> -> Func
+    EXPORT operator Func() const;
+
+    // Output<Func[]> -> vector<Func>
+    EXPORT operator std::vector<Func>() const;
+
+    // Output<Buffer<>> -> StubOutputBuffer (i.e., only assignment to another Output<Buffer<>>)
+    EXPORT operator StubOutputBuffer<>() const;
+
+    // Output<AnyNonArray> -> Realizable
+    EXPORT operator Realizable() const;
+
+    // Output<AnyArray[]> -> Realizable
+    EXPORT Realizable operator[](size_t j) const;
+
+    // Convenience wrappers to allow calling invoker["output_name"].realize() directly
+    inline Realization realize(std::vector<int32_t> sizes) {
+        return ((Realizable)(*this)).realize(sizes);
+    }
+
+    template <typename... Args>
+    inline Realization realize(Args&&... args) {
+        return ((Realizable)(*this)).realize(args...);
+    }
+
+    template<typename Dst>
+    inline void realize(Dst dst) {
+        ((Realizable)(*this)).realize(dst);
+    }
+
+    // Move, yes; Copy; No.
+    Returnable(Returnable &&) = default;
+    Returnable &operator=(Returnable &&) = default;
+
+    Returnable(const Returnable &) = delete;
+    Returnable &operator=(const Returnable &) = delete;
+};
+
 class GeneratorStub : public NamesInterface {
 public:
     // default ctor
@@ -2812,6 +2901,12 @@ public:
        generator->call_schedule();
        return *this;
    }
+
+    // Return the i'th Output<> of the Generator; assert if i out of range.
+    EXPORT Returnable operator[](size_t i) const;
+
+    // Return the Output<> of the Generator with the given name; assert if name not valid.
+    EXPORT Returnable operator[](const std::string &name) const;
 
     // Overloads for first output
     operator Func() const {
