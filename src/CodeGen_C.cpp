@@ -934,16 +934,6 @@ void CodeGen_C::visit(const Call *op) {
         Expr b = op->args[1];
         Expr e = select(a < b, b - a, a - b);
         rhs << print_expr(e);
-    } else if (op->is_intrinsic(Call::address_of)) {
-        const Load *l = op->args[0].as<Load>();
-        internal_assert(op->args.size() == 1 && l);
-        rhs << "(("
-            << print_type(l->type.element_of()) // index is in elements, not vectors.
-            << " *)"
-            << print_name(l->name)
-            << " + "
-            << print_expr(l->index)
-            << ")";
     } else if (op->is_intrinsic(Call::return_second)) {
         internal_assert(op->args.size() == 2);
         string arg0 = print_expr(op->args[0]);
@@ -987,8 +977,9 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::alloca)) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->type.is_handle());
+        const Call *call = op->args[0].as<Call>();
         if (op->type == type_of<struct halide_buffer_t *>() &&
-            is_const(op->args[0], (int)sizeof(halide_buffer_t))) {
+            call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
             do_indent();
             string buf_name = unique_name('b');
             stream << "halide_buffer_t " << buf_name << ";\n";
@@ -1001,12 +992,6 @@ void CodeGen_C::visit(const Call *op) {
             stream << "uint64_t " << array_name << "[" << size << "];";
             rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
         }
-    } else if (op->is_intrinsic(Call::copy_memory)) {
-        internal_assert(op->args.size() == 3);
-        string dest = print_expr(op->args[0]);
-        string src = print_expr(op->args[1]);
-        string size = print_expr(op->args[2]);
-        rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->args.empty()) {
             rhs << "NULL";
@@ -1107,11 +1092,17 @@ void CodeGen_C::visit(const Call *op) {
             " integer overflow for int32 and int64 is undefined behavior in"
             " Halide.\n";
     } else if (op->is_intrinsic(Call::prefetch)) {
-        user_assert((op->args.size() == 3) && is_one(op->args[1]))
+        user_assert((op->args.size() == 4) && is_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
-        rhs << "__builtin_prefetch(" << print_expr(op->args[0]) << ", 1)";
+        const Variable *base = op->args[0].as<Variable>();
+        internal_assert(base && base->type.is_handle());
+        rhs << "__builtin_prefetch("
+            << "((" << print_type(op->type) << " *)" << print_name(base->name)
+            << " + " << print_expr(op->args[1]) << "), 1)";
     } else if (op->is_intrinsic(Call::indeterminate_expression)) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
+    } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
+        rhs << "(sizeof(halide_buffer_t))";
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         // TODO: other intrinsics

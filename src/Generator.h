@@ -447,18 +447,18 @@ private:
     T value_;
 
     template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value>::type * = nullptr>
-    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &t2, const char * msg) {
+    HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char * msg) {
         // Arithmetic types must roundtrip losslessly.
         if (!std::is_same<T, T2>::value &&
             std::is_arithmetic<T>::value &&
             std::is_arithmetic<T2>::value) {
-            const T t = t2;
-            const T2 t2a = t;
-            if (t2a != t2) {
+            const T t = Convert<T2, T>::value(value);
+            const T2 t2 = Convert<T, T2>::value(t);
+            if (t2 != value) {
                 fail_wrong_type(msg);
             }
         }
-        value_ = t2;
+        value_ = Convert<T2, T>::value(value);
     }
 
     template <typename T2, typename std::enable_if<!std::is_convertible<T2, T>::value>::type * = nullptr>

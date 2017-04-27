@@ -304,14 +304,16 @@ public:
     template<typename ...Args>                                          \
     auto method(Args&&... args) const ->                                \
         decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
-        return get()->method(std::forward<Args>(args)...);              \
+        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";         \
+        return get()->method(std::forward<Args>(args)...);                                       \
     }
 
 #define HALIDE_BUFFER_FORWARD(method)                                   \
     template<typename ...Args>                                          \
     auto method(Args&&... args) ->                                      \
         decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
-        return get()->method(std::forward<Args>(args)...);              \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n";         \
+        return get()->method(std::forward<Args>(args)...);                                 \
     }
 
     /** Does the same thing as the equivalent Halide::Runtime::Buffer method */

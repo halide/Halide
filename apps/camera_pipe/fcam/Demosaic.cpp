@@ -49,7 +49,7 @@ void makeLUT(float contrast, int blackLevel, int whiteLevel, float gamma, unsign
 
 // From the Halide camera_pipe's color_correct
 void makeColorMatrix(float colorMatrix[], float colorTemp) {
-    float alpha = (1.0 / colorTemp - 1.0/3200) / (1.0/7000 - 1.0/3200);
+    float alpha = (1.f / colorTemp - 1.f/3200.f) / (1.f/7000.f - 1.f/3200.f);
 
     colorMatrix[0] = alpha*1.6697f     + (1-alpha)*2.2997f;
     colorMatrix[1] = alpha*-0.2693f    + (1-alpha)*-0.4478f;
@@ -89,8 +89,9 @@ void demosaic(Halide::Runtime::Buffer<uint16_t> input, Halide::Runtime::Buffer<u
     outHeight *= BLOCK_HEIGHT;
 
     // Prepare the lookup table
-    unsigned char lut[whiteLevel+1];
-    makeLUT(contrast, blackLevel, whiteLevel, gamma, lut);
+    std::vector<unsigned char> lut;
+    lut.resize(whiteLevel+1);
+    makeLUT(contrast, blackLevel, whiteLevel, gamma, &lut[0]);
 
     // Grab the color matrix
     float colorMatrix[12];
