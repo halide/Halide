@@ -1,8 +1,8 @@
-#ifdef __MINGW32__
+#ifdef _WIN32
 #include <stdio.h>
-// Mingw doesn't support weak linkage
+// MSAN isn't supported for any Windows variant
 int main(int argc, char **argv) {
-    printf("Skipping test on mingw");
+    printf("Skipping test on Windows\n");
     return 0;
 }
 #else
