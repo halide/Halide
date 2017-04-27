@@ -6,6 +6,12 @@ int main(int argc, char **argv) {
   printf("Skipping test on windows\n");
   return 0;
 }
+#elif !defined(TEST_OPENCL)
+// This test requires weak linkage
+int main(int argc, char **argv) {
+  printf("Skipping since TEST_OPENCL is not enabled\n");
+  return 0;
+}
 #else
 
 #include "HalideRuntime.h"
@@ -20,7 +26,6 @@ using namespace Halide::Runtime;
 
 const int W = 256;
 
-#if defined(TEST_OPENCL)
 // Implement OpenCL custom context.
 
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
@@ -166,8 +171,6 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
 
     return 0;
 }
-
-#endif
 
 int main(int argc, char **argv) {
     // Initialize the runtime specific GPU context.
