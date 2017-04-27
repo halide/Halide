@@ -366,22 +366,25 @@ void StubEmitter::emit_generator_params_struct() {
 void StubEmitter::emit_schedule_params_setters() {
     stream << indent() << "// set_schedule_param methods\n";
     stream << indent() << "template <typename T>\n";
-    stream << indent() << class_name << " &set_schedule_param(const std::string &name, const T &value) {\n";
+    stream << indent() << "inline " << class_name << " &set_schedule_param(const std::string &name, const T &value) {\n";
     indent_level++;
     stream << indent() << "(void) GeneratorStub::set_schedule_param(name, value);\n";
     stream << indent() << "return *this;\n";
     indent_level--;
     stream << indent() << "}\n";
 
-    // TODO: do we still want these, now that we have ScheduleParams replicated?
-    // for (auto *sp : schedule_params) {
-    //     std::string c_type = sp->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(sp->scalar_type());
-    //     stream << indent() << class_name << " &set_" << sp->name() << "(const " << c_type << " &value) {\n";
-    //     indent_level++;
-    //     stream << indent() << "return set_schedule_param(\"" << sp->name() <<  "\", value);\n";
-    //     indent_level--;
-    //     stream << indent() << "}\n";
-    // }
+    const auto &v = schedule_params;
+    if (!v.empty()) {
+        for (auto *p : v) {
+            std::string c_type = p->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(p->scalar_type());
+            stream << indent() << "inline " << class_name << " &set_" << p->name() << "(const " << c_type << " &value) {\n";
+            indent_level++;
+            stream << indent() << "this->" << p->name() << ".set(value);\n";
+            stream << indent() << "return *this;\n";
+            indent_level--;
+            stream << indent() << "}\n";
+        }
+    }
     stream << "\n";
 }
 
