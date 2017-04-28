@@ -69,25 +69,25 @@ int init_sim() {
     }
 
     // Configue tracing.
-    const char *T = getenv("HL_HEXAGON_SIM_MIN_TRACE");
-    if (T && T[0] != 0) {
-        status = sim->SetTracing(HEX_TRACE_PC_MIN, T);
+    const char *trace = getenv("HL_HEXAGON_SIM_MIN_TRACE");
+    if (trace && trace[0] != 0) {
+        status = sim->SetTracing(HEX_TRACE_PC_MIN, trace);
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::SetTracing MIN failed: %d\n", status);
             return -1;
         }
     } else {
-        const char *T = getenv("HL_HEXAGON_SIM_TRACE");
-        if (T && T[0] != 0) {
-            status = sim->SetTracing(HEX_TRACE_PC, T);
+        const char *trace = getenv("HL_HEXAGON_SIM_TRACE");
+        if (trace && trace[0] != 0) {
+            status = sim->SetTracing(HEX_TRACE_PC, trace);
             if (status != HEX_STAT_SUCCESS) {
                 printf("HexagonWrapper::SetTracing failed: %d\n", status);
                 return -1;
             }
         } else {
-            const char *T = getenv("HL_HEXAGON_SIM_MEM_TRACE");
-            if (T && T[0] != 0) {
-                status = sim->SetTracing(HEX_TRACE_MEM, T);
+            const char *trace = getenv("HL_HEXAGON_SIM_MEM_TRACE");
+            if (trace && trace[0] != 0) {
+                status = sim->SetTracing(HEX_TRACE_MEM, trace);
                 if (status != HEX_STAT_SUCCESS) {
                     printf("HexagonWrapper::SetTracing MEM failed: %d\n", status);
                     return -1;
