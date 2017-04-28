@@ -86,21 +86,21 @@ void test_saturating() {
 
             if (simpler_correct_result != (int64_t)correct_result) {
                 std::cout << "Simpler verification failed for index " << i
-			  << " correct_result is " << correct_result
-			  << " correct_result casted to int64_t is " << (int64_t)correct_result
-			  << " simpler_correct_result is " << simpler_correct_result << "\n";
+                          << " correct_result is " << correct_result
+                          << " correct_result casted to int64_t is " << (int64_t)correct_result
+                          << " simpler_correct_result is " << simpler_correct_result << "\n";
                 std::cout << "in(i) " << in(i)
-			  << " target_min " << target_min
-			  << " target_max " << target_max << "\n";
+                          << " target_min " << target_min
+                          << " target_max " << target_max << "\n";
             }
             assert(simpler_correct_result == (int64_t)correct_result);
         }
 
         if (result(i) != correct_result) {
             std::cout << "Match failure at index " << i
-		      << " got " << result(i)
-		      << " expected " << correct_result
-		      << " for input " << in(i) << std::endl;
+                      << " got " << result(i)
+                      << " expected " << correct_result
+                      << " for input " << in(i) << std::endl;
         }
 
         assert(result(i) == correct_result);
