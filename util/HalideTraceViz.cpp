@@ -438,14 +438,16 @@ void expect(bool cond, int i) {
 // See all boxes corresponding to positions in a Func's allocation to
 // the given color. Recursive to handle arbitrary
 // dimensionalities. Used by begin and end realization events.
-void fill_realization(uint32_t *image, int image_width, uint32_t color, const FuncInfo &fi,
+void fill_realization(uint32_t *image, int image_width, int image_height, uint32_t color, const FuncInfo &fi,
                       Packet &p, int current_dimension = 0, int x_off = 0, int y_off = 0) {
     assert(p.dimensions >= 2 * fi.config.dims);
     if (2 * current_dimension == p.dimensions) {
         int x_min = x_off * fi.config.zoom + fi.config.x;
         int y_min = y_off * fi.config.zoom + fi.config.y;
         for (int y = 0; y < fi.config.zoom; y++) {
+            if (y_min + y < 0 || y_min + y >= image_height) continue;
             for (int x = 0; x < fi.config.zoom; x++) {
+                if (x_min + x < 0 || x_min + x >= image_width) continue;
                 int idx = (y_min + y) * image_width + (x_min + x);
                 image[idx] = color;
             }
@@ -456,7 +458,7 @@ void fill_realization(uint32_t *image, int image_width, uint32_t color, const Fu
         x_off += fi.config.x_stride[current_dimension] * min;
         y_off += fi.config.y_stride[current_dimension] * min;
         for (int i = min; i < min + extent; i++) {
-            fill_realization(image, image_width, color, fi, p, current_dimension + 1, x_off, y_off);
+            fill_realization(image, image_width, image_height, color, fi, p, current_dimension + 1, x_off, y_off);
             x_off += fi.config.x_stride[current_dimension];
             y_off += fi.config.y_stride[current_dimension];
         }
@@ -784,13 +786,23 @@ int run(int argc, char **argv) {
             assert(p.dimensions >= p.type.lanes * fi.config.dims);
             if (p.dimensions >= p.type.lanes * fi.config.dims) {
                 for (int lane = 0; lane < p.type.lanes; lane++) {
+
                     // Compute the screen-space x, y coord to draw this.
                     int x = fi.config.x;
                     int y = fi.config.y;
+                    const int z = fi.config.zoom;
                     for (int d = 0; d < fi.config.dims; d++) {
                         int a = p.get_coord(d * p.type.lanes + lane);
                         x += fi.config.zoom * fi.config.x_stride[d] * a;
                         y += fi.config.zoom * fi.config.y_stride[d] * a;
+                    }
+
+                    // The box to draw must be entirely on-screen
+                    if (y < 0 || y >= frame_height ||
+                        x < 0 || x >= frame_width ||
+                        y + z - 1 < 0 || y + z - 1 >= frame_height ||
+                        x + z - 1 < 0 || x + z - 1 >= frame_width) {
+                        continue;
                     }
 
                     // Stores are orange, loads are blue.
@@ -834,13 +846,10 @@ int run(int argc, char **argv) {
                     // Draw the pixel
                     for (int dy = 0; dy < fi.config.zoom; dy++) {
                         for (int dx = 0; dx < fi.config.zoom; dx++) {
-                            if (y + dy >= 0 && y + dy < frame_height &&
-                                x + dx >= 0 && x + dx < frame_width) {
-                                int px = frame_width * (y + dy) + x + dx;
-                                anim[px] = color;
-                                if (update_image) {
-                                    image[px] = image_color;
-                                }
+                            int px = frame_width * (y + dy) + x + dx;
+                            anim[px] = color;
+                            if (update_image) {
+                                image[px] = image_color;
                             }
                         }
                     }
@@ -850,11 +859,11 @@ int run(int argc, char **argv) {
         }
         case halide_trace_begin_realization:
             fi.stats.num_realizations++;
-            fill_realization(image, frame_width, fi.config.uninitialized_memory_color, fi, p);
+            fill_realization(image, frame_width, frame_height, fi.config.uninitialized_memory_color, fi, p);
             break;
         case halide_trace_end_realization:
             if (fi.config.blank_on_end_realization) {
-                fill_realization(image, frame_width, 0, fi, p);
+                fill_realization(image, frame_width, frame_height, 0, fi, p);
             }
             break;
         case halide_trace_produce:

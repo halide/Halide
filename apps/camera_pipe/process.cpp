@@ -54,9 +54,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    float color_temp = atof(argv[2]);
-    float gamma = atof(argv[3]);
-    float contrast = atof(argv[4]);
+    float color_temp = (float) atof(argv[2]);
+    float gamma = (float) atof(argv[3]);
+    float contrast = (float) atof(argv[4]);
     int timing_iterations = atoi(argv[5]);
     int blackLevel = 25;
     int whiteLevel = 1023;
