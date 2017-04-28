@@ -115,7 +115,8 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     cl_int error;
     cl_context ocl_ctx = nullptr;
     cl_command_queue ocl_q = nullptr;
-    assert(halide_acquire_cl_context(nullptr, &ocl_ctx, &ocl_q) == 0);
+    int halide_result = halide_acquire_cl_context(nullptr, &ocl_ctx, &ocl_q);
+    assert(halide_result == 0);
 
     cl_kernel kernel = clCreateKernel(ocl_program, "add42", &error);
     if (error != CL_SUCCESS) {
