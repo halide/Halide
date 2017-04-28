@@ -1030,7 +1030,7 @@ WEAK int halide_opengl_device_malloc(void *user_context, halide_buffer_t *buf) {
 
         buf->device = tex;
         buf->device_interface = &opengl_device_interface;
-        buf->device_interface->use_module();
+        buf->device_interface->impl->use_module();
         halide_allocated = true;
         debug(user_context) << "Allocated texture " << tex
                             << " of size " << width << " x " << height << "\n";
@@ -1083,7 +1083,7 @@ WEAK int halide_opengl_device_free(void *user_context, halide_buffer_t *buf) {
             // device fields even if we can't delete the texture.
         }
         buf->device = 0;
-        buf->device_interface->release_module();
+        buf->device_interface->impl->release_module();
         buf->device_interface = NULL;
     }
 
@@ -2098,7 +2098,7 @@ WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, ui
     (void) new_texture_info(texture_id, buf, /* halide_allocated */ false);
     buf->device = texture_id;
     buf->device_interface = &opengl_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
     return 0;
 }
 
@@ -2122,7 +2122,7 @@ WEAK int halide_opengl_wrap_render_target(void *user_context, halide_buffer_t *b
     (void) new_texture_info(tex, buf, /* halide_allocated */ false);
     buf->device = HALIDE_OPENGL_RENDER_TARGET;
     buf->device_interface = &opengl_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
     return 0;
 }
 
@@ -2134,7 +2134,7 @@ WEAK uintptr_t halide_opengl_detach_texture(void *user_context, halide_buffer_t 
     halide_assert(user_context, buf->device_interface == &opengl_device_interface);
     uint64_t handle = buf->device;
     buf->device = 0;
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
     GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : handle;
     TextureInfo *texinfo = unlink_texture_info(tex);
@@ -2169,7 +2169,7 @@ WEAK void halide_opengl_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
-WEAK halide_device_interface_t opengl_device_interface = {
+WEAK halide_device_interface_impl_t opengl_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_opengl_device_malloc,
@@ -2180,6 +2180,18 @@ WEAK halide_device_interface_t opengl_device_interface = {
     halide_opengl_copy_to_device,
     halide_opengl_device_and_host_malloc,
     halide_opengl_device_and_host_free,
+};
+
+WEAK halide_device_interface_t opengl_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    &opengl_device_interface_impl
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenGL

@@ -582,7 +582,7 @@ WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct halide_buf
     handle->buffer = ion_buf;
     handle->size = size;
     buf->device_interface = &hexagon_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
     buf->device = reinterpret<uint64_t>(handle);
     return 0;
 }
@@ -596,7 +596,7 @@ WEAK void *halide_hexagon_detach_device_handle(void *user_context, struct halide
     void *ion_buf = handle->buffer;
     free(handle);
 
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device = 0;
     buf->device_interface = NULL;
     return ion_buf;
@@ -767,7 +767,7 @@ WEAK void halide_hexagon_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
-WEAK halide_device_interface_t hexagon_device_interface = {
+WEAK halide_device_interface_impl_t hexagon_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_hexagon_device_malloc,
@@ -778,6 +778,18 @@ WEAK halide_device_interface_t hexagon_device_interface = {
     halide_hexagon_copy_to_device,
     halide_hexagon_device_and_host_malloc,
     halide_hexagon_device_and_host_free,
+};
+
+WEAK halide_device_interface_t cuda_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    &hexagon_device_interface_impl
 };
 
 }}}} // namespace Halide::Runtime::Internal::Hexagon
