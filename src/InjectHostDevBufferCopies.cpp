@@ -186,6 +186,7 @@ class InjectBufferCopies : public IRMutator {
     const set<string> &buffers_to_track;
     const Target &target;
     DeviceAPI device_api;
+    DeviceAPI extern_device_api;
 
     Expr make_device_interface_call(DeviceAPI device_api) {
         std::string interface_name;
@@ -278,7 +279,7 @@ class InjectBufferCopies : public IRMutator {
             size_t non_host_devices_reading_count = 0;
             DeviceAPI reading_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_reading) {
-                debug(4) << "Device " << static_cast<int>(dev) << " read buffer\n";
+                debug(4) << "Device " << static_cast<int>(dev) << " read buffer " << i.first << "\n";
                 if (dev != DeviceAPI::Host) {
                     non_host_devices_reading_count++;
                     reading_device = dev;
@@ -291,7 +292,7 @@ class InjectBufferCopies : public IRMutator {
             size_t non_host_devices_writing_count = 0;
             DeviceAPI writing_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_writing) {
-                debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer\n";
+                debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer " << i.first << "\n";
                 if (dev != DeviceAPI::Host) {
                     non_host_devices_writing_count++;
                     writing_device = dev;
@@ -300,8 +301,6 @@ class InjectBufferCopies : public IRMutator {
                     host_wrote = true;
                 }
             }
-
-
 
             // Ideally this will support multi-device buffers someday, but not now.
             internal_assert(non_host_devices_reading_count <= 1);
@@ -454,7 +453,56 @@ class InjectBufferCopies : public IRMutator {
             state[buf_name].devices_touched.insert(device_api);
             IRMutator::visit(op);
         } else {
-            IRMutator::visit(op);
+            // PR_TODO(@abadams|@zvookin): At the time of this pass, the IR has
+            // lowered the Call from a Halide one to an Extern one. The
+            // Function is still attached so this seems to work, but this
+            // may be a bit fragile. Is this consistent with the IR design?
+            //
+            // Also a question as to whether this should always use
+            // one path for mutation instead of calling to the parent
+            // class for the regular case. (Always using this path
+            // might catch bugs if the parent class code changes and
+            // this does not track that change.)
+            if (op->call_type == Call::Extern && op->func.defined()) {
+                Function f(op->func);
+
+                internal_assert((f.extern_arguments().size() + f.outputs()) == op->args.size()) <<
+                    "Mismatch between args size and extern_arguments size in call to " << op->name << "\n";
+
+                std::vector<Expr> new_args(op->args.size());
+                bool changed = false;
+                // Mutate the args
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    DeviceAPI old_extern_device_api = extern_device_api;
+                    if (i >= f.extern_arguments().size()) { // arg in call is an output
+                        extern_device_api = f.extern_function_device_api();
+                        debug(4) << "Call to " << op->name << " switched extern_device_api from "
+                                 << (int)old_extern_device_api << " to " << (int)extern_device_api << "\n";
+                    }
+
+                    Expr old_arg = op->args[i];
+                    Expr new_arg = mutate(old_arg);
+                    changed |= !new_arg.same_as(old_arg);
+                    new_args[i] = new_arg;
+
+                    if (i >= f.extern_arguments().size()) { // arg in call is an output
+                        debug(4) << "Return from " << op-> name << " switched extern_device_api back to "
+                                 << (int)old_extern_device_api << " from " << (int)extern_device_api << "\n";
+                        extern_device_api = old_extern_device_api;
+                    }
+                }
+
+                if (!changed) {
+                    expr = op;
+                } else {
+                    expr = Call::make(op->type, op->name, new_args, op->call_type,
+                                      op->func, op->value_index, op->image, op->param);
+                }
+            } else {
+                IRMutator::visit(op);
+            }
+
+
         }
     }
 
@@ -513,7 +561,13 @@ class InjectBufferCopies : public IRMutator {
         if (ends_with(op->name, ".buffer")) {
             string buf_name = op->name.substr(0, op->name.size() - 7);
             if (state.find(buf_name) != state.end()) {
-                state[buf_name].host_touched = true;
+                debug(4) << "Device " << (int)extern_device_api << " reads and writes buffer " << buf_name << " due to .buffer reference.\n";
+                if (extern_device_api != DeviceAPI::Host) {
+                    state[buf_name].devices_writing.insert(extern_device_api);
+                    state[buf_name].devices_touched.insert(extern_device_api);
+                } else {
+                    state[buf_name].host_touched = true;
+                }
             }
         }
 
@@ -768,8 +822,10 @@ class InjectBufferCopies : public IRMutator {
     }
 
 public:
-    InjectBufferCopies(const set<string> &i, const Target &t) : loop_level(""), buffers_to_track(i), target(t), device_api(DeviceAPI::Host) {}
-
+    InjectBufferCopies(const set<string> &i, const Target &t)
+        : loop_level(""), buffers_to_track(i), target(t),
+          device_api(DeviceAPI::Host), extern_device_api(DeviceAPI::Host) {
+    }
 };
 
 }  // namespace
