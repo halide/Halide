@@ -1247,13 +1247,13 @@ public:
 
     int copy_to_device(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         if (host_dirty()) {
-            return device_interface->copy_to_device(ctx, &buf);
+            return device_interface->copy_to_device(ctx, &buf, device_interface);
         }
         return 0;
     }
 
     int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
-        return device_interface->device_malloc(ctx, &buf);
+        return device_interface->device_malloc(ctx, &buf, device_interface);
     }
 
     int device_free(void *ctx = nullptr) {
