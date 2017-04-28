@@ -487,7 +487,7 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t* buf) {
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
     // we just end our reference to it regardless.
     buf->device = 0;
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
     if (result != CL_SUCCESS) {
         // We may be called as a destructor, so don't raise an error
@@ -737,7 +737,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 
     buf->device = (uint64_t)dev_ptr;
     buf->device_interface = &opencl_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
 
     debug(user_context)
         << "    Allocated device buffer " << (void *)buf->device
@@ -1051,11 +1051,11 @@ WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *b
     }
     buf->device = mem;
     buf->device_interface = &opencl_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
 #if DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
         buf->device = 0;
-        buf->device_interface->release_module();
+        buf->device_interface->impl->release_module();
         buf->device_interface = NULL;
         return -3;
     }
@@ -1070,7 +1070,7 @@ WEAK uintptr_t halide_opencl_detach_cl_mem(void *user_context, halide_buffer_t *
     halide_assert(user_context, buf->device_interface == &opencl_device_interface);
     uint64_t mem = buf->device;
     buf->device = 0;
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
     return (uintptr_t)mem;
 }
@@ -1150,7 +1150,7 @@ WEAK const char *get_opencl_error_name(cl_int err) {
     }
 }
 
-WEAK halide_device_interface_t opencl_device_interface = {
+WEAK halide_device_interface_impl_t opencl_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_opencl_device_malloc,
@@ -1161,6 +1161,18 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_opencl_copy_to_device,
     halide_opencl_device_and_host_malloc,
     halide_opencl_device_and_host_free,
+};
+
+WEAK halide_device_interface_t opencl_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    &opencl_device_interface_impl
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL

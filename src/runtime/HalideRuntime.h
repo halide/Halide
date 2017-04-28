@@ -479,32 +479,41 @@ extern int halide_get_trace_file(void *user_context);
  * (flushing the trace). Returns zero on success. */
 extern int halide_shutdown_trace();
 
-/** All Halide GPU or device backend implementations much provide an interface
- * to be used with halide_device_malloc, etc.
+/** All Halide GPU or device backend implementations provide an
+ * interface to be used with halide_device_malloc, etc. This is
+ * accessed via the functions below.
  */
 
+struct halide_device_interface_impl_t;
+
+/** Each GPU API provides a halide_device_interface_t struct pointing
+ * to the code that manages device allocations. You can access these
+ * functions directly from the struct member function pointers, or by
+ * calling the functions declared below. Note that the global
+ * functions are not available when using Halide as a JIT compiler,
+ * and you are using raw halide_buffer_t in that context you must use
+ * the function pointers in the device_interface struct. */
 struct halide_device_interface_t {
-    // These next two methods are used to reference count the runtime code
-    // these function pointers point to. They should always be initialized
-    // to halide_use_jit_module and halide_release_jit_module and Halide's JIT
-    // arranges for this to reference count the container for the code. In AOT
-    // compilation, these are empty functions which do nothing.
-    void (*use_module)();
-    void (*release_module)();
-    int (*device_malloc)(void *user_context, struct halide_buffer_t *buf);
+    int (*device_malloc)(void *user_context, struct halide_buffer_t *buf,
+                         const struct halide_device_interface_t *device_interface);
     int (*device_free)(void *user_context, struct halide_buffer_t *buf);
     int (*device_sync)(void *user_context, struct halide_buffer_t *buf);
-    int (*device_release)(void *user_context);
+    void (*device_release)(void *user_context,
+                          const struct halide_device_interface_t *device_interface);
     int (*copy_to_host)(void *user_context, struct halide_buffer_t *buf);
-    int (*copy_to_device)(void *user_context, struct halide_buffer_t *buf);
-    int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf);
+    int (*copy_to_device)(void *user_context, struct halide_buffer_t *buf,
+                          const struct halide_device_interface_t *device_interface);
+    int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf,
+                                  const struct halide_device_interface_t *device_interface);
     int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+    const struct halide_device_interface_impl_t *impl;
 };
 
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_device_release(void *user_context, const struct halide_device_interface_t *device_interface);
+extern void halide_device_release(void *user_context,
+                                  const struct halide_device_interface_t *device_interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
