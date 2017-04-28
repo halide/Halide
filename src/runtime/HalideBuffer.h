@@ -186,14 +186,12 @@ private:
         }
         if (new_count == 0) {
             if (buf.device) {
-                halide_device_free_t fn = halide_get_device_free_fn();
-                assert(fn && "Buffer has a device allocation but no Halide Runtime linked");
                 assert(!(alloc && device_dirty()) &&
                        "Implicitly freeing a dirty device allocation while a host allocation still lives. "
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
                        "before the device allocation is freed.");
-                (*fn)(nullptr, &buf);
+                buf.device_interface->device_free(nullptr, &buf);
             }
             if (dev_ref_count) {
                 delete dev_ref_count;
@@ -1242,20 +1240,20 @@ public:
 
     int copy_to_host(void *ctx = nullptr) {
         if (device_dirty()) {
-            return halide_copy_to_host(ctx, &buf);
+            return buf.device_interface->copy_to_host(ctx, &buf);
         }
         return 0;
     }
 
     int copy_to_device(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         if (host_dirty()) {
-            return halide_copy_to_device(ctx, &buf, device_interface);
+            return device_interface->copy_to_device(ctx, &buf);
         }
         return 0;
     }
 
     int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
-        return halide_device_malloc(ctx, &buf, device_interface);
+        return device_interface->device_malloc(ctx, &buf);
     }
 
     int device_free(void *ctx = nullptr) {
@@ -1267,7 +1265,7 @@ public:
                    "Don't call device_free on Halide buffers that you have copied or "
                    "passed by value.");
         }
-        int ret = halide_device_free(ctx, &buf);
+        int ret = buf.device_interface->device_free(ctx, &buf);
         if (dev_ref_count) {
             delete dev_ref_count;
             dev_ref_count = nullptr;
@@ -1276,7 +1274,11 @@ public:
     }
 
     int device_sync(void *ctx = nullptr) {
-        return halide_device_sync(ctx, &buf);
+        if (buf.device_interface) {
+            return buf.device_interface->device_sync(ctx, &buf);
+        } else {
+            return 0;
+        }
     }
 
     bool has_device_allocation() const {

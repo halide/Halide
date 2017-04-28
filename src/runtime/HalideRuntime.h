@@ -482,7 +482,24 @@ extern int halide_shutdown_trace();
 /** All Halide GPU or device backend implementations much provide an interface
  * to be used with halide_device_malloc, etc.
  */
-struct halide_device_interface_t;
+
+struct halide_device_interface_t {
+    // These next two methods are used to reference count the runtime code
+    // these function pointers point to. They should always be initialized
+    // to halide_use_jit_module and halide_release_jit_module and Halide's JIT
+    // arranges for this to reference count the container for the code. In AOT
+    // compilation, these are empty functions which do nothing.
+    void (*use_module)();
+    void (*release_module)();
+    int (*device_malloc)(void *user_context, struct halide_buffer_t *buf);
+    int (*device_free)(void *user_context, struct halide_buffer_t *buf);
+    int (*device_sync)(void *user_context, struct halide_buffer_t *buf);
+    int (*device_release)(void *user_context);
+    int (*copy_to_host)(void *user_context, struct halide_buffer_t *buf);
+    int (*copy_to_device)(void *user_context, struct halide_buffer_t *buf);
+    int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf);
+    int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+};
 
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
@@ -512,41 +529,6 @@ extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
 
 /** Free device memory. */
 extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
-
-/** Get a pointer to halide_device_free if a Halide runtime has been
- * linked in. Returns null if it has not. This requires a different
- * mechanism on different platforms. */
-typedef int (*halide_device_free_t)(void *, struct halide_buffer_t *);
-#ifdef _MSC_VER
-extern const __declspec(selectany) void *halide_dummy_device_free = NULL;
-extern int halide_weak_device_free(void *user_context, struct halide_buffer_t *buf);
-// The following pragma tells the windows linker to make
-// halide_device_free_weak the same symbol as halide_dummy_device_free
-// if it can't resolve halide_weak_device_free normally
-#ifdef _WIN64
-#pragma comment(linker, "/alternatename:halide_weak_device_free=halide_dummy_device_free")
-#else
-#pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
-#endif
-inline halide_device_free_t halide_get_device_free_fn() {
-    if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
-        return NULL;
-    } else {
-        return &halide_weak_device_free;
-    }
-};
-#elif __MINGW32__
-inline halide_device_free_t halide_get_device_free_fn() {
-    // There is no workable mechanism for doing this that we know of on mingw.
-    return &halide_device_free;
-}
-#else
-extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct halide_buffer_t *buf);
-inline halide_device_free_t halide_get_device_free_fn() {
-    return &halide_weak_device_free;
-}
-#endif
-
 
 /** Versions of the above functions that accept legacy buffer_t structs. */
 // @{
