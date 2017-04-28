@@ -105,6 +105,16 @@ private:
         potential_lets.clear();
     }
 
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            // Avoid reordering calls to impure functions
+            collecting = false;
+            expr = op;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const LetStmt *op) {
         if (!collecting) {
             stmt = op;
@@ -480,6 +490,14 @@ class Interleaver : public IRMutator {
                 num_lanes = i;
                 break;
             }
+        }
+        IRMutator::visit(op);
+    }
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            // deinterleaving potentially changes the order of execution.
+            should_deinterleave = false;
         }
         IRMutator::visit(op);
     }
