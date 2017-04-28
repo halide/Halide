@@ -292,7 +292,7 @@ class InjectBufferCopies : public IRMutator {
             size_t non_host_devices_writing_count = 0;
             DeviceAPI writing_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_writing) {
-              debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer " << i.first << "\n";
+                debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer " << i.first << "\n";
                 if (dev != DeviceAPI::Host) {
                     non_host_devices_writing_count++;
                     writing_device = dev;
@@ -474,7 +474,7 @@ class InjectBufferCopies : public IRMutator {
                 // Mutate the args
                 for (size_t i = 0; i < op->args.size(); i++) {
                     DeviceAPI old_extern_device_api = extern_device_api;
-                    if (i >= (op->args.size() - f.outputs())) {
+                    if (i >= f.extern_arguments().size()) { // arg in call is an output
                         extern_device_api = f.extern_function_device_api();
                         debug(4) << "Call to " << op->name << " switched extern_device_api from "
                                  << (int)old_extern_device_api << " to " << (int)extern_device_api << "\n";
@@ -485,7 +485,7 @@ class InjectBufferCopies : public IRMutator {
                     changed |= !new_arg.same_as(old_arg);
                     new_args[i] = new_arg;
 
-                    if (i >= (op->args.size() - f.outputs())) {
+                    if (i >= f.extern_arguments().size()) { // arg in call is an output
                         debug(4) << "Return from " << op-> name << " switched extern_device_api back to "
                                  << (int)old_extern_device_api << " from " << (int)extern_device_api << "\n";
                         extern_device_api = old_extern_device_api;
@@ -562,9 +562,10 @@ class InjectBufferCopies : public IRMutator {
             string buf_name = op->name.substr(0, op->name.size() - 7);
             if (state.find(buf_name) != state.end()) {
                 debug(4) << "Device " << (int)extern_device_api << " reads and writes buffer " << buf_name << " due to .buffer reference.\n";
-                state[buf_name].devices_writing.insert(extern_device_api);
-                state[buf_name].devices_touched.insert(extern_device_api);
-                if (extern_device_api == DeviceAPI::Host) {
+                if (extern_device_api != DeviceAPI::Host) {
+                    state[buf_name].devices_writing.insert(extern_device_api);
+                    state[buf_name].devices_touched.insert(extern_device_api);
+                } else {
                     state[buf_name].host_touched = true;
                 }
             }

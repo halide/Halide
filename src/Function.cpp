@@ -46,16 +46,16 @@ struct FunctionContents {
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
     NameMangling extern_mangling;
-    bool extern_uses_old_buffer_t;
     DeviceAPI extern_function_device_api;
+    bool extern_uses_old_buffer_t;
 
     bool trace_loads, trace_stores, trace_realizations;
 
     bool frozen;
 
     FunctionContents() : extern_mangling(NameMangling::Default),
-                         extern_uses_old_buffer_t(false),
                          extern_function_device_api(DeviceAPI::Host),
+                         extern_uses_old_buffer_t(false),
                          trace_loads(false),
                          trace_stores(false),
                          trace_realizations(false),
@@ -686,8 +686,8 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality,
                              NameMangling mangling,
-                             bool use_old_buffer_t,
-                             DeviceAPI device_api) {
+                             DeviceAPI device_api,
+                             bool use_old_buffer_t) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
@@ -701,8 +701,8 @@ void Function::define_extern(const std::string &function_name,
     contents->extern_arguments = args;
     contents->output_types = types;
     contents->extern_mangling = mangling;
-    contents->extern_uses_old_buffer_t = use_old_buffer_t;
     contents->extern_function_device_api = device_api;
+    contents->extern_uses_old_buffer_t = use_old_buffer_t;
 
     for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
