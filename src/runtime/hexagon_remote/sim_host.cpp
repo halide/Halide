@@ -84,6 +84,15 @@ int init_sim() {
                 printf("HexagonWrapper::SetTracing failed: %d\n", status);
                 return -1;
             }
+        } else {
+            const char *T = getenv("HL_HEXAGON_SIM_MEM_TRACE");
+            if (T && T[0] != 0) {
+                status = sim->SetTracing(HEX_TRACE_MEM, T);
+                if (status != HEX_STAT_SUCCESS) {
+                    printf("HexagonWrapper::SetTracing MEM failed: %d\n", status);
+                    return -1;
+                }
+            }
         }
     }
 
