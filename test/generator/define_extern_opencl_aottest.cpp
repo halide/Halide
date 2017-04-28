@@ -1,10 +1,18 @@
 #include <stdio.h>
 
-#if !defined(TEST_OPENCL)
+#ifdef _WIN32
+
+// OpenCL headers/libs are not properly setup yet for minGW.
+int main(int argc, char **argv) {
+    printf("Skipping test on windows\n");
+    return 0;
+}
+
+#elif !defined(TEST_OPENCL)
 
 int main(int argc, char **argv) {
-  printf("Skipping since TEST_OPENCL is not enabled\n");
-  return 0;
+    printf("Skipping since TEST_OPENCL is not enabled\n");
+    return 0;
 }
 
 #else
