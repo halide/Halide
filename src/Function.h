@@ -215,8 +215,8 @@ public:
                               const std::vector<Type> &types,
                               int dimensionality,
                               NameMangling mangling,
-                              bool uses_old_buffer_t,
-                              DeviceAPI device_api);
+                              DeviceAPI device_api,
+                              bool uses_old_buffer_t);
 
     /** Retrive the arguments of the extern definition. */
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;
