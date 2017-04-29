@@ -1265,7 +1265,10 @@ public:
                    "Don't call device_free on Halide buffers that you have copied or "
                    "passed by value.");
         }
-        int ret = buf.device_interface->device_free(ctx, &buf);
+        int ret = 0;
+        if (buf.device_interface) {
+            ret = buf.device_interface->device_free(ctx, &buf);
+        }
         if (dev_ref_count) {
             delete dev_ref_count;
             dev_ref_count = nullptr;
