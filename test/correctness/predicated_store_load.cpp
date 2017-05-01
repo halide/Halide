@@ -350,6 +350,44 @@ int vectorized_predicated_predicate_with_pure_call_test() {
     return 0;
 }
 
+int vectorized_predicated_load_const_index_test() {
+    Buffer<int> in(100, 100);
+    for (int y = 0; y < 100; y++) {
+        for (int x = 0; x < 100; x++) {
+            in(x, y) = rand();
+        }
+    }
+
+    Func f("f"), ref("ref");
+    Var x("x"), y("y");
+    ImageParam input(Int(32), 2, "input");
+
+    input.set(in);
+
+    RDom r(0, 100);
+
+    ref(x, y) = x + y;
+    ref(r.x, y) = clamp(select((r.x % 2) == 0, r.x, y) + input(r.x % 2, y), 0, 10);
+    Buffer<int> im_ref = ref.realize(100, 100);
+
+    f(x, y) = x + y;
+    f(r.x, y) = clamp(select((r.x % 2) == 0, r.x, y) + input(r.x % 2, y), 0, 10);
+
+    Target target = get_jit_target_from_environment();
+    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        f.update().hexagon().vectorize(r.x, 32);
+    } else if (target.arch == Target::X86) {
+        f.update().vectorize(r.x, 32);
+    }
+
+    Buffer<int> im = f.realize(100, 100);
+    auto func = [im_ref](int x, int y) { return im_ref(x, y); };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test() != 0) {
@@ -388,6 +426,11 @@ int main(int argc, char **argv) {
 
     printf("Running vectorized predicated with pure call test\n");
     if (vectorized_predicated_predicate_with_pure_call_test() != 0) {
+        return -1;
+    }
+
+    printf("Running vectorized predicated load with constant index test\n");
+    if (vectorized_predicated_load_const_index_test() != 0) {
         return -1;
     }
 
