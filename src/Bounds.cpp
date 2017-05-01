@@ -13,6 +13,7 @@
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "CSE.h"
+#include "Deinterleave.h"
 
 namespace Halide {
 namespace Internal {
@@ -550,15 +551,8 @@ private:
         if (interval.is_single_point() && is_one(op->predicate)) {
             // If the index is const and it is not a predicated load,
             // we can return the load of that index
-            Expr scalar_pred = const_true();
-            if (const Call *c = op->predicate.as<Call>()) {
-                if (c->is_intrinsic(Call::bool_to_mask)) {
-                    scalar_pred = Call::make(c->type.element_of(), Call::bool_to_mask, {scalar_pred}, Call::PureIntrinsic);
-                } else {
-                    internal_assert(c->is_intrinsic(Call::cast_mask));
-                    scalar_pred = Call::make(c->type.element_of(), Call::cast_mask, {scalar_pred}, Call::PureIntrinsic);
-                }
-            }
+            Expr scalar_pred = op->predicate.type().is_vector() ?
+                extract_lane(op->predicate, 0) : op->predicate;
             Expr load_min =
                 Load::make(op->type.element_of(), op->name, interval.min,
                            op->image, op->param, scalar_pred);
