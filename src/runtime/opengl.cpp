@@ -1667,7 +1667,9 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        uint64_t handle = ((halide_buffer_t *)args[i])->device;
+        halide_buffer_t *buf = (halide_buffer_t *)args[i];
+        halide_assert(user_context, buf->dimensions >= 2);
+        uint64_t handle = buf->device;
         if (!handle) {
             error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
             return 1;
@@ -1691,10 +1693,10 @@ WEAK int halide_opengl_run(void *user_context,
             error(user_context) << "Undefined output texture " << tex;
             return 1;
         }
-        output_min[0] = texinfo->min[0];
-        output_min[1] = texinfo->min[1];
-        output_extent[0] = texinfo->extent[0];
-        output_extent[1] = texinfo->extent[1];
+        output_min[0] = buf->dim[0].min;
+        output_min[1] = buf->dim[1].min;
+        output_extent[0] = buf->dim[0].extent;
+        output_extent[1] = buf->dim[1].extent;
         num_output_textures++;
     }
     // TODO: GL_MAX_DRAW_BUFFERS
