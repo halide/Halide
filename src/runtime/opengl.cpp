@@ -1667,7 +1667,7 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        uint64_t handle = *(uint64_t *)args[i];
+        uint64_t handle = ((halide_buffer_t *)args[i])->device;
         if (!handle) {
             error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
             return 1;
