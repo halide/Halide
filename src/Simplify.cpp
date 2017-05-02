@@ -17,6 +17,7 @@
 #include "Bounds.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "Param.h"
 
 #ifdef _MSC_VER
 #define snprintf _snprintf
@@ -308,12 +309,28 @@ private:
         if (const int64_t *i = as_const_int(e)) {
             *min_val = *max_val = *i;
             return true;
+        } else if (t.is_uint() && is_const(e) && t.is_scalar()
+                   && t.bits() < 64) {
+            const uint64_t *u = as_const_uint(e);
+            *min_val = *max_val = (int64_t) *u;
+            return true;
         } else if (const Variable *v = e.as<Variable>()) {
             if (bounds_info.contains(v->name)) {
                 pair<int64_t, int64_t> b = bounds_info.get(v->name);
                 *min_val = b.first;
                 *max_val = b.second;
                 return true;
+            } else if (v->param.defined() && !v->param.is_buffer()) {
+                int64_t min_a, min_b, max_a, max_b;
+                if (v->param.get_min_value().defined() &&
+                    const_int_bounds(v->param.get_min_value(), &min_a, &max_a) &&
+                    v->param.get_max_value().defined() &&
+                    const_int_bounds(v->param.get_max_value(), &min_b, &max_b)) {
+                    *min_val = std::min(min_a, min_b);
+                    *max_val = std::max(max_a, max_b);
+                    bounds_info.push(v->name, { *min_val, *max_val });
+                    return true;
+                }
             }
         } else if (const Broadcast *b = e.as<Broadcast>()) {
             return const_int_bounds(b->value, min_val, max_val);
@@ -435,6 +452,17 @@ private:
                 *max_val = std::max(max_base, max_last_lane);
                 return no_overflow_scalar_int(t.element_of()) ||
                        (t.can_represent(*min_val) && t.can_represent(*max_val));
+            }
+        } else if (const Cast *cast = e.as<Cast>()) {
+            int64_t min, max;
+            if ((cast->type.is_int() || cast->type.is_uint()) &&
+                const_int_bounds(cast->value, &min, &max)) {
+                    if (can_prove(Expr(min) >= cast->type.min()) &&
+                        can_prove(Expr(max) <= cast->type.max())) {
+                        *min_val = min;
+                        *max_val = max;
+                        return true;
+                    }
             }
         }
         return false;
@@ -5689,6 +5717,18 @@ void check_bounds() {
         // max(broadcast(x, n), max(broadcast(y, n), z))) -> max(z, broadcast(max(x, y), n))
         check(max(broadcast(x, 64), max(broadcast(y, 64), zv)), max(zv, broadcast(max(y, x), 64)));
     }
+
+    {
+        // Bounds from bounded parameters
+        Param<int> p("p");
+        p.set_range(0, 16);
+
+        check(p <= 16, const_true());
+        check(p >= 0, const_true());
+        check(cast<uint16_t>(((p * 256) / 8)) <= 512, const_true());
+        check(min(p, -10), -10);
+        check(max(p, 20), 20);
+    }
 }
 
 void check_boolean() {
@@ -6417,7 +6457,7 @@ void simplify_test() {
     // This expression is used to cause infinite recursion.
     {
         Expr e = Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2));
-        Expr expected = Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2));
+        Expr expected = Broadcast::make(const_true(), 2);
         check(e, expected);
     }
 
