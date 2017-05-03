@@ -310,7 +310,7 @@ private:
             *min_val = *max_val = *i;
             return true;
         } else if (const uint64_t *u = as_const_uint(e)) {
-            if (t.bits() < 64) {
+            if (Int(64).can_represent(*u)) {
                 *min_val = *max_val = (int64_t) *u;
                 return true;
             }
@@ -456,12 +456,12 @@ private:
             int64_t min, max;
             if ((cast->type.is_int() || cast->type.is_uint()) &&
                 const_int_bounds(cast->value, &min, &max)) {
-                    if (can_prove(Expr(min) >= cast->type.min()) &&
-                        can_prove(Expr(max) <= cast->type.max())) {
-                        *min_val = min;
-                        *max_val = max;
-                        return true;
-                    }
+                if (can_prove(Expr(min) >= cast->type.min()) &&
+                    can_prove(Expr(max) <= cast->type.max())) {
+                    *min_val = min;
+                    *max_val = max;
+                    return true;
+                }
             }
         }
         return false;
