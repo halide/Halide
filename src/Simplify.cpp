@@ -309,11 +309,11 @@ private:
         if (const int64_t *i = as_const_int(e)) {
             *min_val = *max_val = *i;
             return true;
-        } else if (t.is_uint() && is_const(e) && t.is_scalar()
-                   && t.bits() < 64) {
-            const uint64_t *u = as_const_uint(e);
-            *min_val = *max_val = (int64_t) *u;
-            return true;
+        } else if (const uint64_t *u = as_const_uint(e)) {
+            if (t.bits() < 64) {
+                *min_val = *max_val = (int64_t) *u;
+                return true;
+            }
         } else if (const Variable *v = e.as<Variable>()) {
             if (bounds_info.contains(v->name)) {
                 pair<int64_t, int64_t> b = bounds_info.get(v->name);
@@ -328,7 +328,6 @@ private:
                     const_int_bounds(v->param.get_max_value(), &min_b, &max_b)) {
                     *min_val = std::min(min_a, min_b);
                     *max_val = std::max(max_a, max_b);
-                    bounds_info.push(v->name, { *min_val, *max_val });
                     return true;
                 }
             }
