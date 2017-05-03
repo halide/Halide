@@ -26,10 +26,8 @@ int main(int argc, char **argv) {
 
     Func f;
     f.define_extern("extern_func", args, Float(32), 2);
-
-    Pipeline p(f);
-    p.set_jit_externs({ { "extern_func", monitor } });
-    Buffer<float> imf = p.realize(32, 32);
+    f.set_jit_externs({ { "extern_func", monitor } });
+    Buffer<float> imf = f.realize(32, 32);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
