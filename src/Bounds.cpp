@@ -551,11 +551,9 @@ private:
         if (interval.is_single_point() && is_one(op->predicate)) {
             // If the index is const and it is not a predicated load,
             // we can return the load of that index
-            Expr scalar_pred = op->predicate.type().is_vector() ?
-                extract_lane(op->predicate, 0) : op->predicate;
             Expr load_min =
                 Load::make(op->type.element_of(), op->name, interval.min,
-                           op->image, op->param, scalar_pred);
+                           op->image, op->param, const_true());
             interval = Interval::single_point(load_min);
         } else {
             // Otherwise use the bounds of the type
