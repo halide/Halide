@@ -147,6 +147,22 @@ public:
     EXPORT static void init_jit_user_context(JITUserContext &jit_user_context, void *user_context, const JITHandlers &handlers);
     EXPORT static JITHandlers set_default_handlers(const JITHandlers &handlers);
 
+    // Set a map of external functions to replace when jitting; unlike the similarly-named
+    // method in Pipeline, this can replace functions in the runtime itself, and
+    // thus should be used only with great caution; generally, use of this outside
+    // of Halide is likely to be fragile and should be avoided.
+    //
+    // Note that this only affects subsequent lazy-initialization of the shared runtime(s);
+    // if shared runtimes have already been built, you must call release_all() after
+    // this to ensure that the runtimes will be rebuilt with the new externs.
+    //
+    // Note that JITSharedRuntime::set_jit_externs can only accept literal C functions
+    // (unlike Pipeline::set_jit_externs, which can also accept Pipelines or Funcs).
+    //
+    // Note also that this *replaces* any previous calls; if you want to merge, you can call
+    // to get the previous set of externs, merge manually, then call again with the merged set.
+    EXPORT static std::map<std::string, ExternCFunction> set_jit_externs(const std::map<std::string, ExternCFunction> &externs);
+
     /** Set the maximum number of bytes used by memoization caching.
      * If you are compiling statically, you should include HalideRuntime.h
      * and call halide_memoization_cache_set_size() instead.

@@ -463,6 +463,7 @@ bool JITModule::compiled() const {
 
 namespace {
 
+std::map<std::string, ExternCFunction> jit_externs;
 JITHandlers runtime_internal_handlers;
 JITHandlers default_handlers;
 JITHandlers active_handlers;
@@ -708,6 +709,10 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         runtime.compile_module(std::move(module), "", target, deps, halide_exports);
 
         if (runtime_kind == MainShared) {
+            for (auto it = jit_externs.begin(); it != jit_externs.end(); it++) {
+                runtime.add_extern_for_export(it->first, it->second);
+            }
+
             runtime_internal_handlers.custom_print =
                 hook_function(runtime.exports(), "halide_set_custom_print", print_handler);
 
@@ -850,6 +855,13 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
     default_handlers = handlers;
     active_handlers = runtime_internal_handlers;
     merge_handlers(active_handlers, default_handlers);
+    return result;
+}
+
+std::map<std::string, ExternCFunction> JITSharedRuntime::set_jit_externs(
+        const std::map<std::string, ExternCFunction> &externs) {
+    auto result = jit_externs;
+    jit_externs = externs;
     return result;
 }
 
