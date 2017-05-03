@@ -1181,7 +1181,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
             InjectRealization injector(f, is_output, target);
             s = injector.mutate(s);
-            internal_assert(injector.found_store_level && injector.found_compute_level);
+            internal_assert(injector.found_store_level && injector.found_compute_level)
+                << "The Func " << order[i-1] << " cannot be inlined, but has no storage level and/or compute_level scheduled.";
         }
         any_memoized = any_memoized || f.schedule().memoized();
         debug(2) << s << '\n';
