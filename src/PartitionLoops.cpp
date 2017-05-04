@@ -398,7 +398,7 @@ public:
     MakeSimplifications(const vector<Simplification> &s) : simplifications(s) {}
 
     using IRMutator::mutate;
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         for (auto const &s : simplifications) {
             if (e.same_as(s.old_expr)) {
                 return mutate(s.likely_value);

@@ -21,7 +21,7 @@ namespace {
 // occur redundantly many times. This list should mirror the list in
 // the simplifier for lets, otherwise they'll just fight with each
 // other pointlessly.
-bool should_extract(Expr e) {
+bool should_extract(const Expr &e) {
     if (is_const(e)) {
         return false;
     }
@@ -83,7 +83,7 @@ public:
 
     GVN() : number(0), cache(8) {}
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
     }
@@ -92,7 +92,7 @@ public:
         return ExprWithCompareCache(e, &cache);
     }
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -123,11 +123,11 @@ public:
 
         // Rebuild using things already in the numbering.
         Expr old_e = e;
-        e = IRMutator::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // See if it's there in another form after being rebuilt
         // (e.g. because it was a let variable).
-        iter = numbering.find(with_cache(e));
+        iter = numbering.find(with_cache(new_e));
         if (iter != numbering.end()) {
             number = iter->second;
             shallow_numbering[old_e] = number;
@@ -136,13 +136,13 @@ public:
         }
 
         // Add it to the numbering.
-        Entry entry = {e, 0};
+        Entry entry = {new_e, 0};
         number = (int)entries.size();
-        numbering[with_cache(e)] = number;
-        shallow_numbering[e] = number;
+        numbering[with_cache(new_e)] = number;
+        shallow_numbering[new_e] = number;
         entries.push_back(entry);
-        internal_assert(e.type() == old_e.type());
-        return e;
+        internal_assert(new_e.type() == old_e.type());
+        return new_e;
     }
 
 
@@ -236,7 +236,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
 
         if (iter != replacements.end()) {
@@ -257,7 +257,7 @@ class CSEEveryExprInStmt : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         return common_subexpression_elimination(e);
     }
 };

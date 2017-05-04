@@ -74,22 +74,27 @@ struct IRNode {
      * visitors.
      */
     virtual void accept(IRVisitor *v) const = 0;
-    IRNode() {}
+    IRNode(IRNodeType t) : node_type(t) {}
     virtual ~IRNode() {}
 
     /** These classes are all managed with intrusive reference
-       counting, so we also track a reference count. It's mutable
-       so that we can do reference counting even through const
-       references to IR nodes. */
+     * counting, so we also track a reference count. It's mutable
+     * so that we can do reference counting even through const
+     * references to IR nodes.
+     */
     mutable RefCount ref_count;
 
-    /** Each IR node subclass should return some unique pointer. We
-     * can compare these pointers to do runtime type
-     * identification. We don't compile with rtti because that
-     * injects run-time type identification stuff everywhere (and
-     * often breaks when linking external libraries compiled
-     * without it), and we only want it for IR nodes. */
-    virtual IRNodeType type_info() const = 0;
+    /** Each IR node subclass has a unique identifier. We can compare
+     * these values to do runtime type identification. We don't
+     * compile with rtti because that injects run-time type
+     * identification stuff everywhere (and often breaks when linking
+     * external libraries compiled without it), and we only want it
+     * for IR nodes. One might want to put this value in the vtable,
+     * but that adds another level of indirection, and for Exprs we
+     * have 32 free bits in between the ref count and the Type
+     * anyway, so this doesn't increase the memory footprint of an IR node.
+     */
+    IRNodeType node_type;
 };
 
 template<>
@@ -105,13 +110,15 @@ EXPORT inline void destroy<IRNode>(const IRNode *n) {delete n;}
    represent a value (e.g. assert(x > 3)) */
 
 /** A base class for statement nodes. They have no properties or
-   methods beyond base IR nodes for now */
+   methods beyond base IR nodes for now. */
 struct BaseStmtNode : public IRNode {
+    BaseStmtNode(IRNodeType t) : IRNode(t) {}
 };
 
 /** A base class for expression nodes. They all contain their types
  * (e.g. Int(32), Float(32)) */
 struct BaseExprNode : public IRNode {
+    BaseExprNode(IRNodeType t) : IRNode(t) {}
     Type type;
 };
 
@@ -124,14 +131,14 @@ struct BaseExprNode : public IRNode {
 template<typename T>
 struct ExprNode : public BaseExprNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType type_info() const {return T::_type_info;}
+    ExprNode() : BaseExprNode(T::_node_type) {}
     virtual ~ExprNode() {}
 };
 
 template<typename T>
 struct StmtNode : public BaseStmtNode {
     EXPORT void accept(IRVisitor *v) const;
-    virtual IRNodeType type_info() const {return T::_type_info;}
+    StmtNode() : BaseStmtNode(T::_node_type) {}
     virtual ~StmtNode() {}
 };
 
@@ -158,7 +165,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      * }
      */
     template<typename T> const T *as() const {
-        if (ptr && ptr->type_info() == T::_type_info) {
+        if (ptr && ptr->node_type == T::_node_type) {
             return (const T *)ptr;
         }
         return nullptr;
@@ -187,7 +194,7 @@ struct IntImm : public ExprNode<IntImm> {
         return node;
     }
 
-    static const IRNodeType _type_info = IRNodeType::IntImm;
+    static const IRNodeType _node_type = IRNodeType::IntImm;
 };
 
 /** Unsigned integer constants */
@@ -210,7 +217,7 @@ struct UIntImm : public ExprNode<UIntImm> {
         return node;
     }
 
-    static const IRNodeType _type_info = IRNodeType::UIntImm;
+    static const IRNodeType _node_type = IRNodeType::UIntImm;
 };
 
 /** Floating point constants */
@@ -239,7 +246,7 @@ struct FloatImm : public ExprNode<FloatImm> {
         return node;
     }
 
-    static const IRNodeType _type_info = IRNodeType::FloatImm;
+    static const IRNodeType _node_type = IRNodeType::FloatImm;
 };
 
 /** String constants */
@@ -253,7 +260,7 @@ struct StringImm : public ExprNode<StringImm> {
         return node;
     }
 
-    static const IRNodeType _type_info = IRNodeType::StringImm;
+    static const IRNodeType _node_type = IRNodeType::StringImm;
 };
 
 }  // namespace Internal
@@ -267,7 +274,6 @@ struct Expr : public Internal::IRHandle {
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
     Expr(const Internal::BaseExprNode *n) : IRHandle(n) {}
-
 
     /** Make an expression representing numeric constants of various types. */
     // @{
