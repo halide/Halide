@@ -1752,15 +1752,15 @@ private:
                                 continue;
                             }
 
-                            Expr new_expr = native_interleave(Call::make(op->type, "halide.hexagon.vtmpy" + vtmpy_suffix, {mpys[k].first, mpys[i].first, mpys[0].second, mpys[1].second}, Call::PureExtern));
+                            Expr new_expr = native_interleave(Call::make(op->type, "halide.hexagon.vtmpy" + vtmpy_suffix, {mpys[k].first, mpys[i].first, mpys[k].second, mpys[j].second}, Call::PureExtern));
                             Expr sum;
                             for (int l = 0; l < mpy_size; l++) {
                                 if (l==i || l==j || l==k)
                                     continue;
                                 if (sum.defined()) {
-                                    sum = sum + lossless_cast(op->type, mpys[l].first*mpys[l].second);
+                                    sum = sum + lossless_cast(op->type, mpys[l].first)*lossless_cast(op->type, mpys[l].second);
                                 } else {
-                                    sum = lossless_cast(op->type, mpys[l].first*mpys[l].second);
+                                    sum = lossless_cast(op->type, mpys[l].first)*lossless_cast(op->type, mpys[l].second);
                                 }
                             }
                             if (sum.defined()) {
