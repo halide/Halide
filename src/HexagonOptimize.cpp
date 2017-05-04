@@ -11,7 +11,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Lerp.h"
-#include <unordered_map>
+#include <queue>
 
 namespace Halide {
 namespace Internal {
@@ -20,6 +20,7 @@ using std::set;
 using std::vector;
 using std::string;
 using std::pair;
+using std::queue;
 
 using namespace Halide::ConciseCasts;
 
@@ -680,7 +681,10 @@ private:
                 return;
             } else {
 
-                // No widening subtracts for these expressions.
+                // No widening subtracts for the expressions of the form:
+                //      cast<int16_t>(wild_i8x) - cast<int16_t>(wild_i8x)
+                //      cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
+                // Convert such expressions to vmpa.
                 if (op->type.bits() == 16 && op->type.is_int() &&
                     ((lossless_cast(UInt(8, op->type.lanes()), op->a).defined() && lossless_cast(UInt(8, op->type.lanes()), op->b).defined()) ||
                     (lossless_cast(Int(8, op->type.lanes()), op->a).defined() && lossless_cast(Int(8, op->type.lanes()), op->b).defined()))) {
@@ -1617,38 +1621,38 @@ public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
 
-
 class VtmpyGenerator : public IRMutator {
 private:
     using IRMutator::visit;
-
-    std::unordered_map<string, Expr> lets;
+    Scope<Expr> vars;
     int vector_size;
 
     // Return value of variable if expr is a variable.
     // Else return the expr.
-    Expr getVal(Expr e) {
+    Expr get_val(Expr e) {
         const Variable *op = e.as<Variable>();
         if (op) {
-            if (lets.find(op->name) != lets.end())
-                return lets[op->name];
-            else 
+            if (vars.contains(op->name)) {
+                return vars.get(op->name);
+            }
+            else {
                 return Expr();
+            }
         } else {
             return e;
         }
     }
 
     void visit(const Let* op) {
-        lets[op->name] = op->value;
+        vars.push(op->name, op->value);
         IRMutator::visit(op);
-        lets.erase(op->name);
+        vars.pop(op->name);
     }
 
     void visit(const LetStmt *op) {
-        lets[op->name] = op->value;
+        vars.push(op->name, op->value);
         IRMutator::visit(op);
-        lets.erase(op->name);
+        vars.pop(op->name);
     }
 
     // Return the base of first vector if a and b are continuous vectors
@@ -1669,7 +1673,7 @@ private:
     Expr find_base(const Expr &e) {
 
         if (e.as<Variable>()) {
-            return find_base(getVal(e));
+            return find_base(get_val(e));
         }
 
         if (const Shuffle *maybe_shuffle = e.as<Shuffle>()) {
@@ -1752,15 +1756,15 @@ private:
                                 continue;
                             }
 
-                            Expr new_expr = native_interleave(Call::make(op->type, "halide.hexagon.vtmpy" + vtmpy_suffix, {mpys[k].first, mpys[i].first, mpys[0].second, mpys[1].second}, Call::PureExtern));
+                            Expr new_expr = native_interleave(Call::make(op->type, "halide.hexagon.vtmpy" + vtmpy_suffix, {mpys[k].first, mpys[i].first, mpys[k].second, mpys[j].second}, Call::PureExtern));
                             Expr sum;
                             for (int l = 0; l < mpy_size; l++) {
                                 if (l==i || l==j || l==k)
                                     continue;
                                 if (sum.defined()) {
-                                    sum = sum + lossless_cast(op->type, mpys[l].first*mpys[l].second);
+                                    sum = sum + lossless_cast(op->type, mpys[l].first)*lossless_cast(op->type, mpys[l].second);
                                 } else {
-                                    sum = lossless_cast(op->type, mpys[l].first*mpys[l].second);
+                                    sum = lossless_cast(op->type, mpys[l].first)*lossless_cast(op->type, mpys[l].second);
                                 }
                             }
                             if (sum.defined()) {
@@ -1786,8 +1790,9 @@ public:
     }
 };
 
-
-class ModifyExpressions : public IRMutator {
+// Convert some expressions to an equivalent form which could get better
+// optimized in later stages for hexagon
+class RearrangeExpressions : public IRMutator {
 private:
     using IRMutator::visit;
 
@@ -1798,11 +1803,11 @@ private:
             op = expr.as<Mul>();
             vector<Expr> matches;
             if (op->a.as<Broadcast>()) {
-                // ensures broadcasts always occurs as op1 not op0
+                // Ensures broadcasts always occurs as op1 not op0
                 expr = mutate(op->b * op->a);
                 return;
             }
-
+            // Distributing broadcasts helps creating more vmpa because of more adds of muls
             if (op->b.as<Broadcast>()) {
                 static const vector<Expr> patterns = {
                     (wild_i8x + wild_i8x),
@@ -1810,7 +1815,6 @@ private:
                     (wild_u8x + wild_u8x),
                     (wild_u16x + wild_u16x),
                 };
-
                 for (const Expr &p : patterns) {
                     if(expr_match(p, op->a, matches)) {
                         expr = mutate(simplify(matches[0] * op->b) + simplify(matches[1] * op->b));
@@ -1824,7 +1828,6 @@ private:
                     (wild_u8x - wild_u8x),
                     (wild_u16x - wild_u16x),
                 };
-
                 for (const Expr &p : patterns2) {
                     if(expr_match(p, op->a, matches)) {
                         expr = mutate(simplify(matches[0] * op->b) - simplify(matches[1] * op->b));
@@ -1835,37 +1838,63 @@ private:
         }
     }
 
-    static void balance_adds_helper(const Expr &e, Expr &curr, Expr &pending) {
+    // Helper function for balance_adds
+    // Param e: the input expression
+    // Param output: the output expression
+    // Param pending: the unpaired expression
+    static void balance_adds_helper(const Expr &e, Expr* root, queue<Expr*> leaves) {
         if (const Add *op = e.as<Add>()) {
-            balance_adds_helper(op->a, curr, pending);
-            balance_adds_helper(op->b, curr, pending);
+            balance_adds_helper(op->a, root, leaves);
+            balance_adds_helper(op->b, root, leaves);
         } else {
-            if (pending.defined()) {
-                if (curr.defined()) {
-                    curr = curr + (pending + e);
-                } else {
-                    curr = pending + e;
-                }
-                pending = Expr();
+            if (!root) {
+                root = (Expr*)&e;
+                leaves.push(root);
             }
             else {
-                pending = e;
+                Expr* curr = leaves.front();
+                *curr = *curr + e;
+                leaves.pop();
+                leaves.push(curr);
+                leaves.push((Expr*) &e);
             }
         }
+
+        // if (const Add *op = e.as<Add>()) {
+        //     balance_adds_helper(op->a, output, pending);
+        //     balance_adds_helper(op->b, output, pending);
+        // } else {
+        //     if (pending.defined()) {
+        //         if (output.defined()) {
+        //             output = output + (pending + e);
+        //         } else {
+        //             output = pending + e;
+        //         }
+        //         pending = Expr();
+        //     }
+        //     else {
+        //         pending = e;
+        //     }
+        // }
+
     }
 
-    // Pairs up add operands in experssion
+    // Convert each add expr to have even number of leaves in op->a and 
+    // op->b [all internal nodes are add exprs]. For example:
+    //      (((a+b) + c) + d) -> ((a+b) + (c+d))
     static Expr balance_adds(Expr &e) {
-        Expr curr = Expr();
-        Expr pending = Expr();
-        balance_adds_helper(e, curr, pending);
-        if (pending.defined() && curr.defined()) {
-            curr = curr + pending;
-        }
-        return curr;
+        Expr* root = nullptr;
+        queue<Expr*> leaves;
+        balance_adds_helper(e, root, leaves);
+        // if (curr.defined() && root.defined()) {
+        //     root = root + curr;
+        // }
+        return *root;
     }
 
-
+    // Decides to choose between absd and abs(sub)
+    // If both operands have odd number of multiple adds, then its
+    // better to use abs as unpaired expressions in absd combine to generate vmpa
     void visit(const Call *op) {
         IRMutator::visit(op);
         op = expr.as<Call>();
@@ -1889,17 +1918,13 @@ private:
         }
     }
 
-    // Convert to expressions with even add operands on each side
+    // Convert each add expr to have even number of leaves in op->a and 
+    // op->b [all internal nodes are add exprs]. For example:
+    //      (((a+b) + c) + d) -> ((a+b) + (c+d))
     void visit(const Add *op) {
         IRMutator::visit(op);
         if (op->type.is_vector()) {
-
-            op = expr.as<Add>();
-
-            Expr new_expr = balance_adds(expr);
-            if (!equal(expr, new_expr)) {
-                expr = mutate(new_expr);
-            }
+            expr = balance_adds(expr);
         }
     }
 };
@@ -1917,8 +1942,8 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     s = VtmpyGenerator(t.natural_vector_size(Int(8))).mutate(s);
 
     // Convert some expressions to an equivalent form which could get better
-    // optimized in later stages
-    s = ModifyExpressions().mutate(s);
+    // optimized in later stages for hexagon
+    s = RearrangeExpressions().mutate(s);
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
