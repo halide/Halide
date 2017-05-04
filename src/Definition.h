@@ -98,14 +98,15 @@ public:
      * definition is always valid), this returns an empty vector. */
     EXPORT std::vector<Expr> split_predicate() const;
 
-    /** Get the default (no-specialization) schedule associated with this definition. */
+    /** Get the default (no-specialization) stage-specific schedule associated
+     * with this definition. */
     // @{
-    EXPORT const Schedule &schedule() const;
-    EXPORT Schedule &schedule();
+    EXPORT const StageSchedule &schedule() const;
+    EXPORT StageSchedule &schedule();
     // @}
 
     /** You may create several specialized versions of a func with
-     * different schedules. They trigger when the condition is
+     * different stage-specific schedules. They trigger when the condition is
      * true. See \ref Func::specialize */
     // @{
     EXPORT const std::vector<Specialization> &specializations() const;

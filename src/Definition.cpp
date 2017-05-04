@@ -18,7 +18,7 @@ struct DefinitionContents {
     bool is_init;
     Expr predicate;
     std::vector<Expr> values, args;
-    Schedule schedule;
+    StageSchedule stage_schedule;
     std::vector<Specialization> specializations;
 
     DefinitionContents() : is_init(true), predicate(const_true()) {}
@@ -35,7 +35,7 @@ struct DefinitionContents {
             arg.accept(visitor);
         }
 
-        schedule.accept(visitor);
+        stage_schedule.accept(visitor);
 
         for (const Specialization &s : specializations) {
             if (s.condition.defined()) {
@@ -57,7 +57,7 @@ struct DefinitionContents {
             args[i] = mutator->mutate(args[i]);
         }
 
-        schedule.mutate(mutator);
+        stage_schedule.mutate(mutator);
 
         for (Specialization &s : specializations) {
             if (s.condition.defined()) {
@@ -94,7 +94,7 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     if (rdom.defined()) {
         contents->predicate = rdom.predicate();
         for (size_t i = 0; i < rdom.domain().size(); i++) {
-            contents->schedule.rvars().push_back(rdom.domain()[i]);
+            contents->stage_schedule.rvars().push_back(rdom.domain()[i]);
         }
     }
 }
@@ -109,7 +109,7 @@ Definition Definition::deep_copy(
     copy.contents->predicate = contents->predicate;
     copy.contents->values = contents->values;
     copy.contents->args = contents->args;
-    copy.contents->schedule = contents->schedule.deep_copy(copied_map);
+    copy.contents->stage_schedule = contents->stage_schedule.deep_copy(copied_map);
 
     // Deep-copy specializations
     for (const Specialization &s : contents->specializations) {
@@ -164,12 +164,12 @@ std::vector<Expr> Definition::split_predicate() const {
     return predicates;
 }
 
-Schedule &Definition::schedule() {
-    return contents->schedule;
+StageSchedule &Definition::schedule() {
+    return contents->stage_schedule;
 }
 
-const Schedule &Definition::schedule() const {
-    return contents->schedule;
+const StageSchedule &Definition::schedule() const {
+    return contents->stage_schedule;
 }
 
 std::vector<Specialization> &Definition::specializations() {
@@ -189,18 +189,12 @@ const Specialization &Definition::add_specialization(Expr condition) {
     s.definition.contents->args   = contents->args;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
-    s.definition.contents->schedule.store_level()      = contents->schedule.store_level();
-    s.definition.contents->schedule.compute_level()    = contents->schedule.compute_level();
-    s.definition.contents->schedule.rvars()            = contents->schedule.rvars();
-    s.definition.contents->schedule.splits()           = contents->schedule.splits();
-    s.definition.contents->schedule.dims()             = contents->schedule.dims();
-    s.definition.contents->schedule.storage_dims()     = contents->schedule.storage_dims();
-    s.definition.contents->schedule.bounds()           = contents->schedule.bounds();
-    s.definition.contents->schedule.prefetches()       = contents->schedule.prefetches();
-    s.definition.contents->schedule.wrappers()         = contents->schedule.wrappers();
-    s.definition.contents->schedule.memoized()         = contents->schedule.memoized();
-    s.definition.contents->schedule.touched()          = contents->schedule.touched();
-    s.definition.contents->schedule.allow_race_conditions() = contents->schedule.allow_race_conditions();
+    s.definition.contents->stage_schedule.rvars()       = contents->stage_schedule.rvars();
+    s.definition.contents->stage_schedule.splits()      = contents->stage_schedule.splits();
+    s.definition.contents->stage_schedule.dims()        = contents->stage_schedule.dims();
+    s.definition.contents->stage_schedule.prefetches()  = contents->stage_schedule.prefetches();
+    s.definition.contents->stage_schedule.touched()     = contents->stage_schedule.touched();
+    s.definition.contents->stage_schedule.allow_race_conditions() = contents->stage_schedule.allow_race_conditions();
 
     contents->specializations.push_back(s);
     return contents->specializations.back();
