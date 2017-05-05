@@ -1196,7 +1196,7 @@ inline Expr fast_pow(Expr x, Expr y) {
 
     x = cast<float>(std::move(x));
     y = cast<float>(std::move(y));
-    return select(x == 0.0f, 0.0f, fast_exp(fast_log(std::move(x)) * std::move(y)));
+    return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * std::move(y)));
 }
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
