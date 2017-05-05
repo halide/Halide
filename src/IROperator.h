@@ -1223,12 +1223,13 @@ inline Expr fast_inverse_sqrt(Expr x) {
  * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr floor(Expr x) {
     user_assert(x.defined()) << "floor of undefined Expr\n";
-    if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(x.type(), "floor_f64", {std::move(x)}, Internal::Call::PureExtern);
-    } else if (x.type().element_of() == Float(16)) {
-        return Internal::Call::make(Float(16), "floor_f16", {std::move(x)}, Internal::Call::PureExtern);
+    Type t = x.type();
+    if (t.element_of() == Float(64)) {
+        return Internal::Call::make(t, "floor_f64", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (t.element_of() == Float(16)) {
+        return Internal::Call::make(t, "floor_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        Type t = Float(32, x.type().lanes());
+        t = t.with_code(Type::Float);
         return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
@@ -1239,12 +1240,13 @@ inline Expr floor(Expr x) {
  * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr ceil(Expr x) {
     user_assert(x.defined()) << "ceil of undefined Expr\n";
-    if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(x.type(), "ceil_f64", {std::move(x)}, Internal::Call::PureExtern);
+    Type t = x.type();
+    if (t.element_of() == Float(64)) {
+        return Internal::Call::make(t, "ceil_f64", {std::move(x)}, Internal::Call::PureExtern);
     } else if (x.type().element_of() == Float(16)) {
-        return Internal::Call::make(Float(16), "ceil_f16", {std::move(x)}, Internal::Call::PureExtern);
+        return Internal::Call::make(t, "ceil_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        Type t = Float(32, x.type().lanes());
+        t = t.with_code(Type::Float);
         return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
@@ -1256,12 +1258,13 @@ inline Expr ceil(Expr x) {
  * cleanly. */
 inline Expr round(Expr x) {
     user_assert(x.defined()) << "round of undefined Expr\n";
-    if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(Float(64), "round_f64", {std::move(x)}, Internal::Call::PureExtern);
-    } else if (x.type().element_of() == Float(16)) {
-        return Internal::Call::make(Float(16), "round_f16", {std::move(x)}, Internal::Call::PureExtern);
+    Type t = x.type();
+    if (t.element_of() == Float(64)) {
+        return Internal::Call::make(t, "round_f64", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (t.element_of() == Float(16)) {
+        return Internal::Call::make(t, "round_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        Type t = Float(32, x.type().lanes());
+        t = t.with_code(Type::Float);
         return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
@@ -1271,12 +1274,13 @@ inline Expr round(Expr x) {
  * floating point, despite being a whole number. Vectorizes cleanly. */
 inline Expr trunc(Expr x) {
     user_assert(x.defined()) << "trunc of undefined Expr\n";
-    if (x.type().element_of() == Float(64)) {
-        return Internal::Call::make(Float(64), "trunc_f64", {std::move(x)}, Internal::Call::PureExtern);
-    } else if (x.type().element_of() == Float(16)) {
-        return Internal::Call::make(Float(16), "trunc_f16", {std::move(x)}, Internal::Call::PureExtern);
+    Type t = x.type();
+    if (t.element_of() == Float(64)) {
+        return Internal::Call::make(t, "trunc_f64", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (t.element_of() == Float(16)) {
+        return Internal::Call::make(t, "trunc_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        Type t = Float(32, x.type().lanes());
+        t = t.with_code(Type::Float);
         return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
@@ -1292,7 +1296,7 @@ inline Expr is_nan(Expr x) {
     } else if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(t, "is_nan_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        Type ft = Float(32, x.type().lanes());
+        Type ft = x.type().with_code(Type::Float);
         return Internal::Call::make(t, "is_nan_f32", {cast(ft, std::move(x))}, Internal::Call::PureExtern);
     }
 }
