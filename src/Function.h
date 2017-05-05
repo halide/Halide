@@ -12,6 +12,7 @@
 #include "Reduction.h"
 #include "Definition.h"
 #include "Buffer.h"
+#include "Util.h"
 
 #include <map>
 
@@ -125,6 +126,10 @@ public:
     /** Accept a visitor to visit all of the definitions and arguments
      * of this function. */
     EXPORT void accept(IRVisitor *visitor) const;
+
+    /** Pass a mutator to mutate all of the definitions and arguments
+     * of this function. */
+    EXPORT void mutate(IRMutator *mutator);
 
     /** Get the name of the function. */
     EXPORT const std::string &name() const;

@@ -2,6 +2,7 @@
 #include <chrono>
 
 #include "local_laplacian.h"
+#include "local_laplacian_auto_schedule.h"
 
 #include "halide_benchmark.h"
 #include "HalideBuffer.h"
@@ -23,16 +24,33 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> output(input.width(), input.height(), 3);
     int timing = atoi(argv[5]);
 
-    // Timing code
-    double best = benchmark(timing, 1, [&]() {
-        local_laplacian(input, levels, alpha/(levels-1), beta, output);
-    });
-    printf("%gus\n", best * 1e6);
-
-
     local_laplacian(input, levels, alpha/(levels-1), beta, output);
 
+    // Timing code
+
+    // Manually-tuned version
+    double best_manual = benchmark(timing, 1, [&]() {
+        local_laplacian(input, levels, alpha/(levels-1), beta, output);
+    });
+    printf("Manually-tuned time: %gms\n", best_manual * 1e3);
+
+    // Auto-scheduled version
+    double best_auto = benchmark(timing, 1, [&]() {
+        local_laplacian_auto_schedule(input, levels, alpha/(levels-1), beta, output);
+    });
+    printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
+
     save_image(output, argv[6]);
+
+    const halide_filter_metadata_t *md = local_laplacian_metadata();
+    // Only compare the performance if target has non-gpu features.
+    if (!strstr(md->target, "cuda") &&
+        !strstr(md->target, "opencl") &&
+        !strstr(md->target, "metal") &&
+        (best_auto > best_manual * 2)) {
+        printf("Auto-scheduler is much much slower than it should be.\n");
+        return -1;
+    }
 
     return 0;
 }

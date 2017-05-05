@@ -6,7 +6,7 @@ constexpr int maxJ = 20;
 
 class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 public:
-
+    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<int>   pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
     ImageParam            input{UInt(16), 3, "input"};
@@ -19,7 +19,7 @@ public:
         const int J = pyramid_levels;
 
         // Make the remapping function as a lookup table.
-        Func remap;
+        Func remap("remap");
         Expr fx = cast<float>(x) / 256.0f;
         remap(x) = alpha*fx*exp(-fx*fx/2.0f);
 
@@ -27,11 +27,11 @@ public:
         Func clamped = Halide::BoundaryConditions::repeat_edge(input);
 
         // Convert to floating point
-        Func floating;
+        Func floating("floating");
         floating(x, y, c) = clamped(x, y, c) / 65535.0f;
 
         // Get the luminance channel
-        Func gray;
+        Func gray("gray");
         gray(x, y) = 0.299f * floating(x, y, 0) + 0.587f * floating(x, y, 1) + 0.114f * floating(x, y, 2);
 
         // Make the processed Gaussian pyramid.
@@ -78,7 +78,7 @@ public:
         }
 
         // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
-        Func color;
+        Func color("color");
         float eps = 0.01f;
         color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c)+eps) / (gray(x, y)+eps);
 
@@ -86,49 +86,65 @@ public:
         // Convert back to 16-bit
         output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
 
-
-
         /* THE SCHEDULE */
-        remap.compute_root();
 
-        if (get_target().has_gpu_feature()) {
-            // gpu schedule
-            Var xi, yi;
-            output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
-            for (int j = 0; j < J; j++) {
-                int blockw = 16, blockh = 8;
-                if (j > 3) {
-                    blockw = 2;
-                    blockh = 2;
+        if (!auto_schedule) {
+            remap.compute_root();
+            if (get_target().has_gpu_feature()) {
+                // gpu schedule
+                Var xi, yi;
+                output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
+                for (int j = 0; j < J; j++) {
+                    int blockw = 16, blockh = 8;
+                    if (j > 3) {
+                        blockw = 2;
+                        blockh = 2;
+                    }
+                    if (j > 0) {
+                        inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
+                        gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
+                    }
+                    outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
                 }
-                if (j > 0) {
-                    inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
-                    gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
+            } else {
+                // cpu schedule
+                Var yo;
+                output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
+                gray.compute_root().parallel(y, 32).vectorize(x, 8);
+                for (int j = 1; j < 5; j++) {
+                    inGPyramid[j]
+                        .compute_root().parallel(y, 32).vectorize(x, 8);
+                    gPyramid[j]
+                        .compute_root().reorder_storage(x, k, y)
+                        .reorder(k, y).parallel(y, 8).vectorize(x, 8);
+                    outGPyramid[j]
+                        .store_at(output, yo).compute_at(output, y)
+                        .vectorize(x, 8);
                 }
-                outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
+                outGPyramid[0]
+                    .compute_at(output, y).vectorize(x, 8);
+                for (int j = 5; j < J; j++) {
+                    inGPyramid[j].compute_root();
+                    gPyramid[j].compute_root().parallel(k);
+                    outGPyramid[j].compute_root();
+                }
             }
         } else {
-            // cpu schedule
-            Var yo;
-            output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
-            gray.compute_root().parallel(y, 32).vectorize(x, 8);
-            for (int j = 1; j < 5; j++) {
-                inGPyramid[j]
-                    .compute_root().parallel(y, 32).vectorize(x, 8);
-                gPyramid[j]
-                    .compute_root().reorder_storage(x, k, y)
-                    .reorder(k, y).parallel(y, 8).vectorize(x, 8);
-                outGPyramid[j]
-                    .store_at(output, yo).compute_at(output, y)
-                    .vectorize(x, 8);
-            }
-            outGPyramid[0]
-                .compute_at(output, y).vectorize(x, 8);
-            for (int j = 5; j < J; j++) {
-                inGPyramid[j].compute_root();
-                gPyramid[j].compute_root().parallel(k);
-                outGPyramid[j].compute_root();
-            }
+            // Provide estimates on the input image
+            input.dim(0).set_bounds_estimate(0, 1536);
+            input.dim(1).set_bounds_estimate(0, 2560);
+            input.dim(2).set_bounds_estimate(0, 3);
+            // Provide estimates on the parameters
+            levels.set_estimate(8);
+            alpha.set_estimate(1);
+            beta.set_estimate(1);
+            // Provide estimates on the pipeline output
+            output.estimate(x, 0, 1536)
+                .estimate(y, 0, 2560)
+                .estimate(c, 0, 3);
+            // Auto schedule the pipeline
+            Pipeline p(output);
+            p.auto_schedule(get_target());
         }
 
         return output;
@@ -139,7 +155,7 @@ private:
     // Downsample with a 1 3 3 1 filter
     Func downsample(Func f) {
         using Halide::_;
-        Func downx, downy;
+        Func downx("downx"), downy("downy");
         downx(x, y, _) = (f(2*x-1, y, _) + 3.0f * (f(2*x, y, _) + f(2*x+1, y, _)) + f(2*x+2, y, _)) / 8.0f;
         downy(x, y, _) = (downx(x, 2*y-1, _) + 3.0f * (downx(x, 2*y, _) + downx(x, 2*y+1, _)) + downx(x, 2*y+2, _)) / 8.0f;
         return downy;
@@ -148,7 +164,7 @@ private:
     // Upsample using bilinear interpolation
     Func upsample(Func f) {
         using Halide::_;
-        Func upx, upy;
+        Func upx("upx"), upy("upy");
         upx(x, y, _) = 0.25f * f((x/2) - 1 + 2*(x % 2), y, _) + 0.75f * f(x/2, y, _);
         upy(x, y, _) = 0.25f * upx(x, (y/2) - 1 + 2*(y % 2), _) + 0.75f * upx(x, y/2, _);
         return upy;
