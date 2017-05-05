@@ -11,7 +11,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Lerp.h"
-#include "unordered_map"
+#include <unordered_map>
 
 namespace Halide {
 namespace Internal {
@@ -1648,7 +1648,7 @@ private:
     void visit(const LetStmt *op) {
         lets[op->name] = op->value;
         IRMutator::visit(op);
-        // lets.erase(op->name);
+        lets.erase(op->name);
     }
 
     // Return the base of first vector if a and b are continuous vectors
