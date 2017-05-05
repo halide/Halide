@@ -18,7 +18,6 @@
 #include "Tuple.h"
 #include "Module.h"
 #include "Pipeline.h"
-#include "Schedule.h"
 
 #include <map>
 

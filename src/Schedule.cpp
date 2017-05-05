@@ -328,10 +328,8 @@ void FuncSchedule::mutate(IRMutator *mutator) {
 
 StageSchedule::StageSchedule() : contents(new StageScheduleContents) {}
 
-StageSchedule StageSchedule::deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
-
-    internal_assert(contents.defined()) << "Cannot deep-copy undefined Schedule\n";
+StageSchedule StageSchedule::get_copy() const {
+    internal_assert(contents.defined()) << "Cannot copy undefined Schedule\n";
     StageSchedule copy;
     copy.contents->rvars = contents->rvars;
     copy.contents->splits = contents->splits;
