@@ -50,15 +50,8 @@ public:
     /** Construct an empty Definition. By default, it is a init definition. */
     EXPORT Definition();
 
-    /** Return a deep copy of this Definition. It recursively deep copies all
-     * called functions, schedules, and reduction domains. This method
-     * takes a map of <old FunctionContents, deep-copied version> as input and
-     * would use the deep-copied FunctionContents from the map if exists instead
-     * of creating a new deep-copy to avoid creating deep-copies of the same
-     * FunctionContents multiple times.
-     */
-    EXPORT Definition deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
+    /** Return a copy of this Definition. */
+    EXPORT Definition get_copy() const;
 
     /** Equality of identity */
     bool same_as(const Definition &other) const {

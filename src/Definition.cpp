@@ -99,23 +99,21 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     }
 }
 
-// Return deep-copy of Definition
-Definition Definition::deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
-    internal_assert(contents.defined()) << "Cannot deep-copy undefined Definition\n";
+Definition Definition::get_copy() const {
+    internal_assert(contents.defined()) << "Cannot copy undefined Definition\n";
 
     Definition copy;
     copy.contents->is_init = contents->is_init;
     copy.contents->predicate = contents->predicate;
     copy.contents->values = contents->values;
     copy.contents->args = contents->args;
-    copy.contents->stage_schedule = contents->stage_schedule.deep_copy(copied_map);
+    copy.contents->stage_schedule = contents->stage_schedule.get_copy();
 
     // Deep-copy specializations
     for (const Specialization &s : contents->specializations) {
         Specialization s_copy;
         s_copy.condition = s.condition;
-        s_copy.definition = s.definition.deep_copy(copied_map);
+        s_copy.definition = s.definition.get_copy();
         s_copy.failure_message = s.failure_message;
         copy.contents->specializations.push_back(std::move(s_copy));
     }
@@ -189,12 +187,7 @@ const Specialization &Definition::add_specialization(Expr condition) {
     s.definition.contents->args   = contents->args;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
-    s.definition.contents->stage_schedule.rvars()       = contents->stage_schedule.rvars();
-    s.definition.contents->stage_schedule.splits()      = contents->stage_schedule.splits();
-    s.definition.contents->stage_schedule.dims()        = contents->stage_schedule.dims();
-    s.definition.contents->stage_schedule.prefetches()  = contents->stage_schedule.prefetches();
-    s.definition.contents->stage_schedule.touched()     = contents->stage_schedule.touched();
-    s.definition.contents->stage_schedule.allow_race_conditions() = contents->stage_schedule.allow_race_conditions();
+    s.definition.contents->stage_schedule = contents->stage_schedule.get_copy();
 
     contents->specializations.push_back(s);
     return contents->specializations.back();

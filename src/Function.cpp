@@ -329,14 +329,14 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->func_schedule = src->func_schedule.deep_copy(copied_map);
 
     // Copy the pure definition
-    dst->init_def = src->init_def.deep_copy(copied_map);
+    dst->init_def = src->init_def.get_copy();
     internal_assert(dst->init_def.is_init());
     internal_assert(dst->init_def.schedule().rvars().empty())
         << "Init definition shouldn't have reduction domain\n";
 
     for (const Definition &def : src->updates) {
         internal_assert(!def.is_init());
-        Definition def_copy = def.deep_copy(copied_map);
+        Definition def_copy = def.get_copy();
         internal_assert(!def_copy.is_init());
         dst->updates.push_back(std::move(def_copy));
     }

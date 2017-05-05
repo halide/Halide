@@ -328,15 +328,8 @@ public:
     StageSchedule(const StageSchedule &other) : contents(other.contents) {}
     EXPORT StageSchedule();
 
-    /** Return a copy of this StageSchedule. It recursively deep copies all
-     * called functions, schedules, specializations, and reduction domains. This
-     * method takes a map of <old FunctionContents, deep-copied version> as input
-     * and would use the deep-copied FunctionContents from the map if exists
-     * instead of creating a new deep-copy to avoid creating deep-copies of the
-     * same FunctionContents multiple times.
-     */
-    EXPORT StageSchedule deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
+    /** Return a copy of this StageSchedule. */
+    EXPORT StageSchedule get_copy() const;
 
     /** This flag is set to true if the dims list has been manipulated
      * by the user (or if a ScheduleHandle was created that could have
