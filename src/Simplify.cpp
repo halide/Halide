@@ -4883,8 +4883,8 @@ private:
         // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
         vector<pair<string, Expr>> lets;
         while (const Let *let = value.as<Let>()) {
-            value = let->body;
             lets.push_back({let->name, let->value});
+            value = let->body;
         }
 
         if (value.same_as(op->value)) {
