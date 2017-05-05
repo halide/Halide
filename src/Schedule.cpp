@@ -131,6 +131,7 @@ struct ScheduleContents {
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<PrefetchDirective> prefetches;
+    std::vector<Bound> estimates;
     std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
     bool memoized;
     bool touched;
@@ -173,6 +174,14 @@ struct ScheduleContents {
                 p.offset = mutator->mutate(p.offset);
             }
         }
+        for (Bound &b : estimates) {
+            if (b.min.defined()) {
+                b.min = mutator->mutate(b.min);
+            }
+            if (b.extent.defined()) {
+                b.extent = mutator->mutate(b.extent);
+            }
+        }
     }
 };
 
@@ -202,6 +211,7 @@ Schedule Schedule::deep_copy(
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->prefetches = contents->prefetches;
+    copy.contents->estimates = contents->estimates;
     copy.contents->memoized = contents->memoized;
     copy.contents->touched = contents->touched;
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
@@ -276,6 +286,14 @@ std::vector<PrefetchDirective> &Schedule::prefetches() {
 
 const std::vector<PrefetchDirective> &Schedule::prefetches() const {
     return contents->prefetches;
+}
+
+std::vector<Bound> &Schedule::estimates() {
+    return contents->estimates;
+}
+
+const std::vector<Bound> &Schedule::estimates() const {
+    return contents->estimates;
 }
 
 std::vector<ReductionVariable> &Schedule::rvars() {
@@ -362,6 +380,14 @@ void Schedule::accept(IRVisitor *visitor) const {
     for (const PrefetchDirective &p : prefetches()) {
         if (p.offset.defined()) {
             p.offset.accept(visitor);
+        }
+    }
+    for (const Bound &b : estimates()) {
+        if (b.min.defined()) {
+            b.min.accept(visitor);
+        }
+        if (b.extent.defined()) {
+            b.extent.accept(visitor);
         }
     }
 }
