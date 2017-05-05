@@ -1965,7 +1965,7 @@ public:
 
     /** You can cast a Func to its pure stage for the purposes of
      * scheduling it. */
-    operator Stage() const;
+    EXPORT operator Stage() const;
 
     /** Get a handle on the output buffer for this Func. Only relevant
      * if this is the output Func in a pipeline. Useful for making
