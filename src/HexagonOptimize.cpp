@@ -11,7 +11,6 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Lerp.h"
-#include <queue>
 
 namespace Halide {
 namespace Internal {
@@ -20,7 +19,6 @@ using std::set;
 using std::vector;
 using std::string;
 using std::pair;
-using std::queue;
 
 using namespace Halide::ConciseCasts;
 
@@ -1625,7 +1623,6 @@ class VtmpyGenerator : public IRMutator {
 private:
     using IRMutator::visit;
     Scope<Expr> vars;
-    int vector_size;
 
     // Return value of variable if expr is a variable.
     // Else return the expr.
@@ -1643,76 +1640,112 @@ private:
         }
     }
 
+    // Save variable value
     void visit(const Let* op) {
         vars.push(op->name, op->value);
         IRMutator::visit(op);
         vars.pop(op->name);
     }
 
+    // Save variable value
     void visit(const LetStmt *op) {
         vars.push(op->name, op->value);
         IRMutator::visit(op);
         vars.pop(op->name);
     }
 
-    // Return the base of first vector if a and b are continuous vectors
-    Expr are_adjacent_vectors(const Expr &a, const Expr &b) {
-        Expr base1 = find_base(a);
-        Expr base2 = find_base(b);
+    // Check if vector start indices differ by constant diff.
+    bool cmp_basediff_const(const Expr &a, const Expr &b, int diff) {
+        Expr maybe_load_a = calc_load(a);
+        Expr maybe_load_b = calc_load(b);
 
-        if (base1.defined() && base2.defined()) {
-            Expr base_diff = simplify(base2 - base1);
-            if (is_const(base_diff, vector_size)) {
-                return base1;
+        if (maybe_load_a.defined() && maybe_load_b.defined()) {
+            const Load* load_a = maybe_load_a.as<Load>();
+            const Load* load_b = maybe_load_b.as<Load>();
+            const Ramp* ramp_a = get_val(load_a->index).as<Ramp>();
+            const Ramp* ramp_b = get_val(load_b->index).as<Ramp>();
+            if (ramp_a && ramp_b && load_a->name == load_b->name) {
+                Expr base_diff = simplify(ramp_a->base - ramp_b->base - diff);
+                if (is_const(base_diff, 0)) {
+                    return true;
+                }
             }
         }
-        return Expr();
+        return false;
     }
 
-    // Returns the base for vector
-    Expr find_base(const Expr &e) {
-
-        if (e.as<Variable>()) {
-            return find_base(get_val(e));
+    // Return the ramp of first vector if all vector in exprs are continuous
+    // vectors in memory.
+    Expr are_continuous_vectors(const vector<Expr> exprs) {
+        if (exprs.size() == 0) {
+            return nullptr;
         }
+        const Load *prev_load;
+        const Load *curr_load;
+        const Ramp *prev_ramp = nullptr;
+        const Ramp *curr_ramp = nullptr;
+        for (size_t i = 0; i < exprs.size(); i++) {
+            Expr maybe_load = calc_load(exprs[i]);
+            if (maybe_load.defined()) {
+                curr_load = maybe_load.as<Load>();
+                curr_ramp = get_val(curr_load->index).as<Ramp>();
+                if (curr_ramp) {
+                    if (i > 0 && curr_load->name == prev_load->name) {
+                        Expr base_diff = simplify(curr_ramp->base - prev_ramp->base - (prev_ramp->lanes * prev_ramp->stride));
+                        if (!is_const(base_diff, 0)) {
+                            return nullptr;
+                        }
+                    }
+                } else {
+                    return nullptr;
+                }
+            } else {
+                return nullptr;
+            }
+            prev_load = curr_load;
+            prev_ramp = curr_ramp;
+        }
+        return calc_load(exprs[0]);
+    }
 
+    // Returns the load indicating vector start index. If the vector is sliced
+    // return load with shifted ramp to include slice_begin value
+    Expr calc_load(const Expr &e) {
+        if (e.as<Variable>()) {
+            return calc_load(get_val(e));
+        }
         if (const Shuffle *maybe_shuffle = e.as<Shuffle>()) {
             if (maybe_shuffle->is_slice()) {
-                Expr res = find_base(maybe_shuffle->vectors[0]);
-                if (res.defined()) {
-                    return res + maybe_shuffle->slice_begin();
-                } else {
-                    return Expr();
+                Expr maybe_load = calc_load(maybe_shuffle->vectors[0]);
+                if (!maybe_load.defined()) {
+                    return nullptr;
                 }
+                const Load *res = maybe_load.as<Load>();
+                const Ramp *ramp = get_val(res->index).as<Ramp>();
+                if (!ramp) {
+                    return nullptr;
+                }
+                Expr shifted_ramp = Ramp::make(ramp->base + maybe_shuffle->slice_begin(), ramp->stride, ramp->lanes);
+                Expr shifted_load = Load::make(res->type, res->name, shifted_ramp, res->image, res->param, res->predicate);
+                return shifted_load;
             }
-
             if (maybe_shuffle->is_concat()) {
-                if (maybe_shuffle->vectors.size()==2) {
-                    Expr concat_op1 = maybe_shuffle->vectors[0];
-                    Expr concat_op2 = maybe_shuffle->vectors[1];
-                    return are_adjacent_vectors(concat_op1, concat_op2);
-                }
+                return are_continuous_vectors(maybe_shuffle->vectors);
             }
         }
-
         if (const Load *maybe_load = e.as<Load>()) {
-            return find_base(maybe_load->index);
+            return maybe_load;
         }
-
-        if (const Ramp *maybe_ramp = e.as<Ramp>()) {
-            return maybe_ramp->base;
-        }
-
-        return Expr();
+        return nullptr;
     }
 
-
+    // Vtmpy helps in sliding window ops of the form a*v0 + b*v1 + v2.
+    // Conditions required:
+    //      v0, v1 and v2 start indices differ by vector stride
     void visit(const Add *op) {
-
         // Find opportunities vtmpy
         if (op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32)) {
             int lanes = op->type.lanes();
-
             vector<MulExpr> mpys;
             Expr rest;
             string vtmpy_suffix;
@@ -1730,35 +1763,30 @@ private:
             }
 
             if (mpys.size() >= 3) {
-
-                int mpy_size = mpys.size();
-                vector<Expr> bases(mpy_size);
-                for(int i = 0; i < mpy_size; i++) {
-                    bases[i] = find_base(mpys[i].first);
+                size_t mpy_size = mpys.size();
+                vector<Expr> loads(mpy_size);
+                for(size_t i = 0; i < mpy_size; i++) {
+                    loads[i] = calc_load(mpys[i].first);
                 }
-
                 // Checking all possible combinations for vtmpy reductions
-                for(int i = 0; i < mpy_size; i++) {
-
-                    if (!bases[i].defined() || !is_const(mpys[i].second, 1)) {
+                for(size_t i = 0; i < mpy_size; i++) {
+                    Expr load2 = loads[i];
+                    if (!load2.defined() || !is_const(mpys[i].second, load2.type().bits()/8)) {
                         continue;
                     }
-                    Expr base2 = bases[i];
-                    for (int j = 0; j < mpy_size; j++) {
-                        Expr base1 = bases[j];
-                        if (!base1.defined() || !is_const(simplify(base2 - base1), 1)) {
+                    for (size_t j = 0; j < mpy_size; j++) {
+                        Expr load1 = loads[j];
+                        if (!load1.defined() || !cmp_basediff_const(load2, load1, load1.type().bits()/8)) {
                             continue;
                         }
-
-                        for (int k = 0; k < mpy_size; k++) {
-                            Expr base0 = bases[k];
-                            if (!base0.defined() || !is_const(simplify(base1 - base0), 1)) {
+                        for (size_t k = 0; k < mpy_size; k++) {
+                            Expr load0 = loads[k];
+                            if (!load0.defined() || !cmp_basediff_const(load1, load0, load0.type().bits()/8)) {
                                 continue;
                             }
-
                             Expr new_expr = native_interleave(Call::make(op->type, "halide.hexagon.vtmpy" + vtmpy_suffix, {mpys[k].first, mpys[i].first, mpys[k].second, mpys[j].second}, Call::PureExtern));
                             Expr sum;
-                            for (int l = 0; l < mpy_size; l++) {
+                            for (size_t l = 0; l < mpy_size; l++) {
                                 if (l==i || l==j || l==k)
                                     continue;
                                 if (sum.defined()) {
@@ -1782,11 +1810,6 @@ private:
         }
 
         IRMutator::visit(op);
-    }
-
-public:
-    VtmpyGenerator(int native_vector_bytes) {
-        vector_size = native_vector_bytes;
     }
 };
 
@@ -1842,58 +1865,40 @@ private:
     // Param e: the input expression
     // Param output: the output expression
     // Param pending: the unpaired expression
-    static void balance_adds_helper(const Expr &e, Expr* root, queue<Expr*> leaves) {
+    static void balance_adds_helper(const Expr &e, Expr &output, Expr &pending) {
         if (const Add *op = e.as<Add>()) {
-            balance_adds_helper(op->a, root, leaves);
-            balance_adds_helper(op->b, root, leaves);
+            balance_adds_helper(op->a, output, pending);
+            balance_adds_helper(op->b, output, pending);
         } else {
-            if (!root) {
-                root = (Expr*)&e;
-                leaves.push(root);
+            if (pending.defined()) {
+                if (output.defined()) {
+                    output = output + (pending + e);
+                } else {
+                    output = pending + e;
+                }
+                pending = Expr();
             }
             else {
-                Expr* curr = leaves.front();
-                *curr = *curr + e;
-                leaves.pop();
-                leaves.push(curr);
-                leaves.push((Expr*) &e);
+                pending = e;
             }
         }
-
-        // if (const Add *op = e.as<Add>()) {
-        //     balance_adds_helper(op->a, output, pending);
-        //     balance_adds_helper(op->b, output, pending);
-        // } else {
-        //     if (pending.defined()) {
-        //         if (output.defined()) {
-        //             output = output + (pending + e);
-        //         } else {
-        //             output = pending + e;
-        //         }
-        //         pending = Expr();
-        //     }
-        //     else {
-        //         pending = e;
-        //     }
-        // }
-
     }
 
     // Convert each add expr to have even number of leaves in op->a and 
     // op->b [all internal nodes are add exprs]. For example:
     //      (((a+b) + c) + d) -> ((a+b) + (c+d))
     static Expr balance_adds(Expr &e) {
-        Expr* root = nullptr;
-        queue<Expr*> leaves;
-        balance_adds_helper(e, root, leaves);
-        // if (curr.defined() && root.defined()) {
-        //     root = root + curr;
-        // }
-        return *root;
+        Expr output = Expr();
+        Expr pending = Expr();
+        balance_adds_helper(e, output, pending);
+        if (pending.defined() && output.defined()) {
+            output = output + pending;
+        }
+        return output;
     }
 
     // Decides to choose between absd and abs(sub)
-    // If both operands have odd number of multiple adds, then its
+    // If both operands have odd number of multiply adds, then its
     // better to use abs as unpaired expressions in absd combine to generate vmpa
     void visit(const Call *op) {
         IRMutator::visit(op);
@@ -1939,9 +1944,9 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
 
     // Generate vtmpy instruction if possible
-    s = VtmpyGenerator(t.natural_vector_size(Int(8))).mutate(s);
+    s = VtmpyGenerator().mutate(s);
 
-    // Convert some expressions to an equivalent form which could get better
+    // Convert some expressions to an equivalent form which get better
     // optimized in later stages for hexagon
     s = RearrangeExpressions().mutate(s);
 
