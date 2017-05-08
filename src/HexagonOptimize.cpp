@@ -682,10 +682,16 @@ private:
                 // No widening subtracts for the expressions of the form:
                 //      cast<int16_t>(wild_i8x) - cast<int16_t>(wild_i8x)
                 //      cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
+                // In above cases the vectors need to be extended before using vsub.
                 // Convert such expressions to vmpa.
-                if (op->type.bits() == 16 && op->type.is_int() &&
-                    ((lossless_cast(UInt(8, op->type.lanes()), op->a).defined() && lossless_cast(UInt(8, op->type.lanes()), op->b).defined()) ||
-                    (lossless_cast(Int(8, op->type.lanes()), op->a).defined() && lossless_cast(Int(8, op->type.lanes()), op->b).defined()))) {
+                // For eg: Consider expression cast<int16_t>(wild_i8x) - cast<int16_t>(wild_i8x)
+                // Converting to cast<int16_t>(wild_i8x) + (-1)*cast<int16_t>(wild_i8x)
+                // generates much more efficient vmpa instead of 2 vzxt and 1 vsub instruction
+                if (op->type.bits() == 16 && op->type.is_int() && 
+                    ((lossless_cast(UInt(8, op->type.lanes()), op->a).defined() &&
+                    lossless_cast(UInt(8, op->type.lanes()), op->b).defined()) ||
+                    (lossless_cast(Int(8, op->type.lanes()), op->a).defined() && 
+                    lossless_cast(Int(8, op->type.lanes()), op->b).defined()))) {
                     // This form will generate vmpa
                     expr = mutate(op->a + (-1)*op->b);
                     return;
