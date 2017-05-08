@@ -1905,7 +1905,6 @@ private:
         op = expr.as<Call>();
 
         if (op->type.is_vector() && op->is_intrinsic(Call::absd) && (op->type.bits() == 16 || op->type.bits() == 32)) {
-
             if (op->args[0].type().is_int()) {
                 Expr a = op->args[0];
                 Expr b = op->args[1];
@@ -1942,7 +1941,6 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
-
     // Generate vtmpy instruction if possible
     s = VtmpyGenerator().mutate(s);
 
