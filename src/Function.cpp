@@ -46,6 +46,7 @@ struct FunctionContents {
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
     NameMangling extern_mangling;
+    DeviceAPI extern_function_device_api;
     bool extern_uses_old_buffer_t;
 
     bool trace_loads, trace_stores, trace_realizations;
@@ -53,6 +54,7 @@ struct FunctionContents {
     bool frozen;
 
     FunctionContents() : extern_mangling(NameMangling::Default),
+                         extern_function_device_api(DeviceAPI::Host),
                          extern_uses_old_buffer_t(false),
                          trace_loads(false),
                          trace_stores(false),
@@ -309,6 +311,7 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->debug_file = src->debug_file;
     dst->extern_function_name = src->extern_function_name;
     dst->extern_mangling = src->extern_mangling;
+    dst->extern_function_device_api = src->extern_function_device_api;
     dst->extern_uses_old_buffer_t = src->extern_uses_old_buffer_t;
     dst->trace_loads = src->trace_loads;
     dst->trace_stores = src->trace_stores;
@@ -683,6 +686,7 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality,
                              NameMangling mangling,
+                             DeviceAPI device_api,
                              bool use_old_buffer_t) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
@@ -697,6 +701,7 @@ void Function::define_extern(const std::string &function_name,
     contents->extern_arguments = args;
     contents->output_types = types;
     contents->extern_mangling = mangling;
+    contents->extern_function_device_api = device_api;
     contents->extern_uses_old_buffer_t = use_old_buffer_t;
 
     for (size_t i = 0; i < types.size(); i++) {
@@ -840,6 +845,10 @@ const std::vector<ExternFuncArgument> &Function::extern_arguments() const {
 
 const std::string &Function::extern_function_name() const {
     return contents->extern_function_name;
+}
+
+DeviceAPI Function::extern_function_device_api() const {
+    return contents->extern_function_device_api;
 }
 
 const std::string &Function::debug_file() const {
