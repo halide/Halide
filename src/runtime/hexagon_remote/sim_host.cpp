@@ -68,30 +68,23 @@ int init_sim() {
         }
     }
 
-    // Configue tracing.
-    const char *trace = getenv("HL_HEXAGON_SIM_MIN_TRACE");
-    if (trace && trace[0] != 0) {
-        status = sim->SetTracing(HEX_TRACE_PC_MIN, trace);
-        if (status != HEX_STAT_SUCCESS) {
-            printf("HexagonWrapper::SetTracing MIN failed: %d\n", status);
-            return -1;
-        }
-    } else {
-        const char *trace = getenv("HL_HEXAGON_SIM_TRACE");
+    // Configue various tracing capabilites.
+    struct Trace {
+        const char *env_var;
+        HEXAPI_TracingType hex_trace;
+    };
+    Trace traces[] = {
+        { "HL_HEXAGON_SIM_MIN_TRACE", HEX_TRACE_PC_MIN },
+        { "HL_HEXAGON_SIM_TRACE", HEX_TRACE_PC },
+        { "HL_HEXAGON_SIM_MEM_TRACE", HEX_TRACE_MEM },
+    };
+    for (auto i : traces) {
+        const char *trace = getenv(i.env_var);
         if (trace && trace[0] != 0) {
-            status = sim->SetTracing(HEX_TRACE_PC, trace);
+            status = sim->SetTracing(i.hex_trace, trace);
             if (status != HEX_STAT_SUCCESS) {
                 printf("HexagonWrapper::SetTracing failed: %d\n", status);
                 return -1;
-            }
-        } else {
-            const char *trace = getenv("HL_HEXAGON_SIM_MEM_TRACE");
-            if (trace && trace[0] != 0) {
-                status = sim->SetTracing(HEX_TRACE_MEM, trace);
-                if (status != HEX_STAT_SUCCESS) {
-                    printf("HexagonWrapper::SetTracing MEM failed: %d\n", status);
-                    return -1;
-                }
             }
         }
     }
