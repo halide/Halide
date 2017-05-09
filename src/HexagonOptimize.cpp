@@ -678,25 +678,6 @@ private:
                 expr = mutate(op->a + neg_b);
                 return;
             } else {
-
-                // No widening subtracts for the expressions of the form:
-                //      cast<int16_t>(wild_i8x) - cast<int16_t>(wild_i8x)
-                //      cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
-                // In above cases the vectors need to be extended before using vsub.
-                // Convert such expressions to vmpa.
-                // For eg: Consider expression cast<int16_t>(wild_i8x) - cast<int16_t>(wild_i8x)
-                // Converting to cast<int16_t>(wild_i8x) + (-1)*cast<int16_t>(wild_i8x)
-                // generates much more efficient vmpa instead of 2 vzxt and 1 vsub instruction
-                if (op->type.bits() == 16 && op->type.is_int() && 
-                    ((lossless_cast(UInt(8, op->type.lanes()), op->a).defined() &&
-                    lossless_cast(UInt(8, op->type.lanes()), op->b).defined()) ||
-                    (lossless_cast(Int(8, op->type.lanes()), op->a).defined() && 
-                    lossless_cast(Int(8, op->type.lanes()), op->b).defined()))) {
-                    // This form will generate vmpa
-                    expr = mutate(op->a + (-1)*op->b);
-                    return;
-                }
-
                 static const vector<Pattern> subs = {
                     // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
                     // To differentiate those from the widening ones, we encode the return type in the name here.
@@ -1692,21 +1673,20 @@ private:
         const Ramp *curr_ramp = nullptr;
         for (size_t i = 0; i < exprs.size(); i++) {
             Expr maybe_load = calc_load(exprs[i]);
-            if (maybe_load.defined()) {
-                curr_load = maybe_load.as<Load>();
-                curr_ramp = get_val(curr_load->index).as<Ramp>();
-                if (curr_ramp) {
-                    if (i > 0 && curr_load->name == prev_load->name) {
-                        Expr base_diff = simplify(curr_ramp->base - prev_ramp->base - (prev_ramp->lanes * prev_ramp->stride));
-                        if (!is_const(base_diff, 0)) {
-                            return nullptr;
-                        }
-                    }
-                } else {
+            if (!maybe_load.defined()) {
+                return nullptr;
+            }
+            curr_load = maybe_load.as<Load>();
+            curr_ramp = get_val(curr_load->index).as<Ramp>();
+            if (!curr_ramp) {
+                return nullptr;
+            }
+            if (i > 0 && curr_load->name == prev_load->name) {
+                Expr vector_size = prev_ramp->lanes * prev_ramp->stride;
+                Expr base_diff = simplify(curr_ramp->base - prev_ramp->base - vector_size);
+                if (!is_const(base_diff, 0)) {
                     return nullptr;
                 }
-            } else {
-                return nullptr;
             }
             prev_load = curr_load;
             prev_ramp = curr_ramp;
@@ -1720,6 +1700,9 @@ private:
         if (e.as<Variable>()) {
             return calc_load(get_val(e));
         }
+        if (const Cast *maybe_cast = e.as<Cast>()) {
+            return calc_load(maybe_cast->value);
+        }
         if (const Shuffle *maybe_shuffle = e.as<Shuffle>()) {
             if (maybe_shuffle->is_slice()) {
                 Expr maybe_load = calc_load(maybe_shuffle->vectors[0]);
@@ -1731,8 +1714,10 @@ private:
                 if (!ramp) {
                     return nullptr;
                 }
-                Expr shifted_ramp = Ramp::make(ramp->base + maybe_shuffle->slice_begin(), ramp->stride, ramp->lanes);
-                Expr shifted_load = Load::make(res->type, res->name, shifted_ramp, res->image, res->param, res->predicate);
+                Expr shifted_ramp = Ramp::make(ramp->base + maybe_shuffle->slice_begin(),
+                                                ramp->stride, ramp->lanes);
+                Expr shifted_load = Load::make(res->type, res->name, shifted_ramp,
+                                                res->image, res->param, res->predicate);
                 return shifted_load;
             }
             if (maybe_shuffle->is_concat()) {
@@ -1750,22 +1735,25 @@ private:
     //      v0, v1 and v2 start indices differ by vector stride
     void visit(const Add *op) {
         // Find opportunities vtmpy
-        if (op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32)) {
+        if (op->type.is_vector() && op->type.bits() == 16) {
             int lanes = op->type.lanes();
             vector<MulExpr> mpys;
             Expr rest;
             string vtmpy_suffix;
 
             if (op->type.bits() == 16) {
+                // Finding more than 100 such expresssions is rare.
+                // Setting it to 100 makes sure we dont miss anything
+                // in most cases and also dont spend unreasonable time while
+                // just looking for vtmpy patterns.
                 find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
                 vtmpy_suffix = ".vub.vub.b.b";
                 if (mpys.size() < 3) {
+                    mpys.clear();
+                    rest = Expr();
                     find_mpy_ops(op, Int(8, lanes), Int(8), 100, mpys, rest);
                     vtmpy_suffix = ".vb.vb.b.b";
                 }
-            } else if (op->type.bits() == 32) {
-                find_mpy_ops(op, Int(16, lanes), Int(8), 100, mpys, rest);
-                vtmpy_suffix = ".vh.vh.b.b";
             }
 
             if (mpys.size() >= 3) {
@@ -1777,28 +1765,36 @@ private:
                 // Checking all possible combinations for vtmpy reductions
                 for(size_t i = 0; i < mpy_size; i++) {
                     Expr load2 = loads[i];
-                    if (!load2.defined() || !is_const(mpys[i].second, load2.type().bits()/8)) {
+                    if (!load2.defined() ||
+                        !is_const(mpys[i].second, load2.type().bits()/8)) {
                         continue;
                     }
                     for (size_t j = 0; j < mpy_size; j++) {
                         Expr load1 = loads[j];
-                        if (!load1.defined() || !cmp_basediff_const(load2, load1, load1.type().bits()/8)) {
+                        if (!load1.defined() ||
+                            !cmp_basediff_const(load2, load1, load1.type().bits()/8)) {
                             continue;
                         }
                         for (size_t k = 0; k < mpy_size; k++) {
                             Expr load0 = loads[k];
-                            if (!load0.defined() || !cmp_basediff_const(load1, load0, load0.type().bits()/8)) {
+                            if (!load0.defined() ||
+                                !cmp_basediff_const(load1, load0,load0.type().bits()/8)) {
                                 continue;
                             }
-                            Expr new_expr = native_interleave(Call::make(op->type, "halide.hexagon.vtmpy" + vtmpy_suffix, {mpys[k].first, mpys[i].first, mpys[k].second, mpys[j].second}, Call::PureExtern));
+                            Expr new_expr = native_interleave(Call::make(op->type,
+                                "halide.hexagon.vtmpy" + vtmpy_suffix,
+                                {mpys[k].first, mpys[i].first, mpys[k].second, mpys[j].second},
+                                Call::PureExtern));
                             Expr sum;
                             for (size_t l = 0; l < mpy_size; l++) {
                                 if (l==i || l==j || l==k)
                                     continue;
+                                Expr mpy_a = lossless_cast(op->type, mpys[l].first);
+                                Expr mpy_b = lossless_cast(op->type, mpys[l].second);
                                 if (sum.defined()) {
-                                    sum = sum + lossless_cast(op->type, mpys[l].first)*lossless_cast(op->type, mpys[l].second);
+                                    sum = sum + (mpy_a * mpy_b);
                                 } else {
-                                    sum = lossless_cast(op->type, mpys[l].first)*lossless_cast(op->type, mpys[l].second);
+                                    sum = mpy_a * mpy_b;
                                 }
                             }
                             if (sum.defined()) {
@@ -1818,126 +1814,6 @@ private:
         IRMutator::visit(op);
     }
 };
-
-// Convert some expressions to an equivalent form which could get better
-// optimized in later stages for hexagon
-class RearrangeExpressions : public IRMutator {
-private:
-    using IRMutator::visit;
-
-    void visit(const Mul *op) {
-        IRMutator::visit(op);
-
-        if (op->type.is_vector()) {
-            op = expr.as<Mul>();
-            vector<Expr> matches;
-            if (op->a.as<Broadcast>()) {
-                // Ensures broadcasts always occurs as op1 not op0
-                expr = mutate(op->b * op->a);
-                return;
-            }
-            // Distributing broadcasts helps creating more vmpa because of more adds of muls
-            if (op->b.as<Broadcast>()) {
-                static const vector<Expr> patterns = {
-                    (wild_i8x + wild_i8x),
-                    (wild_i16x + wild_i16x),
-                    (wild_u8x + wild_u8x),
-                    (wild_u16x + wild_u16x),
-                };
-                for (const Expr &p : patterns) {
-                    if(expr_match(p, op->a, matches)) {
-                        expr = mutate(simplify(matches[0] * op->b) + simplify(matches[1] * op->b));
-                        return;
-                    }
-                }
-
-                static const vector<Expr> patterns2 = {
-                    (wild_i8x - wild_i8x),
-                    (wild_i16x - wild_i16x),
-                    (wild_u8x - wild_u8x),
-                    (wild_u16x - wild_u16x),
-                };
-                for (const Expr &p : patterns2) {
-                    if(expr_match(p, op->a, matches)) {
-                        expr = mutate(simplify(matches[0] * op->b) - simplify(matches[1] * op->b));
-                        return;
-                    }
-                }
-            }
-        }
-    }
-
-    // Helper function for balance_adds
-    // Param e: the input expression
-    // Param output: the output expression
-    // Param pending: the unpaired expression
-    static void balance_adds_helper(const Expr &e, Expr &output, Expr &pending) {
-        if (const Add *op = e.as<Add>()) {
-            balance_adds_helper(op->a, output, pending);
-            balance_adds_helper(op->b, output, pending);
-        } else {
-            if (pending.defined()) {
-                if (output.defined()) {
-                    output = output + (pending + e);
-                } else {
-                    output = pending + e;
-                }
-                pending = Expr();
-            }
-            else {
-                pending = e;
-            }
-        }
-    }
-
-    // Convert each add expr to have even number of leaves in op->a and 
-    // op->b [all internal nodes are add exprs]. For example:
-    //      (((a+b) + c) + d) -> ((a+b) + (c+d))
-    static Expr balance_adds(Expr &e) {
-        Expr output = Expr();
-        Expr pending = Expr();
-        balance_adds_helper(e, output, pending);
-        if (pending.defined() && output.defined()) {
-            output = output + pending;
-        }
-        return output;
-    }
-
-    // Decides to choose between absd and abs(sub)
-    // If both operands have odd number of multiply adds, then its
-    // better to use abs as unpaired expressions in absd combine to generate vmpa
-    void visit(const Call *op) {
-        IRMutator::visit(op);
-        op = expr.as<Call>();
-
-        if (op->type.is_vector() && op->is_intrinsic(Call::absd) && (op->type.bits() == 16 || op->type.bits() == 32)) {
-            if (op->args[0].type().is_int()) {
-                Expr a = op->args[0];
-                Expr b = op->args[1];
-
-                vector<MulExpr> mpys1, mpys2;
-                Expr rest1, rest2;
-                int a_cnt = find_mpy_ops(a, Int(16, op->type.lanes()), Int(8), 100, mpys1, rest1);
-                int b_cnt = find_mpy_ops(b, Int(16, op->type.lanes()), Int(8), 100, mpys2, rest2);
-
-                if ((a_cnt & 1) && (b_cnt & 1) && a_cnt>1 && b_cnt>1) {
-                    // The unpaired expressions in absd combine to generate vmpa
-                    expr = mutate(abs(a + (-1)*b));
-                }
-            }
-        }
-    }
-
-    // Convert each add expr to have even number of leaves in op->a and 
-    // op->b [all internal nodes are add exprs]. For example:
-    //      (((a+b) + c) + d) -> ((a+b) + (c+d))
-    void visit(const Add *op) {
-        IRMutator::visit(op);
-        if (op->type.is_vector()) {
-            expr = balance_adds(expr);
-        }
-    }
-};
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
@@ -1949,10 +1825,6 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Generate vtmpy instruction if possible
     s = VtmpyGenerator().mutate(s);
-
-    // Convert some expressions to an equivalent form which get better
-    // optimized in later stages for hexagon
-    s = RearrangeExpressions().mutate(s);
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
