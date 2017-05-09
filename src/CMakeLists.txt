@@ -347,6 +347,7 @@ set(HEADER_FILES
   Parameter.h
   PartitionLoops.h
   Pipeline.h
+  PrintLoopNest.h
   Prefetch.h
   Profiling.h
   Qualify.h
