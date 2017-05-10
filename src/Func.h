@@ -52,7 +52,10 @@ struct StorageDim;
 class Stage {
     Internal::Definition definition;
     std::string stage_name;
-    std::vector<Var> dim_vars; // Pure Vars of the Function (from the init definition)
+    /** Pure Vars of the Function (from the init definition). */
+    std::vector<Var> dim_vars;
+    /** This is just a reference to the FuncSchedule owned by the Function
+     * associated with this Stage. */
     Internal::FuncSchedule func_schedule;
 
     void set_dim_type(VarOrRVar var, Internal::ForType t);
