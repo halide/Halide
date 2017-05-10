@@ -18,6 +18,7 @@ using std::string;
 // width and height of test images
 constexpr int W = 256*3;
 constexpr int H = 128;
+constexpr int PADD = 128;
 
 constexpr int max_i8  = 127;
 constexpr int max_i16 = 32767;
@@ -192,17 +193,17 @@ struct Test {
         // Define a vectorized Func that uses the pattern.
         Func f(name);
         f(x, y) = e;
-        f.bound(x, 0, W).vectorize(x, vector_width);
+        f.bound(x, PADD, W-PADD).vectorize(x, vector_width);
         f.compute_root();
 
         // Include a scalar version
         Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
-        f_scalar.bound(x, 0, W);
+        f_scalar.bound(x, PADD, W-PADD);
         f_scalar.compute_root();
 
         // The output to the pipeline is the maximum absolute difference as a double.
-        RDom r(0, W, 0, H);
+        RDom r(PADD, W-PADD, 0, H);
         Func error("error_" + name);
         error() = cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
@@ -1871,15 +1872,15 @@ struct Test {
         check("vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2));
         check("v*.w += vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2) + i32_1);
 
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, 2*i16(in_u8(x + hvx_width - 1)) + 3*i16(in_u8(x + hvx_width)) + i16(in_u8(x + hvx_width + 1)));
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x + hvx_width - 1)) + 3*i16(in_u8(x + hvx_width)) + i16(in_u8(x + hvx_width + 1)));
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x + hvx_width - 1))*2 + i16(in_u8(x + hvx_width)) + i16(in_u8(x + hvx_width + 1)));
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x + hvx_width - 1)) + i16(in_u8(x + hvx_width)) + i16(in_u8(x + hvx_width + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, 2*i16(in_u8(x - 1)) + 3*i16(in_u8(x)) + i16(in_u8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x - 1)) + 3*i16(in_u8(x)) + i16(in_u8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x - 1))*2 + i16(in_u8(x)) + i16(in_u8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x - 1)) + i16(in_u8(x)) + i16(in_u8(x + 1)));
 
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, 2*i16(in_i8(x + hvx_width - 1)) + 3*i16(in_i8(x + hvx_width)) + i16(in_i8(x + hvx_width + 1)));
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x + hvx_width - 1)) + 3*i16(in_i8(x + hvx_width)) + i16(in_i8(x + hvx_width + 1)));
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x + hvx_width - 1))*2 + i16(in_i8(x + hvx_width)) + i16(in_i8(x + hvx_width + 1)));
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x + hvx_width - 1)) + i16(in_i8(x + hvx_width)) + i16(in_i8(x + hvx_width + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, 2*i16(in_i8(x - 1)) + 3*i16(in_i8(x)) + i16(in_i8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x - 1)) + 3*i16(in_i8(x)) + i16(in_i8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x - 1))*2 + i16(in_i8(x)) + i16(in_i8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x - 1)) + i16(in_i8(x)) + i16(in_i8(x + 1)));
 
         // We only generate vdmpy if the inputs are interleaved (otherwise we would use vmpa).
         check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*127 + i16(in_u8(2*x + 1))*-128);
