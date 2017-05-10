@@ -718,7 +718,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
-            modules.push_back(get_initmod_tracing(c, bits_64, debug));
             modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
             modules.push_back(get_initmod_cache(c, bits_64, debug));
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
@@ -729,6 +728,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
+            if (t.arch != Target::Hexagon) {
+                // Can't do on-device tracing in Hexagon kernels
+                modules.push_back(get_initmod_tracing(c, bits_64, debug));
+            }
+            
             if (t.arch != Target::MIPS && t.os != Target::NoOS) {
                 // MIPS doesn't support the atomics the profiler requires.
                 modules.push_back(get_initmod_profiler(c, bits_64, debug));
