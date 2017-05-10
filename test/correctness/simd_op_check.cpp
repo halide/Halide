@@ -1871,15 +1871,15 @@ struct Test {
         check("vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2));
         check("v*.w += vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2) + i32_1);
 
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, 2*i16(in_u8(x)) + 3*i16(in_u8(x+1)) + i16(in_u8(x+2)));
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x)) + 3*i16(in_u8(x+1)) + i16(in_u8(x+2)));
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x))*2 + i16(in_u8(x+1)) + i16(in_u8(x+2)));
-        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x)) + i16(in_u8(x+1)) + i16(in_u8(x+2)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, 2*i16(in_u8(x + hvx_width - 1)) + 3*i16(in_u8(x + hvx_width)) + i16(in_u8(x + hvx_width + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x + hvx_width - 1)) + 3*i16(in_u8(x + hvx_width)) + i16(in_u8(x + hvx_width + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x + hvx_width - 1))*2 + i16(in_u8(x + hvx_width)) + i16(in_u8(x + hvx_width + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x + hvx_width - 1)) + i16(in_u8(x + hvx_width)) + i16(in_u8(x + hvx_width + 1)));
 
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, 2*i16(in_i8(x)) + 3*i16(in_i8(x+1)) + i16(in_i8(x+2)));
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x)) + 3*i16(in_i8(x+1)) + i16(in_i8(x+2)));
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x))*2 + i16(in_i8(x+1)) + i16(in_i8(x+2)));
-        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x)) + i16(in_i8(x+1)) + i16(in_i8(x+2)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, 2*i16(in_i8(x + hvx_width - 1)) + 3*i16(in_i8(x + hvx_width)) + i16(in_i8(x + hvx_width + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x + hvx_width - 1)) + 3*i16(in_i8(x + hvx_width)) + i16(in_i8(x + hvx_width + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x + hvx_width - 1))*2 + i16(in_i8(x + hvx_width)) + i16(in_i8(x + hvx_width + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x + hvx_width - 1)) + i16(in_i8(x + hvx_width)) + i16(in_i8(x + hvx_width + 1)));
 
         // We only generate vdmpy if the inputs are interleaved (otherwise we would use vmpa).
         check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*127 + i16(in_u8(2*x + 1))*-128);
