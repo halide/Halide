@@ -60,9 +60,7 @@ bool should_extract(Expr e) {
     }
 
     if (const Call *a = e.as<Call>()) {
-        if( (a->call_type == Call::Extern) ||
-            (a->call_type == Call::ExternCPlusPlus) ||
-            (a->call_type == Call::Intrinsic) ){
+        if (!a->is_pure()) {
             //non-pure Calls may have side-effects, thus
             //may not be re-ordered or reduced in number.
             return false;
