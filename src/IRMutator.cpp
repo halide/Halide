@@ -140,7 +140,7 @@ void IRMutator::visit(const Broadcast *op) {
 }
 
 void IRMutator::visit(const Call *op) {
-    vector<Expr > new_args(op->args.size());
+    vector<Expr> new_args(op->args.size());
     bool changed = false;
 
     // Mutate the args

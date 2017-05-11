@@ -13,6 +13,7 @@
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "CSE.h"
+#include "Deinterleave.h"
 
 namespace Halide {
 namespace Internal {
@@ -163,6 +164,11 @@ private:
             // can only really prove that this is the case if they're
             // constants, so try to make the constants first.
 
+            // First constant-fold
+            a.min = simplify(a.min);
+            a.max = simplify(a.max);
+
+            // Then try to strip off junk mins and maxes.
             Expr lower_bound = find_constant_bound(a.min, Direction::Lower);
             Expr upper_bound = find_constant_bound(a.max, Direction::Upper);
 
@@ -542,11 +548,12 @@ private:
 
     void visit(const Load *op) {
         op->index.accept(this);
-        if (interval.is_single_point()) {
-            // If the index is const we can return the load of that index
+        if (interval.is_single_point() && is_one(op->predicate)) {
+            // If the index is const and it is not a predicated load,
+            // we can return the load of that index
             Expr load_min =
                 Load::make(op->type.element_of(), op->name, interval.min,
-                           op->image, op->param, op->predicate);
+                           op->image, op->param, const_true());
             interval = Interval::single_point(load_min);
         } else {
             // Otherwise use the bounds of the type
@@ -992,27 +999,6 @@ private:
 
     void visit(const Call *op) {
         if (!consider_calls) return;
-
-        // Calls inside of an address_of aren't touched, because no
-        // actual memory access takes place.
-        if (op->is_intrinsic(Call::address_of)) {
-            // Visit the args of the inner call
-            internal_assert(op->args.size() == 1);
-            const Call *c = op->args[0].as<Call>();
-
-            if (c) {
-                for (size_t i = 0; i < c->args.size(); i++) {
-                    c->args[i].accept(this);
-                }
-            } else {
-                const Load *l = op->args[0].as<Load>();
-
-                internal_assert(l);
-                l->index.accept(this);
-            }
-
-            return;
-        }
 
         if (op->is_intrinsic(Call::if_then_else)) {
             assert(op->args.size() == 3);
@@ -1511,6 +1497,8 @@ void bounds_test() {
                  make_const(Int(8), -128), make_const(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
+    check(scope, cast<uint16_t>(x / 2), make_const(UInt(16), 0), make_const(UInt(16), 5));
+    check(scope, cast<uint16_t>((x + 10) / 2), make_const(UInt(16), 5), make_const(UInt(16), 10));
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);

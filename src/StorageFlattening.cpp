@@ -236,11 +236,9 @@ private:
             prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->param);
         }
 
-        Expr base_index = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->param));
-        Expr base_load = Load::make(op->types[0], op->name, base_index, Buffer<>(),
-                                    op->param, const_true(op->types[0].lanes()));
-        Expr base_address = Call::make(Handle(), Call::address_of, {base_load}, Call::Intrinsic);
-        vector<Expr> args = {base_address};
+        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->param));
+        Expr base_address = Variable::make(Handle(), op->name);
+        vector<Expr> args = {base_address, base_offset};
 
         auto iter = env.find(op->name);
         if (iter != env.end()) {
@@ -299,18 +297,6 @@ class PromoteToMemoryType : public IRMutator {
 
     Type upgrade(Type t) {
         return t.with_bits(((t.bits() + 7)/8)*8);
-    }
-
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::address_of)) {
-            Expr load = mutate(op->args[0]);
-            if (const Cast *cast = load.as<Cast>()) {
-                load = cast->value;
-            }
-            expr = Call::make(op->type, op->name, {load}, op->call_type);
-        } else {
-            IRMutator::visit(op);
-        }
     }
 
     void visit(const Load *op) {

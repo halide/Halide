@@ -186,6 +186,7 @@ class InjectBufferCopies : public IRMutator {
     const set<string> &buffers_to_track;
     const Target &target;
     DeviceAPI device_api;
+    DeviceAPI extern_device_api;
 
     Expr make_device_interface_call(DeviceAPI device_api) {
         std::string interface_name;
@@ -278,7 +279,7 @@ class InjectBufferCopies : public IRMutator {
             size_t non_host_devices_reading_count = 0;
             DeviceAPI reading_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_reading) {
-                debug(4) << "Device " << static_cast<int>(dev) << " read buffer\n";
+                debug(4) << "Device " << static_cast<int>(dev) << " read buffer " << i.first << "\n";
                 if (dev != DeviceAPI::Host) {
                     non_host_devices_reading_count++;
                     reading_device = dev;
@@ -291,7 +292,7 @@ class InjectBufferCopies : public IRMutator {
             size_t non_host_devices_writing_count = 0;
             DeviceAPI writing_device = DeviceAPI::None;
             for (DeviceAPI dev : buf.devices_writing) {
-                debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer\n";
+                debug(4) << "Device " << static_cast<int>(dev) << " wrote buffer " << i.first << "\n";
                 if (dev != DeviceAPI::Host) {
                     non_host_devices_writing_count++;
                     writing_device = dev;
@@ -300,8 +301,6 @@ class InjectBufferCopies : public IRMutator {
                     host_wrote = true;
                 }
             }
-
-
 
             // Ideally this will support multi-device buffers someday, but not now.
             internal_assert(non_host_devices_reading_count <= 1);
@@ -431,20 +430,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     void visit(const Call *op) {
-        if (op->is_intrinsic(Call::address_of)) {
-            // We're after storage flattening, so the sole arg should be a load.
-            internal_assert(op->args.size() == 1);
-            const Load *l = op->args[0].as<Load>();
-            internal_assert(l);
-            Expr new_index = mutate(l->index);
-            if (l->index.same_as(new_index)) {
-                expr = op;
-            } else {
-                Expr new_load = Load::make(l->type, l->name, new_index, Buffer<>(),
-                                           Parameter(), const_true(l->type.lanes()));
-                expr = Call::make(op->type, op->name, {new_load}, Call::Intrinsic);
-            }
-        } else if (op->is_intrinsic(Call::image_load)) {
+        if (op->is_intrinsic(Call::image_load)) {
             // counts as a device read
             internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
@@ -467,7 +453,56 @@ class InjectBufferCopies : public IRMutator {
             state[buf_name].devices_touched.insert(device_api);
             IRMutator::visit(op);
         } else {
-            IRMutator::visit(op);
+            // PR_TODO(@abadams|@zvookin): At the time of this pass, the IR has
+            // lowered the Call from a Halide one to an Extern one. The
+            // Function is still attached so this seems to work, but this
+            // may be a bit fragile. Is this consistent with the IR design?
+            //
+            // Also a question as to whether this should always use
+            // one path for mutation instead of calling to the parent
+            // class for the regular case. (Always using this path
+            // might catch bugs if the parent class code changes and
+            // this does not track that change.)
+            if (op->call_type == Call::Extern && op->func.defined()) {
+                Function f(op->func);
+
+                internal_assert((f.extern_arguments().size() + f.outputs()) == op->args.size()) <<
+                    "Mismatch between args size and extern_arguments size in call to " << op->name << "\n";
+
+                std::vector<Expr> new_args(op->args.size());
+                bool changed = false;
+                // Mutate the args
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    DeviceAPI old_extern_device_api = extern_device_api;
+                    if (i >= f.extern_arguments().size()) { // arg in call is an output
+                        extern_device_api = f.extern_function_device_api();
+                        debug(4) << "Call to " << op->name << " switched extern_device_api from "
+                                 << (int)old_extern_device_api << " to " << (int)extern_device_api << "\n";
+                    }
+
+                    Expr old_arg = op->args[i];
+                    Expr new_arg = mutate(old_arg);
+                    changed |= !new_arg.same_as(old_arg);
+                    new_args[i] = new_arg;
+
+                    if (i >= f.extern_arguments().size()) { // arg in call is an output
+                        debug(4) << "Return from " << op-> name << " switched extern_device_api back to "
+                                 << (int)old_extern_device_api << " from " << (int)extern_device_api << "\n";
+                        extern_device_api = old_extern_device_api;
+                    }
+                }
+
+                if (!changed) {
+                    expr = op;
+                } else {
+                    expr = Call::make(op->type, op->name, new_args, op->call_type,
+                                      op->func, op->value_index, op->image, op->param);
+                }
+            } else {
+                IRMutator::visit(op);
+            }
+
+
         }
     }
 
@@ -526,7 +561,13 @@ class InjectBufferCopies : public IRMutator {
         if (ends_with(op->name, ".buffer")) {
             string buf_name = op->name.substr(0, op->name.size() - 7);
             if (state.find(buf_name) != state.end()) {
-                state[buf_name].host_touched = true;
+                debug(4) << "Device " << (int)extern_device_api << " reads and writes buffer " << buf_name << " due to .buffer reference.\n";
+                if (extern_device_api != DeviceAPI::Host) {
+                    state[buf_name].devices_writing.insert(extern_device_api);
+                    state[buf_name].devices_touched.insert(extern_device_api);
+                } else {
+                    state[buf_name].host_touched = true;
+                }
             }
         }
 
@@ -609,7 +650,7 @@ class InjectBufferCopies : public IRMutator {
             internal_assert(buffer_init_let) << "Could not find definition of " << op->name << ".buffer\n";
 
             // The original buffer_init call uses address_of on the
-            // allocate node.  We want it to be initially null and let
+            // allocate node. We want it to be initially null and let
             // the device_and_host_malloc fill it in instead. The
             // Allocate node was just rewritten to just grab this
             // pointer out of the buffer after the combined
@@ -726,16 +767,35 @@ class InjectBufferCopies : public IRMutator {
             return;
         }
 
-        Stmt first = mutate(op->first);
-        first = do_copies(first);
+        // If there are no device transitions, treat the block as a
+        // single unit to avoid pointlessly marking things as dirty
+        // inside of it (it interferes with passes that coalesce
+        // adjacent stores).
+        class AnyDeviceTransitions : public IRVisitor {
+        public:
+            bool result = false;
+        private:
+            using IRVisitor::visit;
+            void visit(const For *op) {
+                if (op->device_api != DeviceAPI::Host &&
+                    op->device_api != DeviceAPI::None) {
+                    result = true;
+                } else {
+                    IRVisitor::visit(op);
+                }
+            }
+        };
 
-        Stmt rest = op->rest;
-        if (rest.defined()) {
-            rest = mutate(rest);
-            rest = do_copies(rest);
+        AnyDeviceTransitions d;
+        op->accept(&d);
+
+        if (d.result) {
+            Stmt first = do_copies(mutate(op->first));
+            Stmt rest = do_copies(mutate(op->rest));
+            stmt = Block::make(first, rest);
+        } else {
+            IRMutator::visit(op);
         }
-
-        stmt = Block::make(first, rest);
     }
 
     void visit(const For *op) {
@@ -762,8 +822,10 @@ class InjectBufferCopies : public IRMutator {
     }
 
 public:
-    InjectBufferCopies(const set<string> &i, const Target &t) : loop_level(""), buffers_to_track(i), target(t), device_api(DeviceAPI::Host) {}
-
+    InjectBufferCopies(const set<string> &i, const Target &t)
+        : loop_level(""), buffers_to_track(i), target(t),
+          device_api(DeviceAPI::Host), extern_device_api(DeviceAPI::Host) {
+    }
 };
 
 }  // namespace

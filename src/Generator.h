@@ -119,6 +119,7 @@
  *          }
  *       }
  *     };
+ * \endcode
  *
  * You can also leave array size unspecified, in which case it will be inferred
  * from the input vector, or (optionally) explicitly specified via a resize()
@@ -2155,6 +2156,7 @@ protected:
  *       // generator params
  *       { ... }
  *   );
+ * \endcode
  */
 class JITGeneratorContext : public GeneratorContext {
 public:

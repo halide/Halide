@@ -537,6 +537,10 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
                 IntrusivePtr<FunctionContents> func, int value_index,
                 Buffer<> image, Parameter param) {
+    if (name == Call::prefetch && call_type == Call::Intrinsic) {
+        internal_assert(args.size() % 2 == 0)
+            << "Number of args to a prefetch call should be even: {base, offset, extent0, min0, ...}\n";
+    }
     for (size_t i = 0; i < args.size(); i++) {
         internal_assert(args[i].defined()) << "Call of undefined\n";
     }
@@ -788,7 +792,6 @@ Call::ConstString Call::popcount = "popcount";
 Call::ConstString Call::count_leading_zeros = "count_leading_zeros";
 Call::ConstString Call::count_trailing_zeros = "count_trailing_zeros";
 Call::ConstString Call::undef = "undef";
-Call::ConstString Call::address_of = "address_of";
 Call::ConstString Call::return_second = "return_second";
 Call::ConstString Call::if_then_else = "if_then_else";
 Call::ConstString Call::glsl_texture_load = "glsl_texture_load";
@@ -800,7 +803,6 @@ Call::ConstString Call::make_struct = "make_struct";
 Call::ConstString Call::stringify = "stringify";
 Call::ConstString Call::memoize_expr = "memoize_expr";
 Call::ConstString Call::alloca = "alloca";
-Call::ConstString Call::copy_memory = "copy_memory";
 Call::ConstString Call::likely = "likely";
 Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
 Call::ConstString Call::register_destructor = "register_destructor";
@@ -814,6 +816,7 @@ Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
 Call::ConstString Call::extract_mask_element = "extract_mask_element";
+Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
 Call::ConstString Call::buffer_get_extent = "_halide_buffer_get_extent";
