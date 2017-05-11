@@ -1084,7 +1084,8 @@ struct Partitioner {
 
     // Return the sum of access strides along each of the loop variables in
     // a function stage. The bounds of all the allocations accessed are specified
-    // in 'allocation_bounds'.
+    // in 'allocation_bounds'. Return an empty map if it can't figure out any of
+    // the stride dimension.
     map<string, int64_t> analyze_spatial_locality(
         const FStage &stg, const map<string, Box> &parent_bounds,
         const set<string> &inlines = set<string>());
@@ -2632,7 +2633,9 @@ void Partitioner::generate_group_cpu_schedule(
     if (dims.size() > 2) {
         map<string, int64_t> strides =
             analyze_spatial_locality(g.output, group_storage_bounds, inlines);
-        reorder_dims(f_handle, g.output.stage_num, def, strides, sched);
+        if (!strides.empty()) {
+            reorder_dims(f_handle, g.output.stage_num, def, strides, sched);
+        }
     }
 
     vector<string> dim_vars(dims.size() - 1);
@@ -2811,7 +2814,9 @@ void Partitioner::generate_group_cpu_schedule(
         if (dims.size() > 2) {
             map<string, int64_t> mem_strides =
                 analyze_spatial_locality(mem, group_storage_bounds, inlines);
-            reorder_dims(mem_handle, mem.stage_num, mem_def, mem_strides, sched);
+            if (!mem_strides.empty()) {
+                reorder_dims(mem_handle, mem.stage_num, mem_def, mem_strides, sched);
+            }
         }
 
         vectorize_stage(g, mem_handle, mem.stage_num, mem_def, mem.func, false,
@@ -2882,6 +2887,9 @@ int64_t Partitioner::find_max_access_stride(const Scope<int> &vars,
 
         const Interval &dim_range = buffer_bounds[sdim];
         int64_t dim_extent = get_extent(dim_range);
+        if (dim_extent == unknown) {
+            return unknown;
+        }
         curr_stride *= dim_extent;
     }
 
@@ -2946,8 +2954,12 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
             } else {
                 call_alloc_reg = get_element(pipeline_bounds, call.first);
             }
-            total_stride += find_max_access_stride(dep_vars.vars, call.first,
-                                                   call.second, call_alloc_reg);
+            int64_t current_stride = find_max_access_stride(dep_vars.vars, call.first,
+                                                            call.second, call_alloc_reg);
+            if (current_stride == unknown) {
+                return map<string, int64_t>();
+            }
+            total_stride += current_stride;
         }
         var_strides.emplace(dims[d].var, total_stride);
     }
