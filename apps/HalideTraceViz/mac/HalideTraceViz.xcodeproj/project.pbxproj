@@ -1,0 +1,431 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		2DCA31D51D08A1F000EE38F4 /* README.md in Sources */ = {isa = PBXBuildFile; fileRef = 2DCA31D41D08A1F000EE38F4 /* README.md */; };
+		2DCA31D81D08A20C00EE38F4 /* HalideTraceViz.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2DCA31D71D08A20C00EE38F4 /* HalideTraceViz.cpp */; };
+		2DCA31E01D08A21E00EE38F4 /* MakePipeline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2DCA31DF1D08A21E00EE38F4 /* MakePipeline.cpp */; };
+		2DCA31EB1D08A22700EE38F4 /* RunPipeline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2DCA31EA1D08A22700EE38F4 /* RunPipeline.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2DCA31C81D08A18200EE38F4 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		2DCA31DB1D08A21E00EE38F4 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		2DCA31E61D08A22700EE38F4 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		2DCA31CA1D08A18200EE38F4 /* HalideTraceViz */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = HalideTraceViz; sourceTree = BUILT_PRODUCTS_DIR; };
+		2DCA31D41D08A1F000EE38F4 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		2DCA31D71D08A20C00EE38F4 /* HalideTraceViz.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = HalideTraceViz.cpp; path = ../../../util/HalideTraceViz.cpp; sourceTree = "<group>"; };
+		2DCA31DD1D08A21E00EE38F4 /* MakePipeline */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = MakePipeline; sourceTree = BUILT_PRODUCTS_DIR; };
+		2DCA31DF1D08A21E00EE38F4 /* MakePipeline.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = MakePipeline.cpp; sourceTree = "<group>"; };
+		2DCA31E81D08A22700EE38F4 /* RunPipeline */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = RunPipeline; sourceTree = BUILT_PRODUCTS_DIR; };
+		2DCA31EA1D08A22700EE38F4 /* RunPipeline.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = RunPipeline.cpp; sourceTree = "<group>"; };
+		2DCA31F01D08A30700EE38F4 /* VisualizeRunPipeline.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; name = VisualizeRunPipeline.sh; path = Scripts/VisualizeRunPipeline.sh; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		2DCA31C71D08A18200EE38F4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2DCA31DA1D08A21E00EE38F4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2DCA31E51D08A22700EE38F4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2DCA31C11D08A18200EE38F4 = {
+			isa = PBXGroup;
+			children = (
+				2DCA31D41D08A1F000EE38F4 /* README.md */,
+				2DCA31D61D08A1F600EE38F4 /* HalideTraceViz */,
+				2DCA31DE1D08A21E00EE38F4 /* MakePipeline */,
+				2DCA31E91D08A22700EE38F4 /* RunPipeline */,
+				2DCA31EF1D08A2EE00EE38F4 /* Scripts */,
+				2DCA31CB1D08A18200EE38F4 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2DCA31CB1D08A18200EE38F4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2DCA31CA1D08A18200EE38F4 /* HalideTraceViz */,
+				2DCA31DD1D08A21E00EE38F4 /* MakePipeline */,
+				2DCA31E81D08A22700EE38F4 /* RunPipeline */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		2DCA31D61D08A1F600EE38F4 /* HalideTraceViz */ = {
+			isa = PBXGroup;
+			children = (
+				2DCA31D71D08A20C00EE38F4 /* HalideTraceViz.cpp */,
+			);
+			name = HalideTraceViz;
+			sourceTree = "<group>";
+		};
+		2DCA31DE1D08A21E00EE38F4 /* MakePipeline */ = {
+			isa = PBXGroup;
+			children = (
+				2DCA31DF1D08A21E00EE38F4 /* MakePipeline.cpp */,
+			);
+			path = MakePipeline;
+			sourceTree = "<group>";
+		};
+		2DCA31E91D08A22700EE38F4 /* RunPipeline */ = {
+			isa = PBXGroup;
+			children = (
+				2DCA31EA1D08A22700EE38F4 /* RunPipeline.cpp */,
+			);
+			path = RunPipeline;
+			sourceTree = "<group>";
+		};
+		2DCA31EF1D08A2EE00EE38F4 /* Scripts */ = {
+			isa = PBXGroup;
+			children = (
+				2DCA31F01D08A30700EE38F4 /* VisualizeRunPipeline.sh */,
+			);
+			name = Scripts;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2DCA31C91D08A18200EE38F4 /* HalideTraceViz */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2DCA31D11D08A18200EE38F4 /* Build configuration list for PBXNativeTarget "HalideTraceViz" */;
+			buildPhases = (
+				2DCA31C61D08A18200EE38F4 /* Sources */,
+				2DCA31C71D08A18200EE38F4 /* Frameworks */,
+				2DCA31C81D08A18200EE38F4 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HalideTraceViz;
+			productName = HalideTraceViz;
+			productReference = 2DCA31CA1D08A18200EE38F4 /* HalideTraceViz */;
+			productType = "com.apple.product-type.tool";
+		};
+		2DCA31DC1D08A21E00EE38F4 /* MakePipeline */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2DCA31E11D08A21E00EE38F4 /* Build configuration list for PBXNativeTarget "MakePipeline" */;
+			buildPhases = (
+				2DCA31D91D08A21E00EE38F4 /* Sources */,
+				2DCA31DA1D08A21E00EE38F4 /* Frameworks */,
+				2DCA31DB1D08A21E00EE38F4 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MakePipeline;
+			productName = MakePipeline;
+			productReference = 2DCA31DD1D08A21E00EE38F4 /* MakePipeline */;
+			productType = "com.apple.product-type.tool";
+		};
+		2DCA31E71D08A22700EE38F4 /* RunPipeline */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2DCA31EC1D08A22700EE38F4 /* Build configuration list for PBXNativeTarget "RunPipeline" */;
+			buildPhases = (
+				2DCA31E41D08A22700EE38F4 /* Sources */,
+				2DCA31E51D08A22700EE38F4 /* Frameworks */,
+				2DCA31E61D08A22700EE38F4 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RunPipeline;
+			productName = RunPipeline;
+			productReference = 2DCA31E81D08A22700EE38F4 /* RunPipeline */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2DCA31C21D08A18200EE38F4 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0730;
+				ORGANIZATIONNAME = "mPerpetuo, inc.";
+				TargetAttributes = {
+					2DCA31C91D08A18200EE38F4 = {
+						CreatedOnToolsVersion = 7.3.1;
+					};
+					2DCA31DC1D08A21E00EE38F4 = {
+						CreatedOnToolsVersion = 7.3.1;
+					};
+					2DCA31E71D08A22700EE38F4 = {
+						CreatedOnToolsVersion = 7.3.1;
+					};
+				};
+			};
+			buildConfigurationList = 2DCA31C51D08A18200EE38F4 /* Build configuration list for PBXProject "HalideTraceViz" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 2DCA31C11D08A18200EE38F4;
+			productRefGroup = 2DCA31CB1D08A18200EE38F4 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2DCA31C91D08A18200EE38F4 /* HalideTraceViz */,
+				2DCA31DC1D08A21E00EE38F4 /* MakePipeline */,
+				2DCA31E71D08A22700EE38F4 /* RunPipeline */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2DCA31C61D08A18200EE38F4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2DCA31D81D08A20C00EE38F4 /* HalideTraceViz.cpp in Sources */,
+				2DCA31D51D08A1F000EE38F4 /* README.md in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2DCA31D91D08A21E00EE38F4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2DCA31E01D08A21E00EE38F4 /* MakePipeline.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2DCA31E41D08A22700EE38F4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2DCA31EB1D08A22700EE38F4 /* RunPipeline.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2DCA31CF1D08A18200EE38F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.11;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		2DCA31D01D08A18200EE38F4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.11;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		2DCA31D21D08A18200EE38F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		2DCA31D31D08A18200EE38F4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		2DCA31E21D08A21E00EE38F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = $PROJECT_DIR/components/halide/include;
+				OTHER_LDFLAGS = $PROJECT_DIR/components/halide/bin/libHalide.so;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		2DCA31E31D08A21E00EE38F4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = $PROJECT_DIR/components/halide/include;
+				OTHER_LDFLAGS = $PROJECT_DIR/components/halide/bin/libHalide.so;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		2DCA31ED1D08A22700EE38F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = $PROJECT_DIR/build/Debug/;
+				OTHER_LDFLAGS = $PROJECT_DIR/build/Debug/brighten.o;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		2DCA31EE1D08A22700EE38F4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = $PROJECT_DIR/build/Debug/;
+				OTHER_LDFLAGS = $PROJECT_DIR/build/Debug/brighten.o;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2DCA31C51D08A18200EE38F4 /* Build configuration list for PBXProject "HalideTraceViz" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2DCA31CF1D08A18200EE38F4 /* Debug */,
+				2DCA31D01D08A18200EE38F4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2DCA31D11D08A18200EE38F4 /* Build configuration list for PBXNativeTarget "HalideTraceViz" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2DCA31D21D08A18200EE38F4 /* Debug */,
+				2DCA31D31D08A18200EE38F4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2DCA31E11D08A21E00EE38F4 /* Build configuration list for PBXNativeTarget "MakePipeline" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2DCA31E21D08A21E00EE38F4 /* Debug */,
+				2DCA31E31D08A21E00EE38F4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2DCA31EC1D08A22700EE38F4 /* Build configuration list for PBXNativeTarget "RunPipeline" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2DCA31ED1D08A22700EE38F4 /* Debug */,
+				2DCA31EE1D08A22700EE38F4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 2DCA31C21D08A18200EE38F4 /* Project object */;
+}
