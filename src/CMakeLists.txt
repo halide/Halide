@@ -257,6 +257,7 @@ set(HEADER_FILES
   AllocationBoundsInference.h
   ApplySplit.h
   Argument.h
+  AssociativeOpsTable.h
   Associativity.h
   BoundaryConditions.h
   Bounds.h
@@ -346,6 +347,7 @@ set(HEADER_FILES
   Parameter.h
   PartitionLoops.h
   Pipeline.h
+  PrintLoopNest.h
   Prefetch.h
   Profiling.h
   Qualify.h
@@ -408,6 +410,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   AlignLoads.cpp
   AllocationBoundsInference.cpp
   ApplySplit.cpp
+  AssociativeOpsTable.cpp
   Associativity.cpp
   BoundaryConditions.cpp
   Bounds.cpp

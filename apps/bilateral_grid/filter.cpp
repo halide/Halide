@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    float r_sigma = atof(argv[3]);
+    float r_sigma = (float) atof(argv[3]);
     int timing_iterations = atoi(argv[4]);
 
     Buffer<float> input = load_image(argv[1]);

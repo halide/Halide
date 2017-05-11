@@ -57,43 +57,6 @@ void Closure::found_buffer_ref(const string &name, Type type,
     }
 }
 
-void Closure::visit(const Call *op) {
-    if (op->is_intrinsic(Call::address_of)) {
-        const Load *load = op->args[0].as<Load>();
-        internal_assert(load);
-        found_buffer_ref(load->name, load->type, address_of_read, address_of_written, op->image);
-    } else if (op->is_intrinsic(Call::copy_memory)) {
-        internal_assert(op->args.size() == 3);
-        bool old_address_of_read = address_of_read;
-        bool old_address_of_written = address_of_written;
-
-        // The destination is first, which is written but not read.
-        address_of_read = false;
-        address_of_written = true;
-        op->args[0].accept(this);
-
-        // The source is second, which is read but not written.
-        address_of_read = true;
-        address_of_written = false;
-        op->args[1].accept(this);
-
-        address_of_read = old_address_of_read;
-        address_of_written = old_address_of_written;
-
-        op->args[2].accept(this);
-    } else {
-        bool old_address_of_written = address_of_written;
-        if (!op->is_pure()) {
-            // Assume that non-pure calls using an address_of will
-            // write to the result of address_of. Reads use the
-            // inherited behavior (default true).
-            address_of_written = true;
-        }
-        IRVisitor::visit(op);
-        address_of_written = old_address_of_written;
-    }
-}
-
 void Closure::visit(const Load *op) {
     op->predicate.accept(this);
     op->index.accept(this);

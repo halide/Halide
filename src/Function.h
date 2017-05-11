@@ -215,6 +215,7 @@ public:
                               const std::vector<Type> &types,
                               int dimensionality,
                               NameMangling mangling,
+                              DeviceAPI device_api,
                               bool uses_old_buffer_t);
 
     /** Retrive the arguments of the extern definition. */
@@ -223,6 +224,9 @@ public:
     /** Get the name of the extern function called for an extern
      * definition. */
     EXPORT const std::string &extern_function_name() const;
+
+    /** Get the DeviceAPI declared for an extern function. */
+    EXPORT DeviceAPI extern_function_device_api() const;
 
     /** Test for equality of identity. */
     bool same_as(const Function &other) const {

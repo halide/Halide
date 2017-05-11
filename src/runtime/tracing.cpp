@@ -15,7 +15,11 @@ WEAK int halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
 WEAK void *halide_trace_file_internally_opened = NULL;
 
-WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
+}}}
+
+extern "C" {
+
+WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t *e) {
     static int32_t ids = 1;
 
     int32_t my_id = __sync_fetch_and_add(&ids, 1);
@@ -161,7 +165,11 @@ WEAK int32_t default_trace(void *user_context, const halide_trace_event_t *e) {
     return my_id;
 }
 
-WEAK trace_fn halide_custom_trace = default_trace;
+} // extern "C"
+
+namespace Halide { namespace Runtime { namespace Internal {
+
+WEAK trace_fn halide_custom_trace = halide_default_trace;
 
 }}} // namespace Halide::Runtime::Internal
 

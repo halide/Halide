@@ -1247,7 +1247,7 @@ struct Test {
             check(arm32 ? "vshll.u16" : "ushll", 4*w, u32(u16_1)*16);
             check(arm32 ? "vshll.u32" : "ushll", 2*w, u64(u32_1)*16);
 
-            // VSHR     I	-	Shift Right
+            // VSHR     I       -       Shift Right
             check(arm32 ? "vshr.s64" : "sshr", 2*w, i64_1/16);
             check(arm32 ? "vshr.s8"  : "sshr", 8*w,  i8_1/16);
             check(arm32 ? "vshr.s16" : "sshr", 4*w, i16_1/16);
@@ -1257,7 +1257,7 @@ struct Test {
             check(arm32 ? "vshr.u16" : "ushr", 4*w, u16_1/16);
             check(arm32 ? "vshr.u32" : "ushr", 2*w, u32_1/16);
 
-            // VSHRN	I	-	Shift Right Narrow
+            // VSHRN    I       -       Shift Right Narrow
             check(arm32 ? "vshrn.i16" : "shrn", 8*w,  i8(i16_1/256));
             check(arm32 ? "vshrn.i32" : "shrn", 4*w, i16(i32_1/65536));
             check(arm32 ? "vshrn.i16" : "shrn", 8*w,  u8(u16_1/256));
@@ -1267,14 +1267,14 @@ struct Test {
             check(arm32 ? "vshrn.i16" : "shrn", 8*w,  u8(u16_1/16));
             check(arm32 ? "vshrn.i32" : "shrn", 4*w, u16(u32_1/16));
 
-            // VSLI	X	-	Shift Left and Insert
+            // VSLI     X       -       Shift Left and Insert
             // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
 
-            // VSQRT	-	F, D	Square Root
+            // VSQRT    -       F, D    Square Root
             check(arm32 ? "vsqrt.f32" : "fsqrt", 4*w, sqrt(f32_1));
             check(arm32 ? "vsqrt.f64" : "fsqrt", 2*w, sqrt(f64_1));
 
-            // VSRA	I	-	Shift Right and Accumulate
+            // VSRA     I       -       Shift Right and Accumulate
             check(arm32 ? "vsra.s64" : "ssra", 2*w, i64_2 + i64_1/16);
             check(arm32 ? "vsra.s8"  : "ssra", 8*w,  i8_2 + i8_1/16);
             check(arm32 ? "vsra.s16" : "ssra", 4*w, i16_2 + i16_1/16);
@@ -1284,11 +1284,11 @@ struct Test {
             check(arm32 ? "vsra.u16" : "usra", 4*w, u16_2 + u16_1/16);
             check(arm32 ? "vsra.u32" : "usra", 2*w, u32_2 + u32_1/16);
 
-            // VSRI	X	-	Shift Right and Insert
+            // VSRI     X       -       Shift Right and Insert
             // See VSLI
 
 
-            // VSUB	I, F	F, D	Subtract
+            // VSUB     I, F    F, D    Subtract
             check(arm32 ? "vsub.i64" : "sub",  2*w, i64_1 - i64_2);
             check(arm32 ? "vsub.i64" : "sub",  2*w, u64_1 - u64_2);
             check(arm32 ? "vsub.f32" : "fsub", 4*w, f32_1 - f32_2);
@@ -1300,13 +1300,13 @@ struct Test {
             check(arm32 ? "vsub.i32" : "sub",  2*w, u32_1 - u32_2);
             check(arm32 ? "vsub.f32" : "fsub", 2*w, f32_1 - f32_2);
 
-            // VSUBHN	I	-	Subtract and Narrow
+            // VSUBHN   I       -       Subtract and Narrow
             check(arm32 ? "vsubhn.i16" : "subhn", 8*w,  i8((i16_1 - i16_2)/256));
             check(arm32 ? "vsubhn.i16" : "subhn", 8*w,  u8((u16_1 - u16_2)/256));
             check(arm32 ? "vsubhn.i32" : "subhn", 4*w, i16((i32_1 - i32_2)/65536));
             check(arm32 ? "vsubhn.i32" : "subhn", 4*w, u16((u32_1 - u32_2)/65536));
 
-            // VSUBL	I	-	Subtract Long
+            // VSUBL    I       -       Subtract Long
             check(arm32 ? "vsubl.s8"  : "ssubl", 8*w, i16(i8_1)  - i16(i8_2));
             check(arm32 ? "vsubl.u8"  : "usubl", 8*w, u16(u8_1)  - u16(u8_2));
             check(arm32 ? "vsubl.s16" : "ssubl", 4*w, i32(i16_1) - i32(i16_2));
@@ -1314,7 +1314,7 @@ struct Test {
             check(arm32 ? "vsubl.s32" : "ssubl", 2*w, i64(i32_1) - i64(i32_2));
             check(arm32 ? "vsubl.u32" : "usubl", 2*w, u64(u32_1) - u64(u32_2));
 
-            // VSUBW	I	-	Subtract Wide
+            // VSUBW    I       -       Subtract Wide
             check(arm32 ? "vsubw.s8"  : "ssubw", 8*w, i16_1 - i8_1);
             check(arm32 ? "vsubw.u8"  : "usubw", 8*w, u16_1 - u8_1);
             check(arm32 ? "vsubw.s16" : "ssubw", 4*w, i32_1 - i16_1);
@@ -1322,12 +1322,12 @@ struct Test {
             check(arm32 ? "vsubw.s32" : "ssubw", 2*w, i64_1 - i32_1);
             check(arm32 ? "vsubw.u32" : "usubw", 2*w, u64_1 - u32_1);
 
-            // VST1	X	-	Store single-element structures
+            // VST1     X       -       Store single-element structures
             check(arm32 ? "vst1.8" : "st", 8*w, i8_1);
 
         }
 
-        // VST2	X	-	Store two-element structures
+        // VST2 X       -       Store two-element structures
         for (int sign = 0; sign <= 1; sign++) {
             for (int width = 128; width <= 128*4; width *= 2) {
                 for (int bits = 8; bits < 64; bits *= 2) {
@@ -1361,7 +1361,7 @@ struct Test {
             }
         }
 
-        // VST3	X	-	Store three-element structures
+        // VST3 X       -       Store three-element structures
         for (int sign = 0; sign <= 1; sign++) {
             for (int width = 192; width <= 192*4; width *= 2) {
                 for (int bits = 8; bits < 64; bits *= 2) {
@@ -1379,7 +1379,7 @@ struct Test {
             }
         }
 
-        // VST4	X	-	Store four-element structures
+        // VST4 X       -       Store four-element structures
         for (int sign = 0; sign <= 1; sign++) {
             for (int width = 256; width <= 256*4; width *= 2) {
                 for (int bits = 8; bits < 64; bits *= 2) {
@@ -1398,30 +1398,30 @@ struct Test {
             }
         }
 
-        // VSTM	X	F, D	Store Multiple Registers
-        // VSTR	X	F, D	Store Register
+        // VSTM X       F, D    Store Multiple Registers
+        // VSTR X       F, D    Store Register
         // we trust llvm to use these
 
-        // VSWP	I	-	Swap Contents
+        // VSWP I       -       Swap Contents
         // Swaps the contents of two registers. Not sure why this would be useful.
 
-        // VTBL	X	-	Table Lookup
+        // VTBL X       -       Table Lookup
         // Arm's version of shufps. Allows for arbitrary permutations of a
         // 64-bit vector. We typically use vrev variants instead.
 
-        // VTBX	X	-	Table Extension
+        // VTBX X       -       Table Extension
         // Like vtbl, but doesn't change any elements where the index was
         // out of bounds. Not sure how we'd use this.
 
-        // VTRN	X	-	Transpose
+        // VTRN X       -       Transpose
         // Swaps the even elements of one vector with the odd elements of
         // another. Not useful for us.
 
-        // VTST	I	-	Test Bits
+        // VTST I       -       Test Bits
         // check("vtst.32", 4, (bool1 & bool2) != 0);
 
-        // VUZP	X	-	Unzip
-        // VZIP	X	-	Zip
+        // VUZP X       -       Unzip
+        // VZIP X       -       Zip
         // Interleave or deinterleave two vectors. Given that we use
         // interleaving loads and stores, it's hard to hit this op with
         // halide.

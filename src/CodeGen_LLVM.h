@@ -284,6 +284,8 @@ protected:
     // @{
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
