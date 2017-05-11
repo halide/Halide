@@ -103,6 +103,16 @@ int init_sim() {
         }
     }
 
+    // Configure packet analysis for hexagon-prof.
+    const char *packet_analyze = getenv("HL_HEXAGON_PACKET_ANALYZE");
+    if (packet_analyze && packet_analyze[0]) {
+        status = sim->ConfigurePacketAnalysis(packet_analyze);
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::ConfigurePacketAnalysis failed: %d\n", status);
+            return -1;
+        }
+    }
+
     // Control use of dlopenbuf. This is to enable testing of the
     // custom implementation of dlopen, which is not used whenever
     // dlopenbuf is available.
