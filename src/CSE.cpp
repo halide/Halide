@@ -18,9 +18,10 @@ using std::pair;
 namespace {
 
 // Some expressions are not worth lifting out into lets, even if they
-// occur redundantly many times. This list should mirror the list in
-// the simplifier for lets, otherwise they'll just fight with each
-// other pointlessly.
+// occur redundantly many times. They may also be illegal to lift out
+// (e.g. calls with side-effects).
+// This list should mirror the list in the simplifier for lets,
+// otherwise they'll just fight with each other pointlessly.
 bool should_extract(Expr e) {
     if (is_const(e)) {
         return false;
@@ -56,6 +57,16 @@ bool should_extract(Expr e) {
 
     if (const Ramp *a = e.as<Ramp>()) {
         return !is_const(a->stride);
+    }
+
+    if (const Call *a = e.as<Call>()) {
+        if( (a->call_type == Call::Extern) ||
+            (a->call_type == Call::ExternCPlusPlus) ||
+            (a->call_type == Call::Intrinsic) ){
+            //non-pure Calls may have side-effects, thus
+            //may not be re-ordered or reduced in number.
+            return false;
+        }
     }
 
     return true;
@@ -493,6 +504,14 @@ void cse_test() {
                             Call::make(Int(32), "dummy", {handle_a, t0, t0}, Call::Extern));
         check(e, correct);
 
+    }
+
+    {
+        Expr nonpure_call_1 = Call::make(Int(32), "dummy1", {1}, Call::Intrinsic);
+        Expr nonpure_call_2 = Call::make(Int(32), "dummy2", {1}, Call::Extern);
+        e = nonpure_call_1 + nonpure_call_2 + nonpure_call_1 + nonpure_call_2;
+        correct = e; //Non-pure calls shouldn't get CSE'd
+        check(e, correct);
     }
 
     debug(0) << "common_subexpression_elimination test passed\n";
