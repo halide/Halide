@@ -1667,16 +1667,16 @@ private:
     // Return the load expression of first vector if all vector in exprs are
     // contiguous vectors pointing to the same buffer.
     Expr are_contiguous_vectors(const vector<Expr> exprs) {
-        Expr concat = simplify(Shuffle::make_concat(exprs));
-        const Shuffle *maybe_shuffle = concat.as<Shuffle>();
+        if (exprs.size() == 0) {
+            return Expr();
+        }
         // If the shuffle simplifies then the vectors are contiguous.
         // If not, check if the bases of adjacent vectors differ by
         // vector size.
+        Expr concat = simplify(Shuffle::make_concat(exprs));
+        const Shuffle *maybe_shuffle = concat.as<Shuffle>();
         if(!maybe_shuffle || !maybe_shuffle->is_concat()) {
-            return concat;
-        }
-        if (exprs.size() == 0) {
-            return Expr();
+            return calc_load(exprs[0]);
         }
         const Load *prev_load;
         const Load *curr_load;
