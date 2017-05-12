@@ -11,6 +11,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Lerp.h"
+#include <unordered_map>
 
 namespace Halide {
 namespace Internal {
@@ -1610,6 +1611,7 @@ class VtmpyGenerator : public IRMutator {
 private:
     using IRMutator::visit;
     Scope<Expr> vars;
+    typedef pair<Expr, size_t> LoadIndex;
 
     // Return value of variable if expr is a variable.
     // Else return the expr.
@@ -1641,8 +1643,9 @@ private:
         vars.pop(op->name);
     }
 
-    // Check if vector start indices differ by constant diff.
-    bool cmp_basediff_const(const Expr &a, const Expr &b, int diff) {
+    // Check if vectors a and b point to the same buffer with the base of a
+    // shifted by diff i.e. base(a) = base(b) + diff.
+    bool is_base_shifted(const Expr &a, const Expr &b, int diff) {
         Expr maybe_load_a = calc_load(a);
         Expr maybe_load_b = calc_load(b);
 
@@ -1661,11 +1664,19 @@ private:
         return false;
     }
 
-    // Return the ramp of first vector if all vector in exprs are continuous
-    // vectors in memory.
-    Expr are_continuous_vectors(const vector<Expr> exprs) {
+    // Return the load expression of first vector if all vector in exprs are
+    // contiguous vectors pointing to the same buffer.
+    Expr are_contiguous_vectors(const vector<Expr> exprs) {
+        Expr concat = simplify(Shuffle::make_concat(exprs));
+        const Shuffle *maybe_shuffle = concat.as<Shuffle>();
+        // If the shuffle simplifies then the vectors are contiguous.
+        // If not, check if the bases of adjacent vectors differ by
+        // vector size.
+        if(!maybe_shuffle || !maybe_shuffle->is_concat()) {
+            return concat;
+        }
         if (exprs.size() == 0) {
-            return nullptr;
+            return Expr();
         }
         const Load *prev_load;
         const Load *curr_load;
@@ -1674,18 +1685,18 @@ private:
         for (size_t i = 0; i < exprs.size(); i++) {
             Expr maybe_load = calc_load(exprs[i]);
             if (!maybe_load.defined()) {
-                return nullptr;
+                return Expr();
             }
             curr_load = maybe_load.as<Load>();
             curr_ramp = get_val(curr_load->index).as<Ramp>();
             if (!curr_ramp) {
-                return nullptr;
+                return Expr();
             }
             if (i > 0 && curr_load->name == prev_load->name) {
                 Expr vector_size = prev_ramp->lanes * prev_ramp->stride;
                 Expr base_diff = simplify(curr_ramp->base - prev_ramp->base - vector_size);
                 if (!is_const(base_diff, 0)) {
-                    return nullptr;
+                    return Expr();
                 }
             }
             prev_load = curr_load;
@@ -1695,7 +1706,7 @@ private:
     }
 
     // Returns the load indicating vector start index. If the vector is sliced
-    // return load with shifted ramp to include slice_begin value
+    // return load with shifted ramp by slice_begin expr.
     Expr calc_load(const Expr &e) {
         if (e.as<Variable>()) {
             return calc_load(get_val(e));
@@ -1704,35 +1715,59 @@ private:
             return calc_load(maybe_cast->value);
         }
         if (const Shuffle *maybe_shuffle = e.as<Shuffle>()) {
-            if (maybe_shuffle->is_slice()) {
+            if (maybe_shuffle->is_slice() && maybe_shuffle->slice_stride() == 1) {
                 Expr maybe_load = calc_load(maybe_shuffle->vectors[0]);
                 if (!maybe_load.defined()) {
-                    return nullptr;
+                    return Expr();
                 }
                 const Load *res = maybe_load.as<Load>();
-                const Ramp *ramp = get_val(res->index).as<Ramp>();
-                if (!ramp) {
-                    return nullptr;
+                if (const Ramp *ramp = get_val(res->index).as<Ramp>()) {
+                    if (!ramp) {
+                        return Expr();
+                    }
+                    Expr shifted_ramp = Ramp::make(ramp->base + maybe_shuffle->slice_begin(),
+                                                    ramp->stride, ramp->lanes);
+                    Expr shifted_load = Load::make(res->type, res->name, shifted_ramp,
+                                                    res->image, res->param, res->predicate);
+                    return shifted_load;
                 }
-                Expr shifted_ramp = Ramp::make(ramp->base + maybe_shuffle->slice_begin(),
-                                                ramp->stride, ramp->lanes);
-                Expr shifted_load = Load::make(res->type, res->name, shifted_ramp,
-                                                res->image, res->param, res->predicate);
-                return shifted_load;
             }
-            if (maybe_shuffle->is_concat()) {
-                return are_continuous_vectors(maybe_shuffle->vectors);
+            else if (maybe_shuffle->is_concat()) {
+                return are_contiguous_vectors(maybe_shuffle->vectors);
             }
         }
         if (const Load *maybe_load = e.as<Load>()) {
-            return maybe_load;
+            if (const Ramp* ramp = maybe_load->index.as<Ramp>()) {
+                if (is_const(ramp->stride, 1)) {
+                    return maybe_load;
+                }
+            }
         }
-        return nullptr;
+        return Expr();
+    }
+
+    // Loads comparator for sorting Load Expr of the same buffer.
+    static bool loads_comparator(LoadIndex a, LoadIndex b) {
+        if (a.first.defined() && b.first.defined()) {
+            const Load* load_a = a.first.as<Load>();
+            const Load* load_b = b.first.as<Load>();
+            const Ramp* ramp_a = load_a->index.as<Ramp>();
+            const Ramp* ramp_b = load_b->index.as<Ramp>();
+            if (ramp_a && ramp_b && load_a->name == load_b->name) {
+                Expr base_diff = simplify(ramp_b->base - ramp_a->base);
+                if (is_positive_const(base_diff)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // Vtmpy helps in sliding window ops of the form a*v0 + b*v1 + v2.
     // Conditions required:
     //      v0, v1 and v2 start indices differ by vector stride
+    // Current supported value of stride is 1.
+    // TODO: Add support for any stride.
     void visit(const Add *op) {
         // Find opportunities vtmpy
         if (op->type.is_vector() && op->type.bits() == 16) {
@@ -1757,60 +1792,82 @@ private:
             }
 
             if (mpys.size() >= 3) {
-                size_t mpy_size = mpys.size();
-                vector<Expr> loads(mpy_size);
+                const size_t mpy_size = mpys.size();
+                // Used to put loads with different buffers in differnt buckets.
+                std::unordered_map<string, vector<LoadIndex> > loads;
+                // To keep track of indices selected for vtmpy.
+                std::unordered_map<size_t, bool> vtmpy_indices;
+                vector<Expr> vtmpy_exprs;
+
                 for(size_t i = 0; i < mpy_size; i++) {
-                    loads[i] = calc_load(mpys[i].first);
+                    Expr curr_load = calc_load(mpys[i].first);
+                    if (curr_load.defined()) {
+                        loads[curr_load.as<Load>()->name].emplace_back(curr_load, i);
+                    } else {
+                        // If the load is undefined put in bucket of "undefined".
+                        // [Assumes that there's no buffer with name "undefined"].
+                        loads["undefined"].emplace_back(curr_load, i);
+                    }
                 }
-                // Checking all possible combinations for vtmpy reductions
-                for(size_t i = 0; i < mpy_size; i++) {
-                    Expr load2 = loads[i];
-                    if (!load2.defined() ||
-                        !is_const(mpys[i].second, load2.type().bits()/8)) {
+
+                for (auto iter = loads.begin(); iter != loads.end(); iter++) {
+                    if (iter->first == "undefined" || iter->second.size() < 3) {
                         continue;
                     }
-                    for (size_t j = 0; j < mpy_size; j++) {
-                        Expr load1 = loads[j];
-                        if (!load1.defined() ||
-                            !cmp_basediff_const(load2, load1, load1.type().bits()/8)) {
-                            continue;
-                        }
-                        for (size_t k = 0; k < mpy_size; k++) {
-                            Expr load0 = loads[k];
-                            if (!load0.defined() ||
-                                !cmp_basediff_const(load1, load0,load0.type().bits()/8)) {
-                                continue;
-                            }
-                            Expr new_expr = native_interleave(Call::make(op->type,
+                    // Sort the bucket and compare bases of 3 adjacent vectors
+                    // at a time. If they differ by vector stride, we've
+                    // found a vtmpy
+                    std::sort(iter->second.begin(), iter->second.end(), loads_comparator);
+                    size_t vec_size = iter->second.size();
+                    for(size_t i = 0; i + 2 < vec_size; i++) {
+                        Expr v0 = iter->second[i].first;
+                        Expr v1 = iter->second[i+1].first;
+                        Expr v2 = iter->second[i+2].first;
+                        size_t v0_idx = iter->second[i].second;
+                        size_t v1_idx = iter->second[i+1].second;
+                        size_t v2_idx = iter->second[i+2].second;
+                        if (is_const(mpys[v2_idx].second, 1) &&
+                            is_base_shifted(v2, v1, v1.type().bits()/8) &&
+                            is_base_shifted(v1, v0, v0.type().bits()/8)) {
+
+                            vtmpy_indices[v0_idx] = true;
+                            vtmpy_indices[v1_idx] = true;
+                            vtmpy_indices[v2_idx] = true;
+
+                            vtmpy_exprs.emplace_back(native_interleave(Call::make(op->type,
                                 "halide.hexagon.vtmpy" + vtmpy_suffix,
-                                {mpys[k].first, mpys[i].first, mpys[k].second, mpys[j].second},
-                                Call::PureExtern));
-                            Expr sum;
-                            for (size_t l = 0; l < mpy_size; l++) {
-                                if (l==i || l==j || l==k)
-                                    continue;
-                                Expr mpy_a = lossless_cast(op->type, mpys[l].first);
-                                Expr mpy_b = lossless_cast(op->type, mpys[l].second);
-                                if (sum.defined()) {
-                                    sum = sum + (mpy_a * mpy_b);
-                                } else {
-                                    sum = mpy_a * mpy_b;
-                                }
-                            }
-                            if (sum.defined()) {
-                                new_expr = new_expr + sum;
-                            }
-                            if (rest.defined()) {
-                                new_expr = new_expr + rest;
-                            }
-                            expr = mutate(new_expr);
-                            return;
+                                { mpys[v0_idx].first, mpys[v2_idx].first,
+                                mpys[v0_idx].second, mpys[v1_idx].second },
+                                Call::PureExtern)));
+                            // As we cannot test the same indices again
+                            i = i+2;
                         }
                     }
+                }
+                // If we found any vtmpy's then recombine Expr using
+                // vtmpy_expr, non_vtmpy_exprs and rest.
+                if (vtmpy_exprs.size() > 0) {
+                    Expr new_expr;
+                    for (size_t i = 0; i < mpy_size; i++) {
+                        if (vtmpy_indices[i]) {
+                            continue;
+                        }
+                        Expr mpy_a = lossless_cast(op->type, mpys[i].first);
+                        Expr mpy_b = lossless_cast(op->type, mpys[i].second);
+                        Expr mpy_res = mpy_a * mpy_b;
+                        new_expr = new_expr.defined() ? new_expr + mpy_res: mpy_res;
+                    }
+                    for (size_t i = 0; i < vtmpy_exprs.size(); i++) {
+                        new_expr = new_expr.defined() ? new_expr + vtmpy_exprs[i]: vtmpy_exprs[i];
+                    }
+                    if (rest.defined()) {
+                        new_expr = new_expr + rest;
+                    }
+                    expr = mutate(new_expr);
+                    return;
                 }
             }
         }
-
         IRMutator::visit(op);
     }
 };
