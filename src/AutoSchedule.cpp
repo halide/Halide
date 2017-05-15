@@ -935,6 +935,8 @@ struct Partitioner {
         // the group.
         int64_t parallelism;
 
+        GroupAnalysis() : cost(Cost()) , parallelism(unknown) {}
+
         friend std::ostream& operator<<(std::ostream &stream, const GroupAnalysis &analysis) {
             stream << "[arith cost:" << analysis.cost.arith << ", ";
             stream << "memory cost:" << analysis.cost.memory << ", ";
@@ -1185,6 +1187,9 @@ Cost Partitioner::get_pipeline_cost() {
     Cost total_cost(0, 0);
     for (const pair<FStage, Group> &g : groups) {
         const GroupAnalysis &analysis = get_element(group_costs, g.first);
+        if ((analysis.cost.arith == unknown) || (analysis.cost.memory == unknown)) {
+            return Cost();
+        }
         total_cost.arith += analysis.cost.arith;
         total_cost.memory += analysis.cost.memory;
     }
@@ -1521,7 +1526,7 @@ Partitioner::find_best_tile_config(const Group &g) {
 
     GroupAnalysis best_analysis = no_tile_analysis;
     map<string, int> best_config = no_tile_config;
-    if (best_analysis.cost.arith == unknown) {
+    if ((best_analysis.cost.arith == unknown) || (best_analysis.cost.memory == unknown)) {
         return make_pair(best_config, best_analysis);
     }
 
@@ -1766,8 +1771,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     DimBounds stg_bounds = get_bounds(g.output);
 
     GroupAnalysis g_analysis;
-    g_analysis.cost = Cost(unknown, unknown);
-    g_analysis.parallelism = unknown;
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         const string &var = dims[d].var;
@@ -2096,7 +2099,9 @@ int64_t Partitioner::estimate_benefit(const GroupAnalysis &old_grouping,
                                       bool ensure_parallelism) {
     // TODO: Instead of having a hard parallelism constraint, it may be better
     // to consider other metric, such as arith_cost/parallelism
-    if (ensure_parallelism && (new_grouping.parallelism < arch_params.parallelism)) {
+    if (ensure_parallelism &&
+        ((new_grouping.parallelism == unknown) ||
+         (new_grouping.parallelism < arch_params.parallelism))) {
         return unknown;
     }
 
@@ -2147,7 +2152,7 @@ int64_t Partitioner::estimate_benefit(
             new_group_analysis.parallelism = std::min(new_group_analysis.parallelism,
                                                       analysisg.parallelism);
         } else {
-            new_group_analysis.cost = Cost(unknown, unknown);
+            new_group_analysis.cost = Cost();
             new_group_analysis.parallelism = unknown;
             break;
         }
@@ -2168,7 +2173,7 @@ int64_t Partitioner::estimate_benefit(
             old_group_analysis.parallelism = std::min(old_group_analysis.parallelism,
                                                       analysisg.parallelism);
         } else {
-            old_group_analysis.cost = Cost(unknown, unknown);
+            old_group_analysis.cost = Cost();
             old_group_analysis.parallelism = unknown;
             break;
         }
