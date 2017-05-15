@@ -307,7 +307,7 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bou
     if (size == unknown) {
         // Size could not be determined; therefore, it is not possible to
         // determine the arithmetic and memory costs.
-        return Cost(unknown, unknown);
+        return Cost();
     }
 
     // If there is nothing to be inlined, use the pre-computed function cost.
@@ -340,7 +340,7 @@ Cost RegionCosts::region_cost(string func, const Box &region, const set<string> 
         Cost stage_cost = stage_region_cost(func, s, region, inlines);
 
         if (stage_cost.arith == unknown) {
-            return Cost(unknown, unknown);
+            return Cost();
         } else {
             region_cost.arith += stage_cost.arith;
             region_cost.memory += stage_cost.memory;
@@ -363,7 +363,7 @@ Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string>
 
         Cost cost = region_cost(f.first, f.second, inlines);
         if (cost.arith == unknown) {
-            return Cost(unknown, unknown);
+            return Cost();
         } else {
             total_cost.arith += cost.arith;
             total_cost.memory += cost.memory;
@@ -490,7 +490,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
 
 Cost RegionCosts::get_func_stage_cost(const Function &f, int stage, const set<string> &inlines) {
     if (f.has_extern_definition()) {
-        return Cost(unknown, unknown);
+        return Cost();
     }
 
     Definition def = get_stage_definition(f, stage);
@@ -526,7 +526,7 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage, const set<st
 
 vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &inlines) {
     if (f.has_extern_definition()) {
-        return { Cost(unknown, unknown) };
+        return { Cost() };
     }
 
     vector<Cost> func_costs;
