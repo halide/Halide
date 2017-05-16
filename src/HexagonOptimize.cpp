@@ -1172,7 +1172,7 @@ class EliminateInterleaves : public IRMutator {
 
         // Lift interleaves out of Let expression bodies.
         const Let *let = expr.as<Let>();
-        if (yields_removable_interleave(let->body)) {
+        if (let && yields_removable_interleave(let->body)) {
             expr = native_interleave(Let::make(let->name, let->value, remove_interleave(let->body)));
         }
     }
@@ -1610,38 +1610,7 @@ public:
 class VtmpyGenerator : public IRMutator {
 private:
     using IRMutator::visit;
-    Scope<Expr> vars;
     typedef pair<Expr, size_t> LoadIndex;
-
-    // Return value of variable if expr is a variable.
-    // Else return the expr.
-    Expr get_val(Expr e) {
-        const Variable *op = e.as<Variable>();
-        if (op) {
-            if (vars.contains(op->name)) {
-                return vars.get(op->name);
-            }
-            else {
-                return Expr();
-            }
-        } else {
-            return e;
-        }
-    }
-
-    // Save variable value
-    void visit(const Let* op) {
-        vars.push(op->name, op->value);
-        IRMutator::visit(op);
-        vars.pop(op->name);
-    }
-
-    // Save variable value
-    void visit(const LetStmt *op) {
-        vars.push(op->name, op->value);
-        IRMutator::visit(op);
-        vars.pop(op->name);
-    }
 
     // Check if vectors a and b point to the same buffer with the base of a
     // shifted by diff i.e. base(a) = base(b) + diff.
@@ -1652,10 +1621,8 @@ private:
         if (maybe_load_a.defined() && maybe_load_b.defined()) {
             const Load* load_a = maybe_load_a.as<Load>();
             const Load* load_b = maybe_load_b.as<Load>();
-            const Ramp* ramp_a = get_val(load_a->index).as<Ramp>();
-            const Ramp* ramp_b = get_val(load_b->index).as<Ramp>();
-            if (ramp_a && ramp_b && load_a->name == load_b->name) {
-                Expr base_diff = simplify(ramp_a->base - ramp_b->base - diff);
+            if (load_a->name == load_b->name) {
+                Expr base_diff = simplify(load_a->index - load_b->index - diff);
                 if (is_const(base_diff, 0)) {
                     return true;
                 }
@@ -1678,39 +1645,12 @@ private:
         if(!maybe_shuffle || !maybe_shuffle->is_concat()) {
             return calc_load(exprs[0]);
         }
-        const Load *prev_load;
-        const Load *curr_load;
-        const Ramp *prev_ramp = nullptr;
-        const Ramp *curr_ramp = nullptr;
-        for (size_t i = 0; i < exprs.size(); i++) {
-            Expr maybe_load = calc_load(exprs[i]);
-            if (!maybe_load.defined()) {
-                return Expr();
-            }
-            curr_load = maybe_load.as<Load>();
-            curr_ramp = get_val(curr_load->index).as<Ramp>();
-            if (!curr_ramp) {
-                return Expr();
-            }
-            if (i > 0 && curr_load->name == prev_load->name) {
-                Expr vector_size = prev_ramp->lanes * prev_ramp->stride;
-                Expr base_diff = simplify(curr_ramp->base - prev_ramp->base - vector_size);
-                if (!is_const(base_diff, 0)) {
-                    return Expr();
-                }
-            }
-            prev_load = curr_load;
-            prev_ramp = curr_ramp;
-        }
-        return calc_load(exprs[0]);
+        return Expr();
     }
 
     // Returns the load indicating vector start index. If the vector is sliced
     // return load with shifted ramp by slice_begin expr.
     Expr calc_load(const Expr &e) {
-        if (e.as<Variable>()) {
-            return calc_load(get_val(e));
-        }
         if (const Cast *maybe_cast = e.as<Cast>()) {
             return calc_load(maybe_cast->value);
         }
@@ -1721,27 +1661,15 @@ private:
                     return Expr();
                 }
                 const Load *res = maybe_load.as<Load>();
-                if (const Ramp *ramp = get_val(res->index).as<Ramp>()) {
-                    if (!ramp) {
-                        return Expr();
-                    }
-                    Expr shifted_ramp = Ramp::make(ramp->base + maybe_shuffle->slice_begin(),
-                                                    ramp->stride, ramp->lanes);
-                    Expr shifted_load = Load::make(res->type, res->name, shifted_ramp,
-                                                    res->image, res->param, res->predicate);
-                    return shifted_load;
-                }
-            }
-            else if (maybe_shuffle->is_concat()) {
+                Expr shifted_load = Load::make(res->type, res->name, res->index + maybe_shuffle->slice_begin(),
+                                                res->image, res->param, res->predicate);
+                return shifted_load;
+            } else if (maybe_shuffle->is_concat()) {
                 return are_contiguous_vectors(maybe_shuffle->vectors);
             }
         }
         if (const Load *maybe_load = e.as<Load>()) {
-            if (const Ramp* ramp = maybe_load->index.as<Ramp>()) {
-                if (is_const(ramp->stride, 1)) {
-                    return maybe_load;
-                }
-            }
+            return maybe_load;
         }
         return Expr();
     }
@@ -1751,10 +1679,8 @@ private:
         if (a.first.defined() && b.first.defined()) {
             const Load* load_a = a.first.as<Load>();
             const Load* load_b = b.first.as<Load>();
-            const Ramp* ramp_a = load_a->index.as<Ramp>();
-            const Ramp* ramp_b = load_b->index.as<Ramp>();
-            if (ramp_a && ramp_b && load_a->name == load_b->name) {
-                Expr base_diff = simplify(ramp_b->base - ramp_a->base);
+            if (load_a->name == load_b->name) {
+                Expr base_diff = simplify(load_b->index - load_a->index);
                 if (is_positive_const(base_diff)) {
                     return true;
                 }
@@ -1770,30 +1696,28 @@ private:
     // TODO: Add support for any stride.
     void visit(const Add *op) {
         // Find opportunities vtmpy
-        if (op->type.is_vector() && op->type.bits() == 16) {
+        if (op && op->type.is_vector() && op->type.bits() == 16) {
             int lanes = op->type.lanes();
             vector<MulExpr> mpys;
             Expr rest;
             string vtmpy_suffix;
 
-            if (op->type.bits() == 16) {
-                // Finding more than 100 such expresssions is rare.
-                // Setting it to 100 makes sure we dont miss anything
-                // in most cases and also dont spend unreasonable time while
-                // just looking for vtmpy patterns.
-                find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
-                vtmpy_suffix = ".vub.vub.b.b";
-                if (mpys.size() < 3) {
-                    mpys.clear();
-                    rest = Expr();
-                    find_mpy_ops(op, Int(8, lanes), Int(8), 100, mpys, rest);
-                    vtmpy_suffix = ".vb.vb.b.b";
-                }
+            // Finding more than 100 such expresssions is rare.
+            // Setting it to 100 makes sure we dont miss anything
+            // in most cases and also dont spend unreasonable time while
+            // just looking for vtmpy patterns.
+            find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
+            vtmpy_suffix = ".vub.vub.b.b";
+            if (mpys.size() < 3) {
+                mpys.clear();
+                rest = Expr();
+                find_mpy_ops(op, Int(8, lanes), Int(8), 100, mpys, rest);
+                vtmpy_suffix = ".vb.vb.b.b";
             }
 
             if (mpys.size() >= 3) {
                 const size_t mpy_size = mpys.size();
-                // Used to put loads with different buffers in differnt buckets.
+                // Used to put loads with different buffers in different buckets.
                 std::unordered_map<string, vector<LoadIndex> > loads;
                 // To keep track of indices selected for vtmpy.
                 std::unordered_map<size_t, bool> vtmpy_indices;
@@ -1881,7 +1805,10 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Generate vtmpy instruction if possible
-    s = VtmpyGenerator().mutate(s);
+    s = VtmpyGenerator().mutate(substitute_in_all_lets(s));
+
+    // Need to re-run CSE because of substitute_in_all_lets for VtmpyGenerator
+    s = common_subexpression_elimination(s);
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
