@@ -1667,7 +1667,7 @@ struct Test {
         // we can cancel with the deinterleaving from widening.
         check("v*.ub = vsat(v*.h,v*.h)", hvx_width/1, u8_sat(i16(i8_1) << 8));
         check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16_sat(i32(i16_1) << 16));
-        check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u8_sat(i32(i16_1) >> 4));
+        check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/1, u8_sat(i32(i16_1) >> 4));
         check("v*.h = vsat(v*.w,v*.w)", hvx_width/2, i16_sat(i32(i16_1) << 16));
 
         // Also check double saturating narrows.
@@ -1882,10 +1882,10 @@ struct Test {
         check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x - 1))*2 + i16(in_i8(x)) + i16(in_i8(x + 1)));
         check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x - 1)) + i16(in_i8(x)) + i16(in_i8(x + 1)));
 
-        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/1, 2*i32(in_i16(x - 1)) + 3*i32(in_i16(x)) + i32(in_i16(x + 1)));
-        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/1, i32(in_i16(x - 1)) + 3*i32(in_i16(x)) + i32(in_i16(x + 1)));
-        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/1, i32(in_i16(x - 1))*2 + i32(in_i16(x)) + i32(in_i16(x + 1)));
-        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/1, i32(in_i16(x - 1)) + i32(in_i16(x)) + i32(in_i16(x + 1)));
+        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/2, 2*i32(in_i16(x - 1)) + 3*i32(in_i16(x)) + i32(in_i16(x + 1)));
+        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/2, i32(in_i16(x - 1)) + 3*i32(in_i16(x)) + i32(in_i16(x + 1)));
+        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/2, i32(in_i16(x - 1))*2 + i32(in_i16(x)) + i32(in_i16(x + 1)));
+        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/2, i32(in_i16(x - 1)) + i32(in_i16(x)) + i32(in_i16(x + 1)));
 
         // We only generate vdmpy if the inputs are interleaved (otherwise we would use vmpa).
         check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*127 + i16(in_u8(2*x + 1))*-128);
