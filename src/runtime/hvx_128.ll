@@ -382,7 +382,6 @@ define weak_odr <64 x i16> @halide.hexagon.trunc_satuh.vw(<64 x i32> %arg) nounw
 
 declare <64 x i32> @llvm.hexagon.V6.vtmpybus.128B(<64 x i32>, i32)
 declare <64 x i32> @llvm.hexagon.V6.vtmpyb.128B(<64 x i32>, i32)
-declare <64 x i32> @llvm.hexagon.V6.vtmpyhb.128B(<64 x i32>, i32)
 
 define weak_odr <128 x i16> @halide.hexagon.vtmpy.vub.vub.b.b(<128 x i8> %low_v, <128 x i8> %high_v, i8 %low_c, i8 %high_c) nounwind uwtable readnone {
   %const = call i32 @halide.hexagon.interleave.b.dup2.h(i8 %low_c, i8 %high_c)
