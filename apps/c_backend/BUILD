@@ -14,9 +14,7 @@ halide_generator(
 
 halide_library_from_generator(
     name = "pipeline_c",
-    extra_outputs = ["cpp"],
     generator = ":pipeline_generator",
-    halide_target_map = {"*": ["*"]},
     includes = ["."],
 )
 
@@ -28,10 +26,13 @@ halide_library_from_generator(
 
 cc_test(
     name = "run",
-    srcs = ["run.cpp"],
+    srcs = [
+        "run.cpp",
+        ":pipeline_c_h",
+        ":pipeline_c_cc",
+    ],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        ":pipeline_c",
         ":pipeline_native",
     ],
 )
@@ -43,10 +44,8 @@ halide_generator(
 
 halide_library_from_generator(
     name = "pipeline_cpp_cpp",
-    extra_outputs = ["cpp"],
     generator = ":pipeline_cpp_generator",
     halide_target_features = ["c_plus_plus_name_mangling"],
-    halide_target_map = {"*": ["*"]},
     includes = ["."],
 )
 
@@ -59,10 +58,13 @@ halide_library_from_generator(
 
 cc_test(
     name = "run_cpp",
-    srcs = ["run_cpp.cpp"],
+    srcs = [
+        "run_cpp.cpp",
+        ":pipeline_cpp_cpp_h",
+        ":pipeline_cpp_cpp_cc",
+    ],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        ":pipeline_cpp_cpp",
         ":pipeline_cpp_native",
     ],
 )

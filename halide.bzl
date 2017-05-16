@@ -639,11 +639,10 @@ def halide_library_from_generator(name,
   full_halide_target_features = sorted(list(set(halide_target_features + ["c_plus_plus_name_mangling", "no_runtime"])))
   user_halide_target_features = sorted(list(set(halide_target_features)))
 
-  outputs = extra_outputs
-  # TODO: yuck. hacky for apps/c_backend.
-  if not "cpp" in outputs:
-    outputs += ["static_library"]
+  if "cpp" in extra_outputs:
+    fail("halide_library('%s') doesn't support 'cpp' in extra_outputs; please depend on '%s_cc' instead." % (name, name))
 
+  outputs = ["static_library"] + extra_outputs
   generator_closure = "%s_closure" % generator
 
   condition_deps = {}
@@ -669,27 +668,11 @@ def halide_library_from_generator(name,
         tags=["manual"] + tags,
         outputs=outputs)
     libname = "halide_internal_%s_%s" % (name, arch)
-    if "static_library" in outputs:
-      native.cc_library(
-          name=libname,
-          srcs=[":%s.a" % sub_name],
-          tags=["manual"] + tags,
-          visibility=["//visibility:private"])
-    elif "cpp" in outputs:
-      # TODO: yuck. hacky for apps/c_backend.
-      if len(multitarget) > 1:
-        fail(
-            'can only request .cpp output if no multitargets are selected. Try' +
-            ' adding halide_target_map={"*":["*"]} to your halide_library_from_generator ' +
-            'rule.'
-        )
-      native.cc_library(
-          name=libname,
-          srcs=[":%s.cpp" % sub_name],
-          tags=["manual"] + tags,
-          visibility=["//visibility:private"])
-    else:
-      fail("either cpp or static_library required")
+    native.cc_library(
+        name=libname,
+        srcs=[":%s.a" % sub_name],
+        tags=["manual"] + tags,
+        visibility=["//visibility:private"])
     condition_deps[_config_setting(
         base_target)] = _HALIDE_RUNTIME_OVERRIDES.get(
             base_target, []) + [":%s" % libname]
@@ -706,16 +689,31 @@ def halide_library_from_generator(name,
     # case, just use the first entry.
     header_target = [header_target[0]]
 
-  outputs = ["h"]
   _gengen(
-      name="%s_header" % name,
+      name="%s_h" % name,
       filename=name,
       halide_generator_args=generator_args,
       generator_closure=generator_closure,
       halide_target=header_target,
       halide_function_name=function_name,
-      outputs=outputs,
+      outputs=["h"],
       tags=tags)
+
+  # Create a _cc target for (unusual) applications that want C++ source output;
+  # we don't support this via extra_outputs=["cpp"] because it can end up being 
+  # compiled by Bazel, producing duplicate symbols; also, targets that want this
+  # sometimes want to compile it via a separate tool (e.g., XCode to produce
+  # certain bitcode variants). Note that this deliberately does not produce
+  # a cc_library() output.
+  _gengen(
+      name="%s_cc" % name,
+      filename=name,
+      halide_generator_args=generator_args,
+      generator_closure=generator_closure,
+      halide_target=header_target,
+      halide_function_name=function_name,
+      outputs=["cpp"],
+      tags=["manual"] + tags)
 
   runtime_library = _halide_library_runtime_target_name(user_halide_target_features)
   if runtime_library in _standard_library_runtime_names():
@@ -736,7 +734,7 @@ def halide_library_from_generator(name,
 
   native.cc_library(
       name=name,
-      hdrs=[":%s_header" % name],
+      hdrs=[":%s_h" % name],
       # Order matters: runtime_library must come *after* condition_deps, so that
       # they will be presented to the linker in this order, and we want
       # unresolved symbols in the generated code (in condition_deps) to be
