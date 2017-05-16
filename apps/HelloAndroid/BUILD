@@ -19,10 +19,7 @@ halide_library(
 cc_library(
     name = "hello_wrapper",
     srcs = ["jni/hello_wrapper.cpp"],
-    linkopts = [
-        "-llog",
-        "-landroid",
-    ],
+    linkopts = halide_runtime_linkopts(),
     tags = ["manual"],  # Don't compile this for ":all" targets
     deps = [":hello"],
 )

@@ -7,7 +7,7 @@ def halide_language_copts():
       "-Wno-conversion",
       "-Wno-sign-compare",
   ]
-  _clangy_opts = [
+  _posix_opts = [
       "$(STACK_FRAME_UNLIMITED)", 
       "-fno-exceptions", 
       "-funwind-tables",
@@ -24,11 +24,11 @@ def halide_language_copts():
       "@halide//:halide_platform_config_x64_windows":
           ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
       "@halide//:halide_platform_config_darwin":
-          _clangy_opts,
+          _posix_opts,
       "@halide//:halide_platform_config_darwin_x86_64":
-          _clangy_opts,
+          _posix_opts,
       "//conditions:default":
-          _clangy_opts,
+          _posix_opts,
   })
 
 def halide_language_linkopts():
@@ -58,22 +58,28 @@ def halide_language_linkopts():
 
 
 def halide_runtime_linkopts():
-  _clangy_opts = [
+  _posix_opts = [
       "-ldl",
       "-lpthread",
   ]
+  _android_opts = [
+      "-llog",
+      "-landroid",
+  ]
   _msvc_opts = []  # TODO
   return select({
-      "@halide//:halide_platform_config_x64_windows_msvc":
+      "@halide//:halide_config_arm_32_android": 
+          _android_opts,
+      "@halide//:halide_config_arm_64_android": 
+          _android_opts,
+      "@halide//:halide_config_x86_32_android": 
+          _android_opts,
+      "@halide//:halide_config_x86_64_android": 
+          _android_opts,
+      "@halide//:halide_config_x86_64_windows":
           _msvc_opts,
-      "@halide//:halide_platform_config_x64_windows":
-          ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
-      "@halide//:halide_platform_config_darwin":
-          _clangy_opts,
-      "@halide//:halide_platform_config_darwin_x86_64":
-          _clangy_opts,
       "//conditions:default":
-          _clangy_opts,
+          _posix_opts,
   })
 
 
@@ -82,13 +88,11 @@ def halide_opengl_linkopts():
   _osx_opts = ["-framework OpenGL"]
   _msvc_opts = []  # TODO
   return select({
-      "@halide//:halide_platform_config_x64_windows_msvc":
+      "@halide//:halide_config_x86_64_windows":
           _msvc_opts,
-      "@halide//:halide_platform_config_x64_windows":
-          ["/error_please_set_cpu_and_host_cpu_x64_windows_msvc"],
-      "@halide//:halide_platform_config_darwin":
+      "@halide//:halide_config_x86_32_osx":
           _osx_opts,
-      "@halide//:halide_platform_config_darwin_x86_64":
+      "@halide//:halide_config_x86_64_osx":
           _osx_opts,
       "//conditions:default":
           _linux_opts,
