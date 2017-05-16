@@ -121,9 +121,14 @@
  *     };
  * \endcode
  *
- * You can also leave array size unspecified, in which case it will be inferred
- * from the input vector, or (optionally) explicitly specified via a resize()
- * method:
+ * You can also leave array size unspecified, with some caveats:
+ *   - For ahead-of-time compilation, Inputs must have a concrete size specified
+ *     via a GeneratorParam at build time (e.g., pyramid.size=3)
+ *   - For JIT compilation via a Stub, Inputs array sizes will be inferred
+ *     from the vector passed.
+ *   - For ahead-of-time compilation, Outputs may specify a concrete size
+ *     via a GeneratorParam at build time (e.g., pyramid.size=3), or the
+ *     size can be specified via a resize() method.
  *
  * \code
  *     class Pyramid : public Generator<Pyramid> {
