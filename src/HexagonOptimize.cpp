@@ -1696,7 +1696,7 @@ private:
     // TODO: Add support for any stride.
     void visit(const Add *op) {
         // Find opportunities vtmpy
-        if (op && op->type.is_vector() && op->type.bits() == 16) {
+        if (op && op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32)) {
             int lanes = op->type.lanes();
             vector<MulExpr> mpys;
             Expr rest;
@@ -1706,13 +1706,18 @@ private:
             // Setting it to 100 makes sure we dont miss anything
             // in most cases and also dont spend unreasonable time while
             // just looking for vtmpy patterns.
-            find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
-            vtmpy_suffix = ".vub.vub.b.b";
-            if (mpys.size() < 3) {
-                mpys.clear();
-                rest = Expr();
-                find_mpy_ops(op, Int(8, lanes), Int(8), 100, mpys, rest);
-                vtmpy_suffix = ".vb.vb.b.b";
+            if (op->type.bits() == 16) {
+                find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
+                vtmpy_suffix = ".vub.vub.b.b";
+                if (mpys.size() < 3) {
+                    mpys.clear();
+                    rest = Expr();
+                    find_mpy_ops(op, Int(8, lanes), Int(8), 100, mpys, rest);
+                    vtmpy_suffix = ".vb.vb.b.b";
+                }
+            } else if (op->type.bits() == 32) {
+                find_mpy_ops(op, Int(16, lanes), Int(8), 100, mpys, rest);
+                vtmpy_suffix = ".vh.vh.b.b";
             }
 
             if (mpys.size() >= 3) {
@@ -1722,6 +1727,7 @@ private:
                 // To keep track of indices selected for vtmpy.
                 std::unordered_map<size_t, bool> vtmpy_indices;
                 vector<Expr> vtmpy_exprs;
+                const char *not_load = "";
 
                 for(size_t i = 0; i < mpy_size; i++) {
                     Expr curr_load = calc_load(mpys[i].first);
@@ -1730,12 +1736,12 @@ private:
                     } else {
                         // If the load is undefined put in bucket of "undefined".
                         // [Assumes that there's no buffer with name "undefined"].
-                        loads["undefined"].emplace_back(curr_load, i);
+                        loads[not_load].emplace_back(curr_load, i);
                     }
                 }
 
                 for (auto iter = loads.begin(); iter != loads.end(); iter++) {
-                    if (iter->first == "undefined" || iter->second.size() < 3) {
+                    if (iter->first == not_load || iter->second.size() < 3) {
                         continue;
                     }
                     // Sort the bucket and compare bases of 3 adjacent vectors
@@ -1751,8 +1757,8 @@ private:
                         size_t v1_idx = iter->second[i+1].second;
                         size_t v2_idx = iter->second[i+2].second;
                         if (is_const(mpys[v2_idx].second, 1) &&
-                            is_base_shifted(v2, v1, v1.type().bits()/8) &&
-                            is_base_shifted(v1, v0, v0.type().bits()/8)) {
+                            is_base_shifted(v2, v1, 1) &&
+                            is_base_shifted(v1, v0, 1)) {
 
                             vtmpy_indices[v0_idx] = true;
                             vtmpy_indices[v1_idx] = true;
@@ -1803,12 +1809,17 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     return OptimizeShuffles(lut_alignment).mutate(s);
 }
 
+Stmt vtmpy_generator(Stmt s) {
+    // Generate vtmpy instruction if possible
+    return VtmpyGenerator().mutate(substitute_in_all_lets(s));
+}
+
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Generate vtmpy instruction if possible
-    s = VtmpyGenerator().mutate(substitute_in_all_lets(s));
+    // s = VtmpyGenerator().mutate(substitute_in_all_lets(s));
 
-    // Need to re-run CSE because of substitute_in_all_lets for VtmpyGenerator
-    s = common_subexpression_elimination(s);
+    // // Need to re-run CSE because of substitute_in_all_lets for VtmpyGenerator
+    // s = common_subexpression_elimination(s);
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.

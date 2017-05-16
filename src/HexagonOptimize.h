@@ -13,6 +13,7 @@ namespace Internal {
 /** Replace indirect and other loads with simple loads + vlut
  * calls. */
 EXPORT Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment);
+EXPORT Stmt vtmpy_generator(Stmt s);
 
 /** Hexagon deinterleaves when performing widening operations, and
  * interleaves when performing narrowing operations. This pass
