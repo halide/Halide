@@ -1667,7 +1667,7 @@ struct Test {
         // we can cancel with the deinterleaving from widening.
         check("v*.ub = vsat(v*.h,v*.h)", hvx_width/1, u8_sat(i16(i8_1) << 8));
         check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u16_sat(i32(i16_1) << 16));
-        check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/1, u8_sat(i32(i16_1) >> 4));
+        check("v*.h = vasr(v*.w,v*.w,r*):sat", hvx_width/2, u8_sat(i32(i16_1) >> 4));
         check("v*.h = vsat(v*.w,v*.w)", hvx_width/2, i16_sat(i32(i16_1) << 16));
 
         // Also check double saturating narrows.
