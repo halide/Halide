@@ -36,6 +36,10 @@ struct FunctionContents {
     std::string name;
     std::vector<Type> output_types;
 
+    // Function-specific schedule. This schedule is applied to all stages
+    // within the function.
+    FuncSchedule func_schedule;
+
     Definition init_def;
     std::vector<Definition> updates;
 
@@ -62,6 +66,8 @@ struct FunctionContents {
                          frozen(false) {}
 
     void accept(IRVisitor *visitor) const {
+        func_schedule.accept(visitor);
+
         init_def.accept(visitor);
         for (const Definition &def : updates) {
             def.accept(visitor);
@@ -94,6 +100,8 @@ struct FunctionContents {
 
     // Pass an IRMutator through to all Exprs referenced in the FunctionContents
     void mutate(IRMutator *mutator) {
+        func_schedule.mutate(mutator);
+
         init_def.mutate(mutator);
         for (Definition &def : updates) {
             def.mutate(mutator);
@@ -318,16 +326,17 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->trace_realizations = src->trace_realizations;
     dst->frozen = src->frozen;
     dst->output_buffers = src->output_buffers;
+    dst->func_schedule = src->func_schedule.deep_copy(copied_map);
 
     // Copy the pure definition
-    dst->init_def = src->init_def.deep_copy(copied_map);
+    dst->init_def = src->init_def.get_copy();
     internal_assert(dst->init_def.is_init());
     internal_assert(dst->init_def.schedule().rvars().empty())
         << "Init definition shouldn't have reduction domain\n";
 
     for (const Definition &def : src->updates) {
         internal_assert(!def.is_init());
-        Definition def_copy = def.deep_copy(copied_map);
+        Definition def_copy = def.get_copy();
         internal_assert(!def_copy.is_init());
         dst->updates.push_back(std::move(def_copy));
     }
@@ -450,7 +459,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
         contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {args[i]};
-        contents->init_def.schedule().storage_dims().push_back(sd);
+        contents->func_schedule.storage_dims().push_back(sd);
     }
 
     // Add the dummy outermost dim
@@ -720,7 +729,7 @@ void Function::define_extern(const std::string &function_name,
         string arg = unique_name('e');
         pure_def_args[i] = Var(arg);
         StorageDim sd = {arg};
-        contents->init_def.schedule().storage_dims().push_back(sd);
+        contents->func_schedule.storage_dims().push_back(sd);
     }
 }
 
@@ -763,19 +772,19 @@ const std::vector<Expr> &Function::values() const {
     return contents->init_def.values();
 }
 
-Schedule &Function::schedule() {
-    return contents->init_def.schedule();
+FuncSchedule &Function::schedule() {
+    return contents->func_schedule;
 }
 
-const Schedule &Function::schedule() const {
-    return contents->init_def.schedule();
+const FuncSchedule &Function::schedule() const {
+    return contents->func_schedule;
 }
 
 const std::vector<Parameter> &Function::output_buffers() const {
     return contents->output_buffers;
 }
 
-Schedule &Function::update_schedule(int idx) {
+StageSchedule &Function::update_schedule(int idx) {
     internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
     return contents->updates[idx].schedule();
 }
@@ -887,12 +896,12 @@ bool Function::frozen() const {
 }
 
 const map<string, IntrusivePtr<FunctionContents>> &Function::wrappers() const {
-    return contents->init_def.schedule().wrappers();
+    return contents->func_schedule.wrappers();
 }
 
 void Function::add_wrapper(const std::string &f, Function &wrapper) {
     wrapper.freeze();
-    contents->init_def.schedule().add_wrapper(f, wrapper.contents);
+    contents->func_schedule.add_wrapper(f, wrapper.contents);
 }
 
 namespace {
