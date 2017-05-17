@@ -107,7 +107,7 @@ struct Test {
         const bool can_run = can_run_code();
         for (auto p : image_params) {
             p.set_host_alignment(128);
-            p.dim(0).set_min(0);
+            p.dim(0).set_min(-PAD).set_extent(W + 2 * PAD);
             if (can_run) {
                 // Make a buffer filled with noise to use as a sample input.
                 Buffer<> b(p.type(), {W*4+H, H});
@@ -193,17 +193,17 @@ struct Test {
         // Define a vectorized Func that uses the pattern.
         Func f(name);
         f(x, y) = e;
-        f.bound(x, PAD, W-PAD).vectorize(x, vector_width);
+        f.bound(x, 0, W).vectorize(x, vector_width);
         f.compute_root();
 
         // Include a scalar version
         Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
-        f_scalar.bound(x, PAD, W-PAD);
+        f_scalar.bound(x, 0, W);
         f_scalar.compute_root();
 
         // The output to the pipeline is the maximum absolute difference as a double.
-        RDom r(PAD, W-PAD, 0, H);
+        RDom r(0, W, 0, H);
         Func error("error_" + name);
         error() = cast<double>(maximum(absd(f(r.x, r.y), f_scalar(r.x, r.y))));
 
