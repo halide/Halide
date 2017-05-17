@@ -1669,7 +1669,10 @@ private:
             }
         }
         if (const Load *maybe_load = e.as<Load>()) {
-            return maybe_load;
+            const Ramp *maybe_ramp = maybe_load->index.as<Ramp>();
+            if (maybe_ramp && is_const(maybe_ramp->stride, 1)) {
+                return maybe_load;
+            }
         }
         return Expr();
     }
@@ -1815,12 +1818,6 @@ Stmt vtmpy_generator(Stmt s) {
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
-    // Generate vtmpy instruction if possible
-    // s = VtmpyGenerator().mutate(substitute_in_all_lets(s));
-
-    // // Need to re-run CSE because of substitute_in_all_lets for VtmpyGenerator
-    // s = common_subexpression_elimination(s);
-
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns(t).mutate(s);
