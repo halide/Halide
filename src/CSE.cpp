@@ -20,8 +20,9 @@ namespace {
 // Some expressions are not worth lifting out into lets, even if they
 // occur redundantly many times. They may also be illegal to lift out
 // (e.g. calls with side-effects).
-// This list should mirror the list in the simplifier for lets,
-// otherwise they'll just fight with each other pointlessly.
+// This list should at least avoid lifting the same cases as that of the
+// simplifier for lets, otherwise CSE and the simplifier will fight each 
+// other pointlessly.
 bool should_extract(Expr e) {
     if (is_const(e)) {
         return false;
