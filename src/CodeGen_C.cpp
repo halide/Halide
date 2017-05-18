@@ -112,6 +112,24 @@ const string globals =
 
 }
 
+class AllVectorTypes : public IRGraphVisitor {
+public:
+    std::set<Type> vector_types_used;
+
+    void include(const Expr &e) {
+        if (e.type().lanes() > 1) {
+            vector_types_used.insert(e.type());
+        }
+        IRGraphVisitor::include(e);
+    }
+
+    // GCC's __builtin_shuffle takes an integer vector of
+    // the size of its input vector. Make sure this type exists.
+    void visit(const Shuffle *op) {
+        vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
+    }
+};
+
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
     IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false) {
 
@@ -223,7 +241,7 @@ namespace {
 string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
     bool needs_space = true;
     ostringstream oss;
-    user_assert(type.lanes() == 1) << "Can't use vector types when compiling to C (yet)\n";
+
     if (type.is_float()) {
         if (type.bits() == 32) {
             oss << "float";
@@ -232,7 +250,9 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
         } else {
             user_error << "Can't represent a float with this many bits in C: " << type << "\n";
         }
-
+        if (type.lanes() != 1) {
+            oss << type.lanes();
+        }
     } else if (type.is_handle()) {
         needs_space = false;
 
@@ -282,13 +302,33 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
             }
         }
     } else {
+        // This ends up using different type names than OpenCL does
+        // for the integer vector types. E.g. uint16x8_t rather than
+        // OpenCL's short8. Should be fine as CodeGen_C introduces
+        // typedefs for them and codegen always goes through this
+        // routine or its override in CodeGen_OpenCL to make the
+        // names. This may be the better bet as the typedefs are less
+        // likely to collide with built-in types (e.g. the OpenCL
+        // ones for a C compiler that decides to compile OpenCL).
+        // This code also supports arbitrary vector sizes where the
+        // OpenCL ones must be one of 2, 3, 4, 8, 16, which is too
+        // restrictive for already existing architectures.
         switch (type.bits()) {
         case 1:
             oss << "bool";
+            if (type.lanes() != 1) {
+                oss << type.lanes();
+            }
             break;
         case 8: case 16: case 32: case 64:
-            if (type.is_uint()) oss << 'u';
-            oss << "int" << type.bits() << "_t";
+            if (type.is_uint()) {
+                oss << 'u';
+            }
+            oss << "int" << type.bits();
+            if (type.lanes() != 1) {
+                oss << "x" << type.lanes();
+            }
+            oss << "_t";
             break;
         default:
             user_error << "Can't represent an integer with this many bits in C: " << type << "\n";
@@ -298,6 +338,35 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
         oss << " ";
     return oss.str();
 }
+}
+
+void CodeGen_C::add_vector_typedefs(const Module &input) {
+    AllVectorTypes all_vector_types;
+
+    for (const auto &f : input.functions()) {
+        f.body.accept(&all_vector_types);
+    }
+
+    if (!all_vector_types.vector_types_used.empty()) {
+        stream << "\n";
+        stream << "#if !defined(__has_attribute)\n" <<
+                  "#define __has_attribute(x) 0\n" <<
+                  "#endif\n" << 
+                  "\n" <<
+                  "#if __has_attribute(ext_vector_type)\n" <<
+                  "#define _halide_vector_type_attribute(lanes, byte_size) __attribute__((ext_vector_type(lanes)));\n" <<
+                  "#elif __GNUC__ || __has_attribute(vector_size)\n" <<
+                  "#define _halide_vector_type_attribute(lanes, byte_size) __attribute__((vector_size(byte_size)));\n" <<
+                  "#else\n" <<
+                  "#error \"This C compiler does not support vector types.\"\n" <<
+                  "#endif\n" <<
+                  "\n";
+        for (const auto &t : all_vector_types.vector_types_used) {
+            string name = type_to_c_type(t, false, false);
+            string scalar_name = type_to_c_type(t.element_of(), false, false);
+            stream << "typedef " << scalar_name << " " << name << " _halide_vector_type_attribute(" << t.lanes() << ", " << (t.bits() * t.lanes()) / 8 << ");\n";
+        }
+    }
 }
 
 void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
@@ -471,6 +540,7 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
+    add_vector_typedefs(input);
     for (const auto &b : input.buffers()) {
         compile(b);
     }
@@ -1288,6 +1358,27 @@ void CodeGen_C::visit(const For *op) {
 
 }
 
+void CodeGen_C::visit(const Ramp *op) {
+    string id_base = print_expr(op->base);
+    string id_stride = print_expr(op->stride);
+
+    ostringstream rhs;
+    rhs << id_base << " + " << id_stride << " * ("
+        << print_type(op->type.with_lanes(op->lanes)) << ")(0";
+    // Note 0 written above.
+    for (int i = 1; i < op->lanes; ++i) {
+        rhs << ", " << i;
+    }
+    rhs << ")";
+    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
+}
+
+void CodeGen_C::visit(const Broadcast *op) {
+    string id_value = print_expr(op->value);
+
+    print_assignment(op->type.with_lanes(op->lanes), id_value);
+}
+
 void CodeGen_C::visit(const Provide *op) {
     internal_error << "Cannot emit Provide statements as C\n";
 }
@@ -1447,7 +1538,63 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
-    internal_error << "Cannot emit vector code to C\n";
+    string vec_args = print_expr(op->vectors[0]);
+    if (op->vectors.size() == 2) {
+        vec_args += ", " + print_expr(op->vectors[1]);
+    }
+
+    do_indent();
+    stream << "#if __has_builtin(__builtin_shufflevector)\n";
+    do_indent();
+    stream << id << " = __builtin_shufflevector(" << vec_args;
+    for (const auto i : op->indices) {
+        stream << ", " << i;
+    }
+    stream << ");\n";
+    do_indent();
+    stream << "#elif  __GNUC__ || __has_builtin(__builtin_shuffle)\n";
+
+    string index_vec_id = unique_name('_');
+    stream << type_to_c_type(Int(32, op->vectors[0].type().lanes()), true) << index_vec_id << " = {";
+    for (const auto i : op->indices) {
+        stream << ", " << i;
+    }
+    const char *prefix = "";
+    for (size_t i = op->indices.size(); i < (size_t)op->vectors[0].type().lanes(); i++) {
+       // TODO: Should this be -1?
+        stream << prefix << 0;
+        prefix = ", ";
+    }
+    stream << "};\n";
+
+    if (op->type != op->vectors[0].type()) {
+        // Union punning only works on little endian machines, but Halide
+        // generally has little-endian deps and it may be faster.
+#if 0
+        string union_id = unique_name('_');
+        do_indent();
+        stream << "union " << union_id << " { " <<
+          type_to_c_type(op->vectors[0].type(), true) << "vin; " <<
+          type_to_c_type(op->type, true) << "vret; };\n";
+        do_indent();
+        stream << union_id << ".vin = __builtin_shuffle(" << vec_args << ", " << index_vec_id << ");\n";
+        id = unique_name('_');
+        stream << type_to_c_type(op->type, true) << id << " = " << union_id << ".vret;\n";
+#else
+        string input_typed_result = unique_name('_');
+        do_indent();
+        stream << type_to_c_type(op->vectors[0].type(), true) << input_typed_result
+               << " = __builtin_shuffle(" << vec_args << ", " << index_vec_id << ");\n";
+        id = unique_name('_');
+        stream << type_to_c_type(op->type, true) << id << ";\n";
+        for (int i = 0; i < op->type.lanes(); i++) {
+            stream << id << "[" << i << "] = " << input_typed_result << "[" << i << "];\n";
+        }
+#endif
+    } else {
+        id = unique_name('_');
+        stream << id << "= __builtin_shuffle(" << vec_args << ", " << index_vec_id << ");\n";
+    }
 }
 
 void CodeGen_C::test() {

@@ -75,6 +75,10 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
     return oss.str();
 }
 
+// These are built-in types in OpenCL
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_vector_typedefs(const Module &) {
+}
+
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e) {
     ostringstream oss;
     oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
@@ -126,6 +130,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     }
 }
 
+#if 0
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
@@ -146,6 +151,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
 
     print_assignment(op->type.with_lanes(op->lanes), id_value);
 }
+#endif
 
 namespace {
 // Mapping of integer vector indices to OpenCL ".s" syntax.
