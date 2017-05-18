@@ -47,7 +47,7 @@ def _llvm_config(repository_ctx, cfg, arg):
 
   return r
 
-def _find_locally_or_download_impl(repository_ctx):
+def _configure_llvm_impl(repository_ctx):
   if 'LLVM_CONFIG' not in repository_ctx.os.environ:
     fail("You must have LLVM_CONFIG set in order to build Halide with Bazel.")
 
@@ -104,10 +104,10 @@ def _find_locally_or_download_impl(repository_ctx):
     False
   ) 
 
-_find_locally_or_download = repository_rule(
-  implementation = _find_locally_or_download_impl,
+_configure_llvm = repository_rule(
+  implementation = _configure_llvm_impl,
   local = True,
 )
 
 def llvm_repository():
-  _find_locally_or_download(name = "llvm")
+  _configure_llvm(name = "llvm")

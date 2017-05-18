@@ -24,7 +24,6 @@ def _binary2cpp(name, srcs):
       copts = halide_language_copts(),
       identifier = "halide_internal_%s" % name,
       visibility = [ "//visibility:private" ],
-      linkstatic = True
   )
   return ":%s_b2clib" % name
 
@@ -109,8 +108,7 @@ def gen_runtime(name,
   ]
   native.cc_library(name = name, 
                     deps = deps,
-                    copts = halide_language_copts(),
-                    linkstatic = True)
+                    copts = halide_language_copts())
 
 
 

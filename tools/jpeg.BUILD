@@ -2,7 +2,7 @@
 #  Private BUILD file for libjpeg use inside Halide.
 #  Should not be used by code outside of Halide itself.
 #  Adapted directly from TensorFlow's JPEG support, with SIMD specializations
-# removed to simplify build requirements.
+#  removed to simplify build requirements.
 
 libjpegturbo_nocopts = "-[W]error"
 
@@ -14,7 +14,6 @@ libjpegturbo_copts = select({
     ],
     ":windows": [
         "-w",
-        #"/Ox",
         "/wd4711",  # function 'function' selected for inline expansion
         "/wd4710",  # 'function' : function not inlined
         "-D_CRT_SECURE_NO_WARNINGS",
