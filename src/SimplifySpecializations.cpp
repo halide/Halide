@@ -33,7 +33,7 @@ class SimplifyUsingFact : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         if (e.type().is_bool()) {
             if (equal(fact, e) ||
                 can_prove(!fact || e)) {
