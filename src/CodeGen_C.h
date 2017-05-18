@@ -92,6 +92,10 @@ protected:
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     virtual std::string print_name(const std::string &);
 
+    /** Add typedefs for vector types. Not needed for OpenCL, might
+     * use different syntax for other C-like languages. */
+    virtual void add_vector_typedefs(const Module &input);
+
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     std::string print_assignment(Type t, const std::string &rhs);
 
@@ -168,6 +172,8 @@ protected:
     void visit(const AssertStmt *);
     void visit(const ProducerConsumer *);
     void visit(const For *);
+    void visit(const Ramp *);
+    void visit(const Broadcast *);
     void visit(const Provide *);
     void visit(const Allocate *);
     void visit(const Free *);
