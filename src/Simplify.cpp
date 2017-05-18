@@ -1493,10 +1493,10 @@ private:
             if (is_simple_const(delta_a) &&
                 is_simple_const(delta_b)) {
                 Expr diff = delta_b - delta_a;
-                if (is_one(mutate(diff <= 0))) {
-                    expr = mutate(clamp(min_a->b - min_a->a, diff, 0) + delta_a);
+                if (is_one(mutate(diff <= make_zero(op->type)))) {
+                    expr = mutate(clamp(min_a->b - min_a->a, diff, make_zero(op->type)) + delta_a);
                 } else {
-                    expr = mutate(delta_b - clamp(min_a->b - min_a->a, 0, diff));
+                    expr = mutate(delta_b - clamp(min_a->b - min_a->a, make_zero(op->type), diff));
                 }
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
@@ -1515,10 +1515,10 @@ private:
             if (is_simple_const(delta_a) &&
                 is_simple_const(delta_b)) {
                 Expr diff = delta_b - delta_a;
-                if (is_one(mutate(diff <= 0))) {
-                    expr = mutate(delta_b - clamp(max_a->b - max_a->a, diff, 0));
+                if (is_one(mutate(diff <= make_zero(op->type)))) {
+                    expr = mutate(delta_b - clamp(max_a->b - max_a->a, diff, make_zero(op->type)));
                 } else {
-                    expr = mutate(clamp(max_a->b - max_a->a, 0, diff) + delta_a);
+                    expr = mutate(clamp(max_a->b - max_a->a, make_zero(op->type), diff) + delta_a);
                 }
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
