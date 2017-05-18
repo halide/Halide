@@ -874,6 +874,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         debug(0) << "Hexagon device code assembly: " << "\n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
+        std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(device_code, context));
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
         debug(0) << assembly.c_str() << "\n";
     }
