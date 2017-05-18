@@ -29,25 +29,25 @@ private:
     template<typename T>
     void mutate_binary_operator(const T *op) {
         Expr a = mutate(op->a);
-        if (!expr.defined()) return;
+        if (!a.defined()) return;
         Expr b = mutate(op->b);
-        if (!expr.defined()) return;
+        if (!b.defined()) return;
         if (a.same_as(op->a) &&
             b.same_as(op->b)) {
             expr = op;
         } else {
-            expr = T::make(a, b);
+            expr = T::make(std::move(a), std::move(b));
         }
         stmt = Stmt();
     }
 
     void visit(const Cast *op) {
         Expr value = mutate(op->value);
-        if (!expr.defined()) return;
+        if (!value.defined()) return;
         if (value.same_as(op->value)) {
             expr = op;
         } else {
-            expr = Cast::make(op->type, value);
+            expr = Cast::make(op->type, std::move(value));
         }
     }
 
@@ -69,7 +69,7 @@ private:
 
     void visit(const Not *op) {
         Expr a = mutate(op->a);
-        if (!expr.defined()) return;
+        if (!a.defined()) return;
         if (a.same_as(op->a)) {
             expr = op;
         }
@@ -118,8 +118,9 @@ private:
 
     void visit(const Load *op) {
         Expr pred = mutate(op->predicate);
+        if (!pred.defined()) return;
         Expr index = mutate(op->index);
-        if (!expr.defined()) return;
+        if (!index.defined()) return;
         if (pred.same_as(op->predicate) && index.same_as(op->index)) {
             expr = op;
         } else {
@@ -129,9 +130,9 @@ private:
 
     void visit(const Ramp *op) {
         Expr base = mutate(op->base);
-        if (!expr.defined()) return;
+        if (!base.defined()) return;
         Expr stride = mutate(op->stride);
-        if (!expr.defined()) return;
+        if (!stride.defined()) return;
         if (base.same_as(op->base) &&
             stride.same_as(op->stride)) {
             expr = op;
@@ -142,7 +143,7 @@ private:
 
     void visit(const Broadcast *op) {
         Expr value = mutate(op->value);
-        if (!expr.defined()) return;
+        if (!value.defined()) return;
         if (value.same_as(op->value)) expr = op;
         else expr = Broadcast::make(value, op->lanes);
     }
@@ -160,7 +161,7 @@ private:
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!expr.defined()) return;
+            if (!new_arg.defined()) return;
             if (!new_arg.same_as(old_arg)) changed = true;
             new_args[i] = new_arg;
         }
@@ -182,7 +183,7 @@ private:
         if (!value.defined()) {
             dead_vars.pop(op->name);
         }
-        if (!expr.defined()) return;
+        if (!body.defined()) return;
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
             expr = op;
@@ -203,7 +204,7 @@ private:
         if (!value.defined()) {
             dead_vars.pop(op->name);
         }
-        if (!stmt.defined()) return;
+        if (!body.defined()) return;
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
             stmt = op;
@@ -216,13 +217,13 @@ private:
 
     void visit(const AssertStmt *op) {
         Expr condition = mutate(op->condition);
-        if (!expr.defined()) {
+        if (!condition.defined()) {
             stmt = Stmt();
             return;
         }
 
         Expr message = mutate(op->message);
-        if (!expr.defined()) {
+        if (!message.defined()) {
             stmt = Stmt();
             return;
         }
@@ -236,7 +237,7 @@ private:
 
     void visit(const ProducerConsumer *op) {
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
+        if (!body.defined()) return;
         if (body.same_as(op->body)) {
             stmt = op;
         } else {
@@ -246,17 +247,17 @@ private:
 
     void visit(const For *op) {
         Expr min = mutate(op->min);
-        if (!expr.defined()) {
+        if (!min.defined()) {
             stmt = Stmt();
             return;
         }
         Expr extent = mutate(op->extent);
-        if (!expr.defined()) {
+        if (!extent.defined()) {
             stmt = Stmt();
             return;
         }
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
+        if (!body.defined()) return;
         if (min.same_as(op->min) &&
             extent.same_as(op->extent) &&
             body.same_as(op->body)) {
@@ -309,7 +310,7 @@ private:
             Expr old_arg = op->args[i];
             predicate = Expr();
             Expr new_arg = mutate(old_arg);
-            if (!expr.defined()) {
+            if (!new_arg.defined()) {
                 stmt = Stmt();
                 return;
             }
@@ -330,7 +331,7 @@ private:
             Expr old_value = op->values[i];
             predicate = Expr();
             Expr new_value = mutate(old_value);
-            if (!expr.defined()) {
+            if (!new_value.defined()) {
                 new_value = undef(old_value.type());
             } else {
                 all_values_undefined = false;
@@ -367,7 +368,7 @@ private:
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
             new_extents.push_back(mutate(op->extents[i]));
-            if (!expr.defined()) {
+            if (!new_extents.back().defined()) {
                 stmt = Stmt();
                 return;
             }
@@ -407,12 +408,12 @@ private:
             Expr old_min    = op->bounds[i].min;
             Expr old_extent = op->bounds[i].extent;
             Expr new_min    = mutate(old_min);
-            if (!expr.defined()) {
+            if (!new_min.defined()) {
                 stmt = Stmt();
                 return;
             }
             Expr new_extent = mutate(old_extent);
-            if (!expr.defined()) {
+            if (!new_extent.defined()) {
                 stmt = Stmt();
                 return;
             }
@@ -453,7 +454,7 @@ private:
 
     void visit(const IfThenElse *op) {
         Expr condition = mutate(op->condition);
-        if (!expr.defined()) {
+        if (!condition.defined()) {
             stmt = Stmt();
             return;
         }
@@ -482,7 +483,7 @@ private:
 
     void visit(const Evaluate *op) {
         Expr v = mutate(op->value);
-        if (!expr.defined()) {
+        if (!v.defined()) {
             stmt = Stmt();
         } else if (v.same_as(op->value)) {
             stmt = op;

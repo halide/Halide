@@ -191,7 +191,7 @@ public:
     }
 
 #if LOG_EXPR_MUTATIONS
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
@@ -207,7 +207,7 @@ public:
 #endif
 
 #if LOG_STMT_MUTATIONS
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
         debug_indent++;
@@ -4769,7 +4769,7 @@ private:
             // the warning, because the assertion is generated internally
             // by Halide and is expected to always fail.
             const Call *call = a->message.as<Call>();
-            const bool const_false_conditions_expected = 
+            const bool const_false_conditions_expected =
                 call && call->name == "halide_error_specialize_fail";
             if (!const_false_conditions_expected) {
                 user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
@@ -4883,8 +4883,8 @@ private:
         // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
         vector<pair<string, Expr>> lets;
         while (const Let *let = value.as<Let>()) {
-            value = let->body;
             lets.push_back({let->name, let->value});
+            value = let->body;
         }
 
         if (value.same_as(op->value)) {
