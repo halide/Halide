@@ -6,24 +6,24 @@ namespace Internal {
 using std::pair;
 using std::vector;
 
-Expr IRMutator::mutate(Expr e) {
+Expr IRMutator::mutate(const Expr &e) {
     if (e.defined()) {
         e.accept(this);
     } else {
         expr = Expr();
     }
     stmt = Stmt();
-    return expr;
+    return std::move(expr);
 }
 
-Stmt IRMutator::mutate(Stmt s) {
+Stmt IRMutator::mutate(const Stmt &s) {
     if (s.defined()) {
         s.accept(this);
     } else {
         stmt = Stmt();
     }
     expr = Expr();
-    return stmt;
+    return std::move(stmt);
 }
 
 namespace {
@@ -35,7 +35,7 @@ void mutate_binary_operator(IRMutator *mutator, const T *op, Expr *expr, Stmt *s
         b.same_as(op->b)) {
         *expr = op;
     } else {
-        *expr = T::make(a, b);
+        *expr = T::make(std::move(a), std::move(b));
     }
     *stmt = nullptr;
 }
@@ -73,7 +73,7 @@ void IRMutator::visit(const Cast *op) {
     if (value.same_as(op->value)) {
         expr = op;
     } else {
-        expr = Cast::make(op->type, value);
+        expr = Cast::make(op->type, std::move(value));
     }
 }
 
@@ -95,8 +95,11 @@ void IRMutator::visit(const Or *op)      {mutate_binary_operator(this, op, &expr
 
 void IRMutator::visit(const Not *op) {
     Expr a = mutate(op->a);
-    if (a.same_as(op->a)) expr = op;
-    else expr = Not::make(a);
+    if (a.same_as(op->a)) {
+        expr = op;
+    } else {
+        expr = Not::make(std::move(a));
+    }
 }
 
 void IRMutator::visit(const Select *op)  {
@@ -108,7 +111,7 @@ void IRMutator::visit(const Select *op)  {
         f.same_as(op->false_value)) {
         expr = op;
     } else {
-        expr = Select::make(cond, t, f);
+        expr = Select::make(std::move(cond), std::move(t), std::move(f));
     }
 }
 
@@ -118,7 +121,8 @@ void IRMutator::visit(const Load *op) {
     if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
         expr = op;
     } else {
-        expr = Load::make(op->type, op->name, index, op->image, op->param, predicate);
+        expr = Load::make(op->type, op->name, std::move(index),
+                          op->image, op->param, std::move(predicate));
     }
 }
 
@@ -129,14 +133,17 @@ void IRMutator::visit(const Ramp *op) {
         stride.same_as(op->stride)) {
         expr = op;
     } else {
-        expr = Ramp::make(base, stride, op->lanes);
+        expr = Ramp::make(std::move(base), std::move(stride), op->lanes);
     }
 }
 
 void IRMutator::visit(const Broadcast *op) {
     Expr value = mutate(op->value);
-    if (value.same_as(op->value)) expr = op;
-    else expr = Broadcast::make(value, op->lanes);
+    if (value.same_as(op->value)) {
+        expr = op;
+    } else {
+        expr = Broadcast::make(std::move(value), op->lanes);
+    }
 }
 
 void IRMutator::visit(const Call *op) {
@@ -145,10 +152,10 @@ void IRMutator::visit(const Call *op) {
 
     // Mutate the args
     for (size_t i = 0; i < op->args.size(); i++) {
-        Expr old_arg = op->args[i];
+        const Expr &old_arg = op->args[i];
         Expr new_arg = mutate(old_arg);
         if (!new_arg.same_as(old_arg)) changed = true;
-        new_args[i] = new_arg;
+        new_args[i] = std::move(new_arg);
     }
 
     if (!changed) {
@@ -166,7 +173,7 @@ void IRMutator::visit(const Let *op) {
         body.same_as(op->body)) {
         expr = op;
     } else {
-        expr = Let::make(op->name, value, body);
+        expr = Let::make(op->name, std::move(value), std::move(body));
     }
 }
 
@@ -177,7 +184,7 @@ void IRMutator::visit(const LetStmt *op) {
         body.same_as(op->body)) {
         stmt = op;
     } else {
-        stmt = LetStmt::make(op->name, value, body);
+        stmt = LetStmt::make(op->name, std::move(value), std::move(body));
     }
 }
 
@@ -188,7 +195,7 @@ void IRMutator::visit(const AssertStmt *op) {
     if (condition.same_as(op->condition) && message.same_as(op->message)) {
         stmt = op;
     } else {
-        stmt = AssertStmt::make(condition, message);
+        stmt = AssertStmt::make(std::move(condition), std::move(message));
     }
 }
 
@@ -197,7 +204,7 @@ void IRMutator::visit(const ProducerConsumer *op) {
     if (body.same_as(op->body)) {
         stmt = op;
     } else {
-        stmt = ProducerConsumer::make(op->name, op->is_producer, body);
+        stmt = ProducerConsumer::make(op->name, op->is_producer, std::move(body));
     }
 }
 
@@ -210,7 +217,8 @@ void IRMutator::visit(const For *op) {
         body.same_as(op->body)) {
         stmt = op;
     } else {
-        stmt = For::make(op->name, min, extent, op->for_type, op->device_api, body);
+        stmt = For::make(op->name, std::move(min), std::move(extent),
+                         op->for_type, op->device_api, std::move(body));
     }
 }
 
@@ -221,7 +229,7 @@ void IRMutator::visit(const Store *op) {
     if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
     } else {
-        stmt = Store::make(op->name, value, index, op->param, predicate);
+        stmt = Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate));
     }
 }
 
@@ -232,14 +240,14 @@ void IRMutator::visit(const Provide *op) {
 
     // Mutate the args
     for (size_t i = 0; i < op->args.size(); i++) {
-        Expr old_arg = op->args[i];
+        const Expr &old_arg = op->args[i];
         Expr new_arg = mutate(old_arg);
         if (!new_arg.same_as(old_arg)) changed = true;
         new_args[i] = new_arg;
     }
 
     for (size_t i = 0; i < op->values.size(); i++) {
-        Expr old_value = op->values[i];
+        const Expr &old_value = op->values[i];
         Expr new_value = mutate(old_value);
         if (!new_value.same_as(old_value)) changed = true;
         new_values[i] = new_value;
@@ -271,7 +279,8 @@ void IRMutator::visit(const Allocate *op) {
         new_expr.same_as(op->new_expr)) {
         stmt = op;
     } else {
-        stmt = Allocate::make(op->name, op->type, new_extents, condition, body, new_expr, op->free_function);
+        stmt = Allocate::make(op->name, op->type, new_extents, std::move(condition),
+                              std::move(body), std::move(new_expr), op->free_function);
     }
 }
 
@@ -294,7 +303,7 @@ void IRMutator::visit(const Realize *op) {
         stmt = op;
     } else {
         stmt = Realize::make(op->name, op->types, new_bounds,
-                             condition, body);
+                             std::move(condition), std::move(body));
     }
 }
 
@@ -319,7 +328,7 @@ void IRMutator::visit(const Block *op) {
         rest.same_as(op->rest)) {
         stmt = op;
     } else {
-        stmt = Block::make(first, rest);
+        stmt = Block::make(std::move(first), std::move(rest));
     }
 }
 
@@ -332,7 +341,7 @@ void IRMutator::visit(const IfThenElse *op) {
         else_case.same_as(op->else_case)) {
         stmt = op;
     } else {
-        stmt = IfThenElse::make(condition, then_case, else_case);
+        stmt = IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
     }
 }
 
@@ -341,12 +350,12 @@ void IRMutator::visit(const Evaluate *op) {
     if (v.same_as(op->value)) {
         stmt = op;
     } else {
-        stmt = Evaluate::make(v);
+        stmt = Evaluate::make(std::move(v));
     }
 }
 
 void IRMutator::visit(const Shuffle *op) {
-    vector<Expr > new_vectors(op->vectors.size());
+    vector<Expr> new_vectors(op->vectors.size());
     bool changed = false;
 
     for (size_t i = 0; i < op->vectors.size(); i++) {
@@ -364,7 +373,7 @@ void IRMutator::visit(const Shuffle *op) {
 }
 
 
-Stmt IRGraphMutator::mutate(Stmt s) {
+Stmt IRGraphMutator::mutate(const Stmt &s) {
     auto iter = stmt_replacements.find(s);
     if (iter != stmt_replacements.end()) {
         return iter->second;
@@ -374,7 +383,7 @@ Stmt IRGraphMutator::mutate(Stmt s) {
     return new_s;
 }
 
-Expr IRGraphMutator::mutate(Expr e) {
+Expr IRGraphMutator::mutate(const Expr &e) {
     auto iter = expr_replacements.find(e);
     if (iter != expr_replacements.end()) {
         return iter->second;

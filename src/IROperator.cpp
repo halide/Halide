@@ -41,9 +41,9 @@ Expr evaluate_polynomial(const Expr &x, float *coeff, int n) {
     }
 
     if ((n & 1) == 0) {
-        return even_terms * x + odd_terms;
+        return even_terms * std::move(x) + odd_terms;
     } else {
-        return odd_terms * x + even_terms;
+        return odd_terms * std::move(x) + even_terms;
     }
 }
 }
@@ -309,11 +309,11 @@ Expr const_false(int w) {
     return make_zero(UInt(1, w));
 }
 
-Expr lossless_cast(Type t, const Expr &e) {
+Expr lossless_cast(Type t, Expr e) {
     if (t == e.type()) {
         return e;
     } else if (t.can_represent(e.type())) {
-        return cast(t, e);
+        return cast(t, std::move(e));
     }
 
     if (const Cast *c = e.as<Cast>()) {
@@ -385,9 +385,9 @@ void match_types(Expr &a, Expr &b) {
 
     // First widen to match
     if (a.type().is_scalar() && b.type().is_vector()) {
-        a = Broadcast::make(a, b.type().lanes());
+        a = Broadcast::make(std::move(a), b.type().lanes());
     } else if (a.type().is_vector() && b.type().is_scalar()) {
-        b = Broadcast::make(b, a.type().lanes());
+        b = Broadcast::make(std::move(b), a.type().lanes());
     } else {
         internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
     }
@@ -400,23 +400,23 @@ void match_types(Expr &a, Expr &b) {
     if (!ta.is_float() && tb.is_float()) {
         // int(a) * float(b) -> float(b)
         // uint(a) * float(b) -> float(b)
-        a = cast(tb, a);
+        a = cast(tb, std::move(a));
     } else if (ta.is_float() && !tb.is_float()) {
-        b = cast(ta, b);
+        b = cast(ta, std::move(b));
     } else if (ta.is_float() && tb.is_float()) {
         // float(a) * float(b) -> float(max(a, b))
-        if (ta.bits() > tb.bits()) b = cast(ta, b);
-        else a = cast(tb, a);
+        if (ta.bits() > tb.bits()) b = cast(ta, std::move(b));
+        else a = cast(tb, std::move(a));
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
-        if (ta.bits() > tb.bits()) b = cast(ta, b);
-        else a = cast(tb, a);
+        if (ta.bits() > tb.bits()) b = cast(ta, std::move(b));
+        else a = cast(tb, std::move(a));
     } else if (!ta.is_float() && !tb.is_float()) {
         // int(a) * (u)int(b) -> int(max(a, b))
         int bits = std::max(ta.bits(), tb.bits());
         int lanes = a.type().lanes();
-        a = cast(Int(bits, lanes), a);
-        b = cast(Int(bits, lanes), b);
+        a = cast(Int(bits, lanes), std::move(a));
+        b = cast(Int(bits, lanes), std::move(b));
     } else {
         internal_error << "Could not match types: " << ta << ", " << tb << "\n";
     }
@@ -454,7 +454,7 @@ void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
     *reduced = reinterpret(type, blended);
 }
 
-Expr halide_log(const Expr &x_full) {
+Expr halide_log(Expr x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
@@ -498,7 +498,7 @@ Expr halide_log(const Expr &x_full) {
     return result;
 }
 
-Expr halide_exp(const Expr &x_full) {
+Expr halide_exp(Expr x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
@@ -545,7 +545,7 @@ Expr halide_exp(const Expr &x_full) {
     return result;
 }
 
-Expr halide_erf(const Expr &x_full) {
+Expr halide_erf(Expr x_full) {
     user_assert(x_full.type() == Float(32)) << "halide_erf only works for Float(32)";
 
     // Extract the sign and magnitude.
@@ -585,19 +585,24 @@ Expr halide_erf(const Expr &x_full) {
     return result;
 }
 
-Expr raise_to_integer_power(const Expr &e, int64_t p) {
+Expr raise_to_integer_power(Expr e, int64_t p) {
     Expr result;
     if (p == 0) {
         result = make_one(e.type());
     } else if (p == 1) {
-        result = e;
+        result = std::move(e);
     } else if (p < 0) {
-        result = make_one(e.type()) / raise_to_integer_power(e, -p);
+        result = make_one(e.type());
+        result /= raise_to_integer_power(std::move(e), -p);
     } else {
         // p is at least 2
-        Expr y = raise_to_integer_power(e, p>>1);
-        if (p & 1) result = y*y*e;
-        else result = y*y;
+        if (p & 1) {
+            Expr y = raise_to_integer_power(e, p >> 1);
+            result = y*y*std::move(e);
+        } else {
+            e = raise_to_integer_power(std::move(e), p >> 1);
+            result = e*e;
+        }
     }
     return result;
 }
@@ -713,7 +718,7 @@ Expr BufferBuilder::build() const {
 
 } // namespace Internal
 
-Expr fast_log(const Expr &x) {
+Expr fast_log(Expr x) {
     user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
 
     Expr reduced, exponent;
@@ -737,7 +742,7 @@ Expr fast_log(const Expr &x) {
     return result;
 }
 
-Expr fast_exp(const Expr &x_full) {
+Expr fast_exp(Expr x_full) {
     user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
 
     Expr scaled = x_full / logf(2.0);
@@ -800,15 +805,15 @@ Expr print(const std::vector<Expr> &args) {
     return result;
 }
 
-Expr print_when(const Expr &condition, const std::vector<Expr> &args) {
+Expr print_when(Expr condition, const std::vector<Expr> &args) {
     Expr p = print(args);
     return Internal::Call::make(p.type(),
                                 Internal::Call::if_then_else,
-                                {condition, p, args[0]},
+                                {std::move(condition), p, args[0]},
                                 Internal::Call::PureIntrinsic);
 }
 
-Expr require(const Expr &condition, const std::vector<Expr> &args) {
+Expr require(Expr condition, const std::vector<Expr> &args) {
     user_assert(condition.defined()) << "Require of undefined condition\n";
     user_assert(condition.type().is_bool()) << "Require condition must be a boolean type\n";
     user_assert(args.at(0).defined()) << "Require of undefined value\n";
@@ -824,17 +829,18 @@ Expr require(const Expr &condition, const std::vector<Expr> &args) {
     Expr failure_value = cast(args[0].type(), requirement_failed_error);
     return Internal::Call::make(args[0].type(),
                                 Internal::Call::if_then_else,
-                                {likely(condition), args[0], failure_value},
+                                {likely(std::move(condition)), args[0], failure_value},
                                 Internal::Call::PureIntrinsic);
 }
 
 namespace Internal {
 
-Expr memoize_tag_helper(const Expr &result, const std::vector<Expr> &cache_key_values) {
+Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) {
+    Type t = result.type();
     std::vector<Expr> args;
-    args.push_back(result);
+    args.push_back(std::move(result));
     args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
-    return Internal::Call::make(result.type(), Internal::Call::memoize_expr,
+    return Internal::Call::make(t, Internal::Call::memoize_expr,
                                 args, Internal::Call::PureIntrinsic);
 }
 
@@ -844,14 +850,14 @@ Expr saturating_cast(Type t, Expr e) {
     // For float to float, guarantee infinities are always pinned to range.
     if (t.is_float() && e.type().is_float()) {
         if (t.bits() < e.type().bits()) {
-            e = cast(t, clamp(e, t.min(), t.max()));
+            e = cast(t, clamp(std::move(e), t.min(), t.max()));
         } else {
-            e = clamp(cast(t, e), t.min(), t.max());
+            e = clamp(cast(t, std::move(e)), t.min(), t.max());
         }
     } else if (e.type() != t) {
         // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
         if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
-            e = max(e, t.min()); // min values turn out to be always representable
+            e = max(std::move(e), t.min()); // min values turn out to be always representable
 
             // This line depends on t.max() rounding upward, which should always
             // be the case as it is one less than a representable value, thus
@@ -865,13 +871,13 @@ Expr saturating_cast(Type t, Expr e) {
             Expr max_bound = lossless_cast(e.type(), t.max());
 
             if (min_bound.defined() && max_bound.defined()) {
-                e = clamp(e, min_bound, max_bound);
+                e = clamp(std::move(e), min_bound, max_bound);
             } else if (min_bound.defined()) {
-                e = max(e, min_bound);
+                e = max(std::move(e), min_bound);
             } else if (max_bound.defined()) {
-                e = min(e, max_bound);
+                e = min(std::move(e), max_bound);
             }
-            e = cast(t, e);
+            e = cast(t, std::move(e));
         }
     }
     return e;

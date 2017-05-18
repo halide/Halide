@@ -974,7 +974,7 @@ WEAK int halide_opencl_run(void *user_context,
 
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            uint64_t opencl_handle = *((uint64_t *)this_arg);
+            uint64_t opencl_handle = ((halide_buffer_t *)this_arg)->device;
             debug(user_context) << "Mapped dev handle is: " << (void *)opencl_handle << "\n";
             // In 32-bit mode, opencl only wants the bottom 32 bits of
             // the handle, so use sizeof(void *) instead of
