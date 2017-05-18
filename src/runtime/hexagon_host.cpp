@@ -255,7 +255,7 @@ WEAK int map_arguments(void *user_context, int arg_count,
             // This is a buffer, map it and put the mapped buffer into
             // the result.
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            uint64_t device_handle = *((uint64_t *)args[i]);
+            uint64_t device_handle = ((halide_buffer_t *)args[i])->device;
             ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device_handle);
             debug(user_context) << i << ", " << device_handle << "\n";
             mapped_arg.data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
