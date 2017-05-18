@@ -1466,19 +1466,21 @@ private:
                    min_b &&
                    is_simple_const(mutate(min_a->a - min_b->b)) &&
                    is_simple_const(mutate(min_a->b - min_b->a))) {
-            // min(a + c1, b + c2) - min(b + c4, a + c3)
+            // Canonicalize min(a + c1, b + c2) - min(b + c4, a + c3)
             //     where c1, c2, c3, and c4 are constants
-            // => min(a + c1, b + c2) - min(a + c3, b + c4)
-            expr = mutate(Expr(min_a) - Min::make(min_b->b, min_b->a));
+            // into min(a + c1, b + c2) - min(a + c3, b + c4)
+            // so that a later rule can pick it up
+            expr = mutate(a - Min::make(min_b->b, min_b->a));
         } else if (no_overflow(op->type) &&
                    max_a &&
                    max_b &&
                    is_simple_const(mutate(max_a->a - max_b->b)) &&
                    is_simple_const(mutate(max_a->b - max_b->a))) {
-            // max(a + c1, b + c2) - max(b + c4, a + c3)
+            // Canonicalize max(a + c1, b + c2) - max(b + c4, a + c3)
             //     where c1, c2, c3, and c4 are constants
-            // => max(a + c1, b + c2) - max(a + c3, b + c4)
-            expr = mutate(Expr(max_a) - Max::make(max_b->b, max_b->a));
+            // into max(a + c1, b + c2) - max(a + c3, b + c4)
+            // so that a later rule can pick it up
+            expr = mutate(a - Max::make(max_b->b, max_b->a));
         } else if (no_overflow(op->type) &&
                    min_a &&
                    min_b) {
