@@ -1038,6 +1038,10 @@ void CodeGen_LLVM::optimize_module() {
 #endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
+    if (TM) {
+        TM->adjustPassManager(b);
+    }
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
