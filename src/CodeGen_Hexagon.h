@@ -35,10 +35,12 @@ protected:
     llvm::Function *define_hvx_intrinsic(int intrin, Type ret_ty,
                                          const std::string &name,
                                          const std::vector<Type> &arg_types,
+                                         const std::vector<llvm::Value *> &extra_args,
                                          bool broadcast_scalar_word = false);
     llvm::Function *define_hvx_intrinsic(llvm::Function *intrin, Type ret_ty,
                                          const std::string &name,
                                          std::vector<Type> arg_types,
+                                         const std::vector<llvm::Value *> &extra_args,
                                          bool broadcast_scalar_word = false);
 
     using CodeGen_Posix::visit;
