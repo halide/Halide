@@ -253,7 +253,6 @@ Buffer<uint8_t> Module::compile_to_buffer() const {
         debug(2) << "Submodule assembly for " << name() << ": " << "\n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
-        std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
         compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
         debug(2) << assembly.c_str() << "\n";
     }
@@ -317,11 +316,11 @@ void Module::compile(const Outputs &output_files) const {
         !output_files.bitcode_name.empty() || !output_files.llvm_assembly_name.empty() ||
         !output_files.static_library_name.empty()) {
         llvm::LLVMContext context;
+        std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
         if (!output_files.object_name.empty()) {
             debug(1) << "Module.compile(): object_name " << output_files.object_name << "\n";
             auto out = make_raw_fd_ostream(output_files.object_name);
-            std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
             compile_llvm_module_to_object(*llvm_module, *out);
         }
         if (!output_files.static_library_name.empty()) {
@@ -335,7 +334,6 @@ void Module::compile(const Outputs &output_files) const {
                 std::string object_name = temp_dir.add_temp_object_file(output_files.static_library_name, "", target());
                 debug(1) << "Module.compile(): temporary object_name " << object_name << "\n";
                 auto out = make_raw_fd_ostream(object_name);
-                std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
                 compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();  // create_static_library() is happier if we do this
             }
@@ -346,19 +344,16 @@ void Module::compile(const Outputs &output_files) const {
         if (!output_files.assembly_name.empty()) {
             debug(1) << "Module.compile(): assembly_name " << output_files.assembly_name << "\n";
             auto out = make_raw_fd_ostream(output_files.assembly_name);
-            std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
             compile_llvm_module_to_assembly(*llvm_module, *out);
         }
         if (!output_files.bitcode_name.empty()) {
             debug(1) << "Module.compile(): bitcode_name " << output_files.bitcode_name << "\n";
             auto out = make_raw_fd_ostream(output_files.bitcode_name);
-            std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
             compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
         }
         if (!output_files.llvm_assembly_name.empty()) {
             debug(1) << "Module.compile(): llvm_assembly_name " << output_files.llvm_assembly_name << "\n";
             auto out = make_raw_fd_ostream(output_files.llvm_assembly_name);
-            std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
     }

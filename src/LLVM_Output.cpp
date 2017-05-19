@@ -21,12 +21,15 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
     return raw_out;
 }
 
-void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMachine::CodeGenFileType file_type) {
+void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::TargetMachine::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
-    Internal::debug(2) << "Target triple: " << module.getTargetTriple() << "\n";
+    Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
+
+    // Work on a copy of the module to avoid modifying the original.
+    std::unique_ptr<llvm::Module> module = llvm::CloneModule(&module_in);
 
     // Get the target specific parser.
-    auto target_machine = Internal::make_target_machine(module);
+    auto target_machine = Internal::make_target_machine(*module);
     internal_assert(target_machine.get()) << "Could not allocate target machine!\n";
 
     #if LLVM_VERSION == 37
@@ -34,16 +37,16 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     #else
     llvm::DataLayout target_data_layout(target_machine->createDataLayout());
     #endif
-    if (!(target_data_layout == module.getDataLayout())) {
+    if (!(target_data_layout == module->getDataLayout())) {
         internal_error << "Warning: module's data layout does not match target machine's\n"
                        << target_data_layout.getStringRepresentation() << "\n"
-                       << module.getDataLayout().getStringRepresentation() << "\n";
+                       << module->getDataLayout().getStringRepresentation() << "\n";
     }
 
     // Build up all of the passes that we want to do to the module.
     llvm::legacy::PassManager pass_manager;
 
-    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module.getTargetTriple())));
+    pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));
 
     // Make sure things marked as always-inline get inlined
     #if LLVM_VERSION < 40
@@ -64,7 +67,7 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     // Ask the target to add backend passes as necessary.
     target_machine->addPassesToEmitFile(pass_manager, out, file_type);
 
-    pass_manager.run(module);
+    pass_manager.run(*module);
 }
 
 std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module, llvm::LLVMContext &context) {
