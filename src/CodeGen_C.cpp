@@ -359,9 +359,9 @@ void CodeGen_C::add_vector_typedefs(const Module &input) {
                   "#endif\n" << 
                   "\n" <<
                   "#if __has_attribute(ext_vector_type)\n" <<
-                  "#define _halide_vector_type_attribute(lanes, byte_size) __attribute__((ext_vector_type(lanes)));\n" <<
+                  "#define _halide_vector_type_attribute(lanes, vec_byte_size, elem_byte_size) __attribute__((ext_vector_type(lanes), aligned(elem_byte_size)));\n" <<
                   "#elif __GNUC__ || __has_attribute(vector_size)\n" <<
-                  "#define _halide_vector_type_attribute(lanes, byte_size) __attribute__((vector_size(byte_size)));\n" <<
+                  "#define _halide_vector_type_attribute(lanes, vec_byte_size, elem_byte_size) __attribute__((vector_size(vec_byte_size), aligned(elem_byte_size)));\n" <<
                   "#else\n" <<
                   "#error \"This C compiler does not support vector types.\"\n" <<
                   "#endif\n" <<
@@ -369,7 +369,7 @@ void CodeGen_C::add_vector_typedefs(const Module &input) {
         for (const auto &t : all_vector_types.vector_types_used) {
             string name = type_to_c_type(t, false, false);
             string scalar_name = type_to_c_type(t.element_of(), false, false);
-            stream << "typedef " << scalar_name << " " << name << " _halide_vector_type_attribute(" << t.lanes() << ", " << (t.bits() * t.lanes()) / 8 << ");\n";
+            stream << "typedef " << scalar_name << " " << name << " _halide_vector_type_attribute(" << t.lanes() << ", " << (t.bits() * t.lanes()) / 8 << ", " << t.bits() / 8 << ");\n";
         }
     }
 }
@@ -1440,8 +1440,18 @@ void CodeGen_C::visit(const Ramp *op) {
 
 void CodeGen_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
+    string rhs;
+    if (op->lanes > 1) {
+        rhs = "{ " + id_value;
+        for (int i = 1; i < op->lanes; i++) {
+            rhs += ", " + id_value;
+        }
+        rhs += " }";
+    } else {
+        rhs = id_value;
+    }
 
-    print_assignment(op->type.with_lanes(op->lanes), id_value);
+    print_assignment(op->type.with_lanes(op->lanes), rhs);
 }
 
 void CodeGen_C::visit(const Provide *op) {
