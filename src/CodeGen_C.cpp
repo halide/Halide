@@ -1207,6 +1207,10 @@ void CodeGen_C::visit(const Call *op) {
 void CodeGen_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
 
+    // TODO: We could replicate the logic in the llvm codegen which decides whether
+    // the vector access can be aligned. Doing so would also require introducing
+    // aligned type equivalents for all the vector types.
+    
     // If we're loading a contiguous ramp into a vector, just load the vector
     Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
@@ -1268,6 +1272,10 @@ void CodeGen_C::visit(const Store *op) {
 
     Type t = op->value.type();
     string id_value = print_expr(op->value);
+
+    // TODO: We could replicate the logic in the llvm codegen which decides whether
+    // the vector access can be aligned. Doing so would also require introducing
+    // aligned type equivalents for all the vector types.
 
     // If we're writing a contiguous ramp, just store the vector.
     Expr ramp_base = strided_ramp_base(op->index);
