@@ -354,30 +354,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
 namespace {
 }
 
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const EQ *op) {
-    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, "==");
-}
-
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const NE *op) {
-    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, "!=");
-}
-
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const LT *op) {
-    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, "<");
-}
-
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const LE *op) {
-    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, "<=");
-}
-
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GT *op) {
-    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, ">");
-}
-
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const GE *op) {
-    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, ">=");
-}
-
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
     if (op->type.is_vector()) {
         print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
