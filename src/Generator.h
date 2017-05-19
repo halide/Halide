@@ -2230,7 +2230,7 @@ class SimpleGeneratorFactory;
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    GeneratorParam<Target> target{ "target", Halide::get_host_target() };
+    GeneratorParam<Target> target{ "target", Target() };
 
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
