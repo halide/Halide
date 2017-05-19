@@ -107,8 +107,8 @@ const string globals =
     "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
     "inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}\n"
     "\n"
-    "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
-    "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
+    "template<typename T> T max(T a, T b) {return (a > b) ? a : b;}\n"
+    "template<typename T> T min(T a, T b) {return (a < b) ? a : b;}\n"
     "\n";
 
 }
@@ -1205,56 +1205,116 @@ void CodeGen_C::visit(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
+    user_assert(is_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
 
-    Type t = op->type;
-    bool type_cast_needed =
-        !allocations.contains(op->name) ||
-        allocations.get(op->name).type != t;
+    // If we're loading a contiguous ramp into a vector, just load the vector
+    Expr ramp_base = strided_ramp_base(op->index);
+    if (ramp_base.defined()) {
+        internal_assert(op->type.is_vector());
+        string id_ramp_base = print_expr(ramp_base);
+
+        ostringstream rhs;
+        rhs << "*(" << print_type(op->type) << "*)((" << print_type(op->type.element_of()) << "*)"
+            << print_name(op->name) << " + " << id_ramp_base << ")";
+
+        print_assignment(op->type, rhs.str());
+        return;
+    }
+
+    string id_index = print_expr(op->index);
+
+    // Get the rhs just for the cache.
+    bool type_cast_needed = !(allocations.contains(op->name) &&
+                              allocations.get(op->name).type.element_of() == op->type.element_of());
 
     ostringstream rhs;
     if (type_cast_needed) {
         rhs << "((const "
-            << print_type(op->type)
+            << print_type(op->type.element_of())
             << " *)"
             << print_name(op->name)
             << ")";
     } else {
         rhs << print_name(op->name);
     }
-    rhs << "["
-        << print_expr(op->index)
-        << "]";
+    rhs << "[" << id_index << "]";
 
-    print_assignment(op->type, rhs.str());
+    // If index is a vector, gather vector elements.
+    if (op->index.type().is_vector()) {
+        internal_assert(op->type.is_vector());
+
+        id = "_" + unique_name('V');
+        cache[rhs.str()] = id;
+
+        do_indent();
+        stream << print_type(op->type)
+               << " " << id << ";\n";
+
+        for (int i = 0; i < op->type.lanes(); ++i) {
+            do_indent();
+            stream
+                << id << "[" << i << "] = (("
+                << print_type(op->type.element_of()) << "*)"
+                << print_name(op->name) << ")"
+                << "[" << id_index << "[" << i << "]];\n";
+        }
+    } else {
+        print_assignment(op->type, rhs.str());
+    }
 }
 
 void CodeGen_C::visit(const Store *op) {
+    user_assert(is_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
 
     Type t = op->value.type();
-
-    bool type_cast_needed =
-        t.is_handle() ||
-        !allocations.contains(op->name) ||
-        allocations.get(op->name).type != t;
-
-    string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
-    do_indent();
 
-    if (type_cast_needed) {
-        stream << "(("
-               << print_type(t)
-               << " *)"
-               << print_name(op->name)
-               << ")";
+    // If we're writing a contiguous ramp, just store the vector.
+    Expr ramp_base = strided_ramp_base(op->index);
+    if (ramp_base.defined()) {
+        internal_assert(op->value.type().is_vector());
+        string id_ramp_base = print_expr(ramp_base);
+
+        do_indent();
+        stream << "*((" << print_type(t) << "*)" << "((" << print_type(t.element_of()) << "*)"
+               << print_name(op->name) << " + " << id_ramp_base << ")) = " << id_value << ";\n";
+    } else if (op->index.type().is_vector()) {
+        // If index is a vector, scatter vector elements.
+        internal_assert(t.is_vector());
+
+        string id_index = print_expr(op->index);
+
+        for (int i = 0; i < t.lanes(); ++i) {
+            do_indent();
+            stream << "((" << print_type(t.element_of()) << " *)"
+                   << print_name(op->name) << ")[" << id_index << "[" << i << "]] = "
+                   << id_value << "[" << i << "];\n";
+        }
     } else {
-        stream << print_name(op->name);
+        bool type_cast_needed =
+            t.is_handle() ||
+            !allocations.contains(op->name) ||
+            allocations.get(op->name).type != t;
+
+        string id_index = print_expr(op->index);
+
+        do_indent();
+
+        if (type_cast_needed) {
+            stream << "(("
+                   << print_type(t)
+                   << " *)"
+                   << print_name(op->name)
+                   << ")";
+        } else {
+            stream << print_name(op->name);
+        }
+        stream << "["
+               << id_index
+               << "] = "
+               << id_value
+               << ";\n";
     }
-    stream << "["
-           << id_index
-           << "] = "
-           << id_value
-           << ";\n";
 
     cache.clear();
 }
@@ -1369,12 +1429,12 @@ void CodeGen_C::visit(const Ramp *op) {
 
     ostringstream rhs;
     rhs << id_base << " + " << id_stride << " * ("
-        << print_type(op->type.with_lanes(op->lanes)) << ")(0";
+        << print_type(op->type.with_lanes(op->lanes)) << "){0";
     // Note 0 written above.
     for (int i = 1; i < op->lanes; ++i) {
         rhs << ", " << i;
     }
-    rhs << ")";
+    rhs << "}";
     print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 

@@ -716,6 +716,20 @@ Expr BufferBuilder::build() const {
     return e;
 }
 
+Expr strided_ramp_base(Expr e, int stride) {
+    const Ramp *r = e.as<Ramp>();
+    if (r == nullptr) {
+        return Expr();
+    }
+
+    const IntImm *i = r->stride.as<IntImm>();
+    if (i != nullptr && i->value == stride) {
+        return r->base;
+    }
+
+    return Expr();
+}
+
 } // namespace Internal
 
 Expr fast_log(Expr x) {
