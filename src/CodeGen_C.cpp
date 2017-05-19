@@ -3,12 +3,13 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
-#include "Substitute.h"
+#include "EliminateBoolVectors.h"
 #include "IROperator.h"
-#include "Param.h"
-#include "Var.h"
 #include "Lerp.h"
+#include "Param.h"
 #include "Simplify.h"
+#include "Substitute.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -116,8 +117,12 @@ class AllVectorTypes : public IRGraphVisitor {
 public:
     std::set<Type> vector_types_used;
 
+    using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
+  
     void include(const Expr &e) {
-        if (e.type().lanes() > 1) {
+        // bool vectors are not supported and are removed by EliminateBoolVectors.
+        if (!e.type().is_bool() && e.type().lanes() > 1) {
             vector_types_used.insert(e.type());
         }
         IRGraphVisitor::include(e);
@@ -848,27 +853,27 @@ void CodeGen_C::visit(const Min *op) {
 }
 
 void CodeGen_C::visit(const EQ *op) {
-    visit_binop(op->type, op->a, op->b, "==");
+    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, "==");
 }
 
 void CodeGen_C::visit(const NE *op) {
-    visit_binop(op->type, op->a, op->b, "!=");
+    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, "!=");
 }
 
 void CodeGen_C::visit(const LT *op) {
-    visit_binop(op->type, op->a, op->b, "<");
+    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, "<");
 }
 
 void CodeGen_C::visit(const LE *op) {
-    visit_binop(op->type, op->a, op->b, "<=");
+    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, "<=");
 }
 
 void CodeGen_C::visit(const GT *op) {
-    visit_binop(op->type, op->a, op->b, ">");
+    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, ">");
 }
 
 void CodeGen_C::visit(const GE *op) {
-    visit_binop(op->type, op->a, op->b, ">=");
+    visit_binop(eliminated_bool_type(op->type, op->a.type()), op->a, op->b, ">=");
 }
 
 void CodeGen_C::visit(const Or *op) {
