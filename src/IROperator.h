@@ -188,6 +188,10 @@ struct BufferBuilder {
     EXPORT Expr build() const;
 };
 
+/** If e is a ramp expression with stride, default 1, return the base,
+ * otherwise undefined. */
+Expr strided_ramp_base(Expr e, int stride = 1);
+
 } // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */

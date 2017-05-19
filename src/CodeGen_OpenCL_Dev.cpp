@@ -157,20 +157,6 @@ namespace {
 // Mapping of integer vector indices to OpenCL ".s" syntax.
 const char * vector_elements = "0123456789ABCDEF";
 
-// If e is a ramp expression with stride 1, return the base, otherwise undefined.
-Expr is_ramp1(Expr e) {
-    const Ramp *r = e.as<Ramp>();
-    if (r == nullptr) {
-        return Expr();
-    }
-
-    const IntImm *i = r->stride.as<IntImm>();
-    if (i != nullptr && i->value == 1) {
-        return r->base;
-    }
-
-    return Expr();
-}
 }
 
 
@@ -229,7 +215,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
 
     // If we're loading a contiguous ramp into a vector, use vload instead.
-    Expr ramp_base = is_ramp1(op->index);
+    Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->type.is_vector());
         string id_ramp_base = print_expr(ramp_base);
@@ -298,7 +284,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     Type t = op->value.type();
 
     // If we're writing a contiguous ramp, use vstore instead.
-    Expr ramp_base = is_ramp1(op->index);
+    Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
