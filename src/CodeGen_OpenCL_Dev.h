@@ -71,6 +71,8 @@ protected:
         void visit(const Free *op);
         void visit(const AssertStmt *op);
         void visit(const Shuffle *op);
+        void visit(const Min *op);
+        void visit(const Max *op);
     };
 
     std::ostringstream src_stream;

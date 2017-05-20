@@ -466,6 +466,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
     }
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Max *op) {
+    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
+    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+}
+
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
                                     const string &name,
                                     const vector<DeviceArgument> &args) {
@@ -612,10 +620,10 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
 
     // Write out the Halide math functions.
-    src_stream << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
-               << "float nan_f32() { return NAN; }\n"
-               << "float neg_inf_f32() { return -INFINITY; }\n"
-               << "float inf_f32() { return INFINITY; }\n"
+    src_stream << "inline float float_from_bits(unsigned int x) {return as_float(x);}\n"
+               << "inline float nan_f32() { return NAN; }\n"
+               << "inline float neg_inf_f32() { return -INFINITY; }\n"
+               << "inline float inf_f32() { return INFINITY; }\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
@@ -640,7 +648,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define atanh_f32 atanh \n"
                << "#define fast_inverse_f32 native_recip \n"
                << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
-               << "int halide_gpu_thread_barrier() {\n"
+               << "inline int halide_gpu_thread_barrier() {\n"
                << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
                << "  return 0;\n"
                << "}\n";
