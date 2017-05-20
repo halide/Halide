@@ -1687,6 +1687,8 @@ private:
                 if (is_positive_const(base_diff)) {
                     return true;
                 }
+            } else {
+                return load_a->name < load_b->name;
             }
         }
         return false;
@@ -1730,23 +1732,19 @@ private:
                 // To keep track of indices selected for vtmpy.
                 std::unordered_map<size_t, bool> vtmpy_indices;
                 vector<Expr> vtmpy_exprs;
-                const char *not_load = "";
+                Expr new_expr;
 
                 for(size_t i = 0; i < mpy_size; i++) {
                     Expr curr_load = calc_load(mpys[i].first);
                     if (curr_load.defined()) {
                         loads[curr_load.as<Load>()->name].emplace_back(curr_load, i);
                     } else {
-                        // If the load is undefined put in bucket of "undefined".
-                        // [Assumes that there's no buffer with name "undefined"].
-                        loads[not_load].emplace_back(curr_load, i);
+                        Cannot 
+                        new_expr = new_expr.defined() ? new_expr + curr_load : curr_load;
                     }
                 }
 
                 for (auto iter = loads.begin(); iter != loads.end(); iter++) {
-                    if (iter->first == not_load || iter->second.size() < 3) {
-                        continue;
-                    }
                     // Sort the bucket and compare bases of 3 adjacent vectors
                     // at a time. If they differ by vector stride, we've
                     // found a vtmpy
@@ -1780,7 +1778,6 @@ private:
                 // If we found any vtmpy's then recombine Expr using
                 // vtmpy_expr, non_vtmpy_exprs and rest.
                 if (vtmpy_exprs.size() > 0) {
-                    Expr new_expr;
                     for (size_t i = 0; i < mpy_size; i++) {
                         if (vtmpy_indices[i]) {
                             continue;
@@ -1788,10 +1785,10 @@ private:
                         Expr mpy_a = lossless_cast(op->type, mpys[i].first);
                         Expr mpy_b = lossless_cast(op->type, mpys[i].second);
                         Expr mpy_res = mpy_a * mpy_b;
-                        new_expr = new_expr.defined() ? new_expr + mpy_res: mpy_res;
+                        new_expr = new_expr.defined() ? new_expr + mpy_res : mpy_res;
                     }
                     for (size_t i = 0; i < vtmpy_exprs.size(); i++) {
-                        new_expr = new_expr.defined() ? new_expr + vtmpy_exprs[i]: vtmpy_exprs[i];
+                        new_expr = new_expr.defined() ? new_expr + vtmpy_exprs[i] : vtmpy_exprs[i];
                     }
                     if (rest.defined()) {
                         new_expr = new_expr + rest;
