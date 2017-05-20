@@ -349,7 +349,9 @@ void CodeGen_C::add_vector_typedefs(const Module &input) {
     AllVectorTypes all_vector_types;
 
     for (const auto &f : input.functions()) {
-        f.body.accept(&all_vector_types);
+        if (f.body.defined()) {
+            f.body.accept(&all_vector_types);
+        }
     }
 
     if (!all_vector_types.vector_types_used.empty()) {
@@ -1398,14 +1400,14 @@ void CodeGen_C::visit(const Select *op) {
 
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
-    if (op->type.is_scalar()) {
+    if (op->condition.type().is_scalar()) {
         rhs << "(" << print_type(op->type) << ")"
             << "(" << cond
             << " ? " << true_val
             << " : " << false_val
             << ")";
     } else {
-        if (op->type.is_scalar()) {
+        if (op->type.is_float()) {
             rhs << "vector_select_float(" << cond << ", " << true_val << ", " << false_val << ")";
         } else {
             rhs << "vector_select_integer(" << cond << ", " << true_val << ", " << false_val << ")";
