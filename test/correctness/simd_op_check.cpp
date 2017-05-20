@@ -111,6 +111,7 @@ struct Test {
             if (can_run) {
                 // Make a buffer filled with noise to use as a sample input.
                 Buffer<> b(p.type(), {W*4+H, H});
+                b.set_min(-PAD);
                 Expr r;
                 if (p.type().is_float()) {
                     r = cast(p.type(), random_float() * 1024 - 512);
