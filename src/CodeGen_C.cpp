@@ -364,8 +364,33 @@ void CodeGen_C::add_vector_typedefs(const Module &input) {
                   "#define _halide_vector_type_attribute(lanes, vec_byte_size, elem_byte_size) __attribute__((vector_size(vec_byte_size), aligned(elem_byte_size)));\n" <<
                   "#else\n" <<
                   "#error \"This C compiler does not support vector types.\"\n" <<
-                  "#endif\n" <<
-                  "\n";
+                  "#endif\n";
+        if (output_kind == CImplementation || output_kind == CPlusPlusImplementation) {
+            stream << "\n" <<
+                      "#ifdef __clang__\n" <<
+                      "template <typename C, typename T> T vector_select_float(C cond, T a, T b) {\n" <<
+                      "    T result;\n" <<
+                      "    for (int i = 0; i < sizeof(a) / sizeof(a[0]); i++) {\n" <<
+                      "        result[i] = cond[i] ? a[i] : b[i];\n" <<
+                      "    }\n" <<
+                      "    return result;\n" <<
+                      "}\n" <<
+                      "template <typename T> T vector_max_float(T a, T b) { auto mask = a > b; return vector_select_float(mask, a, b); }\n" <<
+                      "template <typename T> T vector_min_float(T a, T b) { auto mask = a < b; return vector_select_float(mask, a, b); }\n" <<
+                      "template <typename T> T vector_max_integer(T a, T b) { auto mask = a > b; return (a & mask) | (b & !mask); }\n" <<
+                      "template <typename T> T vector_min_integer(T a, T b) { auto mask = a < b; return (a & mask) | (b & !mask); }\n" <<
+                      "template <typename C, typename T> T vector_select_integer(C mask, T a, T b) { return (a & mask) | (b & !mask); }\n" <<
+                      "#else\n" <<
+                      "#define vector_max_integer max\n" <<
+                      "#define vector_min_integer min\n" <<
+                      "#define vector_max_float max\n" <<
+                      "#define vector_min_float min\n" <<
+                      "template <typename T1, typename T2> T2 vector_select_integer(T1 mask, T2 a, T2 b) { mask ? a : b; }\n" <<
+                      "template <typename T1, typename T2> T2 vector_select_float(T1 mask, T2 a, T2 b) { mask ? a : b; }\n" <<
+                      "#endif\n" <<
+                      "\n";
+        }
+ 
         for (const auto &t : all_vector_types.vector_types_used) {
             string name = type_to_c_type(t, false, false);
             string scalar_name = type_to_c_type(t.element_of(), false, false);
@@ -845,11 +870,32 @@ void CodeGen_C::visit(const Mod *op) {
 }
 
 void CodeGen_C::visit(const Max *op) {
-    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+    // clang doesn't support the ternary operator on OpenCL style vectors.
+    // See: https://bugs.llvm.org/show_bug.cgi?id=33103
+    if (op->type.is_scalar()) {
+        print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+    } else {
+        if (op->type.is_float()) {
+            print_expr(Call::make(op->type, "vector_max_float", {op->a, op->b}, Call::Extern));
+        } else {
+            print_expr(Call::make(op->type, "vector_max_integer", {op->a, op->b}, Call::Extern));
+        }
+    }
+      
 }
 
 void CodeGen_C::visit(const Min *op) {
-    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+    // clang doesn't support the ternary operator on OpenCL style vectors.
+    // See: https://bugs.llvm.org/show_bug.cgi?id=33103
+    if (op->type.is_scalar()) {
+        print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+    } else {
+        if (op->type.is_float()) {
+            print_expr(Call::make(op->type, "vector_min_float", {op->a, op->b}, Call::Extern));
+        } else {
+            print_expr(Call::make(op->type, "vector_min_integer", {op->a, op->b}, Call::Extern));
+        }
+    }
 }
 
 void CodeGen_C::visit(const EQ *op) {
@@ -1349,11 +1395,22 @@ void CodeGen_C::visit(const Select *op) {
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
     string cond = print_expr(op->condition);
-    rhs << "(" << print_type(op->type) << ")"
-        << "(" << cond
-        << " ? " << true_val
-        << " : " << false_val
-        << ")";
+
+    // clang doesn't support the ternary operator on OpenCL style vectors.
+    // See: https://bugs.llvm.org/show_bug.cgi?id=33103
+    if (op->type.is_scalar()) {
+        rhs << "(" << print_type(op->type) << ")"
+            << "(" << cond
+            << " ? " << true_val
+            << " : " << false_val
+            << ")";
+    } else {
+        if (op->type.is_scalar()) {
+            rhs << "vector_select_float(" << cond << ", " << true_val << ", " << false_val << ")";
+        } else {
+            rhs << "vector_select_integer(" << cond << ", " << true_val << ", " << false_val << ")";
+        }
+    }
     print_assignment(op->type, rhs.str());
 }
 
