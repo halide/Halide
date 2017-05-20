@@ -1739,7 +1739,6 @@ private:
                     if (curr_load.defined()) {
                         loads[curr_load.as<Load>()->name].emplace_back(curr_load, i);
                     } else {
-                        Cannot 
                         new_expr = new_expr.defined() ? new_expr + curr_load : curr_load;
                     }
                 }
