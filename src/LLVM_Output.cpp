@@ -26,7 +26,11 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
     Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
 
     // Work on a copy of the module to avoid modifying the original.
+    #if LLVM_VERSION < 38
+    llvm::Module *module = llvm::CloneModule(&module_in);
+    #else
     std::unique_ptr<llvm::Module> module = llvm::CloneModule(&module_in);
+    #endif
 
     // Get the target specific parser.
     auto target_machine = Internal::make_target_machine(*module);
