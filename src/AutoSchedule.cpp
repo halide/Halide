@@ -1762,7 +1762,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     // Count the number of tiles
     uint64_t estimate_tiles = 1;
     uint64_t parallelism = 1;
-    uint64_t num_ele_per_tile = 1;
 
     const vector<Dim> &dims = def.schedule().dims();
 
@@ -1782,7 +1781,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
 
             uint64_t dim_tiles = std::ceil((float)extent / size);
             estimate_tiles *= dim_tiles;
-            num_ele_per_tile *= size;
             // Since all Vars are inherently parallelizable by construct, we
             // only need to take RVars into account for the analysis.
             if (can_parallelize_rvar(var, g.output.func.name(), def)) {
