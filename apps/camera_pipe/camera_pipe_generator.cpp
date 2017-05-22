@@ -158,13 +158,13 @@ public:
                 .vectorize(x, 2*vec, TailStrategy::RoundUp)
                 .fold_storage(y, 2);
         }
-        Func(output).compute_at(output_compute_at)
+        output.compute_at(output_compute_at)
             .vectorize(x)
             .unroll(y)
             .reorder(c, x, y)
             .unroll(c);
         if (use_hexagon) {
-            Func(output).hexagon();
+            output.hexagon();
             for (Func f : intermediates) {
                 f.align_storage(x, vec);
             }
