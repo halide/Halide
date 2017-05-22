@@ -1039,13 +1039,9 @@ void CodeGen_LLVM::optimize_module() {
     b.LoopVectorize = true;
     b.SLPVectorize = true;
 
-#if LLVM_VERSION >= 39
-    if (TM) {
 #if LLVM_VERSION >= 50
+    if (TM) {
         TM->adjustPassManager(b);
-#else
-        TM->addEarlyAsPossiblePasses(b);
-#endif
     }
 #endif
 
