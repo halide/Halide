@@ -1767,7 +1767,7 @@ private:
                             vtmpy_exprs.emplace_back(native_interleave(Call::make(op->type,
                                 "halide.hexagon.vtmpy" + vtmpy_suffix,
                                 { mpys[v0_idx].first, mpys[v2_idx].first,
-                                mpys[v0_idx].second, mpys[v1_idx].second },
+                                  mpys[v0_idx].second, mpys[v1_idx].second },
                                 Call::PureExtern)));
                             // As we cannot test the same indices again
                             i = i+2;
