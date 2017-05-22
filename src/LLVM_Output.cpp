@@ -55,6 +55,9 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream& out, llvm::
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
     #endif
 
+    // Remove any stale debug info
+    pass_manager.add(llvm::createStripDeadDebugInfoPass());
+
     // Enable symbol rewriting. This allows code outside libHalide to
     // use symbol rewriting when compiling Halide code (for example, by
     // using cl::ParseCommandLineOption and then passing the appropriate
