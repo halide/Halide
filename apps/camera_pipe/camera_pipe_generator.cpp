@@ -374,9 +374,9 @@ Func CameraPipe::build() {
         .unroll(c)
         .parallel(yo);
 
-    demosaiced->intermed_compute_at.set(LoopLevel(processed, yi));
-    demosaiced->intermed_store_at.set(LoopLevel(processed, yo));
-    demosaiced->output_compute_at.set(LoopLevel(processed, x));
+    demosaiced->intermed_compute_at.set({processed, yi});
+    demosaiced->intermed_store_at.set({processed, yo});
+    demosaiced->output_compute_at.set({processed, x});
 
     if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
         processed.hexagon();
