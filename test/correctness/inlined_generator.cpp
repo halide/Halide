@@ -49,10 +49,10 @@ int main(int argc, char **argv) {
     {
         // If you have a Generator in a visible translation unit (i.e.
         // in the same source file, or visible via #include), you can
-        // use it directly, even if it's not registered: just call CLASSNAME::apply() 
-        // with a GeneratorContext, followed by values for all Inputs.
+        // use it directly, even if it's not registered: just call 
+        // GeneratorContext.apply<GenType>() with values for all Inputs.
         // (Note that this uses the default values for all GeneratorParams.)
-        auto gen = Example::apply(context, kRuntimeFactor, kRuntimeOffset);  // gen's type is std::unique_ptr<Example>
+        auto gen = context.apply<Example>(kRuntimeFactor, kRuntimeOffset);  // gen's type is std::unique_ptr<Example>
         // Remember: ScheduleParams can be set at any time before lowering,
         // so it's fine to set them here.
         gen->vectorize.set(false);
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
         // If you need to set GeneratorParams, it's a bit trickier: 
         // you must first create the Generator, then set the GeneratorParam(s),
         // than call generate_with_inputs().
-        auto gen = Example::create(context);  // gen's type is std::unique_ptr<Example>
+        auto gen = context.create<Example>();  // gen's type is std::unique_ptr<Example>
 
         // GeneratorParams must be set before calling generate_with_inputs()
         // (you'll assert-fail if you set them later).
