@@ -2123,7 +2123,7 @@ class GeneratorStub;
 
 }  // namespace Internal
 
-/** GeneratorContext is an abstract interface that is used when constructing a Generator Stub;
+/** GeneratorContext is an abstract base class that is used when constructing a Generator Stub;
  * it is used to allow the outer context (typically, either a Generator or "top-level" code)
  * to specify certain information to the inner context to ensure that inner and outer
  * Generators are compiled in a compatible way; at present, this is used to propagate
@@ -2151,6 +2151,19 @@ public:
      *
      * See test/generator/external_code_generator.cpp for example use. */
     virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
+
+    template <typename T>
+    std::unique_ptr<T> create() {
+        return T::create(*this);
+    }
+
+    // TODO: this method name is ok but not great
+    template <typename T, typename... Args>
+    std::unique_ptr<T> apply(const Args &...args) {
+        auto t = this->create<T>();
+        t->generate_with_inputs(args...);
+        return t;
+    }
 
 protected:
     friend class Internal::GeneratorBase;
@@ -2700,14 +2713,6 @@ public:
         call_schedule();
     }
 
-    // TODO: this method name is ok but not greate
-    template <typename... Args>
-    static std::unique_ptr<T> apply(const Halide::GeneratorContext &context, const Args &...args) {
-        auto t = create(context);
-        t->generate_with_inputs(args...);
-        return t;
-    }
-
 private:
     // Implementations for build_pipeline_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
@@ -2801,6 +2806,7 @@ private:
     friend void ::Halide::Internal::generator_test();
     friend class Internal::SimpleGeneratorFactory;
     friend void ::Halide::Internal::generator_test();
+    friend class ::Halide::GeneratorContext;
 
     // No copy
     Generator(const Generator &) = delete;
