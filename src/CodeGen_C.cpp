@@ -572,7 +572,9 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
-    add_vector_typedefs(input);
+    if (!is_header()) {
+        add_vector_typedefs(input);
+    }
     for (const auto &b : input.buffers()) {
         compile(b);
     }
