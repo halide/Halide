@@ -303,6 +303,8 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
 // Try to extract a list of multiplies of the form a_ty*b_ty added
 // together, such that op is equivalent to the sum of the
 // multiplies in 'mpys', added to 'rest'.
+// Difference in mpys.size() - return indicates the number of
+// expressions where we pretend the op to be multiplied by 1.
 int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
                         vector<MulExpr> &mpys, Expr &rest) {
     if ((int)mpys.size() >= max_mpy_count) {
@@ -679,6 +681,27 @@ private:
                 expr = mutate(op->a + neg_b);
                 return;
             } else {
+                // No widening subtracts for the expressions of the form:
+                //      cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
+                //      bc(wild_i8) * cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
+                // In above cases the vectors need to be extended before using vsub.
+                // Convert such expressions to vmpa.
+                // For eg: Consider expression cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
+                // Converting to cast<int16_t>(wild_u8x) + (-1)*cast<int16_t>(wild_u8x)
+                // generates much more efficient vmpa instead of 2 vzxt and 1 vsub instruction
+                if (op->type.bits() == 16 && op->type.is_int()) {
+                    vector<MulExpr> mpys1, mpys2;
+                    Expr rest1, rest2;
+                    int lanes = op->type.lanes();
+                    find_mpy_ops(op->a, UInt(8, lanes), Int(8), 100, mpys1, rest1);
+                    find_mpy_ops(op->b, UInt(8, lanes), Int(8), 100, mpys2, rest2);
+                    // This form will generate vmpa
+                    if (mpys1.size() & mpys2.size() & 1) {
+                        expr = mutate(op->a + simplify((-1)*op->b));
+                        return;
+                    }
+                }
+
                 static const vector<Pattern> subs = {
                     // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
                     // To differentiate those from the widening ones, we encode the return type in the name here.
