@@ -8,6 +8,7 @@
 #include <array>
 #include <memory>
 #include <iomanip>
+#include <set>
 
 namespace Halide {
 namespace Internal {
@@ -772,18 +773,53 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     hash.set_alignment(4);
     hash.set_flag(Section::SHF_ALLOC);
     size_t sym_count = syms.size();
+    std::vector<unsigned long> sym_hashes;
+    sym_hashes.resize(sym_count);
+    for (size_t i = 0; i < sym_count; i++) {
+        const char *name = &strings.table[syms[i].st_name];
+        sym_hashes[i] = elf_hash(name);
+    }
+
+    size_t unique_hashes;
+    {
+        std::set<unsigned long> unique_hash_set;
+        unique_hash_set.insert(sym_hashes.begin(), sym_hashes.end());
+        unique_hashes = unique_hash_set.size();
+    }
+
+    size_t bucket_count;
+    if (unique_hashes > 1024) {
+        bucket_count = unique_hashes / 4;
+    } else if (unique_hashes > 16) {
+        bucket_count = unique_hashes / 2;
+    } else {
+        bucket_count = std::max(unique_hashes, (size_t) 1);
+    }
+
+    debug(2) << "sym_count " << sym_count 
+            << " unique_hashes " << unique_hashes 
+            << " bucket_count " << bucket_count << "\n";
+
     // TODO: Fix non-trivial hash tables so they work with dlsym.
-    size_t bucket_count = 1;
-    std::vector<uint32_t> hash_table(bucket_count + sym_count + 2);
+    std::vector<uint32_t> hash_table(bucket_count + sym_count + 2, 0);
     safe_assign(hash_table[0], bucket_count);
     safe_assign(hash_table[1], sym_count);
     uint32_t *buckets = &hash_table[2];
     uint32_t *chains = buckets + bucket_count;
     for (size_t i = 0; i < sym_count; i++) {
-        const char *name = &strings.table[syms[i].st_name];
-        uint32_t hash = elf_hash(name) % bucket_count;
+        uint32_t hash = sym_hashes[i] % bucket_count;
         chains[i] = buckets[hash];
         safe_assign(buckets[hash], i);
+    }
+    if (debug::debug_level() >= 2) {
+        for (size_t i = 0; i < bucket_count; i++) {
+            uint32_t sym = buckets[i];
+            debug(2) << "bucket[" << i << "] -> " << sym << "=" << &strings.table[syms[sym].st_name];
+            for (sym = chains[sym]; sym != STN_UNDEF; sym = chains[sym]) {
+                debug(2) << " -> " << sym << "=" << &strings.table[syms[sym].st_name];
+            }
+            debug(2) << "\n";
+        }
     }
     hash.set_contents(hash_table);
     uint16_t hash_idx = write_section(hash, sizeof(hash_table[0]));

@@ -78,7 +78,7 @@ private:
 
 public:
     Symbol() {}
-    Symbol(const std::string &name) : name(name) {}
+    explicit Symbol(const std::string &name) : name(name) {}
 
     /** Accesses the name of this symbol. */
     ///@{
