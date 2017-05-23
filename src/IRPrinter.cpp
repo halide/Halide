@@ -95,6 +95,12 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     return out;
 }
 
+ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
+    return stream << "loop_level("
+        << (loop_level.defined() ? loop_level.to_string() : "undefined") 
+        << ")";
+}
+
 namespace Internal {
 
 void IRPrinter::test() {
