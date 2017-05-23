@@ -1338,7 +1338,7 @@ map<string, int64_t> Partitioner::evaluate_reuse(const FStage &stg,
         dep_analysis.overlap_regions(stg.func, stg.stage_num, bounds, prods,
                                      false, &costs.input_estimates);
 
-    for (size_t d = 0; d < dims.size() - 1; d++) {
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
         int64_t total_reuse = 0;
         if (debug::debug_level() >= 3) {
             disp_regions(reuse_regions[d]);
@@ -1852,7 +1852,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     Box out_tile_extent;
     if (g.output.stage_num == 0) {
         const vector<string> &args = g.output.func.args();
-        for (size_t d = 0; d < args.size() - 1; d++ ) {
+        for (size_t d = 0; d < args.size(); d++) {
             const auto &iter = tile_bounds.find(args[d]);
             if (iter != tile_bounds.end()) {
                 out_tile_extent.push_back(iter->second);
@@ -2626,7 +2626,7 @@ void Partitioner::generate_group_cpu_schedule(
 
     // Keep track of the rvars
     set<string> rvars;
-    for (size_t d = 0; d < dims.size() - 1; d++) {
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
         if (dims[d].is_rvar()) {
             rvars.insert(get_base_name(dims[d].var));
         }
@@ -2644,7 +2644,7 @@ void Partitioner::generate_group_cpu_schedule(
     }
 
     vector<string> dim_vars(dims.size() - 1);
-    for (size_t d = 0; d < dims.size() - 1; d++) {
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
         dim_vars[d] = get_base_name(dims[d].var);
     }
 
@@ -2944,7 +2944,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
     map<string, int64_t> var_strides;
     const vector<Dim> &dims = def.schedule().dims();
 
-    for (size_t d = 0; d < dims.size() - 1; d++) {
+    for (int d = 0; d < (int)dims.size() - 1; d++) {
         // Get all the variables involving the dimension in the definition.
         FindVarsUsingVar dep_vars(dims[d].var);
         def.accept(&dep_vars);
@@ -3041,7 +3041,7 @@ void validate_no_partial_schedules(const Function &f) {
 
                 internal_assert(dims.size() - rvars.size() - 1 <= args.size());
                 int last_index = -1;
-                for (size_t i = rvars.size(); i < dims.size() - 1; ++i) {
+                for (int i = rvars.size(); i < (int)dims.size() - 1; ++i) {
                     const Dim &d = dims[i];
                     user_assert(!d.is_rvar())
                         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
