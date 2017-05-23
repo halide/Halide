@@ -10,7 +10,8 @@ using std::map;
 using std::set;
 using std::vector;
 
-int64_t get_extent(const Interval &i) {
+Expr get_extent(const Interval &i) {
+    // TODO(psuriana): Should make this more general (symbolic constants)
     // The concrete extent of a interval can be determined only when both the
     // expressions for min and max are integers.
     if (i.min.as<IntImm>() && i.max.as<IntImm>()) {
@@ -19,39 +20,39 @@ int64_t get_extent(const Interval &i) {
         // The extent only makes sense when the max >= min otherwise
         // it is considered to be zero.
         if (bmin->value <= bmax->value) {
-            return (bmax->value - bmin->value + 1);
+            return make_const(Int(64), bmax->value - bmin->value + 1);
         } else {
-            return 0;
+            return make_zero(Int(64));
         }
     }
-    return unknown;
+    return Expr();
 }
 
-int64_t box_size(const Box &b) {
-    int64_t size = 1;
+Expr box_size(const Box &b) {
+    Expr size = make_one(Int(64));
     for (size_t i = 0; i < b.size(); i++) {
-        int64_t extent = get_extent(b[i]);
-        if (extent != unknown && size != unknown) {
-            size *= extent;
-        } else if (extent == 0) {
-            size = 0;
-            break;
-        } else {
-            size = unknown;
+        Expr extent = get_extent(b[i]);
+        if (!extent.defined() || is_zero(extent)) {
+            return extent;
         }
+        size *= extent;
     }
-    return size;
+    return simplify(size);
 }
 
-void combine_load_costs(map<string, int64_t> &result, const map<string, int64_t> &partial) {
+void combine_load_costs(map<string, Expr> &result, const map<string, Expr> &partial) {
     for (const auto &kv : partial) {
-        int64_t &cost = result[kv.first];
-        if (cost == unknown) {
-            continue;
-        } else if (kv.second == unknown) {
-            cost = unknown;
+        auto iter = result.find(kv.first);
+        if (iter == result.end()) {
+            result.emplace(kv.first, kv.second);
         } else {
-            cost += kv.second;
+            if (!iter->second.defined()) {
+                continue;
+            } else if (!kv.second.defined()) {
+                iter->second = Expr();
+            } else {
+                iter->second = simplify(iter->second + kv.second);
+            }
         }
     }
 }

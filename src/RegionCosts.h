@@ -19,12 +19,16 @@ namespace Internal {
 
 struct Cost {
     // Estimate of cycles spent doing arithmetic.
-    int64_t arith;
+    Expr arith;
     // Estimate of bytes loaded.
-    int64_t memory;
+    Expr memory;
 
     Cost(int64_t arith, int64_t memory) : arith(arith), memory(memory) {}
-    Cost() : Cost(unknown, unknown) {}
+    Cost(Expr arith, Expr memory) : arith(std::move(arith)), memory(std::move(memory)) {}
+    Cost() {}
+
+    inline bool defined() const { return arith.defined() && memory.defined(); }
+    void simplify();
 };
 
 /** Auto scheduling component which is used to assign costs for computing a
@@ -80,42 +84,42 @@ struct RegionCosts {
      * of a function stage (specified by 'func' and 'stage'). This returns a map
      * containing the costs incurred to access each of the functions required
      * to produce 'func'. */
-    std::map<std::string, int64_t>
+    std::map<std::string, Expr>
         stage_detailed_load_costs(std::string func, int stage, DimBounds &bounds,
                                   const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Return a map containing the costs incurred to access each of the functions
      * required to produce a single value of a function stage. */
-    std::map<std::string, int64_t>
+    std::map<std::string, Expr>
         stage_detailed_load_costs(std::string func, int stage,
                                   const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Same as stage_detailed_load_costs above but this computes the cost of a region
      * of 'func'. */
-    std::map<std::string, int64_t>
+    std::map<std::string, Expr>
         detailed_load_costs(std::string func, const Box &region,
                             const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Same as detailed_load_costs above but this computes the cost of many function
      * regions and aggregates them. */
-    std::map<std::string, int64_t>
+    std::map<std::string, Expr>
         detailed_load_costs(const std::map<std::string, Box> &regions,
                             const std::set<std::string> &inlines = std::set<std::string>());
 
     /** Return the size of the region of 'func' in bytes. */
-    int64_t region_size(std::string func, const Box &region);
+    Expr region_size(std::string func, const Box &region);
 
     /** Return the size of the peak amount of memory allocated in bytes. This takes
      * the realization order of the function regions and the early free mechanism
      * into account while computing the peak footprint. */
-    int64_t region_footprint(const std::map<std::string, Box> &regions,
-                             const std::set<std::string> &inlined = std::set<std::string>());
+    Expr region_footprint(const std::map<std::string, Box> &regions,
+                          const std::set<std::string> &inlined = std::set<std::string>());
 
     /** Return the size of the input region in bytes. */
-    int64_t input_region_size(std::string input, const Box &region);
+    Expr input_region_size(std::string input, const Box &region);
 
     /** Return the total size of the many input regions in bytes. */
-    int64_t input_region_size(const std::map<std::string, Box> &input_regions);
+    Expr input_region_size(const std::map<std::string, Box> &input_regions);
 
     /** Display the cost of each function in the pipeline. */
     void disp_func_costs();
