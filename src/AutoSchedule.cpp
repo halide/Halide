@@ -1202,8 +1202,21 @@ void Partitioner::disp_pipeline_costs() {
     debug(0) << "Group: (name) [arith cost, mem cost, parallelism]" << '\n';
     for (const pair<FStage, Group> &g : groups) {
         const GroupAnalysis &analysis = get_element(group_costs, g.first);
-        total_cost.arith += analysis.cost.arith;
-        total_cost.memory += analysis.cost.memory;
+        if (total_cost.arith == unknown) {
+            continue;
+        } else if (analysis.cost.arith == unknown) {
+            total_cost.arith = unknown;
+        } else {
+            total_cost.arith += analysis.cost.arith;
+        }
+
+        if (total_cost.memory == unknown) {
+            continue;
+        } else if (analysis.cost.memory == unknown) {
+            total_cost.memory = unknown;
+        } else {
+            total_cost.memory += analysis.cost.memory;
+        }
 
         debug(0) << "Group: " << g.first << " [";
         debug(0) << analysis.cost.arith << ", " << analysis.cost.memory

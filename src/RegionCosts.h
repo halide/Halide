@@ -25,6 +25,11 @@ struct Cost {
 
     Cost(int64_t arith, int64_t memory) : arith(arith), memory(memory) {}
     Cost() : Cost(unknown, unknown) {}
+
+    friend std::ostream& operator<<(std::ostream &stream, const Cost &c) {
+        stream << "[arith: " << c.arith << ", memory: " << c.memory << "]";
+        return stream;
+    }
 };
 
 /** Auto scheduling component which is used to assign costs for computing a
