@@ -681,31 +681,11 @@ private:
                 expr = mutate(op->a + neg_b);
                 return;
             } else {
-                // No widening subtracts for the expressions of the form:
-                //      cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
-                //      bc(wild_i8) * cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
-                // In above cases the vectors need to be extended before using vsub.
-                // Convert such expressions to vmpa.
-                // For eg: Consider expression cast<int16_t>(wild_u8x) - cast<int16_t>(wild_u8x)
-                // Converting to cast<int16_t>(wild_u8x) + (-1)*cast<int16_t>(wild_u8x)
-                // generates much more efficient vmpa instead of 2 vzxt and 1 vsub instruction
-                if (op->type.bits() == 16 && op->type.is_int()) {
-                    vector<MulExpr> mpys1, mpys2;
-                    Expr rest1, rest2;
-                    int lanes = op->type.lanes();
-                    find_mpy_ops(op->a, UInt(8, lanes), Int(8), 100, mpys1, rest1);
-                    find_mpy_ops(op->b, UInt(8, lanes), Int(8), 100, mpys2, rest2);
-                    // This form will generate vmpa
-                    if (mpys1.size() & mpys2.size() & 1) {
-                        expr = mutate(op->a + simplify((-1)*op->b));
-                        return;
-                    }
-                }
-
                 static const vector<Pattern> subs = {
                     // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
                     // To differentiate those from the widening ones, we encode the return type in the name here.
                     { "halide.hexagon.sub_vuh.vub.vub", wild_u16x - wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                    { "halide.hexagon.sub_vh.vub.vub", wild_i16x - wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOps },
                     { "halide.hexagon.sub_vuw.vuh.vuh", wild_u32x - wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
                     { "halide.hexagon.sub_vw.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
                 };
