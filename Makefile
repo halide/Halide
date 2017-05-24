@@ -1270,7 +1270,10 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
 	  echo "Building out-of-tree, so making local copy of apps"; \
 	  cp -r $(ROOT_DIR)/apps/bilateral_grid \
+	        $(ROOT_DIR)/apps/conv_layer \
+	        $(ROOT_DIR)/apps/lens_blur \
 	        $(ROOT_DIR)/apps/local_laplacian \
+	        $(ROOT_DIR)/apps/nl_means \
 	        $(ROOT_DIR)/apps/interpolate \
 	        $(ROOT_DIR)/apps/blur \
 	        $(ROOT_DIR)/apps/wavelet \
