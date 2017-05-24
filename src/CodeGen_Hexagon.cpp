@@ -350,6 +350,7 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), i16v2, "sub_vh.vub.vub", {u8v1, u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhw), i32v2, "sub_vw.vh.vh", {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), u32v2, "sub_vuw.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), i32v2, "sub_vw.vuh.vuh", {u16v1, u16v1} },
 
 
         // Adds/subtract of unsigned values with saturation.

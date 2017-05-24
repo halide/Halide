@@ -687,6 +687,7 @@ private:
                     { "halide.hexagon.sub_vuh.vub.vub", wild_u16x - wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
                     { "halide.hexagon.sub_vh.vub.vub", wild_i16x - wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOps },
                     { "halide.hexagon.sub_vuw.vuh.vuh", wild_u32x - wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                    { "halide.hexagon.sub_vw.vuh.vuh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOps },
                     { "halide.hexagon.sub_vw.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
                 };
 
