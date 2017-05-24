@@ -303,6 +303,8 @@ Expr unbroadcast_lossless_cast(Type ty, Expr x) {
 // Try to extract a list of multiplies of the form a_ty*b_ty added
 // together, such that op is equivalent to the sum of the
 // multiplies in 'mpys', added to 'rest'.
+// Difference in mpys.size() - return indicates the number of
+// expressions where we pretend the op to be multiplied by 1.
 int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
                         vector<MulExpr> &mpys, Expr &rest) {
     if ((int)mpys.size() >= max_mpy_count) {
@@ -683,7 +685,9 @@ private:
                     // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
                     // To differentiate those from the widening ones, we encode the return type in the name here.
                     { "halide.hexagon.sub_vuh.vub.vub", wild_u16x - wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                    { "halide.hexagon.sub_vh.vub.vub", wild_i16x - wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOps },
                     { "halide.hexagon.sub_vuw.vuh.vuh", wild_u32x - wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                    { "halide.hexagon.sub_vw.vuh.vuh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOps },
                     { "halide.hexagon.sub_vw.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
                 };
 
