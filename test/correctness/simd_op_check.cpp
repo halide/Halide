@@ -1553,7 +1553,6 @@ struct Test {
         check("vsub(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1) - i32(i16_2)));
         check("vsub(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1) - i64(i32_2)));
 
-
         check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
         check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
         check("vavg(v*.uh,v*.uh)", hvx_width/2, u16((u32(u16_1) + u32(u16_2))/2));
