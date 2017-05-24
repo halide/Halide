@@ -372,7 +372,7 @@ void CodeGen_C::add_vector_typedefs(const Module &input) {
                       "#ifdef __clang__\n" <<
                       "template <typename C, typename T> T vector_select_float(C cond, T a, T b) {\n" <<
                       "    T result;\n" <<
-                      "    for (int i = 0; i < sizeof(a) / sizeof(a[0]); i++) {\n" <<
+                      "    for (size_t i = 0; i < sizeof(a) / sizeof(a[0]); i++) {\n" <<
                       "        result[i] = cond[i] ? a[i] : b[i];\n" <<
                       "    }\n" <<
                       "    return result;\n" <<
