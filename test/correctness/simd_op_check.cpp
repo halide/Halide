@@ -1552,8 +1552,8 @@ struct Test {
         check("vsub(v*:*.h,v*:*.h):sat", hvx_width/1, i16_sat(i32(i16_1) - i32(i16_2)));
         check("vsub(v*:*.w,v*:*.w):sat", hvx_width/2, i32_sat(i64(i32_1) - i64(i32_2)));
 
-        check("v*:*.h = vmpa(v*:*.ub,r*.b)", hvx_width/2, u8(i16(u8_1) - i16(u8_2)));
-        check("v*:*.h = vmpa(v*:*.ub,r*.b)", hvx_width/2, u8(3*i16(u8_1) - i16(u8_2)));
+        check("v*:*.h = vmpa(v*:*.ub,r*.b)", hvx_width/1, i16(u8_1) - i16(u8_2));
+        check("v*:*.h = vmpa(v*:*.ub,r*.b)", hvx_width/1, 3*i16(u8_1) - i16(u8_2));
 
         check("vavg(v*.ub,v*.ub)", hvx_width/1, u8((u16(u8_1) + u16(u8_2))/2));
         check("vavg(v*.ub,v*.ub):rnd", hvx_width/1, u8((u16(u8_1) + u16(u8_2) + 1)/2));
