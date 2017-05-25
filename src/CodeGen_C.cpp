@@ -132,10 +132,12 @@ public:
     // the size of its input vector. Make sure this type exists.
     void visit(const Shuffle *op) {
         vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
+        IRGraphVisitor::visit(op);
     }
 
     void visit(const For *op) {
         for_types_used.insert(op->for_type);
+        IRGraphVisitor::visit(op);
     }
 };
 
