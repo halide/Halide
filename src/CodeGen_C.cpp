@@ -112,8 +112,9 @@ const string globals =
 
 }
 
-class AllVectorTypes : public IRGraphVisitor {
+class TypeInfoGatherer : public IRGraphVisitor {
 public:
+    std::set<ForType> for_types_used;
     std::set<Type> vector_types_used;
 
     using IRGraphVisitor::include;
@@ -131,6 +132,10 @@ public:
     // the size of its input vector. Make sure this type exists.
     void visit(const Shuffle *op) {
         vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
+    }
+
+    void visit(const For *op) {
+        for_types_used.insert(op->for_type);
     }
 };
 
@@ -494,13 +499,15 @@ public:
 
 void CodeGen_C::compile(const Module &input) {
     {
-        AllVectorTypes all_vector_types;
+        TypeInfoGatherer type_info;
         for (const auto &f : input.functions()) {
             if (f.body.defined()) {
-                f.body.accept(&all_vector_types);
+                f.body.accept(&type_info);
             }
         }
-        uses_vector_types = !all_vector_types.vector_types_used.empty();
+        uses_vector_types = !type_info.vector_types_used.empty();
+        uses_gpu_for_loops = type_info.for_types_used.count(ForType::GPUBlock) ||
+                             type_info.for_types_used.count(ForType::GPUThread);
     }
     for (const auto &b : input.buffers()) {
         compile(b);
@@ -621,6 +628,14 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             stream << "halide_error("
                    << (have_user_context ? "__user_context_" : "nullptr")
                    << ", \"C++ Backend does not support vector types yet, "
+                   << "this function will always fail at runtime\");\n";
+            do_indent();
+            stream << "return -1;\n";
+        } else if (uses_gpu_for_loops) {
+            do_indent();
+            stream << "halide_error("
+                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
             do_indent();
             stream << "return -1;\n";

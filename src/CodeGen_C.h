@@ -133,6 +133,9 @@ protected:
     /** True if at least one vector type is used. */
     bool uses_vector_types;
 
+    /** True if at least one gpu-based for loop is used. */
+    bool uses_gpu_for_loops;
+
     /** Track which handle types have been forward-declared already. */
     std::set<const halide_handle_cplusplus_type *> forward_declared;
 
