@@ -103,7 +103,7 @@ const string globals =
     "inline float inf_f32() {return INFINITY;}\n"
     "inline bool is_nan_f32(float x) {return x != x;}\n"
     "inline bool is_nan_f64(double x) {return x != x;}\n"
-    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
+    "template<typename A, typename B> A reinterpret(B b) { static_assert(sizeof(A) == sizeof(B), \"type size mismatch\"); A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
     "inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}\n"
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
@@ -349,8 +349,12 @@ string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
 
 string CodeGen_C::print_reinterpret(Type type, Expr e) {
     ostringstream oss;
-    if (type.is_handle()) {
-        // Use a c-style cast
+    if (type.is_handle() || e.type().is_handle()) {
+        // Use a c-style cast if either src or dest is a handle --
+        // note that although Halide declares a "Handle" to always be 64 bits,
+        // the source "handle" might actually be a 32-bit pointer (from
+        // a function parameter), so calling reinterpret<> (which just memcpy's)
+        // would be garbage-producing.
         oss << "(" << print_type(type) << ")";
     } else {
         oss << "reinterpret<" << print_type(type) << ">";
