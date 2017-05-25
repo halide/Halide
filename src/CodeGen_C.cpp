@@ -590,7 +590,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         if (!is_header()) {
             do_indent();
             stream << "void * const _ucon = " 
-                   << (have_user_context ? "(void *) __user_context" : "nullptr")
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ";\n";
         }
 
