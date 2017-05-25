@@ -824,6 +824,18 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_multitarget,$(GENERATOR_
 # remove AOT-CPP tests that don't (yet) work for C++ backend
 # (each tagged with the *known* blocking issue(s))
 
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_acquire_release,$(GENERATOR_AOTCPP_TESTS))
+
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_define_extern_opencl,$(GENERATOR_AOTCPP_TESTS))
+
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_object_lifetime,$(GENERATOR_AOTCPP_TESTS))
+
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_only,$(GENERATOR_AOTCPP_TESTS))
+
 # https://github.com/halide/Halide/issues/1365
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
 
