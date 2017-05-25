@@ -994,9 +994,11 @@ void CodeGen_C::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->args.empty()) {
-            rhs << "NULL";
+            internal_assert(op->type.handle_type);
+            // Add explicit cast so that different structs can't cache to the same value
+            rhs << "(" << print_type(op->type) << ")(NULL)";
         } else {
-            // Emit a line something like:
+            // Emit a declaration like:
             // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
 
             // Get the args
@@ -1005,18 +1007,27 @@ void CodeGen_C::visit(const Call *op) {
                 values.push_back(print_expr(op->args[i]));
             }
             do_indent();
-            stream << "struct {";
+            stream << "struct {\n";
             // List the types.
+            indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                stream << "const " << print_type(op->args[i].type()) << " f_" << i << "; ";
+                do_indent();
+                stream << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
             }
+            indent--;
             string struct_name = unique_name('s');
-            stream << "}  " << struct_name << " = {";
+            do_indent();
+            stream << "} " << struct_name << " = {\n";
             // List the values.
+            indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (i > 0) stream << ", ";
+                do_indent();
                 stream << values[i];
+                if (i < op->args.size() - 1) stream << ",";
+                stream << "\n";
             }
+            indent--;
+            do_indent();
             stream << "};\n";
             // Return a pointer to it of the appropriate type
             if (op->type.handle_type) {
