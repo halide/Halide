@@ -585,6 +585,15 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
         indent += 1;
 
+        // Emit a local user_context we can pass in all cases, either
+        // aliasing __user_context or nullptr.
+        if (!is_header()) {
+            do_indent();
+            stream << "void * const __ucon = " 
+                   << (have_user_context ? "(void *) __user_context" : "nullptr")
+                   << ";\n";
+        }
+
         // Emit the body
         print(f.body);
 
@@ -888,11 +897,10 @@ void CodeGen_C::visit(const Call *op) {
         string typecode = print_expr(op->args[1]);
         string buffer = print_name(print_expr(op->args[2]));
 
-        rhs << "halide_debug_to_file(";
-        rhs << (have_user_context ? "__user_context_" : "nullptr");
-        rhs << ", \"" + filename + "\", " + typecode;
-        rhs << ", (struct halide_buffer_t *)" << buffer;
-        rhs << ")";
+        rhs << "halide_debug_to_file(__ucon, "
+            << "\"" << filename << "\", " 
+            << typecode
+            << ", (struct halide_buffer_t *)" << buffer << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
@@ -1068,10 +1076,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(fn);
         string arg = print_expr(op->args[1]);
 
-        string call =
-            fn->value + "(" +
-            (have_user_context ? "__user_context_, " : "nullptr, ")
-            + "arg);";
+        string call = fn->value + "(__ucon, arg);";
 
         do_indent();
         // Make a struct on the stack that calls the given function as a destructor
@@ -1112,11 +1117,15 @@ void CodeGen_C::visit(const Call *op) {
         vector<string> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = print_expr(op->args[i]);
+            // This substitution ensures const correctness for all calls
+            if (args[i] == "__user_context") {
+                args[i] = "__ucon";
+            }
         }
         rhs << op->name << "(";
 
         if (function_takes_user_context(op->name)) {
-            rhs << (have_user_context ? "__user_context_, " : "nullptr, ");
+            rhs << "__ucon, ";
         }
 
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -1343,10 +1352,8 @@ void CodeGen_C::visit(const Allocate *op) {
               " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
             open_scope();
             do_indent();
-            stream << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
-                   << ", \"32-bit signed overflow computing size of allocation "
-                   << op->name << "\\n\");\n";
+            stream << "halide_error(__ucon, "
+                   << "\"32-bit signed overflow computing size of allocation " << op->name << "\\n\");\n";
             do_indent();
             stream << "return -1;\n";
             close_scope("overflow test " + op->name);
@@ -1379,9 +1386,7 @@ void CodeGen_C::visit(const Allocate *op) {
                    << print_name(op->name)
                    << " = ("
                    << print_type(op->type)
-                   << " *)halide_malloc("
-                   << (have_user_context ? "__user_context_" : "nullptr")
-                   << ", sizeof("
+                   << " *)halide_malloc(__ucon, sizeof("
                    << print_type(op->type)
                    << ")*" << size_id << ");\n";
             heap_allocations.push(op->name, 0);
@@ -1404,8 +1409,7 @@ void CodeGen_C::visit(const Free *op) {
         }
 
         do_indent();
-        stream << free_function << "("
-               << (have_user_context ? "__user_context_, " : "nullptr, ")
+        stream << free_function << "(__ucon, "
                << print_name(op->name)
                << ");\n";
         heap_allocations.pop(op->name);
@@ -1493,6 +1497,7 @@ extern "C" {
 #endif
 
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {
+ void * const __ucon = (void *) __user_context;
  void *_0 = _halide_buffer_get_host(_buf_buffer);
  void * _buf = _0;
  {
@@ -1500,11 +1505,11 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
   int64_t _2 = _1 * _beta;
   if ((_2 > ((int64_t(1) << 31) - 1)) || ((_2 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))
   {
-   halide_error(__user_context_, "32-bit signed overflow computing size of allocation tmp.heap\n");
+   halide_error(__ucon, "32-bit signed overflow computing size of allocation tmp.heap\n");
    return -1;
   } // overflow test tmp.heap
   int64_t _3 = _2;
-  int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_3);
+  int32_t *_tmp_heap = (int32_t *)halide_malloc(__ucon, sizeof(int32_t)*_3);
   {
    int32_t _tmp_stack[127];
    int32_t _4 = _beta + 1;
@@ -1515,7 +1520,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     char b0[1024];
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
     char const *_7 = b0;
-    int32_t _8 = halide_print(__user_context_, _7);
+    int32_t _8 = halide_print(__ucon, _7);
     int32_t _9 = (_8, 3);
     _5 = _9;
    } // if _6
@@ -1528,7 +1533,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    int32_t _12 = (int32_t)(_11 ? _10 : 2);
    ((int32_t *)_buf)[_4] = _12;
   } // alloc _tmp_stack
-  halide_free(__user_context_, _tmp_heap);
+  halide_free(__ucon, _tmp_heap);
  } // alloc _tmp_heap
  return 0;
 }
