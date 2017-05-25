@@ -112,6 +112,28 @@ const string globals =
 
 }
 
+class AllVectorTypes : public IRGraphVisitor {
+public:
+    std::set<Type> vector_types_used;
+
+    using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
+  
+    void include(const Expr &e) {
+        // bool vectors are not supported and are removed by EliminateBoolVectors.
+        if (!e.type().is_bool() && e.type().lanes() > 1) {
+            vector_types_used.insert(e.type());
+        }
+        IRGraphVisitor::include(e);
+    }
+
+    // GCC's __builtin_shuffle takes an integer vector of
+    // the size of its input vector. Make sure this type exists.
+    void visit(const Shuffle *op) {
+        vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
+    }
+};
+
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
     IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false) {
 
@@ -471,6 +493,15 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
+    {
+        AllVectorTypes all_vector_types;
+        for (const auto &f : input.functions()) {
+            if (f.body.defined()) {
+                f.body.accept(&all_vector_types);
+            }
+        }
+        uses_vector_types = !all_vector_types.vector_types_used.empty();
+    }
     for (const auto &b : input.buffers()) {
         compile(b);
     }
@@ -585,12 +616,22 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
         indent += 1;
 
-        // Emit the body
-        print(f.body);
+        if (uses_vector_types) {
+            do_indent();
+            stream << "halide_error("
+                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << ", \"C++ Backend does not support vector types yet, "
+                   << "this function will always fail at runtime\");\n";
+            do_indent();
+            stream << "return -1;\n";
+        } else {
+            // Emit the body
+            print(f.body);
 
-        // Return success.
-        do_indent();
-        stream << "return 0;\n";
+            // Return success.
+            do_indent();
+            stream << "return 0;\n";
+        }
 
         indent -= 1;
         stream << "}\n";
