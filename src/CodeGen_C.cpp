@@ -1561,13 +1561,18 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
  {
   int64_t _1 = 43;
   int64_t _2 = _1 * _beta;
-  if ((_2 > ((int64_t(1) << 31) - 1)) || ((_2 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))
+  if ((_2 > ((int64_t(1) << 31) - 1)) || ((_2 * sizeof(int32_t )) > ((int64_t(1) << 31) - 1)))
   {
    halide_error(__user_context_, "32-bit signed overflow computing size of allocation tmp.heap\n");
    return -1;
   } // overflow test tmp.heap
   int64_t _3 = _2;
-  int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_3);
+  int32_t *_tmp_heap = (int32_t  *)halide_malloc(__user_context_, sizeof(int32_t )*_3);
+  if (!_tmp_heap)
+  {
+   return halide_error_out_of_memory(__user_context_);
+  }
+  HalideFreeHelper _tmp_heap_free(__user_context_, _tmp_heap, halide_free);
   {
    int32_t _tmp_stack[127];
    int32_t _4 = _beta + 1;
@@ -1591,7 +1596,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    int32_t _12 = (int32_t)(_11 ? _10 : 2);
    ((int32_t *)_buf)[_4] = _12;
   } // alloc _tmp_stack
-  halide_free(__user_context_, _tmp_heap);
+  _tmp_heap_free.free();
  } // alloc _tmp_heap
  return 0;
 }
