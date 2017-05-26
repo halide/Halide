@@ -44,7 +44,7 @@ const string headers =
 // We now add definitions of things in the runtime which are
 // intended to be inlined into every module but are only expressed
 // in .ll. The redundancy is regrettable (FIXME).
-const string globals = R"GOLDEN_CODE(
+const string globals = R"INLINE_CODE(
 extern "C" {
 int64_t halide_current_time_ns(void *ctx);
 void halide_profiler_pipeline_end(void *, void *);
@@ -128,7 +128,7 @@ public:
 };
 } // namespace
 
-)GOLDEN_CODE";
+)INLINE_CODE";
 
 }
 
