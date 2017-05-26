@@ -39,9 +39,34 @@ int static_sign(Expr x) {
     }
     return 0;
 }
+
+// Helper function to substitute param with its minimum/maximum value if defined.
+class SubstituteParamBound : public IRMutator {
+    Direction direction;
+
+    using IRMutator::visit;
+
+    void visit(const Variable *op) {
+        IRMutator::visit(op);
+        if (op->param.defined() &&
+            !op->param.is_buffer()) {
+            if (op->param.get_max_value().defined() && (direction == Direction::Upper)) {
+                expr = op->param.get_max_value();
+            } else if (op->param.get_min_value().defined() && (direction == Direction::Lower)) {
+                expr = op->param.get_min_value();
+            }
+        }
+    }
+public:
+    SubstituteParamBound(Direction d) : direction(d) {}
+};
+
 }
 
 Expr find_constant_bound(Expr e, Direction d) {
+    // Substitute in scalar param bounds.
+    e = simplify(SubstituteParamBound(d).mutate(e));
+
     // We look through casts, so we only handle ops that can't
     // overflow. E.g. if A >= a and B >= b, then you can't assume that
     // (A + B) >= (a + b) in a world with overflow.
