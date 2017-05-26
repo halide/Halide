@@ -1381,7 +1381,6 @@ void CodeGen_C::visit(const Allocate *op) {
 
     // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
-    bool needs_free = false;
     int32_t constant_size;
     string size_id;
     if (op->new_expr.defined()) {
@@ -1390,7 +1389,6 @@ void CodeGen_C::visit(const Allocate *op) {
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name, 0);
         stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
-        needs_free = true;
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
@@ -1468,11 +1466,10 @@ void CodeGen_C::visit(const Allocate *op) {
                    << op_type
                    << ")*" << size_id << ");\n";
             heap_allocations.push(op->name, 0);
-            needs_free = true;
         }
     }
 
-    if (needs_free) {
+    if (!on_stack) {
         create_assertion(op_name, "halide_error_out_of_memory(_ucon)");
 
         do_indent();
