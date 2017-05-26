@@ -74,6 +74,10 @@ protected:
     /** Emit a statement */
     void print_stmt(Stmt);
 
+    void create_assertion(const std::string &id_cond, const std::string &id_msg);
+    void create_assertion(const std::string &id_cond, Expr message);
+    void create_assertion(Expr cond, Expr message);
+
     enum AppendSpaceIfNeeded {
         DoNotAppendSpace,
         AppendSpace,
@@ -115,7 +119,6 @@ protected:
 
     struct Allocation {
         Type type;
-        std::string free_function;
     };
 
     /** Track the types of allocations to avoid unnecessary casts. */

@@ -41,74 +41,94 @@ const string headers =
     "#include <stdio.h>\n"
     "#include <stdint.h>\n";
 
-const string globals =
-    "extern \"C\" {\n"
-    "int64_t halide_current_time_ns(void *ctx);\n"
-    "void halide_profiler_pipeline_end(void *, void *);\n"
-    "}\n"
-    "\n"
+// We now add definitions of things in the runtime which are
+// intended to be inlined into every module but are only expressed
+// in .ll. The redundancy is regrettable (FIXME).
+const string globals = R"GOLDEN_CODE(
+extern "C" {
+int64_t halide_current_time_ns(void *ctx);
+void halide_profiler_pipeline_end(void *, void *);
+}
 
-    // We now add definitions of things in the runtime which are
-    // intended to be inlined into every module but are only expressed
-    // in .ll. The redundancy is regrettable (FIXME).
-    "#ifdef _WIN32\n"
-    "float roundf(float);\n"
-    "double round(double);\n"
-    "#else\n"
-    "inline float asinh_f32(float x) {return asinhf(x);}\n"
-    "inline float acosh_f32(float x) {return acoshf(x);}\n"
-    "inline float atanh_f32(float x) {return atanhf(x);}\n"
-    "inline double asinh_f64(double x) {return asinh(x);}\n"
-    "inline double acosh_f64(double x) {return acosh(x);}\n"
-    "inline double atanh_f64(double x) {return atanh(x);}\n"
-    "#endif\n"
-    "inline float sqrt_f32(float x) {return sqrtf(x);}\n"
-    "inline float sin_f32(float x) {return sinf(x);}\n"
-    "inline float asin_f32(float x) {return asinf(x);}\n"
-    "inline float cos_f32(float x) {return cosf(x);}\n"
-    "inline float acos_f32(float x) {return acosf(x);}\n"
-    "inline float tan_f32(float x) {return tanf(x);}\n"
-    "inline float atan_f32(float x) {return atanf(x);}\n"
-    "inline float sinh_f32(float x) {return sinhf(x);}\n"
-    "inline float cosh_f32(float x) {return coshf(x);}\n"
-    "inline float tanh_f32(float x) {return tanhf(x);}\n"
-    "inline float hypot_f32(float x, float y) {return hypotf(x, y);}\n"
-    "inline float exp_f32(float x) {return expf(x);}\n"
-    "inline float log_f32(float x) {return logf(x);}\n"
-    "inline float pow_f32(float x, float y) {return powf(x, y);}\n"
-    "inline float floor_f32(float x) {return floorf(x);}\n"
-    "inline float ceil_f32(float x) {return ceilf(x);}\n"
-    "inline float round_f32(float x) {return roundf(x);}\n"
-    "\n"
-    "inline double sqrt_f64(double x) {return sqrt(x);}\n"
-    "inline double sin_f64(double x) {return sin(x);}\n"
-    "inline double asin_f64(double x) {return asin(x);}\n"
-    "inline double cos_f64(double x) {return cos(x);}\n"
-    "inline double acos_f64(double x) {return acos(x);}\n"
-    "inline double tan_f64(double x) {return tan(x);}\n"
-    "inline double atan_f64(double x) {return atan(x);}\n"
-    "inline double sinh_f64(double x) {return sinh(x);}\n"
-    "inline double cosh_f64(double x) {return cosh(x);}\n"
-    "inline double tanh_f64(double x) {return tanh(x);}\n"
-    "inline double hypot_f64(double x, double y) {return hypot(x, y);}\n"
-    "inline double exp_f64(double x) {return exp(x);}\n"
-    "inline double log_f64(double x) {return log(x);}\n"
-    "inline double pow_f64(double x, double y) {return pow(x, y);}\n"
-    "inline double floor_f64(double x) {return floor(x);}\n"
-    "inline double ceil_f64(double x) {return ceil(x);}\n"
-    "inline double round_f64(double x) {return round(x);}\n"
-    "\n"
-    "inline float nan_f32() {return NAN;}\n"
-    "inline float neg_inf_f32() {return -INFINITY;}\n"
-    "inline float inf_f32() {return INFINITY;}\n"
-    "inline bool is_nan_f32(float x) {return x != x;}\n"
-    "inline bool is_nan_f64(double x) {return x != x;}\n"
-    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
-    "inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}\n"
-    "\n"
-    "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
-    "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
-    "\n";
+#ifdef _WIN32
+float roundf(float);
+double round(double);
+#else
+inline float asinh_f32(float x) {return asinhf(x);}
+inline float acosh_f32(float x) {return acoshf(x);}
+inline float atanh_f32(float x) {return atanhf(x);}
+inline double asinh_f64(double x) {return asinh(x);}
+inline double acosh_f64(double x) {return acosh(x);}
+inline double atanh_f64(double x) {return atanh(x);}
+#endif
+inline float sqrt_f32(float x) {return sqrtf(x);}
+inline float sin_f32(float x) {return sinf(x);}
+inline float asin_f32(float x) {return asinf(x);}
+inline float cos_f32(float x) {return cosf(x);}
+inline float acos_f32(float x) {return acosf(x);}
+inline float tan_f32(float x) {return tanf(x);}
+inline float atan_f32(float x) {return atanf(x);}
+inline float sinh_f32(float x) {return sinhf(x);}
+inline float cosh_f32(float x) {return coshf(x);}
+inline float tanh_f32(float x) {return tanhf(x);}
+inline float hypot_f32(float x, float y) {return hypotf(x, y);}
+inline float exp_f32(float x) {return expf(x);}
+inline float log_f32(float x) {return logf(x);}
+inline float pow_f32(float x, float y) {return powf(x, y);}
+inline float floor_f32(float x) {return floorf(x);}
+inline float ceil_f32(float x) {return ceilf(x);}
+inline float round_f32(float x) {return roundf(x);}
+
+inline double sqrt_f64(double x) {return sqrt(x);}
+inline double sin_f64(double x) {return sin(x);}
+inline double asin_f64(double x) {return asin(x);}
+inline double cos_f64(double x) {return cos(x);}
+inline double acos_f64(double x) {return acos(x);}
+inline double tan_f64(double x) {return tan(x);}
+inline double atan_f64(double x) {return atan(x);}
+inline double sinh_f64(double x) {return sinh(x);}
+inline double cosh_f64(double x) {return cosh(x);}
+inline double tanh_f64(double x) {return tanh(x);}
+inline double hypot_f64(double x, double y) {return hypot(x, y);}
+inline double exp_f64(double x) {return exp(x);}
+inline double log_f64(double x) {return log(x);}
+inline double pow_f64(double x, double y) {return pow(x, y);}
+inline double floor_f64(double x) {return floor(x);}
+inline double ceil_f64(double x) {return ceil(x);}
+inline double round_f64(double x) {return round(x);}
+
+inline float nan_f32() {return NAN;}
+inline float neg_inf_f32() {return -INFINITY;}
+inline float inf_f32() {return INFINITY;}
+inline bool is_nan_f32(float x) {return x != x;}
+inline bool is_nan_f64(double x) {return x != x;}
+template<typename A, typename B> A reinterpret(B b) { static_assert(sizeof(A) == sizeof(B), "type size mismatch"); A a; memcpy(&a, &b, sizeof(a)); return a;}
+inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}
+
+template<typename T> T max(T a, T b) {if (a > b) return a; return b;}
+template<typename T> T min(T a, T b) {if (a < b) return a; return b;}
+
+namespace {
+class HalideFreeHelper {
+    typedef void (*FreeFunction)(void *user_context, void *p);
+    void * user_context;
+    void *p;
+    FreeFunction free_function;
+public:
+    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function) 
+        : user_context(user_context), p(p), free_function(free_function) {}
+    ~HalideFreeHelper() { free(); }
+    void free() {
+        if (p) {
+            // TOOD: do all free_functions guarantee to ignore a null ptr?
+            free_function(user_context, p);
+            p = nullptr;
+        }
+    }
+};
+} // namespace
+
+)GOLDEN_CODE";
 
 }
 
@@ -1242,21 +1262,44 @@ void CodeGen_C::visit(const LetStmt *op) {
     body.accept(this);
 }
 
-void CodeGen_C::visit(const AssertStmt *op) {
-    string id_cond = print_expr(op->condition);
+// Halide asserts have different semantics to C asserts.  They're
+// supposed to clean up and make the containing function return
+// -1, so we can't use the C version of assert. Instead we convert
+// to an if statement.
+void CodeGen_C::create_assertion(const string &id_cond, const string &id_msg) {
+    if (target.has_feature(Target::NoAsserts)) return;
 
     do_indent();
-    // Halide asserts have different semantics to C asserts.  They're
-    // supposed to clean up and make the containing function return
-    // -1, so we can't use the C version of assert. Instead we convert
-    // to an if statement.
-
-    stream << "if (!" << id_cond << ") ";
+    stream << "if (!" << id_cond << ")\n";
     open_scope();
-    string id_msg = print_expr(op->message);
     do_indent();
     stream << "return " << id_msg << ";\n";
     close_scope("");
+}
+
+void CodeGen_C::create_assertion(const string &id_cond, Expr message) {
+    internal_assert(!message.defined() || message.type() == Int(32))
+        << "Assertion result is not an int: " << message;
+
+    if (target.has_feature(Target::NoAsserts)) return;
+
+    // don't call the create_assertion(string, string) version because
+    // we don't want to force evaluation of 'message' unless the condition fails
+    do_indent();
+    stream << "if (!" << id_cond << ") ";
+    open_scope();
+    string id_msg = print_expr(message);
+    do_indent();
+    stream << "return " << id_msg << ";\n";
+    close_scope("");
+}
+
+void CodeGen_C::create_assertion(Expr cond, Expr message) {
+    create_assertion(print_expr(cond), message);
+}
+
+void CodeGen_C::visit(const AssertStmt *op) {
+    create_assertion(op->condition, op->message);
 }
 
 void CodeGen_C::visit(const ProducerConsumer *op) {
@@ -1306,17 +1349,21 @@ void CodeGen_C::visit(const Provide *op) {
 void CodeGen_C::visit(const Allocate *op) {
     open_scope();
 
+    string op_name = print_name(op->name);
+    string op_type = print_type(op->type, AppendSpace);
+
     // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
+    bool needs_free = false;
     int32_t constant_size;
     string size_id;
     if (op->new_expr.defined()) {
         Allocation alloc;
         alloc.type = op->type;
-        alloc.free_function = op->free_function;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name, 0);
-        stream << print_type(op->type) << "*" << print_name(op->name) << " = (" << print_expr(op->new_expr) << ");\n";
+        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
+        needs_free = true;
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
@@ -1351,9 +1398,11 @@ void CodeGen_C::visit(const Allocate *op) {
             }
             do_indent();
             stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id <<
-              " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
+              " * sizeof(" << op_type << ")) > ((int64_t(1) << 31) - 1)))\n";
             open_scope();
             do_indent();
+            // TODO: call halide_error_buffer_allocation_too_large() here instead
+            // TODO: call create_assertion() so that NoAssertions works
             stream << "halide_error("
                    << (have_user_context ? "__user_context_" : "nullptr")
                    << ", \"32-bit signed overflow computing size of allocation "
@@ -1380,23 +1429,34 @@ void CodeGen_C::visit(const Allocate *op) {
         allocations.push(op->name, alloc);
 
         do_indent();
-        stream << print_type(op->type) << ' ';
+        stream << op_type;
 
         if (on_stack) {
-            stream << print_name(op->name)
+            stream << op_name
                    << "[" << size_id << "];\n";
         } else {
             stream << "*"
-                   << print_name(op->name)
+                   << op_name
                    << " = ("
-                   << print_type(op->type)
+                   << op_type
                    << " *)halide_malloc("
                    << (have_user_context ? "__user_context_" : "nullptr")
                    << ", sizeof("
-                   << print_type(op->type)
+                   << op_type
                    << ")*" << size_id << ");\n";
             heap_allocations.push(op->name, 0);
+            needs_free = true;
         }
+    }
+
+    if (needs_free) {
+        create_assertion(op_name, string("halide_error_out_of_memory(") + (have_user_context ? "__user_context_" : "nullptr") + ")");
+
+        do_indent();
+        string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
+        stream << "HalideFreeHelper " << op_name << "_free("
+               << (have_user_context ? "__user_context_, " : "nullptr, ")
+               << op_name << ", " << free_function << ");\n";
     }
 
     op->body.accept(this);
@@ -1409,16 +1469,8 @@ void CodeGen_C::visit(const Allocate *op) {
 
 void CodeGen_C::visit(const Free *op) {
     if (heap_allocations.contains(op->name)) {
-        string free_function = allocations.get(op->name).free_function;
-        if (free_function.empty()) {
-            free_function = "halide_free";
-        }
-
         do_indent();
-        stream << free_function << "("
-               << (have_user_context ? "__user_context_, " : "nullptr, ")
-               << print_name(op->name)
-               << ");\n";
+        stream << print_name(op->name) << "_free.free();\n";
         heap_allocations.pop(op->name);
     }
     allocations.pop(op->name);
