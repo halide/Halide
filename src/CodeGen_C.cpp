@@ -304,12 +304,12 @@ void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
     if (extern_c_open && mode != NameMangling::C) {
         stream << "\n#ifdef __cplusplus\n";
         stream << "}  // extern \"C\"\n";
-        stream << "#endif\n";
+        stream << "#endif\n\n";
         extern_c_open = false;
     } else if (!extern_c_open && mode == NameMangling::C) {
-        stream << "#ifdef __cplusplus\n";
+        stream << "\n#ifdef __cplusplus\n";
         stream << "extern \"C\" {\n";
-        stream << "#endif\n";
+        stream << "#endif\n\n";
         extern_c_open = true;
     }
 }
@@ -364,32 +364,38 @@ class ExternCallPrototypes : public IRGraphVisitor {
     };
     std::map<string, NamespaceOrCall> c_plus_plus_externs;
     std::map<string, const Call *> c_externs;
-    std::set<std::string> &emitted;
+    std::set<std::string> processed;
+    std::set<std::string> internal_linkage;
 
     using IRGraphVisitor::visit;
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
 
-        if (!emitted.count(op->name)) {
+        if (!processed.count(op->name)) {
             if (op->call_type == Call::Extern) {
                 c_externs.insert({op->name, op});
             } else if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
                 std::string name = extract_namespaces(op->name, namespaces);
-                std::map<string, NamespaceOrCall> *namespace_map(&c_plus_plus_externs);
+                std::map<string, NamespaceOrCall> *namespace_map = &c_plus_plus_externs;
                 for (const auto &ns : namespaces) {
                     auto insertion = namespace_map->insert({ns, NamespaceOrCall()});
                     namespace_map = &insertion.first->second.names;
                 }
                 namespace_map->insert({name, NamespaceOrCall(op)});
             }
-            emitted.insert(op->name);
+            processed.insert(op->name);
         }
     }
 
-    void emit_function_decl(ostream &stream, const Call *op, const std::string &name) {
-        stream << type_to_c_type(op->type, true) << " " << name << "(";
+    void emit_function_decl(ostream &stream, const Call *op, const std::string &name) const {
+        stream << "/* PROTOTTYPE */ ";
+        // op->name (rather than the name arg) since we need the fully-qualified C++ name
+        if (internal_linkage.count(op->name)) {
+            stream << "static ";
+        }
+        stream << type_to_c_type(op->type, /* append_space */ true) << name << "(";
         if (function_takes_user_context(name)) {
             stream << "void *";
             if (!op->args.empty()) {
@@ -409,7 +415,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         stream << ");\n";
     }
 
-    void emit_namespace_or_call(ostream &stream, const NamespaceOrCall &ns_or_call, const std::string &name) {
+    void emit_namespace_or_call(ostream &stream, const NamespaceOrCall &ns_or_call, const std::string &name) const {
         if (ns_or_call.call == nullptr) {
             stream << "namespace " << name << " {\n";
             for (const auto &ns_or_call_inner : ns_or_call.names) {
@@ -422,8 +428,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
 public:
-    ExternCallPrototypes(std::set<string> &emitted, bool in_c_plus_plus)
-        : emitted(emitted) {
+    ExternCallPrototypes() {
         // Make sure we don't catch calls that are already in the global declarations
         const char *strs[] = {globals.c_str(),
                               (const char *)halide_internal_runtime_header_HalideRuntime_h,
@@ -435,7 +440,7 @@ public:
                 if (c == '(' && i > j+1) {
                     // Could be the end of a function_name.
                     string name(str + j + 1, i-j-1);
-                    emitted.insert(name);
+                    processed.insert(name);
                 }
 
                 if (('A' <= c && c <= 'Z') ||
@@ -450,22 +455,26 @@ public:
         }
     }
 
-    bool has_c_declarations() {
+    void set_internal_linkage(const std::string &name) {
+        internal_linkage.insert(name);
+    }
+
+    bool has_c_declarations() const {
         return !c_externs.empty();
     }
 
-    bool has_c_plus_plus_declarations() {
+    bool has_c_plus_plus_declarations() const {
         return !c_plus_plus_externs.empty();
     }
 
-    void emit_c_declarations(ostream &stream) {
+    void emit_c_declarations(ostream &stream) const {
         for (const auto &call : c_externs) {
             emit_function_decl(stream, call.second, call.first);
         }
         stream << "\n";
     }
 
-    void emit_c_plus_plus_declarations(ostream &stream) {
+    void emit_c_plus_plus_declarations(ostream &stream) const {
         for (const auto &ns_or_call : c_plus_plus_externs) {
             emit_namespace_or_call(stream, ns_or_call.second, ns_or_call.first);
         }
@@ -475,6 +484,31 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
+    if (!is_header()) {
+        // Emit prototypes for all external and internal-only functions.
+        // Gather them up and do them all up front, to reduce duplicates, 
+        // and to make it simpler to get internal-linkage functions correct.
+        ExternCallPrototypes e;
+        for (const auto &f : input.functions()) {
+            f.body.accept(&e);
+            if (f.linkage == LoweredFunc::Internal) {
+                // We can't tell at the call site if a LoweredFunc is intended to be internal
+                // or not, so mark them explicitly.
+                e.set_internal_linkage(f.name);
+            }
+        }
+
+        if (e.has_c_plus_plus_declarations()) {
+            set_name_mangling_mode(NameMangling::CPlusPlus);
+            e.emit_c_plus_plus_declarations(stream);
+        }
+
+        if (e.has_c_declarations()) {
+            set_name_mangling_mode(NameMangling::C);
+            e.emit_c_declarations(stream);
+        }
+    }
+
     for (const auto &b : input.buffers()) {
         compile(b);
     }
@@ -488,8 +522,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     if (is_header() && f.linkage == LoweredFunc::Internal) {
         return;
     }
-
-    emitted.insert(f.name);
 
     const std::vector<LoweredArgument> &args = f.args;
 
@@ -522,23 +554,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         have_user_context |= (args[i].name == "__user_context");
     }
 
-    // Emit prototypes for any extern calls used.
-    if (!is_header()) {
-        stream << "\n";
-        ExternCallPrototypes e(emitted, is_c_plus_plus_interface());
-        f.body.accept(&e);
-
-        if (e.has_c_plus_plus_declarations()) {
-            set_name_mangling_mode(NameMangling::CPlusPlus);
-            e.emit_c_plus_plus_declarations(stream);
-        }
-
-        if (e.has_c_declarations()) {
-            set_name_mangling_mode(NameMangling::C);
-            e.emit_c_declarations(stream);
-        }
-    }
-
     NameMangling name_mangling = f.name_mangling;
     if (name_mangling == NameMangling::Default) {
         name_mangling = (target.has_feature(Target::CPlusPlusMangling) ?
@@ -546,7 +561,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     set_name_mangling_mode(name_mangling);
-    stream << "\n";
 
     std::vector<std::string> namespaces;
     std::string simple_name = extract_namespaces(f.name, namespaces);
@@ -1556,6 +1570,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
 #ifdef __cplusplus
 }  // extern "C"
 #endif
+
 )GOLDEN_CODE";
 
     if (src != correct_source) {
