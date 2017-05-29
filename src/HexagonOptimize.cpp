@@ -1813,7 +1813,7 @@ private:
 
     void visit(const Mul *op) {
         if (op->type.is_vector()) {
-            if (op->a.as<Broadcast>()) {
+            if (op->a.as<Broadcast>() && !op->b.as<Broadcast>()) {
                 // Ensures broadcasts always occurs as op1 not op0
                 expr = mutate(op->b * op->a);
                 return;
@@ -1828,9 +1828,9 @@ private:
                     (wild_i32x + wild_i32x),
                 };
                 for (const Expr &p : add_patterns) {
-                    if(expr_match(p, op->a, matches)) {
+                    if (expr_match(p, op->a, matches)) {
                         // simplify() ensures that if matches[0] is also
-                        // a scaler multiplications, then we combine the two
+                        // a scalar multiplications, then we combine the two
                         // broadcasts produced in matches[0] * op->b. For eg:
                         // matches[0] = bc * wild_i16x, then simplify combines
                         // bc * op->b into a single expression.
@@ -1855,36 +1855,6 @@ private:
         }
         IRMutator::visit(op);
     }
-
-    // Decides to choose between absd and abs(sub)
-    // If both operands have odd number of multiply adds, then its
-    // better to use abs as unpaired expressions in absd combine to generate vmpa
-    void visit(const Call *op) {
-        IRMutator::visit(op);
-        op = expr.as<Call>();
-
-        if (op->type.is_vector() && op->is_intrinsic(Call::absd) &&
-            (op->type.bits() == 16 || op->type.bits() == 32)) {
-            if (op->args[0].type().is_int()) {
-                Expr a = op->args[0];
-                Expr b = op->args[1];
-                int lanes = op->type.lanes();
-                vector<MulExpr> mpys1, mpys2;
-                Expr rest1, rest2;
-                if (op->type.bits() == 16) {
-                    find_mpy_ops(a, UInt(8, lanes), Int(8), 100, mpys1, rest1);
-                    find_mpy_ops(b, UInt(8, lanes), Int(8), 100, mpys2, rest2);
-                } else if (op->type.bits() == 32) {
-                    find_mpy_ops(a, Int(16, lanes), Int(8), 100, mpys1, rest1);
-                    find_mpy_ops(b, Int(16, lanes), Int(8), 100, mpys2, rest2);
-                }
-                if (mpys1.size() & mpys2.size() & 1) {
-                    // The unpaired expressions in absd combine to generate vmpa
-                    expr = mutate(abs(a - b));
-                }
-            }
-        }
-    }
 };
 }  // namespace
 
@@ -1903,7 +1873,7 @@ Stmt optimize_hexagon_instructions(Stmt s, Target t) {
     // Convert some expressions to an equivalent form which get better
     // optimized in later stages for hexagon
     s = RearrangeExpressions().mutate(s);
-    
+
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns(t).mutate(s);
