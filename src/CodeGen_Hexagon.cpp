@@ -196,10 +196,10 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
-    // Generating vtmpy before CSE and align_loads makes it easier to match
+    // Generating vrmpy/vtmpy before CSE and align_loads makes it easier to match
     // patterns for vtmpy and also saves us from re-rerunning CSE pass after
     // vtmpy_generator
-    body = vtmpy_generator(body);
+    body = sliding_window_inst_generator(body);
 
     debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)));

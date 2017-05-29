@@ -1611,7 +1611,7 @@ public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
 
-class VtmpyGenerator : public IRMutator {
+class SlidingWindowInstGenerator : public IRMutator {
 private:
     using IRMutator::visit;
     typedef pair<Expr, size_t> LoadIndex;
@@ -1698,23 +1698,38 @@ private:
         return false;
     }
 
+    // Increament the load index of the expression by 2 if
+    // the expr is if of type load otherwise return empty expr.
+    Expr shift_load_by_2(const Expr &e) {
+        Expr load = calc_load(e);
+        if (load.defined()) {
+            Load *maybe_load = (Load *) load.as<Load>();
+            if (maybe_load) {
+                maybe_load->index = maybe_load->index + make_two(maybe_load->index.type());
+                return maybe_load;
+            }
+        }
+        return Expr();
+    }
+
     // Vtmpy helps in sliding window ops of the form a*v0 + b*v1 + v2.
+    // Vrmpy helps in sliding window ops of the form a*v0 + b*v1 + c*v2 + d*v3.
     // Conditions required:
-    //      v0, v1 and v2 start indices differ by vector stride
+    //      v0, v1, v2, v3 start indices differ by vector stride
     // Current supported value of stride is 1.
     // TODO: Add support for any stride.
     void visit(const Add *op) {
-        // Find opportunities vtmpy
+        // Find opportunities for vtmpy/vrmpy
         if (op && op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32)) {
             int lanes = op->type.lanes();
             vector<MulExpr> mpys;
             Expr rest;
-            string vtmpy_suffix;
+            string vtmpy_suffix, vrmpy_suffix;
 
             // Finding more than 100 such expresssions is rare.
             // Setting it to 100 makes sure we dont miss anything
             // in most cases and also dont spend unreasonable time while
-            // just looking for vtmpy patterns.
+            // just looking for sliding window patterns.
             if (op->type.bits() == 16) {
                 find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
                 vtmpy_suffix = ".vub.vub.b.b";
@@ -1725,8 +1740,17 @@ private:
                     vtmpy_suffix = ".vb.vb.b.b";
                 }
             } else if (op->type.bits() == 32) {
-                find_mpy_ops(op, Int(16, lanes), Int(8), 100, mpys, rest);
-                vtmpy_suffix = ".vh.vh.b.b";
+                // Since UInt(8) is a subset of Int(16) we match for
+                // UInt(8) vectors first.
+                find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
+                if (mpys.size() >= 3) {
+                    vrmpy_suffix = ".vub.vub.w";
+                } else {
+                    mpys.clear();
+                    rest = Expr();
+                    find_mpy_ops(op, Int(16, lanes), Int(8), 100, mpys, rest);
+                    vtmpy_suffix = ".vh.vh.b.b";
+                }
             }
 
             if (mpys.size() >= 3) {
@@ -1734,8 +1758,8 @@ private:
                 // Used to put loads with different buffers in different buckets.
                 std::unordered_map<string, vector<LoadIndex> > loads;
                 // To keep track of indices selected for vtmpy.
-                std::unordered_map<size_t, bool> vtmpy_indices;
-                vector<Expr> vtmpy_exprs;
+                std::unordered_map<size_t, bool> sw_indices;
+                vector<Expr> sw_exprs;
                 Expr new_expr;
 
                 for(size_t i = 0; i < mpy_size; i++) {
@@ -1748,9 +1772,9 @@ private:
                 }
 
                 for (auto iter = loads.begin(); iter != loads.end(); iter++) {
-                    // Sort the bucket and compare bases of 3 adjacent vectors
+                    // Sort the bucket and compare bases of 3/4 adjacent vectors
                     // at a time. If they differ by vector stride, we've
-                    // found a vtmpy
+                    // found a vtmpy/vrmpy
                     std::sort(iter->second.begin(), iter->second.end(), loads_comparator);
                     size_t vec_size = iter->second.size();
                     for(size_t i = 0; i + 2 < vec_size; i++) {
@@ -1760,29 +1784,75 @@ private:
                         size_t v0_idx = iter->second[i].second;
                         size_t v1_idx = iter->second[i+1].second;
                         size_t v2_idx = iter->second[i+2].second;
-                        if (is_const(mpys[v2_idx].second, 1) &&
-                            is_base_shifted(v2, v1, 1) &&
+                        if (is_base_shifted(v2, v1, 1) &&
                             is_base_shifted(v1, v0, 1)) {
 
-                            vtmpy_indices[v0_idx] = true;
-                            vtmpy_indices[v1_idx] = true;
-                            vtmpy_indices[v2_idx] = true;
+                            if (vrmpy_suffix.empty()) {
+                                if (is_const(mpys[v2_idx].second, 1)) {
+                                    // vtmpy opporrunity
+                                    sw_indices[v0_idx] = true;
+                                    sw_indices[v1_idx] = true;
+                                    sw_indices[v2_idx] = true;
 
-                            vtmpy_exprs.emplace_back(native_interleave(Call::make(op->type,
-                                "halide.hexagon.vtmpy" + vtmpy_suffix,
-                                { mpys[v0_idx].first, mpys[v2_idx].first,
-                                  mpys[v0_idx].second, mpys[v1_idx].second },
-                                Call::PureExtern)));
-                            // As we cannot test the same indices again
-                            i = i+2;
+                                    sw_exprs.emplace_back(native_interleave(Call::make(op->type,
+                                        "halide.hexagon.vtmpy" + vtmpy_suffix,
+                                        { mpys[v0_idx].first, mpys[v2_idx].first,
+                                          mpys[v0_idx].second, mpys[v1_idx].second },
+                                        Call::PureExtern)));
+                                    i = i+2;
+                                }
+                            } else {
+                                // vrmpy opporrunity
+
+                                // Vrmpy helps in sliding window ops of the form:
+                                // b0*v0 + b1*v1 + b2*v2 + b3*v3. In case we cannot
+                                // find v3, we set b3=0.
+                                Expr b3 = make_zero(mpys[v0_idx].second.type());
+                                if (i+3 < vec_size) {
+                                    Expr v3 = iter->second[i+3].first;
+                                    size_t v3_idx = iter->second[i+3].second;
+                                    if (is_base_shifted(v3, v2, 1)) {
+                                        // Try finding the 4th vector. If not, use b3 = 0.
+                                        sw_indices[v3_idx] = true;
+                                        b3 = mpys[v3_idx].second;
+                                    }
+                                }
+
+                                Expr shifted_expr = shift_load_by_2(mpys[v2_idx].first);
+
+                                sw_indices[v0_idx] = true;
+                                sw_indices[v1_idx] = true;
+                                sw_indices[v2_idx] = true;
+
+                                Expr b0123 = Shuffle::make_interleave({ mpys[v0_idx].second,
+                                                mpys[v1_idx].second, mpys[v2_idx].second, b3 });
+                                b0123 = simplify(b0123);
+                                b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
+
+                                Type vrmpy_type = op->type.with_lanes(op->type.lanes()/2);
+                                // Generate expressions for even and odd places and then
+                                // interleave the two 2W vectors to get the desired expression.
+                                Expr even = native_interleave(Call::make(vrmpy_type,
+                                    "halide.hexagon.vrmpy" + vrmpy_suffix,
+                                    { mpys[v0_idx].first, shifted_expr, b0123, 0 },
+                                    Call::PureExtern));
+
+                                Expr odd = native_interleave(Call::make(vrmpy_type,
+                                    "halide.hexagon.vrmpy" + vrmpy_suffix,
+                                    { mpys[v0_idx].first, shifted_expr, b0123, 1 },
+                                    Call::PureExtern));
+
+                                sw_exprs.emplace_back(Shuffle::make_interleave({even, odd}));
+                                i = is_zero(b3) ? i+2 : i+3;
+                            }
                         }
                     }
                 }
-                // If we found any vtmpy's then recombine Expr using
-                // vtmpy_expr, non_vtmpy_exprs and rest.
-                if (vtmpy_exprs.size() > 0) {
+                // If we found any sw exprs, then recombine expr using
+                // sw_exprs, non_sw_exprs and rest.
+                if (sw_exprs.size() > 0) {
                     for (size_t i = 0; i < mpy_size; i++) {
-                        if (vtmpy_indices[i]) {
+                        if (sw_indices[i]) {
                             continue;
                         }
                         Expr mpy_a = lossless_cast(op->type, mpys[i].first);
@@ -1790,8 +1860,8 @@ private:
                         Expr mpy_res = mpy_a * mpy_b;
                         new_expr = new_expr.defined() ? new_expr + mpy_res : mpy_res;
                     }
-                    for (size_t i = 0; i < vtmpy_exprs.size(); i++) {
-                        new_expr = new_expr.defined() ? new_expr + vtmpy_exprs[i] : vtmpy_exprs[i];
+                    for (size_t i = 0; i < sw_exprs.size(); i++) {
+                        new_expr = new_expr.defined() ? new_expr + sw_exprs[i] : sw_exprs[i];
                     }
                     if (rest.defined()) {
                         new_expr = new_expr + rest;
@@ -1812,9 +1882,9 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     return OptimizeShuffles(lut_alignment).mutate(s);
 }
 
-Stmt vtmpy_generator(Stmt s) {
+Stmt sliding_window_inst_generator(Stmt s) {
     // Generate vtmpy instruction if possible
-    return VtmpyGenerator().mutate(substitute_in_all_lets(s));
+    return SlidingWindowInstGenerator().mutate(substitute_in_all_lets(s));
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
