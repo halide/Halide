@@ -439,7 +439,6 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
     void emit_function_decl(ostream &stream, const Call *op, const std::string &name) const {
-        stream << "/* PROTOTTYPE */ ";
         // op->name (rather than the name arg) since we need the fully-qualified C++ name
         if (internal_linkage.count(op->name)) {
             stream << "static ";
