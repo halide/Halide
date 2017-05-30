@@ -743,16 +743,31 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
     }
 
+    // For now, we assume buffers that aren't scalar are constant,
+    // while scalars can be mutated. This accommodates all our existing
+    // use cases, which is that all buffers are constant, except those
+    // used to store stateful module information in offloading runtimes.
+    bool is_constant = buffer.dimensions() != 0;
+
     // Emit the data
-    stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
+    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {\n";
+    do_indent();
     for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) stream << ", ";
+        if (i > 0) {
+            stream << ",";
+            if (i % 16 == 0) {
+                stream << "\n";
+                do_indent();
+            } else {
+                stream << " ";
+            }
+        }
         stream << (int)(b.host[i]);
     }
-    stream << "};\n";
+    stream << "\n};\n";
 
-    // Emit the shape
-    stream << "static halide_dimension_t " << name << "_buffer_shape[] = {";
+    // Emit the shape (constant even for scalar buffers)
+    stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
     for (int i = 0; i < buffer.dimensions(); i++) {
         stream << "{" << buffer.dim(i).min()
                << ", " << buffer.dim(i).extent()
@@ -765,18 +780,18 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
     Type t = buffer.type();
 
-    // Emit the buffer struct
-    stream << "static halide_buffer_t " << name << "_buffer = {"
+    // Emit the buffer struct.
+    stream << "static const halide_buffer_t " << name << "_buffer_ = {"
            << "0, "             // device
-           << "NULL, "          // device_interface
-           << "&" << name << "_data[0], " // host
+           << "nullptr, "       // device_interface
+           << "const_cast<uint8_t*>(&" << name << "_data[0]), " // host
            << "0, "             // flags
            << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
            << buffer.dimensions() << ", "
-           << name << "_buffer_shape};\n";
+           << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
 
-    // Make a global pointer to it
-    stream << "static halide_buffer_t *" << name << " = &" << name << "_buffer;\n";
+    // Make a global pointer to it. Note that the 
+    stream << "static const halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
 }
 
 string CodeGen_C::print_expr(Expr e) {
@@ -1235,9 +1250,20 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "_ucon, ";
         }
 
+        // TODO: special-case for https://github.com/halide/Halide/issues/2099;
+        // embedded buffers will generate code for bounds query, which can
+        // never execute (_halide_buffer_is_bounds_query() always returns false
+        // for them), but the generated bounds-query code won't compile due to 
+        // const correctness. We add some const_casts here as a temporary
+        // workaround.
+        bool arg0_const_cast = (op->name == "_halide_buffer_get_shape" || op->name == "_halide_buffer_init");
         for (size_t i = 0; i < op->args.size(); i++) {
             if (i > 0) rhs << ", ";
-            rhs << args[i];
+            if (i == 0 && arg0_const_cast) {
+                rhs << "const_cast<" << print_type(op->args[i].type()) << ">(" << args[i] << ")";
+            } else {
+                rhs << args[i];
+            }
         }
         rhs << ")";
     }
