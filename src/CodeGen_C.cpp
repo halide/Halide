@@ -678,7 +678,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
             do_indent();
-            stream << "return -1;\n";
+            stream << "return halide_error_code_device_malloc_failed;\n";
         } else {
             // Emit a local user_context we can pass in all cases, either
             // aliasing __user_context or nullptr.

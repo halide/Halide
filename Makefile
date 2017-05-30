@@ -859,7 +859,7 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOT
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_metadata_tester,$(GENERATOR_AOTCPP_TESTS))
 
-# exit status code mismatch ((only if opencl enabled))
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled))
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2071
