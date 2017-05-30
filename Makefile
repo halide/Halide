@@ -847,12 +847,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context,$(GENERATOR
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context_insanity,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/1365
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_blur2x2,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/1365
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_pyramid,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/1365
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOTCPP_TESTS))
 
