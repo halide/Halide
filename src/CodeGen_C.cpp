@@ -780,8 +780,12 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
     Type t = buffer.type();
 
-    // Emit the buffer struct.
-    stream << "static const halide_buffer_t " << name << "_buffer_ = {"
+    // Emit the buffer struct. Note that although our shape and (usually) our host
+    // data is const, the buffer itself isn't: embedded buffers in one pipeline 
+    // can be passed to another pipeline (e.g. for an extern stage), in which
+    // case the buffer objects need to be non-const, because the constness 
+    // (from the POV of the extern stage) is a runtime property.
+    stream << "static halide_buffer_t " << name << "_buffer_ = {"
            << "0, "             // device
            << "nullptr, "       // device_interface
            << "const_cast<uint8_t*>(&" << name << "_data[0]), " // host
@@ -791,7 +795,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
            << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
 
     // Make a global pointer to it.
-    stream << "static const halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
+    stream << "static halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
 }
 
 string CodeGen_C::print_expr(Expr e) {
@@ -1250,19 +1254,9 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "_ucon, ";
         }
 
-        // TODO: special-case for https://github.com/halide/Halide/issues/2099;
-        // embedded buffers will generate code for bounds query, which can
-        // never execute (_halide_buffer_is_bounds_query() always returns false
-        // for them), but the generated bounds-query code won't compile due to 
-        // const correctness. We add some const_casts here as a temporary
-        // workaround.
         for (size_t i = 0; i < op->args.size(); i++) {
             if (i > 0) rhs << ", ";
-            if (op->args[i].type() == type_of<halide_buffer_t *>()) {
-                rhs << "const_cast<" << print_type(op->args[i].type()) << ">(" << args[i] << ")";
-            } else {
-                rhs << args[i];
-            }
+            rhs << args[i];
         }
         rhs << ")";
     }
