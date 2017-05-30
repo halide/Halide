@@ -108,6 +108,12 @@ inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>
 template<typename T> T max(T a, T b) {if (a > b) return a; return b;}
 template<typename T> T min(T a, T b) {if (a < b) return a; return b;}
 
+template<typename A, typename B>
+const B &return_second(const A &a, const B &b) { 
+    (void) a;
+    return b;
+}
+
 namespace {
 class HalideFreeHelper {
     typedef void (*FreeFunction)(void *user_context, void *p);
@@ -1042,7 +1048,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         string arg0 = print_expr(op->args[0]);
         string arg1 = print_expr(op->args[1]);
-        rhs << "(" << arg0 << ", " << arg1 << ")";
+        rhs << "return_second(" << arg0 << ", " << arg1 << ")";
     } else if (op->is_intrinsic(Call::if_then_else)) {
         internal_assert(op->args.size() == 3);
 
