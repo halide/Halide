@@ -859,10 +859,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOT
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_metadata_tester,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2073
-# https://github.com/halide/Halide/issues/2074
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
-
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling,$(GENERATOR_AOTCPP_TESTS))
 
