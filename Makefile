@@ -859,6 +859,9 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOT
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_metadata_tester,$(GENERATOR_AOTCPP_TESTS))
 
+# exit status code mismatch ((only if opencl enabled))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
+
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling,$(GENERATOR_AOTCPP_TESTS))
 
@@ -876,6 +879,9 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_mandelbrot,$(GENERATOR_A
 
 # https://github.com/halide/Halide/issues/2076
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
+
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_old_buffer_t,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2075
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
