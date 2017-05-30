@@ -139,6 +139,10 @@ protected:
     /** Track which handle types have been forward-declared already. */
     std::set<const halide_handle_cplusplus_type *> forward_declared;
 
+    /** If the Type is a handle type, emit a forward-declaration for it
+     * if we haven't already. */
+    void forward_declare_type(const Type &t);
+
     void set_name_mangling_mode(NameMangling mode);
 
     using IRPrinter::visit;
