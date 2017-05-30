@@ -871,7 +871,7 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling_define_exte
 # https://github.com/halide/Halide/issues/2075
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_embed_image,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2075
+# https://github.com/halide/Halide/issues/2102
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_external_code,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2076
