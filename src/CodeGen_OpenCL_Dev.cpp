@@ -76,7 +76,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
 }
 
 // These are built-in types in OpenCL
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_vector_typedefs(const Module &) {
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_vector_typedefs(const std::set<Type> &vector_types) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e) {
