@@ -1703,10 +1703,11 @@ private:
     Expr shift_load_by_2(const Expr &e) {
         Expr load = calc_load(e);
         if (load.defined()) {
-            Load *maybe_load = (Load *) load.as<Load>();
+            const Load *maybe_load = load.as<Load>();
             if (maybe_load) {
-                maybe_load->index = maybe_load->index + make_two(maybe_load->index.type());
-                return maybe_load;
+                return Load::make(maybe_load->type, maybe_load->name,
+                                maybe_load->index + make_two(maybe_load->index.type()),
+                                maybe_load->image, maybe_load->param, maybe_load->predicate);
             }
         }
         return Expr();
