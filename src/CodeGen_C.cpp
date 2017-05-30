@@ -1256,10 +1256,9 @@ void CodeGen_C::visit(const Call *op) {
         // for them), but the generated bounds-query code won't compile due to 
         // const correctness. We add some const_casts here as a temporary
         // workaround.
-        bool arg0_const_cast = (op->name == "_halide_buffer_get_shape" || op->name == "_halide_buffer_init");
         for (size_t i = 0; i < op->args.size(); i++) {
             if (i > 0) rhs << ", ";
-            if (i == 0 && arg0_const_cast) {
+            if (op->args[i].type() == type_of<halide_buffer_t *>()) {
                 rhs << "const_cast<" << print_type(op->args[i].type()) << ">(" << args[i] << ")";
             } else {
                 rhs << args[i];
