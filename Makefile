@@ -846,6 +846,10 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context,$(GENERATOR
 # https://github.com/halide/Halide/issues/2081
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context_insanity,$(GENERATOR_AOTCPP_TESTS))
 
+# Works on Clang, but fails for GCC, due to non-power-of-two vector sizes.
+# TODO: find a way to whitelist for Clang or Blacklist for GCC.
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_blur2x2,$(GENERATOR_AOTCPP_TESTS))		
+
 # https://github.com/halide/Halide/issues/1365
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOTCPP_TESTS))
