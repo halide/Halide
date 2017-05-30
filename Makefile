@@ -881,9 +881,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_mandelbrot,$(GENERATOR_A
 # https://github.com/halide/Halide/issues/2076
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2077
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_old_buffer_t,$(GENERATOR_AOTCPP_TESTS))
-
 # https://github.com/halide/Halide/issues/2075
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
