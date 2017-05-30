@@ -1,6 +1,12 @@
 #include <stdio.h>
+#include "HalideRuntime.h"
 
 #ifdef _WIN32
+
+// Avoid link errors
+extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
+    return 0;
+}
 
 // OpenCL headers/libs are not properly setup yet for minGW.
 int main(int argc, char **argv) {
@@ -10,6 +16,11 @@ int main(int argc, char **argv) {
 
 #elif !defined(TEST_OPENCL)
 
+// Avoid link errors
+extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
+    return 0;
+}
+
 int main(int argc, char **argv) {
     printf("Skipping since TEST_OPENCL is not enabled\n");
     return 0;
@@ -17,7 +28,6 @@ int main(int argc, char **argv) {
 
 #else
 
-#include "HalideRuntime.h"
 #include "HalideBuffer.h"
 #include "HalideRuntimeOpenCL.h"
 #include <assert.h>
