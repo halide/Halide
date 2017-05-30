@@ -132,6 +132,35 @@ public:
 
 }
 
+class TypeInfoGatherer : public IRGraphVisitor {
+public:
+    std::set<ForType> for_types_used;
+    std::set<Type> vector_types_used;
+
+    using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
+  
+    void include(const Expr &e) {
+        // bool vectors are not supported and are removed by EliminateBoolVectors.
+        if (!e.type().is_bool() && e.type().lanes() > 1) {
+            vector_types_used.insert(e.type());
+        }
+        IRGraphVisitor::include(e);
+    }
+
+    // GCC's __builtin_shuffle takes an integer vector of
+    // the size of its input vector. Make sure this type exists.
+    void visit(const Shuffle *op) {
+        vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const For *op) {
+        for_types_used.insert(op->for_type);
+        IRGraphVisitor::visit(op);
+    }
+};
+
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
     IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false) {
 
@@ -504,6 +533,18 @@ public:
 }
 
 void CodeGen_C::compile(const Module &input) {
+    {
+        TypeInfoGatherer type_info;
+        for (const auto &f : input.functions()) {
+            if (f.body.defined()) {
+                f.body.accept(&type_info);
+            }
+        }
+        uses_vector_types = !type_info.vector_types_used.empty();
+        uses_gpu_for_loops = type_info.for_types_used.count(ForType::GPUBlock) ||
+                             type_info.for_types_used.count(ForType::GPUThread);
+    }
+
     if (!is_header()) {
         // Emit prototypes for all external and internal-only functions.
         // Gather them up and do them all up front, to reduce duplicates, 
@@ -623,21 +664,39 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
         indent += 1;
 
-        // Emit a local user_context we can pass in all cases, either
-        // aliasing __user_context or nullptr.
-        if (!is_header()) {
+        if (uses_vector_types) {
             do_indent();
-            stream << "void * const _ucon = " 
-                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
-                   << ";\n";
+            stream << "halide_error("
+                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << ", \"C++ Backend does not support vector types yet, "
+                   << "this function will always fail at runtime\");\n";
+            do_indent();
+            stream << "return -1;\n";
+        } else if (uses_gpu_for_loops) {
+            do_indent();
+            stream << "halide_error("
+                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
+                   << "this function will always fail at runtime\");\n";
+            do_indent();
+            stream << "return -1;\n";
+        } else {
+            // Emit a local user_context we can pass in all cases, either
+            // aliasing __user_context or nullptr.
+            if (!is_header()) {
+                do_indent();
+                stream << "void * const _ucon = " 
+                       << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
+                       << ";\n";
+            }
+
+            // Emit the body
+            print(f.body);
+
+            // Return success.
+            do_indent();
+            stream << "return 0;\n";
         }
-
-        // Emit the body
-        print(f.body);
-
-        // Return success.
-        do_indent();
-        stream << "return 0;\n";
 
         indent -= 1;
         stream << "}\n";
