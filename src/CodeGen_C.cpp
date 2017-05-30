@@ -1668,7 +1668,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
     char const *_7 = b0;
     int32_t _8 = halide_print(_ucon, _7);
-    int32_t _9 = (_8, 3);
+    int32_t _9 = return_second(_8, 3);
     _5 = _9;
    } // if _6
    else
