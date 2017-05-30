@@ -14,6 +14,7 @@
 #include "IRMutator.h"
 #include "CSE.h"
 #include "Deinterleave.h"
+#include "Param.h"
 
 namespace Halide {
 namespace Internal {
@@ -40,32 +41,242 @@ int static_sign(Expr x) {
     return 0;
 }
 
-// Helper function to substitute param with its minimum/maximum value if defined.
 class SubstituteParamBound : public IRMutator {
-    Direction direction;
+    Direction dir;
 
     using IRMutator::visit;
 
+    Direction reverse_dir(Direction d) {
+        if (dir == Direction::Upper) {
+            return Direction::Lower;
+        } else {
+            internal_assert(dir == Direction::Lower);
+            return Direction::Upper;
+        }
+    }
+
     void visit(const Variable *op) {
-        IRMutator::visit(op);
-        if (op->param.defined() &&
-            !op->param.is_buffer()) {
-            if (op->param.get_max_value().defined() && (direction == Direction::Upper)) {
+        if (op->param.defined() && !op->param.is_buffer()) {
+            internal_assert(op->type.is_scalar());
+            if (op->param.get_max_value().defined() && (dir == Direction::Upper)) {
                 expr = op->param.get_max_value();
-            } else if (op->param.get_min_value().defined() && (direction == Direction::Lower)) {
+            } else if (op->param.get_min_value().defined() && (dir == Direction::Lower)) {
                 expr = op->param.get_min_value();
+            } else {
+                expr = op;
+            }
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const Add *op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+
+        if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = Add::make(a, b);
+            // Assume no overflow for float, int32, and int64
+            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+                Expr no_overflow = (cast<int>(a) + cast<int>(b) == cast<int>(expr));
+                if (!can_prove(no_overflow)) {
+                    expr = op;
+                }
             }
         }
     }
+
+    void visit(const Sub *op) {
+        Direction old_dir = dir;
+        Expr a = mutate(op->a);
+        dir = reverse_dir(dir);
+        Expr b = mutate(op->b);
+        dir = old_dir;
+
+        if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+        } else {
+            expr = Sub::make(a, b);
+            // Assume no overflow for float, int32, and int64
+            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+                Expr no_overflow = (cast<int>(a) - cast<int>(b) == cast<int>(expr));
+                if (!can_prove(no_overflow)) {
+                    expr = op;
+                }
+            }
+            // Check underflow for uint
+            if (op->type.is_uint() && !can_prove(b <= a)) {
+                expr = op;
+            }
+        }
+    }
+
+    void visit(const Mul *op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+            return;
+        }
+
+        Direction old_dir = dir;
+        dir = reverse_dir(dir);
+        Expr a_rev = mutate(op->a);
+        Expr b_rev = mutate(op->b);
+        dir = old_dir;
+
+        Interval interval = Interval::nothing();
+        interval.include(a * b);
+        interval.include(a * b_rev);
+        interval.include(a_rev * b);
+        interval.include(a_rev * b_rev);
+
+        if (dir == Direction::Upper) {
+            expr = simplify(interval.max);
+        } else {
+            internal_assert(dir == Direction::Lower);
+            expr = simplify(interval.min);
+        }
+
+        // Assume no overflow for float, int32, and int64
+        if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+            // Try to prove it can't overflow
+            Expr test1 = (cast<int>(a) * cast<int>(b) == cast<int>(a * b));
+            Expr test2 = (cast<int>(a) * cast<int>(b_rev) == cast<int>(a * b_rev));
+            Expr test3 = (cast<int>(a_rev) * cast<int>(b) == cast<int>(a_rev * b));
+            Expr test4 = (cast<int>(a_rev) * cast<int>(b_rev) == cast<int>(a_rev * b_rev));
+            if (!can_prove(test1 && test2 && test3 && test4)) {
+                expr = op;
+            }
+        }
+    }
+
+    void visit(const Div *op) {
+        Expr a = mutate(op->a);
+        Expr b = mutate(op->b);
+        if (a.same_as(op->a) && b.same_as(op->b)) {
+            expr = op;
+            return;
+        }
+
+        Direction old_dir = dir;
+        dir = reverse_dir(dir);
+        Expr a_rev = mutate(op->a);
+        Expr b_rev = mutate(op->b);
+        dir = old_dir;
+
+        // If we can't statically prove that the divisor can't span zero, do nothing
+        int sign = static_sign(b);
+        int rev_sign = static_sign(b_rev);
+        if (sign != rev_sign || sign == 0 || rev_sign == 0) {
+            expr = op;
+        } else {
+            // Divisor is either strictly positive or strictly
+            // negative, so we can just take the extrema.
+            Interval interval = Interval::nothing();
+            interval.include(a / b);
+            interval.include(a / b_rev);
+            interval.include(a_rev / b);
+            interval.include(a_rev / b_rev);
+
+            if (dir == Direction::Upper) {
+                expr = simplify(interval.max);
+            } else {
+                internal_assert(dir == Direction::Lower);
+                expr = simplify(interval.min);
+            }
+        }
+    }
+
+    void visit(const Select *op) {
+        Expr cond = mutate(op->condition);
+        Expr t = mutate(op->true_value);
+        Expr f = mutate(op->false_value);
+
+        if (cond.same_as(op->condition) &&
+            t.same_as(op->true_value) &&
+            f.same_as(op->false_value)) {
+            expr = op;
+        } else {
+            if (is_one(cond)) {
+                expr = t;
+            } else if (is_zero(cond)) {
+                expr = f;
+            } else if (dir == Direction::Upper) {
+                expr = simplify(max(t, f));
+            } else {
+                internal_assert(dir == Direction::Lower);
+                expr = simplify(min(t, f));
+            }
+        }
+    }
+
+    void visit(const LT *op) {
+        Direction old_dir = dir;
+        dir = Direction::Upper;
+        Expr a_max = mutate(op->a);
+        Expr b_max = mutate(op->b);
+        dir = old_dir;
+
+        if (a_max.same_as(op->a) && b_max.same_as(op->b)) {
+            expr = op;
+            return;
+        }
+
+        dir = Direction::Lower;
+        Expr a_min = mutate(op->a);
+        Expr b_min = mutate(op->b);
+        dir = old_dir;
+
+        Expr always_true = (a_max < b_min);
+        Expr always_false = (b_max <= a_min);
+        if (can_prove(always_true)) {
+            expr = const_true(op->type.bits());
+        } else if (can_prove(always_false)) {
+            expr = const_false(op->type.bits());
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const LE *op) {
+        expr = mutate(!(op->b < op->a));
+    }
+
+    void visit(const GT *op) {
+        expr = mutate(op->b < op->a);
+    }
+
+    void visit(const GE *op) {
+        expr = mutate(!(op->a < op->b));
+    }
+
+    void visit(const EQ *op)    { expr = op; }
+    void visit(const NE *op)    { expr = op; }
+    void visit(const Cast *op)  { expr = op; }
+    void visit(const Mod *op)   { expr = op; }
+    void visit(const And *op)   { expr = op; }
+    void visit(const Or *op)    { expr = op; }
+    void visit(const Not *op)   { expr = op; }
+    void visit(const Load *op)  { expr = op; }
+    void visit(const Call *op)  { expr = op; }
+
 public:
-    SubstituteParamBound(Direction d) : direction(d) {}
+    SubstituteParamBound(Direction d) : dir(d) {}
 };
+
+// Helper function to substitute param with its minimum/maximum value if defined.
+Expr substitute_param_bound(const Expr &e, Direction d) {
+    return simplify(SubstituteParamBound(d).mutate(simplify(e)));
+}
 
 }
 
 Expr find_constant_bound(Expr e, Direction d) {
     // Substitute in scalar param bounds.
-    e = simplify(SubstituteParamBound(d).mutate(e));
+    e = substitute_param_bound(e, d);
 
     // We look through casts, so we only handle ops that can't
     // overflow. E.g. if A >= a and B >= b, then you can't assume that
@@ -157,7 +368,6 @@ private:
     }
 
     void visit(const Cast *op) {
-
         op->value.accept(this);
         Interval a = interval;
 
@@ -258,8 +468,8 @@ private:
                 interval.max = a.max + b.max;
             }
 
-            // Check for overflow for (u)int8 and (u)int16
-            if (!op->type.is_float() && op->type.bits() < 32) {
+            // Assume no overflow for float, int32, and int64
+            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
                 if (interval.has_upper_bound()) {
                     Expr no_overflow = (cast<int>(a.max) + cast<int>(b.max) == cast<int>(interval.max));
                     if (!can_prove(no_overflow)) {
@@ -297,8 +507,8 @@ private:
                 interval.max = a.max - b.min;
             }
 
-            // Check for overflow for (u)int8 and (u)int16
-            if (!op->type.is_float() && op->type.bits() < 32) {
+            // Assume no overflow for float, int32, and int64
+            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
                 if (interval.has_upper_bound()) {
                     Expr no_overflow = (cast<int>(a.max) - cast<int>(b.min) == cast<int>(interval.max));
                     if (!can_prove(no_overflow)) {
@@ -325,7 +535,6 @@ private:
     }
 
     void visit(const Mul *op) {
-
         op->a.accept(this);
         Interval a = interval;
 
@@ -367,7 +576,8 @@ private:
             interval = Interval::everything();
         }
 
-        if (op->type.bits() < 32 && !op->type.is_float()) {
+        // Assume no overflow for float, int32, and int64
+        if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
             if (a.is_bounded() && b.is_bounded()) {
                 // Try to prove it can't overflow
                 Expr test1 = (cast<int>(a.min) * cast<int>(b.min) == cast<int>(a.min * b.min));
@@ -381,7 +591,6 @@ private:
                 bounds_of_type(op->type);
             }
         }
-
     }
 
     void visit(const Div *op) {
@@ -1485,6 +1694,8 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
     return fb;
 }
 
+namespace {
+
 void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
     FuncValueBounds fb;
     Interval result = bounds_of_expr_in_scope(e, scope, fb);
@@ -1502,7 +1713,70 @@ void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_
     }
 }
 
+void check_constant_bound(Expr e, Expr correct_min, Expr correct_max) {
+    Expr min = find_constant_bound(e, Direction::Lower);
+    Expr max = find_constant_bound(e, Direction::Upper);
+    if (!equal(min, correct_min)) {
+        internal_error << "In find constant bound of " << e << ":\n"
+                       << "Incorrect min constant bound: " << min << '\n'
+                       << "Should have been: " << correct_min << '\n';
+    }
+    if (!equal(max, correct_max)) {
+        internal_error << "In find constant bound of " << e << ":\n"
+                       << "Incorrect max constant bound: " << max << '\n'
+                       << "Should have been: " << correct_max << '\n';
+    }
+}
+
+void constant_bound_test() {
+    {
+        Param<int> x("x"), y("y");
+        x.set_range(10, 20);
+        y.set_range(5, 30);
+        check_constant_bound(clamp(x, 5, 30), 10, 20);
+        check_constant_bound(clamp(x, 15, 30), 15, 20);
+        check_constant_bound(clamp(x, 15, 17), 15, 17);
+        check_constant_bound(clamp(x, 5, 15), 10, 15);
+
+        check_constant_bound(x + y, 15, 50);
+        check_constant_bound(x - y, -20, 15);
+        check_constant_bound(x*y, 50, 600);
+        check_constant_bound(x / y, 0, 4);
+
+        check_constant_bound(select(x > 4, 3*x - y/2, max(x + y + 2, x - 20)), 15, 58);
+        check_constant_bound(select(x < 4, 3*x - y/2, max(x + y + 2, x - 20)), 17, 52);
+        check_constant_bound(select(x >= 11, 3*x - y/2, max(x + y + 2, x - 20)), 15, 58);
+    }
+
+    {
+        Param<uint8_t> x("x"), y("y");
+        x.set_range(10, 20);
+        y.set_range(5, 30);
+        check_constant_bound(clamp(x, 5, 30), Expr((uint8_t)10), Expr((uint8_t)20));
+        check_constant_bound(clamp(x, 15, 30), Expr((uint8_t)15), Expr((uint8_t)20));
+        check_constant_bound(clamp(x, 15, 17), Expr((uint8_t)15), Expr((uint8_t)17));
+        check_constant_bound(clamp(x, 5, 15), Expr((uint8_t)10), Expr((uint8_t)15));
+
+        check_constant_bound(x + y, Expr((uint8_t)15), Expr((uint8_t)50));
+        check_constant_bound(x - y, Expr(), Expr((uint8_t)15));
+        check_constant_bound(x*y, Expr(), Expr());
+        check_constant_bound(x / y, Expr((uint8_t)0), Expr((uint8_t)4));
+
+        check_constant_bound(select(x > 4, 3*x - y/2, max(x + y + 2, x - 20)),
+                             Expr((uint8_t)15), Expr((uint8_t)58));
+        check_constant_bound(select(x < 4, 3*x - y/2, max(x + y + 2, x - 20)),
+                             Expr((uint8_t)17), Expr((uint8_t)52));
+        check_constant_bound(select(x >= 11, 3*x - y/2, max(x + y + 2, x - 20)),
+                             Expr((uint8_t)15), Expr((uint8_t)58));
+    }
+}
+
+
+} // anonymous namespace
+
 void bounds_test() {
+    constant_bound_test();
+
     Scope<Interval> scope;
     Var x("x"), y("y");
     scope.push("x", Interval(Expr(0), Expr(10)));
