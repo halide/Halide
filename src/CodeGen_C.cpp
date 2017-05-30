@@ -790,7 +790,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
            << buffer.dimensions() << ", "
            << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
 
-    // Make a global pointer to it. Note that the 
+    // Make a global pointer to it.
     stream << "static const halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
 }
 
