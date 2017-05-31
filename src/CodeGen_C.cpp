@@ -551,6 +551,20 @@ void CodeGen_C::compile(const Module &input) {
     }
 
     if (!is_header()) {
+        // Emit any external-code blobs that are C++.
+        for (const ExternalCode &code_blob : input.external_code()) {
+            if (code_blob.is_c_plus_plus_source()) {
+                stream << "\n";
+                stream << "// Begin External Code: " << code_blob.name() << "\n";
+                for (auto c : code_blob.contents()) {
+                    stream << (char) c;
+                }
+                stream << "\n";
+                stream << "// End External Code: " << code_blob.name() << "\n";
+                stream << "\n";
+            }
+        }
+
         // Emit prototypes for all external and internal-only functions.
         // Gather them up and do them all up front, to reduce duplicates,
         // and to make it simpler to get internal-linkage functions correct.
