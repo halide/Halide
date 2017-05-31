@@ -374,43 +374,46 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
-        stream << "\n";
-        stream << "#if !defined(__has_attribute)\n" <<
-                  "#define __has_attribute(x) 0\n" <<
-                  "#endif\n" << 
-                  "\n" <<
-                  "#if __has_attribute(ext_vector_type)\n" <<
-                  "#define _halide_vector_type_attribute(lanes, vec_byte_size, elem_byte_size) __attribute__((ext_vector_type(lanes), aligned(elem_byte_size)));\n" <<
-                  "#elif __GNUC__ || __has_attribute(vector_size)\n" <<
-                  "#define _halide_vector_type_attribute(lanes, vec_byte_size, elem_byte_size) __attribute__((vector_size(vec_byte_size), aligned(elem_byte_size)));\n" <<
-                  "#else\n" <<
-                  "#error \"This C compiler does not support vector types.\"\n" <<
-                  "#endif\n";
-        if (output_kind == CImplementation || output_kind == CPlusPlusImplementation) {
-            stream << "\n" <<
-                      "#ifdef __clang__\n" <<
-                      "template <typename C, typename T> T vector_select_float(C cond, T a, T b) {\n" <<
-                      "    T result;\n" <<
-                      "    for (size_t i = 0; i < sizeof(a) / sizeof(a[0]); i++) {\n" <<
-                      "        result[i] = cond[i] ? a[i] : b[i];\n" <<
-                      "    }\n" <<
-                      "    return result;\n" <<
-                      "}\n" <<
-                      "template <typename T> T vector_max_float(T a, T b) { auto mask = a > b; return vector_select_float(mask, a, b); }\n" <<
-                      "template <typename T> T vector_min_float(T a, T b) { auto mask = a < b; return vector_select_float(mask, a, b); }\n" <<
-                      "template <typename T> T vector_max_integer(T a, T b) { auto mask = a > b; return (a & mask) | (b & !mask); }\n" <<
-                      "template <typename T> T vector_min_integer(T a, T b) { auto mask = a < b; return (a & mask) | (b & !mask); }\n" <<
-                      "template <typename C, typename T> T vector_select_integer(C mask, T a, T b) { return (a & mask) | (b & !mask); }\n" <<
-                      "#else\n" <<
-                      "#define vector_max_integer max\n" <<
-                      "#define vector_min_integer min\n" <<
-                      "#define vector_max_float max\n" <<
-                      "#define vector_min_float min\n" <<
-                      "template <typename T1, typename T2> T2 vector_select_integer(T1 mask, T2 a, T2 b) { mask ? a : b; }\n" <<
-                      "template <typename T1, typename T2> T2 vector_select_float(T1 mask, T2 a, T2 b) { mask ? a : b; }\n" <<
-                      "#endif\n" <<
-                      "\n";
+        stream << R"INLINE_CODE(
+#if !defined(__has_attribute)
+    #define __has_attribute(x) 0
+#endif 
+
+#if !defined(__has_builtin)
+    #define __has_builtin(x) 0
+#endif 
+
+#if __has_attribute(ext_vector_type)
+    #define _halide_vector_type_attribute(lanes, vec_byte_size, elem_byte_size) __attribute__((ext_vector_type(lanes), aligned(elem_byte_size)));
+#elif __GNUC__ || __has_attribute(vector_size)
+    #define _halide_vector_type_attribute(lanes, vec_byte_size, elem_byte_size) __attribute__((vector_size(vec_byte_size), aligned(elem_byte_size)));
+#else
+    #error "This C compiler does not support vector types."
+#endif
+
+#ifdef __clang__
+    template <typename C, typename T> T vector_select_float(C cond, T a, T b) {
+        T result;
+        for (size_t i = 0; i < sizeof(a) / sizeof(a[0]); i++) {
+            result[i] = cond[i] ? a[i] : b[i];
         }
+        return result;
+    }
+    template <typename T> T vector_max_float(T a, T b) { auto mask = a > b; return vector_select_float(mask, a, b); }
+    template <typename T> T vector_min_float(T a, T b) { auto mask = a < b; return vector_select_float(mask, a, b); }
+    template <typename T> T vector_max_integer(T a, T b) { auto mask = a > b; return (a & mask) | (b & !mask); }
+    template <typename T> T vector_min_integer(T a, T b) { auto mask = a < b; return (a & mask) | (b & !mask); }
+    template <typename C, typename T> T vector_select_integer(C mask, T a, T b) { return (a & mask) | (b & !mask); }
+#else
+    #define vector_max_integer max
+    #define vector_min_integer min
+    #define vector_max_float max
+    #define vector_min_float min
+    template <typename T1, typename T2> T2 vector_select_integer(T1 mask, T2 a, T2 b) { mask ? a : b; }
+    template <typename T1, typename T2> T2 vector_select_float(T1 mask, T2 a, T2 b) { mask ? a : b; }
+#endif
+
+)INLINE_CODE";
  
         for (const auto &t : vector_types) {
             string name = type_to_c_type(t, false, false);
