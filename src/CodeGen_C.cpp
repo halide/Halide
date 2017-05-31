@@ -889,7 +889,21 @@ void CodeGen_C::visit(const Variable *op) {
 }
 
 void CodeGen_C::visit(const Cast *op) {
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + print_expr(op->value) + ")");
+    if (op->type.lanes() > 1 && 
+        op->type.lanes() == op->value.type().lanes() &&
+        (op->type.code() != op->value.type().code() || op->type.bits() != op->value.type().bits())) {
+        string src = print_expr(op->value);
+        stream << "#if __has_builtin(__builtin_convertvector)\n";
+        print_assignment(op->type, "__builtin_convertvector(" + src + ", " + print_type(op->type) + ")");
+        stream << "#else\n";
+        do_indent();
+        stream << "halide_error(_ucon, \"This compiler does not support casting vectors to different types\");\n";
+        do_indent();
+        stream << "return -1;\n";
+        stream << "#endif\n";
+    } else {
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + print_expr(op->value) + ")");
+    }
 }
 
 void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char * op) {
