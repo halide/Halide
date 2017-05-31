@@ -548,6 +548,7 @@ void CodeGen_C::compile(const Module &input) {
         uses_vector_types = !type_info.vector_types_used.empty();
         uses_gpu_for_loops = type_info.for_types_used.count(ForType::GPUBlock) ||
                              type_info.for_types_used.count(ForType::GPUThread);
+        uses_external_code = !input.external_code().empty();
     }
 
     if (!is_header()) {
@@ -685,6 +686,14 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << "this function will always fail at runtime\");\n";
             do_indent();
             stream << "return halide_error_code_device_malloc_failed;\n";
+        } else if (uses_external_code) {
+            do_indent();
+            stream << "halide_error("
+                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << ", \"C++ Backend does not support external code blocks yet, "
+                   << "this function will always fail at runtime\");\n";
+            do_indent();
+            stream << "return -1;\n";
         } else {
             // Emit a local user_context we can pass in all cases, either
             // aliasing __user_context or nullptr.

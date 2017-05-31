@@ -136,6 +136,9 @@ protected:
     /** True if at least one gpu-based for loop is used. */
     bool uses_gpu_for_loops;
 
+    /** True if Module uses ExternalCode blocks. */
+    bool uses_external_code;
+
     /** Track which handle types have been forward-declared already. */
     std::set<const halide_handle_cplusplus_type *> forward_declared;
 
