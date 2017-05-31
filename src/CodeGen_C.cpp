@@ -391,8 +391,22 @@ void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     #error "This C compiler does not support vector types."
 #endif
 
+    template<typename TO, typename FROM>
+    TO vector_convert(const FROM &f) {
+#if __has_builtin(__builtin_convertvector)
+        return __builtin_convertvector(f, TO);
+#else
+        TO t;
+        for (size_t i = 0; i < sizeof(f) / sizeof(f[0]); i++) {
+            t[i] = f[i];
+        }
+        return t;
+#endif
+    }
+
 #ifdef __clang__
-    template <typename C, typename T> T vector_select_float(C cond, T a, T b) {
+    template <typename C, typename T> 
+    T vector_select_float(C cond, T a, T b) {
         T result;
         for (size_t i = 0; i < sizeof(a) / sizeof(a[0]); i++) {
             result[i] = cond[i] ? a[i] : b[i];
@@ -855,9 +869,7 @@ void CodeGen_C::print_stmt(Stmt s) {
 }
 
 string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
-
-    map<string, string>::iterator cached = cache.find(rhs);
-
+    auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
         do_indent();
@@ -892,20 +904,14 @@ void CodeGen_C::visit(const Variable *op) {
 }
 
 void CodeGen_C::visit(const Cast *op) {
+    string value = print_expr(op->value);
+    string type = print_type(op->type);
     if (op->type.lanes() > 1 && 
         op->type.lanes() == op->value.type().lanes() &&
         (op->type.code() != op->value.type().code() || op->type.bits() != op->value.type().bits())) {
-        string src = print_expr(op->value);
-        stream << "#if __has_builtin(__builtin_convertvector)\n";
-        print_assignment(op->type, "__builtin_convertvector(" + src + ", " + print_type(op->type) + ")");
-        stream << "#else\n";
-        do_indent();
-        stream << "halide_error(_ucon, \"This compiler does not support casting vectors to different types\");\n";
-        do_indent();
-        stream << "return -1;\n";
-        stream << "#endif\n";
+        print_assignment(op->type, "vector_convert<" + type + ", " + print_type(op->value.type()) + ">(" + value + ")");
     } else {
-        print_assignment(op->type, "(" + print_type(op->type) + ")(" + print_expr(op->value) + ")");
+        print_assignment(op->type, "(" + type + ")(" + value + ")");
     }
 }
 
@@ -1827,19 +1833,6 @@ void CodeGen_C::visit(const Shuffle *op) {
     stream << "};\n";
 
     if (op->type != op->vectors[0].type()) {
-        // Union punning only works on little endian machines, but Halide
-        // generally has little-endian deps and it may be faster.
-#if 0
-        string union_id = unique_name('_');
-        do_indent();
-        stream << "union " << union_id << " { " <<
-          type_to_c_type(op->vectors[0].type(), true) << "vin; " <<
-          type_to_c_type(op->type, true) << "vret; };\n";
-        do_indent();
-        stream << union_id << ".vin = __builtin_shuffle(" << vec_args << ", " << index_vec_id << ");\n";
-        id = unique_name('_');
-        stream << type_to_c_type(op->type, true) << id << " = " << union_id << ".vret;\n";
-#else
         string input_typed_result = unique_name('_');
         do_indent();
         stream << type_to_c_type(op->vectors[0].type(), true) << input_typed_result
@@ -1849,7 +1842,6 @@ void CodeGen_C::visit(const Shuffle *op) {
         for (int i = 0; i < op->type.lanes(); i++) {
             stream << id << "[" << i << "] = " << input_typed_result << "[" << i << "];\n";
         }
-#endif
     } else {
         id = unique_name('_');
         stream << id << "= __builtin_shuffle(" << vec_args << ", " << index_vec_id << ");\n";
