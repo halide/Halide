@@ -109,7 +109,7 @@ template<typename T> T max(T a, T b) {if (a > b) return a; return b;}
 template<typename T> T min(T a, T b) {if (a < b) return a; return b;}
 
 template<typename A, typename B>
-const B &return_second(const A &a, const B &b) { 
+const B &return_second(const A &a, const B &b) {
     (void) a;
     return b;
 }
@@ -121,7 +121,7 @@ class HalideFreeHelper {
     void *p;
     FreeFunction free_function;
 public:
-    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function) 
+    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function)
         : user_context(user_context), p(p), free_function(free_function) {}
     ~HalideFreeHelper() { free(); }
     void free() {
@@ -145,7 +145,7 @@ public:
 
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
-  
+
     void include(const Expr &e) {
         // bool vectors are not supported and are removed by EliminateBoolVectors.
         if (!e.type().is_bool() && e.type().lanes() > 1) {
@@ -552,7 +552,7 @@ void CodeGen_C::compile(const Module &input) {
 
     if (!is_header()) {
         // Emit prototypes for all external and internal-only functions.
-        // Gather them up and do them all up front, to reduce duplicates, 
+        // Gather them up and do them all up front, to reduce duplicates,
         // and to make it simpler to get internal-linkage functions correct.
         ExternCallPrototypes e;
         for (const auto &f : input.functions()) {
@@ -690,7 +690,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
             // aliasing __user_context or nullptr.
             if (!is_header()) {
                 do_indent();
-                stream << "void * const _ucon = " 
+                stream << "void * const _ucon = "
                        << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                        << ";\n";
             }
@@ -1000,7 +1000,7 @@ void CodeGen_C::visit(const Call *op) {
         string buffer = print_name(print_expr(op->args[2]));
 
         rhs << "halide_debug_to_file(_ucon, "
-            << "\"" << filename << "\", " 
+            << "\"" << filename << "\", "
             << typecode
             << ", (struct halide_buffer_t *)" << buffer << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
@@ -1668,7 +1668,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
     char const *_7 = b0;
     int32_t _8 = halide_print(_ucon, _7);
-    int32_t _9 = (_8, 3);
+    int32_t _9 = return_second(_8, 3);
     _5 = _9;
    } // if _6
    else
