@@ -869,9 +869,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling,$(GENERATOR
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling_define_extern,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2075
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_embed_image,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2075
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_external_code,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2076
@@ -882,9 +879,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_old_buffer_t,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2075
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2075
 # https://github.com/halide/Halide/issues/2078

@@ -749,16 +749,31 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
     }
 
+    // For now, we assume buffers that aren't scalar are constant,
+    // while scalars can be mutated. This accommodates all our existing
+    // use cases, which is that all buffers are constant, except those
+    // used to store stateful module information in offloading runtimes.
+    bool is_constant = buffer.dimensions() != 0;
+
     // Emit the data
-    stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
+    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {\n";
+    do_indent();
     for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) stream << ", ";
+        if (i > 0) {
+            stream << ",";
+            if (i % 16 == 0) {
+                stream << "\n";
+                do_indent();
+            } else {
+                stream << " ";
+            }
+        }
         stream << (int)(b.host[i]);
     }
-    stream << "};\n";
+    stream << "\n};\n";
 
-    // Emit the shape
-    stream << "static halide_dimension_t " << name << "_buffer_shape[] = {";
+    // Emit the shape (constant even for scalar buffers)
+    stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
     for (int i = 0; i < buffer.dimensions(); i++) {
         stream << "{" << buffer.dim(i).min()
                << ", " << buffer.dim(i).extent()
@@ -771,18 +786,22 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
     Type t = buffer.type();
 
-    // Emit the buffer struct
-    stream << "static halide_buffer_t " << name << "_buffer = {"
+    // Emit the buffer struct. Note that although our shape and (usually) our host
+    // data is const, the buffer itself isn't: embedded buffers in one pipeline 
+    // can be passed to another pipeline (e.g. for an extern stage), in which
+    // case the buffer objects need to be non-const, because the constness 
+    // (from the POV of the extern stage) is a runtime property.
+    stream << "static halide_buffer_t " << name << "_buffer_ = {"
            << "0, "             // device
-           << "NULL, "          // device_interface
-           << "&" << name << "_data[0], " // host
+           << "nullptr, "       // device_interface
+           << "const_cast<uint8_t*>(&" << name << "_data[0]), " // host
            << "0, "             // flags
            << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
            << buffer.dimensions() << ", "
-           << name << "_buffer_shape};\n";
+           << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
 
-    // Make a global pointer to it
-    stream << "static halide_buffer_t *" << name << " = &" << name << "_buffer;\n";
+    // Make a global pointer to it.
+    stream << "static halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
 }
 
 string CodeGen_C::print_expr(Expr e) {
