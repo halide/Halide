@@ -1834,6 +1834,19 @@ private:
                         // broadcasts produced in matches[0] * op->b. For eg:
                         // matches[0] = bc * wild_i16x, then simplify combines
                         // bc * op->b into a single expression.
+                        // Since the simplifier is used on the individual operands
+                        // after distributing the broadcast, the mutation does not
+                        // compete with the simplifier [the next mutation always occurs
+                        // on the simplified operands]. For eg:
+                        // Consider initial expression:
+                        //      ((v0 * bc(x) + v1 * bc(y)) + v2) * bc(z)
+                        // Mutation sequence:
+                        // Step 1:
+                        //      mutate((v0 * bc(x) + v1 * bc(y)) * bc(z) + v2 * bc(z))
+                        // Step 2:
+                        //      mutate((v0 * bc(x) + v1 * bc(y)) * bc(z)) + mutate(v2 * bc(z))
+                        // Step 3 [Result]:
+                        //      ((v0 * bc(x * z) + v1 * bc(y *z)) + v2 * bc(z))
                         expr = mutate(simplify(matches[0] * op->b) +
                                       simplify(matches[1] * op->b));
                         return;
