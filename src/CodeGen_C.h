@@ -141,7 +141,7 @@ protected:
 
     /** If the Type is a handle type, emit a forward-declaration for it
      * if we haven't already. */
-    void forward_declare_type(const Type &t);
+    void forward_declare_type_if_needed(const Type &t);
 
     void set_name_mangling_mode(NameMangling mode);
 

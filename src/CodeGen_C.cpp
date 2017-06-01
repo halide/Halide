@@ -537,27 +537,38 @@ public:
 };
 }
 
-void CodeGen_C::forward_declare_type(const Type &t) {
-    auto handle_type = t.handle_type;
-    if (!handle_type) return;
-    if (forward_declared.count(handle_type)) return;
-    auto type_type = handle_type->inner_name.cpp_type_type;
-    for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
-        stream << "namespace " << handle_type->namespaces[ns] << " {\n";
+void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
+    if (!t.handle_type ||
+        forward_declared.count(t.handle_type) ||
+        t.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
+        return;
     }
-    if (type_type == halide_cplusplus_type_name::Struct) {
-        stream << "struct " << handle_type->inner_name.name << ";\n";
-    } else if (type_type == halide_cplusplus_type_name::Class) {
-        stream << "class " << handle_type->inner_name.name << ";\n";
-    } else if (type_type == halide_cplusplus_type_name::Union) {
-        stream << "union " << handle_type->inner_name.name << ";\n";
-    } else if (type_type == halide_cplusplus_type_name::Enum) {
+    for (auto &ns : t.handle_type->namespaces) {
+        stream << "namespace " << ns << " { ";
+    }
+    switch (t.handle_type->inner_name.cpp_type_type) {
+    case halide_cplusplus_type_name::Simple:
+        // nothing
+        break;
+    case halide_cplusplus_type_name::Struct:
+        stream << "struct " << t.handle_type->inner_name.name << ";";
+        break;
+    case halide_cplusplus_type_name::Class:
+        stream << "class " << t.handle_type->inner_name.name << ";";
+        break;
+    case halide_cplusplus_type_name::Union:
+        stream << "union " << t.handle_type->inner_name.name << ";";
+        break;
+    case halide_cplusplus_type_name::Enum:
         internal_error << "Passing pointers to enums is unsupported\n";
+        break;
     }
-    for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
-        stream << "}\n";
+    for (auto &ns : t.handle_type->namespaces) {
+        (void) ns;
+        stream << " }";
     }
-    forward_declared.insert(handle_type);
+    stream << "\n";
+    forward_declared.insert(t.handle_type);
 }
 
 void CodeGen_C::compile(const Module &input) {
@@ -573,6 +584,16 @@ void CodeGen_C::compile(const Module &input) {
                              type_info.for_types_used.count(ForType::GPUThread);
     }
 
+    // Forward-declare all the types we need; this needs to happen before
+    // we emit function prototypes, since those may need the types.
+    stream << "\n";
+    for (const auto &f : input.functions()) {
+        for (auto &arg : f.args) {
+            forward_declare_type_if_needed(arg.type);
+        }
+    }
+    stream << "\n";
+
     if (!is_header()) {
         // Emit any external-code blobs that are C++.
         for (const ExternalCode &code_blob : input.external_code()) {
@@ -586,15 +607,6 @@ void CodeGen_C::compile(const Module &input) {
             }
         }
 
-        // Forward-declare all the types we need; this needs to happen before
-        // we emit function prototypes, since those may need the types.
-        // (We could do it as part of the next loop, but this is cheap and more clear.)
-        for (const auto &f : input.functions()) {
-            for (auto &arg : f.args) {
-                forward_declare_type(arg.type);
-            }
-        }
-        
         // Emit prototypes for all external and internal-only functions.
         // Gather them up and do them all up front, to reduce duplicates,
         // and to make it simpler to get internal-linkage functions correct.
@@ -634,10 +646,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     const std::vector<LoweredArgument> &args = f.args;
-
-    for (size_t i = 0; i < args.size(); i++) {
-        forward_declare_type(args[i].type);
-    }
 
     have_user_context = false;
     for (size_t i = 0; i < args.size(); i++) {
