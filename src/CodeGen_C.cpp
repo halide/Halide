@@ -108,6 +108,12 @@ inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>
 template<typename T> T max(T a, T b) {if (a > b) return a; return b;}
 template<typename T> T min(T a, T b) {if (a < b) return a; return b;}
 
+template<typename A, typename B>
+const B &return_second(const A &a, const B &b) {
+    (void) a;
+    return b;
+}
+
 namespace {
 class HalideFreeHelper {
     typedef void (*FreeFunction)(void *user_context, void *p);
@@ -115,7 +121,7 @@ class HalideFreeHelper {
     void *p;
     FreeFunction free_function;
 public:
-    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function) 
+    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function)
         : user_context(user_context), p(p), free_function(free_function) {}
     ~HalideFreeHelper() { free(); }
     void free() {
@@ -139,7 +145,7 @@ public:
 
     using IRGraphVisitor::include;
     using IRGraphVisitor::visit;
-  
+
     void include(const Expr &e) {
         // bool vectors are not supported and are removed by EliminateBoolVectors.
         if (!e.type().is_bool() && e.type().lanes() > 1) {
@@ -422,7 +428,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         IRGraphVisitor::visit(op);
 
         if (!processed.count(op->name)) {
-            if (op->call_type == Call::Extern) {
+            if (op->call_type == Call::Extern || op->call_type == Call::PureExtern) {
                 c_externs.insert({op->name, op});
             } else if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
@@ -568,6 +574,18 @@ void CodeGen_C::compile(const Module &input) {
     }
 
     if (!is_header()) {
+        // Emit any external-code blobs that are C++.
+        for (const ExternalCode &code_blob : input.external_code()) {
+            if (code_blob.is_c_plus_plus_source()) {
+                stream << "\n";
+                stream << "// Begin External Code: " << code_blob.name() << "\n";
+                stream.write((const char *) code_blob.contents().data(), code_blob.contents().size());
+                stream << "\n";
+                stream << "// End External Code: " << code_blob.name() << "\n";
+                stream << "\n";
+            }
+        }
+
         // Forward-declare all the types we need; this needs to happen before
         // we emit function prototypes, since those may need the types.
         // (We could do it as part of the next loop, but this is cheap and more clear.)
@@ -576,9 +594,9 @@ void CodeGen_C::compile(const Module &input) {
                 forward_declare_type(arg.type);
             }
         }
-
+        
         // Emit prototypes for all external and internal-only functions.
-        // Gather them up and do them all up front, to reduce duplicates, 
+        // Gather them up and do them all up front, to reduce duplicates,
         // and to make it simpler to get internal-linkage functions correct.
         ExternCallPrototypes e;
         for (const auto &f : input.functions()) {
@@ -691,13 +709,13 @@ void CodeGen_C::compile(const LoweredFunc &f) {
                    << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
             do_indent();
-            stream << "return -1;\n";
+            stream << "return halide_error_code_device_malloc_failed;\n";
         } else {
             // Emit a local user_context we can pass in all cases, either
             // aliasing __user_context or nullptr.
             if (!is_header()) {
                 do_indent();
-                stream << "void * const _ucon = " 
+                stream << "void * const _ucon = "
                        << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                        << ";\n";
             }
@@ -756,16 +774,31 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
     }
 
+    // For now, we assume buffers that aren't scalar are constant,
+    // while scalars can be mutated. This accommodates all our existing
+    // use cases, which is that all buffers are constant, except those
+    // used to store stateful module information in offloading runtimes.
+    bool is_constant = buffer.dimensions() != 0;
+
     // Emit the data
-    stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
+    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {\n";
+    do_indent();
     for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) stream << ", ";
+        if (i > 0) {
+            stream << ",";
+            if (i % 16 == 0) {
+                stream << "\n";
+                do_indent();
+            } else {
+                stream << " ";
+            }
+        }
         stream << (int)(b.host[i]);
     }
-    stream << "};\n";
+    stream << "\n};\n";
 
-    // Emit the shape
-    stream << "static halide_dimension_t " << name << "_buffer_shape[] = {";
+    // Emit the shape (constant even for scalar buffers)
+    stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
     for (int i = 0; i < buffer.dimensions(); i++) {
         stream << "{" << buffer.dim(i).min()
                << ", " << buffer.dim(i).extent()
@@ -778,18 +811,22 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
     Type t = buffer.type();
 
-    // Emit the buffer struct
-    stream << "static halide_buffer_t " << name << "_buffer = {"
+    // Emit the buffer struct. Note that although our shape and (usually) our host
+    // data is const, the buffer itself isn't: embedded buffers in one pipeline 
+    // can be passed to another pipeline (e.g. for an extern stage), in which
+    // case the buffer objects need to be non-const, because the constness 
+    // (from the POV of the extern stage) is a runtime property.
+    stream << "static halide_buffer_t " << name << "_buffer_ = {"
            << "0, "             // device
-           << "NULL, "          // device_interface
-           << "&" << name << "_data[0], " // host
+           << "nullptr, "       // device_interface
+           << "const_cast<uint8_t*>(&" << name << "_data[0]), " // host
            << "0, "             // flags
            << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
            << buffer.dimensions() << ", "
-           << name << "_buffer_shape};\n";
+           << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
 
-    // Make a global pointer to it
-    stream << "static halide_buffer_t *" << name << " = &" << name << "_buffer;\n";
+    // Make a global pointer to it.
+    stream << "static halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
 }
 
 string CodeGen_C::print_expr(Expr e) {
@@ -1007,7 +1044,7 @@ void CodeGen_C::visit(const Call *op) {
         string buffer = print_name(print_expr(op->args[2]));
 
         rhs << "halide_debug_to_file(_ucon, "
-            << "\"" << filename << "\", " 
+            << "\"" << filename << "\", "
             << typecode
             << ", (struct halide_buffer_t *)" << buffer << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
@@ -1055,7 +1092,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         string arg0 = print_expr(op->args[0]);
         string arg1 = print_expr(op->args[1]);
-        rhs << "(" << arg0 << ", " << arg1 << ")";
+        rhs << "return_second(" << arg0 << ", " << arg1 << ")";
     } else if (op->is_intrinsic(Call::if_then_else)) {
         internal_assert(op->args.size() == 3);
 
@@ -1675,7 +1712,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
     char const *_7 = b0;
     int32_t _8 = halide_print(_ucon, _7);
-    int32_t _9 = (_8, 3);
+    int32_t _9 = return_second(_8, 3);
     _5 = _9;
    } // if _6
    else

@@ -1805,17 +1805,6 @@ void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->lanes);
 }
 
-// Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
-Expr unbroadcast(Expr e) {
-    if (e.type().is_vector()) {
-        const Broadcast *broadcast = e.as<Broadcast>();
-        internal_assert(broadcast);
-        return broadcast->value;
-    } else {
-        return e;
-    }
-}
-
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     internal_assert(vecs.size() >= 1);
     for (size_t i = 1; i < vecs.size(); i++) {
