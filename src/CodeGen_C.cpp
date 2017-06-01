@@ -1367,17 +1367,16 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(fn);
         string arg = print_expr(op->args[1]);
 
-        string call = fn->value + "(_ucon, arg);";
-
         do_indent();
         // Make a struct on the stack that calls the given function as a destructor
         string struct_name = unique_name('s');
         string instance_name = unique_name('d');
-        stream << "struct " << struct_name << "{ "
-               << "void *arg; "
-               << struct_name << "(void *a) : arg((void *)a) {} "
-               << "~" << struct_name << "() {" << call << "}"
-               << "} " << instance_name << "(" << arg << ");\n";
+        stream << "struct " << struct_name << " { "
+               << "void * const ucon; "
+               << "void * const arg; "
+               << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg((void *)a) {} "
+               << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
+               << "} " << instance_name << "(_ucon, " << arg << ");\n";
         rhs << print_expr(0);
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
