@@ -556,9 +556,7 @@ void CodeGen_C::compile(const Module &input) {
             if (code_blob.is_c_plus_plus_source()) {
                 stream << "\n";
                 stream << "// Begin External Code: " << code_blob.name() << "\n";
-                for (auto c : code_blob.contents()) {
-                    stream << (char) c;
-                }
+                stream.write((const char *) code_blob.contents().data(), code_blob.contents().size());
                 stream << "\n";
                 stream << "// End External Code: " << code_blob.name() << "\n";
                 stream << "\n";
