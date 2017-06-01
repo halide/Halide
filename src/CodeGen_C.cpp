@@ -1686,6 +1686,8 @@ void CodeGen_C::test() {
 #define HALIDE_FUNCTION_ATTRS
 #endif
 
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
