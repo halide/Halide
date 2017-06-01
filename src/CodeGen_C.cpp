@@ -1849,7 +1849,7 @@ void CodeGen_C::visit(const Shuffle *op) {
     if (op->vectors.size() == 2) {
         vec_args += ", " + print_expr(op->vectors[1]);
     }
-abort();
+
     do_indent();
     stream << "#if __has_builtin(__builtin_shufflevector)\n";
     do_indent();
