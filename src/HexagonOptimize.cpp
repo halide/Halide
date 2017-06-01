@@ -1706,8 +1706,9 @@ private:
             const Load *maybe_load = load.as<Load>();
             if (maybe_load) {
                 return Load::make(maybe_load->type, maybe_load->name,
-                                maybe_load->index + make_two(maybe_load->index.type()),
-                                maybe_load->image, maybe_load->param, maybe_load->predicate);
+                                  maybe_load->index + make_two(maybe_load->index.type()),
+                                  maybe_load->image, maybe_load->param,
+                                  maybe_load->predicate);
             }
         }
         return Expr();
@@ -1826,9 +1827,11 @@ private:
                                 sw_indices[v2_idx] = true;
 
                                 Expr b0123 = Shuffle::make_interleave({ mpys[v0_idx].second,
-                                                mpys[v1_idx].second, mpys[v2_idx].second, b3 });
+                                                                        mpys[v1_idx].second,
+                                                                        mpys[v2_idx].second,
+                                                                        b3 });
                                 b0123 = simplify(b0123);
-                                b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
+                                b0123 = reinterpret(Int(32), b0123);
 
                                 Type vrmpy_type = op->type.with_lanes(op->type.lanes()/2);
                                 // Generate expressions for even and odd places and then
