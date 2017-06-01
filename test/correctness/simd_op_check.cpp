@@ -1758,8 +1758,6 @@ struct Test {
         check("vabsdiff(v*.w,v*.w)", hvx_width/4, absd(i32_1, i32_2));
 
         // Expression Rearrangements
-        check("vabs(v*.h)", hvx_width/1, absd(3*i16(u8_1), 5*i16(u8_2)));
-        check("vabs(v*.h)", hvx_width/1, absd(4*i16(u8_1) + i16(u8_2) + i16(u8_3), i16(u8_1) + 7*i16(u8_2) + 2*i16(u8_3)));
         check("vmpa(v*.ub,r*.b)", hvx_width/1, 2*(i16(u8_1) + i16(u8_2)));
         check("vmpa(v*.ub,r*.b)", hvx_width/1, 3*(4*i16(u8_1) + i16(u8_2)));
         check("vmpa(v*.h,r*.b)", hvx_width/2, 5*(i32(i16_1) + 7*i32(i16_2)));
