@@ -857,7 +857,7 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOT
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_metadata_tester,$(GENERATOR_AOTCPP_TESTS))
 
-# exit status code mismatch ((only if opencl enabled))
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled))
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2071
@@ -865,9 +865,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling,$(GENERATOR
 
 # https://github.com/halide/Halide/issues/2081
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling_define_extern,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2075
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_embed_image,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2075
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_external_code,$(GENERATOR_AOTCPP_TESTS))
@@ -880,9 +877,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_old_buffer_t,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2075
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2075
 # https://github.com/halide/Halide/issues/2078
@@ -1002,13 +996,16 @@ $(BIN_DIR)/%.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 # of the target is used.
 $(BUILD_DIR)/external_code_extern_bitcode_32.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
 	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -target $(RUNTIME_TRIPLE_32) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.bc || echo -n > $(BUILD_DIR)/external_code_extern_32.bc
-	./$(BIN_DIR)/binary2cpp halide_internal_external_code_extern_32 < $(BUILD_DIR)/external_code_extern_32.bc > $@
+	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_32 < $(BUILD_DIR)/external_code_extern_32.bc > $@
 
 $(BUILD_DIR)/external_code_extern_bitcode_64.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
 	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -target $(RUNTIME_TRIPLE_64) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.bc || echo -n > $(BUILD_DIR)/external_code_extern_64.bc
-	./$(BIN_DIR)/binary2cpp halide_internal_external_code_extern_64 < $(BUILD_DIR)/external_code_extern_64.bc > $@
+	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_64 < $(BUILD_DIR)/external_code_extern_64.bc > $@
 
-$(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/external_code_generator.o $(BUILD_DIR)/external_code_extern_bitcode_32.cpp $(BUILD_DIR)/external_code_extern_bitcode_64.cpp
+$(BUILD_DIR)/external_code_extern_cpp_source.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
+	./$(BIN_DIR)/binary2cpp external_code_extern_cpp_source < $(ROOT_DIR)/test/generator/external_code_extern.cpp > $@
+
+$(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/external_code_generator.o $(BUILD_DIR)/external_code_extern_bitcode_32.cpp $(BUILD_DIR)/external_code_extern_bitcode_64.cpp $(BUILD_DIR)/external_code_extern_cpp_source.cpp
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
 
@@ -1154,6 +1151,16 @@ $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR); $(CURDIR)/$< -f stubtest $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(STUBTEST_GENERATOR_ARGS)
 
+$(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -g external_code -e static_library,h -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
+
+$(FILTERS_DIR)/external_code.cpp: $(BIN_DIR)/external_code.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR); $(CURDIR)/$< -g external_code -e cpp -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
+
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
 # nested_externs_generators.cpp is a counterexample, and thus requires
@@ -1175,7 +1182,6 @@ $(BIN_DIR)/$(TARGET)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $
 
 # Also make AOT testing targets that depends on the .cpp output (rather than .a).
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.cpp $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	echo "BUILDING $<"
 	@mkdir -p $(BIN_DIR)/$(TARGET)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
