@@ -68,6 +68,9 @@ protected:
      * resulting var */
     std::string print_expr(Expr);
 
+    /** Like print_expr, but cast the Expr to the given Type */
+    std::string print_cast_expr(const Type &, Expr);
+
     /** Emit a statement */
     void print_stmt(Stmt);
 
@@ -99,6 +102,9 @@ protected:
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     std::string print_assignment(Type t, const std::string &rhs);
+
+    /** Emit a vector literal, using a lambda to generate each entry. */
+    virtual std::string print_vector_literal(const Type &t, const std::function<std::string(int i)> &f);
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {

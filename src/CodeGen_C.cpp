@@ -443,6 +443,22 @@ void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     }
 }
 
+string CodeGen_C::print_vector_literal(const Type &t, const std::function<std::string(int i)> &f) {
+    internal_assert(t.is_vector());
+    ostringstream rhs;
+    // Note that Clang native vector extensions require {} initialization,
+    // and will not accept ()-style initialization.
+    rhs << print_type(t) << "{";
+    for (int i = 0; i < t.lanes(); ++i) {
+        if (i > 0) {
+            rhs << ", ";
+        }
+        rhs << f(i);
+    }
+    rhs << "}";
+    return rhs.str();
+}
+
 void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
     if (extern_c_open && mode != NameMangling::C) {
         stream << "\n#ifdef __cplusplus\n";
@@ -922,6 +938,18 @@ string CodeGen_C::print_expr(Expr e) {
     return id;
 }
 
+string CodeGen_C::print_cast_expr(const Type &t, Expr e) {
+    string value = print_expr(e);
+    string type = print_type(t);
+    if (t.is_vector() && 
+        t.lanes() == e.type().lanes() &&
+        t != e.type()) {
+        return print_assignment(t, "vector_convert<" + type + ", " + print_type(e.type()) + ">(" + value + ")");
+    } else {
+        return print_assignment(t, "(" + type + ")(" + value + ")");
+    }
+}
+
 void CodeGen_C::print_stmt(Stmt s) {
     s.accept(this);
 }
@@ -962,15 +990,7 @@ void CodeGen_C::visit(const Variable *op) {
 }
 
 void CodeGen_C::visit(const Cast *op) {
-    string value = print_expr(op->value);
-    string type = print_type(op->type);
-    if (op->type.lanes() > 1 && 
-        op->type.lanes() == op->value.type().lanes() &&
-        (op->type.code() != op->value.type().code() || op->type.bits() != op->value.type().bits())) {
-        print_assignment(op->type, "vector_convert<" + type + ", " + print_type(op->value.type()) + ">(" + value + ")");
-    } else {
-        print_assignment(op->type, "(" + type + ")(" + value + ")");
-    }
+    id = print_cast_expr(op->type, op->value);
 }
 
 void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char * op) {
@@ -1415,61 +1435,42 @@ void CodeGen_C::visit(const Load *op) {
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
     // aligned type equivalents for all the vector types.
-    
+    ostringstream rhs;
+
+    Type t = op->type;
+    string name = print_name(op->name);
+
     // If we're loading a contiguous ramp into a vector, just load the vector
     Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
-        internal_assert(op->type.is_vector());
+        internal_assert(t.is_vector());
         string id_ramp_base = print_expr(ramp_base);
 
-        ostringstream rhs;
-        rhs << "*(" << print_type(op->type) << "*)((" << print_type(op->type.element_of()) << "*)"
-            << print_name(op->name) << " + " << id_ramp_base << ")";
-
-        print_assignment(op->type, rhs.str());
-        return;
-    }
-
-    string id_index = print_expr(op->index);
-
-    // Get the rhs just for the cache.
-    bool type_cast_needed = !(allocations.contains(op->name) &&
-                              allocations.get(op->name).type.element_of() == op->type.element_of());
-
-    ostringstream rhs;
-    if (type_cast_needed) {
-        rhs << "((const "
-            << print_type(op->type.element_of())
-            << " *)"
-            << print_name(op->name)
-            << ")";
+        rhs << "*(" << print_type(t) << "*)((" << print_type(t.element_of()) << "*)"
+            << name << " + " << id_ramp_base << ")";
+    } else if (op->index.type().is_vector()) {
+        // If index is a vector, gather vector elements.
+        internal_assert(t.is_vector());
+        string id_index = print_expr(op->index);
+        rhs << print_vector_literal(t, 
+            [this, name, t, id_index](int i) -> string {
+                ostringstream elem;
+                elem << "((" << print_type(t.element_of()) << " *)" << name << ")"
+                    << "[" << id_index << "[" << i << "]]";
+                return elem.str();
+            });
     } else {
-        rhs << print_name(op->name);
-    }
-    rhs << "[" << id_index << "]";
-
-    // If index is a vector, gather vector elements.
-    if (op->index.type().is_vector()) {
-        internal_assert(op->type.is_vector());
-
-        id = "_" + unique_name('V');
-        cache[rhs.str()] = id;
-
-        do_indent();
-        stream << print_type(op->type)
-               << " " << id << ";\n";
-
-        for (int i = 0; i < op->type.lanes(); ++i) {
-            do_indent();
-            stream
-                << id << "[" << i << "] = (("
-                << print_type(op->type.element_of()) << "*)"
-                << print_name(op->name) << ")"
-                << "[" << id_index << "[" << i << "]];\n";
+        string id_index = print_expr(op->index);
+        bool type_cast_needed = !(allocations.contains(op->name) &&
+                              allocations.get(op->name).type.element_of() == t.element_of());
+        if (type_cast_needed) {
+            rhs << "((const " << print_type(t.element_of()) << " *)" << name << ")";
+        } else {
+            rhs << name;
         }
-    } else {
-        print_assignment(op->type, rhs.str());
+        rhs << "[" << id_index << "]";
     }
+    print_assignment(t, rhs.str());
 }
 
 void CodeGen_C::visit(const Store *op) {
@@ -1477,6 +1478,7 @@ void CodeGen_C::visit(const Store *op) {
 
     Type t = op->value.type();
     string id_value = print_expr(op->value);
+    string name = print_name(op->name);
 
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
@@ -1490,17 +1492,14 @@ void CodeGen_C::visit(const Store *op) {
 
         do_indent();
         stream << "*((" << print_type(t) << "*)" << "((" << print_type(t.element_of()) << "*)"
-               << print_name(op->name) << " + " << id_ramp_base << ")) = " << id_value << ";\n";
+               << name << " + " << id_ramp_base << ")) = " << id_value << ";\n";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
-
         string id_index = print_expr(op->index);
-
         for (int i = 0; i < t.lanes(); ++i) {
             do_indent();
-            stream << "((" << print_type(t.element_of()) << " *)"
-                   << print_name(op->name) << ")[" << id_index << "[" << i << "]] = "
+            stream << "((" << print_type(t.element_of()) << " *)" << name << ")[" << id_index << "[" << i << "]] = "
                    << id_value << "[" << i << "];\n";
         }
     } else {
@@ -1510,25 +1509,14 @@ void CodeGen_C::visit(const Store *op) {
             allocations.get(op->name).type != t;
 
         string id_index = print_expr(op->index);
-
         do_indent();
-
         if (type_cast_needed) {
-            stream << "(("
-                   << print_type(t)
-                   << " *)"
-                   << print_name(op->name)
-                   << ")";
+            stream << "((" << print_type(t) << " *)" << name << ")";
         } else {
-            stream << print_name(op->name);
+            stream << name;
         }
-        stream << "["
-               << id_index
-               << "] = "
-               << id_value
-               << ";\n";
+        stream << "[" << id_index << "] = " << id_value << ";\n";
     }
-
     cache.clear();
 }
 
@@ -1671,34 +1659,31 @@ void CodeGen_C::visit(const For *op) {
 }
 
 void CodeGen_C::visit(const Ramp *op) {
+    Type vector_type = op->type.with_lanes(op->lanes);
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
+    string ramp_literal = print_vector_literal(vector_type, 
+        [](int i) -> string {
+            return std::to_string(i);
+        });
 
-    ostringstream rhs;
-    rhs << id_base << " + " << id_stride << " * ("
-        << print_type(op->type.with_lanes(op->lanes)) << "){0";
-    // Note 0 written above.
-    for (int i = 1; i < op->lanes; ++i) {
-        rhs << ", " << i;
-    }
-    rhs << "}";
-    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
+    string rhs = id_base + " + " + id_stride + " * " + ramp_literal;
+    print_assignment(vector_type, rhs);
 }
 
 void CodeGen_C::visit(const Broadcast *op) {
+    Type vector_type = op->type.with_lanes(op->lanes);
     string id_value = print_expr(op->value);
     string rhs;
     if (op->lanes > 1) {
-        rhs = "{ " + id_value;
-        for (int i = 1; i < op->lanes; i++) {
-            rhs += ", " + id_value;
-        }
-        rhs += " }";
+        rhs = print_vector_literal(vector_type, [id_value](int i) -> string {
+            return id_value;
+        });
     } else {
         rhs = id_value;
     }
 
-    print_assignment(op->type.with_lanes(op->lanes), rhs);
+    print_assignment(vector_type, rhs);
 }
 
 void CodeGen_C::visit(const Provide *op) {
@@ -1865,7 +1850,7 @@ void CodeGen_C::visit(const Shuffle *op) {
     if (op->vectors.size() == 2) {
         vec_args += ", " + print_expr(op->vectors[1]);
     }
-
+abort();
     do_indent();
     stream << "#if __has_builtin(__builtin_shufflevector)\n";
     do_indent();
