@@ -1982,6 +1982,7 @@ void CodeGen_C::visit(const Select *op) {
         // added.
         stream << "halide_error(_ucon, \"Vector Select operations not yet supported by C++ backend\");\n";
         stream << "return -1;\n";
+        rhs << print_type(op->type) << "()";
 #else
         if (op->type.is_float()) {
             rhs << "vector_select_float(" << cond << ", " << true_val << ", " << false_val << ")";
