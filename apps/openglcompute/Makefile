@@ -1,5 +1,7 @@
 include ../support/Makefile.inc
 
+CXX ?= c++
+
 TOP := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 .PHONY: all $(TOP)
 all: run run-two
@@ -8,7 +10,7 @@ $(HALIDE_LIB): $(TOP)
 	$(MAKE) -C $(TOP)
 
 test_%: test_%.cpp
-	g++ -std=c++11 -I ../../include/ $< -L ../../bin/ -lHalide -o $@ -g
+	$(CXX) -std=c++11 -I ../../include/ $< -L ../../bin/ -lHalide -o $@ -g
 
 avg_filter_uint32t.o avg_filter_uint32t.h avg_filter_float.o avg_filter_float.h: test_oglc_avg
 	LD_LIBRARY_PATH=../../bin DYLD_LIBRARY_PATH=../../bin HL_TARGET=arm-32-android-armv7s-openglcompute ./$<

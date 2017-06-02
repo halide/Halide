@@ -12,6 +12,7 @@
 #include "Simplify.h"
 #include "IRPrinter.h"
 #include "ExprUsesVar.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -94,6 +95,7 @@ class ExtractBlockSize : public IRVisitor {
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
                 expr_uses_var(block_extent[i], op->name)) {
+                block_extent[i] = simplify(common_subexpression_elimination(block_extent[i]));
                 block_extent[i] = simplify(bounds_of_expr_in_scope(block_extent[i], scope).max);
             }
         }

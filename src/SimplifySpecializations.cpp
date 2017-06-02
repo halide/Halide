@@ -33,7 +33,7 @@ class SimplifyUsingFact : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         if (e.type().is_bool()) {
             if (equal(fact, e) ||
                 can_prove(!fact || e)) {
@@ -109,13 +109,8 @@ vector<Definition> propagate_specialization_in_definition(Definition &def, const
         def.values() = s_def.values();
         def.args() = s_def.args();
 
-        // Only some parts of the schedule need to be copied over. The rests
-        // are only mutable from the default definition.
-        def.schedule().splits() = s_def.schedule().splits();
-        def.schedule().dims() = s_def.schedule().dims();
-        def.schedule().prefetches() = s_def.schedule().prefetches();
-        def.schedule().touched() = s_def.schedule().touched();
-        def.schedule().allow_race_conditions() = s_def.schedule().allow_race_conditions();
+        // Copy over the schedule.
+        def.schedule() = s_def.schedule().get_copy();
 
         // Append our sub-specializations to the Definition's list
         specializations.insert(specializations.end(), s_def.specializations().begin(), s_def.specializations().end());

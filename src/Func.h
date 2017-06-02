@@ -52,8 +52,11 @@ struct StorageDim;
 class Stage {
     Internal::Definition definition;
     std::string stage_name;
-    std::vector<Var> dim_vars; // Pure Vars of the Function (from the init definition)
-    std::vector<Internal::StorageDim> storage_dims;
+    /** Pure Vars of the Function (from the init definition). */
+    std::vector<Var> dim_vars;
+    /** This is just a reference to the FuncSchedule owned by the Function
+     * associated with this Stage. */
+    Internal::FuncSchedule func_schedule;
 
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
@@ -64,15 +67,15 @@ class Stage {
 
 public:
     Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
-          const std::vector<Internal::StorageDim> &sdims)
-            : definition(d), stage_name(n), dim_vars(args), storage_dims(sdims) {
+          const Internal::FuncSchedule &func_s)
+            : definition(d), stage_name(n), dim_vars(args), func_schedule(func_s) {
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
 
     Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
-          const std::vector<Internal::StorageDim> &sdims)
-            : definition(d), stage_name(n), storage_dims(sdims) {
+          const Internal::FuncSchedule &func_s)
+            : definition(d), stage_name(n), func_schedule(func_s) {
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
@@ -82,10 +85,9 @@ public:
         internal_assert(definition.args().size() == dim_vars.size());
     }
 
-    /** Return the current Schedule associated with this Stage.  For
-     * introspection only: to modify Schedule, use the Func
-     * interface. */
-    const Internal::Schedule &get_schedule() const { return definition.schedule(); }
+    /** Return the current StageSchedule associated with this Stage. For
+     * introspection only: to modify schedule, use the Func interface. */
+    const Internal::StageSchedule &get_schedule() const { return definition.schedule(); }
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */

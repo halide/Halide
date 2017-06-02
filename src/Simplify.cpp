@@ -191,7 +191,7 @@ public:
     }
 
 #if LOG_EXPR_MUTATIONS
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
@@ -207,7 +207,7 @@ public:
 #endif
 
 #if LOG_STMT_MUTATIONS
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
         debug_indent++;
@@ -1093,7 +1093,6 @@ private:
         } else if (add_b &&
                    equal(add_b->a, a)) {
             expr = mutate(make_zero(add_b->a.type()) - add_b->b);
-
         } else if (max_a &&
                    equal(max_a->a, b) &&
                    !is_const(b) &&
@@ -1118,7 +1117,6 @@ private:
                    no_overflow(op->type)) {
             // min(a, b) - b -> min(a-b, 0)
             expr = mutate(Min::make(min_a->a - min_a->b, make_zero(op->type)));
-
         } else if (max_b &&
                    equal(max_b->a, a) &&
                    !is_const(a) &&
@@ -1143,7 +1141,6 @@ private:
                    no_overflow(op->type)) {
             // b - min(a, b) -> 0 - min(a-b, 0) -> max(b-a, 0)
             expr = mutate(Max::make(min_b->b - min_b->a, make_zero(op->type)));
-
         } else if (add_a &&
                    is_simple_const(add_a->b)) {
             // In ternary expressions, pull constants outside
@@ -1436,6 +1433,98 @@ private:
             // (x + a)/c - (x - b)/c -> (b - (x + a)%c + (a + c - 1))/c
             Expr x = add_a_a->a, a = add_a_a->b, b = sub_b_a->b, c = div_a->b;
             expr = mutate((b - (x + (a % c))%c + (a + c - 1))/c);
+        } else if (no_overflow(op->type) &&
+                   min_a &&
+                   min_b &&
+                   equal(min_a->a, min_b->a) &&
+                   is_simple_const(min_a->b) &&
+                   is_simple_const(min_b->b)) {
+            // min(x, c1) - min(x, c2) where c1 and c2 are constants
+            // if c1 >= c2 -> clamp(x, c2, c1) - c2
+            // else -> c1 - clamp(x, c1, c2)
+            if (is_one(mutate(min_a->b >= min_b->b))) {
+                expr = mutate(clamp(min_a->a, min_b->b, min_a->b) - min_b->b);
+            } else {
+                expr = mutate(min_a->b - clamp(min_a->a, min_a->b, min_b->b));
+            }
+        } else if (no_overflow(op->type) &&
+                   max_a &&
+                   max_b &&
+                   equal(max_a->a, max_b->a) &&
+                   is_simple_const(max_a->b) &&
+                   is_simple_const(max_b->b)) {
+            // max(x, c1) - max(x, c2) where c1 and c2 are constants
+            // if c1 >= c2 -> c1 - clamp(x, c2, c1)
+            // else -> clamp(x, c1, c2) - c2
+            if (is_one(mutate(max_a->b >= max_b->b))) {
+                expr = mutate(max_a->b - clamp(max_a->a, max_b->b, max_a->b));
+            } else {
+                expr = mutate(clamp(max_a->a, max_a->b, max_b->b)- max_b->b);
+            }
+        } else if (no_overflow(op->type) &&
+                   min_a &&
+                   min_b &&
+                   is_simple_const(mutate(min_a->a - min_b->b)) &&
+                   is_simple_const(mutate(min_a->b - min_b->a))) {
+            // Canonicalize min(a + c1, b + c2) - min(b + c4, a + c3)
+            //     where c1, c2, c3, and c4 are constants
+            // into min(a + c1, b + c2) - min(a + c3, b + c4)
+            // so that a later rule can pick it up
+            expr = mutate(a - Min::make(min_b->b, min_b->a));
+        } else if (no_overflow(op->type) &&
+                   max_a &&
+                   max_b &&
+                   is_simple_const(mutate(max_a->a - max_b->b)) &&
+                   is_simple_const(mutate(max_a->b - max_b->a))) {
+            // Canonicalize max(a + c1, b + c2) - max(b + c4, a + c3)
+            //     where c1, c2, c3, and c4 are constants
+            // into max(a + c1, b + c2) - max(a + c3, b + c4)
+            // so that a later rule can pick it up
+            expr = mutate(a - Max::make(max_b->b, max_b->a));
+        } else if (no_overflow(op->type) &&
+                   min_a &&
+                   min_b) {
+            // min(a + c1, b + c2) - min(a + c3, b + c4)
+            //     where delta_a = c1 - c3 and delta_b = c2 - c4 are constants
+            // if delta_b - delta_a <= 0 -> clamp((b + c2) - (a + c1), delta_b - delta_a, 0) + delta_a
+            // else -> delta_b - clamp((b + c2) - (a + c1), 0, delta_b - delta_a)
+            Expr delta_a = mutate(min_a->a - min_b->a);
+            Expr delta_b = mutate(min_a->b - min_b->b);
+            if (is_simple_const(delta_a) &&
+                is_simple_const(delta_b)) {
+                Expr diff = delta_b - delta_a;
+                if (is_one(mutate(diff <= make_zero(op->type)))) {
+                    expr = mutate(clamp(min_a->b - min_a->a, diff, make_zero(op->type)) + delta_a);
+                } else {
+                    expr = mutate(delta_b - clamp(min_a->b - min_a->a, make_zero(op->type), diff));
+                }
+            } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = Sub::make(a, b);
+            }
+        } else if (no_overflow(op->type) &&
+                   max_a &&
+                   max_b) {
+            // max(a + c1, b + c2) - max(a + c3, b + c4)
+            //     where delta_a = c1 - c3 and delta_b = c2 - c4 are constants
+            // if delta_b - delta_a <= 0 -> delta_b - clamp((b + c2) - (a + c1), delta_b - delta_a, 0)
+            // else -> clamp((b + c2) - (a + c1), 0, delta_b - delta_a) + delta_a
+            Expr delta_a = mutate(max_a->a - max_b->a);
+            Expr delta_b = mutate(max_a->b - max_b->b);
+            if (is_simple_const(delta_a) &&
+                is_simple_const(delta_b)) {
+                Expr diff = delta_b - delta_a;
+                if (is_one(mutate(diff <= make_zero(op->type)))) {
+                    expr = mutate(delta_b - clamp(max_a->b - max_a->a, diff, make_zero(op->type)));
+                } else {
+                    expr = mutate(clamp(max_a->b - max_a->a, make_zero(op->type), diff) + delta_a);
+                }
+            } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = Sub::make(a, b);
+            }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -4769,7 +4858,7 @@ private:
             // the warning, because the assertion is generated internally
             // by Halide and is expected to always fail.
             const Call *call = a->message.as<Call>();
-            const bool const_false_conditions_expected = 
+            const bool const_false_conditions_expected =
                 call && call->name == "halide_error_specialize_fail";
             if (!const_false_conditions_expected) {
                 user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
@@ -4883,8 +4972,8 @@ private:
         // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
         vector<pair<string, Expr>> lets;
         while (const Let *let = value.as<Let>()) {
-            value = let->body;
             lets.push_back({let->name, let->value});
+            value = let->body;
         }
 
         if (value.same_as(op->value)) {
@@ -6463,6 +6552,26 @@ void simplify_test() {
         Expr expected = max(ramp(x, y, 2), broadcast(x, 2)) - max(ramp(y, y, 2), broadcast(y, 2));
         check(e, expected);
     }
+
+    check(min(x, 63) - min(x, 3), clamp(x, 3, 63) + (-3));
+    check(min(x, 3) - min(x, 63), 3 - clamp(x, 3, 63));
+    check(min(63, x) - min(x, 3), clamp(x, 3, 63) + (-3));
+    check(min(x, 3) - min(63, x), 3 - clamp(x, 3, 63));
+
+    check(min(x * 4 + 63, y) - min(x * 4, y - 3), clamp(y - x * 4 + (-63), -60, 0) + 63);
+    check(min(x * 4, y - 3) - min(x * 4 + 63, y), -3 - clamp(y - x * 4 + (-3), 0, 60));
+    check(min(y, x * 4 + 63) - min(x * 4, y - 3), 63 - clamp(x * 4 - y + 63, 0, 60));
+    check(min(x * 4, y - 3) - min(y, x * 4 + 63), -3 - clamp(y - x * 4 + (-3), 0, 60));
+
+    check(max(x, 63) - max(x, 3), 63 - clamp(x, 3, 63));
+    check(max(x, 3) - max(x, 63), clamp(x, 3, 63) + (-63));
+    check(max(63, x) - max(3, x), 63 - clamp(x, 3, 63));
+    check(max(3, x) - max(x, 63), clamp(x, 3, 63) + (-63));
+
+    check(max(x * 4 + 63, y) - max(x * 4, y - 3), 3 - clamp(y - x * 4 + (-63), -60, 0));
+    check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4 + (-3), 0, 60) + (-63));
+    check(max(x * 4 + 63, y) - max(y - 3, x * 4), 3 - clamp(y - x * 4 + (-63), -60, 0));
+    check(max(y - 3, x * 4) - max(y, x * 4 + 63), -63 - clamp(x * 4 - y + 3, -60, 0));
 
     std::cout << "Simplify test passed" << std::endl;
 }

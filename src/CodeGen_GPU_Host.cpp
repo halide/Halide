@@ -357,10 +357,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             Value *val;
 
             if (closure_args[i].is_buffer) {
-                // If it's a buffer, get the dev handle
-                Expr buf = Variable::make(type_of<buffer_t *>(), name + ".buffer");
-                Expr get_dev = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
-                val = codegen(get_dev);
+                // If it's a buffer, get the .buffer symbol
+                val = sym_get(name + ".buffer");
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the
                 // expression mesh. Pass a non-nullptr value in the argument array
@@ -372,15 +370,18 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 val = sym_get(name);
             }
 
-            // allocate stack space to mirror the closure element. It
-            // might be in a register and we need a pointer to it for
-            // the gpu args array.
-            Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
-            // store the closure value into the stack space
-            builder->CreateStore(val, ptr);
+            if (!closure_args[i].is_buffer) {
+                // allocate stack space to mirror the closure element. It
+                // might be in a register and we need a pointer to it for
+                // the gpu args array.
+                Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
+                // store the closure value into the stack space
+                builder->CreateStore(val, ptr);
+                val = ptr;
+            }
 
             // store a void * pointer to the argument into the gpu_args_arr
-            Value *bits = builder->CreateBitCast(ptr, arg_t);
+            Value *bits = builder->CreateBitCast(val, arg_t);
             builder->CreateStore(bits,
                                  builder->CreateConstGEP2_32(
                                     gpu_args_arr_type,
@@ -388,8 +389,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                     0,
                                     i));
 
-            // store the size of the argument. Buffer arguments get
-            // the dev field, which is 64-bits.
+            // store the size of the argument.
             int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
             builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
                                  builder->CreateConstGEP2_32(
