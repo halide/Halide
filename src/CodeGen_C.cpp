@@ -396,7 +396,7 @@ template <typename ElementType_, size_t Lanes_>
 class CppVector {
 public:
     typedef ElementType_ ElementType;
-    enum { Lanes = Lanes_ };
+    static const size_t Lanes = Lanes_;
     typedef CppVector<ElementType, Lanes> Vec;
 
     CppVector &operator=(const Vec &src) {
@@ -625,7 +625,7 @@ public:
 
     template <typename OtherVec>
     static Vec convert_from(const OtherVec &src) {
-        static_assert((int) Vec::Lanes == (int) OtherVec::Lanes, "Lanes mismatch");
+        static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
         Vec r;
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = static_cast<typename Vec::ElementType>(src[i]);
@@ -658,7 +658,7 @@ template <typename ElementType_, size_t Lanes_>
 class NativeVector {
 public:
     typedef ElementType_ ElementType;
-    enum { Lanes = Lanes_ };
+    static const size_t Lanes = Lanes_;
     typedef NativeVector<ElementType, Lanes> Vec;
 
 #if __has_attribute(ext_vector_type)
@@ -799,7 +799,7 @@ public:
 
     template <typename OtherVec>
     static Vec convert_from(const OtherVec &src) {
-        static_assert((int) Vec::Lanes == (int) OtherVec::Lanes, "Lanes mismatch");
+        static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
 #if __has_builtin(__builtin_convertvector)
         return NativeVector(from_native_vector, __builtin_convertvector(src.native_vector, NativeVectorType));
 #else
