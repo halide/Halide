@@ -64,6 +64,12 @@ protected:
         void visit(const Store *op);
         void visit(const Cast *op);
         void visit(const Select *op);
+        void visit(const EQ *);
+        void visit(const NE *);
+        void visit(const LT *);
+        void visit(const LE *);
+        void visit(const GT *);
+        void visit(const GE *);
         void visit(const Allocate *op);
         void visit(const Free *op);
         void visit(const AssertStmt *op);
