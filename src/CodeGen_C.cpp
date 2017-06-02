@@ -1980,7 +1980,8 @@ void CodeGen_C::visit(const Select *op) {
         // This is temporary: the ifdef'ed out code isn't adequately tested;
         // it will be replaced soon by the vector-wrapper classes, with test cases
         // added.
-        internal_error << "Vector Select operations not yet supported by C++ backend";
+        stream << "halide_error(_ucon, \"Vector Select operations not yet supported by C++ backend\");\n";
+        stream << "return -1;\n";
 #else
         if (op->type.is_float()) {
             rhs << "vector_select_float(" << cond << ", " << true_val << ", " << false_val << ")";
@@ -2281,7 +2282,8 @@ void CodeGen_C::visit(const Shuffle *op) {
     // This is temporary: the ifdef'ed out code isn't adequately tested;
     // it will be replaced soon by the vector-wrapper classes, with test cases
     // added.
-    internal_error << "Shuffle operations not yet supported by C++ backend";
+    stream << "halide_error(_ucon, \"Shuffle operations not yet supported by C++ backend\");\n";
+    stream << "return -1;\n";
 #else
     string vec_args = print_expr(op->vectors[0]);
     if (op->vectors.size() == 2) {
