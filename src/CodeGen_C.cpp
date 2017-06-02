@@ -41,76 +41,131 @@ const string headers =
     "#include <stdio.h>\n"
     "#include <stdint.h>\n";
 
-const string globals =
-    "extern \"C\" {\n"
-    "int64_t halide_current_time_ns(void *ctx);\n"
-    "void halide_profiler_pipeline_end(void *, void *);\n"
-    "}\n"
-    "\n"
+// We now add definitions of things in the runtime which are
+// intended to be inlined into every module but are only expressed
+// in .ll. The redundancy is regrettable (FIXME).
+const string globals = R"INLINE_CODE(
+extern "C" {
+int64_t halide_current_time_ns(void *ctx);
+void halide_profiler_pipeline_end(void *, void *);
+}
 
-    // We now add definitions of things in the runtime which are
-    // intended to be inlined into every module but are only expressed
-    // in .ll. The redundancy is regrettable (FIXME).
-    "#ifdef _WIN32\n"
-    "float roundf(float);\n"
-    "double round(double);\n"
-    "#else\n"
-    "inline float asinh_f32(float x) {return asinhf(x);}\n"
-    "inline float acosh_f32(float x) {return acoshf(x);}\n"
-    "inline float atanh_f32(float x) {return atanhf(x);}\n"
-    "inline double asinh_f64(double x) {return asinh(x);}\n"
-    "inline double acosh_f64(double x) {return acosh(x);}\n"
-    "inline double atanh_f64(double x) {return atanh(x);}\n"
-    "#endif\n"
-    "inline float sqrt_f32(float x) {return sqrtf(x);}\n"
-    "inline float sin_f32(float x) {return sinf(x);}\n"
-    "inline float asin_f32(float x) {return asinf(x);}\n"
-    "inline float cos_f32(float x) {return cosf(x);}\n"
-    "inline float acos_f32(float x) {return acosf(x);}\n"
-    "inline float tan_f32(float x) {return tanf(x);}\n"
-    "inline float atan_f32(float x) {return atanf(x);}\n"
-    "inline float sinh_f32(float x) {return sinhf(x);}\n"
-    "inline float cosh_f32(float x) {return coshf(x);}\n"
-    "inline float tanh_f32(float x) {return tanhf(x);}\n"
-    "inline float hypot_f32(float x, float y) {return hypotf(x, y);}\n"
-    "inline float exp_f32(float x) {return expf(x);}\n"
-    "inline float log_f32(float x) {return logf(x);}\n"
-    "inline float pow_f32(float x, float y) {return powf(x, y);}\n"
-    "inline float floor_f32(float x) {return floorf(x);}\n"
-    "inline float ceil_f32(float x) {return ceilf(x);}\n"
-    "inline float round_f32(float x) {return roundf(x);}\n"
-    "\n"
-    "inline double sqrt_f64(double x) {return sqrt(x);}\n"
-    "inline double sin_f64(double x) {return sin(x);}\n"
-    "inline double asin_f64(double x) {return asin(x);}\n"
-    "inline double cos_f64(double x) {return cos(x);}\n"
-    "inline double acos_f64(double x) {return acos(x);}\n"
-    "inline double tan_f64(double x) {return tan(x);}\n"
-    "inline double atan_f64(double x) {return atan(x);}\n"
-    "inline double sinh_f64(double x) {return sinh(x);}\n"
-    "inline double cosh_f64(double x) {return cosh(x);}\n"
-    "inline double tanh_f64(double x) {return tanh(x);}\n"
-    "inline double hypot_f64(double x, double y) {return hypot(x, y);}\n"
-    "inline double exp_f64(double x) {return exp(x);}\n"
-    "inline double log_f64(double x) {return log(x);}\n"
-    "inline double pow_f64(double x, double y) {return pow(x, y);}\n"
-    "inline double floor_f64(double x) {return floor(x);}\n"
-    "inline double ceil_f64(double x) {return ceil(x);}\n"
-    "inline double round_f64(double x) {return round(x);}\n"
-    "\n"
-    "inline float nan_f32() {return NAN;}\n"
-    "inline float neg_inf_f32() {return -INFINITY;}\n"
-    "inline float inf_f32() {return INFINITY;}\n"
-    "inline bool is_nan_f32(float x) {return x != x;}\n"
-    "inline bool is_nan_f64(double x) {return x != x;}\n"
-    "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
-    "inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}\n"
-    "\n"
-    "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
-    "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
-    "\n";
+#ifdef _WIN32
+float roundf(float);
+double round(double);
+#else
+inline float asinh_f32(float x) {return asinhf(x);}
+inline float acosh_f32(float x) {return acoshf(x);}
+inline float atanh_f32(float x) {return atanhf(x);}
+inline double asinh_f64(double x) {return asinh(x);}
+inline double acosh_f64(double x) {return acosh(x);}
+inline double atanh_f64(double x) {return atanh(x);}
+#endif
+inline float sqrt_f32(float x) {return sqrtf(x);}
+inline float sin_f32(float x) {return sinf(x);}
+inline float asin_f32(float x) {return asinf(x);}
+inline float cos_f32(float x) {return cosf(x);}
+inline float acos_f32(float x) {return acosf(x);}
+inline float tan_f32(float x) {return tanf(x);}
+inline float atan_f32(float x) {return atanf(x);}
+inline float sinh_f32(float x) {return sinhf(x);}
+inline float cosh_f32(float x) {return coshf(x);}
+inline float tanh_f32(float x) {return tanhf(x);}
+inline float hypot_f32(float x, float y) {return hypotf(x, y);}
+inline float exp_f32(float x) {return expf(x);}
+inline float log_f32(float x) {return logf(x);}
+inline float pow_f32(float x, float y) {return powf(x, y);}
+inline float floor_f32(float x) {return floorf(x);}
+inline float ceil_f32(float x) {return ceilf(x);}
+inline float round_f32(float x) {return roundf(x);}
+
+inline double sqrt_f64(double x) {return sqrt(x);}
+inline double sin_f64(double x) {return sin(x);}
+inline double asin_f64(double x) {return asin(x);}
+inline double cos_f64(double x) {return cos(x);}
+inline double acos_f64(double x) {return acos(x);}
+inline double tan_f64(double x) {return tan(x);}
+inline double atan_f64(double x) {return atan(x);}
+inline double sinh_f64(double x) {return sinh(x);}
+inline double cosh_f64(double x) {return cosh(x);}
+inline double tanh_f64(double x) {return tanh(x);}
+inline double hypot_f64(double x, double y) {return hypot(x, y);}
+inline double exp_f64(double x) {return exp(x);}
+inline double log_f64(double x) {return log(x);}
+inline double pow_f64(double x, double y) {return pow(x, y);}
+inline double floor_f64(double x) {return floor(x);}
+inline double ceil_f64(double x) {return ceil(x);}
+inline double round_f64(double x) {return round(x);}
+
+inline float nan_f32() {return NAN;}
+inline float neg_inf_f32() {return -INFINITY;}
+inline float inf_f32() {return INFINITY;}
+inline bool is_nan_f32(float x) {return x != x;}
+inline bool is_nan_f64(double x) {return x != x;}
+template<typename A, typename B> A reinterpret(B b) { static_assert(sizeof(A) == sizeof(B), "type size mismatch"); A a; memcpy(&a, &b, sizeof(a)); return a;}
+inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}
+
+template<typename T> T max(T a, T b) {if (a > b) return a; return b;}
+template<typename T> T min(T a, T b) {if (a < b) return a; return b;}
+
+template<typename A, typename B>
+const B &return_second(const A &a, const B &b) {
+    (void) a;
+    return b;
+}
+
+namespace {
+class HalideFreeHelper {
+    typedef void (*FreeFunction)(void *user_context, void *p);
+    void * user_context;
+    void *p;
+    FreeFunction free_function;
+public:
+    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function)
+        : user_context(user_context), p(p), free_function(free_function) {}
+    ~HalideFreeHelper() { free(); }
+    void free() {
+        if (p) {
+            // TOOD: do all free_functions guarantee to ignore a null ptr?
+            free_function(user_context, p);
+            p = nullptr;
+        }
+    }
+};
+} // namespace
+
+)INLINE_CODE";
 
 }
+
+class TypeInfoGatherer : public IRGraphVisitor {
+public:
+    std::set<ForType> for_types_used;
+    std::set<Type> vector_types_used;
+
+    using IRGraphVisitor::include;
+    using IRGraphVisitor::visit;
+
+    void include(const Expr &e) {
+        // bool vectors are not supported and are removed by EliminateBoolVectors.
+        if (!e.type().is_bool() && e.type().lanes() > 1) {
+            vector_types_used.insert(e.type());
+        }
+        IRGraphVisitor::include(e);
+    }
+
+    // GCC's __builtin_shuffle takes an integer vector of
+    // the size of its input vector. Make sure this type exists.
+    void visit(const Shuffle *op) {
+        vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
+        IRGraphVisitor::visit(op);
+    }
+
+    void visit(const For *op) {
+        for_types_used.insert(op->for_type);
+        IRGraphVisitor::visit(op);
+    }
+};
 
 CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard) :
     IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind), extern_c_open(false) {
@@ -304,12 +359,12 @@ void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
     if (extern_c_open && mode != NameMangling::C) {
         stream << "\n#ifdef __cplusplus\n";
         stream << "}  // extern \"C\"\n";
-        stream << "#endif\n";
+        stream << "#endif\n\n";
         extern_c_open = false;
     } else if (!extern_c_open && mode == NameMangling::C) {
-        stream << "#ifdef __cplusplus\n";
+        stream << "\n#ifdef __cplusplus\n";
         stream << "extern \"C\" {\n";
-        stream << "#endif\n";
+        stream << "#endif\n\n";
         extern_c_open = true;
     }
 }
@@ -320,8 +375,12 @@ string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
 
 string CodeGen_C::print_reinterpret(Type type, Expr e) {
     ostringstream oss;
-    if (type.is_handle()) {
-        // Use a c-style cast
+    if (type.is_handle() || e.type().is_handle()) {
+        // Use a c-style cast if either src or dest is a handle --
+        // note that although Halide declares a "Handle" to always be 64 bits,
+        // the source "handle" might actually be a 32-bit pointer (from
+        // a function parameter), so calling reinterpret<> (which just memcpy's)
+        // would be garbage-producing.
         oss << "(" << print_type(type) << ")";
     } else {
         oss << "reinterpret<" << print_type(type) << ">";
@@ -360,32 +419,37 @@ class ExternCallPrototypes : public IRGraphVisitor {
     };
     std::map<string, NamespaceOrCall> c_plus_plus_externs;
     std::map<string, const Call *> c_externs;
-    std::set<std::string> &emitted;
+    std::set<std::string> processed;
+    std::set<std::string> internal_linkage;
 
     using IRGraphVisitor::visit;
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
 
-        if (!emitted.count(op->name)) {
-            if (op->call_type == Call::Extern) {
+        if (!processed.count(op->name)) {
+            if (op->call_type == Call::Extern || op->call_type == Call::PureExtern) {
                 c_externs.insert({op->name, op});
             } else if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
                 std::string name = extract_namespaces(op->name, namespaces);
-                std::map<string, NamespaceOrCall> *namespace_map(&c_plus_plus_externs);
+                std::map<string, NamespaceOrCall> *namespace_map = &c_plus_plus_externs;
                 for (const auto &ns : namespaces) {
                     auto insertion = namespace_map->insert({ns, NamespaceOrCall()});
                     namespace_map = &insertion.first->second.names;
                 }
                 namespace_map->insert({name, NamespaceOrCall(op)});
             }
-            emitted.insert(op->name);
+            processed.insert(op->name);
         }
     }
 
-    void emit_function_decl(ostream &stream, const Call *op, const std::string &name) {
-        stream << type_to_c_type(op->type, true) << " " << name << "(";
+    void emit_function_decl(ostream &stream, const Call *op, const std::string &name) const {
+        // op->name (rather than the name arg) since we need the fully-qualified C++ name
+        if (internal_linkage.count(op->name)) {
+            stream << "static ";
+        }
+        stream << type_to_c_type(op->type, /* append_space */ true) << name << "(";
         if (function_takes_user_context(name)) {
             stream << "void *";
             if (!op->args.empty()) {
@@ -405,7 +469,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         stream << ");\n";
     }
 
-    void emit_namespace_or_call(ostream &stream, const NamespaceOrCall &ns_or_call, const std::string &name) {
+    void emit_namespace_or_call(ostream &stream, const NamespaceOrCall &ns_or_call, const std::string &name) const {
         if (ns_or_call.call == nullptr) {
             stream << "namespace " << name << " {\n";
             for (const auto &ns_or_call_inner : ns_or_call.names) {
@@ -418,8 +482,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
 public:
-    ExternCallPrototypes(std::set<string> &emitted, bool in_c_plus_plus)
-        : emitted(emitted) {
+    ExternCallPrototypes() {
         // Make sure we don't catch calls that are already in the global declarations
         const char *strs[] = {globals.c_str(),
                               (const char *)halide_internal_runtime_header_HalideRuntime_h,
@@ -431,7 +494,7 @@ public:
                 if (c == '(' && i > j+1) {
                     // Could be the end of a function_name.
                     string name(str + j + 1, i-j-1);
-                    emitted.insert(name);
+                    processed.insert(name);
                 }
 
                 if (('A' <= c && c <= 'Z') ||
@@ -446,22 +509,26 @@ public:
         }
     }
 
-    bool has_c_declarations() {
+    void set_internal_linkage(const std::string &name) {
+        internal_linkage.insert(name);
+    }
+
+    bool has_c_declarations() const {
         return !c_externs.empty();
     }
 
-    bool has_c_plus_plus_declarations() {
+    bool has_c_plus_plus_declarations() const {
         return !c_plus_plus_externs.empty();
     }
 
-    void emit_c_declarations(ostream &stream) {
+    void emit_c_declarations(ostream &stream) const {
         for (const auto &call : c_externs) {
             emit_function_decl(stream, call.second, call.first);
         }
         stream << "\n";
     }
 
-    void emit_c_plus_plus_declarations(ostream &stream) {
+    void emit_c_plus_plus_declarations(ostream &stream) const {
         for (const auto &ns_or_call : c_plus_plus_externs) {
             emit_namespace_or_call(stream, ns_or_call.second, ns_or_call.first);
         }
@@ -470,7 +537,100 @@ public:
 };
 }
 
+void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
+    if (!t.handle_type ||
+        forward_declared.count(t.handle_type) ||
+        t.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
+        return;
+    }
+    for (auto &ns : t.handle_type->namespaces) {
+        stream << "namespace " << ns << " { ";
+    }
+    switch (t.handle_type->inner_name.cpp_type_type) {
+    case halide_cplusplus_type_name::Simple:
+        // nothing
+        break;
+    case halide_cplusplus_type_name::Struct:
+        stream << "struct " << t.handle_type->inner_name.name << ";";
+        break;
+    case halide_cplusplus_type_name::Class:
+        stream << "class " << t.handle_type->inner_name.name << ";";
+        break;
+    case halide_cplusplus_type_name::Union:
+        stream << "union " << t.handle_type->inner_name.name << ";";
+        break;
+    case halide_cplusplus_type_name::Enum:
+        internal_error << "Passing pointers to enums is unsupported\n";
+        break;
+    }
+    for (auto &ns : t.handle_type->namespaces) {
+        (void) ns;
+        stream << " }";
+    }
+    stream << "\n";
+    forward_declared.insert(t.handle_type);
+}
+
 void CodeGen_C::compile(const Module &input) {
+    {
+        TypeInfoGatherer type_info;
+        for (const auto &f : input.functions()) {
+            if (f.body.defined()) {
+                f.body.accept(&type_info);
+            }
+        }
+        uses_vector_types = !type_info.vector_types_used.empty();
+        uses_gpu_for_loops = type_info.for_types_used.count(ForType::GPUBlock) ||
+                             type_info.for_types_used.count(ForType::GPUThread);
+    }
+
+    // Forward-declare all the types we need; this needs to happen before
+    // we emit function prototypes, since those may need the types.
+    stream << "\n";
+    for (const auto &f : input.functions()) {
+        for (auto &arg : f.args) {
+            forward_declare_type_if_needed(arg.type);
+        }
+    }
+    stream << "\n";
+
+    if (!is_header()) {
+        // Emit any external-code blobs that are C++.
+        for (const ExternalCode &code_blob : input.external_code()) {
+            if (code_blob.is_c_plus_plus_source()) {
+                stream << "\n";
+                stream << "// Begin External Code: " << code_blob.name() << "\n";
+                stream.write((const char *) code_blob.contents().data(), code_blob.contents().size());
+                stream << "\n";
+                stream << "// End External Code: " << code_blob.name() << "\n";
+                stream << "\n";
+            }
+        }
+
+        // Emit prototypes for all external and internal-only functions.
+        // Gather them up and do them all up front, to reduce duplicates,
+        // and to make it simpler to get internal-linkage functions correct.
+        ExternCallPrototypes e;
+        for (const auto &f : input.functions()) {
+            f.body.accept(&e);
+            if (f.linkage == LoweredFunc::Internal) {
+                // We can't tell at the call site if a LoweredFunc is intended to be internal
+                // or not, so mark them explicitly.
+                e.set_internal_linkage(f.name);
+            }
+        }
+
+        if (e.has_c_plus_plus_declarations()) {
+            set_name_mangling_mode(NameMangling::CPlusPlus);
+            e.emit_c_plus_plus_declarations(stream);
+        }
+
+        if (e.has_c_declarations()) {
+            set_name_mangling_mode(NameMangling::C);
+            e.emit_c_declarations(stream);
+        }
+    }
+
     for (const auto &b : input.buffers()) {
         compile(b);
     }
@@ -485,54 +645,12 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         return;
     }
 
-    emitted.insert(f.name);
-
     const std::vector<LoweredArgument> &args = f.args;
-
-    for (size_t i = 0; i < args.size(); i++) {
-        auto handle_type = args[i].type.handle_type;
-        if (!handle_type) continue;
-        if (forward_declared.count(handle_type)) continue;
-        auto type_type = handle_type->inner_name.cpp_type_type;
-        for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
-            stream << "namespace " << handle_type->namespaces[ns] << " {\n";
-        }
-        if (type_type == halide_cplusplus_type_name::Struct) {
-            stream << "struct " << handle_type->inner_name.name << ";\n";
-        } else if (type_type == halide_cplusplus_type_name::Class) {
-            stream << "class " << handle_type->inner_name.name << ";\n";
-        } else if (type_type == halide_cplusplus_type_name::Union) {
-            stream << "union " << handle_type->inner_name.name << ";\n";
-        } else if (type_type == halide_cplusplus_type_name::Enum) {
-            internal_error << "Passing pointers to enums is unsupported\n";
-        }
-        for (size_t ns = 0; ns < handle_type->namespaces.size(); ns++ ) {
-            stream << "}\n";
-        }
-        forward_declared.insert(handle_type);
-    }
 
     have_user_context = false;
     for (size_t i = 0; i < args.size(); i++) {
         // TODO: check that its type is void *?
         have_user_context |= (args[i].name == "__user_context");
-    }
-
-    // Emit prototypes for any extern calls used.
-    if (!is_header()) {
-        stream << "\n";
-        ExternCallPrototypes e(emitted, is_c_plus_plus_interface());
-        f.body.accept(&e);
-
-        if (e.has_c_plus_plus_declarations()) {
-            set_name_mangling_mode(NameMangling::CPlusPlus);
-            e.emit_c_plus_plus_declarations(stream);
-        }
-
-        if (e.has_c_declarations()) {
-            set_name_mangling_mode(NameMangling::C);
-            e.emit_c_declarations(stream);
-        }
     }
 
     NameMangling name_mangling = f.name_mangling;
@@ -542,7 +660,6 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     set_name_mangling_mode(name_mangling);
-    stream << "\n";
 
     std::vector<std::string> namespaces;
     std::string simple_name = extract_namespaces(f.name, namespaces);
@@ -585,12 +702,39 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
         indent += 1;
 
-        // Emit the body
-        print(f.body);
+        if (uses_vector_types) {
+            do_indent();
+            stream << "halide_error("
+                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << ", \"C++ Backend does not support vector types yet, "
+                   << "this function will always fail at runtime\");\n";
+            do_indent();
+            stream << "return -1;\n";
+        } else if (uses_gpu_for_loops) {
+            do_indent();
+            stream << "halide_error("
+                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
+                   << "this function will always fail at runtime\");\n";
+            do_indent();
+            stream << "return halide_error_code_device_malloc_failed;\n";
+        } else {
+            // Emit a local user_context we can pass in all cases, either
+            // aliasing __user_context or nullptr.
+            if (!is_header()) {
+                do_indent();
+                stream << "void * const _ucon = "
+                       << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
+                       << ";\n";
+            }
 
-        // Return success.
-        do_indent();
-        stream << "return 0;\n";
+            // Emit the body
+            print(f.body);
+
+            // Return success.
+            do_indent();
+            stream << "return 0;\n";
+        }
 
         indent -= 1;
         stream << "}\n";
@@ -638,16 +782,31 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
     }
 
+    // For now, we assume buffers that aren't scalar are constant,
+    // while scalars can be mutated. This accommodates all our existing
+    // use cases, which is that all buffers are constant, except those
+    // used to store stateful module information in offloading runtimes.
+    bool is_constant = buffer.dimensions() != 0;
+
     // Emit the data
-    stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
+    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {\n";
+    do_indent();
     for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) stream << ", ";
+        if (i > 0) {
+            stream << ",";
+            if (i % 16 == 0) {
+                stream << "\n";
+                do_indent();
+            } else {
+                stream << " ";
+            }
+        }
         stream << (int)(b.host[i]);
     }
-    stream << "};\n";
+    stream << "\n};\n";
 
-    // Emit the shape
-    stream << "static halide_dimension_t " << name << "_buffer_shape[] = {";
+    // Emit the shape (constant even for scalar buffers)
+    stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
     for (int i = 0; i < buffer.dimensions(); i++) {
         stream << "{" << buffer.dim(i).min()
                << ", " << buffer.dim(i).extent()
@@ -660,18 +819,22 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
     Type t = buffer.type();
 
-    // Emit the buffer struct
-    stream << "static halide_buffer_t " << name << "_buffer = {"
+    // Emit the buffer struct. Note that although our shape and (usually) our host
+    // data is const, the buffer itself isn't: embedded buffers in one pipeline 
+    // can be passed to another pipeline (e.g. for an extern stage), in which
+    // case the buffer objects need to be non-const, because the constness 
+    // (from the POV of the extern stage) is a runtime property.
+    stream << "static halide_buffer_t " << name << "_buffer_ = {"
            << "0, "             // device
-           << "NULL, "          // device_interface
-           << "&" << name << "_data[0], " // host
+           << "nullptr, "       // device_interface
+           << "const_cast<uint8_t*>(&" << name << "_data[0]), " // host
            << "0, "             // flags
            << "{(halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "}, "
            << buffer.dimensions() << ", "
-           << name << "_buffer_shape};\n";
+           << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
 
-    // Make a global pointer to it
-    stream << "static halide_buffer_t *" << name << " = &" << name << "_buffer;\n";
+    // Make a global pointer to it.
+    stream << "static halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
 }
 
 string CodeGen_C::print_expr(Expr e) {
@@ -888,11 +1051,10 @@ void CodeGen_C::visit(const Call *op) {
         string typecode = print_expr(op->args[1]);
         string buffer = print_name(print_expr(op->args[2]));
 
-        rhs << "halide_debug_to_file(";
-        rhs << (have_user_context ? "__user_context_" : "nullptr");
-        rhs << ", \"" + filename + "\", " + typecode;
-        rhs << ", (struct halide_buffer_t *)" << buffer;
-        rhs << ")";
+        rhs << "halide_debug_to_file(_ucon, "
+            << "\"" << filename << "\", "
+            << typecode
+            << ", (struct halide_buffer_t *)" << buffer << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
@@ -938,7 +1100,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         string arg0 = print_expr(op->args[0]);
         string arg1 = print_expr(op->args[1]);
-        rhs << "(" << arg0 << ", " << arg1 << ")";
+        rhs << "return_second(" << arg0 << ", " << arg1 << ")";
     } else if (op->is_intrinsic(Call::if_then_else)) {
         internal_assert(op->args.size() == 3);
 
@@ -994,9 +1156,11 @@ void CodeGen_C::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->args.empty()) {
-            rhs << "NULL";
+            internal_assert(op->type.handle_type);
+            // Add explicit cast so that different structs can't cache to the same value
+            rhs << "(" << print_type(op->type) << ")(NULL)";
         } else {
-            // Emit a line something like:
+            // Emit a declaration like:
             // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
 
             // Get the args
@@ -1005,18 +1169,27 @@ void CodeGen_C::visit(const Call *op) {
                 values.push_back(print_expr(op->args[i]));
             }
             do_indent();
-            stream << "struct {";
+            stream << "struct {\n";
             // List the types.
+            indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                stream << "const " << print_type(op->args[i].type()) << " f_" << i << "; ";
+                do_indent();
+                stream << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
             }
+            indent--;
             string struct_name = unique_name('s');
-            stream << "}  " << struct_name << " = {";
+            do_indent();
+            stream << "} " << struct_name << " = {\n";
             // List the values.
+            indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (i > 0) stream << ", ";
+                do_indent();
                 stream << values[i];
+                if (i < op->args.size() - 1) stream << ",";
+                stream << "\n";
             }
+            indent--;
+            do_indent();
             stream << "};\n";
             // Return a pointer to it of the appropriate type
             if (op->type.handle_type) {
@@ -1068,10 +1241,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(fn);
         string arg = print_expr(op->args[1]);
 
-        string call =
-            fn->value + "(" +
-            (have_user_context ? "__user_context_, " : "nullptr, ")
-            + "arg);";
+        string call = fn->value + "(_ucon, arg);";
 
         do_indent();
         // Make a struct on the stack that calls the given function as a destructor
@@ -1112,11 +1282,15 @@ void CodeGen_C::visit(const Call *op) {
         vector<string> args(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = print_expr(op->args[i]);
+            // This substitution ensures const correctness for all calls
+            if (args[i] == "__user_context") {
+                args[i] = "_ucon";
+            }
         }
         rhs << op->name << "(";
 
         if (function_takes_user_context(op->name)) {
-            rhs << (have_user_context ? "__user_context_, " : "nullptr, ");
+            rhs << "_ucon, ";
         }
 
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -1231,21 +1405,44 @@ void CodeGen_C::visit(const LetStmt *op) {
     body.accept(this);
 }
 
-void CodeGen_C::visit(const AssertStmt *op) {
-    string id_cond = print_expr(op->condition);
+// Halide asserts have different semantics to C asserts.  They're
+// supposed to clean up and make the containing function return
+// -1, so we can't use the C version of assert. Instead we convert
+// to an if statement.
+void CodeGen_C::create_assertion(const string &id_cond, const string &id_msg) {
+    if (target.has_feature(Target::NoAsserts)) return;
 
     do_indent();
-    // Halide asserts have different semantics to C asserts.  They're
-    // supposed to clean up and make the containing function return
-    // -1, so we can't use the C version of assert. Instead we convert
-    // to an if statement.
-
-    stream << "if (!" << id_cond << ") ";
+    stream << "if (!" << id_cond << ")\n";
     open_scope();
-    string id_msg = print_expr(op->message);
     do_indent();
     stream << "return " << id_msg << ";\n";
     close_scope("");
+}
+
+void CodeGen_C::create_assertion(const string &id_cond, Expr message) {
+    internal_assert(!message.defined() || message.type() == Int(32))
+        << "Assertion result is not an int: " << message;
+
+    if (target.has_feature(Target::NoAsserts)) return;
+
+    // don't call the create_assertion(string, string) version because
+    // we don't want to force evaluation of 'message' unless the condition fails
+    do_indent();
+    stream << "if (!" << id_cond << ") ";
+    open_scope();
+    string id_msg = print_expr(message);
+    do_indent();
+    stream << "return " << id_msg << ";\n";
+    close_scope("");
+}
+
+void CodeGen_C::create_assertion(Expr cond, Expr message) {
+    create_assertion(print_expr(cond), message);
+}
+
+void CodeGen_C::visit(const AssertStmt *op) {
+    create_assertion(op->condition, op->message);
 }
 
 void CodeGen_C::visit(const ProducerConsumer *op) {
@@ -1295,6 +1492,9 @@ void CodeGen_C::visit(const Provide *op) {
 void CodeGen_C::visit(const Allocate *op) {
     open_scope();
 
+    string op_name = print_name(op->name);
+    string op_type = print_type(op->type, AppendSpace);
+
     // For sizes less than 8k, do a stack allocation
     bool on_stack = false;
     int32_t constant_size;
@@ -1302,10 +1502,9 @@ void CodeGen_C::visit(const Allocate *op) {
     if (op->new_expr.defined()) {
         Allocation alloc;
         alloc.type = op->type;
-        alloc.free_function = op->free_function;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name, 0);
-        stream << print_type(op->type) << "*" << print_name(op->name) << " = (" << print_expr(op->new_expr) << ");\n";
+        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
@@ -1340,13 +1539,13 @@ void CodeGen_C::visit(const Allocate *op) {
             }
             do_indent();
             stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id <<
-              " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
+              " * sizeof(" << op_type << ")) > ((int64_t(1) << 31) - 1)))\n";
             open_scope();
             do_indent();
-            stream << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
-                   << ", \"32-bit signed overflow computing size of allocation "
-                   << op->name << "\\n\");\n";
+            // TODO: call halide_error_buffer_allocation_too_large() here instead
+            // TODO: call create_assertion() so that NoAssertions works
+            stream << "halide_error(_ucon, "
+                   << "\"32-bit signed overflow computing size of allocation " << op->name << "\\n\");\n";
             do_indent();
             stream << "return -1;\n";
             close_scope("overflow test " + op->name);
@@ -1369,23 +1568,30 @@ void CodeGen_C::visit(const Allocate *op) {
         allocations.push(op->name, alloc);
 
         do_indent();
-        stream << print_type(op->type) << ' ';
+        stream << op_type;
 
         if (on_stack) {
-            stream << print_name(op->name)
+            stream << op_name
                    << "[" << size_id << "];\n";
         } else {
             stream << "*"
-                   << print_name(op->name)
+                   << op_name
                    << " = ("
-                   << print_type(op->type)
-                   << " *)halide_malloc("
-                   << (have_user_context ? "__user_context_" : "nullptr")
-                   << ", sizeof("
-                   << print_type(op->type)
+                   << op_type
+                   << " *)halide_malloc(_ucon, sizeof("
+                   << op_type
                    << ")*" << size_id << ");\n";
             heap_allocations.push(op->name, 0);
         }
+    }
+
+    if (!on_stack) {
+        create_assertion(op_name, "halide_error_out_of_memory(_ucon)");
+
+        do_indent();
+        string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
+        stream << "HalideFreeHelper " << op_name << "_free(_ucon, "
+               << op_name << ", " << free_function << ");\n";
     }
 
     op->body.accept(this);
@@ -1398,16 +1604,8 @@ void CodeGen_C::visit(const Allocate *op) {
 
 void CodeGen_C::visit(const Free *op) {
     if (heap_allocations.contains(op->name)) {
-        string free_function = allocations.get(op->name).free_function;
-        if (free_function.empty()) {
-            free_function = "halide_free";
-        }
-
         do_indent();
-        stream << free_function << "("
-               << (have_user_context ? "__user_context_, " : "nullptr, ")
-               << print_name(op->name)
-               << ");\n";
+        stream << print_name(op->name) << "_free.free();\n";
         heap_allocations.pop(op->name);
     }
     allocations.pop(op->name);
@@ -1488,23 +1686,31 @@ void CodeGen_C::test() {
 #define HALIDE_FUNCTION_ATTRS
 #endif
 
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) HALIDE_FUNCTION_ATTRS {
+ void * const _ucon = const_cast<void *>(__user_context);
  void *_0 = _halide_buffer_get_host(_buf_buffer);
  void * _buf = _0;
  {
   int64_t _1 = 43;
   int64_t _2 = _1 * _beta;
-  if ((_2 > ((int64_t(1) << 31) - 1)) || ((_2 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))
+  if ((_2 > ((int64_t(1) << 31) - 1)) || ((_2 * sizeof(int32_t )) > ((int64_t(1) << 31) - 1)))
   {
-   halide_error(__user_context_, "32-bit signed overflow computing size of allocation tmp.heap\n");
+   halide_error(_ucon, "32-bit signed overflow computing size of allocation tmp.heap\n");
    return -1;
   } // overflow test tmp.heap
   int64_t _3 = _2;
-  int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_3);
+  int32_t *_tmp_heap = (int32_t  *)halide_malloc(_ucon, sizeof(int32_t )*_3);
+  if (!_tmp_heap)
+  {
+   return halide_error_out_of_memory(_ucon);
+  }
+  HalideFreeHelper _tmp_heap_free(_ucon, _tmp_heap, halide_free);
   {
    int32_t _tmp_stack[127];
    int32_t _4 = _beta + 1;
@@ -1515,8 +1721,8 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     char b0[1024];
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
     char const *_7 = b0;
-    int32_t _8 = halide_print(__user_context_, _7);
-    int32_t _9 = (_8, 3);
+    int32_t _8 = halide_print(_ucon, _7);
+    int32_t _9 = return_second(_8, 3);
     _5 = _9;
    } // if _6
    else
@@ -1528,7 +1734,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    int32_t _12 = (int32_t)(_11 ? _10 : 2);
    ((int32_t *)_buf)[_4] = _12;
   } // alloc _tmp_stack
-  halide_free(__user_context_, _tmp_heap);
+  _tmp_heap_free.free();
  } // alloc _tmp_heap
  return 0;
 }
@@ -1536,6 +1742,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
 #ifdef __cplusplus
 }  // extern "C"
 #endif
+
 )GOLDEN_CODE";
 
     if (src != correct_source) {

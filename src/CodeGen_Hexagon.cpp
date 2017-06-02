@@ -196,6 +196,11 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
+    // Generating vtmpy before CSE and align_loads makes it easier to match
+    // patterns for vtmpy and also saves us from re-rerunning CSE pass after
+    // vtmpy_generator
+    body = vtmpy_generator(body);
+
     debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
@@ -342,8 +347,10 @@ void CodeGen_Hexagon::init_module() {
         // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
         // To differentiate those from the widening ones, we encode the return type in the name here.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), u16v2, "sub_vuh.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), i16v2, "sub_vh.vub.vub", {u8v1, u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhw), i32v2, "sub_vw.vh.vh", {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), u32v2, "sub_vuw.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), i32v2, "sub_vw.vuh.vuh", {u16v1, u16v1} },
 
 
         // Adds/subtract of unsigned values with saturation.

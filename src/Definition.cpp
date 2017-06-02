@@ -18,7 +18,7 @@ struct DefinitionContents {
     bool is_init;
     Expr predicate;
     std::vector<Expr> values, args;
-    Schedule schedule;
+    StageSchedule stage_schedule;
     std::vector<Specialization> specializations;
 
     DefinitionContents() : is_init(true), predicate(const_true()) {}
@@ -35,7 +35,7 @@ struct DefinitionContents {
             arg.accept(visitor);
         }
 
-        schedule.accept(visitor);
+        stage_schedule.accept(visitor);
 
         for (const Specialization &s : specializations) {
             if (s.condition.defined()) {
@@ -57,7 +57,7 @@ struct DefinitionContents {
             args[i] = mutator->mutate(args[i]);
         }
 
-        schedule.mutate(mutator);
+        stage_schedule.mutate(mutator);
 
         for (Specialization &s : specializations) {
             if (s.condition.defined()) {
@@ -94,28 +94,26 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     if (rdom.defined()) {
         contents->predicate = rdom.predicate();
         for (size_t i = 0; i < rdom.domain().size(); i++) {
-            contents->schedule.rvars().push_back(rdom.domain()[i]);
+            contents->stage_schedule.rvars().push_back(rdom.domain()[i]);
         }
     }
 }
 
-// Return deep-copy of Definition
-Definition Definition::deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
-    internal_assert(contents.defined()) << "Cannot deep-copy undefined Definition\n";
+Definition Definition::get_copy() const {
+    internal_assert(contents.defined()) << "Cannot copy undefined Definition\n";
 
     Definition copy;
     copy.contents->is_init = contents->is_init;
     copy.contents->predicate = contents->predicate;
     copy.contents->values = contents->values;
     copy.contents->args = contents->args;
-    copy.contents->schedule = contents->schedule.deep_copy(copied_map);
+    copy.contents->stage_schedule = contents->stage_schedule.get_copy();
 
     // Deep-copy specializations
     for (const Specialization &s : contents->specializations) {
         Specialization s_copy;
         s_copy.condition = s.condition;
-        s_copy.definition = s.definition.deep_copy(copied_map);
+        s_copy.definition = s.definition.get_copy();
         s_copy.failure_message = s.failure_message;
         copy.contents->specializations.push_back(std::move(s_copy));
     }
@@ -164,12 +162,12 @@ std::vector<Expr> Definition::split_predicate() const {
     return predicates;
 }
 
-Schedule &Definition::schedule() {
-    return contents->schedule;
+StageSchedule &Definition::schedule() {
+    return contents->stage_schedule;
 }
 
-const Schedule &Definition::schedule() const {
-    return contents->schedule;
+const StageSchedule &Definition::schedule() const {
+    return contents->stage_schedule;
 }
 
 std::vector<Specialization> &Definition::specializations() {
@@ -189,18 +187,7 @@ const Specialization &Definition::add_specialization(Expr condition) {
     s.definition.contents->args   = contents->args;
 
     // The sub-schedule inherits everything about its parent except for its specializations.
-    s.definition.contents->schedule.store_level()      = contents->schedule.store_level();
-    s.definition.contents->schedule.compute_level()    = contents->schedule.compute_level();
-    s.definition.contents->schedule.rvars()            = contents->schedule.rvars();
-    s.definition.contents->schedule.splits()           = contents->schedule.splits();
-    s.definition.contents->schedule.dims()             = contents->schedule.dims();
-    s.definition.contents->schedule.storage_dims()     = contents->schedule.storage_dims();
-    s.definition.contents->schedule.bounds()           = contents->schedule.bounds();
-    s.definition.contents->schedule.prefetches()       = contents->schedule.prefetches();
-    s.definition.contents->schedule.wrappers()         = contents->schedule.wrappers();
-    s.definition.contents->schedule.memoized()         = contents->schedule.memoized();
-    s.definition.contents->schedule.touched()          = contents->schedule.touched();
-    s.definition.contents->schedule.allow_race_conditions() = contents->schedule.allow_race_conditions();
+    s.definition.contents->stage_schedule = contents->stage_schedule.get_copy();
 
     contents->specializations.push_back(s);
     return contents->specializations.back();

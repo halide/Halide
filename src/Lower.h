@@ -27,7 +27,7 @@ class IRMutator;
  * Stmt. Multiple LoweredFuncs are added to support legacy buffer_t
  * calling convention. */
 EXPORT Module lower(const std::vector<Function> &output_funcs, const std::string &pipeline_name, const Target &t,
-                    std::vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
+                    const std::vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
                     const std::vector<IRMutator *> &custom_passes = std::vector<IRMutator *>());
 
 /** Given a halide function with a schedule, create a statement that

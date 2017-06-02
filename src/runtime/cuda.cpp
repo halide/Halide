@@ -765,7 +765,7 @@ WEAK int halide_cuda_run(void *user_context,
     for (size_t i = 0; i <= num_args; i++) { // Get NULL at end.
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            dev_handles[i] = (*(uint64_t *)args[i]);
+            dev_handles[i] = ((halide_buffer_t *)args[i])->device;
             translated_args[i] = &(dev_handles[i]);
             debug(user_context) << "    halide_cuda_run translated arg" << (int)i
                                 << " [" << (*((void **)translated_args[i])) << " ...]\n";

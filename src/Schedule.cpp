@@ -37,7 +37,7 @@ EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
 
 }  // namespace Internal
 
-LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar) 
+LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar)
     : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar)) {}
 
 LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.name(), v.name(), v.is_rvar) {}
@@ -107,7 +107,7 @@ bool LoopLevel::match(const LoopLevel &other) const {
 
 bool LoopLevel::operator==(const LoopLevel &other) const {
     return defined() == other.defined() &&
-           contents->func_name == other.contents->func_name && 
+           contents->func_name == other.contents->func_name &&
            contents->var_name == other.contents->var_name;
 }
 
@@ -121,40 +121,22 @@ IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
 
 /** A schedule for a halide function, which defines where, when, and
  * how it should be evaluated. */
-struct ScheduleContents {
+struct FuncScheduleContents {
     mutable RefCount ref_count;
 
     LoopLevel store_level, compute_level;
-    std::vector<ReductionVariable> rvars;
-    std::vector<Split> splits;
-    std::vector<Dim> dims;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
-    std::vector<PrefetchDirective> prefetches;
     std::vector<Bound> estimates;
     std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
     bool memoized;
-    bool touched;
-    bool allow_race_conditions;
 
-    ScheduleContents() : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()), 
-    memoized(false), touched(false), allow_race_conditions(false) {};
+    FuncScheduleContents() :
+        store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
+        memoized(false) {};
 
-    // Pass an IRMutator through to all Exprs referenced in the ScheduleContents
+    // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {
-        for (ReductionVariable &r : rvars) {
-            if (r.min.defined()) {
-                r.min = mutator->mutate(r.min);
-            }
-            if (r.extent.defined()) {
-                r.extent = mutator->mutate(r.extent);
-            }
-        }
-        for (Split &s : splits) {
-            if (s.factor.defined()) {
-                s.factor = mutator->mutate(s.factor);
-            }
-        }
         for (Bound &b : bounds) {
             if (b.min.defined()) {
                 b.min = mutator->mutate(b.min);
@@ -169,11 +151,6 @@ struct ScheduleContents {
                 b.remainder = mutator->mutate(b.remainder);
             }
         }
-        for (PrefetchDirective &p : prefetches) {
-            if (p.offset.defined()) {
-                p.offset = mutator->mutate(p.offset);
-            }
-        }
         for (Bound &b : estimates) {
             if (b.min.defined()) {
                 b.min = mutator->mutate(b.min);
@@ -181,40 +158,88 @@ struct ScheduleContents {
             if (b.extent.defined()) {
                 b.extent = mutator->mutate(b.extent);
             }
+            if (b.modulus.defined()) {
+                b.modulus = mutator->mutate(b.modulus);
+            }
+            if (b.remainder.defined()) {
+                b.remainder = mutator->mutate(b.remainder);
+            }
         }
     }
 };
 
-
 template<>
-EXPORT RefCount &ref_count<ScheduleContents>(const ScheduleContents *p) {
+EXPORT RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) {
     return p->ref_count;
 }
 
 template<>
-EXPORT void destroy<ScheduleContents>(const ScheduleContents *p) {
+EXPORT void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
     delete p;
 }
 
-Schedule::Schedule() : contents(new ScheduleContents) {}
 
-Schedule Schedule::deep_copy(
+/** A schedule for a sigle halide stage, which defines where, when, and
+ * how it should be evaluated. */
+struct StageScheduleContents {
+    mutable RefCount ref_count;
+
+    std::vector<ReductionVariable> rvars;
+    std::vector<Split> splits;
+    std::vector<Dim> dims;
+    std::vector<PrefetchDirective> prefetches;
+    bool touched;
+    bool allow_race_conditions;
+
+    StageScheduleContents() : touched(false), allow_race_conditions(false) {};
+
+    // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
+    void mutate(IRMutator *mutator) {
+        for (ReductionVariable &r : rvars) {
+            if (r.min.defined()) {
+                r.min = mutator->mutate(r.min);
+            }
+            if (r.extent.defined()) {
+                r.extent = mutator->mutate(r.extent);
+            }
+        }
+        for (Split &s : splits) {
+            if (s.factor.defined()) {
+                s.factor = mutator->mutate(s.factor);
+            }
+        }
+        for (PrefetchDirective &p : prefetches) {
+            if (p.offset.defined()) {
+                p.offset = mutator->mutate(p.offset);
+            }
+        }
+    }
+};
+
+template<>
+EXPORT RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) {
+    return p->ref_count;
+}
+
+template<>
+EXPORT void destroy<StageScheduleContents>(const StageScheduleContents *p) {
+    delete p;
+}
+
+
+FuncSchedule::FuncSchedule() : contents(new FuncScheduleContents) {}
+
+FuncSchedule FuncSchedule::deep_copy(
         std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
 
-    internal_assert(contents.defined()) << "Cannot deep-copy undefined Schedule\n";
-    Schedule copy;
+    internal_assert(contents.defined()) << "Cannot deep-copy undefined FuncSchedule\n";
+    FuncSchedule copy;
     copy.contents->store_level = contents->store_level;
     copy.contents->compute_level = contents->compute_level;
-    copy.contents->rvars = contents->rvars;
-    copy.contents->splits = contents->splits;
-    copy.contents->dims = contents->dims;
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
-    copy.contents->prefetches = contents->prefetches;
     copy.contents->estimates = contents->estimates;
     copy.contents->memoized = contents->memoized;
-    copy.contents->touched = contents->touched;
-    copy.contents->allow_race_conditions = contents->allow_race_conditions;
 
     // Deep-copy wrapper functions. If function has already been deep-copied before,
     // i.e. it's in the 'copied_map', use the deep-copied version from the map instead
@@ -232,88 +257,48 @@ Schedule Schedule::deep_copy(
     return copy;
 }
 
-bool &Schedule::memoized() {
+bool &FuncSchedule::memoized() {
     return contents->memoized;
 }
 
-bool Schedule::memoized() const {
+bool FuncSchedule::memoized() const {
     return contents->memoized;
 }
 
-bool &Schedule::touched() {
-    return contents->touched;
-}
-
-bool Schedule::touched() const {
-    return contents->touched;
-}
-
-const std::vector<Split> &Schedule::splits() const {
-    return contents->splits;
-}
-
-std::vector<Split> &Schedule::splits() {
-    return contents->splits;
-}
-
-std::vector<Dim> &Schedule::dims() {
-    return contents->dims;
-}
-
-const std::vector<Dim> &Schedule::dims() const {
-    return contents->dims;
-}
-
-std::vector<StorageDim> &Schedule::storage_dims() {
+std::vector<StorageDim> &FuncSchedule::storage_dims() {
     return contents->storage_dims;
 }
 
-const std::vector<StorageDim> &Schedule::storage_dims() const {
+const std::vector<StorageDim> &FuncSchedule::storage_dims() const {
     return contents->storage_dims;
 }
 
-std::vector<Bound> &Schedule::bounds() {
+std::vector<Bound> &FuncSchedule::bounds() {
     return contents->bounds;
 }
 
-const std::vector<Bound> &Schedule::bounds() const {
+const std::vector<Bound> &FuncSchedule::bounds() const {
     return contents->bounds;
 }
 
-std::vector<PrefetchDirective> &Schedule::prefetches() {
-    return contents->prefetches;
-}
-
-const std::vector<PrefetchDirective> &Schedule::prefetches() const {
-    return contents->prefetches;
-}
-
-std::vector<Bound> &Schedule::estimates() {
+std::vector<Bound> &FuncSchedule::estimates() {
     return contents->estimates;
 }
 
-const std::vector<Bound> &Schedule::estimates() const {
+const std::vector<Bound> &FuncSchedule::estimates() const {
     return contents->estimates;
 }
 
-std::vector<ReductionVariable> &Schedule::rvars() {
-    return contents->rvars;
-}
-
-const std::vector<ReductionVariable> &Schedule::rvars() const {
-    return contents->rvars;
-}
-
-std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &Schedule::wrappers() {
+std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &FuncSchedule::wrappers() {
     return contents->wrappers;
 }
 
-const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &Schedule::wrappers() const {
+const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &FuncSchedule::wrappers() const {
     return contents->wrappers;
 }
 
-void Schedule::add_wrapper(const std::string &f,
-                           const IntrusivePtr<Internal::FunctionContents> &wrapper) {
+void FuncSchedule::add_wrapper(const std::string &f,
+                               const IntrusivePtr<Internal::FunctionContents> &wrapper) {
     if (contents->wrappers.count(f)) {
         if (f.empty()) {
             user_warning << "Replacing previous definition of global wrapper in function \""
@@ -325,44 +310,23 @@ void Schedule::add_wrapper(const std::string &f,
     contents->wrappers[f] = wrapper;
 }
 
-LoopLevel &Schedule::store_level() {
+LoopLevel &FuncSchedule::store_level() {
     return contents->store_level;
 }
 
-LoopLevel &Schedule::compute_level() {
+LoopLevel &FuncSchedule::compute_level() {
     return contents->compute_level;
 }
 
-const LoopLevel &Schedule::store_level() const {
+const LoopLevel &FuncSchedule::store_level() const {
     return contents->store_level;
 }
 
-const LoopLevel &Schedule::compute_level() const {
+const LoopLevel &FuncSchedule::compute_level() const {
     return contents->compute_level;
 }
 
-bool &Schedule::allow_race_conditions() {
-    return contents->allow_race_conditions;
-}
-
-bool Schedule::allow_race_conditions() const {
-    return contents->allow_race_conditions;
-}
-
-void Schedule::accept(IRVisitor *visitor) const {
-    for (const ReductionVariable &r : rvars()) {
-        if (r.min.defined()) {
-            r.min.accept(visitor);
-        }
-        if (r.extent.defined()) {
-            r.extent.accept(visitor);
-        }
-    }
-    for (const Split &s : splits()) {
-        if (s.factor.defined()) {
-            s.factor.accept(visitor);
-        }
-    }
+void FuncSchedule::accept(IRVisitor *visitor) const {
     for (const Bound &b : bounds()) {
         if (b.min.defined()) {
             b.min.accept(visitor);
@@ -377,11 +341,6 @@ void Schedule::accept(IRVisitor *visitor) const {
             b.remainder.accept(visitor);
         }
     }
-    for (const PrefetchDirective &p : prefetches()) {
-        if (p.offset.defined()) {
-            p.offset.accept(visitor);
-        }
-    }
     for (const Bound &b : estimates()) {
         if (b.min.defined()) {
             b.min.accept(visitor);
@@ -389,10 +348,106 @@ void Schedule::accept(IRVisitor *visitor) const {
         if (b.extent.defined()) {
             b.extent.accept(visitor);
         }
+        if (b.modulus.defined()) {
+            b.modulus.accept(visitor);
+        }
+        if (b.remainder.defined()) {
+            b.remainder.accept(visitor);
+        }
     }
 }
 
-void Schedule::mutate(IRMutator *mutator) {
+void FuncSchedule::mutate(IRMutator *mutator) {
+    if (contents.defined()) {
+        contents->mutate(mutator);
+    }
+}
+
+
+StageSchedule::StageSchedule() : contents(new StageScheduleContents) {}
+
+StageSchedule StageSchedule::get_copy() const {
+    internal_assert(contents.defined()) << "Cannot copy undefined Schedule\n";
+    StageSchedule copy;
+    copy.contents->rvars = contents->rvars;
+    copy.contents->splits = contents->splits;
+    copy.contents->dims = contents->dims;
+    copy.contents->prefetches = contents->prefetches;
+    copy.contents->touched = contents->touched;
+    copy.contents->allow_race_conditions = contents->allow_race_conditions;
+    return copy;
+}
+
+bool &StageSchedule::touched() {
+    return contents->touched;
+}
+
+bool StageSchedule::touched() const {
+    return contents->touched;
+}
+
+std::vector<ReductionVariable> &StageSchedule::rvars() {
+    return contents->rvars;
+}
+
+const std::vector<ReductionVariable> &StageSchedule::rvars() const {
+    return contents->rvars;
+}
+
+const std::vector<Split> &StageSchedule::splits() const {
+    return contents->splits;
+}
+
+std::vector<Split> &StageSchedule::splits() {
+    return contents->splits;
+}
+
+std::vector<Dim> &StageSchedule::dims() {
+    return contents->dims;
+}
+
+const std::vector<Dim> &StageSchedule::dims() const {
+    return contents->dims;
+}
+
+std::vector<PrefetchDirective> &StageSchedule::prefetches() {
+    return contents->prefetches;
+}
+
+const std::vector<PrefetchDirective> &StageSchedule::prefetches() const {
+    return contents->prefetches;
+}
+
+bool &StageSchedule::allow_race_conditions() {
+    return contents->allow_race_conditions;
+}
+
+bool StageSchedule::allow_race_conditions() const {
+    return contents->allow_race_conditions;
+}
+
+void StageSchedule::accept(IRVisitor *visitor) const {
+    for (const ReductionVariable &r : rvars()) {
+        if (r.min.defined()) {
+            r.min.accept(visitor);
+        }
+        if (r.extent.defined()) {
+            r.extent.accept(visitor);
+        }
+    }
+    for (const Split &s : splits()) {
+        if (s.factor.defined()) {
+            s.factor.accept(visitor);
+        }
+    }
+    for (const PrefetchDirective &p : prefetches()) {
+        if (p.offset.defined()) {
+            p.offset.accept(visitor);
+        }
+    }
+}
+
+void StageSchedule::mutate(IRMutator *mutator) {
     if (contents.defined()) {
         contents->mutate(mutator);
     }

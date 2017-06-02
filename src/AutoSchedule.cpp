@@ -2988,21 +2988,23 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
 // Verify that function 'f' does not have partially specified schedules/bounds.
 // The current auto scheduler cannots handle such cases.
 void validate_no_partial_schedules(const Function &f) {
+    // Verify no compute_root or bounds are specified
+    user_assert(f.schedule().compute_level().is_inline())
+        << "AutoSchedule: cannot auto-schedule function \"" << f.name()
+        << "\" since it is scheduled to be computed at root\n";
+    user_assert(f.schedule().bounds().empty())
+        << "AutoSchedule: cannot auto-schedule function \"" << f.name()
+        << "\" since it has partially specified bounds\n";
+
     int num_stages = f.updates().size() + 1;
     for (int stage = 0; stage < num_stages; ++stage) {
         const Definition &def = get_stage_definition(f, stage);
-        const Schedule &schedule = def.schedule();
+        const StageSchedule &schedule = def.schedule();
 
-        // Verify no compute_root, splits, or bounds are specified
-        user_assert(schedule.compute_level().is_inline())
-            << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-            << "\" since it is scheduled to be computed at root\n";
+        // Verify no splits are specified
         user_assert(schedule.splits().empty())
             << "AutoSchedule: cannot auto-schedule function \"" << f.name()
             << "\" since it has partially specified schedules at stage " << stage << "\n";
-        user_assert(schedule.bounds().empty())
-            << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-            << "\" since it has partially specified bounds at stage " << stage << "\n";
 
         // Verify that none of the dimensions are scheduled to be parallelized or
         // vectorized, or unrolled.
