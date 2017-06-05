@@ -64,16 +64,16 @@ int main(int argc, char **argv) {
     {
         // If you need to set GeneratorParams, it's a bit trickier: 
         // you must first create the Generator, then set the GeneratorParam(s),
-        // than call generate_with_inputs().
+        // than call apply().
         auto gen = context.create<Example>();  // gen's type is std::unique_ptr<Example>
 
-        // GeneratorParams must be set before calling generate_with_inputs()
+        // GeneratorParams must be set before calling apply()
         // (you'll assert-fail if you set them later).
         gen->compiletime_factor.set(2.5f);
-        // ScheduleParams can be set before or after the call to generate_with_inputs().
+        // ScheduleParams can be set before or after the call to apply().
         gen->vectorize.set(false);
 
-        gen->generate_with_inputs(kRuntimeFactor, kRuntimeOffset);
+        gen->apply(kRuntimeFactor, kRuntimeOffset);
 
 
         Buffer<int32_t> img = gen->realize(kSize, kSize, 3);

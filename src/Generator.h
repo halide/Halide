@@ -2157,11 +2157,10 @@ public:
         return T::create(*this);
     }
 
-    // TODO: this method name is ok but not great
     template <typename T, typename... Args>
     std::unique_ptr<T> apply(const Args &...args) {
         auto t = this->create<T>();
-        t->generate_with_inputs(args...);
+        t->apply(args...);
         return t;
     }
 
@@ -2703,11 +2702,10 @@ public:
         return std::unique_ptr<T>(t);
     }
 
-    // TODO: this method name is terrible, surely we can do better
     template <typename... Args>
-    void generate_with_inputs(const Args &...args) {
+    void apply(const Args &...args) {
         static_assert(has_generate_method<T>::value && has_schedule_method<T>::value, 
-            "generate_with_inputs() is not supported for old-style Generators.");
+            "apply() is not supported for old-style Generators.");
         set_inputs(args...);
         call_generate();
         call_schedule();
