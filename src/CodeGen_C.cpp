@@ -935,7 +935,11 @@ public:
     template <typename OtherVec>
     static Vec convert_from(const OtherVec &src) {
         static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
-#if __has_builtin(__builtin_convertvector)
+#if 0 // __has_builtin(__builtin_convertvector)
+        // Disabled (for now) because __builtin_convertvector appears to have
+        // different float->int rounding behavior in at least some situations;
+        // for now we'll use the much-slower-but-correct explicit C++ code.
+        // (https://github.com/halide/Halide/issues/2080)
         return Vec(from_native_vector, __builtin_convertvector(src.native_vector, NativeVectorType));
 #else
         Vec r;
