@@ -61,6 +61,7 @@ else
 WITH_HEXAGON ?=
 endif
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
+WITH_RISCV ?= $(findstring riscv, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
@@ -285,6 +286,7 @@ SOURCE_FILES = \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
+  CodeGen_RISCV.cpp \
   CodeGen_X86.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
@@ -414,6 +416,7 @@ HEADER_FILES = \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
+  CodeGen_RISCV.h \
   CodeGen_X86.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \

@@ -108,6 +108,7 @@ set (RUNTIME_LL
   posix_math
   powerpc
   ptx_dev
+  riscv
   win32_math
   x86
   x86_avx
@@ -280,6 +281,7 @@ set(HEADER_FILES
   CodeGen_PowerPC.h
   CodeGen_PTX_Dev.h
   CodeGen_Posix.h
+  CodeGen_RISCV.h
   CodeGen_X86.h
   ConciseCasts.h
   CPlusPlusMangle.h
@@ -432,6 +434,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_PowerPC.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_Posix.cpp
+  CodeGen_RISCV.cpp
   CodeGen_X86.cpp
   CPlusPlusMangle.cpp
   CSE.cpp
@@ -589,6 +592,11 @@ endif()
 if (TARGET_PTX)
   target_compile_definitions(Halide PRIVATE "-DWITH_PTX=1")
   list(APPEND LLVM_COMPONENTS NVPTX)
+endif()
+
+if (TARGET_RISCV)
+  target_compile_definitions(Halide PRIVATE "-DWITH_RISCV=1")
+  list(APPEND LLVM_COMPONENTS RISCV)
 endif()
 
 if (TARGET_OPENCL)

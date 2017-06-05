@@ -217,6 +217,14 @@ DECLARE_NO_INITMOD(hvx_64)
 DECLARE_NO_INITMOD(hvx_128)
 #endif  // WITH_HEXAGON
 
+#ifdef WITH_RISCV
+DECLARE_LL_INITMOD(riscv)
+DECLARE_CPP_INITMOD(riscv_cpu_features)
+#else
+DECLARE_NO_INITMOD(riscv)
+DECLARE_NO_INITMOD(riscv_cpu_features)
+#endif  // WITH_RISCV
+
 namespace {
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
@@ -277,6 +285,13 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         return llvm::DataLayout(
             "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
             "-f32:32:32-f64:64:64-v32:32:32-v64:64:64-v512:512:512-v1024:1024:1024-v2048:2048:2048");
+    } else if (target.arch == Target::RISCV) {
+        // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
+        if (target.bits == 32) {
+            return llvm::DataLayout("e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
+        } else {
+            return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
+        }
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
         return llvm::DataLayout("unreachable");
@@ -388,6 +403,21 @@ llvm::Triple get_triple_for_target(const Target &target) {
         triple.setVendor(llvm::Triple::UnknownVendor);
         triple.setArch(llvm::Triple::hexagon);
         triple.setObjectFormat(llvm::Triple::ELF);
+    } else if (target.arch == Target::RISCV) {
+        if (target.bits == 32) {
+            triple.setArch(llvm::Triple::riscv32);
+        } else {
+            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
+            triple.setArch(llvm::Triple::riscv64);
+        }
+
+        if (target.os == Target::Linux) {
+            triple.setOS(llvm::Triple::Linux);
+            // TODO: Check what options there are here.
+            triple.setEnvironment(llvm::Triple::GNUEABIHF);
+        } else {
+            user_error << "No RISCV support for this OS\n";
+        }
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
     }
@@ -763,6 +793,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_ll(c));
             }
+            if (t.arch == Target::RISCV) {
+                modules.push_back(get_initmod_riscv_ll(c));
+            }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
                 if (t.has_feature(Target::HVX_64)) {
@@ -802,6 +835,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
+            }
+            if (t.arch == Target::RISCV) {
+                modules.push_back(get_initmod_riscv_cpu_features(c, bits_64, debug));
             }
         }
 

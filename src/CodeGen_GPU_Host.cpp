@@ -519,4 +519,8 @@ template class CodeGen_GPU_Host<CodeGen_MIPS>;
 template class CodeGen_GPU_Host<CodeGen_PowerPC>;
 #endif
 
+#ifdef WITH_RISCV
+template class CodeGen_GPU_Host<CodeGen_RISCV>;
+#endif
+
 }}

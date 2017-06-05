@@ -19,12 +19,13 @@
 #include "IntegerDivisionTable.h"
 #include "CSE.h"
 
-#include "CodeGen_X86.h"
-#include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
+#include "CodeGen_Hexagon.h"
+#include "CodeGen_GPU_Host.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PowerPC.h"
-#include "CodeGen_Hexagon.h"
+#include "CodeGen_RISCV.h"
+#include "CodeGen_X86.h"
 
 #if !(__cplusplus > 199711L || _MSC_VER >= 1800)
 
@@ -83,28 +84,22 @@ using std::stack;
         LLVMInitialize##target##AsmPrinter(); \
 
 // Override above empty init function with macro for supported targets.
-#ifdef WITH_X86
-#define InitializeX86Target()       InitializeTarget(X86)
-#define InitializeX86AsmParser()    InitializeAsmParser(X86)
-#define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
-#endif
-
 #ifdef WITH_ARM
 #define InitializeARMTarget()       InitializeTarget(ARM)
 #define InitializeARMAsmParser()    InitializeAsmParser(ARM)
 #define InitializeARMAsmPrinter()   InitializeAsmPrinter(ARM)
 #endif
 
-#ifdef WITH_PTX
-#define InitializeNVPTXTarget()       InitializeTarget(NVPTX)
-#define InitializeNVPTXAsmParser()    InitializeAsmParser(NVPTX)
-#define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
-#endif
-
 #ifdef WITH_AARCH64
 #define InitializeAArch64Target()       InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
 #define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
+#endif
+
+#ifdef WITH_HEXAGON
+#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
+#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
+#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
 #endif
 
 #ifdef WITH_MIPS
@@ -119,10 +114,22 @@ using std::stack;
 #define InitializePowerPCAsmPrinter()   InitializeAsmPrinter(PowerPC)
 #endif
 
-#ifdef WITH_HEXAGON
-#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
-#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
-#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
+#ifdef WITH_PTX
+#define InitializeNVPTXTarget()       InitializeTarget(NVPTX)
+#define InitializeNVPTXAsmParser()    InitializeAsmParser(NVPTX)
+#define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
+#endif
+
+#ifdef WITH_PTX
+#define InitializeNVRISCVTarget()       InitializeTarget(NVRISCV)
+#define InitializeNVRISCVAsmParser()    InitializeAsmParser(NVRISCV)
+#define InitializeNVRISCVAsmPrinter()   InitializeAsmPrinter(NVRISCV)
+#endif
+
+#ifdef WITH_X86
+#define InitializeX86Target()       InitializeTarget(X86)
+#define InitializeX86AsmParser()    InitializeAsmParser(X86)
+#define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
 #endif
 
 namespace {
@@ -298,6 +305,11 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
             return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
         }
 #endif
+#ifdef WITH_RISCV
+        if (target.arch == Target::RISCV) {
+            return make_codegen<CodeGen_GPU_Host<CodeGen_RISCV>>(target, context);
+        }
+#endif
 
         user_error << "Invalid target architecture for GPU backend: "
                    << target.to_string() << "\n";
@@ -313,6 +325,8 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
         return make_codegen<CodeGen_PowerPC>(target, context);
     } else if (target.arch == Target::Hexagon) {
         return make_codegen<CodeGen_Hexagon>(target, context);
+    } else if (target.arch == Target::RISCV) {
+        return make_codegen<CodeGen_RISCV>(target, context);
     }
 
     user_error << "Unknown target architecture: "
@@ -429,6 +443,7 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
+bool CodeGen_LLVM::llvm_RISCV_enabled = false;
 
 namespace {
 

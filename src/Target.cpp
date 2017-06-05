@@ -66,6 +66,10 @@ Target calculate_host_target() {
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
 
+#if __riscv__
+    Target::Arch arch = Target::RISCV;
+    return Target(os, arch, bits);
+#else
 #if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
     return Target(os, arch, bits);
@@ -162,6 +166,7 @@ Target calculate_host_target() {
 #endif
 #endif
 #endif
+#endif
 }
 
 }  // namespace
@@ -204,6 +209,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
+    {"riscv", Target::RISCV},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -485,6 +491,9 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_HEXAGON)
     bad |= arch == Target::Hexagon;
+#endif
+#if !defined(WITH_RISCV)
+    bad |= arch == Target::RISCV;
 #endif
 #if !defined(WITH_PTX)
     bad |= has_feature(Target::CUDA);
