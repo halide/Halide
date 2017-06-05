@@ -71,6 +71,10 @@ protected:
     /** Emit a statement */
     void print_stmt(Stmt);
 
+    void create_assertion(const std::string &id_cond, const std::string &id_msg);
+    void create_assertion(const std::string &id_cond, Expr message);
+    void create_assertion(Expr cond, Expr message);
+
     enum AppendSpaceIfNeeded {
         DoNotAppendSpace,
         AppendSpace,
@@ -112,7 +116,6 @@ protected:
 
     struct Allocation {
         Type type;
-        std::string free_function;
     };
 
     /** Track the types of allocations to avoid unnecessary casts. */
@@ -127,8 +130,18 @@ protected:
     /** Track current calling convention scope. */
     bool extern_c_open;
 
+    /** True if at least one vector type is used. */
+    bool uses_vector_types;
+
+    /** True if at least one gpu-based for loop is used. */
+    bool uses_gpu_for_loops;
+
     /** Track which handle types have been forward-declared already. */
     std::set<const halide_handle_cplusplus_type *> forward_declared;
+
+    /** If the Type is a handle type, emit a forward-declaration for it
+     * if we haven't already. */
+    void forward_declare_type_if_needed(const Type &t);
 
     void set_name_mangling_mode(NameMangling mode);
 
