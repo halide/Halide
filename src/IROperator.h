@@ -1565,6 +1565,8 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
 inline Expr popcount(Expr x) {
     user_assert(x.defined()) << "popcount of undefined Expr\n";
     Type t = x.type();
+    user_assert(t.is_uint() || t.is_int())
+        << "Argument to popcount must be an integer\n";
     return Internal::Call::make(t, Internal::Call::popcount,
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
@@ -1574,6 +1576,8 @@ inline Expr popcount(Expr x) {
 inline Expr count_leading_zeros(Expr x) {
     user_assert(x.defined()) << "count leading zeros of undefined Expr\n";
     Type t = x.type();
+    user_assert(t.is_uint() || t.is_int())
+        << "Argument to count_leading_zeros must be an integer\n";
     return Internal::Call::make(t, Internal::Call::count_leading_zeros,
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
@@ -1583,6 +1587,8 @@ inline Expr count_leading_zeros(Expr x) {
 inline Expr count_trailing_zeros(Expr x) {
     user_assert(x.defined()) << "count trailing zeros of undefined Expr\n";
     Type t = x.type();
+    user_assert(t.is_uint() || t.is_int())
+        << "Argument to count_trailing_zeros must be an integer\n";
     return Internal::Call::make(t, Internal::Call::count_trailing_zeros,
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
 }
