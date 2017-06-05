@@ -391,7 +391,9 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
-        stream << R"INLINE_CODE(
+        // MSVC has a limit of ~16k for string literals, so split
+        // up these declarations accordingly
+        const char *cpp_vector_decl = R"INLINE_CODE(
 #if !defined(__has_attribute)
     #define __has_attribute(x) 0
 #endif 
@@ -719,6 +721,9 @@ private:
     ElementType elements[Lanes];
 };
 
+)INLINE_CODE";
+
+        const char *native_vector_decl = R"INLINE_CODE(
 #if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
 template <typename ElementType_, size_t Lanes_>
 class NativeVector {
@@ -970,29 +975,33 @@ private:
         native_vector = src;
     }
 };
-
-#if __GNUC__ && !__clang__
-    // GCC only allows powers-of-two; fall back to CppVector for other widths
-    #define halide_cpp_use_native_vector(lanes) ((lanes & (lanes - 1)) == 0)
-#else
-    #define halide_cpp_use_native_vector(lanes) (true)
-#endif
-
-#else
-
-    // No NativeVector available
-    #define halide_cpp_use_native_vector(lanes) (false)
-
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
 
-// Failsafe to allow forcing non-native vectors in case of unruly compilers
+)INLINE_CODE";
+
+        const char *vector_selection_decl = R"INLINE_CODE(
+#if __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+    #if __GNUC__ && !__clang__
+        // GCC only allows powers-of-two; fall back to CppVector for other widths
+        #define halide_cpp_use_native_vector(lanes) ((lanes & (lanes - 1)) == 0)
+    #else
+        #define halide_cpp_use_native_vector(lanes) (true)
+    #endif
+#else
+    // No NativeVector available
+    #define halide_cpp_use_native_vector(lanes) (false)
+#endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
+
+ // Failsafe to allow forcing non-native vectors in case of unruly compilers
 #if HALIDE_CPP_ALWAYS_USE_CPP_VECTORS
     #undef halide_cpp_use_native_vector
     #define halide_cpp_use_native_vector(lanes) (false)
 #endif
 
 )INLINE_CODE";
- 
+
+        stream << cpp_vector_decl << native_vector_decl << vector_selection_decl;
+
         for (const auto &t : vector_types) {
             string name = type_to_c_type(t, false, false);
             string scalar_name = type_to_c_type(t.element_of(), false, false);
