@@ -2702,6 +2702,8 @@ public:
         return std::unique_ptr<T>(t);
     }
 
+    using Internal::GeneratorBase::apply;
+
     template <typename... Args>
     void apply(const Args &...args) {
         static_assert(has_generate_method<T>::value && has_schedule_method<T>::value, 
