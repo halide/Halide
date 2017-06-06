@@ -103,9 +103,6 @@ protected:
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     std::string print_assignment(Type t, const std::string &rhs);
 
-    /** Emit a vector literal, using a lambda to generate each entry. */
-    virtual std::string print_vector_literal(const Type &t, const std::function<std::string(int i)> &f);
-
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
         return output_kind == CHeader ||
