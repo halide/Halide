@@ -104,7 +104,9 @@ inline bool is_nan_f32(float x) {return x != x;}
 inline bool is_nan_f64(double x) {return x != x;}
 template<typename A, typename B> 
 A reinterpret(const B &b) { 
-    static_assert(sizeof(A) == sizeof(B), "type size mismatch"); 
+    #if __cplusplus >= 201103L
+    static_assert(sizeof(A) == sizeof(B), "type size mismatch");
+    #endif
     A a; 
     memcpy(&a, &b, sizeof(a)); 
     return a;
@@ -789,7 +791,9 @@ public:
 
     template <typename OtherVec>
     static Vec convert_from(const OtherVec &src) {
+        #if __cplusplus >= 201103L
         static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
+        #endif
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = static_cast<typename Vec::ElementType>(src[i]);
@@ -1088,7 +1092,9 @@ public:
 
     template <typename OtherVec>
     static Vec convert_from(const OtherVec &src) {
+        #if __cplusplus >= 201103L
         static_assert(Vec::Lanes == OtherVec::Lanes, "Lanes mismatch");
+        #endif
 #if 0 // __has_builtin(__builtin_convertvector)
         // Disabled (for now) because __builtin_convertvector appears to have
         // different float->int rounding behavior in at least some situations;
