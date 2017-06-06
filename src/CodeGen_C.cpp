@@ -102,7 +102,13 @@ inline float neg_inf_f32() {return -INFINITY;}
 inline float inf_f32() {return INFINITY;}
 inline bool is_nan_f32(float x) {return x != x;}
 inline bool is_nan_f64(double x) {return x != x;}
-template<typename A, typename B> A reinterpret(B b) { static_assert(sizeof(A) == sizeof(B), "type size mismatch"); A a; memcpy(&a, &b, sizeof(a)); return a;}
+template<typename A, typename B> 
+A reinterpret(const B &b) { 
+    static_assert(sizeof(A) == sizeof(B), "type size mismatch"); 
+    A a; 
+    memcpy(&a, &b, sizeof(a)); 
+    return a;
+}
 inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}
 
 template<typename T> 
@@ -387,6 +393,24 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
         oss << " ";
     return oss.str();
 }
+
+template<typename T>
+string with_sep(const std::vector<T> &v, const std::string &sep) {
+    ostringstream o;
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i > 0) {
+            o << sep;
+        }
+        o << v[i];
+    }
+    return o.str();
+}
+
+template<typename T>
+string with_commas(const std::vector<T> &v) {
+    return with_sep<T>(v, ", ");
+}
+
 }
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
@@ -2080,11 +2104,7 @@ void CodeGen_C::visit(const Call *op) {
         do_indent();
         stream << "char " << buf_name << "[1024];\n";
         do_indent();
-        stream << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\"";
-        for (size_t i = 0; i < printf_args.size(); i++) {
-            stream << ", " << printf_args[i];
-        }
-        stream << ");\n";
+        stream << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\", " << with_commas(printf_args) << ");\n";
         rhs << buf_name;
 
     } else if (op->is_intrinsic(Call::register_destructor)) {
@@ -2138,17 +2158,10 @@ void CodeGen_C::visit(const Call *op) {
                 args[i] = "_ucon";
             }
         }
-        rhs << op->name << "(";
-
         if (function_takes_user_context(op->name)) {
-            rhs << "_ucon, ";
+            args.insert(args.begin(), "_ucon");
         }
-
-        for (size_t i = 0; i < op->args.size(); i++) {
-            if (i > 0) rhs << ", ";
-            rhs << args[i];
-        }
-        rhs << ")";
+        rhs << op->name << "(" << with_commas(args) << ")";
     }
 
     print_assignment(op->type, rhs.str());
@@ -2552,43 +2565,27 @@ void CodeGen_C::visit(const Shuffle *op) {
     for (size_t i = 1; i < op->vectors.size(); i++) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
     }
+    for (int i : op->indices) {
+        internal_assert(i >= -1 && i < (int) op->indices.size());
+    }
 
     string indices_name = unique_name('_');
     do_indent();
-    stream << "const int32_t " << indices_name << "[] = { ";
-    string comma = "";
-    for (int i : op->indices) {
-        internal_assert(i >= -1 && i < (int) op->indices.size());
-        stream << comma << i;
-        comma = ", ";
+    stream << "const int32_t " << indices_name << "[] = { " << with_commas(op->indices) << " };\n";
+    std::vector<string> vecs;
+    for (Expr v : op->vectors) {
+        vecs.push_back(print_expr(v));
     }
-    stream << " };\n";
     ostringstream rhs;
     if (op->vectors.size() <= 2) {
         // We may have intrinsics to do one- and two-vector cases efficiently
-        rhs << print_type(op->type) << "::shuffle(";
-        comma = "";
-        for (auto &v : op->vectors) {
-            rhs << comma << print_expr(v);
-            comma = ", ";
-        }
-        rhs << ", " << indices_name << ")";
+        rhs << print_type(op->type) << "::shuffle(" << with_commas(vecs) << ", " << indices_name << ")";
     } else {
         // dump everything to memory and do it the slow way.
         // TODO: this could and should definitely be improved.
-        std::vector<string> vecs;
-        for (Expr v : op->vectors) {
-            vecs.push_back(print_expr(v));
-        }
         string storage_name = unique_name('_');
         do_indent();
-        stream << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { ";
-        string comma = "";
-        for (auto &v : vecs) {
-            stream << comma << v;
-            comma = ", ";
-        }
-        stream << " };\n";
+        stream << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
         rhs << print_type(op->type) << "::shuffle<" << op->vectors[0].type().lanes() << ">(" 
             << op->vectors.size() << ", " 
             << storage_name << ", " 
