@@ -100,6 +100,9 @@ protected:
      * use different syntax for other C-like languages. */
     virtual void add_vector_typedefs(const std::set<Type> &vector_types);
 
+    /** Bottleneck to allow customization of calls to generic Extern/PureExtern calls.  */
+    virtual std::string print_extern_call(const Call *op);
+
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     std::string print_assignment(Type t, const std::string &rhs);
 
@@ -194,6 +197,23 @@ protected:
     void visit(const Prefetch *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
+
+    template<typename T>
+    static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
+        std::ostringstream o;
+        for (size_t i = 0; i < v.size(); ++i) {
+            if (i > 0) {
+                o << sep;
+            }
+            o << v[i];
+        }
+        return o.str();
+    }
+
+    template<typename T>
+    static std::string with_commas(const std::vector<T> &v) {
+        return with_sep<T>(v, ", ");
+    }
 };
 
 }

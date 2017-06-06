@@ -396,23 +396,6 @@ string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
     return oss.str();
 }
 
-template<typename T>
-string with_sep(const std::vector<T> &v, const std::string &sep) {
-    ostringstream o;
-    for (size_t i = 0; i < v.size(); ++i) {
-        if (i > 0) {
-            o << sep;
-        }
-        o << v[i];
-    }
-    return o.str();
-}
-
-template<typename T>
-string with_commas(const std::vector<T> &v) {
-    return with_sep<T>(v, ", ");
-}
-
 }
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
@@ -2125,45 +2108,53 @@ void CodeGen_C::visit(const Call *op) {
         // TODO: other intrinsics
         internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
     } else {
-        // Generic calls
-        vector<string> args(op->args.size());
-        for (size_t i = 0; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
-            // This substitution ensures const correctness for all calls
-            if (args[i] == "__user_context") {
-                args[i] = "_ucon";
-            }
-        }
-        if (op->type.is_vector()) {
-            // Need to split into multiple scalar calls.
-            string vname = unique_name('_');
-            do_indent();
-            stream << print_type(op->type, AppendSpace) << vname << ";\n";
-            const size_t lanes = op->type.lanes();
-            for (size_t lane = 0; lane < lanes; lane++) {
-                vector<string> argsn = args;
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    if (op->args[i].type().is_vector()) {
-                        argsn[i] += "[" + std::to_string(lane) + "]";
-                    }
-                }
-                rhs.str("");
-                if (function_takes_user_context(op->name)) {
-                    argsn.insert(argsn.begin(), "_ucon");
-                }
-                rhs << vname << ".replace(" << lane << ", " << op->name << "(" << with_commas(argsn) << "))";
-                vname = print_assignment(op->type, rhs.str());
-            }
-            return;  // skip the final print_assignment() call.
-        } else {
-            if (function_takes_user_context(op->name)) {
-                args.insert(args.begin(), "_ucon");
-            }
-            rhs << op->name << "(" << with_commas(args) << ")";
-        }
+        // Generic extern calls
+        rhs << print_extern_call(op);
     }
 
     print_assignment(op->type, rhs.str());
+}
+
+string CodeGen_C::print_extern_call(const Call *op) {
+    vector<string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+        // This substitution ensures const correctness for all calls
+        if (args[i] == "__user_context") {
+            args[i] = "_ucon";
+        }
+    }
+    ostringstream rhs;
+    if (op->type.is_vector()) {
+        // Need to split into multiple scalar calls.
+        string vname = unique_name('_');
+        do_indent();
+        stream << print_type(op->type, AppendSpace) << vname << ";\n";
+        const size_t lanes = op->type.lanes();
+        for (size_t lane = 0; lane < lanes; lane++) {
+            vector<string> argsn = args;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (op->args[i].type().is_vector()) {
+                    argsn[i] += "[" + std::to_string(lane) + "]";
+                }
+            }
+            rhs.str("");
+            if (function_takes_user_context(op->name)) {
+                argsn.insert(argsn.begin(), "_ucon");
+            }
+            rhs << vname << ".replace(" << lane << ", " << op->name << "(" << with_commas(argsn) << "))";
+            if (lane < lanes - 1) {
+                vname = print_assignment(op->type, rhs.str());
+            } 
+            // else fall thru and return the last rhs
+        }
+    } else {
+        if (function_takes_user_context(op->name)) {
+            args.insert(args.begin(), "_ucon");
+        }
+        rhs << op->name << "(" << with_commas(args) << ")";
+    }
+    return rhs.str();
 }
 
 void CodeGen_C::visit(const Load *op) {
