@@ -831,56 +831,32 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_object_lifetime,$(GE
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_only,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/1365
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/1365
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_TESTS))
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_old_buffer_t,$(GENERATOR_AOTCPP_TESTS))
 
-#https://github.com/halide/Halide/issues/2082
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2081
+# https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2081
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context_insanity,$(GENERATOR_AOTCPP_TESTS))
-
-# Works on Clang, but fails for GCC, due to non-power-of-two vector sizes.
-# TODO: find a way to whitelist for Clang or Blacklist for GCC.
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_blur2x2,$(GENERATOR_AOTCPP_TESTS))		
-
-# https://github.com/halide/Halide/issues/1365
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_metadata_tester,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled))
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
-
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2075
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_external_code,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2076
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2076
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_old_buffer_t,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2075
-# https://github.com/halide/Halide/issues/2078
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_tiled_blur,$(GENERATOR_AOTCPP_TESTS))
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2080
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_example,$(GENERATOR_AOTCPP_TESTS))
+# https://github.com/halide/Halide/issues/2082
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generators: $(GENERATOR_AOTCPP_TESTS)
 test_generators: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS)
