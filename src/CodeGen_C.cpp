@@ -501,8 +501,7 @@ public:
         }
     }
 
-    static Vec shuffle(const Vec &a, 
-                       const int32_t indices[Lanes]) {
+    static Vec shuffle(const Vec &a, const int32_t indices[Lanes]) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             if (indices[i] < 0) {
@@ -514,34 +513,18 @@ public:
     }
 
     template<size_t InputLanes>
-    static Vec shuffle(const CppVector<ElementType, InputLanes> &a, 
-                       const CppVector<ElementType, InputLanes> &b, 
-                       const int32_t indices[Lanes]) {
-        static_assert(InputLanes + InputLanes == Lanes, "Lane count mismatch");
+    static Vec concat(size_t count, const CppVector<ElementType, InputLanes> vecs[]) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            if (indices[i] < 0) {
-                continue;
-            }
-            r.elements[i] = (indices[i] < InputLanes) ? 
-                            a[indices[i]] : 
-                            b[indices[i] - InputLanes];
+            r.elements[i] = vecs[i / InputLanes][i % InputLanes];
         }
         return r;
     }
 
-    template<size_t InputLanes>
-    static Vec shuffle(size_t count, 
-                       const CppVector<ElementType, InputLanes> vecs[], 
-                       const int32_t indices[Lanes]) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            if (indices[i] < 0) {
-                continue;
-            }
-            r.elements[i] = vecs[indices[i] / InputLanes][indices[i] % InputLanes];
-        }
-        return r;
+    Vec replace(size_t i, const ElementType &b) const { 
+        Vec r = *this;
+        r.elements[i] = b;
+        return r; 
     }
 
     ElementType operator[](size_t i) const { 
@@ -551,7 +534,7 @@ public:
     Vec operator~() const { 
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ~r.elements[i];
+            r.elements[i] = ~elements[i];
         }
         return r;
     }
@@ -655,14 +638,14 @@ public:
         }
         return r;
     }
-    friend Vec operator>>(const Vec &a, ElementType b) {
+    friend Vec operator>>(const Vec &a, const ElementType &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a[i] >> b;
         }
         return r;
     }
-    friend Vec operator<<(const Vec &a, ElementType b) {
+    friend Vec operator<<(const Vec &a, const ElementType &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = a[i] << b;
@@ -920,8 +903,7 @@ public:
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
-    static Vec shuffle(const Vec &a, 
-                       const int32_t indices[Lanes]) {
+    static Vec shuffle(const Vec &a, const int32_t indices[Lanes]) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             if (indices[i] < 0) {
@@ -934,35 +916,19 @@ public:
 
     // TODO: this should be improved by taking advantage of native operator support.
     template<size_t InputLanes>
-    static Vec shuffle(const NativeVector<ElementType, InputLanes> &a, 
-                       const NativeVector<ElementType, InputLanes> &b, 
-                       const int32_t indices[Lanes]) {
-        static_assert(InputLanes + InputLanes == Lanes, "Lane count mismatch");
+    static Vec concat(size_t count, const NativeVector<ElementType, InputLanes> vecs[]) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            if (indices[i] < 0) {
-                continue;
-            }
-            r.native_vector[i] = (indices[i] < InputLanes) ? 
-                            a[indices[i]] : 
-                            b[indices[i] - InputLanes];
+            r.native_vector[i] = vecs[i / InputLanes][i % InputLanes];
         }
         return r;
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
-    template<size_t InputLanes>
-    static Vec shuffle(size_t count, 
-                       const NativeVector<ElementType, InputLanes> vecs[], 
-                       const int32_t indices[Lanes]) {
-        Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            if (indices[i] < 0) {
-                continue;
-            }
-            r.native_vector[i] = vecs[indices[i] / InputLanes][indices[i] % InputLanes];
-        }
-        return r;
+    Vec replace(size_t i, const ElementType &b) const { 
+        Vec r = *this;
+        r.native_vector[i] = b;
+        return r; 
     }
 
     ElementType operator[](size_t i) const { 
@@ -1798,7 +1764,9 @@ void CodeGen_C::visit(const Max *op) {
     if (op->type.is_scalar()) {
         print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
     } else {
-        print_expr(Call::make(op->type, print_type(op->type) + "::max", {op->a, op->b}, Call::Extern));
+        ostringstream rhs;
+        rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        print_assignment(op->type, rhs.str());
     }
 }
 
@@ -1808,7 +1776,9 @@ void CodeGen_C::visit(const Min *op) {
     if (op->type.is_scalar()) {
         print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
     } else {
-        print_expr(Call::make(op->type, print_type(op->type) + "::min", {op->a, op->b}, Call::Extern));
+        ostringstream rhs;
+        rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        print_assignment(op->type, rhs.str());
     }
 }
 
@@ -2158,10 +2128,33 @@ void CodeGen_C::visit(const Call *op) {
                 args[i] = "_ucon";
             }
         }
-        if (function_takes_user_context(op->name)) {
-            args.insert(args.begin(), "_ucon");
+        if (op->type.is_vector()) {
+            // Need to split into multiple scalar calls.
+            string vname = unique_name('_');
+            do_indent();
+            stream << print_type(op->type, AppendSpace) << vname << ";\n";
+            const size_t lanes = op->type.lanes();
+            for (size_t lane = 0; lane < lanes; lane++) {
+                vector<string> argsn = args;
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    if (op->args[i].type().is_vector()) {
+                        argsn[i] += "[" + std::to_string(lane) + "]";
+                    }
+                }
+                rhs.str("");
+                if (function_takes_user_context(op->name)) {
+                    argsn.insert(argsn.begin(), "_ucon");
+                }
+                rhs << vname << ".replace(" << lane << ", " << op->name << "(" << with_commas(argsn) << "))";
+                vname = print_assignment(op->type, rhs.str());
+            }
+            return;  // skip the final print_assignment() call.
+        } else {
+            if (function_takes_user_context(op->name)) {
+                args.insert(args.begin(), "_ucon");
+            }
+            rhs << op->name << "(" << with_commas(args) << ")";
         }
-        rhs << op->name << "(" << with_commas(args) << ")";
     }
 
     print_assignment(op->type, rhs.str());
@@ -2565,34 +2558,31 @@ void CodeGen_C::visit(const Shuffle *op) {
     for (size_t i = 1; i < op->vectors.size(); i++) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
     }
+    internal_assert(op->type.lanes() == (int) op->indices.size());
     for (int i : op->indices) {
         internal_assert(i >= -1 && i < (int) op->indices.size());
     }
 
-    string indices_name = unique_name('_');
-    do_indent();
-    stream << "const int32_t " << indices_name << "[] = { " << with_commas(op->indices) << " };\n";
     std::vector<string> vecs;
     for (Expr v : op->vectors) {
         vecs.push_back(print_expr(v));
     }
-    ostringstream rhs;
-    if (op->vectors.size() <= 2) {
-        // We may have intrinsics to do one- and two-vector cases efficiently
-        rhs << print_type(op->type) << "::shuffle(" << with_commas(vecs) << ", " << indices_name << ")";
-    } else {
-        // dump everything to memory and do it the slow way.
-        // TODO: this could and should definitely be improved.
+    string src = vecs[0];
+    if (op->vectors.size() > 1) {
+        ostringstream rhs;
         string storage_name = unique_name('_');
         do_indent();
         stream << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
-        rhs << print_type(op->type) << "::shuffle<" << op->vectors[0].type().lanes() << ">(" 
-            << op->vectors.size() << ", " 
-            << storage_name << ", " 
-            << indices_name 
-            << ")";
 
+        rhs << print_type(op->type) << "::concat(" << op->vectors.size() << ", " << storage_name << ")";
+        src = print_assignment(op->type, rhs.str());
     }
+    string indices_name = unique_name('_');
+    do_indent();
+    stream << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
+
+    ostringstream rhs;
+    rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
     print_assignment(op->type, rhs.str());
 }
 
