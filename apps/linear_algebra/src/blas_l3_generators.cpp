@@ -44,7 +44,7 @@ class GEMMGenerator :
         const bool transpose_A = !transpose_AB && (bool)transpose_A_;
         const bool transpose_B = !transpose_AB && (bool)transpose_B_;
         if (transpose_AB) {
-          std::swap(A_in, B_in);
+            std::swap(A_in, B_in);
         }
 
         Var i, j, ii, ji, jii, iii, io, jo, t;
