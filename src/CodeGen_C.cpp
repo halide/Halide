@@ -450,7 +450,7 @@ public:
     static Vec load(const void *base, int32_t offset) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ((ElementType*)base)[i + offset];
+            r.elements[i] = ((const ElementType*)base)[i + offset];
         }
         return r;
     }
@@ -459,7 +459,7 @@ public:
     static Vec load(const void *base, const CppVector<int32_t, Lanes> &offset) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ((ElementType*)base)[offset[i]];
+            r.elements[i] = ((const ElementType*)base)[offset[i]];
         }
         return r;
     }
@@ -867,7 +867,7 @@ public:
     static Vec load(const void *base, int32_t offset) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ((ElementType*)base)[i + offset];
+            r.native_vector[i] = ((const ElementType*)base)[i + offset];
         }
         return r;
     }
