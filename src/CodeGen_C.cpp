@@ -515,8 +515,6 @@ public:
             if (indices[i] < 0) {
                 continue;
             }
-            size_t vidx = indices[i] / InputLanes;
-            size_t vbit = indices[i] % InputLanes;
             r.elements[i] = vecs[indices[i] / InputLanes][indices[i] % InputLanes];
         }
         return r;
@@ -938,8 +936,6 @@ public:
             if (indices[i] < 0) {
                 continue;
             }
-            size_t vidx = indices[i] / InputLanes;
-            size_t vbit = indices[i] % InputLanes;
             r.native_vector[i] = vecs[indices[i] / InputLanes][indices[i] % InputLanes];
         }
         return r;
