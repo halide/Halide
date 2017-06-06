@@ -130,6 +130,27 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     }
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
+    string id_base = print_expr(op->base);
+    string id_stride = print_expr(op->stride);
+
+    ostringstream rhs;
+    rhs << id_base << " + " << id_stride << " * ("
+        << print_type(op->type.with_lanes(op->lanes)) << ")(0";
+    // Note 0 written above.
+    for (int i = 1; i < op->lanes; ++i) {
+        rhs << ", " << i;
+    }
+    rhs << ")";
+    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
+    string id_value = print_expr(op->value);
+
+    print_assignment(op->type.with_lanes(op->lanes), id_value);
+}
+
 namespace {
 // Mapping of integer vector indices to OpenCL ".s" syntax.
 const char * vector_elements = "0123456789ABCDEF";
@@ -186,6 +207,17 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
     } else {
         CodeGen_C::visit(op);
     }
+}
+
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
+    internal_assert(!function_takes_user_context(op->name));
+    vector<string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+    }
+    ostringstream rhs;
+    rhs << op->name << "(" << with_commas(args) << ")";
+    return rhs.str();
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {

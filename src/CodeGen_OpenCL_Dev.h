@@ -53,11 +53,14 @@ protected:
         using CodeGen_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace);
         std::string print_reinterpret(Type type, Expr e);
+        std::string print_extern_call(const Call *op);
         void add_vector_typedefs(const std::set<Type> &vector_types);
 
         std::string get_memory_space(const std::string &);
 
         void visit(const For *);
+        void visit(const Ramp *op);
+        void visit(const Broadcast *op);
         void visit(const Call *op);
         void visit(const Load *op);
         void visit(const Store *op);
