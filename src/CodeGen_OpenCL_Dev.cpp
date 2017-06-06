@@ -75,20 +75,6 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
     return oss.str();
 }
 
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_vector_literal(const Type &t, const std::function<std::string(int i)> &f) {
-    internal_assert(t.is_vector());
-    ostringstream rhs;
-    rhs << "(" << print_type(t) << "){";
-    for (int i = 0; i < t.lanes(); ++i) {
-        if (i > 0) {
-            rhs << ", ";
-        }
-        rhs << f(i);
-    }
-    rhs << "}";
-    return rhs.str();
-}
-
 // These are built-in types in OpenCL
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_vector_typedefs(const std::set<Type> &vector_types) {
 }
