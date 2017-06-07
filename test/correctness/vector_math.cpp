@@ -1,12 +1,10 @@
 #include "Halide.h"
 #include <math.h>
 #include <stdio.h>
-#include <string>
+#include <string.h>
 #include <cmath>
 #include <algorithm>
 #include <future>
-#include <random>
-#include <dlfcn.h>
 
 using namespace Halide;
 
@@ -111,59 +109,20 @@ struct with_unsigned<int64_t> {
     typedef uint64_t type;
 };
 
-#define HALIDE_TEST_CPP_BACKEND 1
-#ifndef HALIDE_TEST_CPP_BACKEND
-    #define HALIDE_TEST_CPP_BACKEND 0
-#endif
-
-template<typename A> 
-Buffer<A> realize_func(Func f, int w, int h) {
-#if !HALIDE_TEST_CPP_BACKEND
-    return f.realize(w, h);
-#else
-    Buffer<A> result(w, h);
-    Halide::Internal::TemporaryFile cc("", ".cpp");
-    f.compile_to_c(cc.pathname(), {}, "vector_test");
-    Halide::Internal::TemporaryFile so("", ".so");
-    std::string cmd = "gcc -shared -o " + so.pathname() + " -g -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -fno-rtti -fno-exceptions -fPIC -std=c++03 " + cc.pathname() + " /Users/srj/GitHub/Halide/bin/host/runtime.a";
-    std::cout << "   Compiling " << cc.pathname() << "\n";
-//cc.detach();
-    int r = system(cmd.c_str());
-    assert(r == 0);
-    void *lib = dlopen(so.pathname().c_str(), RTLD_LAZY | RTLD_LOCAL);
-    assert(lib);
-    void *sym = dlsym(lib, "vector_test");
-    assert(sym);
-    typedef int (*VectorTestFunc)(struct halide_buffer_t*);
-    r = ((VectorTestFunc)sym)(result.raw_buffer());
-    assert(r == 0);
-    dlclose(lib);
-    return result;
-#endif
-}
-
 
 template<typename A>
-bool test(int lanes, int seed) {
+bool test(int lanes) {
     const int W = 320;
     const int H = 16;
 
-#if HALIDE_TEST_CPP_BACKEND
-    const int verbose = true;
-#else
     const int verbose = false;
-#endif
 
     printf("Testing %sx%d\n", string_of_type<A>(), lanes);
-
-    // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
-    std::mt19937 rng(seed);
-    std::uniform_int_distribution<> dis(0, 1023);
 
     Buffer<A> input(W+16, H+16);
     for (int y = 0; y < H+16; y++) {
         for (int x = 0; x < W+16; x++) {
-            input(x, y) = (A)(dis(rng)*0.125 + 1.0);
+            input(x, y) = (A)((rand() % 1024)*0.125 + 1.0);
             if ((A)(-1) < 0) {
                 input(x, y) -= 10;
             }
@@ -171,13 +130,12 @@ bool test(int lanes, int seed) {
     }
     Var x, y;
 
-#if 1
     // Add
-    if (verbose) printf("Add %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Add\n");
     Func f1;
     f1(x, y) = input(x, y) + input(x+1, y);
     f1.vectorize(x, lanes);
-    Buffer<A> im1 = realize_func<A>(f1, W, H);
+    Buffer<A> im1 = f1.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -190,11 +148,11 @@ bool test(int lanes, int seed) {
     }
 
     // Sub
-    if (verbose) printf("Subtract %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Subtract\n");
     Func f2;
     f2(x, y) = input(x, y) - input(x+1, y);
     f2.vectorize(x, lanes);
-    Buffer<A> im2 = realize_func<A>(f2, W, H);
+    Buffer<A> im2 = f2.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -207,11 +165,11 @@ bool test(int lanes, int seed) {
     }
 
     // Mul
-    if (verbose) printf("Multiply %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Multiply\n");
     Func f3;
     f3(x, y) = input(x, y) * input(x+1, y);
     f3.vectorize(x, lanes);
-    Buffer<A> im3 = realize_func<A>(f3, W, H);
+    Buffer<A> im3 = f3.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -224,11 +182,11 @@ bool test(int lanes, int seed) {
     }
 
     // select
-    if (verbose) printf("Select %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Select\n");
     Func f4;
     f4(x, y) = select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
     f4.vectorize(x, lanes);
-    Buffer<A> im4 = realize_func<A>(f4, W, H);
+    Buffer<A> im4 = f4.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -240,14 +198,15 @@ bool test(int lanes, int seed) {
         }
     }
 
+
     // Gather
-    if (verbose) printf("Gather %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Gather\n");
     Func f5;
     Expr xCoord = clamp(cast<int>(input(x, y)), 0, W-1);
     Expr yCoord = clamp(cast<int>(input(x+1, y)), 0, H-1);
     f5(x, y) = input(xCoord, yCoord);
     f5.vectorize(x, lanes);
-    Buffer<A> im5 = realize_func<A>(f5, W, H);
+    Buffer<A> im5 = f5.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -272,7 +231,7 @@ bool test(int lanes, int seed) {
     Func f5a;
     f5a(x, y) = input(x, y)*cast<A>(2);
     f5a.vectorize(y, lanes);
-    Buffer<A> im5a = realize_func<A>(f5a, W, H);
+    Buffer<A> im5a = f5a.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -285,7 +244,7 @@ bool test(int lanes, int seed) {
     }
 
     // Scatter
-    if (verbose) printf("Scatter %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Scatter\n");
     Func f6;
     // Set one entry in each column high
     f6(x, y) = 0;
@@ -293,7 +252,7 @@ bool test(int lanes, int seed) {
 
     f6.update().vectorize(x, lanes);
 
-    Buffer<int> im6 = realize_func<int>(f6, W, H);
+    Buffer<int> im6 = f6.realize(W, H);
 
     for (int x = 0; x < W; x++) {
         int yCoord = x*x;
@@ -309,11 +268,11 @@ bool test(int lanes, int seed) {
     }
 
     // Min/max
-    if (verbose) printf("Min/max %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Min/max\n");
     Func f7;
     f7(x, y) = clamp(input(x, y), cast<A>(10), cast<A>(20));
     f7.vectorize(x, lanes);
-    Buffer<A> im7 = realize_func<A>(f7, W, H);
+    Buffer<A> im7 = f7.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -323,14 +282,13 @@ bool test(int lanes, int seed) {
             }
         }
     }
-#endif
-#if 1
+
     // Extern function call
-    if (verbose) printf("External call to hypot %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("External call to hypot\n");
     Func f8;
     f8(x, y) = hypot(1.1f, cast<float>(input(x, y)));
     f8.vectorize(x, lanes);
-    Buffer<float> im8 = realize_func<float>(f8, W, H);
+    Buffer<float> im8 = f8.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -342,14 +300,13 @@ bool test(int lanes, int seed) {
             }
         }
     }
-#endif
-#if 1
+
     // Div
-    if (verbose) printf("Division %sx%d\n", string_of_type<A>(), lanes);
-    Func f9("div_result");
+    if (verbose) printf("Division\n");
+    Func f9;
     f9(x, y) = input(x, y) / clamp(input(x+1, y), cast<A>(1), cast<A>(3));
     f9.vectorize(x, lanes);
-    Buffer<A> im9 = realize_func<A>(f9, W, H);
+    Buffer<A> im9 = f9.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -367,15 +324,14 @@ bool test(int lanes, int seed) {
             }
         }
     }
-#endif
-#if 1
+
     // Divide by small constants
-    if (verbose) printf("Dividing by small constants %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Dividing by small constants\n");
     for (int c = 2; c < 16; c++) {
         Func f10;
         f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
         f10.vectorize(x, lanes);
-        Buffer<A> im10 = realize_func<A>(f10, W, H);
+        Buffer<A> im10 = f10.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
@@ -392,33 +348,30 @@ bool test(int lanes, int seed) {
             }
         }
     }
-#endif
-#if 1
+
     // Interleave
-    if (verbose) printf("Interleaving store %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Interleaving store\n");
     Func f11;
     f11(x, y) = select((x%2)==0, input(x/2, y), input(x/2, y+1));
     f11.vectorize(x, lanes);
-    Buffer<A> im11 = realize_func<A>(f11, W, H);
+    Buffer<A> im11 = f11.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             A correct = ((x%2)==0) ? input(x/2, y) : input(x/2, y+1);
             if (im11(x, y) != correct) {
                 printf("im11(%d, %d) = %f instead of %f\n", x, y, (double)(im11(x, y)), (double)(correct));
-                abort();
                 return false;
             }
         }
     }
-#endif
-#if 1
+
     // Reverse
-    if (verbose) printf("Reversing %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Reversing\n");
     Func f12;
     f12(x, y) = input(W-1-x, H-1-y);
     f12.vectorize(x, lanes);
-    Buffer<A> im12 = realize_func<A>(f12, W, H);
+    Buffer<A> im12 = f12.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -431,11 +384,11 @@ bool test(int lanes, int seed) {
     }
 
     // Unaligned load with known shift
-    if (verbose) printf("Unaligned load %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Unaligned load\n");
     Func f13;
     f13(x, y) = input(x+3, y);
     f13.vectorize(x, lanes);
-    Buffer<A> im13 = realize_func<A>(f13, W, H);
+    Buffer<A> im13 = f13.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -448,10 +401,10 @@ bool test(int lanes, int seed) {
 
     // Absolute value
     if (!type_of<A>().is_uint()) {
-        if (verbose) printf("Absolute value %sx%d\n", string_of_type<A>(), lanes);
+        if (verbose) printf("Absolute value\n");
         Func f14;
         f14(x, y) = cast<A>(abs(input(x, y)));
-        Buffer<A> im14 = realize_func<A>(f14, W, H);
+        Buffer<A> im14 = f14.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
@@ -466,14 +419,14 @@ bool test(int lanes, int seed) {
 
     // pmaddwd
     if (type_of<A>() == Int(16)) {
-        if (verbose) printf("pmaddwd %sx%d\n", string_of_type<A>(), lanes);
+        if (verbose) printf("pmaddwd\n");
         Func f15, f16;
         f15(x, y) = cast<int>(input(x, y)) * input(x, y+2) + cast<int>(input(x, y+1)) * input(x, y+3);
         f16(x, y) = cast<int>(input(x, y)) * input(x, y+2) - cast<int>(input(x, y+1)) * input(x, y+3);
         f15.vectorize(x, lanes);
         f16.vectorize(x, lanes);
-        Buffer<int32_t> im15 = realize_func<int32_t>(f15, W, H);
-        Buffer<int32_t> im16 = realize_func<int32_t>(f16, W, H);
+        Buffer<int32_t> im15 = f15.realize(W, H);
+        Buffer<int32_t> im16 = f16.realize(W, H);
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 int correct15 = input(x, y)*input(x, y+2) + input(x, y+1)*input(x, y+3);
@@ -490,7 +443,7 @@ bool test(int lanes, int seed) {
 
     // Fast exp, log, and pow
     if (type_of<A>() == Float(32)) {
-        if (verbose) printf("Fast transcendentals %sx%d\n", string_of_type<A>(), lanes);
+        if (verbose) printf("Fast transcendentals\n");
         Func f15, f16, f17, f18, f19, f20;
         Expr a = input(x, y) * 0.5f;
         Expr b = input((x+1)%W, y) * 0.5f;
@@ -500,12 +453,12 @@ bool test(int lanes, int seed) {
         f18(x, y) = fast_log(a);
         f19(x, y) = fast_exp(b);
         f20(x, y) = fast_pow(a, b/16.0f);
-        Buffer<float> im15 = realize_func<float>(f15, W, H);
-        Buffer<float> im16 = realize_func<float>(f16, W, H);
-        Buffer<float> im17 = realize_func<float>(f17, W, H);
-        Buffer<float> im18 = realize_func<float>(f18, W, H);
-        Buffer<float> im19 = realize_func<float>(f19, W, H);
-        Buffer<float> im20 = realize_func<float>(f20, W, H);
+        Buffer<float> im15 = f15.realize(W, H);
+        Buffer<float> im16 = f16.realize(W, H);
+        Buffer<float> im17 = f17.realize(W, H);
+        Buffer<float> im18 = f18.realize(W, H);
+        Buffer<float> im19 = f19.realize(W, H);
+        Buffer<float> im20 = f20.realize(W, H);
 
         int worst_log_mantissa = 0;
         int worst_exp_mantissa = 0;
@@ -599,7 +552,7 @@ bool test(int lanes, int seed) {
     }
 
     // Lerp (where the weight is the same type as the values)
-    if (verbose) printf("Lerp %sx%d\n", string_of_type<A>(), lanes);
+    if (verbose) printf("Lerp\n");
     Func f21;
     Expr weight = input(x+2, y);
     Type t = type_of<A>();
@@ -609,7 +562,7 @@ bool test(int lanes, int seed) {
         weight = cast(UInt(t.bits(), t.lanes()), max(0, weight));
     }
     f21(x, y) = lerp(input(x, y), input(x+1, y), weight);
-    Buffer<A> im21 = realize_func<A>(f21, W, H);
+    Buffer<A> im21 = f21.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -653,31 +606,24 @@ bool test(int lanes, int seed) {
             }
         }
     }
-#endif
+
     return true;
 }
 
 int main(int argc, char **argv) {
 
-    int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
-    std::cout << "vector_math test seed: " << seed << std::endl;
-
     // Only native vector widths - llvm doesn't handle others well
-#if HALIDE_TEST_CPP_BACKEND
-    Halide::Internal::ThreadPool<bool> pool(1);
-#else
     Halide::Internal::ThreadPool<bool> pool;
-#endif
     std::vector<std::future<bool>> futures;
-    futures.push_back(pool.async(test<float>, 4, seed));
-    futures.push_back(pool.async(test<float>, 8, seed));
-    futures.push_back(pool.async(test<double>, 2, seed));
-    futures.push_back(pool.async(test<uint8_t>, 16, seed));
-    futures.push_back(pool.async(test<int8_t>, 16, seed));
-    futures.push_back(pool.async(test<uint16_t>, 8, seed));
-    futures.push_back(pool.async(test<int16_t>, 8, seed));
-    futures.push_back(pool.async(test<uint32_t>, 4, seed));
-    futures.push_back(pool.async(test<int32_t>, 4, seed));
+    futures.push_back(pool.async(test<float>, 4));
+    futures.push_back(pool.async(test<float>, 8));
+    futures.push_back(pool.async(test<double>, 2));
+    futures.push_back(pool.async(test<uint8_t>, 16));
+    futures.push_back(pool.async(test<int8_t>, 16));
+    futures.push_back(pool.async(test<uint16_t>, 8));
+    futures.push_back(pool.async(test<int16_t>, 8));
+    futures.push_back(pool.async(test<uint32_t>, 4));
+    futures.push_back(pool.async(test<int32_t>, 4));
 
     bool ok = true;
     for (auto &f : futures) {
