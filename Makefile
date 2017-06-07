@@ -1501,7 +1501,7 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
 
-$(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
+$(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/bazel/*
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/lib $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools $(DISTRIB_DIR)/tutorial/figures
 	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/bin
 	cp $(LIB_DIR)/libHalide.a $(DISTRIB_DIR)/lib
@@ -1521,8 +1521,23 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README.md $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/* $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/lib halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp halide/tools/halide_image.h halide/tools/halide_image_io.h halide/tools/halide_image_info.h
+	tar -czf $(DISTRIB_DIR)/halide.tgz \
+		halide/bin \
+		halide/lib \
+		halide/include \
+		halide/tutorial \
+		halide/BUILD \
+		halide/README.md \
+		halide/README_bazel.md \
+		halide/WORKSPACE \
+		halide/halide.bzl \
+		halide/tools/mex_halide.m \
+		halide/tools/GenGen.cpp \
+		halide/tools/halide_image.h \
+		halide/tools/halide_image_io.h \
+		halide/tools/halide_image_info.h
 	rm -rf halide
 
 .PHONY: distrib
