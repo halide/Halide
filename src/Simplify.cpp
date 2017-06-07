@@ -620,6 +620,12 @@ private:
         const Mul *mul_b = b.as<Mul>();
 
         const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
+
+        const Add *add_div_a_a = div_a ? div_a->a.as<Add>(): nullptr;
+        const Sub *sub_div_a_a = div_a ? div_a->a.as<Sub>(): nullptr;
+        const Add *add_div_b_a = div_b ? div_b->a.as<Add>(): nullptr;
+        const Sub *sub_div_b_a = div_b ? div_b->a.as<Sub>(): nullptr;
 
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : nullptr;
         const Mod *mod_a = a.as<Mod>();
@@ -797,6 +803,58 @@ private:
                    no_overflow(op->type)) {
             // a*b + b -> (a + 1)*b
             expr = mutate((mul_a->a + make_one(op->type)) * b);
+        } else if (div_a && add_div_a_a &&
+                   const_int(add_div_a_a->b, &ia) &&
+                   const_int(div_a->b, &ib) &&
+                   const_int(b, &ic)) {
+            // (y + c1)/c2 + c3 -> (y + (c1 + c2*c3))/c2
+            expr = mutate((add_div_a_a->a + (add_div_a_a->b + div_a->b*b))/div_a->b);
+        } else if (div_a && sub_div_a_a &&
+                   const_int(sub_div_a_a->a, &ia) &&
+                   const_int(div_a->b, &ib) &&
+                   const_int(b, &ic)) {
+            // (c1 - y)/c2 + c3 + -> ((c1 + c2*c3) - y)/c2
+            expr = mutate(((sub_div_a_a->a + div_a->b*b) - sub_div_a_a->b)/div_a->b);
+        } else if (div_b && add_div_b_a &&
+                   const_int(div_b->b, &ib) &&
+                   equal(a, add_div_b_a->a)) {
+            // x + (x + y)/c -> ((c + 1)*x + y)/c
+            expr = mutate(((div_b->b + 1)*a + add_div_b_a->b)/div_b->b);
+        } else if (div_b && sub_div_b_a &&
+                   const_int(div_b->b, &ib) &&
+                   equal(a, sub_div_b_a->a)) {
+            // x + (x - y)/c -> ((c + 1)*x - y)/c
+            expr = mutate(((div_b->b + 1)*a - sub_div_b_a->b)/div_b->b);
+        } else if (div_b && add_div_b_a &&
+                   const_int(div_b->b, &ib) &&
+                   equal(a, add_div_b_a->b)) {
+            // x + (y + x)/c -> ((c + 1)*x + y)/c
+            expr = mutate(((div_b->b + 1)*a + add_div_b_a->a)/div_b->b);
+        } else if (div_b && sub_div_b_a &&
+                   const_int(div_b->b, &ib) &&
+                   equal(a, sub_div_b_a->b)) {
+            // x + (y - x)/c -> ((c - 1)*x + y)/c
+            expr = mutate(((div_b->b - 1)*a + sub_div_b_a->a)/div_b->b);
+        } else if (div_a && add_div_a_a &&
+                   const_int(div_a->b, &ib) &&
+                   equal(b, add_div_a_a->a)) {
+            // (x + y)/c + x + -> ((c + 1)*x + y)/c
+            expr = mutate(((div_a->b + 1)*b + add_div_a_a->b)/div_a->b);
+        } else if (div_a && sub_div_a_a &&
+                   const_int(div_a->b, &ib) &&
+                   equal(b, sub_div_a_a->a)) {
+            // (x - y)/c + x + -> ((1 + c)*x - y)/c
+            expr = mutate(((1 + div_a->b)*b - sub_div_a_a->b)/div_a->b);
+        } else if (div_a && add_div_a_a &&
+                   const_int(div_a->b, &ib) &&
+                   equal(b, add_div_a_a->b)) {
+            // (y + x)/c + x -> (y + (c + 1)*x)/c
+            expr = mutate((add_div_a_a->a + (div_a->b + 1)*b)/div_a->b);
+        } else if (div_a && sub_div_a_a &&
+                   const_int(div_a->b, &ib) &&
+                   equal(b, sub_div_a_a->b)) {
+            // (y - x)/c + x -> (y + (c - 1)*x)/c
+            expr = mutate((sub_div_a_a->a + (div_a->b - 1)*b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    min_a &&
                    sub_a_b &&
@@ -959,7 +1017,7 @@ private:
             return;
         }
 
-        int64_t ia = 0, ib = 0;
+        int64_t ia = 0, ib = 0, ic = 0;
         uint64_t ua = 0, ub = 0;
         double fa = 0.0f, fb = 0.0f;
 
@@ -982,6 +1040,11 @@ private:
 
         const Div *div_a = a.as<Div>();
         const Div *div_b = b.as<Div>();
+
+        const Add *add_div_a_a = div_a ? div_a->a.as<Add>(): nullptr;
+        const Sub *sub_div_a_a = div_a ? div_a->a.as<Sub>(): nullptr;
+        const Add *add_div_b_a = div_b ? div_b->a.as<Add>(): nullptr;
+        const Sub *sub_div_b_a = div_b ? div_b->a.as<Sub>(): nullptr;
 
         const Min *min_b = b.as<Min>();
         const Add *add_b_a = min_b ? min_b->a.as<Add>() : nullptr;
@@ -1231,6 +1294,58 @@ private:
                    equal(add_a->b, add_b->a)) {
             // (b + a) - (a + c) -> b - c
             expr = mutate(add_a->a - add_b->b);
+        } else if (div_b && sub_div_b_a &&
+                   const_int(a, &ia) &&
+                   const_int(sub_div_b_a->a, &ib) &&
+                   const_int(div_b->b, &ic)) {
+            // c1 - (c2 - y)/c3 -> ((c1*c3 - c2) + y)/c3
+            expr = mutate(((a*div_b->b - sub_div_b_a->a)*a + sub_div_b_a->b)/div_b->b);
+        } else if (div_b && add_div_b_a &&
+                   const_int(a, &ia) &&
+                   const_int(add_div_b_a->b, &ib) &&
+                   const_int(div_b->b, &ic)) {
+            // c1 - (y + c2)/c3 -> ((c1*c3 - c2) - y)/c3
+            expr = mutate(((a*div_b->b - add_div_b_a->b) - add_div_b_a->a)/div_b->b);
+        } else if (div_b && add_div_b_a &&
+                   const_int(div_b->b, &ib) &&
+                   equal(a, add_div_b_a->a)) {
+            // x - (x + y)/c -> ((c - 1)*x - y)/c
+            expr = mutate(((div_b->b - 1)*a - add_div_b_a->b)/div_b->b);
+        } else if (div_b && sub_div_b_a &&
+                   const_int(div_b->b, &ib) &&
+                   equal(a, sub_div_b_a->a)) {
+            // x - (x - y)/c -> ((c - 1)*x + y)/c
+            expr = mutate(((div_b->b - 1)*a + sub_div_b_a->b)/div_b->b);
+        } else if (div_b && add_div_b_a &&
+                   const_int(div_b->b, &ib) &&
+                   equal(a, add_div_b_a->b)) {
+            // x - (y + x)/c -> ((c - 1)*x - y)/c
+            expr = mutate(((div_b->b - 1)*a - add_div_b_a->a)/div_b->b);
+        } else if (div_b && sub_div_b_a &&
+                   const_int(div_b->b, &ib) &&
+                   equal(a, sub_div_b_a->b)) {
+            // x - (y - x)/c -> ((c + 1)*x - y)/c
+            expr = mutate(((div_b->b + 1)*a - sub_div_b_a->a)/div_b->b);
+        } else if (div_a && add_div_a_a &&
+                   const_int(div_a->b, &ib) &&
+                   equal(b, add_div_a_a->a)) {
+            // (x + y)/c - x + -> ((1 - c)*x + y)/c
+            expr = mutate(((1 - div_a->b)*b + add_div_a_a->b)/div_a->b);
+        } else if (div_a && sub_div_a_a &&
+                   const_int(div_a->b, &ib) &&
+                   equal(b, sub_div_a_a->a)) {
+            // (x - y)/c - x + -> ((1 - c)*x - y)/c
+            expr = mutate(((1 - div_a->b)*b - sub_div_a_a->b)/div_a->b);
+        } else if (div_a && add_div_a_a &&
+                   const_int(div_a->b, &ib) &&
+                   equal(b, add_div_a_a->b)) {
+            // (y + x)/c - x -> (y + (1 - c)*x)/c
+            expr = mutate((add_div_a_a->a + (1 - div_a->b)*b)/div_a->b);
+        } else if (div_a && sub_div_a_a &&
+                   const_int(div_a->b, &ib) &&
+                   equal(b, sub_div_a_a->b)) {
+            // (y - x)/c - x -> (y - (c + 1)*x)/c
+            expr = mutate((sub_div_a_a->a - (div_a->b + 1)*b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    min_b &&
                    add_b_a &&
@@ -5419,6 +5534,27 @@ void check_algebra() {
     check(Expr(-7.25f) % 2.0f, 0.75f);
     check(Expr(-7.25f) % -2.0f, -1.25f);
     check(Expr(7.25f) % -2.0f, -0.75f);
+
+    check(2*x + (2*x + y)/5, (x*12 + y)/5);
+    check(x + (x - y)/4, (x*5 - y)/4);
+    check((x + z) + (y + (x + z))/3, ((x + z)*4 + y)/3);
+    check(x + ((y + w) - x)/2, (x + (y + w))/2);
+    check((x + y)/3 + x, (x*4 + y)/3);
+    check((x - y)/4 + x, (x*5 - y)/4);
+    check((y + x)/3 + x, (y + x*4)/3);
+    check((y - x)/3 + x, (y + x*2)/3);
+    check(x - (x + y)/3, (x*2 - y)/3);
+    check((w + x) - ((w + x) - y*z)/3, ((w + x)*2 + y*z)/3);
+    check(x - (y + x)/2, (x - y)/2);
+    check(x - (y - x)/6, (x*7 - y)/6);
+    check((x + y)/3 - x, (y - x*2)/3);
+    check((x*y - w)/4 - x*y, (x*y*(-3) - w)/4);
+    check((y + x)/5 - x, (y - x*4)/5);
+    check((y - x)/6 - x, (y - x*7)/6);
+    check(1 + (1 + y)/2, (y + 3)/2);
+    check((y + 1)/2 + 1, (y + 3)/2);
+    check(1 - (1 + y)/2 - 1, (-1 - y)/2);
+    check(1 - (-y + 1)/2 - 1, (y + (-1))/2);
 }
 
 void check_vectors() {
