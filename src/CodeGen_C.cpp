@@ -458,9 +458,7 @@ public:
 
     static Vec load(const void *base, int32_t offset) {
         Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ((const ElementType*)base)[i + offset];
-        }
+        memcpy(&r.elements[0], ((const ElementType*)base + offset), sizeof(r.elements));
         return r;
     }
 
@@ -474,9 +472,7 @@ public:
     }
 
     void store(void *base, int32_t offset) const {
-        for (size_t i = 0; i < Lanes; i++) {
-            ((ElementType*)base)[i + offset] = elements[i];
-        }
+        memcpy(((ElementType*)base + offset), &this->elements[0], sizeof(this->elements));
     }
 
     // scatter
@@ -839,11 +835,11 @@ public:
     }
 
     NativeVector() {
-        native_vector = NativeVectorType(0);
+        native_vector = (NativeVectorType){};
     }
 
     static Vec broadcast(const ElementType &v) {
-        return Vec(from_native_vector, NativeVectorType(v));
+        return Vec(from_native_vector, splat(v));
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
@@ -858,9 +854,7 @@ public:
     // TODO: could this be improved by taking advantage of native operator support?
     static Vec load(const void *base, int32_t offset) {
         Vec r(empty);
-        for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ((const ElementType*)base)[i + offset];
-        }
+        memcpy(&r.native_vector, ((const ElementType*)base + offset), sizeof(NativeVectorType));
         return r;
     }
 
@@ -869,16 +863,14 @@ public:
     static Vec load(const void *base, const NativeVector<int32_t, Lanes> &offset) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ((ElementType*)base)[offset[i]];
+            r.native_vector[i] = ((const ElementType*)base)[offset[i]];
         }
         return r;
     }
 
     // TODO: could this be improved by taking advantage of native operator support?
     void store(void *base, int32_t offset) const {
-        for (size_t i = 0; i < Lanes; i++) {
-            ((ElementType*)base)[i + offset] = native_vector[i];
-        }
+        memcpy(((ElementType*)base + offset), &native_vector, sizeof(NativeVectorType));
     }
 
     // scatter
@@ -1118,12 +1110,19 @@ private:
 
     // Leave vector uninitialized for cases where we overwrite every entry
     enum Empty { empty };
-    NativeVector(Empty) {}
+    inline NativeVector(Empty) {}
 
     // Syntactic sugar to avoid ctor overloading issues
     enum FromNativeVector { from_native_vector };
-    NativeVector(FromNativeVector, const NativeVectorType &src) {
+    inline NativeVector(FromNativeVector, const NativeVectorType &src) {
         native_vector = src;
+    }
+
+    inline static NativeVectorType splat(const ElementType &v) {
+        // This is a trick: there's no "splat" operation,
+        // so we do a scalar-minus-vector-of-zero operation,
+        // and hope the compiler will optimize appropriately.
+        return v - (NativeVectorType){};
     }
 };
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
