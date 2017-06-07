@@ -27,6 +27,8 @@ else
 endif
 endif
 
+BAZEL ?= $(shell which bazel)
+
 SHELL = bash
 CXX ?= g++
 PREFIX ?= /usr/local
@@ -1341,7 +1343,7 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)
 
 .PHONY: test_apps
-test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
+test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_bazel
 	mkdir -p apps
 	# Make a local copy of the apps if we're building out-of-tree,
 	# because the app Makefiles are written to build in-tree
@@ -1383,6 +1385,24 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	  make -C apps/linear_algebra clean HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
 	  make -C apps/linear_algebra test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
 	fi
+
+# Bazel depends on the distrib archive being built
+.PHONY: test_bazel
+test_bazel: $(DISTRIB_DIR)/halide.tgz
+	# Only test bazeldemo if Bazel is installed
+	if [ -z "$(BAZEL)" ]; then echo "Bazel is not installed"; exit 1; fi
+	mkdir -p apps
+	# Make a local copy of the apps if we're building out-of-tree,
+	# because the app Makefiles are written to build in-tree
+	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
+	  echo "Building out-of-tree, so making local copy of apps"; \
+	  cp -r $(ROOT_DIR)/apps/bazeldemo apps; \
+	  cp -r $(ROOT_DIR)/tools .; \
+	fi
+	cd apps/bazeldemo; \
+	CXX=`echo ${CXX} | sed 's/ccache //'` \
+	CC=`echo ${CC} | sed 's/ccache //'` \
+	bazel build --verbose_failures :all 
 
 .PHONY: test_python
 test_python: $(LIB_DIR)/libHalide.a $(INCLUDE_DIR)/Halide.h
@@ -1481,7 +1501,13 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
 
-$(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
+LLVM_SYSTEM_LIBS = $(shell $(LLVM_CONFIG) --system-libs | sed -e 's/[\/&]/\\&/g')
+
+$(BUILD_DIR)/halide_linkopts.bzl: $(ROOT_DIR)/bazel/halide_linkopts.bzl.tpl
+	-mkdir -p $(BUILD_DIR)
+	cat $^ | sed -e 's/%{llvm_system-libs}/$(LLVM_SYSTEM_LIBS)/g' > $@
+
+$(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/bazel/* $(BUILD_DIR)/halide_linkopts.bzl
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/lib $(DISTRIB_DIR)/tutorial $(DISTRIB_DIR)/tutorial/images $(DISTRIB_DIR)/tools $(DISTRIB_DIR)/tutorial/figures
 	cp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/bin
 	cp $(LIB_DIR)/libHalide.a $(DISTRIB_DIR)/lib
@@ -1501,8 +1527,27 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README.md $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/halide.bzl $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/README_bazel.md $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/bazel/WORKSPACE $(DISTRIB_DIR)
+	cp $(BUILD_DIR)/halide_linkopts.bzl $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
-	tar -czf $(DISTRIB_DIR)/halide.tgz halide/bin halide/lib halide/include halide/tutorial halide/README.md halide/tools/mex_halide.m halide/tools/GenGen.cpp halide/tools/halide_image.h halide/tools/halide_image_io.h halide/tools/halide_image_info.h
+	tar -czf $(DISTRIB_DIR)/halide.tgz \
+		halide/bin \
+		halide/lib \
+		halide/include \
+		halide/tutorial \
+		halide/BUILD \
+		halide/README.md \
+		halide/README_bazel.md \
+		halide/WORKSPACE \
+		halide/*.bzl \
+		halide/tools/mex_halide.m \
+		halide/tools/GenGen.cpp \
+		halide/tools/halide_image.h \
+		halide/tools/halide_image_io.h \
+		halide/tools/halide_image_info.h
 	rm -rf halide
 
 .PHONY: distrib
