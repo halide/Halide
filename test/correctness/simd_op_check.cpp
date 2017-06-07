@@ -18,6 +18,7 @@ using std::string;
 // width and height of test images
 constexpr int W = 256*3;
 constexpr int H = 128;
+constexpr int PAD = 128;
 
 constexpr int max_i8  = 127;
 constexpr int max_i16 = 32767;
@@ -106,10 +107,11 @@ struct Test {
         const bool can_run = can_run_code();
         for (auto p : image_params) {
             p.set_host_alignment(128);
-            p.dim(0).set_min(0);
+            p.dim(0).set_min(-PAD).set_extent(W + 2 * PAD);
             if (can_run) {
                 // Make a buffer filled with noise to use as a sample input.
                 Buffer<> b(p.type(), {W*4+H, H});
+                b.set_min(-PAD);
                 Expr r;
                 if (p.type().is_float()) {
                     r = cast(p.type(), random_float() * 1024 - 512);
@@ -1517,7 +1519,9 @@ struct Test {
         check("vsub(v*.h,v*.h)", hvx_width/2, i16_1 - i16_2);
         check("vsub(v*.w,v*.w)", hvx_width/4, i32_1 - i32_2);
         check("v*.h = vsub(v*.ub,v*.ub)", hvx_width/1, u16(u8_1) - u16(u8_2));
+        check("v*:*.h = vsub(v*.ub,v*.ub)", hvx_width/1, i16(u8_1) - i16(u8_2));
         check("v*.w = vsub(v*.uh,v*.uh)", hvx_width/2, u32(u16_1) - u32(u16_2));
+        check("v*:*.w = vsub(v*.uh,v*.uh)", hvx_width/2, i32(u16_1) - i32(u16_2));
         check("v*.w = vsub(v*.h,v*.h)", hvx_width/2, i32(i16_1) - i32(i16_2));
         check("vsub(v*.ub,v*.ub):sat", hvx_width/1, u8_sat(i16(u8_1) - i16(u8_2)));
         check("vsub(v*.uh,v*.uh):sat", hvx_width/2, u16_sat(i32(u16_1) - i32(u16_2)));
@@ -1869,6 +1873,21 @@ struct Test {
         check("vmpa(v*.h,r*.b)", hvx_width/2, i32(i16_1)*2 + 3*i32(i16_2));
         check("vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2));
         check("v*.w += vmpa(v*.h,r*.b)", hvx_width/2, 2*i32(i16_1) + 3*i32(i16_2) + i32_1);
+
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, 2*i16(in_u8(x - 1)) + 3*i16(in_u8(x)) + i16(in_u8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x - 1)) + 3*i16(in_u8(x)) + i16(in_u8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x - 1))*2 + i16(in_u8(x)) + i16(in_u8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.ub, r*.b)", hvx_width/1, i16(in_u8(x - 1)) + i16(in_u8(x)) + i16(in_u8(x + 1)));
+
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, 2*i16(in_i8(x - 1)) + 3*i16(in_i8(x)) + i16(in_i8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x - 1)) + 3*i16(in_i8(x)) + i16(in_i8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x - 1))*2 + i16(in_i8(x)) + i16(in_i8(x + 1)));
+        check("v*:*.h = vtmpy(v*:*.b, r*.b)", hvx_width/1, i16(in_i8(x - 1)) + i16(in_i8(x)) + i16(in_i8(x + 1)));
+
+        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/2, 2*i32(in_i16(x - 1)) + 3*i32(in_i16(x)) + i32(in_i16(x + 1)));
+        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/2, i32(in_i16(x - 1)) + 3*i32(in_i16(x)) + i32(in_i16(x + 1)));
+        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/2, i32(in_i16(x - 1))*2 + i32(in_i16(x)) + i32(in_i16(x + 1)));
+        check("v*:*.w = vtmpy(v*:*.h, r*.b)", hvx_width/2, i32(in_i16(x - 1)) + i32(in_i16(x)) + i32(in_i16(x + 1)));
 
         // We only generate vdmpy if the inputs are interleaved (otherwise we would use vmpa).
         check("vdmpy(v*.ub,r*.b)", hvx_width/2, i16(in_u8(2*x))*127 + i16(in_u8(2*x + 1))*-128);

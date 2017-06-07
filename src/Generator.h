@@ -454,6 +454,7 @@ private:
 
     template <typename T2, typename std::enable_if<std::is_convertible<T2, T>::value>::type * = nullptr>
     HALIDE_ALWAYS_INLINE void typed_setter_impl(const T2 &value, const char * msg) {
+        check_value_writable();
         // Arithmetic types must roundtrip losslessly.
         if (!std::is_same<T, T2>::value &&
             std::is_arithmetic<T>::value &&
@@ -604,6 +605,14 @@ class GeneratorParam_Enum : public GeneratorParamImpl<T> {
 public:
     GeneratorParam_Enum(const std::string &name, const T &value, const std::map<std::string, T> &enum_map)
         : GeneratorParamImpl<T>(name, value), enum_map(enum_map) {}
+
+    // define a "set" that takes our specific enum (but don't hide the inherited virtual functions)
+    using GeneratorParamImpl<T>::set;
+
+    template <typename T2 = T, typename std::enable_if<!std::is_same<T2, Type>::value>::type * = nullptr>
+    void set(const T &e) {
+        this->set_impl(e);        
+    }
 
     void set_from_string(const std::string &new_value_string) override {
         auto it = enum_map.find(new_value_string);
@@ -2114,7 +2123,7 @@ class GeneratorStub;
 
 }  // namespace Internal
 
-/** GeneratorContext is an abstract interface that is used when constructing a Generator Stub;
+/** GeneratorContext is an abstract base class that is used when constructing a Generator Stub;
  * it is used to allow the outer context (typically, either a Generator or "top-level" code)
  * to specify certain information to the inner context to ensure that inner and outer
  * Generators are compiled in a compatible way; at present, this is used to propagate
@@ -2142,6 +2151,18 @@ public:
      *
      * See test/generator/external_code_generator.cpp for example use. */
     virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
+
+    template <typename T>
+    std::unique_ptr<T> create() {
+        return T::create(*this);
+    }
+
+    template <typename T, typename... Args>
+    std::unique_ptr<T> apply(const Args &...args) {
+        auto t = this->create<T>();
+        t->apply(args...);
+        return t;
+    }
 
 protected:
     friend class Internal::GeneratorBase;
@@ -2230,7 +2251,7 @@ class SimpleGeneratorFactory;
 
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
-    GeneratorParam<Target> target{ "target", Halide::get_host_target() };
+    GeneratorParam<Target> target{ "target", Target() };
 
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html, emit_static_library, emit_cpp_stub;
@@ -2673,12 +2694,23 @@ protected:
                                 Internal::Introspection::get_introspection_helper<T>()) {}
 
 public:
-    static std::unique_ptr<Internal::GeneratorBase> create(const Halide::GeneratorContext &context) {
+    static std::unique_ptr<T> create(const Halide::GeneratorContext &context) {
         // We must have an object of type T (not merely GeneratorBase) to call a protected method,
         // because CRTP is a weird beast.
         T *t = new T;
         t->init_from_context(context);
-        return std::unique_ptr<Internal::GeneratorBase>(t);
+        return std::unique_ptr<T>(t);
+    }
+
+    using Internal::GeneratorBase::apply;
+
+    template <typename... Args>
+    void apply(const Args &...args) {
+        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value, 
+            "apply() is not supported for old-style Generators.");
+        set_inputs(args...);
+        call_generate();
+        call_schedule();
     }
 
 private:
@@ -2769,10 +2801,12 @@ protected:
     void call_schedule() override {
         this->call_schedule_impl();
     }
+
 private:
     friend void ::Halide::Internal::generator_test();
     friend class Internal::SimpleGeneratorFactory;
     friend void ::Halide::Internal::generator_test();
+    friend class ::Halide::GeneratorContext;
 
     // No copy
     Generator(const Generator &) = delete;

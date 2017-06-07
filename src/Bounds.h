@@ -29,14 +29,16 @@ typedef std::map<std::pair<std::string, int>, Interval> FuncValueBounds;
  */
 Interval bounds_of_expr_in_scope(Expr expr,
                                  const Scope<Interval> &scope,
-                                 const FuncValueBounds &func_bounds = FuncValueBounds());
+                                 const FuncValueBounds &func_bounds = FuncValueBounds(),
+                                 bool const_bound = false);
 
 /* Given a varying expression, try to find a constant that is either:
  * An upper bound (always greater than or equal to the expression), or
  * A lower bound (always less than or equal to the expression)
  * If it fails, returns an undefined Expr. */
 enum class Direction {Upper, Lower};
-Expr find_constant_bound(Expr e, Direction d);
+Expr find_constant_bound(Expr e, Direction d,
+                         const Scope<Interval> &scope = Scope<Interval>());
 
 /** Represents the bounds of a region of arbitrary dimension. Zero
  * dimensions corresponds to a scalar region. */
