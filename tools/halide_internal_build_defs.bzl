@@ -24,6 +24,10 @@ def _binary2cpp(name, srcs):
       copts = halide_language_copts(),
       identifier = "halide_internal_%s" % name,
       visibility = [ "//visibility:private" ],
+      # Without this, Bazel may decide to link all these
+      # as .so files, which (on OSX Sierra systems) can generate
+      # so many RPATH specifications that dyld refuses to load the result.
+      linkstatic = 1
   )
   return ":%s_b2clib" % name
 
