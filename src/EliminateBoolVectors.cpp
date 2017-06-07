@@ -149,6 +149,24 @@ private:
             // ints.
             internal_assert(cond_ty.code() == Type::Int);
 
+            // If both true_value and false_value were originally boolean vectors,
+            // they might have been promoted to different-sized integer vectors
+            // depending on how they were calculated, e.g.
+            //
+            //    Expr a = float_expr1() < float_expr2();  // promoted to int32xN
+            //    Expr b = uint8_expr1() < uint8_expr2();  // promoted to int8xN
+            //    Expr c = select(a < b, a, b);            // whoops
+            // 
+            if (true_value.type().bits() != false_value.type().bits() &&
+                true_value.type().lanes() == false_value.type().lanes() &&
+                true_value.type().is_int() && false_value.type().is_int()) {
+                if (true_value.type().bits() > false_value.type().bits()) {
+                    false_value = Call::make(true_value.type(), Call::cast_mask, {false_value}, Call::PureIntrinsic);
+                } else {
+                    true_value = Call::make(false_value.type(), Call::cast_mask, {true_value}, Call::PureIntrinsic);
+                }
+            }
+
             // select_mask requires that all 3 operands have the same
             // width.
             internal_assert(true_value.type().bits() == false_value.type().bits());

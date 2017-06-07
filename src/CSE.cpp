@@ -21,7 +21,7 @@ namespace {
 // occur redundantly many times. They may also be illegal to lift out
 // (e.g. calls with side-effects).
 // This list should at least avoid lifting the same cases as that of the
-// simplifier for lets, otherwise CSE and the simplifier will fight each 
+// simplifier for lets, otherwise CSE and the simplifier will fight each
 // other pointlessly.
 bool should_extract(const Expr &e) {
     if (is_const(e)) {
@@ -61,9 +61,12 @@ bool should_extract(const Expr &e) {
     }
 
     if (const Call *a = e.as<Call>()) {
-        if (!a->is_pure()) {
-            //non-pure Calls may have side-effects, thus
-            //may not be re-ordered or reduced in number.
+        if (!a->is_pure() && (a->call_type != Call::Halide)) {
+            // Impure calls may have side-effects, thus may not be re-ordered
+            // or reduced in number.
+            // Call to Halide function may give different value depending on
+            // where it is evaluated; however, the value is constant within
+            // an expr. Thus, it is okay to lift out.
             return false;
         }
     }
@@ -509,7 +512,16 @@ void cse_test() {
         Expr nonpure_call_1 = Call::make(Int(32), "dummy1", {1}, Call::Intrinsic);
         Expr nonpure_call_2 = Call::make(Int(32), "dummy2", {1}, Call::Extern);
         e = nonpure_call_1 + nonpure_call_2 + nonpure_call_1 + nonpure_call_2;
-        correct = e; //Non-pure calls shouldn't get CSE'd
+        correct = e; // Impure calls shouldn't get CSE'd
+        check(e, correct);
+    }
+
+    {
+        Expr halide_func = Call::make(Int(32), "dummy", {0}, Call::Halide);
+        e = halide_func * halide_func;
+        Expr t0 = Variable::make(halide_func.type(), "t0");
+        // It's okay to CSE Halide call within an expr
+        correct = Let::make("t0", halide_func, t0 * t0);
         check(e, correct);
     }
 
