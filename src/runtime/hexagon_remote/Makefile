@@ -127,7 +127,7 @@ bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexag
 
 bin/%/signed_by_debug/libhalide_hexagon_remote_skel.so: bin/%/libhalide_hexagon_remote_skel.so
 	mkdir -p $(@D)
-	OPENSSL_DIR=/usr/bin /usr/bin/python $(HEXAGON_ELFSIGNER) --no_disclaimer -i $^ -o `dirname $@`
+	python $(HEXAGON_ELFSIGNER) --no_disclaimer -i $^ -o `dirname $@`
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o
 	mkdir -p $(@D)
