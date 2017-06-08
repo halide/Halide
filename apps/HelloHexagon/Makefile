@@ -43,13 +43,17 @@ $(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
-# This requires root: adb root && adb wait-for-device && adb remount
+DEVICE_DIR ?= /data/local/tmp/HelloHexagon
+DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_DIR):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_DIR);/dsp\""
 run-%-android: $(BIN)/process-%-android
-	adb push $(BIN)/process-$*-android /data/
-	adb shell chmod +x /data/process-$*-android
-	adb shell /data/process-$*-android cpu 10
-	adb shell /data/process-$*-android hvx64 10
-	adb shell /data/process-$*-android hvx128 10
+	adb shell mkdir -p $(DEVICE_DIR)
+	adb push $(BIN)/process-$*-android $(DEVICE_DIR)
+	adb push ../../src/runtime/hexagon_remote/bin/$*-android/libhalide_hexagon_host.so $(DEVICE_DIR)
+	adb push ../../src/runtime/hexagon_remote/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so $(DEVICE_DIR)
+	adb shell chmod +x $(DEVICE_DIR)/process-$*-android
+	adb shell $(DEVICE_ENV) $(DEVICE_DIR)/process-$*-android cpu 10
+	adb shell $(DEVICE_ENV) $(DEVICE_DIR)/process-$*-android hvx64 10
+	adb shell $(DEVICE_ENV) $(DEVICE_DIR)/process-$*-android hvx128 10
 
 run-host: $(BIN)/process-host
 	$(BIN)/process-host cpu 10
