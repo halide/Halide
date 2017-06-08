@@ -43,17 +43,18 @@ $(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
 
-DEVICE_DIR ?= /data/local/tmp/hexagon_matmul
-DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_DIR):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_DIR);/dsp\""
+DEVICE_PATH ?= /data/local/tmp/hexagon_matmul
+DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_PATH):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_PATH);/dsp\""
+HEXAGON_RUNTIME_PATH = $(HALIDE_SRC_PATH)/src/runtime/hexagon_remote
 run-%-android: $(BIN)/process-%-android
-	adb shell mkdir -p $(DEVICE_DIR)
-	adb push $(BIN)/process-$*-android $(DEVICE_DIR)
-	adb push ../../src/runtime/hexagon_remote/bin/$*-android/libhalide_hexagon_host.so $(DEVICE_DIR)
-	adb push ../../src/runtime/hexagon_remote/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so $(DEVICE_DIR)
-	adb shell chmod +x $(DEVICE_DIR)/process-$*-android
-	adb shell $(DEVICE_ENV) $(DEVICE_DIR)/process-$*-android cpu 10 1024 1024 1024
-	adb shell $(DEVICE_ENV) $(DEVICE_DIR)/process-$*-android hvx64 10 1024 1024 1024
-	adb shell $(DEVICE_ENV) $(DEVICE_DIR)/process-$*-android hvx128 10 1024 1024 1024
+	adb shell mkdir -p $(DEVICE_PATH)
+	adb push $(BIN)/process-$*-android $(DEVICE_PATH)
+	adb push $(HEXAGON_RUNTIME_PATH)/bin/$*-android/libhalide_hexagon_host.so $(DEVICE_PATH)
+	adb push $(HEXAGON_RUNTIME_PATH)/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so $(DEVICE_PATH)
+	adb shell chmod +x $(DEVICE_PATH)/process-$*-android
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process-$*-android cpu 10 1024 1024 1024
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process-$*-android hvx64 10 1024 1024 1024
+	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process-$*-android hvx128 10 1024 1024 1024
 
 run-host: $(BIN)/process-host
 	$(BIN)/process-host cpu 10 256 256 256
