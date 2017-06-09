@@ -1726,17 +1726,18 @@ private:
             // Setting it to 100 makes sure we dont miss anything
             // in most cases and also dont spend unreasonable time while
             // just looking for vtmpy patterns.
+            const int max_mpy_ops = 100;
             if (op->type.bits() == 16) {
-                find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
+                find_mpy_ops(op, UInt(8, lanes), Int(8), max_mpy_ops, mpys, rest);
                 vtmpy_suffix = ".vub.vub.b.b";
                 if (mpys.size() < 3) {
                     mpys.clear();
                     rest = Expr();
-                    find_mpy_ops(op, Int(8, lanes), Int(8), 100, mpys, rest);
+                    find_mpy_ops(op, Int(8, lanes), Int(8), max_mpy_ops, mpys, rest);
                     vtmpy_suffix = ".vb.vb.b.b";
                 }
             } else if (op->type.bits() == 32) {
-                find_mpy_ops(op, Int(16, lanes), Int(8), 100, mpys, rest);
+                find_mpy_ops(op, Int(16, lanes), Int(8), max_mpy_ops, mpys, rest);
                 vtmpy_suffix = ".vh.vh.b.b";
             }
 
