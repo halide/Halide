@@ -1620,7 +1620,9 @@ public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
 
-class VtmpyGenerator : public IRMutator {
+// Attempt to generate vtmpy instructions. This requires that all lets
+// be substituted prior to running, and so must be an IRGraphMutator.
+class VtmpyGenerator : public IRGraphMutator {
 private:
     using IRMutator::visit;
     typedef pair<Expr, size_t> LoadIndex;
@@ -1823,7 +1825,10 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
 
 Stmt vtmpy_generator(Stmt s) {
     // Generate vtmpy instruction if possible
-    return VtmpyGenerator().mutate(substitute_in_all_lets(s));
+    s = substitute_in_all_lets(s);
+    s = VtmpyGenerator().mutate(s);
+    s = common_subexpression_elimination(s);
+    return s;
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
