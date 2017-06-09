@@ -1620,7 +1620,9 @@ public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
 
-class VtmpyGenerator : public IRMutator {
+// Attempt to generate vtmpy instructions. This requires that all lets
+// be substituted prior to running, and so must be an IRGraphMutator.
+class VtmpyGenerator : public IRGraphMutator {
 private:
     using IRMutator::visit;
     typedef pair<Expr, size_t> LoadIndex;
@@ -1724,17 +1726,18 @@ private:
             // Setting it to 100 makes sure we dont miss anything
             // in most cases and also dont spend unreasonable time while
             // just looking for vtmpy patterns.
+            const int max_mpy_ops = 100;
             if (op->type.bits() == 16) {
-                find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
+                find_mpy_ops(op, UInt(8, lanes), Int(8), max_mpy_ops, mpys, rest);
                 vtmpy_suffix = ".vub.vub.b.b";
                 if (mpys.size() < 3) {
                     mpys.clear();
                     rest = Expr();
-                    find_mpy_ops(op, Int(8, lanes), Int(8), 100, mpys, rest);
+                    find_mpy_ops(op, Int(8, lanes), Int(8), max_mpy_ops, mpys, rest);
                     vtmpy_suffix = ".vb.vb.b.b";
                 }
             } else if (op->type.bits() == 32) {
-                find_mpy_ops(op, Int(16, lanes), Int(8), 100, mpys, rest);
+                find_mpy_ops(op, Int(16, lanes), Int(8), max_mpy_ops, mpys, rest);
                 vtmpy_suffix = ".vh.vh.b.b";
             }
 
@@ -1823,7 +1826,10 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
 
 Stmt vtmpy_generator(Stmt s) {
     // Generate vtmpy instruction if possible
-    return VtmpyGenerator().mutate(substitute_in_all_lets(s));
+    s = substitute_in_all_lets(s);
+    s = VtmpyGenerator().mutate(s);
+    s = common_subexpression_elimination(s);
+    return s;
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
