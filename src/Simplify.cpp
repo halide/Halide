@@ -810,10 +810,13 @@ private:
             // (y + c1)/c2 + c3 -> (y + (c1 + c2*c3))/c2
             expr = mutate((add_div_a_a->a + (add_div_a_a->b + div_a->b*b))/div_a->b);
         } else if (div_a && sub_div_a_a &&
+                   !is_zero(sub_div_a_a->a) &&
                    const_int(sub_div_a_a->a, &ia) &&
                    const_int(div_a->b, &ib) &&
                    const_int(b, &ic)) {
             // (c1 - y)/c2 + c3 + -> ((c1 + c2*c3) - y)/c2
+            // If c1 == 0, we shouldn't pull in c3 inside the division; otherwise,
+            // it will cause a cycle with the division simplification rule.
             expr = mutate(((sub_div_a_a->a + div_a->b*b) - sub_div_a_a->b)/div_a->b);
         } else if (div_b && add_div_b_a &&
                    const_int(div_b->b, &ib) &&
@@ -848,13 +851,13 @@ private:
         } else if (div_a && add_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, add_div_a_a->b)) {
-            // (y + x)/c + x -> (y + (c + 1)*x)/c
-            expr = mutate((add_div_a_a->a + (div_a->b + 1)*b)/div_a->b);
+            // (y + x)/c + x -> (y + (1 + c)*x)/c
+            expr = mutate((add_div_a_a->a + (1 + div_a->b)*b)/div_a->b);
         } else if (div_a && sub_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, sub_div_a_a->b)) {
-            // (y - x)/c + x -> (y + (c - 1)*x)/c
-            expr = mutate((sub_div_a_a->a + (div_a->b - 1)*b)/div_a->b);
+            // (y - x)/c + x -> (y + (-1 + c)*x)/c
+            expr = mutate((sub_div_a_a->a + (- 1 + div_a->b)*b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    min_a &&
                    sub_a_b &&
@@ -1298,34 +1301,34 @@ private:
                    const_int(a, &ia) &&
                    const_int(sub_div_b_a->a, &ib) &&
                    const_int(div_b->b, &ic)) {
-            // c1 - (c2 - y)/c3 -> ((c1*c3 - c2) + y)/c3
-            expr = mutate(((a*div_b->b - sub_div_b_a->a)*a + sub_div_b_a->b)/div_b->b);
+            // c1 - (c2 - y)/c3 -> ((c1*c3 - c2 + (c3 - 1)) + y)/c3
+            expr = mutate(((a*div_b->b - sub_div_b_a->a) + sub_div_b_a->b + (div_b->b - 1))/div_b->b);
         } else if (div_b && add_div_b_a &&
                    const_int(a, &ia) &&
                    const_int(add_div_b_a->b, &ib) &&
                    const_int(div_b->b, &ic)) {
-            // c1 - (y + c2)/c3 -> ((c1*c3 - c2) - y)/c3
-            expr = mutate(((a*div_b->b - add_div_b_a->b) - add_div_b_a->a)/div_b->b);
+            // c1 - (y + c2)/c3 -> ((c1*c3 - c2 + (c3 - 1)) - y)/c3
+            expr = mutate(((a*div_b->b - add_div_b_a->b) - add_div_b_a->a + (div_b->b - 1))/div_b->b);
         } else if (div_b && add_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, add_div_b_a->a)) {
-            // x - (x + y)/c -> ((c - 1)*x - y)/c
-            expr = mutate(((div_b->b - 1)*a - add_div_b_a->b)/div_b->b);
+            // x - (x + y)/c -> ((c - 1)*x - y + (c - 1))/c
+            expr = mutate(((div_b->b - 1)*a - add_div_b_a->b + (div_b->b - 1))/div_b->b);
         } else if (div_b && sub_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, sub_div_b_a->a)) {
-            // x - (x - y)/c -> ((c - 1)*x + y)/c
-            expr = mutate(((div_b->b - 1)*a + sub_div_b_a->b)/div_b->b);
+            // x - (x - y)/c -> ((c - 1)*x + y + (c - 1))/c
+            expr = mutate(((div_b->b - 1)*a + sub_div_b_a->b + (div_b->b - 1))/div_b->b);
         } else if (div_b && add_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, add_div_b_a->b)) {
-            // x - (y + x)/c -> ((c - 1)*x - y)/c
-            expr = mutate(((div_b->b - 1)*a - add_div_b_a->a)/div_b->b);
+            // x - (y + x)/c -> ((c - 1)*x - y + (c - 1))/c
+            expr = mutate(((div_b->b - 1)*a - add_div_b_a->a + (div_b->b - 1))/div_b->b);
         } else if (div_b && sub_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, sub_div_b_a->b)) {
-            // x - (y - x)/c -> ((c + 1)*x - y)/c
-            expr = mutate(((div_b->b + 1)*a - sub_div_b_a->a)/div_b->b);
+            // x - (y - x)/c -> ((c + 1)*x - y + (c - 1))/c
+            expr = mutate(((div_b->b + 1)*a - sub_div_b_a->a + (div_b->b - 1))/div_b->b);
         } else if (div_a && add_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, add_div_a_a->a)) {
@@ -2052,8 +2055,6 @@ private:
             // (y + 8) / 2 -> y/2 + 4
             Expr ratio = make_const(op->type, div_imp(ia, ib));
             expr = mutate((add_a->a / b) + ratio);
-
-
         } else if (no_overflow(op->type) &&
                    add_a &&
                    equal(add_a->a, b)) {
@@ -2075,8 +2076,6 @@ private:
                    equal(sub_a->b, b)) {
             // (y - x)/x -> y/x - 1
             expr = mutate(sub_a->a/b + make_const(op->type, -1));
-
-
         } else if (no_overflow(op->type) &&
                    add_a &&
                    add_a_a &&
@@ -2101,7 +2100,6 @@ private:
                    equal(add_a_b->a, b)) {
             // (y + (x + z))/x -> ((y + z) + x)/x -> (y+z)/x + 1
             expr = mutate((add_a->a + add_a_b->b)/b + make_one(op->type));
-
         } else if (no_overflow(op->type) &&
                    mul_a &&
                    equal(mul_a->b, b)) {
@@ -5543,18 +5541,21 @@ void check_algebra() {
     check((x - y)/4 + x, (x*5 - y)/4);
     check((y + x)/3 + x, (y + x*4)/3);
     check((y - x)/3 + x, (y + x*2)/3);
-    check(x - (x + y)/3, (x*2 - y)/3);
-    check((w + x) - ((w + x) - y*z)/3, ((w + x)*2 + y*z)/3);
-    check(x - (y + x)/2, (x - y)/2);
-    check(x - (y - x)/6, (x*7 - y)/6);
+    check(1 + (1 + y)/2, (y + 3)/2);
+    check((y + 1)/2 + 1, (y + 3)/2);
+    check((0 - y)/5 + 1, (0 - y)/5 + 1);
+
+    check(x - (x + y)/3, (x*2 - y + 2)/3);
+    check((w + x) - ((w + x) - y*z)/3, ((w + x)*2 + y*z + 2)/3);
+    check(x - (y + x)/2, (x - y + 1)/2);
+    check(x - (y - x)/6, (x*7 - y + 5)/6);
     check((x + y)/3 - x, (y - x*2)/3);
     check((x*y - w)/4 - x*y, (x*y*(-3) - w)/4);
     check((y + x)/5 - x, (y - x*4)/5);
     check((y - x)/6 - x, (y - x*7)/6);
-    check(1 + (1 + y)/2, (y + 3)/2);
-    check((y + 1)/2 + 1, (y + 3)/2);
-    check(1 - (1 + y)/2 - 1, (-1 - y)/2);
-    check(1 - (-y + 1)/2 - 1, (y + (-1))/2);
+    check(1 - (1 + y)/2 - 1, (0 - y)/2);
+    check(1 - (-y + 1)/2 - 1, y/2);
+    check(1 - (0 - y)/5, (y + 9)/5);
 }
 
 void check_vectors() {
