@@ -83,7 +83,6 @@ protected:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     CodeGen_OpenCL_C clc;
-    Target target;
 };
 
 }}
