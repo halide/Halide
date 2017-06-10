@@ -393,13 +393,13 @@ struct Type {
     }
 
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
-    bool operator<(const Type &other) const { 
-        return code() < other.code() || (code () == other.code() &&
-              (bits() < other.bits() || (bits() == other.bits() && 
-              (lanes() < other.lanes() || (lanes() == other.lanes( ) &&
-              (code() == Handle && handle_type < other.handle_type)))) ));
-    } 
- 
+    bool operator<(const Type &other) const {
+        return code() < other.code() || (code() == other.code() &&
+              (bits() < other.bits() || (bits() == other.bits() &&
+              (lanes() < other.lanes() || (lanes() == other.lanes() &&
+              (code() == Handle && handle_type < other.handle_type))))));
+    }
+
     /** Produce the scalar type (that of a single element) of this vector type */
     Type element_of() const {
         return with_lanes(1);
