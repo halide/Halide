@@ -647,8 +647,10 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
 
+    const Target &target = clc.get_target();
+
     // This identifies the program as OpenCL C (as opposed to SPIR).
-    src_stream << "/*OpenCL C*/\n";
+    src_stream << "/*OpenCL C " << target.to_string() << "*/\n";
 
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
 
