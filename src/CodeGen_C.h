@@ -41,6 +41,9 @@ public:
     /** Emit the declarations contained in the module as C code. */
     void compile(const Module &module);
 
+    /** The target we're generating code for */
+    const Target &get_target() const { return target; }
+
     EXPORT static void test();
 
 protected:
