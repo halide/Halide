@@ -769,7 +769,7 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
                 }
             }
 
-            return vlut(lut, indices);
+            return vdelta(lut, indices);
         }
     }
     return CodeGen_Posix::interleave_vectors(v);
@@ -1121,6 +1121,126 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     }
 
     return slice_vector(concat_vectors(result), 0, idx_elements);
+}
+
+#if 0
+    Vd=vdelta(Vu,Vv)
+    for (offset = VWIDTH; (offset >>= 1) > 0; ) {
+        for (k = 0; k < VWIDTH; k++) {
+            Vd.ub[k] = (Vv.ub[k] & offset) ? Vu.ub[k ^ offset] : Vu.ub[k];
+        }
+        for (k = 0; k < VWIDTH; k++) {
+            Vu.ub[k] = Vd.ub[k];
+        }
+    }
+
+    Vd=vrdelta(Vu,Vv)
+    for (offset = 1; offset < VWIDTH; offset <<= 1) {
+        for (k = 0; k < VWIDTH; k++) {
+            Vd.ub[k] = (Vv.ub[k] & offset) ? Vu.ub[k ^ offset] : Vu.ub[k];
+        }
+        for (k = 0; k < VWIDTH; k++) {
+            Vu.ub[k] = Vd.ub[k];
+        }
+    }
+#endif
+
+Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
+    llvm::Type *lut_ty = lut->getType();
+    int lut_elements = lut_ty->getVectorNumElements();
+    llvm::Type *element_ty = lut_ty->getVectorElementType();
+    int element_bits = element_ty->getScalarSizeInBits();
+    int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
+    int result_elements = indices.size();
+
+    // We can only use vdelta to produce a single native vector at a
+    // time. Break the input into native vector length shuffles.
+    if (result_elements != native_elements) {
+        vector<llvm::Value *> ret;
+        for (int i = 0; i < result_elements; i += native_elements) {
+            vector<int> indices_i(native_elements);
+            for (int j = 0; j < native_elements; j++) {
+                if (i + j < result_elements) {
+                    indices_i[j] = indices[i + j];
+                } else {
+                    indices_i[j] = -1;
+                }
+            }
+            Value *ret_i = vdelta(lut, indices_i);
+            if (result_elements - i < native_elements) {
+                // This was a fractional vector at the end, slice the part we want.
+                ret_i = slice_vector(ret_i, 0, result_elements - i);
+            }
+            ret.push_back(ret_i);
+        }
+        return concat_vectors(ret);
+    }
+
+    // If the input is not a vector of 8 bit elements, replicate the
+    // indices and cast the LUT.
+    if (element_bits != 8) {
+        int replicate = element_bits / 8;
+        assert(replicate != 0);
+        llvm::Type *new_lut_ty = llvm::VectorType::get(i8_t, lut_elements * replicate);
+        Value *i8_lut = builder->CreateBitCast(lut, new_lut_ty);
+        vector<int> i8_indices(indices.size() * replicate);
+        for (size_t i = 0; i < indices.size(); i++) {
+            for (int j = 0; j < replicate; j++) {
+                i8_indices[i * replicate + j] = indices[i] * replicate + j;
+            }
+        }
+        return vdelta(i8_lut, i8_indices);
+    }
+
+    assert(result_elements == native_elements);
+
+    // We can only use vdelta to shuffle a single native vector of
+    // input. If we have more than one, we need to break it into
+    // multiple vdelta operations, and combine them with vmux.
+    if (lut_elements != native_elements) {
+        Value *ret = nullptr;
+        for (int i = 0; i < lut_elements; i += native_elements) {
+            Value *lut_i = slice_vector(lut, i, native_elements);
+            vector<int> indices_i(native_elements);
+            vector<Constant *> mask(native_elements);
+            for (int j = 0; j < native_elements; j++) {
+                int idx = indices[j] - i;
+                if (0 <= idx && idx < native_elements) {
+                    indices_i[j] = idx;
+                    mask[j] = ConstantInt::get(i8_t, 255);
+                } else {
+                    indices_i[j] = -1;
+                    mask[j] = ConstantInt::get(i8_t, 0);
+                }
+            }
+            Value *ret_i = vdelta(lut_i, indices_i);
+            if (ret != nullptr) {
+                // Create a condition value for which elements of the range are valid for this index.
+                // We can't make a constant vector of <1024 x i1>, it crashes the Hexagon LLVM backend.
+                Value *minus_one = codegen(make_const(UInt(8, mask.size()), 255));
+                Value *hack_mask = call_intrin(lut_i->getType(), "halide.hexagon.eq.vb.vb", {ConstantVector::get(mask), minus_one});
+
+                // If this isn't the first result, use the mask to add
+                // the new elements to the result.
+                ret = call_intrin(lut_i->getType(),
+                                  "halide.hexagon.mux.vb.vb",
+                                  {hack_mask, ret_i, ret});
+            } else {
+                ret = ret_i;
+            }
+        }
+        return ret;
+    }
+
+    lut->dump();
+    for (int i : indices) {
+        debug(0) << " " << i;
+    }
+    debug(0) << "\n";
+
+    // At this point, we have an 8 bit element, native vector to
+    // native vector vdelta to handle.
+    return vlut(lut, indices);
 }
 
 Value *CodeGen_Hexagon::vlut(Value *lut, const vector<int> &indices) {
