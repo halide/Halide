@@ -139,7 +139,9 @@ struct Pattern {
         NarrowUnsignedOp2 = 1 << 17,
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
 
-        v62 = 1 << 20,  // Pattern should be matched only for v62 target
+        v62orLater = 1 << 20,  // Pattern should be matched only for v62 target or later
+        v65orLater = 1 << 21,  // Pattern should be matched only for v65 target or later
+        v66orLater = 1 << 22,  // Pattern should be matched only for v66 target or later
    };
 
     string intrin;        // Name of the intrinsic
@@ -178,7 +180,14 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
 
-        if ((p.flags & (Pattern::v62)) && !target.has_feature(Target::HVX_v62))
+        if ((p.flags & (Pattern::v62orLater)) &&
+            !target.features_any_of({Target::HVX_v62, Target::HVX_v65, Target::HVX_v66}))
+            continue;
+        if ((p.flags & (Pattern::v65orLater)) &&
+            !target.features_any_of({Target::HVX_v65, Target::HVX_v66}))
+            continue;
+        if ((p.flags & (Pattern::v66orLater)) &&
+            !target.features_any_of({Target::HVX_v66}))
             continue;
 
         if (expr_match(p.pattern, x, matches)) {
@@ -744,7 +753,7 @@ private:
             // Saturating add/subtract
             { "halide.hexagon.satub_add.vub.vub", u8_sat(wild_u16x + wild_u16x), Pattern::NarrowOps },
             { "halide.hexagon.satuh_add.vuh.vuh", u16_sat(wild_u32x + wild_u32x), Pattern::NarrowOps },
-            { "halide.hexagon.satuw_add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps | Pattern::v62 },
+            { "halide.hexagon.satuw_add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps | Pattern::v62orLater },
             { "halide.hexagon.sath_add.vh.vh", i16_sat(wild_i32x + wild_i32x), Pattern::NarrowOps },
             { "halide.hexagon.satw_add.vw.vw", i32_sat(wild_i64x + wild_i64x), Pattern::NarrowOps },
 
@@ -794,7 +803,7 @@ private:
             { "halide.hexagon.pack_sath.vw", i16_sat(wild_i32x) },
 
             // We don't have a vpack equivalent to this one, so we match it directly.
-            { "halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0 | Pattern::v62 },
+            { "halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0 | Pattern::v62orLater },
 
             // Narrowing casts. These may interleave later with trunclo.
             { "halide.hexagon.packhi.vh", u8(wild_u16x/256) },
@@ -1611,7 +1620,9 @@ public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
 
-class VtmpyGenerator : public IRMutator {
+// Attempt to generate vtmpy instructions. This requires that all lets
+// be substituted prior to running, and so must be an IRGraphMutator.
+class VtmpyGenerator : public IRGraphMutator {
 private:
     using IRMutator::visit;
     typedef pair<Expr, size_t> LoadIndex;
@@ -1715,17 +1726,18 @@ private:
             // Setting it to 100 makes sure we dont miss anything
             // in most cases and also dont spend unreasonable time while
             // just looking for vtmpy patterns.
+            const int max_mpy_ops = 100;
             if (op->type.bits() == 16) {
-                find_mpy_ops(op, UInt(8, lanes), Int(8), 100, mpys, rest);
+                find_mpy_ops(op, UInt(8, lanes), Int(8), max_mpy_ops, mpys, rest);
                 vtmpy_suffix = ".vub.vub.b.b";
                 if (mpys.size() < 3) {
                     mpys.clear();
                     rest = Expr();
-                    find_mpy_ops(op, Int(8, lanes), Int(8), 100, mpys, rest);
+                    find_mpy_ops(op, Int(8, lanes), Int(8), max_mpy_ops, mpys, rest);
                     vtmpy_suffix = ".vb.vb.b.b";
                 }
             } else if (op->type.bits() == 32) {
-                find_mpy_ops(op, Int(16, lanes), Int(8), 100, mpys, rest);
+                find_mpy_ops(op, Int(16, lanes), Int(8), max_mpy_ops, mpys, rest);
                 vtmpy_suffix = ".vh.vh.b.b";
             }
 
@@ -1814,7 +1826,10 @@ Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
 
 Stmt vtmpy_generator(Stmt s) {
     // Generate vtmpy instruction if possible
-    return VtmpyGenerator().mutate(substitute_in_all_lets(s));
+    s = substitute_in_all_lets(s);
+    s = VtmpyGenerator().mutate(s);
+    s = common_subexpression_elimination(s);
+    return s;
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
