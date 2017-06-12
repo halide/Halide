@@ -80,10 +80,10 @@ inline std::string get_test_tmp_dir() {
     bool is_absolute = dir.size() >= 1 && dir[0] == '/';
     char sep = '/';
 #ifdef _WIN32
-    // Allow for C:\whatever on Windows
-    if (dir.size() >= 3 && dir[1] == ':' && dir[2] == '\\') {
+    // Allow for C:\whatever or c:/whatever on Windows
+    if (dir.size() >= 3 && dir[1] == ':' && (dir[2] == '\\' || dir[2] == '/')) {
         is_absolute = true;
-        sep = '\\';
+        sep = dir[2];
     }
 #endif
     if (!is_absolute) {

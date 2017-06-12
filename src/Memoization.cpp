@@ -166,7 +166,7 @@ class KeyInfo {
         return size_t(1) << i;
     }
 
-// Using the full names in the key results in a (hopefully incredibly
+// TODO: Using the full names in the key results in a (hopefully incredibly
 // slight) performance difference based on how one names filters and
 // functions. It is arguably a little easier to debug if something
 // goes wrong as one doesn't need to destructure the cache key by hand
@@ -177,20 +177,8 @@ class KeyInfo {
 //
 // There is a plan to change the hash function used in the cache and
 // after that happens, we'll measure performance again and maybe decide
-// to choose one path or the other here and remove the #ifdef.
-#define USE_FULL_NAMES_IN_KEY 0
-#if USE_FULL_NAMES_IN_KEY
-    Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
-        Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(UInt(8), key_name, index, Buffer<>(), Parameter(), const_true())},
-                               Call::PureIntrinsic);
-        Expr src = StringImm::make(value);
-        Expr copy_size = (int32_t)value.size();
-
-        return Evaluate::make(Call::make(UInt(8), Call::copy_memory,
-                                         {dest, src, copy_size}, Call::Intrinsic));
-    }
-#endif
+// to choose one path or the other (see Git history for the implementation.
+// It was deleted as part of the address_of intrinsic cleanup).
 
 public:
   KeyInfo(const Function &function, const std::string &name)
@@ -198,13 +186,7 @@ public:
     {
         dependencies.visit_function(function);
         size_t size_so_far = 0;
-
-#if USE_FULL_NAMES_IN_KEY
-        size_so_far = 4 + (int32_t)((top_level_name.size() + 3) & ~3);
-        size_so_far += 4 + function_name.size();
-#else
         size_so_far += Handle().bytes() + 4;
-#endif
 
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
@@ -228,36 +210,6 @@ public:
         std::vector<Stmt> writes;
         Expr index = Expr(0);
 
-#if USE_FULL_NAMES_IN_KEY
-        // In code below, casts to vec type is done because stores to
-        // the buffer can be unaligned.
-
-        Expr top_level_name_size = (int32_t)top_level_name.size();
-        writes.push_back(Store::make(key_name,
-                                     Cast::make(Int(32), top_level_name_size),
-                                     (index / Int(32).bytes()), Parameter(),
-                                     const_true()));
-        index += 4;
-        writes.push_back(call_copy_memory(key_name, top_level_name, index));
-        // Align to four byte boundary again.
-        index += top_level_name_size;
-        size_t alignment = 4 + top_level_name.size();
-        while (alignment % 4) {
-            writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index,
-                                         Parameter(), const_true()));
-            index = index + 1;
-            alignment++;
-        }
-
-        Expr name_size = (int32_t)function_name.size();
-        writes.push_back(Store::make(key_name,
-                                     Cast::make(Int(32), name_size),
-                                     (index / Int(32).bytes())));
-        index += 4;
-        writes.push_back(call_copy_memory(key_name, function_name, index));
-        index += name_size;
-        alignment += 4 + function_name.size();
-#else
         // Store a pointer to a string identifying the filter and
         // function. Assume this will be unique due to CSE. This can
         // break with loading and unloading of code, though the name
@@ -280,7 +232,6 @@ public:
                                      Parameter(), const_true()));
         alignment += 4;
         index += 4;
-#endif
 
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
@@ -311,9 +262,7 @@ public:
     Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true())},
-                                  Call::PureIntrinsic));
+        args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
@@ -334,9 +283,7 @@ public:
     Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
-                                  {Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer<>(), Parameter(), const_true())},
-                                  Call::PureIntrinsic));
+        args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<halide_buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
@@ -536,24 +483,14 @@ private:
                 << "RewriteMemoizedAllocations: _halide_buffer_init call with fewer than two args.\n";
 
             // Grab the host pointer argument
-            // FIXME: Mutating the buffer_init call in this way is gross.
-            const Call *arg2 = call->args[2].as<Call>();
-            if (arg2 != nullptr && arg2->is_intrinsic(Call::address_of)) {
-                internal_assert(!arg2->args.empty()) << "RewriteMemoizedAllocations: address_of call with zero args.\n";
-                const Load *load = arg2->args[0].as<Load>();
-                if (load != nullptr) {
-                    const IntImm *index = load->index.as<IntImm>();
-
-                    if (index != nullptr && index->value == 0 &&
-                        get_realization_name(load->name) == innermost_realization_name) {
-                        // Everything matches, rewrite _halide_buffer_init to use a nullptr handle for address.
-                        std::vector<Expr> args = call->args;
-                        args[2] = make_zero(Handle());
-                        expr = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,
-                                          args, Call::Extern);
-                        return;
-                    }
-                }
+            const Variable *var = call->args[2].as<Variable>();
+            if (var && get_realization_name(var->name) == innermost_realization_name) {
+                // Rewrite _halide_buffer_init to use a nullptr handle for address.
+                std::vector<Expr> args = call->args;
+                args[2] = make_zero(Handle());
+                expr = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_init,
+                                  args, Call::Extern);
+                return;
             }
         }
 

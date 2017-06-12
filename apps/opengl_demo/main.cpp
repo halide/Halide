@@ -8,6 +8,7 @@
 #include "timer.h"
 
 #include <HalideRuntimeOpenGL.h>
+#include <HalideBuffer.h>
 #include "sample_filter_cpu.h"
 #include "sample_filter_opengl.h"
 
@@ -16,21 +17,8 @@
  * Initializes a halide buffer_t object for 8-bit RGBA data stored
  * interleaved as rgbargba... in row-major order.
  */
-buffer_t create_buffer(int width, int height)
-{
-    const int channels = 4;
-    const int elem_size = 1;
-    buffer_t buf = {0};
-    buf.stride[0] = channels;
-    buf.stride[1] = channels * width;
-    buf.stride[2] = 1;
-    buf.elem_size = elem_size;
-    buf.extent[0] = width;
-    buf.extent[1] = height;
-    buf.extent[2] = channels;
-    // buf.host is null by initialization
-    // buf.host_dirty is false by initialization
-    return buf;
+Halide::Runtime::Buffer<uint8_t> create_buffer(uint8_t *data, int width, int height) {
+    return Halide::Runtime::Buffer<uint8_t>::make_interleaved(data, width, height, 4);
 }
 
 /*
@@ -43,15 +31,13 @@ std::string run_cpu_filter(const uint8_t *image_data, uint8_t *result_data, int 
     const auto time = Timer::start("CPU");
 
     // Create halide input buffer and point it at the passed image data
-    auto input_buf = create_buffer(width, height);
-    input_buf.host = (uint8_t *) image_data; // OK to break the const, since we know halide won't change the input
+    auto input_buf = create_buffer((uint8_t *) image_data, width, height);
 
     // Create halide output buffer and point it at the passed result data storage
-    auto output_buf = create_buffer(width, height);
-    output_buf.host = result_data;
+    auto output_buf = create_buffer(result_data, width, height);
 
     // Run the AOT-compiled OpenGL filter
-    sample_filter_cpu(&input_buf, &output_buf);
+    sample_filter_cpu(input_buf, output_buf);
 
     return Timer::report(time);
 }
@@ -69,19 +55,19 @@ std::string run_opengl_filter_from_host_to_host(const uint8_t *image_data, uint8
     // the host memory.  Halide will automatically allocate a texture to
     // hold the data on the GPU.  Mark the host memory as "dirty" so halide
     // will know it needs to transfer the data to the GPU texture.
-    auto input_buf = create_buffer(width, height);
-    input_buf.host = (uint8_t *) image_data; // OK to break the const, since we know halide won't change the input
-    input_buf.host_dirty = true;
+    auto input_buf = create_buffer((uint8_t *)image_data, width, height);
+    input_buf.set_host_dirty();
 
     // Create halide output buffer and point it at the passed result data
     // memory.  Halide will automatically allocate a texture to hold the
     // data on the GPU.
-    auto output_buf = create_buffer(width, height);
-    output_buf.host = result_data;
+    auto output_buf = create_buffer(result_data, width, height);
 
     // Run the AOT-compiled OpenGL filter
-    sample_filter_opengl(&input_buf, &output_buf);
-    halide_copy_to_host(nullptr, &output_buf); // Ensure that halide copies the data back to the host
+    sample_filter_opengl(input_buf, output_buf);
+
+    // Ensure that halide copies the data back to the host
+    output_buf.copy_to_host();
 
     return Timer::report(time);
 }
@@ -97,21 +83,21 @@ std::string run_opengl_filter_from_texture_to_texture(GLuint input_texture_id, G
     // Create halide input buffer and tell it to use the existing GPU
     // texture.  No need to allocate memory on the host since this simple
     // pipeline will run entirely on the GPU.
-    auto input_buf = create_buffer(width, height);
-    halide_opengl_wrap_texture(nullptr, &input_buf, input_texture_id);
+    auto input_buf = create_buffer(nullptr, width, height);
+    halide_opengl_wrap_texture(nullptr, input_buf.raw_buffer(), input_texture_id);
 
     // Create halide output buffer and tell it to use the existing GPU texture.
     // No need to allocate memory on the host since this simple pipeline will run
     // entirely on the GPU.
-    auto output_buf = create_buffer(width, height);
-    halide_opengl_wrap_texture(nullptr, &output_buf, output_texture_id);
+    auto output_buf = create_buffer(nullptr, width, height);
+    halide_opengl_wrap_texture(nullptr, output_buf.raw_buffer(), output_texture_id);
 
     // Run the AOT-compiled OpenGL filter
-    sample_filter_opengl(&input_buf, &output_buf);
+    sample_filter_opengl(input_buf, output_buf);
 
     // Tell halide we are finished using the textures
-    halide_opengl_detach_texture(nullptr, &output_buf);
-    halide_opengl_detach_texture(nullptr, &input_buf);
+    halide_opengl_detach_texture(nullptr, output_buf.raw_buffer());
+    halide_opengl_detach_texture(nullptr, input_buf.raw_buffer());
 
     return Timer::report(time);
 }

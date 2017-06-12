@@ -56,6 +56,7 @@ struct Target {
         CUDACapability32 = halide_target_feature_cuda_capability32,
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
+        CUDACapability61 = halide_target_feature_cuda_capability61,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         OpenGL = halide_target_feature_opengl,
@@ -71,6 +72,8 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        HVX_v65 = halide_target_feature_hvx_v65,
+        HVX_v66 = halide_target_feature_hvx_v66,
         HVX_shared_object = halide_target_feature_hvx_use_shared_object,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
@@ -79,6 +82,9 @@ struct Target {
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
+        TraceLoads = halide_target_feature_trace_loads,
+        TraceStores = halide_target_feature_trace_stores,
+        TraceRealizations = halide_target_feature_trace_realizations,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}

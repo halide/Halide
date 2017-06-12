@@ -165,20 +165,20 @@ public:
     /** Is it legal to inline this function? */
     EXPORT bool can_be_inlined() const;
 
-    /** Get a handle to the schedule for the purpose of modifying
-     * it. */
-    EXPORT Schedule &schedule();
+    /** Get a handle to the function-specific schedule for the purpose
+     * of modifying it. */
+    EXPORT FuncSchedule &schedule();
 
-    /** Get a const handle to the schedule for inspecting it. */
-    EXPORT const Schedule &schedule() const;
+    /** Get a const handle to the function-specific schedule for inspecting it. */
+    EXPORT const FuncSchedule &schedule() const;
 
     /** Get a handle on the output buffer used for setting constraints
      * on it. */
     EXPORT const std::vector<Parameter> &output_buffers() const;
 
-    /** Get a mutable handle to the schedule for the update
+    /** Get a mutable handle to the stage-specfic schedule for the update
      * stage. */
-    EXPORT Schedule &update_schedule(int idx = 0);
+    EXPORT StageSchedule &update_schedule(int idx = 0);
 
     /** Get a mutable handle to this function's update definition at
      * index 'idx'. */
@@ -215,6 +215,7 @@ public:
                               const std::vector<Type> &types,
                               int dimensionality,
                               NameMangling mangling,
+                              DeviceAPI device_api,
                               bool uses_old_buffer_t);
 
     /** Retrive the arguments of the extern definition. */
@@ -223,6 +224,9 @@ public:
     /** Get the name of the extern function called for an extern
      * definition. */
     EXPORT const std::string &extern_function_name() const;
+
+    /** Get the DeviceAPI declared for an extern function. */
+    EXPORT DeviceAPI extern_function_device_api() const;
 
     /** Test for equality of identity. */
     bool same_as(const Function &other) const {
@@ -277,6 +281,10 @@ public:
     EXPORT Function &substitute_calls(const std::map<Function, Function, Compare> &substitutions);
     EXPORT Function &substitute_calls(const Function &orig, const Function &substitute);
     // @}
+
+    /** Find all Vars that are placeholders for ScheduleParams and substitute in
+     * the corresponding constant value. */
+    EXPORT Function &substitute_schedule_param_exprs();
 };
 
 }}

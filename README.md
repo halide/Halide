@@ -131,7 +131,7 @@ The makefile method above should work from inside a "mingw64" shell
 
 #### If all else fails...
 
-Do what the build-bots do: https://buildbot.halide-lang.org/master/waterfall
+Do what the build-bots do: https://buildbot.halide-lang.org/master/#/builders
 
 If the column that best matches your system is red, then maybe things
 aren't just broken for you. If it's green, then you can click the
@@ -375,17 +375,6 @@ To build and run the HelloHexagon example in Halide/apps/HelloHexagon on the sim
     LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. make run-host
 
 #### To build and run the HelloHexagon example in Halide/apps/HelloHexagon on Android:
-
-The device needs to be prepared to run Halide Hexagon code. Halide uses a small
-runtime library that must be present on the device. The device must be signed as
-a debug device to run Hexagon code, or the libhalide\_hexagon\_remote\_skel.so
-library must be signed. Refer to the Hexagon SDK documentation for more information
-about signing Hexagon binaries (see: Hexagon\_SDK/3.0/docs/Tools\_Signing.html).
-
-    adb shell mkdir -p /system/lib/rfsa/adsp
-    adb push src/runtime/hexagon_remote/bin/arm-32-android/libhalide_hexagon_host.so /system/lib/
-    adb push src/runtime/hexagon_remote/bin/arm-64-android/libhalide_hexagon_host.so /system/lib64/
-    adb push src/runtime/hexagon_remote/bin/v60/libhalide_hexagon_remote_skel.so /system/lib/rfsa/adsp/
 
 To build the example for Android, first ensure that you have a standalone toolchain
 created from the NDK using the make-standalone-toolchain.sh script:

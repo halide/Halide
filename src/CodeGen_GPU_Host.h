@@ -52,12 +52,6 @@ protected:
     using CodeGen_CPU::sym_pop;
     using CodeGen_CPU::sym_get;
     using CodeGen_CPU::sym_exists;
-    using CodeGen_CPU::buffer_min_ptr;
-    using CodeGen_CPU::buffer_stride_ptr;
-    using CodeGen_CPU::buffer_extent_ptr;
-    using CodeGen_CPU::buffer_host_ptr;
-    using CodeGen_CPU::buffer_device;
-    using CodeGen_CPU::buffer_device_ptr;
     using CodeGen_CPU::llvm_type_of;
     using CodeGen_CPU::create_alloca_at_entry;
     using CodeGen_CPU::i8_t;

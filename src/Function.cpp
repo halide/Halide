@@ -36,6 +36,10 @@ struct FunctionContents {
     std::string name;
     std::vector<Type> output_types;
 
+    // Function-specific schedule. This schedule is applied to all stages
+    // within the function.
+    FuncSchedule func_schedule;
+
     Definition init_def;
     std::vector<Definition> updates;
 
@@ -46,6 +50,7 @@ struct FunctionContents {
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
     NameMangling extern_mangling;
+    DeviceAPI extern_function_device_api;
     bool extern_uses_old_buffer_t;
 
     bool trace_loads, trace_stores, trace_realizations;
@@ -53,6 +58,7 @@ struct FunctionContents {
     bool frozen;
 
     FunctionContents() : extern_mangling(NameMangling::Default),
+                         extern_function_device_api(DeviceAPI::Host),
                          extern_uses_old_buffer_t(false),
                          trace_loads(false),
                          trace_stores(false),
@@ -60,6 +66,8 @@ struct FunctionContents {
                          frozen(false) {}
 
     void accept(IRVisitor *visitor) const {
+        func_schedule.accept(visitor);
+
         init_def.accept(visitor);
         for (const Definition &def : updates) {
             def.accept(visitor);
@@ -92,6 +100,8 @@ struct FunctionContents {
 
     // Pass an IRMutator through to all Exprs referenced in the FunctionContents
     void mutate(IRMutator *mutator) {
+        func_schedule.mutate(mutator);
+
         init_def.mutate(mutator);
         for (Definition &def : updates) {
             def.mutate(mutator);
@@ -309,22 +319,24 @@ void deep_copy_function_contents_helper(const IntrusivePtr<FunctionContents> &sr
     dst->debug_file = src->debug_file;
     dst->extern_function_name = src->extern_function_name;
     dst->extern_mangling = src->extern_mangling;
+    dst->extern_function_device_api = src->extern_function_device_api;
     dst->extern_uses_old_buffer_t = src->extern_uses_old_buffer_t;
     dst->trace_loads = src->trace_loads;
     dst->trace_stores = src->trace_stores;
     dst->trace_realizations = src->trace_realizations;
     dst->frozen = src->frozen;
     dst->output_buffers = src->output_buffers;
+    dst->func_schedule = src->func_schedule.deep_copy(copied_map);
 
     // Copy the pure definition
-    dst->init_def = src->init_def.deep_copy(copied_map);
+    dst->init_def = src->init_def.get_copy();
     internal_assert(dst->init_def.is_init());
     internal_assert(dst->init_def.schedule().rvars().empty())
         << "Init definition shouldn't have reduction domain\n";
 
     for (const Definition &def : src->updates) {
         internal_assert(!def.is_init());
-        Definition def_copy = def.deep_copy(copied_map);
+        Definition def_copy = def.get_copy();
         internal_assert(!def_copy.is_init());
         dst->updates.push_back(std::move(def_copy));
     }
@@ -447,7 +459,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         Dim d = {args[i], ForType::Serial, DeviceAPI::None, Dim::Type::PureVar};
         contents->init_def.schedule().dims().push_back(d);
         StorageDim sd = {args[i]};
-        contents->init_def.schedule().storage_dims().push_back(sd);
+        contents->func_schedule.storage_dims().push_back(sd);
     }
 
     // Add the dummy outermost dim
@@ -683,6 +695,7 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality,
                              NameMangling mangling,
+                             DeviceAPI device_api,
                              bool use_old_buffer_t) {
 
     user_assert(!has_pure_definition() && !has_update_definition())
@@ -697,6 +710,7 @@ void Function::define_extern(const std::string &function_name,
     contents->extern_arguments = args;
     contents->output_types = types;
     contents->extern_mangling = mangling;
+    contents->extern_function_device_api = device_api;
     contents->extern_uses_old_buffer_t = use_old_buffer_t;
 
     for (size_t i = 0; i < types.size(); i++) {
@@ -715,7 +729,7 @@ void Function::define_extern(const std::string &function_name,
         string arg = unique_name('e');
         pure_def_args[i] = Var(arg);
         StorageDim sd = {arg};
-        contents->init_def.schedule().storage_dims().push_back(sd);
+        contents->func_schedule.storage_dims().push_back(sd);
     }
 }
 
@@ -758,19 +772,19 @@ const std::vector<Expr> &Function::values() const {
     return contents->init_def.values();
 }
 
-Schedule &Function::schedule() {
-    return contents->init_def.schedule();
+FuncSchedule &Function::schedule() {
+    return contents->func_schedule;
 }
 
-const Schedule &Function::schedule() const {
-    return contents->init_def.schedule();
+const FuncSchedule &Function::schedule() const {
+    return contents->func_schedule;
 }
 
 const std::vector<Parameter> &Function::output_buffers() const {
     return contents->output_buffers;
 }
 
-Schedule &Function::update_schedule(int idx) {
+StageSchedule &Function::update_schedule(int idx) {
     internal_assert(idx < (int)contents->updates.size()) << "Invalid update definition index\n";
     return contents->updates[idx].schedule();
 }
@@ -842,6 +856,10 @@ const std::string &Function::extern_function_name() const {
     return contents->extern_function_name;
 }
 
+DeviceAPI Function::extern_function_device_api() const {
+    return contents->extern_function_device_api;
+}
+
 const std::string &Function::debug_file() const {
     return contents->debug_file;
 }
@@ -878,12 +896,12 @@ bool Function::frozen() const {
 }
 
 const map<string, IntrusivePtr<FunctionContents>> &Function::wrappers() const {
-    return contents->init_def.schedule().wrappers();
+    return contents->func_schedule.wrappers();
 }
 
 void Function::add_wrapper(const std::string &f, Function &wrapper) {
     wrapper.freeze();
-    contents->init_def.schedule().add_wrapper(f, wrapper.contents);
+    contents->func_schedule.add_wrapper(f, wrapper.contents);
 }
 
 namespace {
@@ -911,6 +929,21 @@ public:
         : substitutions(substitutions) {}
 };
 
+class SubstituteScheduleParamExprs : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const Variable *v) override {
+        IRMutator::visit(v);
+        if (v->param.defined() && v->param.is_bound_before_lowering()) {
+            expr = mutate(v->param.get_scalar_expr());
+        }
+    }
+
+public:
+    SubstituteScheduleParamExprs() = default;
+};
+
+
 } // anonymous namespace
 
 Function &Function::substitute_calls(const map<Function, Function, Compare> &substitutions) {
@@ -928,6 +961,12 @@ Function &Function::substitute_calls(const Function &orig, const Function &subst
     map<Function, Function, Compare> substitutions;
     substitutions.emplace(orig, substitute);
     return substitute_calls(substitutions);
+}
+
+Function &Function::substitute_schedule_param_exprs() {
+    SubstituteScheduleParamExprs sub_schedule_params;
+    contents->mutate(&sub_schedule_params);
+    return *this;
 }
 
 }

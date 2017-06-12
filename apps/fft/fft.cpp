@@ -150,7 +150,7 @@ ComplexFunc dft4(ComplexFunc f, int sign, const string& prefix) {
 
 ComplexFunc dft6(ComplexFunc f, int sign, const string& prefix) {
     const float re_W1_3 = -0.5f;
-    const float im_W1_3 = sign*0.866025404;
+    const float im_W1_3 = sign*0.866025404f;
 
     ComplexExpr W1_3(re_W1_3, im_W1_3);
     ComplexExpr W2_3(re_W1_3, -im_W1_3);
@@ -229,7 +229,7 @@ ComplexFunc dft8(ComplexFunc f, int sign, const string& prefix) {
 }
 
 // Compute the complex DFT of size N on dimension 0 of x.
-ComplexFunc dftN(ComplexFunc x, int N, float sign, const string& prefix) {
+ComplexFunc dftN(ComplexFunc x, int N, int sign, const string& prefix) {
     vector<Var> args(x.args());
     args.erase(args.begin());
 
