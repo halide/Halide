@@ -3,10 +3,12 @@ include ../support/Makefile.inc
 CXXFLAGS += -O3 -fopenmp -Wall -std=c++11 -march=native
 HL_TARGET ?= host
 LIBHALIDE_BLAS = src/libhalide_blas.a
+HALIDEBLAS_FLAGS ?= -DUSE_HALIDE
 EMIT_OPTIONS = stmt,assembly,o,h
 
 EIGEN_INCLUDES ?= -I/usr/include/eigen3
 CBLAS_LIBS ?= -lblas
+CBLAS_FLAGS ?= -DUSE_CBLAS
 OPENBLAS_FLAGS ?= -DUSE_OPENBLAS
 OPENBLAS_LIBS ?= -lopenblas
 
@@ -182,24 +184,24 @@ benchmarks.csv: $(BENCHMARKS)
 	make --no-print-directory run_benchmarks > benchmarks.dat
 	awk '{printf("%s,%s,%s,%s,%s\n",$$1,$$2,$$3,$$4,$$5)}' benchmarks.dat > benchmarks.csv
 
-benchmarks/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
+benchmarks/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(CBLAS_FLAGS) \
-	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
+	$(<) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
+benchmarks/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(ATLAS_FLAGS) \
-	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(ATLAS_LIBS) $(LLVM_LDFLAGS)
+	$(<) $(ATLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
+benchmarks/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(OPENBLAS_FLAGS) \
-	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(OPENBLAS_LIBS) $(LLVM_LDFLAGS)
+	$(<) $(OPENBLAS_LIBS) $(LLVM_LDFLAGS)
 
-benchmarks/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
+benchmarks/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
 	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(KERNEL_DIR) $(EIGEN_INCLUDES) \
-	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(LLVM_LDFLAGS)
+	$(<) $(LLVM_LDFLAGS)
 
 benchmarks/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
-	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) \
+	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) $(HALIDEBLAS_FLAGS) \
 	$(<) $(LIBHALIDE_BLAS) $(LIB_HALIDE) $(LLVM_LDFLAGS)
 
 $(KERNEL_DIR)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
