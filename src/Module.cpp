@@ -7,6 +7,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
+#include "HexagonOffload.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
@@ -111,6 +112,8 @@ struct ModuleContents {
     Target target;
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
+    std::vector<Module> submodules;
+    std::vector<ExternalCode> external_code;
 };
 
 template<>
@@ -167,9 +170,16 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
-
 std::vector<Internal::LoweredFunc> &Module::functions() {
     return contents->functions;
+}
+
+const std::vector<Module> &Module::submodules() const {
+    return contents->submodules;
+}
+
+const std::vector<ExternalCode> &Module::external_code() const {
+    return contents->external_code;
 }
 
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
@@ -188,6 +198,14 @@ void Module::append(const Buffer<> &buffer) {
 
 void Module::append(const Internal::LoweredFunc &function) {
     contents->functions.push_back(function);
+}
+
+void Module::append(const Module &module) {
+    contents->submodules.push_back(module);
+}
+ 
+void Module::append(const ExternalCode &external_code) {
+    contents->external_code.push_back(external_code);
 }
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
@@ -216,7 +234,84 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
     return output;
 }
 
+Buffer<uint8_t> Module::compile_to_buffer() const {
+    // TODO: This Hexagon specific code should be removed as soon as possible.
+    // This may involve adding more general support for post-processing and
+    // a way of specifying to use it.
+    if (target().arch == Target::Hexagon) {
+        return compile_module_to_hexagon_shared_object(*this);
+    }
+    
+    llvm::LLVMContext context;
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
+
+    llvm::SmallVector<char, 4096> object;
+    llvm::raw_svector_ostream object_stream(object);
+    compile_llvm_module_to_object(*llvm_module, object_stream);
+
+    if (debug::debug_level() >= 2) {
+        debug(2) << "Submodule assembly for " << name() << ": " << "\n";
+        llvm::SmallString<4096> assembly;
+        llvm::raw_svector_ostream assembly_stream(assembly);
+        compile_llvm_module_to_assembly(*llvm_module, assembly_stream);
+        debug(2) << assembly.c_str() << "\n";
+    }
+
+    Buffer<uint8_t> result(object.size(), name());
+    memcpy(result.data(), reinterpret_cast<uint8_t*>(&object[0]), object.size());
+    return result;
+}
+
+Module Module::resolve_submodules() const {
+    if (submodules().empty()) {
+        return *this;
+    }
+
+    Module lowered_module(name(), target());
+
+    for (const auto &f : functions()) {
+        lowered_module.append(f);
+    }
+    for (const auto &buf : buffers()) {
+        lowered_module.append(buf);
+    }
+    for (const auto &ec : external_code()) {
+        lowered_module.append(ec);
+    }
+    for (const auto &m : submodules()) {
+        Module copy(m.resolve_submodules());
+
+        // Propagate external code blocks.
+        for (const auto &ec : external_code()) {
+            // TODO(zalman): Is this the right thing to do?
+            bool already_in_list = false;
+            for (const auto &ec_sub : copy.external_code()) {
+                if (ec_sub.name() == ec.name()) {
+                    already_in_list = true;
+                    break;
+                }
+            }
+            if (!already_in_list) {
+                copy.append(ec);
+            }
+        }
+
+        auto buf = copy.compile_to_buffer();
+        lowered_module.append(buf);
+    }
+
+    return lowered_module;
+}
+
 void Module::compile(const Outputs &output_files) const {
+    // If there are submodules, recursively lower submodules to
+    // buffers on a copy of the module being compiled, then compile
+    // the copied module.
+    if (!submodules().empty()) {
+        resolve_submodules().compile(output_files);
+        return;
+    }
+
     if (!output_files.object_name.empty() || !output_files.assembly_name.empty() ||
         !output_files.bitcode_name.empty() || !output_files.llvm_assembly_name.empty() ||
         !output_files.static_library_name.empty()) {

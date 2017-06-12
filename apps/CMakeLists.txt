@@ -11,6 +11,8 @@ macro(add_if_have_libpng dirname)
   endif()
 endmacro()
 
+include(${CMAKE_SOURCE_DIR}/HalideGenerator.cmake)
+
 add_if_have_libpng(bilateral_grid)
 add_subdirectory(blur)
 add_subdirectory(c_backend)

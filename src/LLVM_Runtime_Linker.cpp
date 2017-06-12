@@ -416,7 +416,6 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
 
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
-        string err_msg;
         #if LLVM_VERSION >= 38
         bool failed = llvm::Linker::linkModules(*modules[0],
                                                 std::move(modules[i]));
@@ -426,7 +425,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
         #endif
 
         if (failed) {
-            internal_error << "Failure linking initial modules: " << err_msg << "\n";
+            internal_error << "Failure linking initial modules\n";
         }
     }
 
@@ -569,7 +568,7 @@ void add_underscore_to_posix_call(llvm::CallInst *call, llvm::Function *fn, llvm
  * of mcjit, so we just rewrite uses of these functions to include an
  * underscore. */
 void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
-    string posix_fns[] = {"vsnprintf", "open", "close", "write"};
+    string posix_fns[] = {"vsnprintf", "open", "close", "write", "fileno"};
 
     string *posix_fns_begin = posix_fns;
     string *posix_fns_end = posix_fns + sizeof(posix_fns) / sizeof(posix_fns[0]);
@@ -821,13 +820,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 modules.push_back(get_initmod_cuda(c, bits_64, debug));
             }
-        } else if (t.has_feature(Target::OpenCL)) {
+        } 
+        if (t.has_feature(Target::OpenCL)) {
             if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_opencl(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
-        } else if (t.has_feature(Target::OpenGL)) {
+        } 
+        if (t.has_feature(Target::OpenGL)) {
             modules.push_back(get_initmod_opengl(c, bits_64, debug));
             if (t.os == Target::Linux) {
                 modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));
@@ -838,7 +839,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
-        } else if (t.has_feature(Target::OpenGLCompute)) {
+        } 
+        if (t.has_feature(Target::OpenGLCompute)) {
             modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
             if (t.os == Target::Android) {
                 // Only platform that supports OpenGL Compute for now.
@@ -851,7 +853,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
 
-        } else if (t.has_feature(Target::Metal)) {
+        } 
+        if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
             if (t.arch == Target::ARM) {
                 modules.push_back(get_initmod_metal_objc_arm(c, bits_64, debug));
@@ -860,7 +863,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
-        } else if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } 
+        if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
         }
@@ -950,6 +954,22 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 }
 #endif
 
+void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
+                           const std::vector<uint8_t> &bitcode, const std::string &name) {
+    llvm::StringRef sb = llvm::StringRef((const char *)&bitcode[0], bitcode.size());
+    std::unique_ptr<llvm::Module> add_in = parse_bitcode_file(sb, context, name.c_str());
+
+    #if LLVM_VERSION >= 38
+    bool failed = llvm::Linker::linkModules(module, std::move(add_in));
+    #else
+    bool failed = llvm::Linker::LinkModules(&module, add_in.release());
+    #endif
+
+    if (failed) {
+        internal_error << "Failure linking in additional module: " << name << "\n";
+    }
+}
+  
 }  // namespace Internal
 
 }

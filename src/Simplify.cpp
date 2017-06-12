@@ -191,7 +191,7 @@ public:
     }
 
 #if LOG_EXPR_MUTATIONS
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Expr: " << e << "\n";
         debug_indent++;
@@ -207,7 +207,7 @@ public:
 #endif
 
 #if LOG_STMT_MUTATIONS
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         const std::string spaces(debug_indent, ' ');
         debug(1) << spaces << "Simplifying Stmt: " << s << "\n";
         debug_indent++;
@@ -236,6 +236,26 @@ private:
     Scope<pair<int64_t, int64_t>> bounds_info;
     Scope<ModulusRemainder> alignment_info;
 
+    // If we encounter a reference to a buffer (a Load, Store, Call,
+    // or Provide), there's an implicit dependence on some associated
+    // symbols.
+    void found_buffer_reference(const string &name, size_t dimensions = 0) {
+        for (size_t i = 0; i < dimensions; i++) {
+            string stride = name + ".stride." + std::to_string(i);
+            if (var_info.contains(stride)) {
+                var_info.ref(stride).old_uses++;
+            }
+
+            string min = name + ".min." + std::to_string(i);
+            if (var_info.contains(min)) {
+                var_info.ref(min).old_uses++;
+            }
+        }
+
+        if (var_info.contains(name)) {
+            var_info.ref(name).old_uses++;
+        }
+    }
 
     using IRMutator::visit;
 
@@ -1017,16 +1037,16 @@ private:
         } else if (ramp_a && ramp_b) {
             // Ramp - Ramp
             expr = mutate(Ramp::make(ramp_a->base - ramp_b->base,
-                                   ramp_a->stride - ramp_b->stride, ramp_a->lanes));
+                                     ramp_a->stride - ramp_b->stride, ramp_a->lanes));
         } else if (ramp_a && broadcast_b) {
             // Ramp - Broadcast
             expr = mutate(Ramp::make(ramp_a->base - broadcast_b->value,
-                                   ramp_a->stride, ramp_a->lanes));
+                                     ramp_a->stride, ramp_a->lanes));
         } else if (broadcast_a && ramp_b) {
             // Broadcast - Ramp
             expr = mutate(Ramp::make(broadcast_a->value - ramp_b->base,
-                                   make_zero(ramp_b->stride.type())- ramp_b->stride,
-                                   ramp_b->lanes));
+                                     make_zero(ramp_b->stride.type())- ramp_b->stride,
+                                     ramp_b->lanes));
         } else if (broadcast_a && broadcast_b) {
             // Broadcast + Broadcast
             expr = Broadcast::make(mutate(broadcast_a->value - broadcast_b->value),
@@ -1073,7 +1093,6 @@ private:
         } else if (add_b &&
                    equal(add_b->a, a)) {
             expr = mutate(make_zero(add_b->a.type()) - add_b->b);
-
         } else if (max_a &&
                    equal(max_a->a, b) &&
                    !is_const(b) &&
@@ -1098,7 +1117,6 @@ private:
                    no_overflow(op->type)) {
             // min(a, b) - b -> min(a-b, 0)
             expr = mutate(Min::make(min_a->a - min_a->b, make_zero(op->type)));
-
         } else if (max_b &&
                    equal(max_b->a, a) &&
                    !is_const(a) &&
@@ -1123,7 +1141,6 @@ private:
                    no_overflow(op->type)) {
             // b - min(a, b) -> 0 - min(a-b, 0) -> max(b-a, 0)
             expr = mutate(Max::make(min_b->b - min_b->a, make_zero(op->type)));
-
         } else if (add_a &&
                    is_simple_const(add_a->b)) {
             // In ternary expressions, pull constants outside
@@ -1279,22 +1296,26 @@ private:
                    equal(max_a->b, max_b->a)) {
             // max(a, b) - max(b, a) -> 0
             expr = make_zero(op->type);
-        } else if (min_a &&
+        } else if (no_overflow(op->type) &&
+                   min_a &&
                    min_b &&
                    is_zero(mutate((min_a->a + min_b->b) - (min_a->b + min_b->a)))) {
             // min(a, b) - min(c, d) where a-b == c-d -> b - d
             expr = mutate(min_a->b - min_b->b);
-        } else if (max_a &&
+        } else if (no_overflow(op->type) &&
+                   max_a &&
                    max_b &&
                    is_zero(mutate((max_a->a + max_b->b) - (max_a->b + max_b->a)))) {
             // max(a, b) - max(c, d) where a-b == c-d -> b - d
             expr = mutate(max_a->b - max_b->b);
-        } else if (min_a &&
+        } else if (no_overflow(op->type) &&
+                   min_a &&
                    min_b &&
                    is_zero(mutate((min_a->a + min_b->a) - (min_a->b + min_b->b)))) {
             // min(a, b) - min(c, d) where a-b == d-c -> b - c
             expr = mutate(min_a->b - min_b->a);
-        } else if (max_a &&
+        } else if (no_overflow(op->type) &&
+                   max_a &&
                    max_b &&
                    is_zero(mutate((max_a->a + max_b->a) - (max_a->b + max_b->b)))) {
             // max(a, b) - max(c, d) where a-b == d-c -> b - c
@@ -1412,6 +1433,98 @@ private:
             // (x + a)/c - (x - b)/c -> (b - (x + a)%c + (a + c - 1))/c
             Expr x = add_a_a->a, a = add_a_a->b, b = sub_b_a->b, c = div_a->b;
             expr = mutate((b - (x + (a % c))%c + (a + c - 1))/c);
+        } else if (no_overflow(op->type) &&
+                   min_a &&
+                   min_b &&
+                   equal(min_a->a, min_b->a) &&
+                   is_simple_const(min_a->b) &&
+                   is_simple_const(min_b->b)) {
+            // min(x, c1) - min(x, c2) where c1 and c2 are constants
+            // if c1 >= c2 -> clamp(x, c2, c1) - c2
+            // else -> c1 - clamp(x, c1, c2)
+            if (is_one(mutate(min_a->b >= min_b->b))) {
+                expr = mutate(clamp(min_a->a, min_b->b, min_a->b) - min_b->b);
+            } else {
+                expr = mutate(min_a->b - clamp(min_a->a, min_a->b, min_b->b));
+            }
+        } else if (no_overflow(op->type) &&
+                   max_a &&
+                   max_b &&
+                   equal(max_a->a, max_b->a) &&
+                   is_simple_const(max_a->b) &&
+                   is_simple_const(max_b->b)) {
+            // max(x, c1) - max(x, c2) where c1 and c2 are constants
+            // if c1 >= c2 -> c1 - clamp(x, c2, c1)
+            // else -> clamp(x, c1, c2) - c2
+            if (is_one(mutate(max_a->b >= max_b->b))) {
+                expr = mutate(max_a->b - clamp(max_a->a, max_b->b, max_a->b));
+            } else {
+                expr = mutate(clamp(max_a->a, max_a->b, max_b->b)- max_b->b);
+            }
+        } else if (no_overflow(op->type) &&
+                   min_a &&
+                   min_b &&
+                   is_simple_const(mutate(min_a->a - min_b->b)) &&
+                   is_simple_const(mutate(min_a->b - min_b->a))) {
+            // Canonicalize min(a + c1, b + c2) - min(b + c4, a + c3)
+            //     where c1, c2, c3, and c4 are constants
+            // into min(a + c1, b + c2) - min(a + c3, b + c4)
+            // so that a later rule can pick it up
+            expr = mutate(a - Min::make(min_b->b, min_b->a));
+        } else if (no_overflow(op->type) &&
+                   max_a &&
+                   max_b &&
+                   is_simple_const(mutate(max_a->a - max_b->b)) &&
+                   is_simple_const(mutate(max_a->b - max_b->a))) {
+            // Canonicalize max(a + c1, b + c2) - max(b + c4, a + c3)
+            //     where c1, c2, c3, and c4 are constants
+            // into max(a + c1, b + c2) - max(a + c3, b + c4)
+            // so that a later rule can pick it up
+            expr = mutate(a - Max::make(max_b->b, max_b->a));
+        } else if (no_overflow(op->type) &&
+                   min_a &&
+                   min_b) {
+            // min(a + c1, b + c2) - min(a + c3, b + c4)
+            //     where delta_a = c1 - c3 and delta_b = c2 - c4 are constants
+            // if delta_b - delta_a <= 0 -> clamp((b + c2) - (a + c1), delta_b - delta_a, 0) + delta_a
+            // else -> delta_b - clamp((b + c2) - (a + c1), 0, delta_b - delta_a)
+            Expr delta_a = mutate(min_a->a - min_b->a);
+            Expr delta_b = mutate(min_a->b - min_b->b);
+            if (is_simple_const(delta_a) &&
+                is_simple_const(delta_b)) {
+                Expr diff = delta_b - delta_a;
+                if (is_one(mutate(diff <= make_zero(op->type)))) {
+                    expr = mutate(clamp(min_a->b - min_a->a, diff, make_zero(op->type)) + delta_a);
+                } else {
+                    expr = mutate(delta_b - clamp(min_a->b - min_a->a, make_zero(op->type), diff));
+                }
+            } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = Sub::make(a, b);
+            }
+        } else if (no_overflow(op->type) &&
+                   max_a &&
+                   max_b) {
+            // max(a + c1, b + c2) - max(a + c3, b + c4)
+            //     where delta_a = c1 - c3 and delta_b = c2 - c4 are constants
+            // if delta_b - delta_a <= 0 -> delta_b - clamp((b + c2) - (a + c1), delta_b - delta_a, 0)
+            // else -> clamp((b + c2) - (a + c1), 0, delta_b - delta_a) + delta_a
+            Expr delta_a = mutate(max_a->a - max_b->a);
+            Expr delta_b = mutate(max_a->b - max_b->b);
+            if (is_simple_const(delta_a) &&
+                is_simple_const(delta_b)) {
+                Expr diff = delta_b - delta_a;
+                if (is_one(mutate(diff <= make_zero(op->type)))) {
+                    expr = mutate(delta_b - clamp(max_a->b - max_a->a, diff, make_zero(op->type)));
+                } else {
+                    expr = mutate(clamp(max_a->b - max_a->a, make_zero(op->type), diff) + delta_a);
+                }
+            } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
+            } else {
+                expr = Sub::make(a, b);
+            }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -3949,6 +4062,8 @@ private:
     }
 
     void visit(const Load *op) {
+        found_buffer_reference(op->name);
+
         Expr predicate = mutate(op->predicate);
         Expr index = mutate(op->index);
 
@@ -3969,26 +4084,9 @@ private:
     }
 
     void visit(const Call *op) {
-        // Calls implicitly depend on mins and strides of the buffer referenced
+        // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                {
-                    ostringstream oss;
-                    oss << op->name << ".stride." << i;
-                    string stride = oss.str();
-                    if (var_info.contains(stride)) {
-                        var_info.ref(stride).old_uses++;
-                    }
-                }
-                {
-                    ostringstream oss;
-                    oss << op->name << ".min." << i;
-                    string min = oss.str();
-                    if (var_info.contains(min)) {
-                        var_info.ref(min).old_uses++;
-                    }
-                }
-            }
+            found_buffer_reference(op->name, op->args.size());
         }
 
         if (op->is_intrinsic(Call::shift_left) ||
@@ -4243,6 +4341,8 @@ private:
             // Collapse the prefetched region into lower dimension whenever is possible.
             // TODO(psuriana): Deal with negative strides and overlaps.
 
+            internal_assert(op->args.size() % 2 == 0); // Format: {base, offset, extent0, min0, ...}
+
             vector<Expr> args(op->args);
             bool changed = false;
             for (size_t i = 0; i < op->args.size(); ++i) {
@@ -4256,7 +4356,7 @@ private:
             // based on the storage dimension in ascending order (i.e. innermost
             // first and outermost last), so, it is enough to check for the upper
             // triangular pairs to see if any contiguous addresses exist.
-            for (size_t i = 1; i < args.size(); i += 2) {
+            for (size_t i = 2; i < args.size(); i += 2) {
                 Expr extent_0 = args[i];
                 Expr stride_0 = args[i + 1];
                 for (size_t j = i + 2; j < args.size(); j += 2) {
@@ -4753,8 +4853,17 @@ private:
 
         const AssertStmt *a = stmt.as<AssertStmt>();
         if (a && is_zero(a->condition)) {
-            user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
-                         << stmt << "\n";
+            // Usually, assert(const-false) should generate a warning;
+            // in at least one case (specialize_fail()), we want to suppress
+            // the warning, because the assertion is generated internally
+            // by Halide and is expected to always fail.
+            const Call *call = a->message.as<Call>();
+            const bool const_false_conditions_expected =
+                call && call->name == "halide_error_specialize_fail";
+            if (!const_false_conditions_expected) {
+                user_warning << "This pipeline is guaranteed to fail an assertion at runtime: \n"
+                             << stmt << "\n";
+            }
         } else if (a && is_one(a->condition)) {
             stmt = Evaluate::make(0);
         }
@@ -4792,30 +4901,13 @@ private:
     }
 
     void visit(const Provide *op) {
-        // Provides implicitly depend on mins and strides of the buffer referenced
-        for (size_t i = 0; i < op->args.size(); i++) {
-            {
-                ostringstream oss;
-                oss << op->name << ".stride." << i;
-                string stride = oss.str();
-                if (var_info.contains(stride)) {
-                    var_info.ref(stride).old_uses++;
-                }
-            }
-            {
-                ostringstream oss;
-                oss << op->name << ".min." << i;
-                string min = oss.str();
-                if (var_info.contains(min)) {
-                    var_info.ref(min).old_uses++;
-                }
-            }
-        }
-
+        found_buffer_reference(op->name, op->args.size());
         IRMutator::visit(op);
     }
 
     void visit(const Store *op) {
+        found_buffer_reference(op->name);
+
         Expr predicate = mutate(op->predicate);
         Expr value = mutate(op->value);
         Expr index = mutate(op->index);
@@ -4880,8 +4972,8 @@ private:
         // Rewrite Lets inside an evaluate as LetStmts outside the Evaluate.
         vector<pair<string, Expr>> lets;
         while (const Let *let = value.as<Let>()) {
-            value = let->body;
             lets.push_back({let->name, let->value});
+            value = let->body;
         }
 
         if (value.same_as(op->value)) {
@@ -6292,10 +6384,9 @@ void simplify_test() {
 
     {
         // Check that contiguous prefetch call get collapsed
-        Expr load = Load::make(Int(32), "buf", x, Buffer<>(), Parameter(), const_true());
-        Expr base = Call::make(Handle(), Call::address_of, {load}, Call::Intrinsic);
-        check(Call::make(Int(32), Call::prefetch, {base, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
-              Call::make(Int(32), Call::prefetch, {base, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+        Expr base = Variable::make(Handle(), "buf");
+        check(Call::make(Int(32), Call::prefetch, {base, x, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+              Call::make(Int(32), Call::prefetch, {base, x, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }
 
     // Check min(x, y)*max(x, y) gets simplified into x*y
@@ -6451,6 +6542,36 @@ void simplify_test() {
         r3 = max(one, Expr(two), one);
         internal_assert(r3.type() == halide_type_of<int>());
     }
+
+    {
+        Expr x = Variable::make(UInt(32), "x");
+        Expr y = Variable::make(UInt(32), "y");
+        // This is used to get simplified into broadcast(x - y, 2) which is
+        // incorrect when there is overflow.
+        Expr e = simplify(max(ramp(x, y, 2), broadcast(x, 2)) - max(broadcast(y, 2), ramp(y, y, 2)));
+        Expr expected = max(ramp(x, y, 2), broadcast(x, 2)) - max(ramp(y, y, 2), broadcast(y, 2));
+        check(e, expected);
+    }
+
+    check(min(x, 63) - min(x, 3), clamp(x, 3, 63) + (-3));
+    check(min(x, 3) - min(x, 63), 3 - clamp(x, 3, 63));
+    check(min(63, x) - min(x, 3), clamp(x, 3, 63) + (-3));
+    check(min(x, 3) - min(63, x), 3 - clamp(x, 3, 63));
+
+    check(min(x * 4 + 63, y) - min(x * 4, y - 3), clamp(y - x * 4 + (-63), -60, 0) + 63);
+    check(min(x * 4, y - 3) - min(x * 4 + 63, y), -3 - clamp(y - x * 4 + (-3), 0, 60));
+    check(min(y, x * 4 + 63) - min(x * 4, y - 3), 63 - clamp(x * 4 - y + 63, 0, 60));
+    check(min(x * 4, y - 3) - min(y, x * 4 + 63), -3 - clamp(y - x * 4 + (-3), 0, 60));
+
+    check(max(x, 63) - max(x, 3), 63 - clamp(x, 3, 63));
+    check(max(x, 3) - max(x, 63), clamp(x, 3, 63) + (-63));
+    check(max(63, x) - max(3, x), 63 - clamp(x, 3, 63));
+    check(max(3, x) - max(x, 63), clamp(x, 3, 63) + (-63));
+
+    check(max(x * 4 + 63, y) - max(x * 4, y - 3), 3 - clamp(y - x * 4 + (-63), -60, 0));
+    check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4 + (-3), 0, 60) + (-63));
+    check(max(x * 4 + 63, y) - max(y - 3, x * 4), 3 - clamp(y - x * 4 + (-63), -60, 0));
+    check(max(y - 3, x * 4) - max(y, x * 4 + 63), -63 - clamp(x * 4 - y + 3, -60, 0));
 
     std::cout << "Simplify test passed" << std::endl;
 }

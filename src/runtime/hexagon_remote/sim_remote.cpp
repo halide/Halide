@@ -4,11 +4,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <dlfcn.h>
+#include <unistd.h>
+#include <memory.h>
 #include <hexagon_standalone.h>
 
 #include "sim_protocol.h"
 #include "log.h"
-#include "elf.h"
+#include "dlib.h"
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
@@ -88,6 +90,8 @@ extern int floor;
 extern int ceilf;
 extern int ceil;
 
+extern int write;
+
 // These might not always be available.
 __attribute__((weak)) extern int mmap;
 __attribute__((weak)) extern int mprotect;
@@ -145,15 +149,36 @@ void *halide_get_symbol(const char *name) {
         char *addr;
     };
     static known_sym known_syms[] = {
-        {"close", (char *)(&close)},
         {"abort", (char *)(&abort)},
+        {"atoi", (char *)(&atoi)},
+        {"close", (char *)(&close)},
+        {"exit", (char *)(&exit)},
+        {"fclose", (char *)(&fclose)},
+        {"fileno", (char *)(&fileno)},
+        {"fopen", (char *)(&fopen)},
+        {"free", (char *)(&free)},
+        {"fwrite", (char *)(&fwrite)},
+        {"getenv", (char *)(&getenv)},
+        {"malloc", (char *)(&malloc)},
+        {"memcmp", (char *)(&memcmp)},
         {"memcpy", (char *)(&memcpy)},
         {"memmove", (char *)(&memmove)},
         {"memset", (char *)(&memset)},
+        {"mmap", (char *)(&mmap)},
+        {"mprotect", (char *)(&mprotect)},
+        {"munmap", (char *)(&munmap)},
+        {"strcmp", (char *)(&strcmp)},
+        {"strchr", (char *)(char *(*)(char *, int))(&strchr)},
+        {"strstr", (char *)(char *(*)(char *, const char *))(&strstr)},
+        {"strncmp", (char *)(&strncmp)},
+        {"strncpy", (char *)(&strncpy)},
+        {"write", (char *)(&write)},
+
         {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
         {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
         {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
         {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
+
         {"__hexagon_divdf3", (char *)(&__hexagon_divdf3)},
         {"__hexagon_muldf3", (char *)(&__hexagon_muldf3)},
         {"__hexagon_adddf3", (char *)(&__hexagon_adddf3)},
@@ -207,9 +232,6 @@ void *halide_get_symbol(const char *name) {
         {"floor", (char *)(&floor)},
         {"ceilf", (char *)(&ceilf)},
         {"ceil", (char *)(&ceil)},
-        {"mmap", (char *)(&mmap)},
-        {"mprotect", (char *)(&mprotect)},
-        {"munmap", (char *)(&munmap)},
         {NULL, NULL} // Null terminator.
     };
 
@@ -239,7 +261,7 @@ typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
                              void *(*)(const char *),
                              void *(*)(const char *),
                              void *(*)(void *, const char *));
-void* dlopenbuf(const char*filename, const char* data, int size, int perms) __attribute__ ((weak));
+__attribute__ ((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
 
 static void dllib_init() {
     // The simulator needs this call to enable dlopen to work...
@@ -247,60 +269,56 @@ static void dllib_init() {
     dlinit(3, const_cast<char**>(builtin));
 }
 
-int initialize_kernels_v2(const unsigned char *code, int codeLen,
-                          bool use_shared_object,
-                          handle_t *module_ptr) {
-
-    // Keep this false, even for dlbuf usage, as we do not yet have api for dlopenbuf from standalone.
+int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
     void *lib = NULL;
-    elf_t *elib = NULL;
-    if (use_shared_object) {
-
-        // Create a unique file name
-        char *newf = tmpnam(NULL);
-        char filename[260];
-        strcpy(filename, newf);
-        strcat(filename, "_halide_hexagon_kernels");
-        strcat(filename, ".so");
+    if (use_dlopenbuf) {
+        if (!dlopenbuf) {
+            log_printf("dlopenbuf not available.\n");
+            return -1;
+        }
+        // We need a unique soname, or dlopenbuf will return a
+        // previously opened library.
+        static int unique_id = 0;
+        char soname[256];
+        sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
 
         // Open the library
         dllib_init();
-        if(&dlopenbuf == NULL) {
-            halide_print(NULL, "dlopenbuf missing\n");
-            return -1;
-        }
-        lib = dlopenbuf( filename, (const char*)code, codeLen, RTLD_LOCAL | RTLD_LAZY);
+        // We need to use RTLD_NOW, the libraries we build for Hexagon
+        // offloading do not support lazy bindin.
+        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
         if (!lib) {
             halide_print(NULL, "dlopenbuf failed\n");
+            halide_print(NULL, dlerror());
             return -1;
         }
     } else {
-        elib = obj_dlopen_mem(code, codeLen);
-        if (!elib) {
-            halide_print(NULL, "dlopen_mem failed\n");
+        lib = mmap_dlopen(code, codeLen);
+        if (!lib) {
+            halide_print(NULL, "mmap_dlopen failed\n");
             return -1;
         }
     }
+
     // Initialize the runtime. The Hexagon runtime can't call any
     // system functions (because we can't link them), so we put all
     // the implementations that need to do so here, and pass poiners
     // to them in here.
     set_runtime_t set_runtime;
-    if (use_shared_object) {
+    if (use_dlopenbuf) {
         set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
     } else {
-        set_runtime = (set_runtime_t)obj_dlsym(elib, "halide_noos_set_runtime");
+        set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
     }
     if (!set_runtime) {
-        if (use_shared_object) {
+        if (use_dlopenbuf) {
             dlclose(lib);
         } else {
-            obj_dlclose(elib);
+            mmap_dlclose(lib);
         }
         halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
         return -1;
     }
-
     int result = set_runtime(halide_malloc,
                              halide_free,
                              halide_print,
@@ -311,33 +329,23 @@ int initialize_kernels_v2(const unsigned char *code, int codeLen,
                              halide_load_library,
                              halide_get_library_symbol);
     if (result != 0) {
-        if (use_shared_object) {
+        if (use_dlopenbuf) {
             dlclose(lib);
         } else {
-            obj_dlclose(elib);
+            mmap_dlclose(lib);
         }
         halide_print(NULL, "set_runtime failed\n");
         return result;
     }
-    if (use_shared_object) {
-        *module_ptr = reinterpret_cast<handle_t>(lib);
-    } else {
-        *module_ptr = reinterpret_cast<handle_t>(elib);
-    }
+    *module_ptr = reinterpret_cast<handle_t>(lib);
     return 0;
 }
 
-int initialize_kernels(const unsigned char *code, int codeLen,
-                       bool use_shared_object,
-                       handle_t *module_ptr) {
-    return initialize_kernels_v2(code, codeLen, false, module_ptr);
-}
-
-handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, int use_shared_object) {
-    if (use_shared_object) {
-        return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+handle_t get_symbol(handle_t module_ptr, const char* name, int nameLen, bool use_dlopenbuf) {
+    if (use_dlopenbuf) {
+        return reinterpret_cast<handle_t>(dlsym(reinterpret_cast<void *>(module_ptr), name));
     } else {
-        return reinterpret_cast<handle_t>(obj_dlsym(reinterpret_cast<elf_t*>(module_ptr), name));
+        return reinterpret_cast<handle_t>(mmap_dlsym(reinterpret_cast<void *>(module_ptr), name));
     }
 }
 
@@ -382,8 +390,12 @@ int run(handle_t module_ptr, handle_t function,
     return pipeline(args);
 }
 
-int release_kernels(handle_t module_ptr, int codeLen) {
-    obj_dlclose(reinterpret_cast<elf_t*>(module_ptr));
+int release_kernels(handle_t module_ptr, bool use_dlopenbuf) {
+    if (use_dlopenbuf) {
+        dlclose(reinterpret_cast<void *>(module_ptr));
+    } else {
+        mmap_dlclose(reinterpret_cast<void *>(module_ptr));
+    }
     return 0;
 }
 
@@ -437,7 +449,7 @@ int main(int argc, const char **argv) {
             set_rpc_return(0);
             break;
         case Message::InitKernels:
-            set_rpc_return(initialize_kernels_v2(
+            set_rpc_return(initialize_kernels(
                 reinterpret_cast<unsigned char*>(RPC_ARG(0)),
                 RPC_ARG(1),
                 RPC_ARG(2),

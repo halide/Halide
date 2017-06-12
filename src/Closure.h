@@ -24,11 +24,6 @@ class Closure : public IRVisitor {
 protected:
     Scope<int> ignore;
 
-    // Indicates whether the pointer obtained by address_of is read or written.
-    // By default, assume address_of users read but not write.
-    bool address_of_read = true;
-    bool address_of_written = false;
-
     using IRVisitor::visit;
 
     void visit(const Let *op);
@@ -38,7 +33,6 @@ protected:
     void visit(const Store *op);
     void visit(const Allocate *op);
     void visit(const Variable *op);
-    void visit(const Call *op);
 
 public:
     /** Information about a buffer reference from a closure. */
@@ -83,9 +77,6 @@ public:
 
     /** External allocations referenced. */
     std::map<std::string, Buffer> buffers;
-
-    /** The Halide names of the external symbols (in the same order as llvm_types). */
-    std::vector<std::string> names() const;
 };
 
 }}

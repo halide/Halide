@@ -36,7 +36,21 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
 /** Emit a halide device api type in a human readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
+/** Emit a halide LoopLevel in a human readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
+
 namespace Internal {
+
+struct AssociativePattern;
+struct AssociativeOp;
+
+/** Emit a halide associative pattern on an output stream (such as std::cout)
+ * in a human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
+
+/** Emit a halide associative op on an output stream (such as std::cout) in a
+ * human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */

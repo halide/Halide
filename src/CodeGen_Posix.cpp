@@ -165,7 +165,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             int64_t stack_size = (stack_bytes + type.bytes() - 1) / type.bytes();
             // Handles are stored as uint64s
             llvm::Type *t =
-                llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);   
+                llvm_type_of(type.is_handle() ? UInt(64, type.lanes()) : type);
             allocation.ptr = create_alloca_at_entry(t, stack_size, false, name);
             allocation.stack_bytes = stack_bytes;
         }
@@ -178,7 +178,11 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // call malloc
             llvm::Function *malloc_fn = module->getFunction("halide_malloc");
             internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
+            #if LLVM_VERSION < 50
             malloc_fn->setDoesNotAlias(0);
+            #else
+            malloc_fn->setReturnDoesNotAlias();
+            #endif
 
             llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
             ++arg_iter;  // skip the user context *
@@ -195,7 +199,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             Value *call = builder->CreateCall(malloc_fn, args);
 
             // Fix the type to avoid pointless bitcasts later
-            call = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());    
+            call = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());
 
             allocation.ptr = call;
         }
@@ -226,7 +230,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     }
 
     // Push the allocation base pointer onto the symbol table
-    debug(3) << "Pushing allocation called " << name << ".host onto the symbol table\n";
+    debug(3) << "Pushing allocation called " << name << " onto the symbol table\n";
 
     allocations.push(name, allocation);
 
@@ -247,7 +251,7 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     }
 
     allocations.pop(name);
-    sym_pop(name + ".host");
+    sym_pop(name);
 }
 
 string CodeGen_Posix::get_allocation_name(const std::string &n) {
@@ -259,7 +263,7 @@ string CodeGen_Posix::get_allocation_name(const std::string &n) {
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
-    if (sym_exists(alloc->name + ".host")) {
+    if (sym_exists(alloc->name)) {
         user_error << "Can't have two different buffers with the same name: "
                    << alloc->name << "\n";
     }
@@ -267,7 +271,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     Allocation allocation = create_allocation(alloc->name, alloc->type,
                                               alloc->extents, alloc->condition,
                                               alloc->new_expr, alloc->free_function);
-    sym_push(alloc->name + ".host", allocation.ptr);
+    sym_push(alloc->name, allocation.ptr);
 
     codegen(alloc->body);
 

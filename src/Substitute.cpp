@@ -114,7 +114,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         if (equal(e, find)) {
             return replacement;
         } else {
@@ -165,9 +165,12 @@ public:
 
     using IRGraphMutator::mutate;
 
-    Expr mutate(Expr e) {
-        if (e.same_as(find)) return replace;
-        return IRGraphMutator::mutate(e);
+    Expr mutate(const Expr &e) {
+        if (e.same_as(find)) {
+            return replace;
+        } else {
+            return IRGraphMutator::mutate(e);
+        }
     }
 
     GraphSubstituteExpr(const Expr &find, const Expr &replace) : find(find), replace(replace) {}

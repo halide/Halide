@@ -204,7 +204,7 @@ bool load_png(const std::string &filename, ImageType *im) {
 
     // convert the data to ImageType::ElemType
 
-    int c_stride = (im->channels() == 1) ? 0 : ((&(*im)(0, 0, 1)) - (&(*im)(0, 0, 0)));
+    int64_t c_stride = (im->channels() == 1) ? 0 : ((&(*im)(0, 0, 1)) - (&(*im)(0, 0, 0)));
     typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im->data();
     if (bit_depth == 8) {
         for (int y = 0; y < im->height(); y++) {
@@ -289,9 +289,11 @@ bool save_png(ImageType &im, const std::string &filename) {
 
     Internal::PngRowPointers row_pointers(im.height(), png_get_rowbytes(png_ptr, info_ptr));
 
-    // im.copyToHost(); // in case the image is on the gpu
-
-    int c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
+    // We don't require that the image type provided has any
+    // particular way to get at the strides, so take differences of
+    // addresses of pixels to compute them.
+    int64_t c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
+    int64_t x_stride = (int)((&im(1, 0, 0)) - (&im(0, 0, 0)));
     typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
 
     for (int y = 0; y < im.height(); y++) {
@@ -305,7 +307,7 @@ bool save_png(ImageType &im, const std::string &filename) {
                     *dstPtr++ = out >> 8;
                     *dstPtr++ = out & 0xff;
                 }
-                srcPtr++;
+                srcPtr += x_stride;
             }
         } else if (bit_depth == 8) {
             // convert to uint8_t
@@ -315,7 +317,7 @@ bool save_png(ImageType &im, const std::string &filename) {
                     Internal::convert(srcPtr[c*c_stride], out);
                     *dstPtr++ = out;
                 }
-                srcPtr++;
+                srcPtr += x_stride;
             }
         } else {
             if (!check(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.")) return false;
@@ -381,7 +383,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
             }
         }
     } else if (bit_depth == 16) {
-        int little_endian = Internal::is_little_endian();
+        bool little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height);
         if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
@@ -425,7 +427,7 @@ bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel =
         }
         if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 8-bit data\n")) return false;
     } else if (bit_depth == 16) {
-        int little_endian = Internal::is_little_endian();
+        bool little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height);
         uint16_t *p = &data[0];
         for (int y = 0; y < height; y++) {
@@ -488,7 +490,7 @@ bool load_ppm(const std::string &filename, ImageType *im) {
             }
         }
     } else if (bit_depth == 16) {
-        int little_endian = Internal::is_little_endian();
+        bool little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
         if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
@@ -550,7 +552,7 @@ bool save_ppm(ImageType &im, const std::string &filename) {
         }
         if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n")) return false;
     } else if (bit_depth == 16) {
-        int little_endian = Internal::is_little_endian();
+        bool little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
         uint16_t *p = &data[0];
         // unroll inner loop for 3 channel RGB (common case)

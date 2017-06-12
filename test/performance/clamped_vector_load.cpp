@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <cstdio>
 #include <algorithm>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 Buffer<uint16_t> input;
 Buffer<uint16_t> output;

@@ -523,8 +523,9 @@ p::object ndarray_to_buffer(bn::ndarray &array) {
 bn::ndarray buffer_to_ndarray(p::object buffer_object) {
     h::Buffer<> im = python_object_to_buffer(buffer_object);
 
-    user_assert(im.data() != nullptr)
-        << "buffer_to_ndarray received an buffer without host data";
+    if (im.data() == nullptr) {
+        throw std::invalid_argument("Can't create a numpy array from a Buffer with a null host pointer");
+    }
 
     std::vector<int32_t> extent(im.dimensions()), stride(im.dimensions());
     for (int i = 0; i < im.dimensions(); i++) {

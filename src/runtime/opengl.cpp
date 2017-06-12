@@ -165,15 +165,6 @@ struct KernelInfo {
     GLuint program_id;
 };
 
-// Information about each known texture.
-struct TextureInfo {
-    GLuint id;
-    GLint min[4];
-    GLint extent[4];
-    bool halide_allocated;              // allocated by us or host app?
-    TextureInfo *next;
-};
-
 struct ModuleState {
     KernelInfo *kernel;
     ModuleState *next;
@@ -200,9 +191,6 @@ struct GlobalState {
     GLuint vertex_array_object;
     GLuint vertex_buffer;
     GLuint element_buffer;
-
-    // A list of all textures that are still active
-    TextureInfo *textures;
 
     // Declare pointers used OpenGL functions
 #define GLFUNC(PTYPE,VAR) PTYPE VAR
@@ -567,7 +555,6 @@ WEAK void GlobalState::init() {
     minor_version = 0;
     framebuffer_id = 0;
     vertex_array_object = vertex_buffer = element_buffer = 0;
-    textures = NULL;
     have_vertex_array_objects = false;
     have_texture_rg = false;
     have_texture_rgb8_rgba8 = false;
@@ -766,28 +753,6 @@ WEAK int halide_opengl_device_release(void *user_context) {
         mod = next;
     }
 
-    // Delete all textures that were allocated by us.
-    TextureInfo *tex = global_state.textures;
-    int freed_textures = 0;
-    while (tex) {
-        TextureInfo *next = tex->next;
-        if (tex->halide_allocated) {
-            debug(user_context) << "halide_opengl_device_release: Deleting texture " << tex->id << "\n";
-            global_state.DeleteTextures(1, &tex->id);
-            if (global_state.CheckAndReportError(user_context, "halide_opengl_device_release DeleteTextures")) {
-                return 1;
-            }
-            freed_textures++;
-        }
-        free(tex);
-        tex = next;
-    }
-
-    if (freed_textures > 0) {
-        debug(user_context) << "halide_opengl_release: deleted "
-                            << freed_textures << " dangling texture(s).\n";
-    }
-
     global_state.DeleteBuffers(1, &global_state.vertex_buffer);
     global_state.DeleteBuffers(1, &global_state.element_buffer);
     if (global_state.have_vertex_array_objects) {
@@ -905,45 +870,6 @@ WEAK bool get_texture_dimensions(void *user_context, halide_buffer_t *buf, GLint
     return true;
 }
 
-WEAK TextureInfo *find_texture_info(GLuint tex) {
-    TextureInfo *texinfo = global_state.textures;
-    while (texinfo && texinfo->id != tex) {
-        texinfo = texinfo->next;
-    }
-    return texinfo;
-}
-
-
-// Allocate new TextureInfo, fill it in, add to global list.
-WEAK TextureInfo *new_texture_info(GLuint tex, const halide_buffer_t *buf, bool halide_allocated) {
-    TextureInfo *texinfo = (TextureInfo*)malloc(sizeof(TextureInfo));
-    texinfo->id = tex;
-    for (int i = 0; i < 3; i++) {
-        texinfo->min[i] = (buf->dimensions > i) ? buf->dim[i].min : 0;
-        texinfo->extent[i] = (buf->dimensions > i) ? buf->dim[i].extent : 0;
-    }
-    texinfo->halide_allocated = halide_allocated;
-
-    texinfo->next = global_state.textures;
-    global_state.textures = texinfo;
-
-    return texinfo;
-}
-
-// Find TextureInfo with the given texture ID and remove it from the global list,
-// but DO NOT free the TextureInfo itself. If not found, return NULL.
-WEAK TextureInfo *unlink_texture_info(GLuint tex) {
-    TextureInfo **ptr = &global_state.textures;
-    TextureInfo *texinfo = *ptr;
-    for (; texinfo != NULL; ptr = &texinfo->next, texinfo = *ptr) {
-        if (texinfo->id == tex) {
-            *ptr = texinfo->next;
-            texinfo->next = NULL;
-            return texinfo;
-        }
-    }
-    return NULL;
-}
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
 WEAK int halide_opengl_device_malloc(void *user_context, halide_buffer_t *buf) {
@@ -1038,20 +964,10 @@ WEAK int halide_opengl_device_malloc(void *user_context, halide_buffer_t *buf) {
         global_state.BindTexture(GL_TEXTURE_2D, 0);
     }
 
-    // Record main information about texture and remember it for later. In
-    // halide_opengl_run we are only given the texture ID and not the full
-    // halide_buffer_t, so we copy the interesting information here.  Note: there can
-    // be multiple dev_malloc calls for the same halide_buffer_t; only record texture
-    // information once.
-    if (!find_texture_info(tex)) {
-        (void) new_texture_info(tex, buf, halide_allocated);
-    }
     return 0;
 }
 
-// Delete all texture information associated with a buffer. The OpenGL texture
-// itself is only deleted if it was actually allocated by Halide and not
-// provided by the host application.
+// Delete all texture information associated with a buffer.
 WEAK int halide_opengl_device_free(void *user_context, halide_buffer_t *buf) {
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized in call to halide_opengl_device_free.";
@@ -1065,29 +981,17 @@ WEAK int halide_opengl_device_free(void *user_context, halide_buffer_t *buf) {
     uint64_t handle = buf->device;
     GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
 
-    // Look up corresponding TextureInfo and unlink it from the list.
-    TextureInfo *texinfo = unlink_texture_info(tex);
-    if (!texinfo) {
-        error(user_context) << "Internal error: texture " << tex << " not found.";
-        return 1;
-    }
-
-    // Delete texture if it was allocated by us.
     int result = 0;
-    if (texinfo->halide_allocated) {
-        debug(user_context) << "halide_opengl_device_free: Deleting texture " << tex << "\n";
-        global_state.DeleteTextures(1, &tex);
-        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_free DeleteTextures")) {
-            result = 1;
-            // do not return: we want to zero out the interface and
-            // device fields even if we can't delete the texture.
-        }
-        buf->device = 0;
-        buf->device_interface->release_module();
-        buf->device_interface = NULL;
+    debug(user_context) << "halide_opengl_device_free: Deleting texture " << tex << "\n";
+    global_state.DeleteTextures(1, &tex);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_device_free DeleteTextures")) {
+        result = 1;
+        // do not return: we want to zero out the interface and
+        // device fields even if we can't delete the texture.
     }
-
-    free(texinfo);
+    buf->device = 0;
+    buf->device_interface->release_module();
+    buf->device_interface = NULL;
 
     return result;
 }
@@ -1510,10 +1414,10 @@ WEAK int halide_opengl_run(void *user_context,
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
 
         if (kernel_arg->kind == Argument::Outbuf) {
-            halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
+            halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.");
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
-            uint64_t handle = *(uint64_t *)args[i];
+            uint64_t handle = ((halide_buffer_t *)args[i])->device;
             if (!handle) {
                 error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
                 return 1;
@@ -1534,7 +1438,7 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
-            uint64_t handle = *(uint64_t *)args[i];
+            uint64_t handle = ((halide_buffer_t *)args[i])->device;
             if (!handle) {
                 error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
                 return 1;
@@ -1667,7 +1571,9 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        uint64_t handle = *(uint64_t *)args[i];
+        halide_buffer_t *buf = (halide_buffer_t *)args[i];
+        halide_assert(user_context, buf->dimensions >= 2);
+        uint64_t handle = buf->device;
         if (!handle) {
             error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
             return 1;
@@ -1686,15 +1592,10 @@ WEAK int halide_opengl_run(void *user_context,
             }
         }
 
-        TextureInfo *texinfo = find_texture_info(tex);
-        if (!texinfo) {
-            error(user_context) << "Undefined output texture " << tex;
-            return 1;
-        }
-        output_min[0] = texinfo->min[0];
-        output_min[1] = texinfo->min[1];
-        output_extent[0] = texinfo->extent[0];
-        output_extent[1] = texinfo->extent[1];
+        output_min[0] = buf->dim[0].min;
+        output_min[1] = buf->dim[1].min;
+        output_extent[0] = buf->dim[0].extent;
+        output_extent[1] = buf->dim[1].extent;
         num_output_textures++;
     }
     // TODO: GL_MAX_DRAW_BUFFERS
@@ -2064,21 +1965,12 @@ WEAK void halide_opengl_context_lost(void *user_context) {
         mod->kernel->program_id = 0;
     }
 
-    TextureInfo *tex = global_state.textures;
-    while (tex) {
-        TextureInfo *next = tex->next;
-        free(tex);
-        tex = next;
-    }
-
     global_state.init();
     return;
 }
 
 WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uintptr_t texture_id) {
   if (!global_state.initialized) {
-      // Must initialize here: if not, we risk having the TextureInfo
-      // blown away when global state really is inited.
       if (int error = halide_opengl_init(user_context)) {
           return error;
       }
@@ -2091,11 +1983,6 @@ WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, ui
     if (buf->device != 0) {
         return -2;
     }
-    if (find_texture_info(texture_id)) {
-        error(user_context) << "Internal error: texture " << texture_id << " is already wrapped.";
-        return -3;
-    }
-    (void) new_texture_info(texture_id, buf, /* halide_allocated */ false);
     buf->device = texture_id;
     buf->device_interface = &opengl_device_interface;
     buf->device_interface->use_module();
@@ -2104,8 +1991,6 @@ WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, ui
 
 WEAK int halide_opengl_wrap_render_target(void *user_context, halide_buffer_t *buf) {
     if (!global_state.initialized) {
-        // Must initialize here: if not, we risk having the TextureInfo
-        // blown away when global state really is inited.
         if (int error = halide_opengl_init(user_context)) {
             return error;
         }
@@ -2114,12 +1999,6 @@ WEAK int halide_opengl_wrap_render_target(void *user_context, halide_buffer_t *b
     if (buf->device != 0) {
         return -2;
     }
-    const GLuint tex = 0;
-    if (find_texture_info(tex)) {
-        error(user_context) << "Internal error: texture " << tex << " is already wrapped.";
-        return -3;
-    }
-    (void) new_texture_info(tex, buf, /* halide_allocated */ false);
     buf->device = HALIDE_OPENGL_RENDER_TARGET;
     buf->device_interface = &opengl_device_interface;
     buf->device_interface->use_module();
@@ -2137,13 +2016,6 @@ WEAK uintptr_t halide_opengl_detach_texture(void *user_context, halide_buffer_t 
     buf->device_interface->release_module();
     buf->device_interface = NULL;
     GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : handle;
-    TextureInfo *texinfo = unlink_texture_info(tex);
-    if (!texinfo) {
-        error(user_context) << "Internal error: texture " << tex << " not found.";
-        return -3;
-    }
-    halide_assert(user_context, !texinfo->halide_allocated);
-    free(texinfo);
     return (uintptr_t) tex;
 }
 

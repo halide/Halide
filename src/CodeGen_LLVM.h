@@ -128,6 +128,7 @@ protected:
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
 
+    const Module *input_module;
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
@@ -150,6 +151,9 @@ protected:
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
+
+    /** Add external_code entries to llvm module. */
+    void add_external_code(const Module &halide_module);
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
@@ -230,12 +234,6 @@ protected:
     /** Codegen a vector Expr by codegenning each lane and combining. */
     void scalarize(Expr);
 
-    /** Take an llvm Value representing a pointer to a buffer_t,
-     * and populate the symbol table with its constituent parts.
-     */
-    virtual void push_buffer(const std::string &name, int dimensions, llvm::Value *buffer);
-    virtual void pop_buffer(const std::string &name, int dimensions);
-
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
     enum DestructorType {Always, OnError, OnSuccess};
@@ -280,60 +278,14 @@ protected:
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);
 
-    /** Make a buffer_t struct type for the given dimensionality. The
-     * one declared in HalideRuntime.h corresponds to
-     * make_buffer_t_type(8). */
-    llvm::StructType *make_buffer_t_type(int dims);
-
-    /** Convenience wrapper for constructing gep nodes. Accepts an
-     * llvm::Type, and an llvm::Value which is a pointer to an object
-     * of that type. */
-    llvm::Value *create_gep(llvm::Type *t, llvm::Value *obj, std::vector<int> field);
-
-    /** Given an llvm value representing a pointer to a buffer_t of
-     * some dimensionality, get or set various subfields. The *_ptr
-     * variants return a pointer to the struct element rather than its
-     * value. */
-    // @{
-    llvm::Value *buffer_host(llvm::Value *);
-    llvm::Value *buffer_device(llvm::Value *);
-    llvm::Value *buffer_device_interface(llvm::Value *);
-    llvm::Value *buffer_flags(llvm::Value *);
-    llvm::Value *buffer_type_code(llvm::Value *);
-    llvm::Value *buffer_type_bits(llvm::Value *);
-    llvm::Value *buffer_type_lanes(llvm::Value *);
-    llvm::Value *buffer_type_bytes(llvm::Value *);
-    llvm::Value *buffer_dimensions(llvm::Value *);
-    llvm::Value *buffer_dim_array(llvm::Value *);
-    llvm::Value *buffer_min(llvm::Value *, int);
-    llvm::Value *buffer_extent(llvm::Value *, int);
-    llvm::Value *buffer_stride(llvm::Value *, int);
-
-    llvm::Value *buffer_host_ptr(llvm::Value *);
-    llvm::Value *buffer_device_ptr(llvm::Value *);
-    llvm::Value *buffer_device_interface_ptr(llvm::Value *);
-    llvm::Value *buffer_flags_ptr(llvm::Value *);
-    llvm::Value *buffer_type_ptr(llvm::Value *);
-    llvm::Value *buffer_type_code_ptr(llvm::Value *);
-    llvm::Value *buffer_type_bits_ptr(llvm::Value *);
-    llvm::Value *buffer_type_lanes_ptr(llvm::Value *);
-    llvm::Value *buffer_dimensions_ptr(llvm::Value *);
-    llvm::Value *buffer_dim_array_ptr(llvm::Value *);
-    llvm::Value *buffer_min_ptr(llvm::Value *, int);
-    llvm::Value *buffer_extent_ptr(llvm::Value *, int);
-    llvm::Value *buffer_stride_ptr(llvm::Value *, int);
-    // @}
-
-    // Convenience functions for manipulating the flags field in a buffer_t
-    llvm::Value *buffer_get_flag(llvm::Value *, halide_buffer_flags);
-    void buffer_set_flag(llvm::Value *, halide_buffer_flags, bool);
-
     /** Generate a pointer into a named buffer at a given index, of a
      * given type. The index counts according to the scalar type of
      * the type passed in. */
     // @{
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */

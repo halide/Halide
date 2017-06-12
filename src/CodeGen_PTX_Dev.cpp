@@ -69,7 +69,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
+            #if LLVM_VERSION < 50
             function->setDoesNotAlias(i+1);
+            #else
+            function->addParamAttr(i, Attribute::NoAlias);
+            #endif
         }
     }
 
@@ -85,12 +89,6 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
         for (auto &fn_arg : function->args()) {
 
             string arg_sym_name = args[i].name;
-            if (args[i].is_buffer) {
-                // HACK: codegen expects a load from foo to use base
-                // address 'foo.host', so we store the device pointer
-                // as foo.host in this scope.
-                arg_sym_name += ".host";
-            }
             sym_push(arg_sym_name, &fn_arg);
             fn_arg.setName(arg_sym_name);
             arg_sym_names.push_back(arg_sym_name);
@@ -192,19 +190,19 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
     if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8_t, 3));
-        sym_push(alloc->name + ".host", shared_base);
+        sym_push(alloc->name, shared_base);
     } else {
 
         debug(2) << "Allocate " << alloc->name << " on device\n";
 
-        string allocation_name = alloc->name + ".host";
+        string allocation_name = alloc->name;
         debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
 
         // Jump back to the entry and generate an alloca. Note that by
         // jumping back we're rendering any expression we carry back
         // meaningless, so we had better only be dealing with
         // constants here.
-        int32_t size = alloc->constant_allocation_size();
+        int32_t size = CodeGen_GPU_Dev::get_constant_bound_allocation_size(alloc);
         user_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
@@ -221,7 +219,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 }
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
-    sym_pop(f->name + ".host");
+    sym_pop(f->name);
 }
 
 void CodeGen_PTX_Dev::visit(const AssertStmt *op) {
@@ -235,7 +233,9 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability50)) {
+    if (target.has_feature(Target::CUDACapability61)) {
+        return "sm_61";
+    } else if (target.has_feature(Target::CUDACapability50)) {
         return "sm_50";
     } else if (target.has_feature(Target::CUDACapability35)) {
         return "sm_35";
@@ -249,7 +249,9 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.features_any_of({Target::CUDACapability32,
+    if (target.has_feature(Target::CUDACapability61)) {
+        return "+ptx50";
+    } else if (target.features_any_of({Target::CUDACapability32,
                                 Target::CUDACapability50})) {
         // Need ptx isa 4.0.
         return "+ptx40";
@@ -352,7 +354,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     PassManagerBuilder b;
     b.OptLevel = 3;
+#if LLVM_VERSION >= 50
+    b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
+#else
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0);
+#endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
 

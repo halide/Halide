@@ -39,15 +39,6 @@ private:
                                  index, load->image, load->param, const_true(index.type().lanes())));
     }
 
-    void visit(const Call *op) {
-        // We shouldn't mess with load inside an address_of.
-        if (op->is_intrinsic(Call::address_of)) {
-            expr = op;
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
     void visit(const Load *op) {
         if (!is_one(op->predicate)) {
             // TODO(psuriana): Do nothing to predicated loads for now.

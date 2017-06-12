@@ -1,8 +1,9 @@
 #include "Halide.h"
 #include <cstdio>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 void simple_version(float* A, float *B, float *C, int width, int stride) {
     for (int iy = 0; iy < width; iy++) {

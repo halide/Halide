@@ -68,9 +68,9 @@ extern "C" DLLEXPORT int make_data_multi(halide_buffer_t *out1, halide_buffer_t 
     assert(out1->host && out1->type == halide_type_of<float>() && out1->dim[0].stride == 1);
     assert(out2->host && out2->type == halide_type_of<float>() && out2->dim[0].stride == 1);
     assert(out1->dim[0].min == out2->dim[0].min &&
-	   out1->dim[1].min == out2->dim[1].min &&
-	   out1->dim[0].extent == out2->dim[0].extent &&
-	   out1->dim[1].extent == out2->dim[1].extent);
+           out1->dim[1].min == out2->dim[1].min &&
+           out1->dim[0].extent == out2->dim[0].extent &&
+           out1->dim[1].extent == out2->dim[1].extent);
     printf("Generating data over [%d %d] x [%d %d]\n",
            out1->dim[0].min, out1->dim[0].min + out1->dim[0].extent,
            out1->dim[1].min, out1->dim[1].min + out1->dim[1].extent);
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
     types.push_back(Float(32));
     multi.define_extern("make_data_multi",
                         std::vector<ExternFuncArgument>(),
-			types, 2);
+                        types, 2);
     Func sink_multi;
     sink_multi(x, y) = multi(x, y)[0] - sin(x + y) +
                        multi(x, y)[1] - cos(x + y);

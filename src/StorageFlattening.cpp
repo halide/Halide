@@ -21,19 +21,28 @@ namespace {
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, pair<Function, int>> &e, const Target &t)
-        : env(e), target(t) {}
+    FlattenDimensions(const map<string, pair<Function, int>> &e,
+                      const vector<Function> &o,
+                      const Target &t)
+        : env(e), target(t) {
+        for (auto &f : o) {
+            outputs.insert(f.name());
+        }
+    }
     Scope<int> scope;
 private:
     const map<string, pair<Function, int>> &env;
+    set<string> outputs;
     const Target &target;
     Scope<int> realizations;
 
-    Expr flatten_args(const string &name, const vector<Expr> &args) {
+    Expr flatten_args(const string &name, const vector<Expr> &args,
+                      const Buffer<> &buf, const Parameter &param) {
         bool internal = realizations.contains(name);
         Expr idx = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
+        ReductionDomain rdom;
         for (size_t i = 0; i < args.size(); i++) {
             string dim = std::to_string(i);
             string stride_name = name + ".stride." + dim;
@@ -46,8 +55,8 @@ private:
             if (scope.contains(min_name_constrained)) {
                 min_name = min_name_constrained;
             }
-            strides[i] = Variable::make(Int(32), stride_name);
-            mins[i] = Variable::make(Int(32), min_name);
+            strides[i] = Variable::make(Int(32), stride_name, buf, param, rdom);
+            mins[i] = Variable::make(Int(32), min_name, buf, param, rdom);
         }
 
         if (internal) {
@@ -144,8 +153,7 @@ private:
 
         // Create a buffer_t object for this allocation.
         BufferBuilder builder;
-        Expr first_elem = Load::make(op->types[0], op->name, 0, Buffer<>(), Parameter(), const_true());
-        builder.host = Call::make(Handle(), Call::address_of, {first_elem}, Call::PureIntrinsic);
+        builder.host = Variable::make(Handle(), op->name);
         builder.type = op->types[0];
         builder.dimensions = dims;
         for (int i = 0; i < dims; i++) {
@@ -182,16 +190,32 @@ private:
     void visit(const Provide *op) {
         internal_assert(op->values.size() == 1);
 
-        Expr idx = mutate(flatten_args(op->name, op->args));
+        Parameter output_buf;
+        auto it = env.find(op->name);
+        if (it != env.end()) {
+            const Function &f = it->second.first;
+            int idx = it->second.second;
+
+            // We only want to do this for actual pipeline outputs,
+            // even though every Function has an output buffer. Any
+            // constraints you set on the output buffer of a Func that
+            // isn't actually an output is ignored. This is a language
+            // wart.
+            if (outputs.count(f.name())) {
+                output_buf = f.output_buffers()[idx];
+            }
+        }
+
+        Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
         Expr value = mutate(op->values[0]);
-        stmt = Store::make(op->name, value, idx, Parameter(), const_true(value.type().lanes()));
+        stmt = Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
     }
 
     void visit(const Call *op) {
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
             internal_assert(op->value_index == 0);
-            Expr idx = mutate(flatten_args(op->name, op->args));
+            Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
             expr = Load::make(op->type, op->name, idx, op->image, op->param,
                               const_true(op->type.lanes()));
         } else {
@@ -209,14 +233,12 @@ private:
         for (size_t i = 0; i < op->bounds.size(); i++) {
             prefetch_min[i] = mutate(op->bounds[i].min);
             prefetch_extent[i] = mutate(op->bounds[i].extent);
-            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i));
+            prefetch_stride[i] = Variable::make(Int(32), op->name + ".stride." + std::to_string(i), op->param);
         }
 
-        Expr base_index = mutate(flatten_args(op->name, prefetch_min));
-        Expr base_load = Load::make(op->types[0], op->name, base_index, Buffer<>(),
-                                    op->param, const_true(op->types[0].lanes()));
-        Expr base_address = Call::make(Handle(), Call::address_of, {base_load}, Call::Intrinsic);
-        vector<Expr> args = {base_address};
+        Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->param));
+        Expr base_address = Variable::make(Handle(), op->name);
+        vector<Expr> args = {base_address, base_offset};
 
         auto iter = env.find(op->name);
         if (iter != env.end()) {
@@ -277,18 +299,6 @@ class PromoteToMemoryType : public IRMutator {
         return t.with_bits(((t.bits() + 7)/8)*8);
     }
 
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::address_of)) {
-            Expr load = mutate(op->args[0]);
-            if (const Cast *cast = load.as<Cast>()) {
-                load = cast->value;
-            }
-            expr = Call::make(op->type, op->name, {load}, op->call_type);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
     void visit(const Load *op) {
         Type t = upgrade(op->type);
         if (t != op->type) {
@@ -325,46 +335,6 @@ class PromoteToMemoryType : public IRMutator {
     }
 };
 
-// Connect Store nodes to their output buffers
-class ConnectOutputBuffers : public IRMutator {
-    using IRMutator::visit;
-
-    void visit(const Store *op) {
-        Parameter output_buf;
-        auto it = env.find(op->name);
-        if (it != env.end()) {
-            const Function &f = it->second.first;
-            int idx = it->second.second;
-
-            // We only want to do this for actual pipeline outputs,
-            // even though every Function has an output buffer. Any
-            // constraints you set on the output buffer of a Func that
-            // isn't actually an output is ignored. This is a language
-            // wart.
-            if (outputs.count(f.name())) {
-                output_buf = f.output_buffers()[idx];
-            }
-        }
-
-        if (output_buf.defined()) {
-            stmt = Store::make(op->name, op->value, op->index, output_buf, const_true());
-        } else {
-            stmt = op;
-        }
-    }
-
-    const map<string, pair<Function, int>> &env;
-    set<string> outputs;
-
-public:
-    ConnectOutputBuffers(const std::map<string, pair<Function, int>> &e,
-                         const vector<Function> &o) : env(e) {
-        for (auto &f : o) {
-            outputs.insert(f.name());
-        }
-    }
-};
-
 }  // namespace
 
 Stmt storage_flattening(Stmt s,
@@ -385,9 +355,8 @@ Stmt storage_flattening(Stmt s,
         }
     }
 
-    s = FlattenDimensions(tuple_env, target).mutate(s);
+    s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
     s = PromoteToMemoryType().mutate(s);
-    s = ConnectOutputBuffers(tuple_env, outputs).mutate(s);
     return s;
 }
 

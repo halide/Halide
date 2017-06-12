@@ -8,7 +8,6 @@ public:
     Output<Buffer<uint8_t>> output{"output", 2};
 
     void generate() {
-        Func bounded_input{"bounded_input"};
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
         Func input_16("input_16");
@@ -26,20 +25,23 @@ public:
         input.dim(0).set_min(0);
         input.dim(1).set_min(0);
 
-        auto output_buffer = Func(output).output_buffer();
-        output_buffer.dim(0).set_min(0);
-        output_buffer.dim(1).set_min(0);
+        output.dim(0).set_min(0);
+        output.dim(1).set_min(0);
 
         if (get_target().features_any_of({Target::HVX_64, Target::HVX_128})) {
             const int vector_size = get_target().has_feature(Target::HVX_128) ? 128 : 64;
             Expr input_stride = input.dim(1).stride();
             input.dim(1).set_stride((input_stride/vector_size) * vector_size);
 
-            Expr output_stride = output_buffer.dim(1).stride();
-            output_buffer.dim(1).set_stride((output_stride/vector_size) * vector_size);
-            Func(output)
+            Expr output_stride = output.dim(1).stride();
+            bounded_input
+                .compute_at(Func(output), y)
+                .align_storage(x, 128)
+                .vectorize(x, vector_size, TailStrategy::RoundUp);
+            output.dim(1).set_stride((output_stride/vector_size) * vector_size);
+            output
                 .hexagon()
-                .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
+                .tile(x, y, xi, yi, vector_size*2, 4, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
             rows.compute_at(Func(output), y)
@@ -48,13 +50,13 @@ public:
                 .unroll(yi);
         } else {
             const int vector_size = natural_vector_size<uint8_t>();
-            Func(output)
+            output
                 .vectorize(x, vector_size)
                 .parallel(y, 16);
         }
     }
 private:
-    Func rows{"rows"}, cols{"cols"};
+    Func rows{"rows"}, cols{"cols"}, bounded_input{"bounded_input"};
     Var x{"x"}, y{"y"};
 };
 

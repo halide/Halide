@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <cstdio>
 #include <cstdint>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 template<typename T>
 bool test(int w, bool div) {

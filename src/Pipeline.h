@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "ExternalCode.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
@@ -57,7 +58,6 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<Buffer<>> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
     std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
@@ -101,9 +101,9 @@ public:
      * and C function name. If you're compiling a pipeline with a
      * single output Func, see also Func::compile_to_llvm_assembly. */
     EXPORT void compile_to_llvm_assembly(const std::string &filename,
-                                   const std::vector<Argument> &args,
-                                   const std::string &fn_name,
-                                   const Target &target = get_target_from_environment());
+                                         const std::vector<Argument> &args,
+                                         const std::string &fn_name,
+                                         const Target &target = get_target_from_environment());
 
     /** Statically compile a pipeline with multiple output functions to an
      * object file, with the given filename (which should probably end in
@@ -395,8 +395,6 @@ public:
 
 private:
     std::string generate_function_name() const;
-    std::vector<Argument> build_public_args(const std::vector<Argument> &args, const Target &target) const;
-
 };
 
 struct ExternSignature {

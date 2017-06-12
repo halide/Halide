@@ -6,14 +6,17 @@
 #include "Halide.h"
 #include <cstdio>
 #include <vector>
+#include <cmath>  // for log2
+
 #include "fft.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 #ifdef WITH_FFTW
 #include <fftw3.h>
 #endif
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 Var x("x"), y("y");
 
@@ -29,10 +32,6 @@ ComplexFunc make_complex(const Buffer<T> &re) {
     ComplexFunc ret;
     ret(x, y) = re(x, y);
     return ret;
-}
-
-double log2(double x) {
-    return log(x)/log(2.0);
 }
 
 int main(int argc, char **argv) {

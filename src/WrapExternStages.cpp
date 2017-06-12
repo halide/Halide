@@ -70,7 +70,7 @@ class WrapExternStages : public IRMutator {
         for (Argument a : args) {
             if (a.kind == Argument::InputBuffer ||
                 a.kind == Argument::OutputBuffer) {
-                Expr new_buffer_var = Variable::make(a.type, a.name);
+                Expr new_buffer_var = Variable::make(a.type, a.name + ".buffer");
 
                 // Allocate some stack space for the old buffer
                 string old_buffer_name = a.name + ".old_buffer_t";

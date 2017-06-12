@@ -15,6 +15,7 @@
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
+    (void *)&halide_buffer_to_string,
     (void *)&halide_can_use_target_features,
     (void *)&halide_cond_broadcast,
     (void *)&halide_cond_destroy,
@@ -74,6 +75,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_param_too_small_i64,
     (void *)&halide_error_param_too_small_u64,
     (void *)&halide_error_requirement_failed,
+    (void *)&halide_error_specialize_fail,
     (void *)&halide_error_unaligned_host_ptr,
     (void *)&halide_float16_bits_to_double,
     (void *)&halide_float16_bits_to_float,

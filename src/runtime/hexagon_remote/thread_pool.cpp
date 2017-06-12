@@ -143,7 +143,7 @@ int halide_do_par_for(void *user_context,
             c.hvx_mode = -1;
         }
     }
-    int ret = Halide::Runtime::Internal::default_do_par_for(user_context, task, min, size, (uint8_t *)&c);
+    int ret = halide_default_do_par_for(user_context, task, min, size, (uint8_t *)&c);
     if (c.hvx_mode != -1) {
         qurt_hvx_lock((qurt_hvx_mode_t)c.hvx_mode);
     }
