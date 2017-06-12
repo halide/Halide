@@ -87,7 +87,7 @@ public:
         if (get_target().has_gpu_feature()) {
             // gpu schedule
             Var xi, yi;
-            Func(output).compute_root().gpu_tile(x, y, xi, yi, 16, 8);
+            output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
             for (int j = 0; j < pyramid_levels; j++) {
                 int blockw = 16, blockh = 8;
                 if (j > 3) {
@@ -103,7 +103,7 @@ public:
         } else {
             // cpu schedule
             Var yo;
-            Func(output).reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
+            output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
             gray.compute_root().parallel(y, 32).vectorize(x, 8);
             for (int j = 1; j < 5; j++) {
                 inGPyramid[j]
