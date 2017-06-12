@@ -88,7 +88,7 @@ public:
             blurx.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
             blury.compute_root().gpu_tile(x, y, z, xi, yi, zi, 8, 8, 1);
 
-            Func(output).compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma);
+            output.compute_root().gpu_tile(x, y, xi, yi, s_sigma, s_sigma);
         } else {
             // The CPU schedule.
             blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 8).unroll(c);
@@ -97,7 +97,7 @@ public:
             blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
 
-            Func(output).compute_root().parallel(y).vectorize(x, 8);
+            output.compute_root().parallel(y).vectorize(x, 8);
         }
     }
 private:
