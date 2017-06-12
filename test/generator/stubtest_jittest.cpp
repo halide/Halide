@@ -103,11 +103,16 @@ int main(int argc, char **argv) {
     Buffer<float> b0 = typed_buffer_output_realized;
     verify(buffer_input, 1.f, 0, b0);
 
-    Halide::Realization untyped_buffer_output_realized = gen.untyped_buffer_output.realize(kSize, kSize, 3);
+    // We can also access outputs via operator[] on the Stub, looking up the output by its declared name;
+    // this is useful if we have several similar outputs and want to select dynamically. (In this case,
+    // it provides no advantage other than a test/demonstration.)
+    Halide::Realization untyped_buffer_output_realized = gen["untyped_buffer_output"].realize(kSize, kSize, 3);
     Buffer<float> b1 = untyped_buffer_output_realized;
     verify(buffer_input, 1.f, 0, b1);
 
-    Halide::Realization static_compiled_buffer_output_realized = gen.static_compiled_buffer_output.realize(kSize, kSize, 3);
+    // operator[] also accepts an index; since the static_compiled_buffer_output
+    // Output<> is the last of 6, it is index 5.
+    Halide::Realization static_compiled_buffer_output_realized = gen[5].realize(kSize, kSize, 3);
     Buffer<uint8_t> b2 = static_compiled_buffer_output_realized;
     verify(buffer_input, 1.f, 42, b2);
 
