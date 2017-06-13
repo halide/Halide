@@ -803,13 +803,15 @@ private:
                    no_overflow(op->type)) {
             // a*b + b -> (a + 1)*b
             expr = mutate((mul_a->a + make_one(op->type)) * b);
-        } else if (div_a && add_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && add_div_a_a &&
                    const_int(add_div_a_a->b, &ia) &&
                    const_int(div_a->b, &ib) &&
                    const_int(b, &ic)) {
             // (y + c1)/c2 + c3 -> (y + (c1 + c2*c3))/c2
             expr = mutate((add_div_a_a->a + (add_div_a_a->b + div_a->b*b))/div_a->b);
-        } else if (div_a && sub_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && sub_div_a_a &&
                    !is_zero(sub_div_a_a->a) &&
                    const_int(sub_div_a_a->a, &ia) &&
                    const_int(div_a->b, &ib) &&
@@ -818,42 +820,50 @@ private:
             // If c1 == 0, we shouldn't pull in c3 inside the division; otherwise,
             // it will cause a cycle with the division simplification rule.
             expr = mutate(((sub_div_a_a->a + div_a->b*b) - sub_div_a_a->b)/div_a->b);
-        } else if (div_b && add_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && add_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, add_div_b_a->a)) {
             // x + (x + y)/c -> ((c + 1)*x + y)/c
             expr = mutate(((div_b->b + 1)*a + add_div_b_a->b)/div_b->b);
-        } else if (div_b && sub_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && sub_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, sub_div_b_a->a)) {
             // x + (x - y)/c -> ((c + 1)*x - y)/c
             expr = mutate(((div_b->b + 1)*a - sub_div_b_a->b)/div_b->b);
-        } else if (div_b && add_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && add_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, add_div_b_a->b)) {
             // x + (y + x)/c -> ((c + 1)*x + y)/c
             expr = mutate(((div_b->b + 1)*a + add_div_b_a->a)/div_b->b);
-        } else if (div_b && sub_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && sub_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, sub_div_b_a->b)) {
             // x + (y - x)/c -> ((c - 1)*x + y)/c
             expr = mutate(((div_b->b - 1)*a + sub_div_b_a->a)/div_b->b);
-        } else if (div_a && add_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && add_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, add_div_a_a->a)) {
             // (x + y)/c + x + -> ((c + 1)*x + y)/c
             expr = mutate(((div_a->b + 1)*b + add_div_a_a->b)/div_a->b);
-        } else if (div_a && sub_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && sub_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, sub_div_a_a->a)) {
             // (x - y)/c + x + -> ((1 + c)*x - y)/c
             expr = mutate(((1 + div_a->b)*b - sub_div_a_a->b)/div_a->b);
-        } else if (div_a && add_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && add_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, add_div_a_a->b)) {
             // (y + x)/c + x -> (y + (1 + c)*x)/c
             expr = mutate((add_div_a_a->a + (1 + div_a->b)*b)/div_a->b);
-        } else if (div_a && sub_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && sub_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, sub_div_a_a->b)) {
             // (y - x)/c + x -> (y + (-1 + c)*x)/c
@@ -1297,54 +1307,64 @@ private:
                    equal(add_a->b, add_b->a)) {
             // (b + a) - (a + c) -> b - c
             expr = mutate(add_a->a - add_b->b);
-        } else if (div_b && sub_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && sub_div_b_a &&
                    const_int(a, &ia) &&
                    const_int(sub_div_b_a->a, &ib) &&
                    const_int(div_b->b, &ic)) {
             // c1 - (c2 - y)/c3 -> ((c1*c3 - c2 + (c3 - 1)) + y)/c3
             expr = mutate(((a*div_b->b - sub_div_b_a->a) + sub_div_b_a->b + (div_b->b - 1))/div_b->b);
-        } else if (div_b && add_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && add_div_b_a &&
                    const_int(a, &ia) &&
                    const_int(add_div_b_a->b, &ib) &&
                    const_int(div_b->b, &ic)) {
             // c1 - (y + c2)/c3 -> ((c1*c3 - c2 + (c3 - 1)) - y)/c3
             expr = mutate(((a*div_b->b - add_div_b_a->b) - add_div_b_a->a + (div_b->b - 1))/div_b->b);
-        } else if (div_b && add_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && add_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, add_div_b_a->a)) {
             // x - (x + y)/c -> ((c - 1)*x - y + (c - 1))/c
             expr = mutate(((div_b->b - 1)*a - add_div_b_a->b + (div_b->b - 1))/div_b->b);
-        } else if (div_b && sub_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && sub_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, sub_div_b_a->a)) {
             // x - (x - y)/c -> ((c - 1)*x + y + (c - 1))/c
             expr = mutate(((div_b->b - 1)*a + sub_div_b_a->b + (div_b->b - 1))/div_b->b);
-        } else if (div_b && add_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && add_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, add_div_b_a->b)) {
             // x - (y + x)/c -> ((c - 1)*x - y + (c - 1))/c
             expr = mutate(((div_b->b - 1)*a - add_div_b_a->a + (div_b->b - 1))/div_b->b);
-        } else if (div_b && sub_div_b_a &&
+        } else if (no_overflow(op->type) &&
+                   div_b && sub_div_b_a &&
                    const_int(div_b->b, &ib) &&
                    equal(a, sub_div_b_a->b)) {
             // x - (y - x)/c -> ((c + 1)*x - y + (c - 1))/c
             expr = mutate(((div_b->b + 1)*a - sub_div_b_a->a + (div_b->b - 1))/div_b->b);
-        } else if (div_a && add_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && add_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, add_div_a_a->a)) {
             // (x + y)/c - x + -> ((1 - c)*x + y)/c
             expr = mutate(((1 - div_a->b)*b + add_div_a_a->b)/div_a->b);
-        } else if (div_a && sub_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && sub_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, sub_div_a_a->a)) {
             // (x - y)/c - x + -> ((1 - c)*x - y)/c
             expr = mutate(((1 - div_a->b)*b - sub_div_a_a->b)/div_a->b);
-        } else if (div_a && add_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && add_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, add_div_a_a->b)) {
             // (y + x)/c - x -> (y + (1 - c)*x)/c
             expr = mutate((add_div_a_a->a + (1 - div_a->b)*b)/div_a->b);
-        } else if (div_a && sub_div_a_a &&
+        } else if (no_overflow(op->type) &&
+                   div_a && sub_div_a_a &&
                    const_int(div_a->b, &ib) &&
                    equal(b, sub_div_a_a->b)) {
             // (y - x)/c - x -> (y - (c + 1)*x)/c
@@ -1352,7 +1372,6 @@ private:
         } else if (no_overflow(op->type) &&
                    min_b &&
                    add_b_a &&
-                   no_overflow(op->type) &&
                    equal(a, add_b_a->a)) {
             // Quaternary expressions involving mins where a term
             // cancels. These are important for bounds inference
@@ -1362,7 +1381,6 @@ private:
         } else if (no_overflow(op->type) &&
                    min_b &&
                    add_b_a &&
-                   no_overflow(op->type) &&
                    equal(a, add_b_a->b)) {
             // a - min(b + a, c) -> max(-b, a-c)
             expr = mutate(max(0 - add_b_a->a, a - min_b->b));
