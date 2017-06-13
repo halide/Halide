@@ -1,6 +1,8 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-set(CXX_FLAGS -O3 -fopenmp -Wall -std=c++11 -march=native)
+# XXX if we don't set fast-math, we get a major slowdown due to denormal numbers
+# might be better to explicitly set Flush-To-Zero (FTZ) and Denormals-Are-Zero (DAZ)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -std=c++11 -march=native -ffast-math")
 
 halide_add_generator( blas_l1.generator SRCS blas_l1_generators.cpp)
 halide_add_generator( blas_l2.generator SRCS blas_l2_generators.cpp)
@@ -9,7 +11,6 @@ halide_add_generator( blas_l3.generator SRCS blas_l3_generators.cpp)
 add_library(halide_blas
   halide_blas.cpp
 )
-target_compile_options(halide_blas PRIVATE ${CXX_FLAGS})
 
 set(GENERATOR_OUTPUTS h static_library)
 

@@ -1,6 +1,8 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-set(MY_CXX_FLAGS -O3 -Wall -std=c++11 -march=native)
+# XXX if we don't set fast-math, we get a major slowdown due to denormal numbers
+# might be better to explicitly set Flush-To-Zero (FTZ) and Denormals-Are-Zero (DAZ)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -std=c++11 -march=native -ffast-math")
 
 add_executable(halide_benchmarks
   halide_benchmarks.cpp
@@ -10,7 +12,6 @@ target_include_directories(halide_benchmarks
     ../src # XXX
     ${halide_blas_INCLUDE_DIRS}
 )
-target_compile_options(halide_benchmarks PRIVATE ${MY_CXX_FLAGS})
 target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE)
 target_link_libraries(halide_benchmarks
   PRIVATE
@@ -24,7 +25,7 @@ if (Eigen3_FOUND)
   add_executable(eigen_benchmarks
     eigen_benchmarks.cpp
   )
-  target_compile_options(eigen_benchmarks PRIVATE ${MY_CXX_FLAGS} -DEIGEN_DONT_PARALLELIZE)
+  target_compile_options(eigen_benchmarks PRIVATE -DEIGEN_DONT_PARALLELIZE)
   target_link_libraries(eigen_benchmarks
     PRIVATE
       Eigen3::Eigen
@@ -53,7 +54,6 @@ foreach(BLAS_VENDOR OpenBLAS ATLAS)
     target_include_directories(${TARGET}
       PRIVATE
     )
-    target_compile_options(${TARGET} PRIVATE ${MY_CXX_FLAGS})
     string(TOUPPER ${BLAS_VENDOR} UNAME)
     target_compile_definitions(${TARGET} PRIVATE -DUSE_${UNAME})
     target_link_libraries(${TARGET}
