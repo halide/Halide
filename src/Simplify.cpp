@@ -805,66 +805,66 @@ private:
             expr = mutate((mul_a->a + make_one(op->type)) * b);
         } else if (no_overflow(op->type) &&
                    div_a && add_div_a_a &&
-                   const_int(add_div_a_a->b, &ia) &&
-                   const_int(div_a->b, &ib) &&
-                   const_int(b, &ic)) {
+                   is_simple_const(add_div_a_a->b) &&
+                   is_simple_const(div_a->b) &&
+                   is_simple_const(b)) {
             // (y + c1)/c2 + c3 -> (y + (c1 + c2*c3))/c2
             expr = mutate((add_div_a_a->a + (add_div_a_a->b + div_a->b*b))/div_a->b);
         } else if (no_overflow(op->type) &&
                    div_a && sub_div_a_a &&
                    !is_zero(sub_div_a_a->a) &&
-                   const_int(sub_div_a_a->a, &ia) &&
-                   const_int(div_a->b, &ib) &&
-                   const_int(b, &ic)) {
+                   is_simple_const(sub_div_a_a->a) &&
+                   is_simple_const(div_a->b) &&
+                   is_simple_const(b)) {
             // (c1 - y)/c2 + c3 + -> ((c1 + c2*c3) - y)/c2
             // If c1 == 0, we shouldn't pull in c3 inside the division; otherwise,
             // it will cause a cycle with the division simplification rule.
             expr = mutate(((sub_div_a_a->a + div_a->b*b) - sub_div_a_a->b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    div_b && add_div_b_a &&
-                   const_int(div_b->b, &ib) &&
+                   is_simple_const(div_b->b) &&
                    equal(a, add_div_b_a->a)) {
             // x + (x + y)/c -> ((c + 1)*x + y)/c
             expr = mutate(((div_b->b + 1)*a + add_div_b_a->b)/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && sub_div_b_a &&
-                   const_int(div_b->b, &ib) &&
+                   is_simple_const(div_b->b) &&
                    equal(a, sub_div_b_a->a)) {
             // x + (x - y)/c -> ((c + 1)*x - y)/c
             expr = mutate(((div_b->b + 1)*a - sub_div_b_a->b)/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && add_div_b_a &&
-                   const_int(div_b->b, &ib) &&
+                   is_simple_const(div_b->b) &&
                    equal(a, add_div_b_a->b)) {
             // x + (y + x)/c -> ((c + 1)*x + y)/c
             expr = mutate(((div_b->b + 1)*a + add_div_b_a->a)/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && sub_div_b_a &&
-                   const_int(div_b->b, &ib) &&
+                   is_simple_const(div_b->b) &&
                    equal(a, sub_div_b_a->b)) {
             // x + (y - x)/c -> ((c - 1)*x + y)/c
             expr = mutate(((div_b->b - 1)*a + sub_div_b_a->a)/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_a && add_div_a_a &&
-                   const_int(div_a->b, &ib) &&
+                   is_simple_const(div_a->b) &&
                    equal(b, add_div_a_a->a)) {
             // (x + y)/c + x + -> ((c + 1)*x + y)/c
             expr = mutate(((div_a->b + 1)*b + add_div_a_a->b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    div_a && sub_div_a_a &&
-                   const_int(div_a->b, &ib) &&
+                   is_simple_const(div_a->b) &&
                    equal(b, sub_div_a_a->a)) {
             // (x - y)/c + x + -> ((1 + c)*x - y)/c
             expr = mutate(((1 + div_a->b)*b - sub_div_a_a->b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    div_a && add_div_a_a &&
-                   const_int(div_a->b, &ib) &&
+                   is_simple_const(div_a->b) &&
                    equal(b, add_div_a_a->b)) {
             // (y + x)/c + x -> (y + (1 + c)*x)/c
             expr = mutate((add_div_a_a->a + (1 + div_a->b)*b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    div_a && sub_div_a_a &&
-                   const_int(div_a->b, &ib) &&
+                   is_simple_const(div_a->b) &&
                    equal(b, sub_div_a_a->b)) {
             // (y - x)/c + x -> (y + (-1 + c)*x)/c
             expr = mutate((sub_div_a_a->a + (- 1 + div_a->b)*b)/div_a->b);
@@ -1030,7 +1030,7 @@ private:
             return;
         }
 
-        int64_t ia = 0, ib = 0, ic = 0;
+        int64_t ia = 0, ib = 0;
         uint64_t ua = 0, ub = 0;
         double fa = 0.0f, fb = 0.0f;
 
@@ -1309,63 +1309,69 @@ private:
             expr = mutate(add_a->a - add_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && sub_div_b_a &&
-                   const_int(a, &ia) &&
-                   const_int(sub_div_b_a->a, &ib) &&
-                   const_int(div_b->b, &ic)) {
-            // c1 - (c2 - y)/c3 -> ((c1*c3 - c2 + (c3 - 1)) + y)/c3
+                   is_simple_const(a) &&
+                   is_simple_const(sub_div_b_a->a) &&
+                   is_simple_const(div_b->b) &&
+                   is_positive_const(div_b->b)) {
+            // c1 - (c2 - y)/c3 and c3 > 0-> ((c1*c3 - c2 + (c3 - 1)) + y)/c3
             expr = mutate(((a*div_b->b - sub_div_b_a->a) + sub_div_b_a->b + (div_b->b - 1))/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && add_div_b_a &&
-                   const_int(a, &ia) &&
-                   const_int(add_div_b_a->b, &ib) &&
-                   const_int(div_b->b, &ic)) {
-            // c1 - (y + c2)/c3 -> ((c1*c3 - c2 + (c3 - 1)) - y)/c3
+                   is_simple_const(a) &&
+                   is_simple_const(add_div_b_a->b) &&
+                   is_simple_const(div_b->b) &&
+                   is_positive_const(div_b->b)) {
+            // c1 - (y + c2)/c3 and c3 > 0 -> ((c1*c3 - c2 + (c3 - 1)) - y)/c3
             expr = mutate(((a*div_b->b - add_div_b_a->b) - add_div_b_a->a + (div_b->b - 1))/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && add_div_b_a &&
-                   const_int(div_b->b, &ib) &&
+                   is_simple_const(div_b->b) &&
+                   is_positive_const(div_b->b) &&
                    equal(a, add_div_b_a->a)) {
-            // x - (x + y)/c -> ((c - 1)*x - y + (c - 1))/c
+            // x - (x + y)/c and c > 0 -> ((c - 1)*x - y + (c - 1))/c
             expr = mutate(((div_b->b - 1)*a - add_div_b_a->b + (div_b->b - 1))/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && sub_div_b_a &&
-                   const_int(div_b->b, &ib) &&
+                   is_simple_const(div_b->b) &&
+                   is_positive_const(div_b->b) &&
                    equal(a, sub_div_b_a->a)) {
-            // x - (x - y)/c -> ((c - 1)*x + y + (c - 1))/c
+            // x - (x - y)/c and c > 0 -> ((c - 1)*x + y + (c - 1))/c
             expr = mutate(((div_b->b - 1)*a + sub_div_b_a->b + (div_b->b - 1))/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && add_div_b_a &&
-                   const_int(div_b->b, &ib) &&
+                   is_simple_const(div_b->b) &&
+                   is_positive_const(div_b->b) &&
                    equal(a, add_div_b_a->b)) {
-            // x - (y + x)/c -> ((c - 1)*x - y + (c - 1))/c
+            // x - (y + x)/c and c > 0 -> ((c - 1)*x - y + (c - 1))/c
             expr = mutate(((div_b->b - 1)*a - add_div_b_a->a + (div_b->b - 1))/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_b && sub_div_b_a &&
-                   const_int(div_b->b, &ib) &&
+                   is_simple_const(div_b->b) &&
+                   is_positive_const(div_b->b) &&
                    equal(a, sub_div_b_a->b)) {
-            // x - (y - x)/c -> ((c + 1)*x - y + (c - 1))/c
+            // x - (y - x)/c and c > 0 -> ((c + 1)*x - y + (c - 1))/c
             expr = mutate(((div_b->b + 1)*a - sub_div_b_a->a + (div_b->b - 1))/div_b->b);
         } else if (no_overflow(op->type) &&
                    div_a && add_div_a_a &&
-                   const_int(div_a->b, &ib) &&
+                   is_simple_const(div_a->b) &&
                    equal(b, add_div_a_a->a)) {
             // (x + y)/c - x + -> ((1 - c)*x + y)/c
             expr = mutate(((1 - div_a->b)*b + add_div_a_a->b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    div_a && sub_div_a_a &&
-                   const_int(div_a->b, &ib) &&
+                   is_simple_const(div_a->b) &&
                    equal(b, sub_div_a_a->a)) {
             // (x - y)/c - x + -> ((1 - c)*x - y)/c
             expr = mutate(((1 - div_a->b)*b - sub_div_a_a->b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    div_a && add_div_a_a &&
-                   const_int(div_a->b, &ib) &&
+                   is_simple_const(div_a->b) &&
                    equal(b, add_div_a_a->b)) {
             // (y + x)/c - x -> (y + (1 - c)*x)/c
             expr = mutate((add_div_a_a->a + (1 - div_a->b)*b)/div_a->b);
         } else if (no_overflow(op->type) &&
                    div_a && sub_div_a_a &&
-                   const_int(div_a->b, &ib) &&
+                   is_simple_const(div_a->b) &&
                    equal(b, sub_div_a_a->b)) {
             // (y - x)/c - x -> (y - (c + 1)*x)/c
             expr = mutate((sub_div_a_a->a - (div_a->b + 1)*b)/div_a->b);
@@ -5567,6 +5573,10 @@ void check_algebra() {
     check((w + x) - ((w + x) - y*z)/3, ((w + x)*2 + y*z + 2)/3);
     check(x - (y + x)/2, (x - y + 1)/2);
     check(x - (y - x)/6, (x*7 - y + 5)/6);
+    check(x - (x + y)/-3, x - (x + y)/-3);
+    check((w + x) - ((w + x) - y*z)/-3, (w + x) - ((w + x) - y*z)/-3);
+    check(x - (y + x)/-2, x - (y + x)/-2);
+    check(x - (y - x)/-6, x - (y - x)/-6);
     check((x + y)/3 - x, (y - x*2)/3);
     check((x*y - w)/4 - x*y, (x*y*(-3) - w)/4);
     check((y + x)/5 - x, (y - x*4)/5);
