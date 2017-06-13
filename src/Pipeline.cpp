@@ -152,13 +152,6 @@ void Pipeline::compile_to(const Outputs &output_files,
                           const vector<Argument> &args,
                           const string &fn_name,
                           const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Pipeline.\n";
-
-    for (Function f : contents->outputs) {
-        user_assert(f.has_pure_definition() || f.has_extern_definition())
-            << "Can't compile undefined Func.\n";
-    }
-
     compile_to_module(args, fn_name, target).compile(output_files);
 }
 
@@ -305,7 +298,13 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target,
                                    const Internal::LoweredFunc::LinkageType linkage_type) {
-    user_assert(defined()) << "Can't compile undefined Pipeline\n";
+    user_assert(defined()) << "Can't compile undefined Pipeline.\n";
+
+    for (Function f : contents->outputs) {
+        user_assert(f.has_pure_definition() || f.has_extern_definition())
+            << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
+    }
+
     string new_fn_name(fn_name);
     if (new_fn_name.empty()) {
         new_fn_name = generate_function_name();
