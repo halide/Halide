@@ -93,7 +93,7 @@ float hblas_sdot(const int N, const float *x, const int incx,
                  const float *y, const int incy) {
     float result;
     auto buff_x = init_vector_buffer(N, const_cast<float*>(x), incx);
-    auto buff_y = init_vector_buffer(N, y, incy);
+    auto buff_y = init_vector_buffer(N, const_cast<float*>(y), incy);
     auto buff_dot = init_scalar_buffer(&result);
     assert_no_error(halide_sdot(buff_x, buff_y, buff_dot));
     return result;
@@ -103,7 +103,7 @@ double hblas_ddot(const int N, const double *x, const int incx,
                   const double *y, const int incy) {
     double result;
     auto buff_x = init_vector_buffer(N, const_cast<double*>(x), incx);
-    auto buff_y = init_vector_buffer(N, y, incy);
+    auto buff_y = init_vector_buffer(N, const_cast<double*>(y), incy);
     auto buff_dot = init_scalar_buffer(&result);
     assert_no_error(halide_ddot(buff_x, buff_y, buff_dot));
     return result;
