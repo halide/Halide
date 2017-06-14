@@ -1,21 +1,38 @@
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+# XXX
+#  if we don't set these flags, we get a major slowdown due to denormal numbers.
+#  Even if the halide generators emit code that does this, we still want a fair
+#   comparison against the BLAS libraries with these flags set.
+#  If these flags are not set, due to randomly generated data between 0..1,
+#   some benchmarks will have inconsitent timings (sscal dscal)
+option(LINEAR_ALGEBRA_USE_MATH_FLAGS "Set FTZ/DAZ math flags on all linear_algebra benchmarks" ON)
+if (LINEAR_ALGEBRA_USE_MATH_FLAGS)
+	include (CheckCXXSourceRuns)
+	CHECK_CXX_SOURCE_RUNS(
+		"#include <xmmintrin.h>
+		#include <pmmintrin.h>
+		int main()
+		{
+			// Flush denormals to zero (the FTZ flag).
+			_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+			// Interpret denormal inputs as zero (the DAZ flag).
+			_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+			return 0;
+		}" CAN_ENABLE_FTZ_DAZ)
+	if (CAN_ENABLE_FTZ_DAZ)
+		# explicitly set Flush-To-Zero (FTZ) and Denormals-Are-Zero (DAZ) flags
+    # this definition affects macros.h
+		set(MISC_DEFINITIONS -DENABLE_FTZ_DAZ)
+	endif()
+	message(STATUS "Setting FTZ/DAZ math flags in linear_algebra benchmarks")
+else()
+	message(STATUS "Not setting FTZ/DAZ math flags in linear_algebra benchmarks")
+endif()
 
-# XXX if we don't set fast-math, we get a major slowdown due to denormal numbers
-# might be better to explicitly set Flush-To-Zero (FTZ) and Denormals-Are-Zero (DAZ)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -std=c++11 -march=native -ffast-math")
-
-add_executable(halide_benchmarks
-  halide_benchmarks.cpp
-)
-target_include_directories(halide_benchmarks
-  PRIVATE
-    ${halide_blas_INCLUDE_DIRS}
-)
-target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE)
-target_link_libraries(halide_benchmarks
-  PRIVATE
-    halide_blas
-)
+add_executable(halide_benchmarks halide_benchmarks.cpp)
+target_include_directories(halide_benchmarks PRIVATE ${halide_blas_INCLUDE_DIRS})
+target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE ${MISC_DEFINITIONS})
+target_compile_options(halide_benchmarks PRIVATE -std=c++11)
+target_link_libraries(halide_benchmarks PRIVATE halide_blas)
 list(APPEND BLAS_NAMES halide)
 
 message(STATUS "Checking for Eigen")
@@ -25,7 +42,8 @@ if (Eigen3_FOUND)
   add_executable(eigen_benchmarks
     eigen_benchmarks.cpp
   )
-  target_compile_options(eigen_benchmarks PRIVATE -DEIGEN_DONT_PARALLELIZE)
+  target_compile_definitions(eigen_benchmarks PRIVATE -DEIGEN_DONT_PARALLELIZE ${MISC_DEFINITIONS})
+  target_compile_options(eigen_benchmarks PRIVATE -std=c++11 -Wno-error=unused-variable)
   target_link_libraries(eigen_benchmarks
     PRIVATE
       Eigen3::Eigen
@@ -47,7 +65,8 @@ else()
        ${CBLAS_INCLUDE_DIR}
     )
     string(TOUPPER ${BLAS_VENDOR} DEFINE_SUFFIX)
-    target_compile_definitions(${TARGET} PRIVATE -DUSE_${DEFINE_SUFFIX})
+    target_compile_definitions(${TARGET} PRIVATE -DUSE_${DEFINE_SUFFIX} ${MISC_DEFINITIONS})
+    target_compile_options(${TARGET} PRIVATE -std=c++11 -Wno-error=unused-variable)
     target_link_libraries(${TARGET}
       PRIVATE
        ${BLAS_${NAME}_LIBRARY}
