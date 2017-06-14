@@ -1,6 +1,9 @@
-# this could be made to use any number of blas header files
-# or we could supply our own
-# another option is to use some FindBLAS.cmake that our floating around
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+# This could be made to use any number of blas header files
+#  or we could supply our own cblas.h
+# Another option is to use a more robust FindBLAS.cmake than the one
+#  distributed with cmake
 set(CBLAS_HEADER_NAME "cblas.h")
 find_path(CBLAS_INCLUDE_DIR
   ${CBLAS_HEADER_NAME}
@@ -50,5 +53,7 @@ add_subdirectory(src)
 get_target_property(halide_blas_INCLUDE_DIRS halide_blas INCLUDE_DIRECTORIES)
 list(APPEND halide_blas_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-add_subdirectory(tests)
+if (WITH_TESTS)
+  add_subdirectory(tests)
+endif()
 add_subdirectory(benchmarks)
