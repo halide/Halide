@@ -9,6 +9,7 @@
 #include "Var.h"
 #include "Lerp.h"
 #include "Simplify.h"
+#include "Deinterleave.h"
 
 namespace Halide {
 namespace Internal {
@@ -1856,11 +1857,11 @@ void CodeGen_C::visit(const FloatImm *op) {
         u.as_float = op->value;
 
         ostringstream oss;
+        if (op->type.bits() == 64) {
+            oss << "(double) ";
+        }
         oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
-        id = oss.str();
-    }
-    if (op->type.bits() == 64) {
-        id = "((double)" + id + ")";
+        print_assignment(op->type, oss.str());
     }
 }
 
@@ -2114,7 +2115,28 @@ void CodeGen_C::visit(const Call *op) {
     print_assignment(op->type, rhs.str());
 }
 
+string CodeGen_C::print_scalarized_expr(Expr e) {
+    Type t = e.type();
+    internal_assert(t.is_vector());
+    string v = unique_name('_');
+    do_indent();
+    stream << print_type(t, AppendSpace) << v << ";\n";
+    for (int lane = 0; lane < t.lanes(); lane++) {
+        Expr e2 = extract_lane(e, lane);
+        string elem = print_expr(e2);
+        ostringstream rhs;
+        rhs << v << ".replace(" << lane << ", " << elem << ")";
+        v = print_assignment(t, rhs.str());
+    }
+    return v;
+}
+
 string CodeGen_C::print_extern_call(const Call *op) {
+    if (op->type.is_vector()) {
+        // Need to split into multiple scalar calls.
+        return print_scalarized_expr(op);
+    }
+    ostringstream rhs;
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
         args[i] = print_expr(op->args[i]);
@@ -2123,36 +2145,10 @@ string CodeGen_C::print_extern_call(const Call *op) {
             args[i] = "_ucon";
         }
     }
-    ostringstream rhs;
-    if (op->type.is_vector()) {
-        // Need to split into multiple scalar calls.
-        string vname = unique_name('_');
-        do_indent();
-        stream << print_type(op->type, AppendSpace) << vname << ";\n";
-        const size_t lanes = op->type.lanes();
-        for (size_t lane = 0; lane < lanes; lane++) {
-            vector<string> argsn = args;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                if (op->args[i].type().is_vector()) {
-                    argsn[i] += "[" + std::to_string(lane) + "]";
-                }
-            }
-            rhs.str("");
-            if (function_takes_user_context(op->name)) {
-                argsn.insert(argsn.begin(), "_ucon");
-            }
-            rhs << vname << ".replace(" << lane << ", " << op->name << "(" << with_commas(argsn) << "))";
-            if (lane < lanes - 1) {
-                vname = print_assignment(op->type, rhs.str());
-            } 
-            // else fall thru and return the last rhs
-        }
-    } else {
-        if (function_takes_user_context(op->name)) {
-            args.insert(args.begin(), "_ucon");
-        }
-        rhs << op->name << "(" << with_commas(args) << ")";
+    if (function_takes_user_context(op->name)) {
+        args.insert(args.begin(), "_ucon");
     }
+    rhs << op->name << "(" << with_commas(args) << ")";
     return rhs.str();
 }
 
@@ -2555,8 +2551,9 @@ void CodeGen_C::visit(const Shuffle *op) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
     }
     internal_assert(op->type.lanes() == (int) op->indices.size());
+    const int max_index = (int) (op->vectors[0].type().lanes() * op->vectors.size());
     for (int i : op->indices) {
-        internal_assert(i >= -1 && i < (int) op->indices.size());
+        internal_assert(i >= -1 && i < max_index);
     }
 
     std::vector<string> vecs;
@@ -2573,12 +2570,15 @@ void CodeGen_C::visit(const Shuffle *op) {
         rhs << print_type(op->type) << "::concat(" << op->vectors.size() << ", " << storage_name << ")";
         src = print_assignment(op->type, rhs.str());
     }
-    string indices_name = unique_name('_');
-    do_indent();
-    stream << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
-
     ostringstream rhs;
-    rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
+    if (op->type.is_scalar()) {
+        rhs << src << "[" << op->indices[0] << "] /*shuft*/";
+    } else {
+        string indices_name = unique_name('_');
+        do_indent();
+        stream << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
+        rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
+    }
     print_assignment(op->type, rhs.str());
 }
 
@@ -2664,9 +2664,10 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     _5 = 3;
    } // if _6 else
    int32_t _10 = _5;
-   bool _11 = _alpha > float_from_bits(1082130432 /* 4 */);
-   int32_t _12 = (int32_t)(_11 ? _10 : 2);
-   ((int32_t *)_buf)[_4] = _12;
+   float _11 = float_from_bits(1082130432 /* 4 */);
+   bool _12 = _alpha > _11;
+   int32_t _13 = (int32_t)(_12 ? _10 : 2);
+   ((int32_t *)_buf)[_4] = _13;
   } // alloc _tmp_stack
   _tmp_heap_free.free();
  } // alloc _tmp_heap
