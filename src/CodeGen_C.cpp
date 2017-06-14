@@ -2572,7 +2572,7 @@ void CodeGen_C::visit(const Shuffle *op) {
     }
     ostringstream rhs;
     if (op->type.is_scalar()) {
-        rhs << src << "[" << op->indices[0] << "] /*shuft*/";
+        rhs << src << "[" << op->indices[0] << "]";
     } else {
         string indices_name = unique_name('_');
         do_indent();
