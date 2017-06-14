@@ -2296,6 +2296,15 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             value = phi;
         }
+    } else if (op->is_intrinsic(Call::require)) {
+        internal_assert(op->args.size() == 3);
+        Expr cond = op->args[0];
+        if (cond.type().is_vector()) {
+            scalarize(op);
+        } else {
+            create_assertion(codegen(cond), op->args[2]);
+            value = codegen(op->args[1]);
+        }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->type.is_vector()) {
             // Make a vector of pointers to distinct structs
