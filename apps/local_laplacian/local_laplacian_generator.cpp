@@ -4,8 +4,7 @@ namespace {
 
 constexpr int maxJ = 20;
 
-class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
-public:
+struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
     GeneratorParam<int>         pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
     Input<Buffer<uint16_t>>     input{"input", 3};
