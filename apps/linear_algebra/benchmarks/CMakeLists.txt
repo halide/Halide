@@ -9,7 +9,6 @@ add_executable(halide_benchmarks
 )
 target_include_directories(halide_benchmarks
   PRIVATE
-    ../src # XXX
     ${halide_blas_INCLUDE_DIRS}
 )
 target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE)
@@ -19,9 +18,10 @@ target_link_libraries(halide_benchmarks
 )
 list(APPEND BLAS_NAMES halide)
 
+message(STATUS "Checking for Eigen")
 find_package(Eigen3)
 if (Eigen3_FOUND)
-  message(STATUS "Found Eigen")
+  message(STATUS " Found")
   add_executable(eigen_benchmarks
     eigen_benchmarks.cpp
   )
@@ -33,41 +33,33 @@ if (Eigen3_FOUND)
   list(APPEND BLAS_NAMES eigen)
 endif()
 
-# XXX
-#  OpenBLAS seems to provide cblas symbols
-#  Atlas requires also linking against its provided libcblas for cblas symbols
-set(ATLAS_EXTRA_LIBS cblas)
-set(OpenBLAS_EXTRA_LIBS)
-
-# TODO there are more vendors we could add here
-foreach(BLAS_VENDOR OpenBLAS ATLAS)
-  set(BLA_VENDOR ${BLAS_VENDOR})
-  message(STATUS "Checking BLAS ${BLAS_VENDOR}")
-  find_package(BLAS)
-  if (BLAS_FOUND)
-    message(STATUS "Found BLAS ${BLA_VENDOR}")
+if (NOT CBLAS_FOUND)
+  message(WARNING "No CBLAS header, skipping BLAS benchmarks")
+else()
+  foreach(BLAS_VENDOR ${BLAS_VENDORS})
     string(TOLOWER ${BLAS_VENDOR} NAME)
     set(TARGET ${NAME}_benchmarks)
     add_executable(${TARGET}
       cblas_benchmarks.cpp
     )
-    target_include_directories(${TARGET}
+    target_include_directories(${TARGET} SYSTEM
       PRIVATE
+       ${CBLAS_INCLUDE_DIR}
     )
-    string(TOUPPER ${BLAS_VENDOR} UNAME)
-    target_compile_definitions(${TARGET} PRIVATE -DUSE_${UNAME})
+    string(TOUPPER ${BLAS_VENDOR} DEFINE_SUFFIX)
+    target_compile_definitions(${TARGET} PRIVATE -DUSE_${DEFINE_SUFFIX})
     target_link_libraries(${TARGET}
       PRIVATE
-       ${BLAS_LIBRARIES}
+       ${BLAS_${NAME}_LIBRARY}
        ${${BLAS_VENDOR}_EXTRA_LIBS}
-    )
+      )
     list(APPEND BLAS_NAMES ${NAME})
-  endif()
-endforeach()
+  endforeach()
+endif()
 
-message(STATUS "Building Benchmarks for") 
+message(STATUS "Building Benchmarks")
 foreach(BLAS ${BLAS_NAMES})
-  message(STATUS " ${BLAS}") 
+  message(STATUS " ${BLAS}")
 endforeach()
 
 # Large powers of two are a pathological case for the cache, so avoid
