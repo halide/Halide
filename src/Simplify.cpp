@@ -2356,7 +2356,11 @@ private:
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
         const Add *add_a = a.as<Add>();
+        const Add *add_a_a = add_a ? add_a->a.as<Add>() : nullptr;
+        const Add *add_a_b = add_a ? add_a->b.as<Add>() : nullptr;
         const Add *add_b = b.as<Add>();
+        const Add *add_b_a = add_b ? add_b->a.as<Add>() : nullptr;
+        const Add *add_b_b = add_b ? add_b->b.as<Add>() : nullptr;
         const Div *div_a = a.as<Div>();
         const Div *div_b = b.as<Div>();
         const Mul *mul_a = a.as<Mul>();
@@ -2637,6 +2641,54 @@ private:
                    equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
+        } else if (no_overflow(op->type) &&
+                   add_a_a &&
+                   add_b &&
+                   equal(add_a_a->a, add_b->a)) {
+            // min((a + b) + c, a + d) -> min(b + c, d) + a
+            expr = mutate(min(add_a_a->b + add_a->b, add_b->b)) + add_b->a;
+        } else if (no_overflow(op->type) &&
+                   add_a_a &&
+                   add_b &&
+                   equal(add_a_a->b, add_b->a)) {
+            // min((b + a) + c, a + d) -> min(b + c, d) + a
+            expr = mutate(min(add_a_a->a + add_a->b, add_b->b)) + add_b->a;
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_b_a &&
+                   equal(add_a->a, add_b_a->a)) {
+            // min(a + d, (a + b) + c) -> min(d, b + c) + a
+            expr = mutate(min(add_a->b, add_b_a->b + add_b->b)) + add_a->a;
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_b_a &&
+                   equal(add_a->a, add_b_a->b)) {
+            // min(a + d, (b + a) + c) -> min(d, b + c) + a
+            expr = mutate(min(add_a->b, add_b_a->a + add_b->b)) + add_a->a;
+        } else if (no_overflow(op->type) &&
+                   add_a_b &&
+                   add_b &&
+                   equal(add_a_b->a, add_b->a)) {
+            // min(a + (b + c), b + d) -> min(a + c, d) + b
+            expr = mutate(min(add_a->a + add_a_b->b, add_b->b)) + add_b->a;
+        } else if (no_overflow(op->type) &&
+                   add_a_b &&
+                   add_b &&
+                   equal(add_a_b->b, add_b->a)) {
+            // min(a + (c + b), b + d) -> min(a + c, d) + b
+            expr = mutate(min(add_a->a + add_a_b->a, add_b->b)) + add_b->a;
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_b_b &&
+                   equal(add_a->a, add_b_b->a)) {
+            // min(b + d, a + (b + c)) -> min(d, a + c) + b
+            expr = mutate(min(add_a->b, add_b->a + add_b_b->b)) + add_a->a;
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_b_b &&
+                   equal(add_a->a, add_b_b->b)) {
+            // min(b + d, a + (c + b)) -> min(d, a + c) + b
+            expr = mutate(min(add_a->b, add_b->a + add_b_b->a)) + add_a->a;
         } else if (min_a &&
                    is_simple_const(min_a->b)) {
             if (is_simple_const(b)) {
@@ -2746,7 +2798,11 @@ private:
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Ramp *ramp_a = a.as<Ramp>();
         const Add *add_a = a.as<Add>();
+        const Add *add_a_a = add_a ? add_a->a.as<Add>() : nullptr;
+        const Add *add_a_b = add_a ? add_a->b.as<Add>() : nullptr;
         const Add *add_b = b.as<Add>();
+        const Add *add_b_a = add_b ? add_b->a.as<Add>() : nullptr;
+        const Add *add_b_b = add_b ? add_b->b.as<Add>() : nullptr;
         const Div *div_a = a.as<Div>();
         const Div *div_b = b.as<Div>();
         const Mul *mul_a = a.as<Mul>();
@@ -3000,6 +3056,54 @@ private:
                    equal(add_a->b, add_b->a)) {
             // max(a + b, b + c) -> max(a, c) + b
             expr = mutate(max(add_a->a, add_b->b)) + add_a->b;
+        } else if (no_overflow(op->type) &&
+                   add_a_a &&
+                   add_b &&
+                   equal(add_a_a->a, add_b->a)) {
+            // max((a + b) + c, a + d) -> max(b + c, d) + a
+            expr = mutate(max(add_a_a->b + add_a->b, add_b->b)) + add_b->a;
+        } else if (no_overflow(op->type) &&
+                   add_a_a &&
+                   add_b &&
+                   equal(add_a_a->b, add_b->a)) {
+            // max((b + a) + c, a + d) -> max(b + c, d) + a
+            expr = mutate(max(add_a_a->a + add_a->b, add_b->b)) + add_b->a;
+        } else if (no_overflow(op->type) &&
+                   add_a_b &&
+                   add_b &&
+                   equal(add_a_b->a, add_b->a)) {
+            // max(a + (b + c), b + d) -> max(a + c, d) + b
+            expr = mutate(max(add_a->a + add_a_b->b, add_b->b)) + add_b->a;
+        } else if (no_overflow(op->type) &&
+                   add_a_b &&
+                   add_b &&
+                   equal(add_a_b->b, add_b->a)) {
+            // max(a + (c + b), b + d) -> max(a + c, d) + b
+            expr = mutate(max(add_a->a + add_a_b->a, add_b->b)) + add_b->a;
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_b_a &&
+                   equal(add_a->a, add_b_a->a)) {
+            // max(a + d, (a + b) + c) -> max(d, b + c) + a
+            expr = mutate(max(add_a->b, add_b_a->b + add_b->b)) + add_a->a;
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_b_a &&
+                   equal(add_a->a, add_b_a->b)) {
+            // max(a + d, (b + a) + c) -> max(d, b + c) + a
+            expr = mutate(max(add_a->b, add_b_a->a + add_b->b)) + add_a->a;
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_b_b &&
+                   equal(add_a->a, add_b_b->a)) {
+            // max(b + d, a + (b + c)) -> max(d, a + c) + b
+            expr = mutate(max(add_a->b, add_b->a + add_b_b->b)) + add_a->a;
+        } else if (no_overflow(op->type) &&
+                   add_a &&
+                   add_b_b &&
+                   equal(add_a->a, add_b_b->b)) {
+            // max(b + d, a + (c + b)) -> max(d, a + c) + b
+            expr = mutate(max(add_a->b, add_b->a + add_b_b->a)) + add_a->a;
         } else if (max_a && is_simple_const(max_a->b)) {
             if (is_simple_const(b)) {
                 // max(max(x, 4), 5) -> max(x, 4)
@@ -5641,7 +5745,7 @@ void check_vectors() {
 }
 
 void check_bounds() {
-    Expr x = Var("x"), y = Var("y"), z = Var("z");
+    Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w");
 
     check(min(Expr(7), 3), 3);
     check(min(Expr(4.25f), 1.25f), 1.25f);
@@ -5943,6 +6047,26 @@ void check_bounds() {
         // max(broadcast(x, n), max(broadcast(y, n), z))) -> max(z, broadcast(max(x, y), n))
         check(max(broadcast(x, 64), max(broadcast(y, 64), zv)), max(zv, broadcast(max(y, x), 64)));
     }
+
+    // Pull out common addition term inside min/max
+    check(min((x + y) + z, x + w), min(y + z, w) + x);
+    check(min((y + x) + z, x + w), min(y + z, w) + x);
+    check(min(x + y, (x + z) + w), min(y, z + w) + x);
+    check(min(x + y, (z + x) + w), min(y, z + w) + x);
+    check(min(x + (y + z), y + w), min(x + z, w) + y);
+    check(min(x + (z + y), y + w), min(x + z, w) + y);
+    check(min(x + y, z + (x + w)), min(y, z + w) + x);
+    check(min(x + y, z + (w + x)), min(y, z + w) + x);
+    check(min(x + y/2 + 13, x + (0 - y)/2), min(y/2 + 13, (0 - y)/2) + x);
+
+    check(max((x + y) + z, x + w), max(y + z, w) + x);
+    check(max((y + x) + z, x + w), max(y + z, w) + x);
+    check(max(x + y, (x + z) + w), max(y, z + w) + x);
+    check(max(x + y, (z + x) + w), max(y, z + w) + x);
+    check(max(x + (y + z), y + w), max(x + z, w) + y);
+    check(max(x + (z + y), y + w), max(x + z, w) + y);
+    check(max(x + y, z + (x + w)), max(y, z + w) + x);
+    check(max(x + y, z + (w + x)), max(y, z + w) + x);
 }
 
 void check_boolean() {
