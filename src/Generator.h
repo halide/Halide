@@ -1951,6 +1951,7 @@ public:
         return get_assignable_func_ref(i);
     }
 
+    // Allow Func = Output<Func[]>
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     const Func &operator[](size_t i) const {
         return Super::operator[](i);
@@ -2153,12 +2154,12 @@ public:
     virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
 
     template <typename T>
-    std::unique_ptr<T> create() {
+    std::unique_ptr<T> create() const {
         return T::create(*this);
     }
 
     template <typename T, typename... Args>
-    std::unique_ptr<T> apply(const Args &...args) {
+    std::unique_ptr<T> apply(const Args &...args) const {
         auto t = this->create<T>();
         t->apply(args...);
         return t;
