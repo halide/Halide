@@ -81,7 +81,6 @@ protected:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     CodeGen_Metal_C metal_c;
-    Target target;
 };
 
 }}

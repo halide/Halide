@@ -30,6 +30,7 @@ ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r10d
 
 # QAIC compiler may vary depending on your build env.
 HEXAGON_QAIC ?= ${HEXAGON_SDK_ROOT}/tools/qaic/Ubuntu14/qaic
+HEXAGON_ELFSIGNER ?= ${HEXAGON_SDK_ROOT}/tools/elfsigner/elfsigner.py
 
 # Some SDK versions use "inc/", some use "incs/"
 HEXAGON_SDK_INCLUDES ?= "${HEXAGON_SDK_ROOT}/incs"
@@ -70,10 +71,16 @@ CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPI
 all: hosts remotes
 
 .PHONY: hosts
-hosts: bin/arm-64-android/libhalide_hexagon_host.so bin/arm-32-android/libhalide_hexagon_host.so bin/host/libhalide_hexagon_host.so
+hosts: \
+	bin/arm-64-android/libhalide_hexagon_host.so \
+	bin/arm-32-android/libhalide_hexagon_host.so \
+	bin/host/libhalide_hexagon_host.so
 
 .PHONY: remotes
-remotes: bin/v60/libhalide_hexagon_remote_skel.so bin/v60/hexagon_sim_remote
+remotes: \
+	bin/v60/libhalide_hexagon_remote_skel.so \
+	bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so \
+	bin/v60/hexagon_sim_remote
 
 bin/src/halide_hexagon_remote.h bin/src/halide_hexagon_remote_skel.c bin/src/halide_hexagon_remote_stub.c: halide_hexagon_remote.idl
 	mkdir -p $(@D)
@@ -117,6 +124,10 @@ bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexag
 	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -Wl,--no-threads -o $@ \
 	-Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
 	-Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail
+
+bin/%/signed_by_debug/libhalide_hexagon_remote_skel.so: bin/%/libhalide_hexagon_remote_skel.so
+	mkdir -p $(@D)
+	python $(HEXAGON_ELFSIGNER) --no_disclaimer -i $^ -o `dirname $@`
 
 bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o
 	mkdir -p $(@D)
