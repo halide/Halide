@@ -22,15 +22,10 @@ int main(int argc, char **argv) {
     Func f;
     f(x) = require((p1 + p2) == kPrime1, 
                    (p1 + p2) * kPrime2,
-                   "The parameters should add to exactly", (kPrime1 * kPrime2), "but were", p1, p2);
+                   "The parameters should add to exactly", kPrime1, "but were", p1, p2);
     f.set_error_handler(&halide_error);
 
-    // It should be the case that the non-error path of the code
-    // assumes (p1 + p2) == kPrime1, and thus hardcodes the body to fill
-    // in the result to the constant kPrime1*kPrime2 (rather than
-    // actually computing the result at runtime).
-    // f.compile_to_assembly("require_.s", {p1, p2}, "require_body");
-
+    // choose values that will fail
     p1.set(1);
     p2.set(2);
     error_occurred = false;

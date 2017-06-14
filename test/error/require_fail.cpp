@@ -14,7 +14,8 @@ int main(int argc, char **argv) {
     Func f;
     f(x) = require((p1 + p2) == kPrime1, 
                    (p1 + p2) * kPrime2,
-                   "The parameters should add to exactly", (kPrime1 * kPrime2), "but were", p1, p2);
+                   "The parameters should add to exactly", kPrime1, "but were", p1, p2);
+    // choose values that will fail
     p1.set(1);
     p2.set(2);
     result = f.realize(1);
