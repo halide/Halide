@@ -2,8 +2,7 @@
 
 namespace {
 
-class BilateralGrid : public Halide::Generator<BilateralGrid> {
-public:
+struct BilateralGrid : public Halide::Generator<BilateralGrid> {
     GeneratorParam<int>     s_sigma{"s_sigma", 8};
 
     Input<Buffer<float>>    input{"input", 2};
