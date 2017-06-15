@@ -168,6 +168,11 @@ WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
 
 WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
                                    int min, int size, uint8_t *closure) {
+    // Our for loops are expected to gracefully handle sizes <= 0
+    if (size <= 0) {
+        return 0;
+    }
+
     // Grab the lock. If it hasn't been initialized yet, then the
     // field will be zero-initialized because it's a static global.
     halide_mutex_lock(&work_queue.mutex);
