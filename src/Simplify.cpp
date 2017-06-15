@@ -3204,7 +3204,8 @@ private:
                 }
             } else if (mul_b &&
                        is_positive_const(mul_b->b) &&
-                       is_const(a)) {
+                       is_simple_const(mul_b->b) &&
+                       is_simple_const(a)) {
                 // (c1 < b * c2) <=> ((c1 / c2) < b)
                 expr = mutate((a / mul_b->b) < mul_b->a);
             } else if (a.type().is_int() &&
@@ -6503,12 +6504,11 @@ void simplify_test() {
         check(e, e);
     }
 
-    // This expression is used to cause infinite recursion.
-    {
-        Expr e = Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2));
-        Expr expected = Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2));
-        check(e, expected);
-    }
+    // These expressions are used to cause infinite recursion.
+    check(Broadcast::make(-16, 2) < (ramp(Cast::make(UInt(16), 7), Cast::make(UInt(16), 11), 2) - Broadcast::make(1, 2)),
+          Broadcast::make(-16, 2) < (ramp(make_const(UInt(16), 7), make_const(UInt(16), 11), 2) - Broadcast::make(1, 2)));
+    check((ramp(-71, 39, 2)/Cast::make(Int(32).with_lanes(2), ramp(Expr((uint16_t)1), Expr((uint16_t)1), 2))) >= Broadcast::make(23, 2),
+          (Cast::make(Int(32).with_lanes(2), ramp(Expr((uint16_t)1), Expr((uint16_t)1), 2)) * Broadcast::make(23, 2)) <= ramp(-71, 39, 2));
 
     {
         Expr pred = ramp(x*y + x*z, 2, 8) > 2;
