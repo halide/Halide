@@ -166,7 +166,11 @@ public:
                 // a bitwidth that matches the other vectors in use; EliminateBoolVectors
                 // could be used for this with a bit of work.
                 vector_types_used.insert(UInt(8).with_lanes(e.type().lanes()));
-            } else {
+            } else if (!e.type().is_handle()) {
+                // Vector-handle types can be seen when processing (e.g.)
+                // require() statements that are vectorized, but they
+                // will all be scalarized away prior to use, so don't emit
+                // them.
                 vector_types_used.insert(e.type());
             }
         }
@@ -1963,6 +1967,14 @@ void CodeGen_C::visit(const Call *op) {
         close_scope("if " + cond_id + " else");
 
         rhs << result_id;
+    } else if (op->is_intrinsic(Call::require)) {
+        internal_assert(op->args.size() == 3);
+        if (op->args[0].type().is_vector()) {
+            rhs << print_scalarized_expr(op);
+        } else {
+            create_assertion(op->args[0], op->args[2]);
+            rhs << print_expr(op->args[1]);
+        }
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
         Expr a0 = op->args[0];

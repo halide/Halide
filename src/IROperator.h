@@ -1771,7 +1771,8 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
  * Note that this essentially *always* inserts a runtime check into the
  * generated code (except when the condition can be proven at compile time);
  * as such, it should be avoided inside inner loops, except for debugging
- * or testing purposes.
+ * or testing purposes. Note also that it does not vectorize cleanly (vector
+ * values will be scalarized for the check).
  *
  * However, using this to make assertions about (say) input values
  * can be useful, both in terms of correctness and (potentially) in terms
