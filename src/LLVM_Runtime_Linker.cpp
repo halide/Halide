@@ -97,7 +97,6 @@ DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
 DECLARE_CPP_INITMOD(msan_stubs)
-DECLARE_CPP_INITMOD(noos)
 DECLARE_CPP_INITMOD(old_buffer_t)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -692,8 +691,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // TODO: Replace fake thread pool with a real implementation.
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
-                // No externally resolved symbols are allowed here.
-                modules.push_back(get_initmod_noos(c, bits_64, debug));
+                // The OS-specific symbols provided by the modules
+                // above are expected to be provided by the containing
+                // process instead at link time. Less aggressive than
+                // NoRuntime, as OS-agnostic modules like tracing are
+                // still included below.
             }
         }
 
@@ -820,14 +822,14 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 modules.push_back(get_initmod_cuda(c, bits_64, debug));
             }
-        } 
+        }
         if (t.has_feature(Target::OpenCL)) {
             if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_opencl(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
-        } 
+        }
         if (t.has_feature(Target::OpenGL)) {
             modules.push_back(get_initmod_opengl(c, bits_64, debug));
             if (t.os == Target::Linux) {
@@ -839,7 +841,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
-        } 
+        }
         if (t.has_feature(Target::OpenGLCompute)) {
             modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
             if (t.os == Target::Android) {
@@ -853,7 +855,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
             }
 
-        } 
+        }
         if (t.has_feature(Target::Metal)) {
             modules.push_back(get_initmod_metal(c, bits_64, debug));
             if (t.arch == Target::ARM) {
@@ -863,7 +865,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             } else {
                 user_error << "Metal can only be used on ARM or X86 architectures.\n";
             }
-        } 
+        }
         if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
@@ -875,7 +877,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     }
 
     if (module_type == ModuleAOTNoRuntime ||
-        module_type == ModuleJITInlined) {
+        module_type == ModuleJITInlined ||
+        t.os == Target::NoOS) {
         modules.push_back(get_initmod_runtime_api(c, bits_64, debug));
     }
 
@@ -969,7 +972,7 @@ void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
         internal_error << "Failure linking in additional module: " << name << "\n";
     }
 }
-  
+
 }  // namespace Internal
 
 }
