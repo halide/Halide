@@ -859,41 +859,29 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // Update value of the new update definition. It loads values from
     // the intermediate Func.
     vector<Expr> f_values(values.size());
-    if (values.size() > 1) {
-        // There might be cross-dependencies between tuple elements, so we need
-        // to collect all substitutions first.
-        map<string, Expr> replacement;
-        for (size_t i = 0; i < f_values.size(); ++i) {
-            internal_assert(!prover_result.ys[i].var.empty());
-            replacement.emplace(prover_result.ys[i].var, intm(f_load_args)[i]);
 
-            if (!prover_result.xs[i].var.empty()) {
-                Expr prev_val = Call::make(intm.output_types()[i], func_name,
-                                           f_store_args, Call::CallType::Halide,
-                                           nullptr, i);
-                replacement.emplace(prover_result.xs[i].var, prev_val);
-            } else {
-                user_warning << "Update definition of " << stage_name << " at index " << i
-                             << " doesn't depend on the previous value. This isn't a"
-                             << " reduction operation\n";
-            }
+    // There might be cross-dependencies between tuple elements, so we need
+    // to collect all substitutions first.
+    map<string, Expr> replacements;
+    for (size_t i = 0; i < f_values.size(); ++i) {
+        if (!prover_result.ys[i].var.empty()) {
+            Expr r = (values.size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
+            replacements.emplace(prover_result.ys[i].var, r);
         }
-        for (size_t i = 0; i < f_values.size(); ++i) {
-            f_values[i] = substitute(replacement, prover_result.pattern.ops[i]);
-        }
-    } else {
-        Expr prev_val = Call::make(intm.output_types()[0], func_name,
-                                   f_store_args, Call::CallType::Halide);
-        internal_assert(!prover_result.ys[0].var.empty());
-        Expr val = substitute(prover_result.ys[0].var, intm(f_load_args), prover_result.pattern.ops[0]);
-        if (!prover_result.xs[0].var.empty()) {
-            val = substitute(prover_result.xs[0].var, prev_val, val);
+
+        if (!prover_result.xs[i].var.empty()) {
+            Expr prev_val = Call::make(intm.output_types()[i], func_name,
+                                       f_store_args, Call::CallType::Halide,
+                                       nullptr, i);
+            replacements.emplace(prover_result.xs[i].var, prev_val);
         } else {
-            user_warning << "Update definition of " << stage_name
+            user_warning << "Update definition of " << stage_name << " at index " << i
                          << " doesn't depend on the previous value. This isn't a"
                          << " reduction operation\n";
         }
-        f_values[0] = val;
+    }
+    for (size_t i = 0; i < f_values.size(); ++i) {
+        f_values[i] = substitute(replacements, prover_result.pattern.ops[i]);
     }
 
     // Update the definition
