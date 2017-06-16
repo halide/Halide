@@ -106,6 +106,9 @@ protected:
     /** Bottleneck to allow customization of calls to generic Extern/PureExtern calls.  */
     virtual std::string print_extern_call(const Call *op);
 
+    /** Convert a vector Expr into a series of scalar Exprs, then reassemble into vector of original type.  */
+    std::string print_scalarized_expr(Expr e);
+
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     std::string print_assignment(Type t, const std::string &rhs);
 
