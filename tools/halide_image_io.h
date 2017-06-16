@@ -90,8 +90,8 @@ inline void convert(uint8_t in, uint64_t &out) {out = uint64_t(in) * 0x010101010
 inline void convert(uint8_t in, int16_t &out) {out = uint16_t(in) * 0x0101;}
 inline void convert(uint8_t in, int32_t &out) {out = uint32_t(in) * 0x01010101;}
 inline void convert(uint8_t in, int64_t &out) {out = uint64_t(in) * 0x0101010101010101LL;}
-inline void convert(uint8_t in, float &out) {out = (in + 128)/255.0f;}
-inline void convert(uint8_t in, double &out) {out = (in + 128)/255.0f;}
+inline void convert(uint8_t in, float &out) {out = in/255.0f;}
+inline void convert(uint8_t in, double &out) {out = in/255.0f;}
 
 // Convert from u16
 inline void convert(uint16_t in, bool &out) {out = in != 0;}
@@ -103,8 +103,8 @@ inline void convert(uint16_t in, int8_t &out) {out = in >> 8;}
 inline void convert(uint16_t in, int16_t &out) {out = in;}
 inline void convert(uint16_t in, int32_t &out) {out = uint32_t(in) * 0x00010001;}
 inline void convert(uint16_t in, int64_t &out) {out = uint64_t(in) * 0x0001000100010001LL;}
-inline void convert(uint16_t in, float &out) {out = (in + 32768)/65535.0f;}
-inline void convert(uint16_t in, double &out) {out = (in + 32768)/65535.0f;}
+inline void convert(uint16_t in, float &out) {out = in/65535.0f;}
+inline void convert(uint16_t in, double &out) {out = in/65535.0f;}
 
 
 inline bool ends_with_ignore_case(const std::string &ac, const std::string &bc) {
