@@ -228,18 +228,30 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 bool extract_associative_op(const vector<Expr> exprs, const vector<string> &op_x_names,
                             const vector<string> &op_y_names, const vector<Expr> &x_parts,
                             AssociativeOp &assoc_op) {
-
-    if ((exprs.size() == 1) && (!x_parts[0].defined())) {
+    if (exprs.size() == 1) {
         Type t = exprs[0].type();
-        // Update with no self-recurrence is associative and the identity can be
-        // anything since it's going to be replaced anyway, but it's not
-        // commutative
-        assoc_op.pattern.ops[0] = Variable::make(t, op_y_names[0]);
-        assoc_op.pattern.identities[0] = make_const(t, 0);
-        assoc_op.pattern.is_commutative = false;
-        assoc_op.xs[0] = {"", Expr()};
-        assoc_op.ys[0] = {op_y_names[0], exprs[0]};
-        return true;
+        if (!x_parts[0].defined()) {
+            // Update with no self-recurrence is associative and the identity
+            // can be anything since it's going to be replaced anyway, but it's
+            // not commutative
+            assoc_op.pattern.ops[0] = Variable::make(t, op_y_names[0]);
+            assoc_op.pattern.identities[0] = make_const(t, 0);
+            assoc_op.pattern.is_commutative = false;
+            assoc_op.xs[0] = {"", Expr()};
+            assoc_op.ys[0] = {op_y_names[0], exprs[0]};
+            return true;
+        } else if (equal(exprs[0], Variable::make(t, op_x_names[0]))) {
+            // Self assignment, f(x) = f(x), is both associative
+            // and commutative. The identity can be anything since it's
+            // going to be replaced by itself.
+            debug(5) << "Self assignment: " << x_parts[0] << " = " << x_parts[0] << "\n";
+            assoc_op.pattern.ops[0] = Variable::make(t, op_x_names[0]);
+            assoc_op.pattern.identities[0] = make_const(t, 0);
+            assoc_op.pattern.is_commutative = true;
+            assoc_op.xs[0] = {op_x_names[0], x_parts[0]};
+            assoc_op.ys[0] = {"", Expr()};
+            return true;
+        }
     }
     return find_match(get_ops_table(exprs), op_x_names, op_y_names,
                       x_parts, exprs, assoc_op);
@@ -498,8 +510,9 @@ void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
             if (result.xs[i].expr.defined()) {
                 replacement.emplace(assoc_op.xs[i].var, Variable::make(result.xs[i].expr.type(), result.xs[i].var));
             }
-            internal_assert(result.ys[i].expr.defined());
-            replacement.emplace(assoc_op.ys[i].var, Variable::make(result.ys[i].expr.type(), result.ys[i].var));
+            if (result.ys[i].expr.defined()) {
+                replacement.emplace(assoc_op.ys[i].var, Variable::make(result.ys[i].expr.type(), result.ys[i].var));
+            }
         }
         for (size_t i = 0; i < assoc_op.size(); ++i) {
             Expr expected_op = substitute(replacement, assoc_op.pattern.ops[i]);
@@ -615,6 +628,15 @@ void associativity_test() {
     Expr g_call_0 = Call::make(t, "g", {rx}, Call::CallType::Halide, nullptr, 0);
     Expr g_call_1 = Call::make(t, "g", {rx}, Call::CallType::Halide, nullptr, 1);
 
+    // f(x) = f(x)
+    check_associativity("f", {x}, {f_call_0},
+                    AssociativeOp(
+                      AssociativePattern(x, make_const(t, 0), true),
+                      {Replacement("x", f_call_0)},
+                      {Replacement("", Expr())},
+                      true)
+                    );
+
     // f(x) = min(f(x), y + int16(z))
     check_associativity("f", {x}, {min(f_call_0, y + Cast::make(Int(16), z))},
                         AssociativeOp(
@@ -639,6 +661,15 @@ void associativity_test() {
                           AssociativePattern(max(x, y), t.min(), true),
                           {Replacement("x", f_call_0)},
                           {Replacement("y", y)},
+                          true)
+                        );
+
+    // f(x) = Tuple(f(x)[0], 3, f(x)[2] + z)
+    check_associativity("f", {x}, {f_call_0, 3, f_call_2 + z},
+                        AssociativeOp(
+                          AssociativePattern({xs[0], ys[1], xs[2] + ys[2]}, {make_const(t, 0), make_const(t, 0), make_const(t, 0)}, true),
+                          {Replacement("x0", f_call_0), Replacement("", Expr()), Replacement("x2", f_call_2)},
+                          {Replacement("", Expr()), Replacement("y1", 3), Replacement("y2", z)},
                           true)
                         );
 
@@ -683,9 +714,6 @@ void associativity_test() {
                           {Replacement("y", min(g_call_0, 4))},
                           true)
                         );
-
-    // f(x) = f(x) -> associative but doesn't really make any sense, so we'll treat it as non-associative
-    check_associativity("f", {x}, {f_call_0}, AssociativeOp());
 
     // f(x) = max(max(min(f(x), g(rx) + 2), f(x)), g(rx) + 2) -> can be simplified into max(f(x), g(rx) + 2)
     check_associativity("f", {x}, {max(max(min(f_call_0, g_call_0 + 2), f_call_0), g_call_0 + 2)},
