@@ -730,12 +730,16 @@ bool load_jpg(const std::string &filename, ImageType *im) {
         if (channels > 1) {
             for (int x = 0; x < im->width(); x++) {
                 for (int c = 0; c < channels; c++) {
-                    (*im)(x, y, c) = *src++;
+                    typename ImageType::ElemType out;
+                    Internal::convert(*src++, out);
+                    (*im)(x, y, c) = out;
                 }
             }
         } else {
             for (int x = 0; x < im->width(); x++) {
-                (*im)(x, y) = *src++;
+                typename ImageType::ElemType out;
+                Internal::convert(*src++, out);
+                (*im)(x, y) = out;
             }
         }
     }
