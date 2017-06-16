@@ -12,8 +12,11 @@ namespace Internal {
 struct LoopLevelContents {
     mutable RefCount ref_count;
 
-    // Note: func_ is empty for inline or root.
+    // Note: func_name is "" for inline or root
     std::string func_name;
+    // If set to -1, this loop level does not refer to a particular stage of the
+    // function. 0 refers to initial stage, 1 refers to the 1st update stage, etc.
+    int stage;
     // TODO: these two fields should really be VarOrRVar,
     // but cyclical include dependencies make this challenging.
     std::string var_name;
@@ -21,8 +24,9 @@ struct LoopLevelContents {
 
     LoopLevelContents(const std::string &func_name,
                       const std::string &var_name,
-                      bool is_rvar)
-    : func_name(func_name), var_name(var_name), is_rvar(is_rvar) {}
+                      bool is_rvar,
+                      int stage)
+    : func_name(func_name), stage(stage), var_name(var_name), is_rvar(is_rvar) {}
 };
 
 template<>
@@ -37,16 +41,17 @@ EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
 
 }  // namespace Internal
 
-LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar)
-    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar)) {}
+LoopLevel::LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar, int stage)
+    : contents(new Internal::LoopLevelContents(func_name, var_name, is_rvar, stage)) {}
 
-LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v) : LoopLevel(f.name(), v.name(), v.is_rvar) {}
+LoopLevel::LoopLevel(Internal::Function f, VarOrRVar v, int stage) : LoopLevel(f.name(), v.name(), v.is_rvar, stage) {}
 
-LoopLevel::LoopLevel(Func f, VarOrRVar v) : LoopLevel(f.function().name(), v.name(), v.is_rvar) {}
+LoopLevel::LoopLevel(Func f, VarOrRVar v, int stage) : LoopLevel(f.function().name(), v.name(), v.is_rvar, stage) {}
 
 void LoopLevel::copy_from(const LoopLevel &other) {
     internal_assert(defined());
     contents->func_name = other.contents->func_name;
+    contents->stage = other.contents->stage;
     contents->var_name = other.contents->var_name;
     contents->is_rvar = other.contents->is_rvar;
 }
@@ -60,6 +65,12 @@ std::string LoopLevel::func() const {
     return contents->func_name;
 }
 
+int LoopLevel::stage() const {
+    internal_assert(defined());
+    internal_assert(contents->stage >= 0);
+    return contents->stage;
+}
+
 VarOrRVar LoopLevel::var() const {
     internal_assert(defined());
     internal_assert(!is_inline() && !is_root());
@@ -68,7 +79,7 @@ VarOrRVar LoopLevel::var() const {
 
 /*static*/
 LoopLevel LoopLevel::inlined() {
-    return LoopLevel("", "", false);
+    return LoopLevel("", "", false, -1);
 }
 
 bool LoopLevel::is_inline() const {
@@ -78,7 +89,7 @@ bool LoopLevel::is_inline() const {
 
 /*static*/
 LoopLevel LoopLevel::root() {
-    return LoopLevel("", "__root", false);
+    return LoopLevel("", "__root", false, -1);
 }
 
 bool LoopLevel::is_root() const {
@@ -88,13 +99,22 @@ bool LoopLevel::is_root() const {
 
 std::string LoopLevel::to_string() const {
     internal_assert(defined());
-    return contents->func_name + "." + contents->var_name;
+    if (contents->stage == -1) {
+        return contents->func_name + "." + contents->var_name;
+    } else {
+        return contents->func_name + ".s" + std::to_string(contents->stage) + "." + contents->var_name;
+    }
 }
 
 bool LoopLevel::match(const std::string &loop) const {
     internal_assert(defined());
-    return Internal::starts_with(loop, contents->func_name + ".") &&
-           Internal::ends_with(loop, "." + contents->var_name);
+    if (contents->stage == -1) {
+        return Internal::starts_with(loop, contents->func_name + ".") &&
+               Internal::ends_with(loop, "." + contents->var_name);
+    } else {
+        return Internal::starts_with(loop, contents->func_name + ".s" + std::to_string(contents->stage)) &&
+               Internal::ends_with(loop, "." + contents->var_name);
+    }
 }
 
 bool LoopLevel::match(const LoopLevel &other) const {
@@ -102,13 +122,15 @@ bool LoopLevel::match(const LoopLevel &other) const {
     return (contents->func_name == other.contents->func_name &&
             (contents->var_name == other.contents->var_name ||
              Internal::ends_with(contents->var_name, "." + other.contents->var_name) ||
-             Internal::ends_with(other.contents->var_name, "." + contents->var_name)));
+             Internal::ends_with(other.contents->var_name, "." + contents->var_name)) &&
+            (contents->stage == other.contents->stage));
 }
 
 bool LoopLevel::operator==(const LoopLevel &other) const {
-    return defined() == other.defined() &&
-           contents->func_name == other.contents->func_name &&
-           contents->var_name == other.contents->var_name;
+    return (defined() == other.defined()) &&
+           (contents->func_name == other.contents->func_name) &&
+           (contents->stage == other.contents->stage) &&
+           (contents->var_name == other.contents->var_name);
 }
 
 namespace Internal {
@@ -172,11 +194,13 @@ struct StageScheduleContents {
     std::vector<ReductionVariable> rvars;
     std::vector<Split> splits;
     std::vector<Dim> dims;
+    FuseLoopLevel fuse_level;
+    std::vector<FusedPair> fused_pairs;
     std::vector<PrefetchDirective> prefetches;
     bool touched;
     bool allow_race_conditions;
 
-    StageScheduleContents() : touched(false), allow_race_conditions(false) {};
+    StageScheduleContents() : touched(false), allow_race_conditions(false), fuse_level(FuseLoopLevel()) {};
 
     // Pass an IRMutator through to all Exprs referenced in the StageScheduleContents
     void mutate(IRMutator *mutator) {
@@ -293,7 +317,7 @@ LoopLevel &FuncSchedule::store_level() {
 LoopLevel &FuncSchedule::compute_level() {
     return contents->compute_level;
 }
-
+	
 const LoopLevel &FuncSchedule::store_level() const {
     return contents->store_level;
 }
@@ -334,9 +358,11 @@ StageSchedule StageSchedule::get_copy() const {
     copy.contents->rvars = contents->rvars;
     copy.contents->splits = contents->splits;
     copy.contents->dims = contents->dims;
+    copy.contents->fuse_level = contents->fuse_level;
     copy.contents->prefetches = contents->prefetches;
     copy.contents->touched = contents->touched;
     copy.contents->allow_race_conditions = contents->allow_race_conditions;
+    copy.contents->fused_pairs = contents->fused_pairs;
     return copy;
 }
 
@@ -368,6 +394,14 @@ std::vector<Dim> &StageSchedule::dims() {
     return contents->dims;
 }
 
+std::vector<FusedPair> &StageSchedule::fused_pairs() {
+    return contents->fused_pairs;
+}
+
+const std::vector<FusedPair> &StageSchedule::fused_pairs() const {
+    return contents->fused_pairs;
+}
+
 const std::vector<Dim> &StageSchedule::dims() const {
     return contents->dims;
 }
@@ -386,6 +420,14 @@ bool &StageSchedule::allow_race_conditions() {
 
 bool StageSchedule::allow_race_conditions() const {
     return contents->allow_race_conditions;
+}
+
+FuseLoopLevel &StageSchedule::fuse_level() {
+    return contents->fuse_level;
+}
+
+const FuseLoopLevel &StageSchedule::fuse_level() const {
+    return contents->fuse_level;
 }
 
 void StageSchedule::accept(IRVisitor *visitor) const {
