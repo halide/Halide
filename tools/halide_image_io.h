@@ -52,15 +52,14 @@ inline bool CheckReturn(bool condition, const char* fmt, ...) {
 inline void convert(bool in, uint8_t &out) {out = -int(in);}
 inline void convert(uint8_t in, uint8_t &out) {out = in;}
 inline void convert(uint16_t in, uint8_t &out) {
-    // We need to divide by 257 (not 256), but we can avoid division
-    // entirely using this approach (see http://research.swtch.com/divmult)
-    in = (uint32_t)(in) + (1 << 7);
-    out = ((in * 255 + 255) >> 16);
+    uint32_t tmp = (uint32_t)(in) + 0x80;
+    // Fast approximation of div-by-257: see http://research.swtch.com/divmult
+    out = ((tmp * 255 + 255) >> 16);
 }
-// TODO: the downshifts for 32 and 64 are slightly off, but are largely provided
-// so that all template instantiations will compile.
-inline void convert(uint32_t in, uint8_t &out) {out = in >> 24;}
-inline void convert(uint64_t in, uint8_t &out) {out = in >> 56;}
+inline void convert(uint32_t in, uint8_t &out) {out = (((uint64_t) in) + 0x00808080) / 0x01010101;}
+// uint64 -> 8 just discards the lower 32 bits:
+// if you were expecting more precision, well, sorry
+inline void convert(uint64_t in, uint8_t &out) {convert(uint32_t(in >> 32), out);}
 inline void convert(int8_t in, uint8_t &out) {convert((uint8_t)in, out);}
 inline void convert(int16_t in, uint8_t &out) {convert((uint16_t)in, out);}
 inline void convert(int32_t in, uint8_t &out) {convert((uint32_t)in, out);}
