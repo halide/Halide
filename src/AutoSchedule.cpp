@@ -3083,38 +3083,38 @@ void validate_no_partial_schedules(const Function &f) {
 }
 
 // If the cost of computing a Func is about the same as calling the Func,
-// inline the Func and remove it from 'env'.
-void inline_all_trivial_functions(const vector<Function> &outputs, map<string, Function> &env) {
-    set<string> should_remove;
-    for (auto &iter1 : env) {
+// inline the Func. Return true of any of the Funcs is inlined.
+bool inline_all_trivial_functions(const vector<Function> &outputs,
+                                  const vector<string> &order,
+                                  map<string, Function> &env) {
+    bool inlined = false;
+    for (size_t i = 0; i < order.size(); ++i) {
         bool is_output = false;
         for (const Function &f : outputs) {
-            if (iter1.first == f.name()) {
+            if (order[i] == f.name()) {
                 is_output = true;
                 break;
             }
         }
         if (is_output) {
             // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
             continue;
         }
-
-        if (is_func_trivial_to_inline(iter1.second)) {
-            should_remove.insert(iter1.first);
-            for (auto &iter2 : env) {
-                if (iter1.first != iter2.first) {
-                    debug(4) << "Inline trivial function \"" << iter1.first
-                             << "\" inside \"" << iter2.first << "\"\n";
-                    inline_function(iter2.second, iter1.second);
-                }
+        Function f1 = env.at(order[i]);
+        if (is_func_trivial_to_inline(f1)) {
+            inlined = true;
+            debug(4) << "Remove function \"" << order[i] << "\" from 'env' since it is inlined\n";
+            for (size_t j = i + 1; j < order.size(); ++j) {
+                internal_assert(order[i] != order[j]);
+                Function f2 = env.at(order[j]);
+                debug(5) << "Inline trivial function \"" << f1.name()
+                         << "\" inside \"" << f2.name() << "\"\n";
+                inline_function(f2, f1);
             }
         }
     }
-
-    for (const auto &f : should_remove) {
-        debug(4) << "Remove function \"" << f << "\" from 'env' since it is inlined\n";
-        env.erase(f);
-    }
+    return inlined;
 }
 
 // Return true if 'f' is used by some extern Func.
@@ -3162,10 +3162,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
-    // Compute the realization order, before any trivial inlining (i.e. before
-    // we remove any functions from 'env'). We need the full realization
-    // order to pass to get_func() when generating the string representation
-    // of the schedule.
+    // Compute the realization order, before any trivial inlining. We need the
+    // full realization order to pass to get_func() when generating the string
+    // representation of the schedule.
     vector<string> full_order = realization_order(outputs, env);
 
     // Validate that none of the functions in the pipeline have partial schedules.
@@ -3181,7 +3180,26 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // Run a pre-pass that inline all trivial Funcs (i.e. if the cost of
     // computing a Func is about the same as calling that Func, we should
     // just inline it).
-    inline_all_trivial_functions(outputs, env);
+    if (inline_all_trivial_functions(outputs, full_order, env)) {
+        // If any of the Funcs is inlined, we need to recompute 'env', since some
+        // of the Funcs are no longer used and need to be removed from 'env'.
+        //
+        // Instead of recomputing 'env', we could also remove the inlined Func
+        // within inline_all_trivial_functions(); however, it is a bit tricky
+        // to do when dealing with inlined tuple. Consider the following case:
+        //   f(x, y) = x + y;
+        //   g(x, y) = {x, f(x, y)};
+        //   h(x, y) = g(x, y)[0];
+        // When 'g' is inlined in 'h', no one uses 'f' anymore and it can
+        // be removed from 'env'. However, to know this, we need to trace
+        // all the function calls within the pipeline. Thus, we might as well
+        // recompute the 'env' from scratch.
+        env.clear();
+        for (Function f : outputs) {
+            map<string, Function> more_funcs = find_transitive_calls(f);
+            env.insert(more_funcs.begin(), more_funcs.end());
+        }
+    }
 
     // Compute the bounds of function values which are used for dependence analysis.
     vector<string> order = realization_order(outputs, env);
