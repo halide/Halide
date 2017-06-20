@@ -47,12 +47,20 @@ template<typename TO, typename FROM>
 TO convert(const FROM &from);
 
 // Convert to bool
-template<bool, typename FROM> inline bool convert(const FROM &in) { return in != 0; }
-
-// Convert from bool
-template<typename TO, bool> inline TO convert(const bool &in) { return (TO) in; }
+template<> inline bool convert(const bool &in) { return in; }
+template<> inline bool convert(const uint8_t &in) { return in != 0; }
+template<> inline bool convert(const uint16_t &in) { return in != 0; }
+template<> inline bool convert(const uint32_t &in) { return in != 0; }
+template<> inline bool convert(const uint64_t &in) { return in != 0; }
+template<> inline bool convert(const int8_t &in) { return in != 0; }
+template<> inline bool convert(const int16_t &in) { return in != 0; }
+template<> inline bool convert(const int32_t &in) { return in != 0; }
+template<> inline bool convert(const int64_t &in) { return in != 0; }
+template<> inline bool convert(const float &in) { return in != 0; }
+template<> inline bool convert(const double &in) { return in != 0; }
 
 // Convert to u8
+template<> inline uint8_t convert(const bool &in) { return in; }
 template<> inline uint8_t convert(const uint8_t &in) { return in; }
 template<> inline uint8_t convert(const uint16_t &in) {
     uint32_t tmp = (uint32_t)(in) + 0x80;
@@ -70,6 +78,7 @@ template<> inline uint8_t convert(const float &in) { return (uint8_t)(in*255.0f)
 template<> inline uint8_t convert(const double &in) { return (uint8_t)(in*255.0); }
 
 // Convert to u16
+template<> inline uint16_t convert(const bool &in) { return in; }
 template<> inline uint16_t convert(const uint8_t &in) { return uint16_t(in) * 0x0101; }
 template<> inline uint16_t convert(const uint16_t &in) { return in; }
 template<> inline uint16_t convert(const uint32_t &in) { return in >> 16; }
@@ -82,6 +91,7 @@ template<> inline uint16_t convert(const float &in) { return (uint16_t)(in*65535
 template<> inline uint16_t convert(const double &in) { return (uint16_t)(in*65535.0); }
 
 // Convert to u32
+template<> inline uint32_t convert(const bool &in) { return in; }
 template<> inline uint32_t convert(const uint8_t &in) { return uint32_t(in) * 0x01010101; }
 template<> inline uint32_t convert(const uint16_t &in) { return uint32_t(in) * 0x00010001; }
 template<> inline uint32_t convert(const uint32_t &in) { return in; }
@@ -94,6 +104,7 @@ template<> inline uint32_t convert(const float &in) { return (uint32_t)(in*42949
 template<> inline uint32_t convert(const double &in) { return (uint32_t)(in*4294967295.0); }
 
 // Convert to u64
+template<> inline uint64_t convert(const bool &in) { return in; }
 template<> inline uint64_t convert(const uint8_t &in) { return uint64_t(in) * 0x0101010101010101LL; }
 template<> inline uint64_t convert(const uint16_t &in) { return uint64_t(in) * 0x0001000100010001LL; }
 template<> inline uint64_t convert(const uint32_t &in) { return uint64_t(in) * 0x0000000100000001LL; }
@@ -106,18 +117,59 @@ template<> inline uint64_t convert(const float &in) { return convert<uint64_t, u
 template<> inline uint64_t convert(const double &in) { return convert<uint64_t, uint32_t>(in*4294967295.0); }
 
 // Convert to i8
-template<int8_t, typename FROM> inline int8_t convert(const FROM &in) { return convert<uint8_t, FROM>(in); }
+template<> inline int8_t convert(const bool &in) { return in; }
+template<> inline int8_t convert(const uint8_t &in) { return convert<uint8_t, uint8_t>(in); }
+template<> inline int8_t convert(const uint16_t &in) { return convert<uint8_t, uint16_t>(in); }
+template<> inline int8_t convert(const uint32_t &in) { return convert<uint8_t, uint32_t>(in); }
+template<> inline int8_t convert(const uint64_t &in) { return convert<uint8_t, uint64_t>(in); }
+template<> inline int8_t convert(const int8_t &in) { return convert<uint8_t, int8_t>(in); }
+template<> inline int8_t convert(const int16_t &in) { return convert<uint8_t, int16_t>(in); }
+template<> inline int8_t convert(const int32_t &in) { return convert<uint8_t, int32_t>(in); }
+template<> inline int8_t convert(const int64_t &in) { return convert<uint8_t, int64_t>(in); }
+template<> inline int8_t convert(const float &in) { return convert<uint8_t, float>(in); }
+template<> inline int8_t convert(const double &in) { return convert<uint8_t, double>(in); }
 
 // Convert to i16
-template<int16_t, typename FROM> inline int16_t convert(const FROM &in) { return convert<uint16_t, FROM>(in); }
+template<> inline int16_t convert(const bool &in) { return in; }
+template<> inline int16_t convert(const uint8_t &in) { return convert<uint16_t, uint8_t>(in); }
+template<> inline int16_t convert(const uint16_t &in) { return convert<uint16_t, uint16_t>(in); }
+template<> inline int16_t convert(const uint32_t &in) { return convert<uint16_t, uint32_t>(in); }
+template<> inline int16_t convert(const uint64_t &in) { return convert<uint16_t, uint64_t>(in); }
+template<> inline int16_t convert(const int8_t &in) { return convert<uint16_t, int8_t>(in); }
+template<> inline int16_t convert(const int16_t &in) { return convert<uint16_t, int16_t>(in); }
+template<> inline int16_t convert(const int32_t &in) { return convert<uint16_t, int32_t>(in); }
+template<> inline int16_t convert(const int64_t &in) { return convert<uint16_t, int64_t>(in); }
+template<> inline int16_t convert(const float &in) { return convert<uint16_t, float>(in); }
+template<> inline int16_t convert(const double &in) { return convert<uint16_t, double>(in); }
 
 // Convert to i32
-template<int32_t, typename FROM> inline int32_t convert(const FROM &in) { return convert<uint32_t, FROM>(in); }
+template<> inline int32_t convert(const bool &in) { return in; }
+template<> inline int32_t convert(const uint8_t &in) { return convert<uint32_t, uint8_t>(in); }
+template<> inline int32_t convert(const uint16_t &in) { return convert<uint32_t, uint16_t>(in); }
+template<> inline int32_t convert(const uint32_t &in) { return convert<uint32_t, uint32_t>(in); }
+template<> inline int32_t convert(const uint64_t &in) { return convert<uint32_t, uint64_t>(in); }
+template<> inline int32_t convert(const int8_t &in) { return convert<uint32_t, int8_t>(in); }
+template<> inline int32_t convert(const int16_t &in) { return convert<uint32_t, int16_t>(in); }
+template<> inline int32_t convert(const int32_t &in) { return convert<uint32_t, int32_t>(in); }
+template<> inline int32_t convert(const int64_t &in) { return convert<uint32_t, int64_t>(in); }
+template<> inline int32_t convert(const float &in) { return convert<uint32_t, float>(in); }
+template<> inline int32_t convert(const double &in) { return convert<uint32_t, double>(in); }
 
 // Convert to i64
-template<int64_t, typename FROM> inline int64_t convert(const FROM &in) { return convert<uint64_t, FROM>(in); }
+template<> inline int64_t convert(const bool &in) { return in; }
+template<> inline int64_t convert(const uint8_t &in) { return convert<uint64_t, uint8_t>(in); }
+template<> inline int64_t convert(const uint16_t &in) { return convert<uint64_t, uint16_t>(in); }
+template<> inline int64_t convert(const uint32_t &in) { return convert<uint64_t, uint32_t>(in); }
+template<> inline int64_t convert(const uint64_t &in) { return convert<uint64_t, uint64_t>(in); }
+template<> inline int64_t convert(const int8_t &in) { return convert<uint64_t, int8_t>(in); }
+template<> inline int64_t convert(const int16_t &in) { return convert<uint64_t, int16_t>(in); }
+template<> inline int64_t convert(const int32_t &in) { return convert<uint64_t, int32_t>(in); }
+template<> inline int64_t convert(const int64_t &in) { return convert<uint64_t, int64_t>(in); }
+template<> inline int64_t convert(const float &in) { return convert<uint64_t, float>(in); }
+template<> inline int64_t convert(const double &in) { return convert<uint64_t, double>(in); }
 
 // Convert to f32
+template<> inline float convert(const bool &in) { return in; }
 template<> inline float convert(const uint8_t &in) { return in/255.0f; }
 template<> inline float convert(const uint16_t &in) { return in/65535.0f; }
 template<> inline float convert(const uint32_t &in) { return (float) (in/4294967295.0); }
@@ -130,6 +182,7 @@ template<> inline float convert(const float &in) { return in; }
 template<> inline float convert(const double &in) { return (double) in; }
 
 // Convert to f64
+template<> inline double convert(const bool &in) { return in; }
 template<> inline double convert(const uint8_t &in) { return in/255.0f; }
 template<> inline double convert(const uint16_t &in) { return in/65535.0f; }
 template<> inline double convert(const uint32_t &in) { return (double) (in/4294967295.0); }
