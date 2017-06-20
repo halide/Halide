@@ -230,11 +230,16 @@ EXPORT FileStat file_stat(const std::string &name);
 class TemporaryFile final {
 public:
     TemporaryFile(const std::string &prefix, const std::string &suffix)
-        : temp_path(file_make_temp(prefix, suffix)) {}
+        : temp_path(file_make_temp(prefix, suffix)), do_unlink(true) {}
     const std::string &pathname() const { return temp_path; }
-    ~TemporaryFile() { file_unlink(temp_path); }
+    ~TemporaryFile() { if (do_unlink) { file_unlink(temp_path); } }
+    // You can call this if you want to defeat the automatic deletion;
+    // this is rarely what you want to do (since it defeats the purpose
+    // of this class), but can be quite handy for debugging purposes.
+    void detach() { do_unlink = false; }
 private:
     const std::string temp_path;
+    bool do_unlink;
     TemporaryFile(const TemporaryFile &) = delete;
     void operator=(const TemporaryFile &) = delete;
 };
