@@ -7,6 +7,7 @@
 #include "FindCalls.h"
 #include "Func.h"
 #include "Inline.h"
+#include "IREquality.h"
 #include "ParallelRVar.h"
 #include "RealizationOrder.h"
 #include "RegionCosts.h"
@@ -3088,7 +3089,9 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
                                   const vector<string> &order,
                                   map<string, Function> &env) {
     bool inlined = false;
-    for (size_t i = 0; i < order.size(); ++i) {
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
         bool is_output = false;
         for (const Function &f : outputs) {
             if (order[i] == f.name()) {
@@ -3104,14 +3107,101 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
         Function f1 = env.at(order[i]);
         if (is_func_trivial_to_inline(f1)) {
             inlined = true;
-            debug(4) << "Remove function \"" << order[i] << "\" from 'env' since it is inlined\n";
-            for (size_t j = i + 1; j < order.size(); ++j) {
+            debug(4) << "Function \"" << order[i] << "\" is trivial to inline\n";
+            for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
                 internal_assert(order[i] != order[j]);
                 Function f2 = env.at(order[j]);
                 debug(5) << "Inline trivial function \"" << f1.name()
                          << "\" inside \"" << f2.name() << "\"\n";
                 inline_function(f2, f1);
             }
+        }
+    }
+    return inlined;
+}
+
+// Determine if a Func (order[index]) is only consumed by another single Func
+// in element-wise manner. If it is, return the name of the consumer Func;
+// otherwise, return an empty string.
+string is_func_called_element_wise(const vector<string> &order, size_t index,
+                                   map<string, Function> &env) {
+    Function f1 = env.at(order[index]);
+    if (!f1.can_be_inlined()) {
+        return "";
+    }
+    internal_assert(index < order.size());
+
+    string caller = "";
+    for (size_t i = index + 1; i < order.size(); ++i) {
+        Function f2 = env.at(order[i]);
+        int num_stages = f2.updates().size() + 1;
+        for (int s = 0; s < num_stages; ++s) {
+            Definition def = get_stage_definition(f2, s);
+            FindAllCalls find;
+            def.accept(&find);
+
+            if (find.funcs_called.count(f1.name())) {
+                if (caller.empty()) {
+                    caller = f2.name();
+                } else {
+                    // Found another caller of 'f1'
+                    return "";
+                }
+            }
+            for (const auto &iter : find.call_args) {
+                if (iter.first != f1.name()) {
+                    continue;
+                }
+                if (def.args().size() != iter.second.size()) {
+                    // It's not an element-wise access
+                    return "";
+                }
+                for (size_t j = 0; j < iter.second.size(); ++j) {
+                    if (!equal(def.args()[j], iter.second[j])) {
+                        // It's not an element-wise access
+                        return "";
+                    }
+                }
+            }
+        }
+    }
+    return caller;
+}
+
+// Inline a Func if its values are only consumed by another single Func in
+// element-wise manner and remove the inlined Func from 'order' and 'env'.
+bool inline_all_element_wise_functions(const vector<Function> &outputs,
+                                       vector<string> &order,
+                                       map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        bool is_output = false;
+        for (const Function &f : outputs) {
+            if (order[i] == f.name()) {
+                is_output = true;
+                break;
+            }
+        }
+        if (is_output) {
+            // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
+            continue;
+        }
+        string caller = is_func_called_element_wise(order, i, env);
+        if (!caller.empty()) {
+            inlined = true;
+            debug(4) << "Inline function \"" << order[i] << "\" since it is called only by "
+                     << caller << " in element-wise manner\n";
+            internal_assert(order[i] != caller);
+
+            auto iter = env.find(order[i]);
+            internal_assert(iter != env.end());
+            inline_function(env.at(caller), iter->second);
+            env.erase(iter);
+            order.erase(order.begin() + i);
+            i -= 1;
         }
     }
     return inlined;
@@ -3201,8 +3291,14 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         }
     }
 
-    // Compute the bounds of function values which are used for dependence analysis.
+    // Compute the realization order of the functions within the pipeline.
     vector<string> order = realization_order(outputs, env);
+
+    // Run a pre-pass that inline all Funcs which values are accessed by
+    // another single Func in element-wise manner.
+    inline_all_element_wise_functions(outputs, order, env);
+
+    // Compute the bounds of function values which are used for dependence analysis.
     FuncValueBounds func_val_bounds = compute_function_value_bounds(order, env);
 
     // Initialize the cost model.
