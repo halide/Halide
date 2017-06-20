@@ -784,8 +784,8 @@ WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
 
         cl_int err = 0;
 
-        size_t offset[3] = { off, 0, 0 };
-        size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
+        size_t offset[3] = { (size_t) off, 0, 0 };
+        size_t region[3] = { (size_t) c.chunk_size, (size_t) c.extent[0], (size_t) c.extent[1] };
 
         const char *copy_name = d_to_h ? "clEnqueueReadBufferRect" : "clEnqueueWriteBufferRect";
         debug(user_context) << "    " << copy_name << " "
@@ -959,8 +959,8 @@ WEAK int halide_opencl_run(void *user_context,
     }
 
     // Pack dims
-    size_t global_dim[3] = {blocksX*threadsX,  blocksY*threadsY,  blocksZ*threadsZ};
-    size_t local_dim[3] = {threadsX, threadsY, threadsZ};
+    size_t global_dim[3] = {(size_t) blocksX*threadsX,  (size_t) blocksY*threadsY, (size_t) blocksZ*threadsZ};
+    size_t local_dim[3] = {(size_t) threadsX, (size_t) threadsY, (size_t) threadsZ};
 
     // Set args
     int i = 0;

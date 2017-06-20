@@ -837,13 +837,9 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
                              "halide_error_requirement_failed",
                              {stringify({condition}), combine_strings(args)},
                              Internal::Call::Extern);
-    // Just cast to the type expected by the success path: since the actual
-    // value will never be used in the failure branch, it doesn't really matter
-    // what it is, but the type must match.
-    Expr failure_value = cast(args[0].type(), requirement_failed_error);
     return Internal::Call::make(args[0].type(),
-                                Internal::Call::if_then_else,
-                                {likely(std::move(condition)), args[0], failure_value},
+                                Internal::Call::require,
+                                {likely(std::move(condition)), args[0], requirement_failed_error},
                                 Internal::Call::PureIntrinsic);
 }
 
