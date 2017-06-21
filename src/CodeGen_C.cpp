@@ -103,8 +103,9 @@ inline float neg_inf_f32() {return -INFINITY;}
 inline float inf_f32() {return INFINITY;}
 inline bool is_nan_f32(float x) {return x != x;}
 inline bool is_nan_f64(double x) {return x != x;}
+
 template<typename A, typename B> 
-A reinterpret(const B &b) { 
+inline A reinterpret(const B &b) { 
     #if __cplusplus >= 201103L
     static_assert(sizeof(A) == sizeof(B), "type size mismatch");
     #endif
@@ -112,13 +113,15 @@ A reinterpret(const B &b) {
     memcpy(&a, &b, sizeof(a)); 
     return a;
 }
-inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}
+inline float float_from_bits(uint32_t bits) {
+    return reinterpret<float, uint32_t>(bits);
+}
 
 template<typename T> 
-inline T max(const T &a, const T &b) {return (a > b) ? a : b;}
+inline T halide_cpp_max(const T &a, const T &b) {return (a > b) ? a : b;}
 
 template<typename T> 
-inline T min(const T &a, const T &b) {return (a < b) ? a : b;}
+inline T halide_cpp_min(const T &a, const T &b) {return (a < b) ? a : b;}
 
 template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
@@ -788,7 +791,7 @@ public:
     static Vec max(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ::max(a[i], b[i]);
+            r.elements[i] = ::halide_cpp_max(a[i], b[i]);
         }
         return r;
     }
@@ -796,7 +799,7 @@ public:
     static Vec min(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ::min(a[i], b[i]);
+            r.elements[i] = ::halide_cpp_min(a[i], b[i]);
         }
         return r;
     }
@@ -1094,7 +1097,7 @@ public:
     static Vec max(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ::max(a[i], b[i]);
+            r.native_vector[i] = ::halide_cpp_max(a[i], b[i]);
         }
         return r;
     }
@@ -1103,7 +1106,7 @@ public:
     static Vec min(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ::min(a[i], b[i]);
+            r.native_vector[i] = ::halide_cpp_min(a[i], b[i]);
         }
         return r;
     }
@@ -1755,7 +1758,7 @@ void CodeGen_C::visit(const Max *op) {
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->type.is_scalar()) {
-        print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "::halide_cpp_max", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
         rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -1767,7 +1770,7 @@ void CodeGen_C::visit(const Min *op) {
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->type.is_scalar()) {
-        print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "::halide_cpp_min", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
         rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
