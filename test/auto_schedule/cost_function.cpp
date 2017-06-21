@@ -37,7 +37,10 @@ int main(int argc, char **argv) {
     Target target = get_target_from_environment();
     Pipeline p(stencils[num_stencils - 1]);
 
-    p.auto_schedule(target);
+    std::cout << "\n\n******************************************\nSCHEDULE:\n"
+              << "******************************************\n"
+              << p.auto_schedule(target)
+              << "\n******************************************\n\n";
 
     // Inspect the schedule
     stencils[num_stencils - 1].print_loop_nest();
