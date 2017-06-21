@@ -103,8 +103,11 @@ inline float neg_inf_f32() {return -INFINITY;}
 inline float inf_f32() {return INFINITY;}
 inline bool is_nan_f32(float x) {return x != x;}
 inline bool is_nan_f64(double x) {return x != x;}
+
+namespace HalideCpp {
+
 template<typename A, typename B> 
-A reinterpret(const B &b) { 
+inline A reinterpret(const B &b) { 
     #if __cplusplus >= 201103L
     static_assert(sizeof(A) == sizeof(B), "type size mismatch");
     #endif
@@ -112,7 +115,10 @@ A reinterpret(const B &b) {
     memcpy(&a, &b, sizeof(a)); 
     return a;
 }
-inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}
+
+inline float float_from_bits(uint32_t bits) {
+    return reinterpret<float, uint32_t>(bits);
+}
 
 template<typename T> 
 inline T max(const T &a, const T &b) {return (a > b) ? a : b;}
@@ -126,16 +132,15 @@ const B &return_second(const A &a, const B &b) {
     return b;
 }
 
-namespace {
-class HalideFreeHelper {
+class FreeHelper {
     typedef void (*FreeFunction)(void *user_context, void *p);
     void * user_context;
     void *p;
     FreeFunction free_function;
 public:
-    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function)
+    FreeHelper(void *user_context, void *p, FreeFunction free_function)
         : user_context(user_context), p(p), free_function(free_function) {}
-    ~HalideFreeHelper() { free(); }
+    ~FreeHelper() { free(); }
     void free() {
         if (p) {
             // TOOD: do all free_functions guarantee to ignore a null ptr?
@@ -144,7 +149,8 @@ public:
         }
     }
 };
-} // namespace
+
+}  // namespace HalideCpp
 
 )INLINE_CODE";
 
@@ -788,7 +794,7 @@ public:
     static Vec max(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ::max(a[i], b[i]);
+            r.elements[i] = HalideCpp::max(a[i], b[i]);
         }
         return r;
     }
@@ -796,7 +802,7 @@ public:
     static Vec min(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ::min(a[i], b[i]);
+            r.elements[i] = HalideCpp::min(a[i], b[i]);
         }
         return r;
     }
@@ -1094,7 +1100,7 @@ public:
     static Vec max(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ::max(a[i], b[i]);
+            r.native_vector[i] = HalideCpp::max(a[i], b[i]);
         }
         return r;
     }
@@ -1103,7 +1109,7 @@ public:
     static Vec min(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ::min(a[i], b[i]);
+            r.native_vector[i] = HalideCpp::min(a[i], b[i]);
         }
         return r;
     }
@@ -1201,7 +1207,7 @@ string CodeGen_C::print_reinterpret(Type type, Expr e) {
         // would be garbage-producing.
         oss << "(" << print_type(type) << ")";
     } else {
-        oss << "reinterpret<" << print_type(type) << ">";
+        oss << "HalideCpp::reinterpret<" << print_type(type) << ">";
     }
     oss << "(" << print_expr(e) << ")";
     return oss.str();
@@ -1755,7 +1761,7 @@ void CodeGen_C::visit(const Max *op) {
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->type.is_scalar()) {
-        print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "HalideCpp::max", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
         rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -1767,7 +1773,7 @@ void CodeGen_C::visit(const Min *op) {
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->type.is_scalar()) {
-        print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "HalideCpp::min", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
         rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -1864,7 +1870,7 @@ void CodeGen_C::visit(const FloatImm *op) {
         if (op->type.bits() == 64) {
             oss << "(double) ";
         }
-        oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
+        oss << "HalideCpp::float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
         print_assignment(op->type, oss.str());
     }
 }
@@ -1939,7 +1945,7 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         string arg0 = print_expr(op->args[0]);
         string arg1 = print_expr(op->args[1]);
-        rhs << "return_second(" << arg0 << ", " << arg1 << ")";
+        rhs << "HalideCpp::return_second(" << arg0 << ", " << arg1 << ")";
     } else if (op->is_intrinsic(Call::if_then_else)) {
         internal_assert(op->args.size() == 3);
 
@@ -2502,7 +2508,7 @@ void CodeGen_C::visit(const Allocate *op) {
 
         do_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
-        stream << "HalideFreeHelper " << op_name << "_free(_ucon, "
+        stream << "HalideCpp::FreeHelper " << op_name << "_free(_ucon, "
                << op_name << ", " << free_function << ");\n";
     }
 
@@ -2656,7 +2662,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
   {
    return halide_error_out_of_memory(_ucon);
   }
-  HalideFreeHelper _tmp_heap_free(_ucon, _tmp_heap, halide_free);
+  HalideCpp::FreeHelper _tmp_heap_free(_ucon, _tmp_heap, halide_free);
   {
    int32_t _tmp_stack[127];
    int32_t _4 = _beta + 1;
@@ -2668,7 +2674,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
     char const *_7 = b0;
     int32_t _8 = halide_print(_ucon, _7);
-    int32_t _9 = return_second(_8, 3);
+    int32_t _9 = HalideCpp::return_second(_8, 3);
     _5 = _9;
    } // if _6
    else
@@ -2676,7 +2682,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     _5 = 3;
    } // if _6 else
    int32_t _10 = _5;
-   float _11 = float_from_bits(1082130432 /* 4 */);
+   float _11 = HalideCpp::float_from_bits(1082130432 /* 4 */);
    bool _12 = _alpha > _11;
    int32_t _13 = (int32_t)(_12 ? _10 : 2);
    ((int32_t *)_buf)[_4] = _13;
