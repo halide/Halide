@@ -43,8 +43,8 @@ inline bool CheckReturn(bool condition, const char* fmt, ...) {
     return condition;
 }
 
-template<typename TO, typename FROM>
-TO convert(const FROM &from);
+template<typename To, typename From>
+To convert(const From &from);
 
 // Convert to bool
 template<> inline bool convert(const bool &in) { return in; }
