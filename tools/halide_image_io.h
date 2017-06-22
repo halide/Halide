@@ -418,7 +418,7 @@ bool save_png(ImageType &im, const std::string &filename) {
             // convert to uint16_t
             for (int x = 0; x < im.width(); x++) {
                 for (int c = 0; c < im.channels(); c++) {
-                    uint16_t out = Internal::convert<ElemType>(srcPtr[c*c_stride]);
+                    uint16_t out = Internal::convert<uint16_t>(srcPtr[c*c_stride]);
                     *dstPtr++ = out >> 8;
                     *dstPtr++ = out & 0xff;
                 }
@@ -428,7 +428,7 @@ bool save_png(ImageType &im, const std::string &filename) {
             // convert to uint8_t
             for (int x = 0; x < im.width(); x++) {
                 for (int c = 0; c < im.channels(); c++) {
-                    uint8_t out = Internal::convert<ElemType>(srcPtr[c*c_stride]);
+                    uint8_t out = Internal::convert<uint8_t>(srcPtr[c*c_stride]);
                     *dstPtr++ = out;
                 }
                 srcPtr += x_stride;
@@ -539,7 +539,7 @@ bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel =
         uint8_t *p = &data[0];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                *p++ = Internal::convert<ElemType>(im(x, y, channel));
+                *p++ = Internal::convert<uint8_t>(im(x, y, channel));
             }
         }
         if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 8-bit data\n")) return false;
@@ -549,7 +549,7 @@ bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel =
         uint16_t *p = &data[0];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                uint16_t value = Internal::convert<ElemType>(im(x, y, channel));
+                uint16_t value = Internal::convert<uint16_t>(im(x, y, channel));
                 Internal::swap_endian_16(little_endian, value);
                 *p++ = value;
             }
@@ -655,16 +655,16 @@ bool save_ppm(ImageType &im, const std::string &filename) {
         if (channels == 3) {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    *p++ = Internal::convert<ElemType>(im(x, y, 0));
-                    *p++ = Internal::convert<ElemType>(im(x, y, 1));
-                    *p++ = Internal::convert<ElemType>(im(x, y, 2));
+                    *p++ = Internal::convert<uint8_t>(im(x, y, 0));
+                    *p++ = Internal::convert<uint8_t>(im(x, y, 1));
+                    *p++ = Internal::convert<uint8_t>(im(x, y, 2));
                 }
             }
         } else {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     for (int c = 0; c < channels; c++) {
-                        *p++ = Internal::convert<ElemType>(im(x, y, c));
+                        *p++ = Internal::convert<uint8_t>(im(x, y, c));
                     }
                 }
             }
@@ -678,13 +678,13 @@ bool save_ppm(ImageType &im, const std::string &filename) {
         if (channels == 3) {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    uint16_t value0 = Internal::convert<ElemType>(im(x, y, 0));
+                    uint16_t value0 = Internal::convert<uint16_t>(im(x, y, 0));
                     Internal::swap_endian_16(little_endian, value0);
                     *p++ = value0;
-                    uint16_t value1 = Internal::convert<ElemType>(im(x, y, 1));
+                    uint16_t value1 = Internal::convert<uint16_t>(im(x, y, 1));
                     Internal::swap_endian_16(little_endian, value1);
                     *p++ = value1;
-                    uint16_t value2 = Internal::convert<ElemType>(im(x, y, 2));
+                    uint16_t value2 = Internal::convert<uint16_t>(im(x, y, 2));
                     Internal::swap_endian_16(little_endian, value2);
                     *p++ = value2;
                 }
@@ -693,7 +693,7 @@ bool save_ppm(ImageType &im, const std::string &filename) {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     for (int c = 0; c < channels; c++) {
-                        uint16_t value = Internal::convert<ElemType>(im(x, y, c));
+                        uint16_t value = Internal::convert<uint16_t>(im(x, y, c));
                         Internal::swap_endian_16(little_endian, value);
                         *p++ = value;
                     }
@@ -713,8 +713,6 @@ bool save_jpg(ImageType &im, const std::string &filename) {
     check(false, "jpg not supported in this build\n");
     return false;
 #else
-    using ElemType = typename ImageType::ElemType;
-
     im.copy_to_host();
 
     int channels = 1;
@@ -766,12 +764,12 @@ bool save_jpg(ImageType &im, const std::string &filename) {
         JSAMPLE *dst = row.data();
         if (im.dimensions() == 2) {
             for (int x = 0; x < im.width(); x++) {
-                *dst++ = Internal::convert<ElemType>(im(x, y));
+                *dst++ = Internal::convert<JSAMPLE>(im(x, y));
             }
         } else {
             for (int x = 0; x < im.width(); x++) {
                 for (int c = 0; c < channels; c++) {
-                    *dst++ = Internal::convert<ElemType>(im(x, y, c));
+                    *dst++ = Internal::convert<JSAMPLE>(im(x, y, c));
                 }
             }
         }
