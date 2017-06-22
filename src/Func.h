@@ -414,8 +414,8 @@ public:
  * disambiguate calls to min on FuncRefs when a user has pulled both
  * Halide::min and std::min into their namespace. */
 // @{
-inline Expr min(FuncRef a, FuncRef b) {return min(Expr(a), Expr(b));}
-inline Expr max(FuncRef a, FuncRef b) {return max(Expr(a), Expr(b));}
+inline Expr min(FuncRef a, FuncRef b) {return min(Expr(std::move(a)), Expr(std::move(b)));}
+inline Expr max(FuncRef a, FuncRef b) {return max(Expr(std::move(a)), Expr(std::move(b)));}
 // @}
 
 /** A fragment of front-end syntax of the form f(x, y, z)[index], where x, y,
