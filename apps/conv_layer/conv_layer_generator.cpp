@@ -58,7 +58,7 @@ public:
             f_ReLU.compute_root()
                 .split(x, xo, xi, 8)
                 .split(y, yo, yi, 8)
-                .split(z, zo, zi, 16)
+                .split(z, zo, zi, 4)
                 .reorder(xi, yi, zi, n, xo, yo, zo)
                 .gpu_threads(xi, yi, zi)
                 .gpu_blocks(xo, yo, zo);

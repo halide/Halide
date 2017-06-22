@@ -23,7 +23,7 @@ $(BIN)/process: process.cpp $(BIN)/lens_blur.a $(BIN)/lens_blur_auto_schedule.a
 
 $(BIN)/out.png: $(BIN)/process
 	@-mkdir -p $(BIN)
-	$(BIN)/process $(IMAGES)/rgb.png 32 13 0.5 32 3 $(BIN)/out.png
+	$(BIN)/process $(IMAGES)/rgb_small.png 32 13 0.5 32 3 $(BIN)/out.png
 
 clean:
 	rm -rf $(BIN)
