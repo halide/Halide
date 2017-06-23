@@ -490,8 +490,8 @@ struct halide_device_interface_impl_t;
  * to the code that manages device allocations. You can access these
  * functions directly from the struct member function pointers, or by
  * calling the functions declared below. Note that the global
- * functions are not available when using Halide as a JIT compiler,
- * and you are using raw halide_buffer_t in that context you must use
+ * functions are not available when using Halide as a JIT compiler.
+ * If you are using raw halide_buffer_t in that context you must use
  * the function pointers in the device_interface struct. */
 struct halide_device_interface_t {
     int (*device_malloc)(void *user_context, struct halide_buffer_t *buf,
