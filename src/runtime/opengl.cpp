@@ -990,7 +990,7 @@ WEAK int halide_opengl_device_free(void *user_context, halide_buffer_t *buf) {
         // device fields even if we can't delete the texture.
     }
     buf->device = 0;
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
 
     return result;
