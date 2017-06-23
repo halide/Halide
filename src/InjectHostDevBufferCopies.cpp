@@ -320,8 +320,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
     void visit(const LetStmt *op) {
-        // If the value uses a buffer, treat this as a single
-        // leaf. Otherwise we can recurse.
+        // If op->value uses the buffer, we need to treat this as a
+        // single leaf. Otherwise we can recurse.
         FindBufferUsage finder(buffer, DeviceAPI::Host);
         op->value.accept(&finder);
         if (finder.devices_touched.empty()) {
@@ -335,6 +335,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         stmt = do_copies(op);
     }
 
+    // Check if a stmt has any for loops (and hence possible device
+    // transitions).
     class HasLoops : public IRVisitor {
         using IRVisitor::visit;
         void visit(const For *op) {
@@ -389,40 +391,8 @@ public:
     Stmt last_use;
 };
 
-class FindInputsAndOutputs : public IRVisitor {
-    using IRVisitor::visit;
-
-    void include(const Parameter &p) {
-        if (p.defined()) {
-            result.insert(p.name());
-        }
-    }
-
-    void include(const Buffer<> &b) {
-        if (b.defined()) {
-            result.insert(b.name());
-        }
-    }
-
-    void visit(const Variable *op) {
-        include(op->param);
-    }
-
-    void visit(const Load *op) {
-        include(op->param);
-        include(op->image);
-        IRVisitor::visit(op);
-    }
-
-    void visit(const Store *op) {
-        include(op->param);
-        IRVisitor::visit(op);
-    }
-
-public:
-    set<string> result;
-};
-
+// Inject the buffer-handling logic for all internal
+// allocations. Inputs and outputs are handled below.
 class InjectBufferCopies : public IRMutator {
     using IRMutator::visit;
 
@@ -619,9 +589,45 @@ public:
 };
 
 // Inject the buffer handling code for the inputs and outputs at the
-// site determined by the visitor above.
+// appropriate site.
 class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
     Stmt site;
+
+    // Find all references to external buffers.
+    class FindInputsAndOutputs : public IRVisitor {
+        using IRVisitor::visit;
+
+        void include(const Parameter &p) {
+            if (p.defined()) {
+                result.insert(p.name());
+            }
+        }
+
+        void include(const Buffer<> &b) {
+            if (b.defined()) {
+                result.insert(b.name());
+            }
+        }
+
+        void visit(const Variable *op) {
+            include(op->param);
+        }
+
+        void visit(const Load *op) {
+            include(op->param);
+            include(op->image);
+            IRVisitor::visit(op);
+        }
+
+        void visit(const Store *op) {
+            include(op->param);
+            IRVisitor::visit(op);
+        }
+
+    public:
+        set<string> result;
+    };
+
 public:
     using IRMutator::mutate;
 
