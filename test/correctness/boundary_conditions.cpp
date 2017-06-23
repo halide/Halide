@@ -376,7 +376,12 @@ int main(int argc, char **argv) {
 
     Halide::Internal::ThreadPool<bool> pool;
     std::vector<std::future<bool>> futures;
-    for (int vector_width = 1; vector_width <= 32; vector_width *= 2) {
+    int vector_width_max = 32;
+    if (target.has_feature(Target::Metal)) {
+        // https://github.com/halide/Halide/issues/2148
+        vector_width_max = 4;
+    }
+    for (int vector_width = 1; vector_width <= vector_width_max; vector_width *= 2) {
         std::cout << "Testing vector_width: " << vector_width << "\n";
         futures.push_back(pool.async(test_all, vector_width, target));
     }

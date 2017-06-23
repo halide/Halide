@@ -300,43 +300,6 @@ int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbu
         }
     }
 
-    // Initialize the runtime. The Hexagon runtime can't call any
-    // system functions (because we can't link them), so we put all
-    // the implementations that need to do so here, and pass poiners
-    // to them in here.
-    set_runtime_t set_runtime;
-    if (use_dlopenbuf) {
-        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
-    } else {
-        set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
-    }
-    if (!set_runtime) {
-        if (use_dlopenbuf) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
-        return -1;
-    }
-    int result = set_runtime(halide_malloc,
-                             halide_free,
-                             halide_print,
-                             halide_error,
-                             halide_do_par_for,
-                             halide_do_task,
-                             halide_get_symbol,
-                             halide_load_library,
-                             halide_get_library_symbol);
-    if (result != 0) {
-        if (use_dlopenbuf) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        halide_print(NULL, "set_runtime failed\n");
-        return result;
-    }
     *module_ptr = reinterpret_cast<handle_t>(lib);
     return 0;
 }

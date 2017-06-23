@@ -75,6 +75,10 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
     return oss.str();
 }
 
+// These are built-in types in OpenCL
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_vector_typedefs(const std::set<Type> &vector_types) {
+}
+
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e) {
     ostringstream oss;
     oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
@@ -151,20 +155,6 @@ namespace {
 // Mapping of integer vector indices to OpenCL ".s" syntax.
 const char * vector_elements = "0123456789ABCDEF";
 
-// If e is a ramp expression with stride 1, return the base, otherwise undefined.
-Expr is_ramp1(Expr e) {
-    const Ramp *r = e.as<Ramp>();
-    if (r == nullptr) {
-        return Expr();
-    }
-
-    const IntImm *i = r->stride.as<IntImm>();
-    if (i != nullptr && i->value == 1) {
-        return r->base;
-    }
-
-    return Expr();
-}
 }
 
 
@@ -219,11 +209,22 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
     }
 }
 
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
+    internal_assert(!function_takes_user_context(op->name));
+    vector<string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+    }
+    ostringstream rhs;
+    rhs << op->name << "(" << with_commas(args) << ")";
+    return rhs.str();
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     user_assert(is_one(op->predicate)) << "Predicated load is not supported inside OpenCL kernel.\n";
 
     // If we're loading a contiguous ramp into a vector, use vload instead.
-    Expr ramp_base = is_ramp1(op->index);
+    Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->type.is_vector());
         string id_ramp_base = print_expr(ramp_base);
@@ -292,7 +293,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     Type t = op->value.type();
 
     // If we're writing a contiguous ramp, use vstore instead.
-    Expr ramp_base = is_ramp1(op->index);
+    Expr ramp_base = strided_ramp_base(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
@@ -401,7 +402,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
 
         // Allocation is not a shared memory allocation, just make a local declaration.
         // It must have a constant size.
-        int32_t size = op->constant_allocation_size();
+        int32_t size = CodeGen_GPU_Dev::get_constant_bound_allocation_size(op);
         user_assert(size > 0)
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
@@ -496,6 +497,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
     } else {
         internal_error << "Shuffle not implemented.\n";
     }
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Max *op) {
+    print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Min *op) {
+    print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
@@ -638,16 +647,18 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream.str("");
     src_stream.clear();
 
+    const Target &target = clc.get_target();
+
     // This identifies the program as OpenCL C (as opposed to SPIR).
-    src_stream << "/*OpenCL C*/\n";
+    src_stream << "/*OpenCL C " << target.to_string() << "*/\n";
 
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
 
     // Write out the Halide math functions.
-    src_stream << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
-               << "float nan_f32() { return NAN; }\n"
-               << "float neg_inf_f32() { return -INFINITY; }\n"
-               << "float inf_f32() { return INFINITY; }\n"
+    src_stream << "inline float float_from_bits(unsigned int x) {return as_float(x);}\n"
+               << "inline float nan_f32() { return NAN; }\n"
+               << "inline float neg_inf_f32() { return -INFINITY; }\n"
+               << "inline float inf_f32() { return INFINITY; }\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
@@ -672,7 +683,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define atanh_f32 atanh \n"
                << "#define fast_inverse_f32 native_recip \n"
                << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
-               << "int halide_gpu_thread_barrier() {\n"
+               << "inline int halide_gpu_thread_barrier() {\n"
                << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
                << "  return 0;\n"
                << "}\n";

@@ -480,7 +480,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 return -1;
             }
         } else {
-            uint64_t arg_value = *(uint64_t *)args[i];
+            uint64_t arg_value = ((halide_buffer_t *)args[i])->device;
 
             GLuint the_buffer = (GLuint)arg_value;
             global_state.BindBufferBase(GL_SHADER_STORAGE_BUFFER, i, the_buffer);
@@ -590,7 +590,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         GLuint shader = global_state.CreateShader(GL_COMPUTE_SHADER);
         if (global_state.CheckAndReportError(user_context, "create shader")) { return -1; }
         const GLchar* sources = { src };
-        const GLint sources_lengths = { src_len };
+        const GLint sources_lengths = { (GLint) src_len };
 
         debug(user_context) << "Compute shader source for " << kernel_name << " :" << src;
         debug(user_context) << "\n";

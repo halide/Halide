@@ -366,22 +366,25 @@ void StubEmitter::emit_generator_params_struct() {
 void StubEmitter::emit_schedule_params_setters() {
     stream << indent() << "// set_schedule_param methods\n";
     stream << indent() << "template <typename T>\n";
-    stream << indent() << class_name << " &set_schedule_param(const std::string &name, const T &value) {\n";
+    stream << indent() << "inline " << class_name << " &set_schedule_param(const std::string &name, const T &value) {\n";
     indent_level++;
     stream << indent() << "(void) GeneratorStub::set_schedule_param(name, value);\n";
     stream << indent() << "return *this;\n";
     indent_level--;
     stream << indent() << "}\n";
 
-    // TODO: do we still want these, now that we have ScheduleParams replicated?
-    // for (auto *sp : schedule_params) {
-    //     std::string c_type = sp->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(sp->scalar_type());
-    //     stream << indent() << class_name << " &set_" << sp->name() << "(const " << c_type << " &value) {\n";
-    //     indent_level++;
-    //     stream << indent() << "return set_schedule_param(\"" << sp->name() <<  "\", value);\n";
-    //     indent_level--;
-    //     stream << indent() << "}\n";
-    // }
+    const auto &v = schedule_params;
+    if (!v.empty()) {
+        for (auto *p : v) {
+            std::string c_type = p->is_looplevel_param() ? "LoopLevel" : halide_type_to_c_type(p->scalar_type());
+            stream << indent() << "inline " << class_name << " &set_" << p->name() << "(const " << c_type << " &value) {\n";
+            indent_level++;
+            stream << indent() << "this->" << p->name() << ".set(value);\n";
+            stream << indent() << "return *this;\n";
+            indent_level--;
+            stream << indent() << "}\n";
+        }
+    }
     stream << "\n";
 }
 
@@ -706,7 +709,6 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              const std::map<std::string, std::string> &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
     : generator(generator_factory(context, generator_params)) {
-    generator->externs_map = context.get_externs_map();
     generator->set_inputs_vector(inputs);
     generator->call_generate();
 }
@@ -1062,6 +1064,7 @@ GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.get_target());
     value_tracker = context.get_value_tracker();
+    externs_map = context.get_externs_map();
 }
 
 GeneratorBase::~GeneratorBase() { 
@@ -1069,10 +1072,8 @@ GeneratorBase::~GeneratorBase() {
 }
 
 std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::get_externs_map() const {
-    // Lazily create the ExternsMap.
-    if (externs_map == nullptr) {
-        externs_map = std::make_shared<ExternsMap>();
-    }
+    // externs_map should always come from a GeneratorContext.
+    internal_assert(externs_map != nullptr);
     return externs_map;
 }
 
@@ -1280,9 +1281,8 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
 }
 
 void GeneratorBase::track_parameter_values(bool include_outputs) {
-    if (value_tracker == nullptr) {
-        value_tracker = std::make_shared<ValueTracker>();
-    }
+    // value_tracker should always come from a GeneratorContext.
+    internal_assert(value_tracker != nullptr);
     ParamInfo &pi = param_info();
     for (auto input : pi.filter_inputs) {
         if (input->kind() == IOKind::Buffer) {
@@ -1335,6 +1335,7 @@ void GeneratorBase::pre_generate() {
     ParamInfo &pi = param_info();
     user_assert(pi.filter_params.size() == 0) << "May not use generate() method with Param<> or ImageParam.";
     user_assert(pi.filter_outputs.size() > 0) << "Must use Output<> with generate() method.";
+    user_assert(get_target() != Target()) << "The Generator target has not been set.";
 
     if (!inputs_set) {
         for (auto input : pi.filter_inputs) {
@@ -1434,10 +1435,8 @@ Module GeneratorBase::build_module(const std::string &function_name,
 
     Module result = pipeline.compile_to_module(filter_arguments, function_name, target, linkage_type);
     std::shared_ptr<ExternsMap> externs_map = get_externs_map();
-    if (externs_map) {
-        for (const auto &map_entry : *externs_map) {
-            result.append(map_entry.second);
-        }
+    for (const auto &map_entry : *externs_map) {
+        result.append(map_entry.second);
     }
     return result;
 }
@@ -1763,6 +1762,8 @@ Target StubOutputBufferBase::get_target() const {
 }
 
 void generator_test() {
+    JITGeneratorContext context(get_host_target());
+
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations.
     {
@@ -1794,6 +1795,7 @@ void generator_test() {
         };
 
         Tester tester;
+        tester.init_from_context(context);
         internal_assert(tester.phase == GeneratorBase::Created);
 
         // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
@@ -1855,6 +1857,7 @@ void generator_test() {
         };
 
         Tester tester_instance;
+        tester_instance.init_from_context(context);
         // Use a base-typed reference to verify the code below doesn't know about subtype
         GeneratorBase &tester = tester_instance;
 
@@ -1904,6 +1907,7 @@ void generator_test() {
         };
 
         Tester tester;
+        tester.init_from_context(context);
         internal_assert(tester.phase == GeneratorBase::Created);
 
         // Verify that calling GeneratorParam::set() and ScheduleParam::set() works.
@@ -1963,6 +1967,7 @@ void generator_test() {
         };
 
         Tester tester_instance;
+        tester_instance.init_from_context(context);
         // Use a base-typed reference to verify the code below doesn't know about subtype
         GeneratorBase &tester = tester_instance;
 
@@ -2001,6 +2006,7 @@ void generator_test() {
         void schedule() {}
     };
     GPTester gp_tester;
+    gp_tester.init_from_context(context);
     // Accessing the GeneratorParam will assert-fail if we
     // don't do some minimal setup here.
     gp_tester.set_inputs_vector({});

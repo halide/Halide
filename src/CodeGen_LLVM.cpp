@@ -603,7 +603,11 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
+            #if LLVM_VERSION < 50
             function->setDoesNotAlias(i+1);
+            #else
+            function->addParamAttr(i, Attribute::NoAlias);
+            #endif
         }
     }
 
@@ -672,7 +676,11 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
             module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
         internal_assert(annotate_buffer_fn)
             << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
-        annotate_buffer_fn->setDoesNotAlias(0);
+        #if LLVM_VERSION < 50
+        annotate_buffer_fn->setDoesNotAlias(1);
+        #else
+        annotate_buffer_fn->addParamAttr(0, Attribute::NoAlias);
+        #endif
         for (const auto &arg : f.args) {
             if (arg.kind == Argument::OutputBuffer) {
                 register_destructor(annotate_buffer_fn, sym_get(arg.name + ".buffer"), OnSuccess);
@@ -1030,6 +1038,13 @@ void CodeGen_LLVM::optimize_module() {
 #endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
+
+#if LLVM_VERSION >= 50
+    if (TM) {
+        TM->adjustPassManager(b);
+    }
+#endif
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
@@ -1790,17 +1805,6 @@ void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->lanes);
 }
 
-// Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
-Expr unbroadcast(Expr e) {
-    if (e.type().is_vector()) {
-        const Broadcast *broadcast = e.as<Broadcast>();
-        internal_assert(broadcast);
-        return broadcast->value;
-    } else {
-        return e;
-    }
-}
-
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     internal_assert(vecs.size() >= 1);
     for (size_t i = 1; i < vecs.size(); i++) {
@@ -2291,6 +2295,15 @@ void CodeGen_LLVM::visit(const Call *op) {
             phi->addIncoming(false_value, false_pred);
 
             value = phi;
+        }
+    } else if (op->is_intrinsic(Call::require)) {
+        internal_assert(op->args.size() == 3);
+        Expr cond = op->args[0];
+        if (cond.type().is_vector()) {
+            scalarize(op);
+        } else {
+            create_assertion(codegen(cond), op->args[2]);
+            value = codegen(op->args[1]);
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->type.is_vector()) {
@@ -2997,7 +3010,11 @@ void CodeGen_LLVM::visit(const For *op) {
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
                                           "par_for_" + function->getName() + "_" + op->name, module.get());
+        #if LLVM_VERSION < 50
         function->setDoesNotAlias(3);
+        #else
+        function->addParamAttr(2, Attribute::NoAlias);
+        #endif
         set_function_attributes_for_target(function, target);
 
         // Make the initial basic block and jump the builder into the new function
@@ -3047,7 +3064,11 @@ void CodeGen_LLVM::visit(const For *op) {
         builder->restoreIP(call_site);
         llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
         internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
+        #if LLVM_VERSION < 50
         do_par_for->setDoesNotAlias(5);
+        #else
+        do_par_for->addParamAttr(4, Attribute::NoAlias);
+        #endif
         //do_par_for->setDoesNotCapture(5);
         ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
         Value *args[] = {user_context, function, min, extent, ptr};

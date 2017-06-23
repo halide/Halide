@@ -18,10 +18,12 @@ using std::pair;
 namespace {
 
 // Some expressions are not worth lifting out into lets, even if they
-// occur redundantly many times. This list should mirror the list in
-// the simplifier for lets, otherwise they'll just fight with each
+// occur redundantly many times. They may also be illegal to lift out
+// (e.g. calls with side-effects).
+// This list should at least avoid lifting the same cases as that of the
+// simplifier for lets, otherwise CSE and the simplifier will fight each
 // other pointlessly.
-bool should_extract(Expr e) {
+bool should_extract(const Expr &e) {
     if (is_const(e)) {
         return false;
     }
@@ -58,6 +60,17 @@ bool should_extract(Expr e) {
         return !is_const(a->stride);
     }
 
+    if (const Call *a = e.as<Call>()) {
+        if (!a->is_pure() && (a->call_type != Call::Halide)) {
+            // Impure calls may have side-effects, thus may not be re-ordered
+            // or reduced in number.
+            // Call to Halide function may give different value depending on
+            // where it is evaluated; however, the value is constant within
+            // an expr. Thus, it is okay to lift out.
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -83,7 +96,7 @@ public:
 
     GVN() : number(0), cache(8) {}
 
-    Stmt mutate(Stmt s) {
+    Stmt mutate(const Stmt &s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
     }
@@ -92,7 +105,7 @@ public:
         return ExprWithCompareCache(e, &cache);
     }
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         // Early out if we've already seen this exact Expr.
         {
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
@@ -123,11 +136,11 @@ public:
 
         // Rebuild using things already in the numbering.
         Expr old_e = e;
-        e = IRMutator::mutate(e);
+        Expr new_e = IRMutator::mutate(e);
 
         // See if it's there in another form after being rebuilt
         // (e.g. because it was a let variable).
-        iter = numbering.find(with_cache(e));
+        iter = numbering.find(with_cache(new_e));
         if (iter != numbering.end()) {
             number = iter->second;
             shallow_numbering[old_e] = number;
@@ -136,13 +149,13 @@ public:
         }
 
         // Add it to the numbering.
-        Entry entry = {e, 0};
+        Entry entry = {new_e, 0};
         number = (int)entries.size();
-        numbering[with_cache(e)] = number;
-        shallow_numbering[e] = number;
+        numbering[with_cache(new_e)] = number;
+        shallow_numbering[new_e] = number;
         entries.push_back(entry);
-        internal_assert(e.type() == old_e.type());
-        return e;
+        internal_assert(new_e.type() == old_e.type());
+        return new_e;
     }
 
 
@@ -236,7 +249,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
 
         if (iter != replacements.end()) {
@@ -257,7 +270,7 @@ class CSEEveryExprInStmt : public IRMutator {
 public:
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         return common_subexpression_elimination(e);
     }
 };
@@ -493,6 +506,23 @@ void cse_test() {
                             Call::make(Int(32), "dummy", {handle_a, t0, t0}, Call::Extern));
         check(e, correct);
 
+    }
+
+    {
+        Expr nonpure_call_1 = Call::make(Int(32), "dummy1", {1}, Call::Intrinsic);
+        Expr nonpure_call_2 = Call::make(Int(32), "dummy2", {1}, Call::Extern);
+        e = nonpure_call_1 + nonpure_call_2 + nonpure_call_1 + nonpure_call_2;
+        correct = e; // Impure calls shouldn't get CSE'd
+        check(e, correct);
+    }
+
+    {
+        Expr halide_func = Call::make(Int(32), "dummy", {0}, Call::Halide);
+        e = halide_func * halide_func;
+        Expr t0 = Variable::make(halide_func.type(), "t0");
+        // It's okay to CSE Halide call within an expr
+        correct = Let::make("t0", halide_func, t0 * t0);
+        check(e, correct);
     }
 
     debug(0) << "common_subexpression_elimination test passed\n";
