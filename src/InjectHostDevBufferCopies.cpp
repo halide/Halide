@@ -152,6 +152,12 @@ public:
     FindBufferUsage(const std::string &buf, DeviceAPI d) : buffer(buf), current_device_api(d) {}
 };
 
+// Inject the device copies, mallocs, and dirty flag setting for a
+// single allocation. Sticks to the same loop level as the original
+// allocation and treats the stmt as a serial sequence of leaf
+// stmts. We walk this sequence of leaves, tracking what we know about
+// the buffer as we go, sniffing usage within each leaf using
+// FindBufferUsage, and injecting device buffer logic as needed.
 class InjectBufferCopiesForSingleBuffer : public IRMutator {
     using IRMutator::visit;
 
@@ -639,9 +645,10 @@ public:
 }  // namespace
 
 Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
+    // Handle internal allocations
     s = InjectBufferCopies().mutate(s);
 
-    // Now handle inputs and outputs
+    // Handle inputs and outputs
     FindOutermostProduce outermost;
     s.accept(&outermost);
     if (outermost.result.defined()) {
