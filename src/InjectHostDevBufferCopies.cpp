@@ -65,7 +65,6 @@ class FindBufferUsage : public IRVisitor {
             // Passing the buffer variable out of Halide counts
             // as a read/write.
             devices_touched.insert(current_device_api);
-            devices_reading.insert(current_device_api);
             devices_writing.insert(current_device_api);
         }
     }
@@ -74,7 +73,6 @@ class FindBufferUsage : public IRVisitor {
         IRVisitor::visit(op);
         if (op->name == buffer) {
             devices_touched.insert(current_device_api);
-            devices_reading.insert(current_device_api);
         }
     }
 
@@ -95,7 +93,6 @@ class FindBufferUsage : public IRVisitor {
         if (op->is_intrinsic(Call::image_load)) {
             internal_assert(op->args.size() >= 1);
             if (is_buffer_var(op->args[1])) {
-                devices_reading.insert(current_device_api);
                 devices_touched.insert(current_device_api);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -105,7 +102,6 @@ class FindBufferUsage : public IRVisitor {
         } else if (op->is_intrinsic(Call::image_store)) {
             internal_assert(op->args.size() >= 1);
             if (is_buffer_var(op->args[1])) {
-                devices_reading.insert(current_device_api);
                 devices_touched.insert(current_device_api);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -124,10 +120,7 @@ class FindBufferUsage : public IRVisitor {
                 if (is_buffer_var(op->args[i])) {
                     DeviceAPI extern_device_api = f.extern_function_device_api();
                     devices_touched.insert(extern_device_api);
-                    if (i < f.extern_arguments().size()) {
-                        // An input
-                        devices_reading.insert(extern_device_api);
-                    } else {
+                    if (i >= f.extern_arguments().size()) {
                         // An output
                         devices_writing.insert(extern_device_api);
                     }
@@ -154,14 +147,7 @@ class FindBufferUsage : public IRVisitor {
     string buffer;
     DeviceAPI current_device_api;
 public:
-    std::set<DeviceAPI> devices_reading, devices_writing, devices_touched;
-
-    bool same_usage(const FindBufferUsage &other) const {
-        return
-            ((devices_reading == other.devices_reading) &&
-             (devices_writing == other.devices_writing) &&
-             (devices_touched == other.devices_touched));
-    }
+    std::set<DeviceAPI> devices_writing, devices_touched;
 
     FindBufferUsage(const std::string &buf, DeviceAPI d) : buffer(buf), current_device_api(d) {}
 };
@@ -242,8 +228,6 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         // First figure out what happened
         bool touched_on_host = finder.devices_touched.count(DeviceAPI::Host);
         bool touched_on_device = finder.devices_touched.size() > (touched_on_host ? 1 : 0);
-        //bool read_on_host = finder.devices_reading.count(DeviceAPI::Host);
-        //bool read_on_device = finder.devices_reading.size() > (touched_on_host ? 1 : 0);
         bool written_on_host = finder.devices_writing.count(DeviceAPI::Host);
         bool written_on_device = finder.devices_writing.size() > (touched_on_host ? 1 : 0);
 
