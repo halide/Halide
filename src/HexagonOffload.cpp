@@ -42,6 +42,7 @@ enum {
     EF_HEXAGON_MACH_V61 = 0x61,
     EF_HEXAGON_MACH_V62 = 0x62,
     EF_HEXAGON_MACH_V65 = 0x65,
+    EF_HEXAGON_MACH_V66 = 0x66,
 };
 
 enum {
@@ -475,7 +476,11 @@ public:
     uint32_t flags;
 
     HexagonLinker(const Target &target) {
-        if (target.has_feature(Target::HVX_v62)) {
+        if (target.has_feature(Target::HVX_v66)) {
+            flags = Elf::EF_HEXAGON_MACH_V66;
+        } else if (target.has_feature(Target::HVX_v65)) {
+            flags = Elf::EF_HEXAGON_MACH_V65;
+        } else if (target.has_feature(Target::HVX_v62)) {
             flags = Elf::EF_HEXAGON_MACH_V62;
         } else {
             flags = Elf::EF_HEXAGON_MACH_V60;
@@ -844,6 +849,8 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         Target::HVX_64,
         Target::HVX_128,
         Target::HVX_v62,
+        Target::HVX_v65,
+        Target::HVX_v66,
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {
@@ -922,7 +929,10 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         debug(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
-        internal_assert(system(cmd.c_str()) == 0);
+        int result = system(cmd.c_str());
+        internal_assert(result == 0) 
+            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
+            << " for cmd (" << cmd << ")";
 
         {
             std::ifstream f(output.pathname());

@@ -689,7 +689,8 @@ WEAK int halide_metal_run(void *user_context,
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            mtl_buffer *metal_buffer = *((mtl_buffer **)args[i]);
+            uint64_t handle = ((halide_buffer_t *)args[i])->device;
+            mtl_buffer *metal_buffer = (mtl_buffer *)handle;
             set_input_buffer(encoder, metal_buffer, buffer_index);
             buffer_index++;
         }

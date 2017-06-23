@@ -11,6 +11,7 @@
 #include "Scope.h"
 #include "Bounds.h"
 #include "Lerp.h"
+#include <unordered_map>
 
 namespace Halide {
 namespace Internal {
@@ -138,7 +139,9 @@ struct Pattern {
         NarrowUnsignedOp2 = 1 << 17,
         NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
 
-        v62 = 1 << 20,  // Pattern should be matched only for v62 target
+        v62orLater = 1 << 20,  // Pattern should be matched only for v62 target or later
+        v65orLater = 1 << 21,  // Pattern should be matched only for v65 target or later
+        v66orLater = 1 << 22,  // Pattern should be matched only for v66 target or later
    };
 
     string intrin;        // Name of the intrinsic
@@ -177,7 +180,14 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
 
-        if ((p.flags & (Pattern::v62)) && !target.has_feature(Target::HVX_v62))
+        if ((p.flags & (Pattern::v62orLater)) &&
+            !target.features_any_of({Target::HVX_v62, Target::HVX_v65, Target::HVX_v66}))
+            continue;
+        if ((p.flags & (Pattern::v65orLater)) &&
+            !target.features_any_of({Target::HVX_v65, Target::HVX_v66}))
+            continue;
+        if ((p.flags & (Pattern::v66orLater)) &&
+            !target.features_any_of({Target::HVX_v66}))
             continue;
 
         if (expr_match(p.pattern, x, matches)) {
@@ -283,6 +293,98 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
     return op;
 }
 
+typedef pair<Expr, Expr> MulExpr;
+
+// If ty is scalar, and x is a vector, try to remove a broadcast
+// from x prior to using lossless_cast on it.
+Expr unbroadcast_lossless_cast(Type ty, Expr x) {
+    if (ty.lanes() == 1 && x.type().lanes() > 1) {
+        if (const Broadcast *bc = x.as<Broadcast>()) {
+            x = bc->value;
+        }
+    }
+    if (ty.lanes() != x.type().lanes()) {
+        return Expr();
+    }
+    return lossless_cast(ty, x);
+}
+
+// Try to extract a list of multiplies of the form a_ty*b_ty added
+// together, such that op is equivalent to the sum of the
+// multiplies in 'mpys', added to 'rest'.
+// Difference in mpys.size() - return indicates the number of
+// expressions where we pretend the op to be multiplied by 1.
+int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
+                        vector<MulExpr> &mpys, Expr &rest) {
+    if ((int)mpys.size() >= max_mpy_count) {
+        rest = rest.defined() ? Add::make(rest, op) : op;
+        return 0;
+    }
+
+    // If the add is also widening, remove the cast.
+    int mpy_bits = std::max(a_ty.bits(), b_ty.bits())*2;
+    Expr maybe_mul = op;
+    if (op.type().bits() == mpy_bits*2) {
+        if (const Cast *cast = op.as<Cast>()) {
+            if (cast->value.type().bits() == mpy_bits) {
+                maybe_mul = cast->value;
+            }
+        }
+    }
+
+    if (const Mul *mul = maybe_mul.as<Mul>()) {
+        Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
+        Expr b = unbroadcast_lossless_cast(b_ty, mul->b);
+        if (a.defined() && b.defined()) {
+            mpys.emplace_back(a, b);
+            return 1;
+        } else {
+            // Try to commute the op.
+            a = unbroadcast_lossless_cast(a_ty, mul->b);
+            b = unbroadcast_lossless_cast(b_ty, mul->a);
+            if (a.defined() && b.defined()) {
+                mpys.emplace_back(a, b);
+                return 1;
+            }
+        }
+    } else if (const Add *add = op.as<Add>()) {
+        int mpy_count = 0;
+        mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+        mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
+        return mpy_count;
+    } else if (const Sub *sub = op.as<Sub>()) {
+        // Try to rewrite subs as adds.
+        if (const Mul *mul_b = sub->b.as<Mul>()) {
+            if (is_positive_const(mul_b->a) || is_negative_negatable_const(mul_b->a)) {
+                Expr add_b = Mul::make(simplify(-mul_b->a), mul_b->b);
+                int mpy_count = 0;
+                mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+                mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+                return mpy_count;
+            } else if (is_positive_const(mul_b->b) || is_negative_negatable_const(mul_b->b)) {
+                Expr add_b = Mul::make(mul_b->a, simplify(-mul_b->b));
+                int mpy_count = 0;
+                mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+                mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
+                return mpy_count;
+            }
+        }
+    }
+
+    // Attempt to pretend this op is multiplied by 1.
+    Expr as_a = unbroadcast_lossless_cast(a_ty, op);
+    Expr as_b = unbroadcast_lossless_cast(b_ty, op);
+
+    if (as_a.defined()) {
+        mpys.emplace_back(as_a, make_one(b_ty));
+    } else if (as_b.defined()) {
+        mpys.emplace_back(make_one(a_ty), as_b);
+    } else {
+        rest = rest.defined() ? Add::make(rest, op) : op;
+    }
+    return 0;
+}
+
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class OptimizePatterns : public IRMutator {
@@ -367,96 +469,6 @@ private:
 
     static Expr halide_hexagon_add_4mpy(Type result_type, string suffix, Expr v01, Expr c01) {
         return Call::make(result_type, "halide.hexagon.add_4mpy" + suffix, {v01, c01}, Call::PureExtern);
-    }
-
-    typedef pair<Expr, Expr> MulExpr;
-
-    // If ty is scalar, and x is a vector, try to remove a broadcast
-    // from x prior to using lossless_cast on it.
-    static Expr unbroadcast_lossless_cast(Type ty, Expr x) {
-        if (ty.lanes() == 1 && x.type().lanes() > 1) {
-            if (const Broadcast *bc = x.as<Broadcast>()) {
-                x = bc->value;
-            }
-        }
-        if (ty.lanes() != x.type().lanes()) {
-            return Expr();
-        }
-        return lossless_cast(ty, x);
-    }
-
-    // Try to extract a list of multiplies of the form a_ty*b_ty added
-    // together, such that op is equivalent to the sum of the
-    // multiplies in 'mpys', added to 'rest'.
-    static int find_mpy_ops(Expr op, Type a_ty, Type b_ty, int max_mpy_count,
-                            vector<MulExpr> &mpys, Expr &rest) {
-        if ((int)mpys.size() >= max_mpy_count) {
-            rest = rest.defined() ? Add::make(rest, op) : op;
-            return 0;
-        }
-
-        // If the add is also widening, remove the cast.
-        int mpy_bits = std::max(a_ty.bits(), b_ty.bits())*2;
-        Expr maybe_mul = op;
-        if (op.type().bits() == mpy_bits*2) {
-            if (const Cast *cast = op.as<Cast>()) {
-                if (cast->value.type().bits() == mpy_bits) {
-                    maybe_mul = cast->value;
-                }
-            }
-        }
-
-        if (const Mul *mul = maybe_mul.as<Mul>()) {
-            Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
-            Expr b = unbroadcast_lossless_cast(b_ty, mul->b);
-            if (a.defined() && b.defined()) {
-                mpys.emplace_back(a, b);
-                return 1;
-            } else {
-                // Try to commute the op.
-                a = unbroadcast_lossless_cast(a_ty, mul->b);
-                b = unbroadcast_lossless_cast(b_ty, mul->a);
-                if (a.defined() && b.defined()) {
-                    mpys.emplace_back(a, b);
-                    return 1;
-                }
-            }
-        } else if (const Add *add = op.as<Add>()) {
-            int mpy_count = 0;
-            mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-            mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
-            return mpy_count;
-        } else if (const Sub *sub = op.as<Sub>()) {
-            // Try to rewrite subs as adds.
-            if (const Mul *mul_b = sub->b.as<Mul>()) {
-                if (is_positive_const(mul_b->a) || is_negative_negatable_const(mul_b->a)) {
-                    Expr add_b = Mul::make(simplify(-mul_b->a), mul_b->b);
-                    int mpy_count = 0;
-                    mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-                    mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
-                    return mpy_count;
-                } else if (is_positive_const(mul_b->b) || is_negative_negatable_const(mul_b->b)) {
-                    Expr add_b = Mul::make(mul_b->a, simplify(-mul_b->b));
-                    int mpy_count = 0;
-                    mpy_count += find_mpy_ops(sub->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-                    mpy_count += find_mpy_ops(add_b, a_ty, b_ty, max_mpy_count, mpys, rest);
-                    return mpy_count;
-                }
-            }
-        }
-
-        // Attempt to pretend this op is multiplied by 1.
-        Expr as_a = unbroadcast_lossless_cast(a_ty, op);
-        Expr as_b = unbroadcast_lossless_cast(b_ty, op);
-
-        if (as_a.defined()) {
-            mpys.emplace_back(as_a, make_one(b_ty));
-        } else if (as_b.defined()) {
-            mpys.emplace_back(make_one(a_ty), as_b);
-        } else {
-            rest = rest.defined() ? Add::make(rest, op) : op;
-        }
-        return 0;
     }
 
     void visit(const Add *op) {
@@ -682,7 +694,9 @@ private:
                     // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
                     // To differentiate those from the widening ones, we encode the return type in the name here.
                     { "halide.hexagon.sub_vuh.vub.vub", wild_u16x - wild_u16x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                    { "halide.hexagon.sub_vh.vub.vub", wild_i16x - wild_i16x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOps },
                     { "halide.hexagon.sub_vuw.vuh.vuh", wild_u32x - wild_u32x, Pattern::InterleaveResult | Pattern::NarrowOps },
+                    { "halide.hexagon.sub_vw.vuh.vuh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowUnsignedOps },
                     { "halide.hexagon.sub_vw.vh.vh", wild_i32x - wild_i32x, Pattern::InterleaveResult | Pattern::NarrowOps },
                 };
 
@@ -739,7 +753,7 @@ private:
             // Saturating add/subtract
             { "halide.hexagon.satub_add.vub.vub", u8_sat(wild_u16x + wild_u16x), Pattern::NarrowOps },
             { "halide.hexagon.satuh_add.vuh.vuh", u16_sat(wild_u32x + wild_u32x), Pattern::NarrowOps },
-            { "halide.hexagon.satuw_add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps | Pattern::v62 },
+            { "halide.hexagon.satuw_add.vuw.vuw", u32_sat(wild_u64x + wild_u64x), Pattern::NarrowOps | Pattern::v62orLater },
             { "halide.hexagon.sath_add.vh.vh", i16_sat(wild_i32x + wild_i32x), Pattern::NarrowOps },
             { "halide.hexagon.satw_add.vw.vw", i32_sat(wild_i64x + wild_i64x), Pattern::NarrowOps },
 
@@ -789,7 +803,7 @@ private:
             { "halide.hexagon.pack_sath.vw", i16_sat(wild_i32x) },
 
             // We don't have a vpack equivalent to this one, so we match it directly.
-            { "halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0 | Pattern::v62 },
+            { "halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0 | Pattern::v62orLater },
 
             // Narrowing casts. These may interleave later with trunclo.
             { "halide.hexagon.packhi.vh", u8(wild_u16x/256) },
@@ -1171,7 +1185,7 @@ class EliminateInterleaves : public IRMutator {
 
         // Lift interleaves out of Let expression bodies.
         const Let *let = expr.as<Let>();
-        if (yields_removable_interleave(let->body)) {
+        if (let && yields_removable_interleave(let->body)) {
             expr = native_interleave(Let::make(let->name, let->value, remove_interleave(let->body)));
         }
     }
@@ -1605,12 +1619,217 @@ class OptimizeShuffles : public IRMutator {
 public:
     OptimizeShuffles(int lut_alignment) : lut_alignment(lut_alignment) {}
 };
+
+// Attempt to generate vtmpy instructions. This requires that all lets
+// be substituted prior to running, and so must be an IRGraphMutator.
+class VtmpyGenerator : public IRGraphMutator {
+private:
+    using IRMutator::visit;
+    typedef pair<Expr, size_t> LoadIndex;
+
+    // Check if vectors a and b point to the same buffer with the base of a
+    // shifted by diff i.e. base(a) = base(b) + diff.
+    bool is_base_shifted(const Expr &a, const Expr &b, int diff) {
+        Expr maybe_load_a = calc_load(a);
+        Expr maybe_load_b = calc_load(b);
+
+        if (maybe_load_a.defined() && maybe_load_b.defined()) {
+            const Load* load_a = maybe_load_a.as<Load>();
+            const Load* load_b = maybe_load_b.as<Load>();
+            if (load_a->name == load_b->name) {
+                Expr base_diff = simplify(load_a->index - load_b->index - diff);
+                if (is_const(base_diff, 0)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Return the load expression of first vector if all vector in exprs are
+    // contiguous vectors pointing to the same buffer.
+    Expr are_contiguous_vectors(const vector<Expr> exprs) {
+        if (exprs.size() == 0) {
+            return Expr();
+        }
+        // If the shuffle simplifies then the vectors are contiguous.
+        // If not, check if the bases of adjacent vectors differ by
+        // vector size.
+        Expr concat = simplify(Shuffle::make_concat(exprs));
+        const Shuffle *maybe_shuffle = concat.as<Shuffle>();
+        if(!maybe_shuffle || !maybe_shuffle->is_concat()) {
+            return calc_load(exprs[0]);
+        }
+        return Expr();
+    }
+
+    // Returns the load indicating vector start index. If the vector is sliced
+    // return load with shifted ramp by slice_begin expr.
+    Expr calc_load(const Expr &e) {
+        if (const Cast *maybe_cast = e.as<Cast>()) {
+            return calc_load(maybe_cast->value);
+        }
+        if (const Shuffle *maybe_shuffle = e.as<Shuffle>()) {
+            if (maybe_shuffle->is_slice() && maybe_shuffle->slice_stride() == 1) {
+                Expr maybe_load = calc_load(maybe_shuffle->vectors[0]);
+                if (!maybe_load.defined()) {
+                    return Expr();
+                }
+                const Load *res = maybe_load.as<Load>();
+                Expr shifted_load = Load::make(res->type, res->name, res->index + maybe_shuffle->slice_begin(),
+                                                res->image, res->param, res->predicate);
+                return shifted_load;
+            } else if (maybe_shuffle->is_concat()) {
+                return are_contiguous_vectors(maybe_shuffle->vectors);
+            }
+        }
+        if (const Load *maybe_load = e.as<Load>()) {
+            const Ramp *maybe_ramp = maybe_load->index.as<Ramp>();
+            if (maybe_ramp && is_const(maybe_ramp->stride, 1)) {
+                return maybe_load;
+            }
+        }
+        return Expr();
+    }
+
+    // Loads comparator for sorting Load Expr of the same buffer.
+    static bool loads_comparator(LoadIndex a, LoadIndex b) {
+        if (a.first.defined() && b.first.defined()) {
+            const Load* load_a = a.first.as<Load>();
+            const Load* load_b = b.first.as<Load>();
+            if (load_a->name == load_b->name) {
+                Expr base_diff = simplify(load_b->index - load_a->index);
+                if (is_positive_const(base_diff)) {
+                    return true;
+                }
+            } else {
+                return load_a->name < load_b->name;
+            }
+        }
+        return false;
+    }
+
+    // Vtmpy helps in sliding window ops of the form a*v0 + b*v1 + v2.
+    // Conditions required:
+    //      v0, v1 and v2 start indices differ by vector stride
+    // Current supported value of stride is 1.
+    // TODO: Add support for any stride.
+    void visit(const Add *op) {
+        // Find opportunities vtmpy
+        if (op && op->type.is_vector() && (op->type.bits() == 16 || op->type.bits() == 32)) {
+            int lanes = op->type.lanes();
+            vector<MulExpr> mpys;
+            Expr rest;
+            string vtmpy_suffix;
+
+            // Finding more than 100 such expresssions is rare.
+            // Setting it to 100 makes sure we dont miss anything
+            // in most cases and also dont spend unreasonable time while
+            // just looking for vtmpy patterns.
+            const int max_mpy_ops = 100;
+            if (op->type.bits() == 16) {
+                find_mpy_ops(op, UInt(8, lanes), Int(8), max_mpy_ops, mpys, rest);
+                vtmpy_suffix = ".vub.vub.b.b";
+                if (mpys.size() < 3) {
+                    mpys.clear();
+                    rest = Expr();
+                    find_mpy_ops(op, Int(8, lanes), Int(8), max_mpy_ops, mpys, rest);
+                    vtmpy_suffix = ".vb.vb.b.b";
+                }
+            } else if (op->type.bits() == 32) {
+                find_mpy_ops(op, Int(16, lanes), Int(8), max_mpy_ops, mpys, rest);
+                vtmpy_suffix = ".vh.vh.b.b";
+            }
+
+            if (mpys.size() >= 3) {
+                const size_t mpy_size = mpys.size();
+                // Used to put loads with different buffers in different buckets.
+                std::unordered_map<string, vector<LoadIndex> > loads;
+                // To keep track of indices selected for vtmpy.
+                std::unordered_map<size_t, bool> vtmpy_indices;
+                vector<Expr> vtmpy_exprs;
+                Expr new_expr;
+
+                for(size_t i = 0; i < mpy_size; i++) {
+                    Expr curr_load = calc_load(mpys[i].first);
+                    if (curr_load.defined()) {
+                        loads[curr_load.as<Load>()->name].emplace_back(curr_load, i);
+                    } else {
+                        new_expr = new_expr.defined() ? new_expr + curr_load : curr_load;
+                    }
+                }
+
+                for (auto iter = loads.begin(); iter != loads.end(); iter++) {
+                    // Sort the bucket and compare bases of 3 adjacent vectors
+                    // at a time. If they differ by vector stride, we've
+                    // found a vtmpy
+                    std::sort(iter->second.begin(), iter->second.end(), loads_comparator);
+                    size_t vec_size = iter->second.size();
+                    for(size_t i = 0; i + 2 < vec_size; i++) {
+                        Expr v0 = iter->second[i].first;
+                        Expr v1 = iter->second[i+1].first;
+                        Expr v2 = iter->second[i+2].first;
+                        size_t v0_idx = iter->second[i].second;
+                        size_t v1_idx = iter->second[i+1].second;
+                        size_t v2_idx = iter->second[i+2].second;
+                        if (is_const(mpys[v2_idx].second, 1) &&
+                            is_base_shifted(v2, v1, 1) &&
+                            is_base_shifted(v1, v0, 1)) {
+
+                            vtmpy_indices[v0_idx] = true;
+                            vtmpy_indices[v1_idx] = true;
+                            vtmpy_indices[v2_idx] = true;
+
+                            vtmpy_exprs.emplace_back(native_interleave(Call::make(op->type,
+                                "halide.hexagon.vtmpy" + vtmpy_suffix,
+                                { mpys[v0_idx].first, mpys[v2_idx].first,
+                                  mpys[v0_idx].second, mpys[v1_idx].second },
+                                Call::PureExtern)));
+                            // As we cannot test the same indices again
+                            i = i+2;
+                        }
+                    }
+                }
+                // If we found any vtmpy's then recombine Expr using
+                // vtmpy_expr, non_vtmpy_exprs and rest.
+                if (vtmpy_exprs.size() > 0) {
+                    for (size_t i = 0; i < mpy_size; i++) {
+                        if (vtmpy_indices[i]) {
+                            continue;
+                        }
+                        Expr mpy_a = lossless_cast(op->type, mpys[i].first);
+                        Expr mpy_b = lossless_cast(op->type, mpys[i].second);
+                        Expr mpy_res = mpy_a * mpy_b;
+                        new_expr = new_expr.defined() ? new_expr + mpy_res : mpy_res;
+                    }
+                    for (size_t i = 0; i < vtmpy_exprs.size(); i++) {
+                        new_expr = new_expr.defined() ? new_expr + vtmpy_exprs[i] : vtmpy_exprs[i];
+                    }
+                    if (rest.defined()) {
+                        new_expr = new_expr + rest;
+                    }
+                    expr = mutate(new_expr);
+                    return;
+                }
+            }
+        }
+        IRMutator::visit(op);
+    }
+};
 }  // namespace
 
 Stmt optimize_hexagon_shuffles(Stmt s, int lut_alignment) {
     // Replace indirect and other complicated loads with
     // dynamic_shuffle (vlut) calls.
     return OptimizeShuffles(lut_alignment).mutate(s);
+}
+
+Stmt vtmpy_generator(Stmt s) {
+    // Generate vtmpy instruction if possible
+    s = substitute_in_all_lets(s);
+    s = VtmpyGenerator().mutate(s);
+    s = common_subexpression_elimination(s);
+    return s;
 }
 
 Stmt optimize_hexagon_instructions(Stmt s, Target t) {
