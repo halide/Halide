@@ -147,10 +147,11 @@ class GEMMGenerator :
                 .bound_extent(j, s).vectorize(j);
         }
 
-        A_.set_min(0, 0).set_min(1, 0);
-        B_.set_bounds(0, 0, sum_size).set_min(1, 0);
-        C_.set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
-        result.output_buffer().set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
+        A_.dim(0).set_min(0).dim(1).set_min(0);
+        B_.dim(0).set_bounds(0, sum_size).dim(1).set_min(0);
+        C_.dim(0).set_bounds(0, num_rows);
+        C_.dim(1).set_bounds(0, num_cols);
+        result.output_buffer().dim(0).set_bounds(0, num_rows).dim(1).set_bounds(0, num_cols);
 
         return result;
     }
