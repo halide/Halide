@@ -84,7 +84,7 @@ struct FunctionContents {
         }
 
         for (Parameter i : output_buffers) {
-            for (size_t j = 0; j < init_def.args().size() && j < 4; j++) {
+            for (size_t j = 0; j < init_def.args().size(); j++) {
                 if (i.min_constraint(j).defined()) {
                     i.min_constraint(j).accept(visitor);
                 }

@@ -150,9 +150,9 @@ function(halide_add_aot_library_dependency TARGET AOT_LIBRARY_TARGET)
         # 4088: "/FORCE used, image may not work"
         # (Note that MSVC apparently considers 4088 too important to allow us to ignore it;
         # I'm nevertheless leaving this here to document that we don't care about it.)
-        target_link_libraries("${TARGET}" INTERFACE "-STACK:8388608,1048576" "-FORCE:multiple" "-ignore:4006" "-ignore:4088")
+        set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple /ignore:4006 /ignore:4088")
       else()
-        target_link_libraries("${TARGET}" INTERFACE "-Wl,--allow-multiple-definition")
+        set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "-Wl,--allow-multiple-definition")
       endif()
     else()
       target_link_libraries("${TARGET}" PRIVATE dl pthread z)
