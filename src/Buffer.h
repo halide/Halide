@@ -356,6 +356,8 @@ public:
     HALIDE_BUFFER_FORWARD(set_device_dirty)
     HALIDE_BUFFER_FORWARD(device_sync)
     HALIDE_BUFFER_FORWARD(device_malloc)
+    HALIDE_BUFFER_FORWARD(device_wrap_native)
+    HALIDE_BUFFER_FORWARD(device_detach_native)
     HALIDE_BUFFER_FORWARD(allocate)
     HALIDE_BUFFER_FORWARD(deallocate)
     HALIDE_BUFFER_FORWARD(device_deallocate)
@@ -461,6 +463,10 @@ public:
         return contents->buf.device_malloc(get_device_interface_for_device_api(d, t));
     }
 
+    /** Wrap a native handle, using the given device API. */
+    int device_wrap_native(const DeviceAPI &d, uint64_t handle) {
+        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d), handle);
+    }
 
 };
 

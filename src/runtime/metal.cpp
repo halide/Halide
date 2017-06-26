@@ -747,7 +747,7 @@ WEAK int halide_metal_device_and_host_free(void *user_context, struct halide_buf
     return 0;
 }
 
-WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uintptr_t buffer) {
+WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t buffer) {
     halide_assert(user_context, buf->device == 0);
     if (buf->device != 0) {
         return -2;
@@ -761,16 +761,15 @@ WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *bu
     return 0;
 }
 
-WEAK uintptr_t halide_metal_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
+WEAK int halide_metal_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == 0) {
         return 0;
     }
     halide_assert(user_context, buf->device_interface == &metal_device_interface);
-    uint64_t buffer = buf->device;
     buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
     buf->device = 0;
-    return (uintptr_t)buffer;
+    return 0;
 }
 
 WEAK uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffer_t *buf) {
@@ -807,6 +806,8 @@ WEAK halide_device_interface_impl_t metal_device_interface_impl = {
     halide_metal_copy_to_device,
     halide_metal_device_and_host_malloc,
     halide_metal_device_and_host_free,
+    halide_metal_wrap_buffer,
+    halide_metal_detach_buffer
 };
 
 WEAK halide_device_interface_t metal_device_interface = {
@@ -818,6 +819,8 @@ WEAK halide_device_interface_t metal_device_interface = {
     halide_copy_to_device,
     halide_device_and_host_malloc,
     halide_device_and_host_free,
+    halide_device_wrap_native,
+    halide_device_detach_native,
     &metal_device_interface_impl
 };
 
