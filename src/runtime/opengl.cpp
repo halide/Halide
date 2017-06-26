@@ -2180,6 +2180,7 @@ WEAK halide_device_interface_t opengl_device_interface = {
     halide_opengl_copy_to_device,
     halide_opengl_device_and_host_malloc,
     halide_opengl_device_and_host_free,
+    halide_default_buffer_copy,
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenGL

@@ -753,23 +753,25 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 
 namespace {
 WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
-                             const device_copy &c,
-                             uint64_t off, int d, bool d_to_h) {
+                                  const device_copy &c,
+                                  uint64_t dst_off, uint64_t src_off, int d, bool d_to_h) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
     } else if (d == 0) {
         cl_int err = 0;
         const char *copy_name = d_to_h ? "clEnqueueReadBuffer" : "clEnqueueWriteBuffer";
-        debug(user_context) << "    " << copy_name << " "
-                            << (void *)c.src << " -> " << (void *)c.dst << ", " << c.chunk_size << " bytes\n";
+        debug(user_context) << "    " << copy_name
+                            << " " << (void *)c.src << " + " << src_off
+                            << " -> " << (void *)c.dst << " + " << dst_off
+                            << ", " << c.chunk_size << " bytes\n";
         if (d_to_h) {
             err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
-                                      CL_FALSE, off, c.chunk_size, (void *)c.dst,
+                                      CL_FALSE, src_off, c.chunk_size, (void *)(c.dst + dst_off),
                                       0, NULL, NULL);
         } else {
             err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
-                                       CL_FALSE, off, c.chunk_size, (void *)c.src,
+                                       CL_FALSE, dst_off, c.chunk_size, (void *)(c.src + src_off),
                                        0, NULL, NULL);
         }
         if (err) {
@@ -784,27 +786,29 @@ WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
 
         cl_int err = 0;
 
-        size_t offset[3] = { off, 0, 0 };
+        size_t src_origin[3] = { src_off, 0, 0 };
+        size_t dst_origin[3] = { dst_off, 0, 0 };
         size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
 
         const char *copy_name = d_to_h ? "clEnqueueReadBufferRect" : "clEnqueueWriteBufferRect";
-        debug(user_context) << "    " << copy_name << " "
-                            << (void *)c.src << " -> " << (void *)c.dst
+        debug(user_context) << "    " << copy_name
+                            << " " << (void *)c.src << " + " << src_off
+                            << " -> " << (void *)c.dst << " + " << dst_off
                             << ", " << c.chunk_size << " bytes\n";
 
         if (d_to_h) {
             err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
-                                          offset, offset, region,
-                                          c.stride_bytes[0], c.stride_bytes[1],
-                                          c.stride_bytes[0], c.stride_bytes[1],
+                                          src_origin, dst_origin, region,
+                                          c.src_stride_bytes[0], c.src_stride_bytes[1],
+                                          c.dst_stride_bytes[0], c.dst_stride_bytes[1],
                                           (void *)c.dst,
                                           0, NULL, NULL);
         } else {
 
             err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
-                                           offset, offset, region,
-                                           c.stride_bytes[0], c.stride_bytes[1],
-                                           c.stride_bytes[0], c.stride_bytes[1],
+                                           dst_origin, src_origin, region,
+                                           c.dst_stride_bytes[0], c.dst_stride_bytes[1],
+                                           c.src_stride_bytes[0], c.src_stride_bytes[1],
                                            (void *)c.src,
                                            0, NULL, NULL);
 
@@ -818,8 +822,9 @@ WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
 #endif
     else {
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, ctx, c, off, d-1, d_to_h);
-            off += c.stride_bytes[d-1];
+            int err = do_multidimensional_copy(user_context, ctx, c, dst_off, src_off, d - 1, d_to_h);
+            dst_off += c.dst_stride_bytes[d-1];
+            src_off += c.src_stride_bytes[d-1];
             if (err) {
                 return err;
             }
@@ -856,7 +861,7 @@ WEAK int halide_opencl_copy_to_device(void *user_context, halide_buffer_t* buf) 
 
     device_copy c = make_host_to_device_copy(buf);
 
-    do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, false);
+    do_multidimensional_copy(user_context, ctx, c, 0, c.src_begin, buf->dimensions, false);
 
     // The writes above are all non-blocking, so empty the command
     // queue before we proceed so that other host code won't write
@@ -893,7 +898,7 @@ WEAK int halide_opencl_copy_to_host(void *user_context, halide_buffer_t* buf) {
 
     device_copy c = make_device_to_host_copy(buf);
 
-    do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, true);
+    do_multidimensional_copy(user_context, ctx, c, 0, c.src_begin, buf->dimensions, true);
 
     // The reads above are all non-blocking, so empty the command
     // queue before we proceed so that other host code won't read
@@ -1161,6 +1166,7 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_opencl_copy_to_device,
     halide_opencl_device_and_host_malloc,
     halide_opencl_device_and_host_free,
+    halide_default_buffer_copy,
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenCL

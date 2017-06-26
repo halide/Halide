@@ -19,12 +19,17 @@ struct halide_device_interface_t {
     int (*copy_to_device)(void *user_context, struct halide_buffer_t *buf);
     int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf);
     int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+    int (*buffer_copy)(void *user_context, struct halide_buffer_t *src,
+                       const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
 };
 
 extern WEAK int halide_default_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf,
                                                       const struct halide_device_interface_t *device_interface);
 extern WEAK int halide_default_device_and_host_free(void *user_context, struct halide_buffer_t *buf,
                                                     const struct halide_device_interface_t *device_interface);
+extern WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                           const struct halide_device_interface_t *dst_device_interface,
+                                           struct halide_buffer_t *dst);
 
 }
 
