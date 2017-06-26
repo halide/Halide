@@ -578,7 +578,8 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, const device_copy &c, uint64_t dst, uint64_t src, int d, bool d_to_h) {
+WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
+                                  uint64_t src, uint64_t dst, int d, bool d_to_h) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -597,10 +598,11 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c, uint
             return (int)err;
         }
     } else {
-        ssize_t off = 0;
+        ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, c, dst + off, src + off, d-1, d_to_h);
-            off += c.stride_bytes[d-1];
+            int err = do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, d_to_h);
+            dst_off += c.dst_stride_bytes[d-1];
+            src_off += c.src_stride_bytes[d-1];
             if (err) {
                 return err;
             }
@@ -629,7 +631,7 @@ WEAK int halide_cuda_copy_to_device(void *user_context, halide_buffer_t* buf) {
 
     device_copy c = make_host_to_device_copy(buf);
 
-    int err = do_multidimensional_copy(user_context, c, c.dst, c.src, buf->dimensions, false);
+    int err = do_multidimensional_copy(user_context, c, c.src, c.dst, buf->dimensions, false);
     if (err) {
         return err;
     }
@@ -661,7 +663,7 @@ WEAK int halide_cuda_copy_to_host(void *user_context, halide_buffer_t* buf) {
 
     device_copy c = make_device_to_host_copy(buf);
 
-    int err = do_multidimensional_copy(user_context, c, c.dst, c.src, buf->dimensions, true);
+    int err = do_multidimensional_copy(user_context, c, c.src, c.dst, buf->dimensions, true);
     if (err) {
         return err;
     }
@@ -910,6 +912,7 @@ WEAK halide_device_interface_t cuda_device_interface = {
     halide_cuda_copy_to_device,
     halide_cuda_device_and_host_malloc,
     halide_cuda_device_and_host_free,
+    halide_default_buffer_copy,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Cuda

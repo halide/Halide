@@ -52,36 +52,12 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
     return result;
 }
 
-}}} // namespace Halide::Runtime::Internal
-
-extern "C" {
-
-/** Release all data associated with the current GPU backend, in particular
- * all resources (memory, texture, context handles) allocated by Halide. Must
- * be called explicitly when using AOT compilation. */
-WEAK void halide_device_release(void *user_context, const halide_device_interface_t *device_interface) {
-    device_interface->device_release(user_context);
-}
-
-/** Copy image data from device memory to host memory. This must be called
- * explicitly to copy back the results of a GPU-based filter. */
-WEAK int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
-    ScopedMutexLock lock(&device_copy_mutex);
-
-    debug(NULL) << "halide_copy_to_host " << buf << "\n";
-
-    return copy_to_host_already_locked(user_context, buf);
-}
-
 /** Copy image data from host memory to device memory. This should not be
  * called directly; Halide handles copying to the device automatically. */
-WEAK int halide_copy_to_device(void *user_context,
-                               struct halide_buffer_t *buf,
-                               const halide_device_interface_t *device_interface) {
+WEAK int copy_to_device_already_locked(void *user_context,
+                                       struct halide_buffer_t *buf,
+                                       const halide_device_interface_t *device_interface) {
     int result = 0;
-
-    ScopedMutexLock lock(&device_copy_mutex);
-
 
     debug(user_context)
         << "halide_copy_to_device " << buf
@@ -143,6 +119,31 @@ WEAK int halide_copy_to_device(void *user_context,
     }
 
     return 0;
+}
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
+
+/** Release all data associated with the current GPU backend, in particular
+ * all resources (memory, texture, context handles) allocated by Halide. Must
+ * be called explicitly when using AOT compilation. */
+WEAK void halide_device_release(void *user_context, const halide_device_interface_t *device_interface) {
+    device_interface->device_release(user_context);
+}
+
+/** Copy image data from device memory to host memory. This must be called
+ * explicitly to copy back the results of a GPU-based filter. */
+WEAK int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
+    ScopedMutexLock lock(&device_copy_mutex);
+    return copy_to_host_already_locked(user_context, buf);
+}
+
+WEAK int halide_copy_to_device(void *user_context,
+                               struct halide_buffer_t *buf,
+                               const halide_device_interface_t *device_interface) {
+    ScopedMutexLock lock(&device_copy_mutex);
+    return copy_to_device_already_locked(user_context, buf, device_interface);
 }
 
 /** Wait for current GPU operations to complete. Calling this explicitly
@@ -333,6 +334,106 @@ WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *ob
 
 /** TODO: Find a way to elide host free without this hack. */
 WEAK void halide_device_host_nop_free(void *user_context, void *obj) {
+}
+
+WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                    const struct halide_device_interface_t *dst_device_interface,
+                                    struct halide_buffer_t *dst) {
+
+    const bool from_device = src->device && (src->device_dirty() || !src->host);
+    const bool to_device = dst_device_interface;
+    const bool from_host = !from_device;
+    const bool to_host = !to_device;
+
+    // We consider four cases, and decompose each into simpler cases
+    // using intermediate host memory in the src or dst buffers.
+    int err = 0;
+    if (from_device && to_device) {
+        // dev -> dev via dst host memory
+        err = src->device_interface->buffer_copy(user_context, src, NULL, dst);
+        err = err || copy_to_device_already_locked(user_context, dst, dst_device_interface);
+    } else if (from_device && to_host) {
+        // dev -> host via src host memory
+        err = copy_to_host_already_locked(user_context, src);
+        err = err || halide_default_buffer_copy(user_context, src, NULL, dst);
+    } else if (from_host && to_device) {
+        // host -> dev via dst host memory
+        err = halide_default_buffer_copy(user_context, src, NULL, dst);
+        err = err || copy_to_device_already_locked(user_context, dst, dst_device_interface);
+    } else {
+        // host -> host
+        device_copy copy = make_buffer_copy(src, true, dst, true);
+        copy_memory(copy, user_context);
+        dst->set_host_dirty();
+    }
+
+    return err;
+}
+
+WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                            const struct halide_device_interface_t *dst_device_interface,
+                            struct halide_buffer_t *dst) {
+    // Temporary hack: Make this act like a valid extern stage
+    if (src->host == NULL && src->device == 0) {
+        for (int i = 0; i < src->dimensions; i++) {
+            src->dim[i] = dst->dim[i];
+        }
+        return 0;
+    }
+
+    ScopedMutexLock lock(&device_copy_mutex);
+
+    debug(user_context) << "halide_buffer_copy:\n"
+                        << " src " << src << "\n"
+                        << " interface " << dst_device_interface << "\n"
+                        << " dst " << dst << "\n";
+
+    const struct halide_device_interface_t *src_device_interface = src->device_interface;
+
+    // Fix up the dst device interface
+    if (dst_device_interface &&
+        dst_device_interface != dst->device_interface) {
+        halide_device_free(user_context, dst);
+        halide_device_malloc(user_context, dst, dst_device_interface);
+    }
+
+    if (dst_device_interface) {
+        dst_device_interface->use_module();
+    }
+    if (src_device_interface) {
+        src_device_interface->use_module();
+    }
+
+    int err = 0;
+    if (dst_device_interface) {
+        // Make the dst interface handle arbitrary src device
+        // interfaces (e.g. CUDA might know how to copy out of an
+        // OpenGL texture). If the dst device interface doesn't
+        // recognize the src device interface, it should ask the src
+        // device interface to copy to host memory in the *dst* buffer
+        // first (so that only the subset required is copied), and
+        // then do a copy_to_device from there.
+        err = dst_device_interface->buffer_copy(user_context, src, dst_device_interface, dst);
+    } else if (src_device_interface) {
+        // The src device interface can handle copies to host
+        err = src_device_interface->buffer_copy(user_context, src, dst_device_interface, dst);
+    } else {
+        // This is a host->host copy. The default implementation can
+        // handle this.
+        err = halide_default_buffer_copy(user_context, src, dst_device_interface, dst);
+    }
+
+    // TODO: proper error handling. This function should be calling
+    // halide_error and returning an actual error code.
+
+    if (dst_device_interface) {
+        dst_device_interface->release_module();
+    }
+    if (src_device_interface) {
+        src_device_interface->release_module();
+    }
+
+    return err;
 }
 
 } // extern "C" linkage

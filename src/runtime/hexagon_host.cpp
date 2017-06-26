@@ -778,6 +778,7 @@ WEAK halide_device_interface_t hexagon_device_interface = {
     halide_hexagon_copy_to_device,
     halide_hexagon_device_and_host_malloc,
     halide_hexagon_device_and_host_free,
+    halide_default_buffer_copy,
 };
 
 }}}} // namespace Halide::Runtime::Internal::Hexagon

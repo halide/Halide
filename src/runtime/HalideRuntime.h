@@ -502,6 +502,18 @@ extern int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
 extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                  const struct halide_device_interface_t *device_interface);
 
+/** Copy data from one buffer to another. The buffers may have
+ * different shapes and sizes, but the destination buffer's shape must
+ * be contained within the source buffer's shape. The source data is
+ * pulled from either device or host memory on the source, depending
+ * on the dirty flags. host is preferred if both are valid. The
+ * dst_device_interface parameter controls the destination memory
+ * space. NULL means host memory.
+ */
+extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                              const struct halide_device_interface_t *dst_device_interface,
+                              struct halide_buffer_t *dst);
+
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
