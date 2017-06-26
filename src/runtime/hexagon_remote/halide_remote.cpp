@@ -100,16 +100,6 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
-                             halide_free_t custom_free,
-                             halide_print_t print,
-                             halide_error_handler_t error_handler,
-                             halide_do_par_for_t do_par_for,
-                             halide_do_task_t do_task,
-                             void *(*)(const char *),
-                             void *(*)(const char *),
-                             void *(*)(void *, const char *));
-
 PipelineContext run_context(stack_alignment, stack_size);
 
 __attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
@@ -140,44 +130,6 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
             log_printf("mmap_dlopen failed\n");
             return -1;
         }
-    }
-    // Initialize the runtime. The Hexagon runtime can't call any
-    // system functions (because we can't link them), so we put all
-    // the implementations that need to do so here, and pass poiners
-    // to them in here.
-    set_runtime_t set_runtime;
-    if (use_dlopenbuf()) {
-        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
-    } else {
-        set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
-    }
-    if (!set_runtime) {
-        if (use_dlopenbuf()) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        log_printf("halide_noos_set_runtime not found in shared object\n");
-        return -1;
-    }
-
-    int result = set_runtime(halide_malloc,
-                             halide_free,
-                             halide_print,
-                             halide_error,
-                             halide_do_par_for,
-                             halide_do_task,
-                             halide_get_symbol,
-                             halide_load_library,
-                             halide_get_library_symbol);
-    if (result != 0) {
-        if (use_dlopenbuf()) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        log_printf("set_runtime failed (%d)\n", result);
-        return result;
     }
 
     *module_ptr = reinterpret_cast<handle_t>(lib);

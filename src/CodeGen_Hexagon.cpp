@@ -51,6 +51,10 @@ CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
 #if LLVM_VERSION < 50
     user_assert(!t.has_feature(Target::HVX_v62))
         << "llvm 5.0 or later is required for Hexagon v62.\n";
+    user_assert(!t.has_feature(Target::HVX_v65))
+        << "llvm 5.0 or later is required for Hexagon v65.\n";
+    user_assert(!t.has_feature(Target::HVX_v66))
+        << "llvm 5.0 or later is required for Hexagon v66.\n";
 #endif
     user_assert(llvm_Hexagon_enabled) << "llvm build not configured with Hexagon target enabled.\n";
 }
@@ -196,6 +200,15 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n" << body << "\n\n";
 
+    // Generating vtmpy before CSE and align_loads makes it easier to match
+    // patterns for vtmpy.
+    #if 0
+    // TODO(aankit): Re-enable this after fixing complexity issue.
+    debug(1) << "Generating vtmpy...\n";
+    body = vtmpy_generator(body);
+    debug(2) << "Lowering after generating vtmpy:\n" << body << "\n\n";
+    #endif
+
     debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)));
     body = common_subexpression_elimination(body);
@@ -297,7 +310,7 @@ void CodeGen_Hexagon::init_module() {
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsathub),  u8v1,  "trunc_satub.vh",  {i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsatwh),   i16v1, "trunc_sath.vw",   {i32v2} },
 #if LLVM_VERSION >= 50
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vsatuwuh), u16v1, "trunc_satuh.vuw",   {u32v2} },    // v62
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsatuwuh), u16v1, "trunc_satuh.vuw",   {u32v2} },    // v62 or later
 #endif
 
         { IPICK(is_128B, Intrinsic::hexagon_V6_vroundhub), u8v1,  "trunc_satub_rnd.vh", {i16v2} },
@@ -342,22 +355,24 @@ void CodeGen_Hexagon::init_module() {
         // Widening subtracts. There are other instructions that subtact two vub and two vuh but do not widen.
         // To differentiate those from the widening ones, we encode the return type in the name here.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), u16v2, "sub_vuh.vub.vub", {u8v1, u8v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsububh), i16v2, "sub_vh.vub.vub", {u8v1, u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubhw), i32v2, "sub_vw.vh.vh", {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), u32v2, "sub_vuw.vuh.vuh", {u16v1, u16v1} },
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vsubuhw), i32v2, "sub_vw.vuh.vuh", {u16v1, u16v1} },
 
 
         // Adds/subtract of unsigned values with saturation.
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat),    u8v1,  "satub_add.vub.vub",    {u8v1,  u8v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat),    u16v1, "satuh_add.vuh.vuh",    {u16v1, u16v1} },
 #if LLVM_VERSION >= 50
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat),    u32v1, "satuw_add.vuw.vuw",    {u32v1, u32v1} },  // v62
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat),    u32v1, "satuw_add.vuw.vuw",    {u32v1, u32v1} },  // v62 or later
 #endif
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat),     i16v1, "sath_add.vh.vh",       {i16v1, i16v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat),     i32v1, "satw_add.vw.vw",       {i32v1, i32v1} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddubsat_dv), u8v2,  "satub_add.vub.vub.dv", {u8v2,  u8v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vadduhsat_dv), u16v2, "satuh_add.vuh.vuh.dv", {u16v2, u16v2} },
 #if LLVM_VERSION >= 50
-        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat_dv), u32v2, "satuw_add.vuw.vuw.dv", {u32v2, u32v2} },  // v62
+        { IPICK(is_128B, Intrinsic::hexagon_V6_vadduwsat_dv), u32v2, "satuw_add.vuw.vuw.dv", {u32v2, u32v2} },  // v62 or later
 #endif
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddhsat_dv),  i16v2, "sath_add.vh.vh.dv",    {i16v2, i16v2} },
         { IPICK(is_128B, Intrinsic::hexagon_V6_vaddwsat_dv),  i32v2, "satw_add.vw.vw.dv",    {i32v2, i32v2} },
@@ -544,8 +559,8 @@ void CodeGen_Hexagon::init_module() {
 
         // Broadcasts
 #if LLVM_VERSION >= 50
-        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatb), u8v1,   "splat_v62.b", {u8}  },   // v62
-        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat_v62.h", {u16} },   // v62
+        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatb), u8v1,   "splat_v62.b", {u8}  },   // v62 or later
+        { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplath), u16v1,  "splat_v62.h", {u16} },   // v62 or later
 #endif
         { IPICK(is_128B, Intrinsic::hexagon_V6_lvsplatw), u32v1,  "splat.w", {u32} },
 
@@ -1274,7 +1289,11 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
 }
 
 string CodeGen_Hexagon::mcpu() const {
-    if (target.has_feature(Halide::Target::HVX_v62)) {
+    if (target.has_feature(Halide::Target::HVX_v66)) {
+        return "hexagonv66";
+    } else if (target.has_feature(Halide::Target::HVX_v65)) {
+        return "hexagonv65";
+    } else if (target.has_feature(Halide::Target::HVX_v62)) {
         return "hexagonv62";
     } else {
         return "hexagonv60";
@@ -1555,12 +1574,13 @@ void CodeGen_Hexagon::visit(const Broadcast *op) {
         CodeGen_Posix::visit(op);
     } else {
         // TODO: Use vd0?
-        string v62_suffix = "";
-        if (target.has_feature(Target::HVX_v62) && (op->value.type().bits() == 8 || op->value.type().bits() == 16))
-            v62_suffix = "_v62";
+        string v62orLater_suffix = "";
+        if (target.features_any_of({Target::HVX_v62, Target::HVX_v65, Target::HVX_v66}) &&
+            (op->value.type().bits() == 8 || op->value.type().bits() == 16))
+            v62orLater_suffix = "_v62";
 
         value = call_intrin(op->type,
-                            "halide.hexagon.splat" + v62_suffix + type_suffix(op->value, false),
+                            "halide.hexagon.splat" + v62orLater_suffix + type_suffix(op->value, false),
                             {op->value});
     }
 }

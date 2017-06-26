@@ -376,17 +376,6 @@ To build and run the HelloHexagon example in Halide/apps/HelloHexagon on the sim
 
 #### To build and run the HelloHexagon example in Halide/apps/HelloHexagon on Android:
 
-The device needs to be prepared to run Halide Hexagon code. Halide uses a small
-runtime library that must be present on the device. The device must be signed as
-a debug device to run Hexagon code, or the libhalide\_hexagon\_remote\_skel.so
-library must be signed. Refer to the Hexagon SDK documentation for more information
-about signing Hexagon binaries (see: Hexagon\_SDK/3.0/docs/Tools\_Signing.html).
-
-    adb shell mkdir -p /system/lib/rfsa/adsp
-    adb push src/runtime/hexagon_remote/bin/arm-32-android/libhalide_hexagon_host.so /system/lib/
-    adb push src/runtime/hexagon_remote/bin/arm-64-android/libhalide_hexagon_host.so /system/lib64/
-    adb push src/runtime/hexagon_remote/bin/v60/libhalide_hexagon_remote_skel.so /system/lib/rfsa/adsp/
-
 To build the example for Android, first ensure that you have a standalone toolchain
 created from the NDK using the make-standalone-toolchain.sh script:
 

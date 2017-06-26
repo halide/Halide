@@ -36,19 +36,15 @@ class GEMMGenerator :
         const int vec = natural_vector_size(a_.type());
         const int s = vec * 2;
 
-        ImageParam A_in, B_in;
+        ImageParam A_in = A_;
+        ImageParam B_in = B_;
 
         // If they're both transposed, then reverse the order and transpose the result instead.
-        bool transpose_AB = false;
-        if ((bool)transpose_A_ && (bool)transpose_B_) {
-            A_in = B_;
-            B_in = A_;
-            transpose_A_.set(false);
-            transpose_B_.set(false);
-            transpose_AB = true;
-        } else {
-            A_in = A_;
-            B_in = B_;
+        const bool transpose_AB = (bool)transpose_A_ && (bool)transpose_B_;
+        const bool transpose_A = !transpose_AB && (bool)transpose_A_;
+        const bool transpose_B = !transpose_AB && (bool)transpose_B_;
+        if (transpose_AB) {
+            std::swap(A_in, B_in);
         }
 
         Var i, j, ii, ji, jii, iii, io, jo, t;
@@ -59,7 +55,7 @@ class GEMMGenerator :
         Func A("A"), B("B"), Btmp("Btmp"), As("As"), Atmp("Atmp");
         Atmp(i, j) = BoundaryConditions::constant_exterior(A_in, cast<T>(0))(i, j);
 
-        if (transpose_A_) {
+        if (transpose_A) {
             As(i, j, io) = Atmp(j, io*s + i);
         } else {
             As(i, j, io) = Atmp(io*s + i, j);
@@ -68,7 +64,7 @@ class GEMMGenerator :
         A(i, j) = As(i % s, j, i / s);
 
         Btmp(i, j) = B_in(i, j);
-        if (transpose_B_) {
+        if (transpose_B) {
             B(i, j) = Btmp(j, i);
         } else {
             B(i, j) = Btmp(i, j);
@@ -129,7 +125,7 @@ class GEMMGenerator :
         Atmp.compute_at(As, io)
             .vectorize(i).unroll(j);
 
-        if (transpose_B_) {
+        if (transpose_B) {
             B.compute_at(result, t)
                 .tile(i, j, ii, ji, 8, 8)
                 .vectorize(ii).unroll(ji);
@@ -151,10 +147,11 @@ class GEMMGenerator :
                 .bound_extent(j, s).vectorize(j);
         }
 
-        A_.set_min(0, 0).set_min(1, 0);
-        B_.set_bounds(0, 0, sum_size).set_min(1, 0);
-        C_.set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
-        result.output_buffer().set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
+        A_.dim(0).set_min(0).dim(1).set_min(0);
+        B_.dim(0).set_bounds(0, sum_size).dim(1).set_min(0);
+        C_.dim(0).set_bounds(0, num_rows);
+        C_.dim(1).set_bounds(0, num_cols);
+        result.output_buffer().dim(0).set_bounds(0, num_rows).dim(1).set_bounds(0, num_cols);
 
         return result;
     }
