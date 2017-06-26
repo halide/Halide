@@ -321,7 +321,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
             state.current_device = DeviceAPI::None;
         }
 
-        if (!finder.devices_touched.empty()) {
+        if (!finder.devices_touched.empty() ||
+            finder.touched_by_extern) {
             last_use = s;
         }
 
@@ -521,7 +522,7 @@ class InjectBufferCopies : public IRMutator {
         bool touched_on_host = finder.devices_touched.count(DeviceAPI::Host);
         bool touched_on_device = finder.devices_touched.size() > (touched_on_host ? 1 : 0);
 
-        if (!touched_on_device) {
+        if (!touched_on_device && !finder.touched_by_extern) {
             // Boring.
             IRMutator::visit(op);
             return;
@@ -557,7 +558,8 @@ class InjectBufferCopies : public IRMutator {
             stmt = InjectCombinedAllocation(op->name, op->type, op->extents,
                                             op->condition, touching_device).mutate(body);
         } else {
-            // Only touched on device, or touched on multiple
+            // Only touched on host but passed to an extern stage, or
+            // only touched on device, or touched on multiple
             // devices. Do separate device and host allocations.
 
             // Add a device destructor
@@ -570,9 +572,13 @@ class InjectBufferCopies : public IRMutator {
             }
 
             Expr condition = op->condition;
-            if (finder.devices_touched.size() == 1) {
+            if (!touched_on_host) {
                 // Only touched on device
                 condition = const_false();
+                // There's no host allocation, so substitute any
+                // references to it (e.g. the one in the make_buffer
+                // call) with NULL.
+                body = substitute(op->name, reinterpret(Handle(), make_zero(UInt(64))), body);
             }
 
             stmt = Allocate::make(op->name, op->type, op->extents, condition, body, op->new_expr, op->free_function);

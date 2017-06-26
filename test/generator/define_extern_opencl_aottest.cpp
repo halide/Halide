@@ -128,6 +128,9 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
     printf("gpu_input: Called to compute on size %d\n", input->dim[0].extent);
     assert(output->device != 0);
 
+    // The output should use a device-only allocation
+    assert(output->host == nullptr);
+
     halide_copy_to_device(nullptr, input, halide_opencl_device_interface());
 
     cl_int error;
