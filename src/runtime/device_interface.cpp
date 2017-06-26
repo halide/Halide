@@ -323,6 +323,59 @@ WEAK int halide_default_device_and_host_free(void *user_context, struct halide_b
     return result;
 }
 
+
+WEAK int halide_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
+                                   const halide_device_interface_t *device_interface) {
+    const halide_device_interface_t *current_interface = buf->device_interface;
+
+    if (current_interface != NULL && current_interface != device_interface) {
+        error(user_context) << "halide_device_wrap_native doesn't support switching interfaces\n";
+        return halide_error_code_device_wrap_native_failed;
+    }
+
+    device_interface->impl->use_module();
+    buf->device_interface = device_interface;
+    int result = device_interface->impl->wrap_native(user_context, buf, handle);
+    device_interface->impl->release_module();
+
+    if (result) {
+        return halide_error_code_device_malloc_failed;
+    } else {
+        return 0;
+    }
+}
+
+WEAK int halide_device_detach_native(void *user_context, struct halide_buffer_t *buf) {
+    const halide_device_interface_t *device_interface = buf->device_interface;
+    int result = 0;
+    if (device_interface != NULL) {
+        device_interface->impl->use_module();
+        result = device_interface->impl->detach_native(user_context, buf);
+        device_interface->impl->release_module();
+        halide_assert(user_context, buf->device == 0);
+        if (result) {
+            result = halide_error_code_device_detach_native_failed;
+        }
+    }
+    return result;
+}
+
+WEAK int halide_default_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle) {
+    buf->device_interface->impl->use_module();
+    buf->device = handle;
+    return 0;
+}
+
+WEAK int halide_default_device_detach_native(void *user_context, struct halide_buffer_t *buf) {
+    if (buf->device == 0) {
+        return 0;
+    }
+    buf->device_interface->impl->release_module();
+    buf->device = 0;
+    buf->device_interface = NULL;
+    return 0;
+}
+
 /** Free any host and device memory associated with a buffer_t and ignore any
  * error. Used when freeing as a destructor on an error. */
 WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj) {

@@ -1969,11 +1969,11 @@ WEAK void halide_opengl_context_lost(void *user_context) {
     return;
 }
 
-WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uintptr_t texture_id) {
-  if (!global_state.initialized) {
-      if (int error = halide_opengl_init(user_context)) {
-          return error;
-      }
+WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uint64_t texture_id) {
+    if (!global_state.initialized) {
+        if (int error = halide_opengl_init(user_context)) {
+            return error;
+        }
     }
     if (texture_id == 0) {
         error(user_context) << "Texture " << texture_id << " is not a valid texture name.";
@@ -2005,18 +2005,16 @@ WEAK int halide_opengl_wrap_render_target(void *user_context, halide_buffer_t *b
     return 0;
 }
 
-WEAK uintptr_t halide_opengl_detach_texture(void *user_context, halide_buffer_t *buf) {
+WEAK int halide_opengl_detach_texture(void *user_context, halide_buffer_t *buf) {
     if (buf->device == 0) {
         return 0;
     }
 
     halide_assert(user_context, buf->device_interface == &opengl_device_interface);
-    uint64_t handle = buf->device;
     buf->device = 0;
     buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
-    GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : handle;
-    return (uintptr_t) tex;
+    return 0;
 }
 
 WEAK uintptr_t halide_opengl_get_texture(void *user_context, halide_buffer_t *buf) {
@@ -2052,6 +2050,8 @@ WEAK halide_device_interface_impl_t opengl_device_interface_impl = {
     halide_opengl_copy_to_device,
     halide_opengl_device_and_host_malloc,
     halide_opengl_device_and_host_free,
+    halide_opengl_wrap_texture,
+    halide_opengl_detach_texture
 };
 
 WEAK halide_device_interface_t opengl_device_interface = {
@@ -2063,6 +2063,8 @@ WEAK halide_device_interface_t opengl_device_interface = {
     halide_copy_to_device,
     halide_device_and_host_malloc,
     halide_device_and_host_free,
+    halide_device_wrap_native,
+    halide_device_detach_native,
     &opengl_device_interface_impl
 };
 

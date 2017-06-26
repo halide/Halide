@@ -506,6 +506,9 @@ struct halide_device_interface_t {
     int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf,
                                   const struct halide_device_interface_t *device_interface);
     int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+    int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
+                       const struct halide_device_interface_t *device_interface);
+    int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
     const struct halide_device_interface_impl_t *impl;
 };
 
@@ -538,6 +541,19 @@ extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
 
 /** Free device memory. */
 extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
+
+/** Wrap or detach a native device handle. The meaning of the opaque
+ * is specific to the device interface, so if you know the device
+ * interface in use, call the more specific functions in the runtime
+ * headers for your specific device API instead
+ * (e.g. HalideRuntimeCuda.h). */
+// @{
+extern int halide_device_wrap_native(void *user_context,
+                                     struct halide_buffer_t *buf,
+                                     uint64_t handle,
+                                     const struct halide_device_interface_t *device_interface);
+extern int halide_device_detach_native(void *user_context, struct halide_buffer_t *buf);
+// @}
 
 /** Versions of the above functions that accept legacy buffer_t structs. */
 // @{
@@ -795,6 +811,16 @@ enum halide_error_code_t {
 
     /** A specialize_fail() schedule branch was selected at runtime. */
     halide_error_code_specialize_fail = -31,
+
+    /** The Halide runtime encountered an error while trying to wrap a
+     * native device handle.  Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_device_wrap_native_failed = -32,
+
+    /** The Halide runtime encountered an error while trying to detach
+     * a native device handle.  Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_detach_native_failed = -33,
 
 };
 

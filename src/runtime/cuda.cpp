@@ -810,7 +810,7 @@ WEAK int halide_cuda_device_and_host_free(void *user_context, struct halide_buff
     return halide_default_device_and_host_free(user_context, buf, &cuda_device_interface);
 }
 
-WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t *buf, uintptr_t device_ptr) {
+WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr) {
     halide_assert(user_context, buf->device == 0);
     if (buf->device != 0) {
         return -2;
@@ -829,16 +829,15 @@ WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t 
     return 0;
 }
 
-WEAK uintptr_t halide_cuda_detach_device_ptr(void *user_context, struct halide_buffer_t *buf) {
+WEAK int halide_cuda_detach_device_ptr(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == NULL) {
         return 0;
     }
     halide_assert(user_context, buf->device_interface == &cuda_device_interface);
-    uint64_t dev_ptr = buf->device;
     buf->device_interface->impl->release_module();
     buf->device = 0;
     buf->device_interface = NULL;
-    return (uintptr_t)dev_ptr;
+    return 0;
 }
 
 WEAK uintptr_t halide_cuda_get_device_ptr(void *user_context, struct halide_buffer_t *buf) {
@@ -910,6 +909,8 @@ WEAK halide_device_interface_impl_t cuda_device_interface_impl = {
     halide_cuda_copy_to_device,
     halide_cuda_device_and_host_malloc,
     halide_cuda_device_and_host_free,
+    halide_cuda_wrap_device_ptr,
+    halide_cuda_detach_device_ptr,
 };
 
 WEAK halide_device_interface_t cuda_device_interface = {
@@ -921,6 +922,8 @@ WEAK halide_device_interface_t cuda_device_interface = {
     halide_copy_to_device,
     halide_device_and_host_malloc,
     halide_device_and_host_free,
+    halide_device_wrap_native,
+    halide_device_detach_native,
     &cuda_device_interface_impl
 };
 
