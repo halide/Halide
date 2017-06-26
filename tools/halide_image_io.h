@@ -198,14 +198,6 @@ template<> inline double convert(const int64_t &in) { return convert<double, uin
 template<> inline double convert(const float &in) { return (double) in; }
 template<> inline double convert(const double &in) { return in; }
 
-inline bool ends_with_ignore_case(const std::string &ac, const std::string &bc) {
-    if (ac.length() < bc.length()) { return false; }
-    std::string a = ac, b = bc;
-    std::transform(a.begin(), a.end(), a.begin(), ::tolower);
-    std::transform(b.begin(), b.end(), b.begin(), ::tolower);
-    return a.compare(a.length()-b.length(), b.length(), b) == 0;
-}
-
 inline std::string get_lowercase_extension(const std::string &path) {
     size_t last_dot = path.rfind('.');
     if (last_dot == std::string::npos) {
@@ -901,52 +893,57 @@ bool load_jpg(const std::string &filename, ImageType *im, FormatInfo *actual = n
 #endif
 }
 
+namespace Internal {
 
-// Returns false upon failure.
-template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool load(const std::string &filename, ImageType *im, FormatInfo *actual = nullptr) {
-    using Loader = std::function<bool(const std::string &, ImageType *, FormatInfo *)>;
-    const std::map<std::string, Loader> m = {
-        {"jpeg", load_jpg<ImageType, check>},
-        {"jpg", load_jpg<ImageType, check>},
-        {"pgm", load_pgm<ImageType, check>},
-        {"png", load_png<ImageType, check>},
-        {"ppm", load_ppm<ImageType, check>}
+template<typename ImageType, Internal::CheckFunc check>
+struct ImageIO {
+    std::function<bool(const std::string &, ImageType *, FormatInfo *)> load;
+    std::function<bool(ImageType &im, const std::string &, FormatInfo *)> save;
+};
+
+template<typename ImageType, Internal::CheckFunc check>
+bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result) {
+    const std::map<std::string, ImageIO<ImageType, check>> m = {
+        {"jpeg", {load_jpg<ImageType, check>, save_jpg<ImageType, check>}},
+        {"jpg", {load_jpg<ImageType, check>, save_jpg<ImageType, check>}},
+        {"pgm", {load_pgm<ImageType, check>, save_pgm<ImageType, check>}},
+        {"png", {load_png<ImageType, check>, save_png<ImageType, check>}},
+        {"ppm", {load_ppm<ImageType, check>, save_ppm<ImageType, check>}}
     };
     auto it = m.find(Internal::get_lowercase_extension(filename));
     if (it != m.end()) {
-        return it->second(filename, im, actual);
+        *result = it->second;
+        return true;
     }
 
-    std::string err = "[load] unsupported file extension, supported are:";
+    std::string err = "unsupported file extension, supported are:";
     for (auto &it : m) {
         err += " " + it.first;
     }
     err += "\n";
     return check(false, err.c_str());
 }
+
+}  // namespace Internal
+
+// Returns false upon failure.
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load(const std::string &filename, ImageType *im, FormatInfo *actual = nullptr) {
+    Internal::ImageIO<ImageType, check> imageio;
+    if (!Internal::find_imageio<ImageType, check>(filename, &imageio)) {
+        return false;
+    }
+    return imageio.load(filename, im, actual);
+}
+
 // Returns false upon failure.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save(ImageType &im, const std::string &filename, FormatInfo *actual = nullptr) {
-    using Saver = std::function<bool(ImageType &im, const std::string &, FormatInfo *)>;
-    const std::map<std::string, Saver> m = {
-        {"jpeg", save_jpg<ImageType, check>},
-        {"jpg", save_jpg<ImageType, check>},
-        {"pgm", save_pgm<ImageType, check>},
-        {"png", save_png<ImageType, check>},
-        {"ppm", save_ppm<ImageType, check>}
-    };
-    auto it = m.find(Internal::get_lowercase_extension(filename));
-    if (it != m.end()) {
-        return it->second(im, filename, actual);
+    Internal::ImageIO<ImageType, check> imageio;
+    if (!Internal::find_imageio<ImageType, check>(filename, &imageio)) {
+        return false;
     }
-
-    std::string err = "[save] unsupported file extension, supported are:";
-    for (auto &it : m) {
-        err += " " + it.first;
-    }
-    err += "\n";
-    return check(false, err.c_str());
+    return imageio.save(im, filename, actual);
 }
 
 // Fancy wrapper to call load() with CheckFail, inferring the return type;
