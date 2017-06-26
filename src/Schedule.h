@@ -217,8 +217,6 @@ struct Bound {
     Expr min, extent, modulus, remainder;
 };
 
-struct ScheduleContents;
-
 struct StorageDim {
     std::string var;
     Expr alignment;
@@ -235,69 +233,37 @@ struct PrefetchDirective {
     Parameter param;
 };
 
+struct FuncScheduleContents;
+struct StageScheduleContents;
 struct FunctionContents;
 
-/** A schedule for a single stage of a Halide pipeline. Right now this
- * interface is basically a struct, offering mutable access to its
- * innards. In the future it may become more encapsulated. */
-class Schedule {
-    IntrusivePtr<ScheduleContents> contents;
+/** A schedule for a Function of a Halide pipeline. This schedule is
+ * applied to all stages of the Function. Right now this interface is
+ * basically a struct, offering mutable access to its innards.
+ * In the future it may become more encapsulated. */
+class FuncSchedule {
+    IntrusivePtr<FuncScheduleContents> contents;
 
 public:
 
-    Schedule(IntrusivePtr<ScheduleContents> c) : contents(c) {}
-    Schedule(const Schedule &other) : contents(other.contents) {}
-    EXPORT Schedule();
+    FuncSchedule(IntrusivePtr<FuncScheduleContents> c) : contents(c) {}
+    FuncSchedule(const FuncSchedule &other) : contents(other.contents) {}
+    EXPORT FuncSchedule();
 
-    /** Return a deep copy of this Schedule. It recursively deep copies all called
-     * functions, schedules, specializations, and reduction domains. This method
-     * takes a map of <old FunctionContents, deep-copied version> as input and
-     * would use the deep-copied FunctionContents from the map if exists instead
-     * of creating a new deep-copy to avoid creating deep-copies of the same
-     * FunctionContents multiple times.
+    /** Return a deep copy of this FuncSchedule. It recursively deep copies all
+     * called functions, schedules, specializations, and reduction domains. This
+     * method takes a map of <old FunctionContents, deep-copied version> as input
+     * and would use the deep-copied FunctionContents from the map if exists
+     * instead of creating a new deep-copy to avoid creating deep-copies of the
+     * same FunctionContents multiple times.
      */
-    EXPORT Schedule deep_copy(
+    EXPORT FuncSchedule deep_copy(
         std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
 
     /** This flag is set to true if the schedule is memoized. */
     // @{
     bool &memoized();
     bool memoized() const;
-    // @}
-
-    /** This flag is set to true if the dims list has been manipulated
-     * by the user (or if a ScheduleHandle was created that could have
-     * been used to manipulate it). It controls the warning that
-     * occurs if you schedule the vars of the pure step but not the
-     * update steps. */
-    // @{
-    bool &touched();
-    bool touched() const;
-    // @}
-
-    /** The traversal of the domain of a function can have some of its
-     * dimensions split into sub-dimensions. See ScheduleHandle::split */
-    // @{
-    const std::vector<Split> &splits() const;
-    std::vector<Split> &splits();
-    // @}
-
-    /** The list and ordering of dimensions used to evaluate this
-     * function, after all splits have taken place. The first
-     * dimension in the vector corresponds to the innermost for loop,
-     * and the last is the outermost. Also specifies what type of for
-     * loop to use for each dimension. Does not specify the bounds on
-     * each dimension. These get inferred from how the function is
-     * used, what the splits are, and any optional bounds in the list below. */
-    // @{
-    const std::vector<Dim> &dims() const;
-    std::vector<Dim> &dims();
-    // @}
-
-    /** RVars of reduction domain associated with this schedule if there is any. */
-    // @{
-    const std::vector<ReductionVariable> &rvars() const;
-    std::vector<ReductionVariable> &rvars();
     // @}
 
     /** The list and order of dimensions used to store this
@@ -315,13 +281,6 @@ public:
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
-    // @}
-
-    /** You may perform prefetching in some of the dimensions of a
-     * function. See \ref Func::prefetch */
-    // @{
-    const std::vector<PrefetchDirective> &prefetches() const;
-    std::vector<PrefetchDirective> &prefetches();
     // @}
 
     /** Mark calls of a function by 'f' to be replaced with its wrapper
@@ -345,6 +304,73 @@ public:
     const LoopLevel &compute_level() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
+    // @}
+
+    /** Pass an IRVisitor through to all Exprs referenced in the
+     * Schedule. */
+    void accept(IRVisitor *) const;
+
+    /** Pass an IRMutator through to all Exprs referenced in the
+     * Schedule. */
+    void mutate(IRMutator *);
+};
+
+
+/** A schedule for a single stage of a Halide pipeline. Right now this
+ * interface is basically a struct, offering mutable access to its
+ * innards. In the future it may become more encapsulated. */
+class StageSchedule {
+    IntrusivePtr<StageScheduleContents> contents;
+
+public:
+
+    StageSchedule(IntrusivePtr<StageScheduleContents> c) : contents(c) {}
+    StageSchedule(const StageSchedule &other) : contents(other.contents) {}
+    EXPORT StageSchedule();
+
+    /** Return a copy of this StageSchedule. */
+    EXPORT StageSchedule get_copy() const;
+
+    /** This flag is set to true if the dims list has been manipulated
+     * by the user (or if a ScheduleHandle was created that could have
+     * been used to manipulate it). It controls the warning that
+     * occurs if you schedule the vars of the pure step but not the
+     * update steps. */
+    // @{
+    bool &touched();
+    bool touched() const;
+    // @}
+
+    /** RVars of reduction domain associated with this schedule if there is any. */
+    // @{
+    const std::vector<ReductionVariable> &rvars() const;
+    std::vector<ReductionVariable> &rvars();
+    // @}
+
+    /** The traversal of the domain of a function can have some of its
+     * dimensions split into sub-dimensions. See \ref Func::split */
+    // @{
+    const std::vector<Split> &splits() const;
+    std::vector<Split> &splits();
+    // @}
+
+    /** The list and ordering of dimensions used to evaluate this
+     * function, after all splits have taken place. The first
+     * dimension in the vector corresponds to the innermost for loop,
+     * and the last is the outermost. Also specifies what type of for
+     * loop to use for each dimension. Does not specify the bounds on
+     * each dimension. These get inferred from how the function is
+     * used, what the splits are, and any optional bounds in the list below. */
+    // @{
+    const std::vector<Dim> &dims() const;
+    std::vector<Dim> &dims();
+    // @}
+
+    /** You may perform prefetching in some of the dimensions of a
+     * function. See \ref Func::prefetch */
+    // @{
+    const std::vector<PrefetchDirective> &prefetches() const;
+    std::vector<PrefetchDirective> &prefetches();
     // @}
 
     /** Are race conditions permitted? */

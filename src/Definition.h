@@ -50,15 +50,8 @@ public:
     /** Construct an empty Definition. By default, it is a init definition. */
     EXPORT Definition();
 
-    /** Return a deep copy of this Definition. It recursively deep copies all
-     * called functions, schedules, and reduction domains. This method
-     * takes a map of <old FunctionContents, deep-copied version> as input and
-     * would use the deep-copied FunctionContents from the map if exists instead
-     * of creating a new deep-copy to avoid creating deep-copies of the same
-     * FunctionContents multiple times.
-     */
-    EXPORT Definition deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
+    /** Return a copy of this Definition. */
+    EXPORT Definition get_copy() const;
 
     /** Equality of identity */
     bool same_as(const Definition &other) const {
@@ -98,14 +91,15 @@ public:
      * definition is always valid), this returns an empty vector. */
     EXPORT std::vector<Expr> split_predicate() const;
 
-    /** Get the default (no-specialization) schedule associated with this definition. */
+    /** Get the default (no-specialization) stage-specific schedule associated
+     * with this definition. */
     // @{
-    EXPORT const Schedule &schedule() const;
-    EXPORT Schedule &schedule();
+    EXPORT const StageSchedule &schedule() const;
+    EXPORT StageSchedule &schedule();
     // @}
 
     /** You may create several specialized versions of a func with
-     * different schedules. They trigger when the condition is
+     * different stage-specific schedules. They trigger when the condition is
      * true. See \ref Func::specialize */
     // @{
     EXPORT const std::vector<Specialization> &specializations() const;

@@ -69,7 +69,11 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
+            #if LLVM_VERSION < 50
             function->setDoesNotAlias(i+1);
+            #else
+            function->addParamAttr(i, Attribute::NoAlias);
+            #endif
         }
     }
 
@@ -198,7 +202,7 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // jumping back we're rendering any expression we carry back
         // meaningless, so we had better only be dealing with
         // constants here.
-        int32_t size = alloc->constant_allocation_size();
+        int32_t size = CodeGen_GPU_Dev::get_constant_bound_allocation_size(alloc);
         user_assert(size > 0)
             << "Allocation " << alloc->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported on the gpu. "
@@ -229,7 +233,9 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability50)) {
+    if (target.has_feature(Target::CUDACapability61)) {
+        return "sm_61";
+    } else if (target.has_feature(Target::CUDACapability50)) {
         return "sm_50";
     } else if (target.has_feature(Target::CUDACapability35)) {
         return "sm_35";
@@ -243,7 +249,9 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.features_any_of({Target::CUDACapability32,
+    if (target.has_feature(Target::CUDACapability61)) {
+        return "+ptx50";
+    } else if (target.features_any_of({Target::CUDACapability32,
                                 Target::CUDACapability50})) {
         // Need ptx isa 4.0.
         return "+ptx40";

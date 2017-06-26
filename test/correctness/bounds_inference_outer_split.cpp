@@ -8,7 +8,7 @@ using namespace Halide::Internal;
 class CheckAllocationSize : public IRVisitor {
     
     using IRVisitor::visit;
-	
+        
     void visit(const Allocate *op) {
         if (op->name == "input_cpy") {
             result = op->extents[0];
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
 
     Func input_cpy("input_cpy");
     input_cpy(x, y) = input(x, y);
-	
+        
     Func input_cpy_2;
     input_cpy_2(x, y) = input_cpy(x, y);
     
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
         .compute_at(sum_stage_cpy_2, y)
         .split(x, xout, xin, 32)
         .unroll(xout, 4);
-	
+        
     Module m = sum_stage_cpy_2.compile_to_module({input});
 
     CheckAllocationSize checker;

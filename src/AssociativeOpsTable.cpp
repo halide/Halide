@@ -1,12 +1,12 @@
 #include "AssociativeOpsTable.h"
 #include "IRPrinter.h"
 
+namespace Halide {
+namespace Internal {
+
 using std::map;
 using std::string;
 using std::vector;
-
-namespace Halide {
-namespace Internal {
 
 namespace {
 
@@ -321,13 +321,14 @@ const vector<AssociativePattern> &get_ops_table_helper(Type t, RootExpr root, si
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     internal_assert(!exprs.empty());
 
-    // Make sure every expr in the list has the same type
     static vector<AssociativePattern> empty;
-    for (size_t i = 1; i < exprs.size() - 1; ++i) {
+
+    // Make sure every expr in the list has the same type
+    for (size_t i = 1; i < exprs.size(); ++i) {
         user_assert(exprs[i-1].type() == exprs[i].type())
             << "Tuple elements have different type. Can't prove associativity\n";
-        return empty;
     }
+
     if (exprs.size() > 2) {
         debug(5) << "Returning empty table\n";
         return empty;
