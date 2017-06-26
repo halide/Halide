@@ -782,7 +782,7 @@ WEAK halide_device_interface_impl_t hexagon_device_interface_impl = {
     halide_default_device_detach_native,
 };
 
-WEAK halide_device_interface_t cuda_device_interface = {
+WEAK halide_device_interface_t hexagon_device_interface = {
     halide_device_malloc,
     halide_device_free,
     halide_device_sync,
