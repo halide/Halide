@@ -119,9 +119,12 @@ class FindBufferUsage : public IRVisitor {
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (is_buffer_var(op->args[i])) {
                     DeviceAPI extern_device_api = f.extern_function_device_api();
-                    devices_touched.insert(extern_device_api);
+                    touched_by_extern = true;
                     if (i >= f.extern_arguments().size()) {
-                        // An output
+                        // An output. The extern stage is responsible
+                        // for dealing with any device transitions for
+                        // inputs.
+                        devices_touched.insert(extern_device_api);
                         devices_writing.insert(extern_device_api);
                     }
                 } else {
@@ -148,6 +151,9 @@ class FindBufferUsage : public IRVisitor {
     DeviceAPI current_device_api;
 public:
     std::set<DeviceAPI> devices_writing, devices_touched;
+    // Any buffer passed to an extern stage may have had its dirty
+    // bits and device allocation messed with.
+    bool touched_by_extern = false;
 
     FindBufferUsage(const std::string &buf, DeviceAPI d) : buffer(buf), current_device_api(d) {}
 };
@@ -299,6 +305,22 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
             state.current_device = touching_device;
         }
 
+        if (finder.touched_by_extern) {
+            // This buffer was passed to an extern stage. Unless we
+            // explicitly marked it after the stmt ran, we no longer
+            // know the state of the dirty bits.
+            if (!needs_host_dirty) {
+                state.host_dirty = Unknown;
+            }
+            if (!needs_device_dirty) {
+                state.device_dirty = Unknown;
+            }
+            // Also, the extern stage may have gifted a host
+            // allocation, or flipped the buffer to another device.
+            state.device_allocation_exists = Unknown;
+            state.current_device = DeviceAPI::None;
+        }
+
         if (!finder.devices_touched.empty()) {
             last_use = s;
         }
@@ -324,7 +346,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         // single leaf. Otherwise we can recurse.
         FindBufferUsage finder(buffer, DeviceAPI::Host);
         op->value.accept(&finder);
-        if (finder.devices_touched.empty()) {
+        if (finder.devices_touched.empty() &&
+            !finder.touched_by_extern) {
             IRMutator::visit(op);
         } else {
             stmt = do_copies(op);
@@ -511,6 +534,10 @@ class InjectBufferCopies : public IRMutator {
 
         string buffer_name = op->name + ".buffer";
         Expr buffer = Variable::make(Handle(), buffer_name);
+
+        // Device what type of allocation to make. Note that we ignore
+        // finder.touched_by_extern. Extern stages just have to deal
+        // with whatever we decide to do here.
 
         if (touched_on_host && finder.devices_touched.size() == 2) {
             // Touched on a single device and the host. Use a combined allocation.
