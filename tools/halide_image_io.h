@@ -8,6 +8,8 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -18,6 +20,8 @@
 #ifndef HALIDE_NO_JPEG
 #include "jpeglib.h"
 #endif
+
+#include "HalideRuntime.h"
 
 namespace Halide {
 namespace Tools {
@@ -194,12 +198,14 @@ template<> inline double convert(const int64_t &in) { return convert<double, uin
 template<> inline double convert(const float &in) { return (double) in; }
 template<> inline double convert(const double &in) { return in; }
 
-inline bool ends_with_ignore_case(const std::string &ac, const std::string &bc) {
-    if (ac.length() < bc.length()) { return false; }
-    std::string a = ac, b = bc;
-    std::transform(a.begin(), a.end(), a.begin(), ::tolower);
-    std::transform(b.begin(), b.end(), b.begin(), ::tolower);
-    return a.compare(a.length()-b.length(), b.length(), b) == 0;
+inline std::string get_lowercase_extension(const std::string &path) {
+    size_t last_dot = path.rfind('.');
+    if (last_dot == std::string::npos) {
+        return "";
+    }
+    std::string ext = path.substr(last_dot + 1);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    return ext;
 }
 
 inline bool is_little_endian() {
@@ -257,9 +263,13 @@ struct PngRowPointers {
 
 }  // namespace Internal
 
+struct FormatInfo {
+    halide_type_t type;
+    int32_t dimensions;
+};
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool load_png(const std::string &filename, ImageType *im) {
+bool load_png(const std::string &filename, ImageType *im, FormatInfo *actual = nullptr) {
 #ifdef HALIDE_NO_PNG
     check(false, "png not supported in this build\n");
     return false;
@@ -348,13 +358,19 @@ bool load_png(const std::string &filename, ImageType *im) {
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
 
     im->set_host_dirty();
+
+    if (actual) {
+        actual->type = halide_type_t(halide_type_uint, bit_depth);
+        actual->dimensions = (channels != 1) ? 3 : 2;
+    }
+
     return true;
 #endif // HALIDE_NO_PNG
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool save_png(ImageType &im, const std::string &filename) {
+bool save_png(ImageType &im, const std::string &filename, FormatInfo *actual = nullptr) {
 #ifdef HALIDE_NO_PNG
     check(false, "png not supported in this build\n");
     return false;
@@ -450,12 +466,17 @@ bool save_png(ImageType &im, const std::string &filename) {
 
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
+    if (actual) {
+        actual->type = halide_type_t(halide_type_uint, bit_depth);
+        actual->dimensions = (im.channels() != 1) ? 3 : 2;
+    }
+
     return true;
 #endif // HALIDE_NO_PNG
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool load_pgm(const std::string &filename, ImageType *im) {
+bool load_pgm(const std::string &filename, ImageType *im, FormatInfo *actual = nullptr) {
     using ElemType = typename ImageType::ElemType;
 
     /* open file and test for it being a pgm */
@@ -513,13 +534,18 @@ bool load_pgm(const std::string &filename, ImageType *im) {
     }
     (*im)(0,0,0) = (*im)(0,0,0);      /* Mark dirty inside read/write functions. */
 
+    if (actual) {
+        actual->type = halide_type_t(halide_type_uint, bit_depth);
+        actual->dimensions = 2;
+    }
+
     return true;
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 // Optional channel parameter for specifying which color to save as a graymap
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel = 0) {
+bool save_pgm_channel(ImageType &im, const std::string &filename, unsigned int channel, FormatInfo *actual = nullptr) {
     using ElemType = typename ImageType::ElemType;
 
     im.copy_to_host();
@@ -558,11 +584,20 @@ bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel =
     } else {
         return check(false, "We only support saving 8- and 16-bit images.");
     }
+    if (actual) {
+        actual->type = halide_type_t(halide_type_uint, bit_depth);
+        actual->dimensions = 1;
+    }
     return true;
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool load_ppm(const std::string &filename, ImageType *im) {
+bool save_pgm(ImageType &im, const std::string &filename, FormatInfo *actual = nullptr) {
+    return save_pgm_channel<ImageType, check>(im, filename, /* channel */ 0, actual);
+}
+
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load_ppm(const std::string &filename, ImageType *im, FormatInfo *actual = nullptr) {
     using ElemType = typename ImageType::ElemType;
 
     /* open file and test for it being a ppm */
@@ -629,12 +664,17 @@ bool load_ppm(const std::string &filename, ImageType *im) {
     }
     (*im)(0,0,0) = (*im)(0,0,0);      /* Mark dirty inside read/write functions. */
 
+    if (actual) {
+        actual->type = halide_type_t(halide_type_uint, bit_depth);
+        actual->dimensions = 3;
+    }
+
     return true;
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool save_ppm(ImageType &im, const std::string &filename) {
+bool save_ppm(ImageType &im, const std::string &filename, FormatInfo *actual = nullptr) {
     using ElemType = typename ImageType::ElemType;
 
     if (!check(im.channels() == 3, "save_ppm() requires a 3-channel image.\n")) { return false; }
@@ -704,11 +744,15 @@ bool save_ppm(ImageType &im, const std::string &filename) {
     } else {
         return check(false, "We only support saving 8- and 16-bit images.");
     }
+    if (actual) {
+        actual->type = halide_type_t(halide_type_uint, bit_depth);
+        actual->dimensions = (channels > 1) ? 3 : 2;
+    }
     return true;
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool save_jpg(ImageType &im, const std::string &filename) {
+bool save_jpg(ImageType &im, const std::string &filename, FormatInfo *actual = nullptr) {
 #ifdef HALIDE_NO_JPEG
     check(false, "jpg not supported in this build\n");
     return false;
@@ -780,12 +824,17 @@ bool save_jpg(ImageType &im, const std::string &filename) {
     jpeg_finish_compress(&cinfo);
     jpeg_destroy_compress(&cinfo);
 
+    if (actual) {
+        actual->type = halide_type_t(halide_type_uint, 8);
+        actual->dimensions = (channels > 1) ? 3 : 2;
+    }
+
     return true;
 #endif
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool load_jpg(const std::string &filename, ImageType *im) {
+bool load_jpg(const std::string &filename, ImageType *im, FormatInfo *actual = nullptr) {
 #ifdef HALIDE_NO_JPEG
     check(false, "jpg not supported in this build\n");
     return false;
@@ -835,42 +884,66 @@ bool load_jpg(const std::string &filename, ImageType *im) {
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
 
+    if (actual) {
+        actual->type = halide_type_t(halide_type_uint, 8);
+        actual->dimensions = (channels > 1) ? 3 : 2;
+    }
+
     return true;
 #endif
 }
 
+namespace Internal {
+
+template<typename ImageType, Internal::CheckFunc check>
+struct ImageIO {
+    std::function<bool(const std::string &, ImageType *, FormatInfo *)> load;
+    std::function<bool(ImageType &im, const std::string &, FormatInfo *)> save;
+};
+
+template<typename ImageType, Internal::CheckFunc check>
+bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result) {
+    const std::map<std::string, ImageIO<ImageType, check>> m = {
+        {"jpeg", {load_jpg<ImageType, check>, save_jpg<ImageType, check>}},
+        {"jpg", {load_jpg<ImageType, check>, save_jpg<ImageType, check>}},
+        {"pgm", {load_pgm<ImageType, check>, save_pgm<ImageType, check>}},
+        {"png", {load_png<ImageType, check>, save_png<ImageType, check>}},
+        {"ppm", {load_ppm<ImageType, check>, save_ppm<ImageType, check>}}
+    };
+    auto it = m.find(Internal::get_lowercase_extension(filename));
+    if (it != m.end()) {
+        *result = it->second;
+        return true;
+    }
+
+    std::string err = "unsupported file extension, supported are:";
+    for (auto &it : m) {
+        err += " " + it.first;
+    }
+    err += "\n";
+    return check(false, err.c_str());
+}
+
+}  // namespace Internal
 
 // Returns false upon failure.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool load(const std::string &filename, ImageType *im) {
-    if (Internal::ends_with_ignore_case(filename, ".png")) {
-        return load_png<ImageType, check>(filename, im);
-    } else if (Internal::ends_with_ignore_case(filename, ".jpg") ||
-               Internal::ends_with_ignore_case(filename, ".jpeg")) {
-        return load_jpg<ImageType, check>(filename, im);
-    } else if (Internal::ends_with_ignore_case(filename, ".pgm")) {
-        return load_pgm<ImageType, check>(filename, im);
-    } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
-        return load_ppm<ImageType, check>(filename, im);
-    } else {
-        return check(false, "[load] unsupported file extension (png|jpg|pgm|ppm supported)");
+bool load(const std::string &filename, ImageType *im, FormatInfo *actual = nullptr) {
+    Internal::ImageIO<ImageType, check> imageio;
+    if (!Internal::find_imageio<ImageType, check>(filename, &imageio)) {
+        return false;
     }
+    return imageio.load(filename, im, actual);
 }
+
 // Returns false upon failure.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
-bool save(ImageType &im, const std::string &filename) {
-    if (Internal::ends_with_ignore_case(filename, ".png")) {
-        return save_png<ImageType, check>(im, filename);
-    } else if (Internal::ends_with_ignore_case(filename, ".jpg") ||
-               Internal::ends_with_ignore_case(filename, ".jpeg")) {
-        return save_jpg<ImageType, check>(im, filename);
-    } else if (Internal::ends_with_ignore_case(filename, ".pgm")) {
-        return save_pgm<ImageType, check>(im, filename);
-    } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
-        return save_ppm<ImageType, check>(im, filename);
-    } else {
-        return check(false, "[save] unsupported file extension (png|jpg|pgm|ppm supported)");
+bool save(ImageType &im, const std::string &filename, FormatInfo *actual = nullptr) {
+    Internal::ImageIO<ImageType, check> imageio;
+    if (!Internal::find_imageio<ImageType, check>(filename, &imageio)) {
+        return false;
     }
+    return imageio.save(im, filename, actual);
 }
 
 // Fancy wrapper to call load() with CheckFail, inferring the return type;
