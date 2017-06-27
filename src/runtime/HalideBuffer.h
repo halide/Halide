@@ -1303,7 +1303,8 @@ public:
     int device_detach_native(void *ctx = nullptr) {
         assert(dev_ref_count && dev_ref_count->wrapping_native_device_handle &&
                "Only call device_detach_native on buffers wrapping a native "
-               "device handle via device_wrap_native. Call device_free instead.");
+               "device handle via device_wrap_native. This buffer was allocated "
+               "using device_malloc, so call device_free instead.");
         // Multiple people may be holding onto this dev field
         assert(dev_ref_count->count == 1 &&
                "Multiple Halide::Runtime::Buffer objects share this device "
