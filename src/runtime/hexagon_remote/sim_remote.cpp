@@ -115,7 +115,7 @@ static void *aligned_malloc(size_t alignment, size_t x) {
 static void aligned_free(void *ptr) {
     if (ptr) {
         free(((void**)ptr)[-1]);
-    };
+    }
 }
 
 void log_printf(const char *fmt, ...) {
