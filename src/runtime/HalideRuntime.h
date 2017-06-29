@@ -817,6 +817,10 @@ enum halide_error_code_t {
     /** A specialize_fail() schedule branch was selected at runtime. */
     halide_error_code_specialize_fail = -31,
 
+    /** The Halide runtime encountered an error while trying to copy
+     * from one buffer to another. Turn on -debug in your target
+     * string to see more details. */
+    halide_error_code_device_buffer_copy_failed = -32,
 };
 
 /** Halide calls the functions below on various error conditions. The

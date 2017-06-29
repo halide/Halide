@@ -89,6 +89,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     for (int i = 0; i < src->dimensions; i++) {
         c.src_begin += src->dim[i].stride * (dst->dim[i].min - src->dim[i].min);
     }
+    c.src_begin *= c.chunk_size;
 
     if (src->dimensions != dst->dimensions ||
         src->type.bytes() != dst->type.bytes() ||
