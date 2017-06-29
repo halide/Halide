@@ -371,9 +371,7 @@ public:
         return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...); 
     }
 
-    static constexpr bool has_static_halide_type() {
-        return Runtime::Buffer<T>::has_static_halide_type();
-    }
+    static constexpr bool has_static_halide_type = Runtime::Buffer<T>::has_static_halide_type;
 
     static halide_type_t static_halide_type() {
         return Runtime::Buffer<T>::static_halide_type();

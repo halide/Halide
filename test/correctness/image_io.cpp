@@ -1,11 +1,3 @@
-#ifdef _MSC_VER
-#include <stdio.h>
-int main(int argc, char **argv) {
-    printf("Skipping test on Windows\n");
-    return 0;
-}
-#else
-
 #include "Halide.h"
 #include "halide_image_io.h"
 #include "test/common/halide_test_dirs.h"
@@ -141,8 +133,15 @@ int main(int argc, char **argv) {
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2, 0);
 
-    std::string formats[] = {"jpg", "png", "ppm"};
+    std::vector<std::string> formats = {"ppm"};
+#ifndef HALIDE_NO_JPEG
+    formats.push_back("jpg");
+#endif
+#ifndef HALIDE_NO_PNG
+    formats.push_back("png");
+#endif
     for (std::string format : formats) {
+        std::cout << "Testing format: " << format << "\n";
         test_round_trip(color_buf, format);
         if (format != "ppm") {
             // ppm really only supports RGB images.
@@ -151,5 +150,3 @@ int main(int argc, char **argv) {
     }
     return 0;
 }
-
-#endif
