@@ -198,12 +198,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = split_tuples(s, env);
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s, env);
-        debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
-    }
-
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
