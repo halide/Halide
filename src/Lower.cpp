@@ -26,7 +26,6 @@
 #include "HexagonOffload.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
-#include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "Inline.h"
 #include "IRMutator.h"
