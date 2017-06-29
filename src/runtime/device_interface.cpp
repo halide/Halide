@@ -345,23 +345,32 @@ WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *
     const bool from_host = !from_device;
     const bool to_host = !to_device;
 
+    debug(user_context)
+        << "halide_default_buffer_copy\n"
+        << " source: " << *src << "\n"
+        << " dst: " << *dst << "\n";
+
     // We consider four cases, and decompose each into simpler cases
     // using intermediate host memory in the src or dst buffers.
     int err = 0;
     if (from_device && to_device) {
         // dev -> dev via dst host memory
+        debug(user_context) << " dev -> src via src host memory\n";
         err = src->device_interface->buffer_copy(user_context, src, NULL, dst);
         err = err || copy_to_device_already_locked(user_context, dst, dst_device_interface);
     } else if (from_device && to_host) {
         // dev -> host via src host memory
+        debug(user_context) << " dev -> host via src host memory\n";
         err = copy_to_host_already_locked(user_context, src);
         err = err || halide_default_buffer_copy(user_context, src, NULL, dst);
     } else if (from_host && to_device) {
         // host -> dev via dst host memory
+        debug(user_context) << " host -> dev via dst host memory\n";
         err = halide_default_buffer_copy(user_context, src, NULL, dst);
         err = err || copy_to_device_already_locked(user_context, dst, dst_device_interface);
     } else {
         // host -> host
+        debug(user_context) << " host -> host\n";
         device_copy copy = make_buffer_copy(src, true, dst, true);
         copy_memory(copy, user_context);
         dst->set_host_dirty();
@@ -390,11 +399,17 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
 
     const struct halide_device_interface_t *src_device_interface = src->device_interface;
 
+    int err = 0;
+
     // Fix up the dst device interface
     if (dst_device_interface &&
         dst_device_interface != dst->device_interface) {
-        halide_device_free(user_context, dst);
-        halide_device_malloc(user_context, dst, dst_device_interface);
+        err = halide_device_free(user_context, dst);
+        err = err || halide_device_malloc(user_context, dst, dst_device_interface);
+    }
+
+    if (err) {
+        return err;
     }
 
     if (dst_device_interface) {
@@ -404,7 +419,6 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
         src_device_interface->use_module();
     }
 
-    int err = 0;
     if (dst_device_interface) {
         // Make the dst interface handle arbitrary src device
         // interfaces (e.g. CUDA might know how to copy out of an
@@ -423,8 +437,17 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
         err = halide_default_buffer_copy(user_context, src, dst_device_interface, dst);
     }
 
-    // TODO: proper error handling. This function should be calling
-    // halide_error and returning an actual error code.
+    if (dst != src) {
+        if (dst_device_interface) {
+            dst->set_device_dirty(true);
+        } else {
+            dst->set_host_dirty(true);
+        }
+    }
+
+    if (err) {
+        err = halide_error_code_device_buffer_copy_failed;
+    }
 
     if (dst_device_interface) {
         dst_device_interface->release_module();
