@@ -974,15 +974,20 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 
 struct ImageTypeConversion {
     // Convert an Image from one ElemType to another, where the src and
-    // dst types are statically known (e.g. Buffer<uint8_t> -> Buffer<float>). 
+    // dst types are statically known (e.g. Buffer<uint8_t> -> Buffer<float>).
+    // You'd normally call this with an explicit type for DstElemType and
+    // allow ImageType to be inferred, e.g.
+    //     Buffer<uint8_t> src = ...;
+    //     Buffer<float> dst = convert_image<float>(src);
     template<typename DstElemType, typename ImageType>
-    static auto convert_image(const ImageType &src) -> typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
+    static auto convert_image(const ImageType &src) -> 
+            typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
         using SrcImageType = ImageType;
         using SrcElemType = typename SrcImageType::ElemType;
 
         using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
 
-        static_assert(SrcImageType::has_static_halide_type(), 
+        static_assert(SrcImageType::has_static_halide_type, 
                       "convert_image_s2s() requires a statically-typed image");
 
         DstImageType dst = DstImageType::make_with_shape_of(src);
@@ -998,11 +1003,14 @@ struct ImageTypeConversion {
     // Convert an Image from one ElemType to another, where the src type
     // is statically known but the dst type is not 
     // (e.g. Buffer<uint8_t> -> Buffer<>(halide_type_t)). 
-    template <typename ImageType, typename std::enable_if<ImageType::has_static_halide_type()>::type * = nullptr>
-    static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> typename Internal::ImageTypeWithElemType<ImageType, void>::type {
+    template <typename DstElemType = void,
+              typename ImageType, 
+              typename std::enable_if<ImageType::has_static_halide_type>::type * = nullptr>
+    static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> 
+            typename Internal::ImageTypeWithElemType<ImageType, void>::type {
         // The enable_if ensures this will never fire; this is here primarily
         // as documentation and a backstop against breakage.
-        static_assert(ImageType::has_static_halide_type(), 
+        static_assert(ImageType::has_static_halide_type, 
                       "This variant of convert_image() requires a statically-typed image");
 
         const halide_type_t src_type = src.type();
@@ -1045,11 +1053,14 @@ struct ImageTypeConversion {
     // Convert an Image from one ElemType to another, where neither src type
     // nor dst type are statically known
     // (e.g. Buffer<>(halide_type_t) -> Buffer<>(halide_type_t)). 
-    template <typename ImageType, typename std::enable_if<!ImageType::has_static_halide_type()>::type * = nullptr>
-    static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> typename Internal::ImageTypeWithElemType<ImageType, void>::type {
+    template <typename DstElemType = void,
+              typename ImageType, 
+              typename std::enable_if<!ImageType::has_static_halide_type>::type * = nullptr>
+    static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> 
+            typename Internal::ImageTypeWithElemType<ImageType, void>::type {
         // The enable_if ensures this will never fire; this is here primarily
         // as documentation and a backstop against breakage.
-        static_assert(!ImageType::has_static_halide_type(), 
+        static_assert(!ImageType::has_static_halide_type, 
                       "This variant of convert_image() requires a dynamically-typed image");
 
         const halide_type_t src_type = src.type();
