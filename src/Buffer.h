@@ -362,10 +362,14 @@ public:
     HALIDE_BUFFER_FORWARD(device_free)
     HALIDE_BUFFER_FORWARD(fill)
     HALIDE_BUFFER_FORWARD_CONST(for_each_element)
-    HALIDE_BUFFER_FORWARD(for_each_value)
 
 #undef HALIDE_BUFFER_FORWARD
 #undef HALIDE_BUFFER_FORWARD_CONST
+
+    template<typename Fn, typename ...Args>
+    void for_each_value(Fn &&f, Args... other_buffers) {
+        return get()->for_each_value(std::forward<Fn>(f), (*std::forward<Args>(other_buffers).get())...); 
+    }
 
     static constexpr bool has_static_halide_type() {
         return Runtime::Buffer<T>::has_static_halide_type();
@@ -382,6 +386,11 @@ public:
 
     Type type() const {
         return contents->buf.type();
+    }
+
+    template<typename T2>
+    Buffer<T2> as() const {
+        return Buffer<T2>(*this);
     }
 
     Buffer<T> copy() const {

@@ -42,6 +42,68 @@ void test_round_trip(Buffer<uint8_t> buf, std::string format) {
     }
 }
 
+// static -> static conversion test
+void test_convert_image_s2s(Buffer<uint8_t> buf) {
+    // convert to float
+    Buffer<float> buf_float = Tools::ImageTypeConversion::convert_image<float>(buf);
+
+    // convert back to uint8
+    Buffer<uint8_t> buf2 = Tools::ImageTypeConversion::convert_image<uint8_t>(buf_float);
+
+    // Check that they match (this conversion should be exact).
+    RDom r(buf2);
+    std::vector<Expr> args = {r.x, r.y, r.z};
+    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
+    if (diff > 0) {
+        printf("test_convert_static: Difference of %d when converted\n", diff);
+        abort();
+    }
+}
+
+// static -> dynamic conversion test
+void test_convert_image_s2d(Buffer<uint8_t> buf) {
+    // convert to float
+    Buffer<> buf_float_d = Tools::ImageTypeConversion::convert_image(buf, halide_type_t(halide_type_float, 32));
+    // This will do a runtime check
+    Buffer<float> buf_float(buf_float_d);
+
+    // convert back to uint8
+    Buffer<> buf2_d = Tools::ImageTypeConversion::convert_image(buf_float, halide_type_t(halide_type_uint, 8));
+    // This will do a runtime check
+    Buffer<uint8_t> buf2(buf2_d);
+
+    // Check that they match (this conversion should be exact).
+    RDom r(buf2);
+    std::vector<Expr> args = {r.x, r.y, r.z};
+    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
+    if (diff > 0) {
+        printf("test_convert_image_s2d: Difference of %d when converted\n", diff);
+        abort();
+    }
+}
+
+// dynamic -> dynamic conversion test
+void test_convert_image_d2d(Buffer<> buf_d) {
+    // convert to float
+    Buffer<> buf_float_d = Tools::ImageTypeConversion::convert_image(buf_d, halide_type_t(halide_type_float, 32));
+
+    // convert back to uint8
+    Buffer<> buf2_d = Tools::ImageTypeConversion::convert_image(buf_float_d, halide_type_t(halide_type_uint, 8));
+
+    // These will do a runtime check
+    Buffer<uint8_t> buf(buf_d);
+    Buffer<uint8_t> buf2(buf2_d);
+
+    // Check that they match (this conversion should be exact).
+    RDom r(buf2);
+    std::vector<Expr> args = {r.x, r.y, r.z};
+    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
+    if (diff > 0) {
+        printf("test_convert_image_d2d: Difference of %d when converted\n", diff);
+        abort();
+    }
+}
+
 Func make_noise(int depth) {
     Func f;
     Var x, y, c;
@@ -70,6 +132,10 @@ int main(int argc, char **argv) {
     f(x, y, c) = cast<uint8_t>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * 255.0f);
 
     Buffer<uint8_t> color_buf = f.realize(width, height, 3);
+
+    test_convert_image_s2s(color_buf);
+    test_convert_image_s2d(color_buf);
+    test_convert_image_d2d(color_buf);
 
     Buffer<uint8_t> luma_buf(width, height, 1);
     luma_buf.copy_from(color_buf);
