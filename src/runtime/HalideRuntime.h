@@ -484,6 +484,8 @@ extern int halide_shutdown_trace();
  * accessed via the functions below.
  */
 
+/** An opaque struct containing per-GPU API implementations of the
+ * device functions. */
 struct halide_device_interface_impl_t;
 
 /** Each GPU API provides a halide_device_interface_t struct pointing
@@ -492,7 +494,14 @@ struct halide_device_interface_impl_t;
  * calling the functions declared below. Note that the global
  * functions are not available when using Halide as a JIT compiler.
  * If you are using raw halide_buffer_t in that context you must use
- * the function pointers in the device_interface struct. */
+ * the function pointers in the device_interface struct.
+ *
+ * The function pointers below are currently the same for every GPU
+ * API; only the impl field varies. These top-level functions do the
+ * bookkeeping that is common across all GPU APIs, and then dispatch
+ * to more API-specific functions via another set of function pointers
+ * hidden inside the impl field.
+ */
 struct halide_device_interface_t {
     int (*device_malloc)(void *user_context, struct halide_buffer_t *buf,
                          const struct halide_device_interface_t *device_interface);
@@ -512,9 +521,10 @@ struct halide_device_interface_t {
     const struct halide_device_interface_impl_t *impl;
 };
 
-/** Release all data associated with the current GPU backend, in particular
- * all resources (memory, texture, context handles) allocated by Halide. Must
- * be called explicitly when using AOT compilation. */
+/** Release all data associated with the given device interface, in
+ * particular all resources (memory, texture, context handles)
+ * allocated by Halide. Must be called explicitly when using AOT
+ * compilation. */
 extern void halide_device_release(void *user_context,
                                   const struct halide_device_interface_t *device_interface);
 
@@ -542,11 +552,12 @@ extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
 /** Free device memory. */
 extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
 
-/** Wrap or detach a native device handle. The meaning of the opaque
- * is specific to the device interface, so if you know the device
- * interface in use, call the more specific functions in the runtime
- * headers for your specific device API instead
- * (e.g. HalideRuntimeCuda.h). */
+/** Wrap or detach a native device handle, setting the device field
+ * and device_interface field as appropriate for the given GPU
+ * API. The meaning of the opaque handle is specific to the device
+ * interface, so if you know the device interface in use, call the
+ * more specific functions in the runtime headers for your specific
+ * device API instead (e.g. HalideRuntimeCuda.h). */
 // @{
 extern int halide_device_wrap_native(void *user_context,
                                      struct halide_buffer_t *buf,
