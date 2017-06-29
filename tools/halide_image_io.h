@@ -975,6 +975,9 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 struct ImageTypeConversion {
     // Convert an Image from one ElemType to another, where the src and
     // dst types are statically known (e.g. Buffer<uint8_t> -> Buffer<float>).
+    // Note that this does conversion with scaling -- intepreting integers
+    // as fixed-point numbers between 0 and 1 -- not merely C-style casting.
+    //
     // You'd normally call this with an explicit type for DstElemType and
     // allow ImageType to be inferred, e.g.
     //     Buffer<uint8_t> src = ...;
@@ -1012,12 +1015,6 @@ struct ImageTypeConversion {
         // as documentation and a backstop against breakage.
         static_assert(ImageType::has_static_halide_type, 
                       "This variant of convert_image() requires a statically-typed image");
-
-        const halide_type_t src_type = src.type();
-        if (src_type == dst_type) {
-            // My, that was easy.
-            return src;
-        }
 
         // Call the appropriate static-to-static conversion routine
         // based on the desired dst type.
@@ -1063,16 +1060,11 @@ struct ImageTypeConversion {
         static_assert(!ImageType::has_static_halide_type, 
                       "This variant of convert_image() requires a dynamically-typed image");
 
-        const halide_type_t src_type = src.type();
-        if (src_type == dst_type) {
-            // My, that was easy.
-            return src;
-        }
-
         // Sniff the runtime type of src, coerce it to that type using as<>(),
         // and call the static-to-dynamic variant of this method. (Note that
         // this forces instantiation of the complete any-to-any conversion
         // matrix of code.)
+        const halide_type_t src_type = src.type();
         switch (Internal::halide_type_code((halide_type_code_t) src_type.code, src_type.bits)) {
             case Internal::halide_type_code(halide_type_float, 32): 
                 return convert_image(src.template as<float>(), dst_type);
