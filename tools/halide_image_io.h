@@ -1021,7 +1021,7 @@ struct ImageTypeConversion {
 
         // Call the appropriate static-to-static conversion routine
         // based on the desired dst type.
-        switch (Internal::halide_type_code(dst_type.code, dst_type.bits)) {
+        switch (Internal::halide_type_code((halide_type_code_t) dst_type.code, dst_type.bits)) {
             case Internal::halide_type_code(halide_type_float, 32): 
                 return convert_image<float>(src);
             case Internal::halide_type_code(halide_type_float, 64): 
@@ -1073,7 +1073,7 @@ struct ImageTypeConversion {
         // and call the static-to-dynamic variant of this method. (Note that
         // this forces instantiation of the complete any-to-any conversion
         // matrix of code.)
-        switch (Internal::halide_type_code(src_type.code, src_type.bits)) {
+        switch (Internal::halide_type_code((halide_type_code_t) src_type.code, src_type.bits)) {
             case Internal::halide_type_code(halide_type_float, 32): 
                 return convert_image(src.template as<float>(), dst_type);
             case Internal::halide_type_code(halide_type_float, 64): 
