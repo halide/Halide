@@ -959,7 +959,138 @@ bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result
     return check(false, err.c_str());
 }
 
+// Given something like ImageType<Foo>, produce typedef ImageType<Bar>
+template<typename ImageType, typename ElemType>
+struct ImageTypeWithElemType {
+    using type = decltype(std::declval<ImageType>().template as<ElemType>());
+};
+
+// Must be constexpr to allow use in case clauses.
+inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
+    return (((int) code) << 8) | bits;
+}
+
 }  // namespace Internal
+
+struct ImageTypeConversion {
+    // Convert an Image from one ElemType to another, where the src and
+    // dst types are statically known (e.g. Buffer<uint8_t> -> Buffer<float>). 
+    template<typename DstElemType, typename ImageType>
+    static auto convert_image(const ImageType &src) -> typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
+        using SrcImageType = ImageType;
+        using SrcElemType = typename SrcImageType::ElemType;
+
+        using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
+
+        static_assert(SrcImageType::has_static_halide_type(), 
+                      "convert_image_s2s() requires a statically-typed image");
+
+        DstImageType dst = DstImageType::make_with_shape_of(src);
+        const auto converter = [](DstElemType &dst_elem, SrcElemType src_elem) {
+            dst_elem = Internal::convert<DstElemType>(src_elem);
+        };
+        // TODO: do we need src.copy_to_host() here?
+        dst.for_each_value(converter, src);
+
+        return dst;
+    }
+
+    // Convert an Image from one ElemType to another, where the src type
+    // is statically known but the dst type is not 
+    // (e.g. Buffer<uint8_t> -> Buffer<>(halide_type_t)). 
+    template <typename ImageType, typename std::enable_if<ImageType::has_static_halide_type()>::type * = nullptr>
+    static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> typename Internal::ImageTypeWithElemType<ImageType, void>::type {
+        // The enable_if ensures this will never fire; this is here primarily
+        // as documentation and a backstop against breakage.
+        static_assert(ImageType::has_static_halide_type(), 
+                      "This variant of convert_image() requires a statically-typed image");
+
+        const halide_type_t src_type = src.type();
+        if (src_type == dst_type) {
+            // My, that was easy.
+            return src;
+        }
+
+        // Call the appropriate static-to-static conversion routine
+        // based on the desired dst type.
+        switch (Internal::halide_type_code(dst_type.code, dst_type.bits)) {
+            case Internal::halide_type_code(halide_type_float, 32): 
+                return convert_image<float>(src);
+            case Internal::halide_type_code(halide_type_float, 64): 
+                return convert_image<double>(src);
+            case Internal::halide_type_code(halide_type_int, 8): 
+                return convert_image<int8_t>(src);
+            case Internal::halide_type_code(halide_type_int, 16): 
+                return convert_image<int16_t>(src);
+            case Internal::halide_type_code(halide_type_int, 32): 
+                return convert_image<int32_t>(src);
+            case Internal::halide_type_code(halide_type_int, 64): 
+                return convert_image<int64_t>(src);
+            case Internal::halide_type_code(halide_type_uint, 1): 
+                return convert_image<bool>(src);
+            case Internal::halide_type_code(halide_type_uint, 8): 
+                return convert_image<uint8_t>(src);
+            case Internal::halide_type_code(halide_type_uint, 16): 
+                return convert_image<uint16_t>(src);
+            case Internal::halide_type_code(halide_type_uint, 32): 
+                return convert_image<uint32_t>(src);
+            case Internal::halide_type_code(halide_type_uint, 64): 
+                return convert_image<uint64_t>(src);
+            default:
+                assert(!"Unsupported type");
+                return ImageType();
+        }
+    }
+
+    // Convert an Image from one ElemType to another, where neither src type
+    // nor dst type are statically known
+    // (e.g. Buffer<>(halide_type_t) -> Buffer<>(halide_type_t)). 
+    template <typename ImageType, typename std::enable_if<!ImageType::has_static_halide_type()>::type * = nullptr>
+    static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> typename Internal::ImageTypeWithElemType<ImageType, void>::type {
+        // The enable_if ensures this will never fire; this is here primarily
+        // as documentation and a backstop against breakage.
+        static_assert(!ImageType::has_static_halide_type(), 
+                      "This variant of convert_image() requires a dynamically-typed image");
+
+        const halide_type_t src_type = src.type();
+        if (src_type == dst_type) {
+            // My, that was easy.
+            return src;
+        }
+
+        // Sniff the runtime type of src, coerce it to that type using as<>(),
+        // and call the static-to-dynamic variant of this method. (Note that
+        // this forces instantiation of the complete any-to-any conversion
+        // matrix of code.)
+        switch (Internal::halide_type_code(src_type.code, src_type.bits)) {
+            case Internal::halide_type_code(halide_type_float, 32): 
+                return convert_image(src.template as<float>(), dst_type);
+            case Internal::halide_type_code(halide_type_float, 64): 
+                return convert_image(src.template as<double>(), dst_type);
+            case Internal::halide_type_code(halide_type_int, 8): 
+                return convert_image(src.template as<int8_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_int, 16): 
+                return convert_image(src.template as<int16_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_int, 32): 
+                return convert_image(src.template as<int32_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_int, 64): 
+                return convert_image(src.template as<int64_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 1): 
+                return convert_image(src.template as<bool>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 8): 
+                return convert_image(src.template as<uint8_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 16): 
+                return convert_image(src.template as<uint16_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 32): 
+                return convert_image(src.template as<uint32_t>(), dst_type);
+            case Internal::halide_type_code(halide_type_uint, 64): 
+                return convert_image(src.template as<uint64_t>(), dst_type);
+            default:
+                assert(!"Unsupported type");
+                return ImageType();
+        }
+    }
+};
 
 // Returns false upon failure.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
