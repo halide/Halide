@@ -36,6 +36,8 @@ void test_round_trip(Buffer<uint8_t> buf, std::string format) {
 
 // static -> static conversion test
 void test_convert_image_s2s(Buffer<uint8_t> buf) {
+    std::cout << "Testing static -> static image conversion\n";
+
     // convert to float
     Buffer<float> buf_float = Tools::ImageTypeConversion::convert_image<float>(buf);
 
@@ -54,6 +56,8 @@ void test_convert_image_s2s(Buffer<uint8_t> buf) {
 
 // static -> dynamic conversion test
 void test_convert_image_s2d(Buffer<uint8_t> buf) {
+    std::cout << "Testing static -> dynamic image conversion\n";
+
     // convert to float
     Buffer<> buf_float_d = Tools::ImageTypeConversion::convert_image(buf, halide_type_t(halide_type_float, 32));
     // This will do a runtime check
@@ -76,6 +80,8 @@ void test_convert_image_s2d(Buffer<uint8_t> buf) {
 
 // dynamic -> dynamic conversion test
 void test_convert_image_d2d(Buffer<> buf_d) {
+    std::cout << "Testing dynamic -> dynamic image conversion\n";
+
     // convert to float
     Buffer<> buf_float_d = Tools::ImageTypeConversion::convert_image(buf_d, halide_type_t(halide_type_float, 32));
 
