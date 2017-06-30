@@ -982,16 +982,19 @@ struct ImageTypeConversion {
     // allow ImageType to be inferred, e.g.
     //     Buffer<uint8_t> src = ...;
     //     Buffer<float> dst = convert_image<float>(src);
-    template<typename DstElemType, typename ImageType>
+    template<typename DstElemType, typename ImageType,
+             typename std::enable_if<ImageType::has_static_halide_type>::type * = nullptr>
     static auto convert_image(const ImageType &src) -> 
             typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
+        // The enable_if ensures this will never fire; this is here primarily
+        // as documentation and a backstop against breakage.
+        static_assert(ImageType::has_static_halide_type, 
+                      "This variant of convert_image() requires a statically-typed image");
+
         using SrcImageType = ImageType;
         using SrcElemType = typename SrcImageType::ElemType;
 
         using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
-
-        static_assert(SrcImageType::has_static_halide_type, 
-                      "convert_image_s2s() requires a statically-typed image");
 
         DstImageType dst = DstImageType::make_with_shape_of(src);
         const auto converter = [](DstElemType &dst_elem, SrcElemType src_elem) {
@@ -1001,6 +1004,52 @@ struct ImageTypeConversion {
         dst.for_each_value(converter, src);
 
         return dst;
+    }
+
+    // Convert an Image from one ElemType to another, where the dst type is statically
+    // known but the src type is not (e.g. Buffer<> -> Buffer<float>).
+    // You'd normally call this with an explicit type for DstElemType and
+    // allow ImageType to be inferred, e.g.
+    //     Buffer<uint8_t> src = ...;
+    //     Buffer<float> dst = convert_image<float>(src);
+    template<typename DstElemType, typename ImageType,
+             typename std::enable_if<!ImageType::has_static_halide_type>::type * = nullptr>
+    static auto convert_image(const ImageType &src) -> 
+            typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
+        // The enable_if ensures this will never fire; this is here primarily
+        // as documentation and a backstop against breakage.
+        static_assert(!ImageType::has_static_halide_type, 
+                      "This variant of convert_image() requires a dynamically-typed image");
+
+        const halide_type_t src_type = src.type();
+        switch (Internal::halide_type_code((halide_type_code_t) src_type.code, src_type.bits)) {
+            case Internal::halide_type_code(halide_type_float, 32):
+                return convert_image<DstElemType>(src.template as<float>());
+            case Internal::halide_type_code(halide_type_float, 64): 
+                return convert_image<DstElemType>(src.template as<double>());
+            case Internal::halide_type_code(halide_type_int, 8): 
+                return convert_image<DstElemType>(src.template as<int8_t>());
+            case Internal::halide_type_code(halide_type_int, 16): 
+                return convert_image<DstElemType>(src.template as<int16_t>());
+            case Internal::halide_type_code(halide_type_int, 32): 
+                return convert_image<DstElemType>(src.template as<int32_t>());
+            case Internal::halide_type_code(halide_type_int, 64): 
+                return convert_image<DstElemType>(src.template as<int64_t>());
+            case Internal::halide_type_code(halide_type_uint, 1): 
+                return convert_image<DstElemType>(src.template as<bool>());
+            case Internal::halide_type_code(halide_type_uint, 8): 
+                return convert_image<DstElemType>(src.template as<uint8_t>());
+            case Internal::halide_type_code(halide_type_uint, 16): 
+                return convert_image<DstElemType>(src.template as<uint16_t>());
+            case Internal::halide_type_code(halide_type_uint, 32): 
+                return convert_image<DstElemType>(src.template as<uint32_t>());
+            case Internal::halide_type_code(halide_type_uint, 64): 
+                return convert_image<DstElemType>(src.template as<uint64_t>());
+            default:
+                assert(!"Unsupported type");
+                using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
+                return DstImageType();
+        }
     }
 
     // Convert an Image from one ElemType to another, where the src type
