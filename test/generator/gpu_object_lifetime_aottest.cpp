@@ -27,33 +27,52 @@ void my_halide_print(void *user_context, const char *str) {
 int main(int argc, char **argv) {
     halide_set_custom_print(&my_halide_print);
 
-    const int iters = 3;
-
     // Run the whole program several times.
-    for (int i = 0; i < iters; i++) {
-        Buffer<int> output(80);
+    for (int wrap_memory = 0; wrap_memory < 2; wrap_memory++) {
+        // Do an explicit copy-back and device free.
+        {
+            int scratch[80];
+            Buffer<int> output = wrap_memory ? Buffer<int>(scratch, 80) : Buffer<int>(80);
 
-        gpu_object_lifetime(output);
+            gpu_object_lifetime(output);
 
-        output.copy_to_host();
-        output.device_free();
+            output.copy_to_host();
+            output.device_free();
 
-        for (int x = 0; x < output.width(); x++) {
-            if (output(x) != x) {
-                printf("Error! %d != %d\n", output(x), x);
-                return -1;
+            for (int x = 0; x < output.width(); x++) {
+                if (output(x) != x) {
+                    printf("Error! %d != %d\n", output(x), x);
+                    return -1;
+                }
             }
         }
 
-        // Also run the pipeline with wrapped host memory and no
-        // explicit device_free call, to make sure memory gifted by
-        // pipelines doesn't leak in that case.
-        if (true) {
+        // Do an explicit copy-back but no device free
+        {
             int scratch[80];
-            Buffer<int> output_wrapped(scratch, 80);
-            gpu_object_lifetime(output_wrapped);
+            Buffer<int> output = wrap_memory ? Buffer<int>(scratch, 80) : Buffer<int>(80);
+
+            gpu_object_lifetime(output);
+
+            output.copy_to_host();
+
+            for (int x = 0; x < output.width(); x++) {
+                if (output(x) != x) {
+                    printf("Error! %d != %d\n", output(x), x);
+                    return -1;
+                }
+            }
         }
 
+        // Do no explicit copy-back and no device free
+        {
+            int scratch[80];
+            Buffer<int> output = wrap_memory ? Buffer<int>(scratch, 80) : Buffer<int>(80);
+            gpu_object_lifetime(output);
+        }
+
+        // Use a device_release between the two loop iterations to
+        // check that it doesn't leak anything.
 #if defined(TEST_CUDA)
         halide_device_release(nullptr, halide_cuda_device_interface());
 #elif defined(TEST_OPENCL)
@@ -61,7 +80,7 @@ int main(int argc, char **argv) {
 #endif
     }
 
-    int ret = tracker.validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */, iters /* max_globals */);
+    int ret = tracker.validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */, 2 /* max_globals */);
     if (ret != 0) {
         return ret;
     }
