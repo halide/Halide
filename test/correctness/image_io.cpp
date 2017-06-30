@@ -1,24 +1,17 @@
-#ifdef _MSC_VER
-#include <stdio.h>
-int main(int argc, char **argv) {
-    printf("Skipping test on Windows\n");
-    return 0;
-}
-#else
-
 #include "Halide.h"
 #include "halide_image_io.h"
 #include "test/common/halide_test_dirs.h"
 
 using namespace Halide;
 
-void test_round_trip(Buffer<uint8_t> buf, std::string format) {
+template<typename T>
+void test_round_trip(Buffer<T> buf, std::string format) {
     // Save it
     std::string filename = Internal::get_test_tmp_dir() + "test." + format;
     Tools::save_image(buf, filename);
 
     // Reload it
-    Buffer<uint8_t> reloaded = Tools::load_image(filename);
+    Buffer<T> reloaded = Tools::load_image(filename);
 
     Tools::save_image(reloaded, Internal::get_test_tmp_dir() + "test_reloaded." + format);
 
@@ -42,6 +35,100 @@ void test_round_trip(Buffer<uint8_t> buf, std::string format) {
     }
 }
 
+// static -> static conversion test
+template<typename T>
+void test_convert_image_s2s(Buffer<T> buf) {
+    std::cout << "Testing static -> static image conversion for " << halide_type_of<T>() << "\n";
+
+    // convert to float
+    Buffer<float> buf_float = Tools::ImageTypeConversion::convert_image<float>(buf);
+
+    // convert back to T
+    Buffer<T> buf2 = Tools::ImageTypeConversion::convert_image<T>(buf_float);
+
+    // Check that they match (this conversion should be exact).
+    RDom r(buf2);
+    std::vector<Expr> args = {r.x, r.y, r.z};
+    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
+    if (diff > 0) {
+        printf("test_convert_static: Difference of %d when converted\n", diff);
+        abort();
+    }
+}
+
+// dynamic -> static conversion test
+template<typename T>
+void test_convert_image_d2s(Buffer<T> buf) {
+    std::cout << "Testing dynamic -> static image conversion for " << halide_type_of<T>() << "\n";
+
+    // convert to float
+    Buffer<> buf_d(buf);
+    Buffer<float> buf_float = Tools::ImageTypeConversion::convert_image<float>(buf_d);
+
+    // convert back to T
+    Buffer<> buf_float_d(buf_float);
+    Buffer<T> buf2 = Tools::ImageTypeConversion::convert_image<T>(buf_float_d);
+
+    // Check that they match (this conversion should be exact).
+    RDom r(buf2);
+    std::vector<Expr> args = {r.x, r.y, r.z};
+    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
+    if (diff > 0) {
+        printf("test_convert_image_s2d: Difference of %d when converted\n", diff);
+        abort();
+    }
+}
+
+// static -> dynamic conversion test
+template<typename T>
+void test_convert_image_s2d(Buffer<T> buf) {
+    std::cout << "Testing static -> dynamic image conversion for " << halide_type_of<T>() << "\n";
+
+    // convert to float
+    Buffer<> buf_float_d = Tools::ImageTypeConversion::convert_image(buf, halide_type_t(halide_type_float, 32));
+    // This will do a runtime check
+    Buffer<float> buf_float(buf_float_d);
+
+    // convert back to T
+    Buffer<> buf2_d = Tools::ImageTypeConversion::convert_image(buf_float, halide_type_of<T>());
+    // This will do a runtime check
+    Buffer<T> buf2(buf2_d);
+
+    // Check that they match (this conversion should be exact).
+    RDom r(buf2);
+    std::vector<Expr> args = {r.x, r.y, r.z};
+    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
+    if (diff > 0) {
+        printf("test_convert_image_s2d: Difference of %d when converted\n", diff);
+        abort();
+    }
+}
+
+// dynamic -> dynamic conversion test
+template<typename T>
+void test_convert_image_d2d(Buffer<> buf_d) {
+    std::cout << "Testing dynamic -> dynamic image conversion for " << halide_type_of<T>() << "\n";
+
+    // convert to float
+    Buffer<> buf_float_d = Tools::ImageTypeConversion::convert_image(buf_d, halide_type_t(halide_type_float, 32));
+
+    // convert back to T
+    Buffer<> buf2_d = Tools::ImageTypeConversion::convert_image(buf_float_d, halide_type_of<T>());
+
+    // These will do a runtime check
+    Buffer<T> buf(buf_d);
+    Buffer<T> buf2(buf2_d);
+
+    // Check that they match (this conversion should be exact).
+    RDom r(buf2);
+    std::vector<Expr> args = {r.x, r.y, r.z};
+    uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
+    if (diff > 0) {
+        printf("test_convert_image_d2d: Difference of %d when converted\n", diff);
+        abort();
+    }
+}
+
 Func make_noise(int depth) {
     Func f;
     Var x, y, c;
@@ -60,30 +147,54 @@ Func make_noise(int depth) {
     return f;
 }
 
-int main(int argc, char **argv) {
+template<typename T>
+void do_test() {
     const int width = 1600;
     const int height = 1200;
 
     // Make some colored noise
     Func f;
     Var x, y, c;
-    f(x, y, c) = cast<uint8_t>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * 255.0f);
+    const float one = std::numeric_limits<T>::max();
+    f(x, y, c) = cast<T>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * one);
 
-    Buffer<uint8_t> color_buf = f.realize(width, height, 3);
+    Buffer<T> color_buf = f.realize(width, height, 3);
 
-    Buffer<uint8_t> luma_buf(width, height, 1);
+    test_convert_image_s2s<T>(color_buf);
+    test_convert_image_s2d<T>(color_buf);
+    test_convert_image_d2s<T>(color_buf);
+    test_convert_image_d2d<T>(color_buf);
+
+    Buffer<T> luma_buf(width, height, 1);
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2, 0);
 
-    std::string formats[] = {"jpg", "png", "ppm"};
+    std::vector<std::string> formats = {"ppm","pgm"};
+#ifndef HALIDE_NO_JPEG
+    formats.push_back("jpg");
+#endif
+#ifndef HALIDE_NO_PNG
+    formats.push_back("png");
+#endif
     for (std::string format : formats) {
-        test_round_trip(color_buf, format);
+        if (format == "jpg" && halide_type_of<T>() != halide_type_t(halide_type_uint, 8)) {
+            continue;
+        }
+        std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "\n";
+        if (format != "pgm") {
+            // pgm really only supports gray images.
+            test_round_trip(color_buf, format);
+        }
         if (format != "ppm") {
             // ppm really only supports RGB images.
             test_round_trip(luma_buf, format);
         }
     }
+}
+
+int main(int argc, char **argv) {
+    do_test<uint8_t>();
+    do_test<uint16_t>();
     return 0;
 }
 
-#endif
