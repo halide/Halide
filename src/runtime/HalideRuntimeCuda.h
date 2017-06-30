@@ -45,10 +45,8 @@ extern int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_
 /** Disconnect this halide_buffer_t from the device pointer it was
  * previously wrapped around. Should only be called for a
  * halide_buffer_t that halide_cuda_wrap_device_ptr was previously
- * called on. Frees any storage associated with the binding of the
- * halide_buffer_t and the device pointer, but does not free the
- * device pointer. The dev field of the halide_buffer_t will be NULL
- * on return.
+ * called on. The device field of the halide_buffer_t will be NULL on
+ * return.
  */
 extern int halide_cuda_detach_device_ptr(void *user_context, struct halide_buffer_t *buf);
 

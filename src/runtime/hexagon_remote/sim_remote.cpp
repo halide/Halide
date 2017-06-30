@@ -99,6 +99,25 @@ __attribute__((weak)) extern int munmap;
 
 }  // extern "C"
 
+// memalign() on the Simulator is unreliable and can apparently return
+// overlapping areas. Roll our own version that is based on malloc().
+static void *aligned_malloc(size_t alignment, size_t x) {
+    void *orig = malloc(x + alignment);
+    if (!orig) {
+        return NULL;
+    }
+    // We want to store the original pointer prior to the pointer we return.
+    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
+    ((void **)ptr)[-1] = orig;
+    return ptr;
+}
+
+static void aligned_free(void *ptr) {
+    if (ptr) {
+        free(((void**)ptr)[-1]);
+    }
+}
+
 void log_printf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -116,11 +135,11 @@ void halide_error(void *user_context, const char *str) {
 }
 
 void *halide_malloc(void *user_context, size_t x) {
-    return memalign(hvx_alignment, x);
+    return aligned_malloc(hvx_alignment, x);
 }
 
 void halide_free(void *user_context, void *ptr) {
-    free(ptr);
+    aligned_free(ptr);
 }
 
 int halide_do_task(void *user_context, halide_task_t f, int idx,
@@ -405,10 +424,10 @@ int main(int argc, const char **argv) {
         case Message::None:
             break;
         case Message::Alloc:
-            set_rpc_return(reinterpret_cast<int>(memalign(hvx_alignment, RPC_ARG(0))));
+            set_rpc_return(reinterpret_cast<int>(aligned_malloc(hvx_alignment, RPC_ARG(0))));
             break;
         case Message::Free:
-            free(reinterpret_cast<void*>(RPC_ARG(0)));
+            aligned_free(reinterpret_cast<void*>(RPC_ARG(0)));
             set_rpc_return(0);
             break;
         case Message::InitKernels:
