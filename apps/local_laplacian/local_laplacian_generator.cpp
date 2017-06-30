@@ -119,11 +119,10 @@ public:
                     .compute_root().reorder_storage(x, k, y)
                     .reorder(k, y).parallel(y, 8).vectorize(x, 8);
                 outGPyramid[j]
-                    .store_at(output, yo).compute_at(output, y)
+                    .store_at(output, yo).compute_at(outGPyramid[j-1], y).fold_storage(y, 8)
                     .vectorize(x, 8);
             }
-            outGPyramid[0]
-                .compute_at(output, y).vectorize(x, 8);
+            outGPyramid[0].compute_at(output, y).vectorize(x, 8);
             for (int j = 5; j < J; j++) {
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);
