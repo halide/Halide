@@ -139,13 +139,11 @@ class Buffer {
     using storage_T = typename std::conditional<std::is_pointer<T>::value, uint64_t, not_void_T>::type;
 
 public:
-    /** Return true if the Halide type is not void (or const void). */
-    static constexpr bool has_static_halide_type() {
-        return !T_is_void;
-    }
+    /** True if the Halide type is not void (or const void). */
+    static constexpr bool has_static_halide_type = !T_is_void;
 
     /** Get the Halide type of T. Callers should not use the result if
-     * has_static_halide_type() returns false. */
+     * has_static_halide_type is false. */
     static halide_type_t static_halide_type() {
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
