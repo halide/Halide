@@ -7,7 +7,9 @@ using namespace Halide;
 template<typename T>
 void test_round_trip(Buffer<T> buf, std::string format) {
     // Save it
-    std::string filename = Internal::get_test_tmp_dir() + "test." + format;
+    std::ostringstream o;
+    o << Internal::get_test_tmp_dir() << "test_" << halide_type_of<T>() << "x" << buf.channels() << "." << format;
+    std::string filename = o.str();
     Tools::save_image(buf, filename);
 
     // Reload it
@@ -180,12 +182,13 @@ void do_test() {
         if (format == "jpg" && halide_type_of<T>() != halide_type_t(halide_type_uint, 8)) {
             continue;
         }
-        std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "\n";
         if (format != "pgm") {
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x3\n";
             // pgm really only supports gray images.
             test_round_trip(color_buf, format);
         }
         if (format != "ppm") {
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x1\n";
             // ppm really only supports RGB images.
             test_round_trip(luma_buf, format);
         }
