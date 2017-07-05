@@ -353,7 +353,7 @@ int main(int argc, char * const * argv) {
     for(;;) {
         Packet p;
         if (!p.read_from_filedesc(file_desc)) {
-            printf("[INFO] Finished pass 2 after %d packets.\n", packet_count);
+            printf("[INFO] Finished pass 1 after %d packets.\n", packet_count);
             break;
         }
 
