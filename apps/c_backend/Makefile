@@ -8,7 +8,7 @@ all: $(BIN)/test
 
 $(BIN)/pipeline_exec: pipeline_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(LLVM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(LLVM_SYSTEM_LDFLAGS)
 
 $(BIN)/pipeline_native.a: $(BIN)/pipeline_exec
 	@-mkdir -p $(BIN)
@@ -21,9 +21,9 @@ $(BIN)/pipeline_c.cpp: $(BIN)/pipeline_exec
 $(BIN)/run: run.cpp $(BIN)/pipeline_c.cpp $(BIN)/pipeline_native.a
 	$(CXX) $(CXXFLAGS) -Wall -I$(BIN) $(filter-out %.h,$^) -o $@  $(LDFLAGS)
 
-$(BIN)/pipeline_cpp_exec: pipeline_cpp_generator.cpp $(GENERATOR_DEPS)
+$(BIN)/pipeline_cpp_exec: pipeline_cpp_generator.cpp $(GENERATOR_DEPS) $(LLVM_SYSTEM_LDFLAGS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(LLVM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 $(BIN)/pipeline_cpp_cpp.cpp: $(BIN)/pipeline_cpp_exec
 	@-mkdir -p $(BIN)
