@@ -335,6 +335,12 @@ private:
             } else if (is_positive_const(b.min) || op->type.is_uint()) {
                 interval = Interval(e1, e2);
             } else if (is_negative_const(b.min)) {
+                if (e1.same_as(Interval::neg_inf)) {
+                    e1 = Interval::pos_inf;
+                }
+                if (e2.same_as(Interval::pos_inf)) {
+                    e2 = Interval::neg_inf;
+                }
                 interval = Interval(e2, e1);
             } else if (a.is_bounded()) {
                 // Sign of b is unknown
@@ -387,6 +393,12 @@ private:
             if (is_positive_const(b.min) || op->type.is_uint()) {
                 interval = Interval(e1, e2);
             } else if (is_negative_const(b.min)) {
+                if (e1.same_as(Interval::neg_inf)) {
+                    e1 = Interval::pos_inf;
+                }
+                if (e2.same_as(Interval::pos_inf)) {
+                    e2 = Interval::neg_inf;
+                }
                 interval = Interval(e2, e1);
             } else if (a.is_bounded()) {
                 // Sign of b is unknown. Note that this might divide
@@ -508,7 +520,7 @@ private:
         } else if (can_prove(always_false)) {
             interval = Interval::single_point(const_false());
         } else {
-            bounds_of_type(a_expr.type());
+            bounds_of_type(Bool(a_expr.type().lanes()));
         }
     }
 
@@ -597,7 +609,7 @@ private:
 
     void visit(const Load *op) {
         op->index.accept(this);
-        if (interval.is_single_point() && is_one(op->predicate)) {
+        if (!const_bound && interval.is_single_point() && is_one(op->predicate)) {
             // If the index is const and it is not a predicated load,
             // we can return the load of that index
             Expr load_min =
@@ -684,6 +696,9 @@ private:
             // Probably more conservative than necessary
             Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
             equivalent_select.accept(this);
+        } else if (op->is_intrinsic(Call::require)) {
+            assert(op->args.size() == 3);
+            op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
                    op->is_intrinsic(Call::bitwise_and)) {
@@ -835,7 +850,7 @@ Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const 
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
     Bounds b(&scope, fb, const_bound);
     expr.accept(&b);
-    //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.min) << ", " << simplify(b.max) << "\n";
+    //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.interval.min) << ", " << simplify(b.interval.max) << "\n";
     if (b.interval.has_lower_bound()) {
         internal_assert(b.interval.min.type().is_scalar())
             << "Min of " << expr
@@ -1593,6 +1608,9 @@ void constant_bound_test() {
         check_constant_bound(x - y, Expr((uint8_t)0), Expr((uint8_t)255));
         check_constant_bound(x*y, Expr((uint8_t)0), Expr((uint8_t)255));
     }
+
+    check_constant_bound(Load::make(Int(32), "buf", 0, Buffer<>(), Parameter(), const_true()) * 20,
+                         Interval::neg_inf, Interval::pos_inf);
 }
 
 } // anonymous namespace
@@ -1621,6 +1639,10 @@ void bounds_test() {
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
     check(scope, cast<uint16_t>(x / 2), make_const(UInt(16), 0), make_const(UInt(16), 5));
     check(scope, cast<uint16_t>((x + 10) / 2), make_const(UInt(16), 5), make_const(UInt(16), 10));
+    check(scope, x < 20, make_bool(1), make_bool(1));
+    check(scope, x < 5, make_bool(0), make_bool(1));
+    check(scope, Broadcast::make(x >= 11, 3), make_bool(0), make_bool(0));
+    check(scope, Ramp::make(x+5, 1, 5) > Broadcast::make(2, 5), make_bool(1), make_bool(1));
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);

@@ -479,15 +479,54 @@ extern int halide_get_trace_file(void *user_context);
  * (flushing the trace). Returns zero on success. */
 extern int halide_shutdown_trace();
 
-/** All Halide GPU or device backend implementations much provide an interface
- * to be used with halide_device_malloc, etc.
+/** All Halide GPU or device backend implementations provide an
+ * interface to be used with halide_device_malloc, etc. This is
+ * accessed via the functions below.
  */
-struct halide_device_interface_t;
 
-/** Release all data associated with the current GPU backend, in particular
- * all resources (memory, texture, context handles) allocated by Halide. Must
- * be called explicitly when using AOT compilation. */
-extern void halide_device_release(void *user_context, const struct halide_device_interface_t *device_interface);
+/** An opaque struct containing per-GPU API implementations of the
+ * device functions. */
+struct halide_device_interface_impl_t;
+
+/** Each GPU API provides a halide_device_interface_t struct pointing
+ * to the code that manages device allocations. You can access these
+ * functions directly from the struct member function pointers, or by
+ * calling the functions declared below. Note that the global
+ * functions are not available when using Halide as a JIT compiler.
+ * If you are using raw halide_buffer_t in that context you must use
+ * the function pointers in the device_interface struct.
+ *
+ * The function pointers below are currently the same for every GPU
+ * API; only the impl field varies. These top-level functions do the
+ * bookkeeping that is common across all GPU APIs, and then dispatch
+ * to more API-specific functions via another set of function pointers
+ * hidden inside the impl field.
+ */
+struct halide_device_interface_t {
+    int (*device_malloc)(void *user_context, struct halide_buffer_t *buf,
+                         const struct halide_device_interface_t *device_interface);
+    int (*device_free)(void *user_context, struct halide_buffer_t *buf);
+    int (*device_sync)(void *user_context, struct halide_buffer_t *buf);
+    void (*device_release)(void *user_context,
+                          const struct halide_device_interface_t *device_interface);
+    int (*copy_to_host)(void *user_context, struct halide_buffer_t *buf);
+    int (*copy_to_device)(void *user_context, struct halide_buffer_t *buf,
+                          const struct halide_device_interface_t *device_interface);
+    int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf,
+                                  const struct halide_device_interface_t *device_interface);
+    int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+    int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
+                       const struct halide_device_interface_t *device_interface);
+    int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
+    const struct halide_device_interface_impl_t *impl;
+};
+
+/** Release all data associated with the given device interface, in
+ * particular all resources (memory, texture, context handles)
+ * allocated by Halide. Must be called explicitly when using AOT
+ * compilation. */
+extern void halide_device_release(void *user_context,
+                                  const struct halide_device_interface_t *device_interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
@@ -513,40 +552,19 @@ extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
 /** Free device memory. */
 extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
 
-/** Get a pointer to halide_device_free if a Halide runtime has been
- * linked in. Returns null if it has not. This requires a different
- * mechanism on different platforms. */
-typedef int (*halide_device_free_t)(void *, struct halide_buffer_t *);
-#ifdef _MSC_VER
-extern const __declspec(selectany) void *halide_dummy_device_free = NULL;
-extern int halide_weak_device_free(void *user_context, struct halide_buffer_t *buf);
-// The following pragma tells the windows linker to make
-// halide_device_free_weak the same symbol as halide_dummy_device_free
-// if it can't resolve halide_weak_device_free normally
-#ifdef _WIN64
-#pragma comment(linker, "/alternatename:halide_weak_device_free=halide_dummy_device_free")
-#else
-#pragma comment(linker, "/alternatename:_halide_weak_device_free=_halide_dummy_device_free")
-#endif
-inline halide_device_free_t halide_get_device_free_fn() {
-    if ((const void **)(&halide_weak_device_free) == &halide_dummy_device_free) {
-        return NULL;
-    } else {
-        return &halide_weak_device_free;
-    }
-};
-#elif __MINGW32__
-inline halide_device_free_t halide_get_device_free_fn() {
-    // There is no workable mechanism for doing this that we know of on mingw.
-    return &halide_device_free;
-}
-#else
-extern __attribute__((weak)) int halide_weak_device_free(void *user_context, struct halide_buffer_t *buf);
-inline halide_device_free_t halide_get_device_free_fn() {
-    return &halide_weak_device_free;
-}
-#endif
-
+/** Wrap or detach a native device handle, setting the device field
+ * and device_interface field as appropriate for the given GPU
+ * API. The meaning of the opaque handle is specific to the device
+ * interface, so if you know the device interface in use, call the
+ * more specific functions in the runtime headers for your specific
+ * device API instead (e.g. HalideRuntimeCuda.h). */
+// @{
+extern int halide_device_wrap_native(void *user_context,
+                                     struct halide_buffer_t *buf,
+                                     uint64_t handle,
+                                     const struct halide_device_interface_t *device_interface);
+extern int halide_device_detach_native(void *user_context, struct halide_buffer_t *buf);
+// @}
 
 /** Versions of the above functions that accept legacy buffer_t structs. */
 // @{
@@ -804,6 +822,16 @@ enum halide_error_code_t {
 
     /** A specialize_fail() schedule branch was selected at runtime. */
     halide_error_code_specialize_fail = -31,
+
+    /** The Halide runtime encountered an error while trying to wrap a
+     * native device handle.  Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_device_wrap_native_failed = -32,
+
+    /** The Halide runtime encountered an error while trying to detach
+     * a native device handle.  Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_detach_native_failed = -33,
 
 };
 

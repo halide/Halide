@@ -74,6 +74,14 @@ struct AllocationHeader {
     std::atomic<int> ref_count {0};
 };
 
+/** A similar struct for managing device allocations. */
+struct DeviceRefCount {
+    // This is only ever constructed when there's something to manage,
+    // so start at one.
+    std::atomic<int> count {1};
+    bool wrapping_native_device_handle {false};
+};
+
 /** A templated Buffer class that wraps halide_buffer_t and adds
  * functionality. When using Halide from C++, this is the preferred
  * way to create input and output buffers. The overhead of using this
@@ -107,8 +115,9 @@ class Buffer {
      * own the memory. */
     AllocationHeader *alloc = nullptr;
 
-    /** A reference count for the device allocation owned by this buffer. */
-    mutable std::atomic<int> *dev_ref_count = nullptr;
+    /** A reference count for the device allocation owned by this
+     * buffer. */
+    mutable DeviceRefCount *dev_ref_count = nullptr;
 
     /** True if T is of type void or const void */
     static const bool T_is_void = std::is_same<typename std::remove_const<T>::type, void>::value;
@@ -130,13 +139,11 @@ class Buffer {
     using storage_T = typename std::conditional<std::is_pointer<T>::value, uint64_t, not_void_T>::type;
 
 public:
-    /** Return true if the Halide type is not void (or const void). */
-    static constexpr bool has_static_halide_type() {
-        return !T_is_void;
-    }
+    /** True if the Halide type is not void (or const void). */
+    static constexpr bool has_static_halide_type = !T_is_void;
 
     /** Get the Halide type of T. Callers should not use the result if
-     * has_static_halide_type() returns false. */
+     * has_static_halide_type is false. */
     static halide_type_t static_halide_type() {
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
@@ -158,9 +165,9 @@ private:
                 // device allocation by a Halide pipeline, and have
                 // never been copied from since. Take sole ownership
                 // of it.
-                dev_ref_count = new std::atomic<int>(1);
+                dev_ref_count = new DeviceRefCount;
             }
-            (*dev_ref_count)++;
+            dev_ref_count->count++;
         }
     }
 
@@ -182,18 +189,20 @@ private:
     void decref_dev() {
         int new_count = 0;
         if (dev_ref_count) {
-            new_count = --(*dev_ref_count);
+            new_count = --(dev_ref_count->count);
         }
         if (new_count == 0) {
             if (buf.device) {
-                halide_device_free_t fn = halide_get_device_free_fn();
-                assert(fn && "Buffer has a device allocation but no Halide Runtime linked");
                 assert(!(alloc && device_dirty()) &&
                        "Implicitly freeing a dirty device allocation while a host allocation still lives. "
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
                        "before the device allocation is freed.");
-                (*fn)(nullptr, &buf);
+                if (dev_ref_count && dev_ref_count->wrapping_native_device_handle) {
+                    buf.device_interface->detach_native(nullptr, &buf);
+                } else {
+                    buf.device_interface->device_free(nullptr, &buf);
+                }
             }
             if (dev_ref_count) {
                 delete dev_ref_count;
@@ -1242,32 +1251,38 @@ public:
 
     int copy_to_host(void *ctx = nullptr) {
         if (device_dirty()) {
-            return halide_copy_to_host(ctx, &buf);
+            return buf.device_interface->copy_to_host(ctx, &buf);
         }
         return 0;
     }
 
     int copy_to_device(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         if (host_dirty()) {
-            return halide_copy_to_device(ctx, &buf, device_interface);
+            return device_interface->copy_to_device(ctx, &buf, device_interface);
         }
         return 0;
     }
 
     int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
-        return halide_device_malloc(ctx, &buf, device_interface);
+        return device_interface->device_malloc(ctx, &buf, device_interface);
     }
 
     int device_free(void *ctx = nullptr) {
         if (dev_ref_count) {
+            assert(!dev_ref_count->wrapping_native_device_handle &&
+                   "Can't call device_free on wrapped native device handle. "
+                   "Call device_detach_native instead.");
             // Multiple people may be holding onto this dev field
-            assert(*dev_ref_count == 1 &&
+            assert(dev_ref_count->count == 1 &&
                    "Multiple Halide::Runtime::Buffer objects share this device "
                    "allocation. Freeing it would create dangling references. "
                    "Don't call device_free on Halide buffers that you have copied or "
                    "passed by value.");
         }
-        int ret = halide_device_free(ctx, &buf);
+        int ret = 0;
+        if (buf.device_interface) {
+            ret = buf.device_interface->device_free(ctx, &buf);
+        }
         if (dev_ref_count) {
             delete dev_ref_count;
             dev_ref_count = nullptr;
@@ -1275,8 +1290,40 @@ public:
         return ret;
     }
 
+    int device_wrap_native(const struct halide_device_interface_t *device_interface,
+                           uint64_t handle, void *ctx = nullptr) {
+        assert(device_interface);
+        dev_ref_count = new DeviceRefCount;
+        dev_ref_count->wrapping_native_device_handle = true;
+        return device_interface->wrap_native(ctx, &buf, handle, device_interface);
+    }
+
+    int device_detach_native(void *ctx = nullptr) {
+        assert(dev_ref_count && dev_ref_count->wrapping_native_device_handle &&
+               "Only call device_detach_native on buffers wrapping a native "
+               "device handle via device_wrap_native. This buffer was allocated "
+               "using device_malloc, so call device_free instead.");
+        // Multiple people may be holding onto this dev field
+        assert(dev_ref_count->count == 1 &&
+               "Multiple Halide::Runtime::Buffer objects share this device "
+               "allocation. Freeing it could create dangling references. "
+               "Don't call device_detach_native on Halide buffers that you "
+               "have copied or passed by value.");
+        int ret = 0;
+        if (buf.device_interface) {
+            ret = buf.device_interface->detach_native(ctx, &buf);
+        }
+        delete dev_ref_count;
+        dev_ref_count = nullptr;
+        return ret;
+    }
+
     int device_sync(void *ctx = nullptr) {
-        return halide_device_sync(ctx, &buf);
+        if (buf.device_interface) {
+            return buf.device_interface->device_sync(ctx, &buf);
+        } else {
+            return 0;
+        }
     }
 
     bool has_device_allocation() const {

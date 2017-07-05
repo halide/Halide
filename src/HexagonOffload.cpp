@@ -929,7 +929,10 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
         debug(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
-        internal_assert(system(cmd.c_str()) == 0);
+        int result = system(cmd.c_str());
+        internal_assert(result == 0) 
+            << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
+            << " for cmd (" << cmd << ")";
 
         {
             std::ifstream f(output.pathname());
