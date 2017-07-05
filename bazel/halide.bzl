@@ -2,16 +2,16 @@ def halide_language_copts():
   _common_opts = [
       "-DGOOGLE_PROTOBUF_NO_RTTI",
       "-fPIC",
-      "-fno-rtti", 
-      "-std=c++11", 
+      "-fno-rtti",
+      "-std=c++11",
       "-Wno-conversion",
       "-Wno-sign-compare",
   ]
   _posix_opts = [
-      "$(STACK_FRAME_UNLIMITED)", 
-      "-fno-exceptions", 
+      "$(STACK_FRAME_UNLIMITED)",
+      "-fno-exceptions",
       "-funwind-tables",
-      "-fvisibility-inlines-hidden", 
+      "-fvisibility-inlines-hidden",
   ]
   _msvc_opts = [
       "-D_CRT_SECURE_NO_WARNINGS",
@@ -33,13 +33,13 @@ def halide_language_copts():
 
 def halide_language_linkopts():
   _linux_opts = [
-     "-rdynamic", 
-     "-ldl", 
-     "-lpthread", 
-     "-lz"
+      "-rdynamic",
+      "-ldl",
+      "-lpthread",
+      "-lz"
   ]
   _osx_opts = [
-     "-Wl,-stack_size", 
+      "-Wl,-stack_size",
       "-Wl,1000000"
   ]
   _msvc_opts = []  # TODO
@@ -68,13 +68,13 @@ def halide_runtime_linkopts():
   ]
   _msvc_opts = []  # TODO
   return select({
-      "@halide//:halide_config_arm_32_android": 
+      "@halide//:halide_config_arm_32_android":
           _android_opts,
-      "@halide//:halide_config_arm_64_android": 
+      "@halide//:halide_config_arm_64_android":
           _android_opts,
-      "@halide//:halide_config_x86_32_android": 
+      "@halide//:halide_config_x86_32_android":
           _android_opts,
-      "@halide//:halide_config_x86_64_android": 
+      "@halide//:halide_config_x86_64_android":
           _android_opts,
       "@halide//:halide_config_x86_64_windows":
           _msvc_opts,
@@ -506,6 +506,7 @@ def _define_halide_library_runtime(halide_target_features = []):
 
   native.cc_library(
       name=target_name,
+      linkopts=halide_runtime_linkopts(),
       srcs=select(condition_deps),
       tags=["manual"],
       visibility=["//visibility:public"])
@@ -704,7 +705,7 @@ def halide_library_from_generator(name,
       tags=tags)
 
   # Create a _cc target for (unusual) applications that want C++ source output;
-  # we don't support this via extra_outputs=["cpp"] because it can end up being 
+  # we don't support this via extra_outputs=["cpp"] because it can end up being
   # compiled by Bazel, producing duplicate symbols; also, targets that want this
   # sometimes want to compile it via a separate tool (e.g., XCode to produce
   # certain bitcode variants). Note that this deliberately does not produce
