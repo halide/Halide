@@ -42,7 +42,7 @@ def halide_language_linkopts():
       "-Wl,-stack_size",
       "-Wl,1000000"
   ]
-  _msvc_opts = []  # TODO
+  _msvc_opts = []
   return select({
       "@halide//:halide_platform_config_x64_windows_msvc":
           _msvc_opts,
@@ -66,7 +66,7 @@ def halide_runtime_linkopts():
       "-llog",
       "-landroid",
   ]
-  _msvc_opts = []  # TODO
+  _msvc_opts = []
   return select({
       "@halide//:halide_config_arm_32_android":
           _android_opts,
@@ -86,7 +86,7 @@ def halide_runtime_linkopts():
 def halide_opengl_linkopts():
   _linux_opts = ["-lGL", "-lX11"]
   _osx_opts = ["-framework OpenGL"]
-  _msvc_opts = []  # TODO
+  _msvc_opts = []
   return select({
       "@halide//:halide_config_x86_64_windows":
           _msvc_opts,
@@ -130,7 +130,6 @@ _HALIDE_TARGET_CONFIG_INFO = [
     # than allowing certain builds to complete.
     ("armeabi-32-android", ["armeabi"], "armeabi", None),
 ]
-# TODO: add conditions appropriate for other targets/cpus
 
 _HALIDE_TARGET_MAP_DEFAULT = {
     "x86-64-osx": [
@@ -371,8 +370,18 @@ def _gengen_impl(ctx):
   if ctx.attr.halide_generator_args:
     arguments += ctx.attr.halide_generator_args.split(" ")
 
+  if ctx.executable.hexagon_code_signer:
+    additional_inputs, _, input_manifests = ctx.resolve_command(
+        tools=[ctx.attr.hexagon_code_signer])
+    hexagon_code_signer = ctx.executable.hexagon_code_signer.path
+  else:
+    additional_inputs = []
+    input_manifests = None
+    hexagon_code_signer = ""
+
   env = {
       "HL_DEBUG_CODEGEN": str(ctx.attr.debug_codegen_level),
+      "HL_HEXAGON_CODE_SIGNER": hexagon_code_signer,
   }
   ctx.action(
       # If you need to force the tools to run locally (e.g. for experimentation),
@@ -380,14 +389,16 @@ def _gengen_impl(ctx):
       # execution_requirements={"local":"1"},
       arguments=arguments,
       env=env,
-      # TODO: files_to_run is undocumented but (apparently) reliable
       executable=ctx.attr.generator_closure.generator_binary.files_to_run.executable,
       mnemonic="ExecuteHalideGenerator",
+      input_manifests=input_manifests,
+      inputs=additional_inputs,
       outputs=outputs,
       progress_message="Executing generator %s with target (%s) args (%s)..." %
       (ctx.attr.generator_closure.generator_name,
        ",".join(halide_target),
-       ctx.attr.halide_generator_args))
+       ctx.attr.halide_generator_args)
+  )
 
 
 _gengen = rule(
@@ -408,6 +419,9 @@ _gengen = rule(
             attr.string(),
         "halide_generator_args":
             attr.string(),
+        "hexagon_code_signer":
+            attr.label(
+                executable=True, cfg="host"),
         "outputs":
             attr.string_list(),
         "sanitizer":
@@ -648,6 +662,7 @@ def halide_library_from_generator(name,
                                   generator_args="",
                                   halide_target_features=[],
                                   halide_target_map=halide_library_default_target_map(),
+                                  hexagon_code_signer=None,
                                   includes=[],
                                   namespace=None,
                                   tags=[],
@@ -696,6 +711,7 @@ def halide_library_from_generator(name,
             "//conditions:default": "",
         }),
         debug_codegen_level=debug_codegen_level,
+        hexagon_code_signer=hexagon_code_signer,
         tags=["manual"] + tags,
         outputs=outputs)
     libname = "halide_internal_%s_%s" % (name, arch)
@@ -720,6 +736,7 @@ def halide_library_from_generator(name,
     # case, just use the first entry.
     header_target = [header_target[0]]
 
+  outputs = ["h"]
   _gengen(
       name="%s_h" % name,
       filename=name,
@@ -727,7 +744,7 @@ def halide_library_from_generator(name,
       generator_closure=generator_closure,
       halide_target=header_target,
       halide_function_name=function_name,
-      outputs=["h"],
+      outputs=outputs,
       tags=tags)
 
   # Create a _cc target for (unusual) applications that want C++ source output;
@@ -790,6 +807,7 @@ def halide_library(name,
                    generator_name=None,
                    halide_target_features=[],
                    halide_target_map=halide_library_default_target_map(),
+                   hexagon_code_signer=None,
                    includes=[],
                    namespace=None,
                    visibility=None):
@@ -814,5 +832,6 @@ def halide_library(name,
       debug_codegen_level=debug_codegen_level,
       halide_target_features=halide_target_features,
       halide_target_map=halide_target_map,
+      hexagon_code_signer=hexagon_code_signer,
       extra_outputs=extra_outputs)
 
