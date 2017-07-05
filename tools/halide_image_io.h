@@ -320,14 +320,14 @@ void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
     const int width = im_typed.width();
     if (im_typed.dimensions() > 2) {
         const int channels = im_typed.channels();
-        for (int x = 0; x < width; x++) {
-            for (int c = 0; c < channels; c++) {
+        for (int x = im_typed.dim(0).min(); x < width; x++) {
+            for (int c = im_typed.dim(2).min(); c < channels; c++) {
                 im_typed(x, y, c) = read_big_endian<ElemType>(src);
                 src += sizeof(ElemType);
             }
         }
     } else {
-        for (int x = 0; x < width; x++) {
+        for (int x = im_typed.dim(0).min(); x < width; x++) {
             im_typed(x, y) = read_big_endian<ElemType>(src);
             src += sizeof(ElemType);
         }
@@ -342,14 +342,14 @@ void write_big_endian_row(const ImageType &im, int y, uint8_t *dst) {
     const int width = im_typed.width();
     if (im_typed.dimensions() > 2) {
         const int channels = im_typed.channels();
-        for (int x = 0; x < width; x++) {
-            for (int c = 0; c < channels; c++) {
+        for (int x = im_typed.dim(0).min(); x < width; x++) {
+            for (int c = im_typed.dim(2).min(); c < channels; c++) {
                 write_big_endian<ElemType>(im_typed(x, y, c), dst);
                 dst += sizeof(ElemType);
             }
         }
     } else {
-        for (int x = 0; x < width; x++) {
+        for (int x = im_typed.dim(0).min(); x < width; x++) {
             write_big_endian<ElemType>(im_typed(x, y), dst);
             dst += sizeof(ElemType);
         }
@@ -415,7 +415,7 @@ bool load_png(const std::string &filename, ImageType *im) {
         Internal::read_big_endian_row<uint16_t, ImageType>;
 
     std::vector<uint8_t> row(png_get_rowbytes(png_ptr, info_ptr));
-    for (int y = 0; y < height; ++y) {
+    for (int y = im->dim(1).min(); y < height; ++y) {
         png_read_row(png_ptr, row.data(), nullptr);
         copy_to_image(row.data(), y, im);
     }
@@ -497,7 +497,7 @@ bool save_png(ImageType &im, const std::string &filename) {
         Internal::write_big_endian_row<uint16_t, ImageType>;
 
     std::vector<uint8_t> row(png_get_rowbytes(png_ptr, info_ptr));
-    for (int y = 0; y < height; ++y) {
+    for (int y = im.dim(1).min(); y < height; ++y) {
         copy_from_image(im, y, row.data());
         png_write_row(png_ptr, row.data());
     }
@@ -567,7 +567,7 @@ bool load_pnm(const std::string &filename, int channels, ImageType *im) {
         Internal::read_big_endian_row<uint16_t, ImageType>;
 
     std::vector<uint8_t> row(width * channels * (bit_depth / 8));
-    for (int y = 0; y < height; ++y) {
+    for (int y = im->dim(1).min(); y < height; ++y) {
         if (!check(f.read_vector(&row), "Could not read data")) {
             return false;
         }
@@ -605,7 +605,7 @@ bool save_pnm(ImageType &im, const int channels, const std::string &filename) {
         Internal::write_big_endian_row<uint16_t, ImageType>;
 
     std::vector<uint8_t> row(width * channels * (bit_depth / 8));
-    for (int y = 0; y < height; ++y) {
+    for (int y = im.dim(1).min(); y < height; ++y) {
         copy_from_image(im, y, row.data());
         if (!check(f.write_vector(row), "Could not write data")) {
             return false;
@@ -686,7 +686,7 @@ bool load_jpg(const std::string &filename, ImageType *im) {
     auto copy_to_image = Internal::read_big_endian_row<uint8_t, ImageType>;
 
     std::vector<uint8_t> row(width * channels);
-    for (int y = 0; y < height; ++y) {
+    for (int y = im->dim(1).min(); y < height; ++y) {
         uint8_t *src = row.data();
         jpeg_read_scanlines(&cinfo, &src, 1);
         copy_to_image(row.data(), y, im);
@@ -743,7 +743,7 @@ bool save_jpg(ImageType &im, const std::string &filename) {
     auto copy_from_image = Internal::write_big_endian_row<uint8_t, ImageType>;
 
     std::vector<uint8_t> row(width * channels);
-    for (int y = 0; y < height; ++y) {
+    for (int y = im.dim(1).min(); y < height; ++y) {
         uint8_t *dst = row.data();
         copy_from_image(im, y, dst);
         jpeg_write_scanlines(&cinfo, &dst, 1);
