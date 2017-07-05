@@ -406,7 +406,7 @@ private:
             if (const_int_bounds(mod->b, &min_b, &max_b) &&
                 (min_b > 0 || max_b < 0)) {
                 *min_val = 0;
-                *max_val = std::abs(max_b) - 1;
+                *max_val = std::max(std::abs(min_b), std::abs(max_b)) - 1;
                 return no_overflow_scalar_int(t.element_of()) ||
                        (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
@@ -5720,6 +5720,11 @@ void check_vectors() {
           broadcast(x % 2, 4));
     check(Expr(ramp(2*x+1, 4, 4)) % (broadcast(2, 4)),
           broadcast(1, 4));
+
+    check(max(broadcast(24, 2), broadcast(x, 2) % ramp(-8, -33, 2)),
+          max(broadcast(x, 2) % ramp(-8, -33, 2), broadcast(24, 2)));
+    check(max(broadcast(41, 2), broadcast(x, 2) % ramp(-8, -33, 2)),
+          broadcast(41, 2));
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
