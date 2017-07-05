@@ -317,17 +317,19 @@ struct FileOpener {
 template<typename ElemType, typename ImageType>
 void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
     auto im_typed = im->template as<ElemType>();
-    const int width = im_typed.width();
+    const int xmin = im_typed.dim(0).min();
+    const int xmax = im_typed.dim(0).max();
     if (im_typed.dimensions() > 2) {
-        const int channels = im_typed.channels();
-        for (int x = im_typed.dim(0).min(); x < width; x++) {
-            for (int c = im_typed.dim(2).min(); c < channels; c++) {
-                im_typed(x, y, c) = read_big_endian<ElemType>(src);
+        const int cmin = im_typed.dim(2).min();
+        const int cmax = im_typed.dim(2).max();
+        for (int x = xmin; x <= xmax; x++) {
+            for (int c = cmin; c <= cmax; c++) {
+                im_typed(x, y, c+cmin) = read_big_endian<ElemType>(src);
                 src += sizeof(ElemType);
             }
         }
     } else {
-        for (int x = im_typed.dim(0).min(); x < width; x++) {
+        for (int x = xmin; x <= xmax; x++) {
             im_typed(x, y) = read_big_endian<ElemType>(src);
             src += sizeof(ElemType);
         }
@@ -339,17 +341,19 @@ void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
 template<typename ElemType, typename ImageType>
 void write_big_endian_row(const ImageType &im, int y, uint8_t *dst) {
     auto im_typed = im.template as<ElemType>();
-    const int width = im_typed.width();
+    const int xmin = im_typed.dim(0).min();
+    const int xmax = im_typed.dim(0).max();
     if (im_typed.dimensions() > 2) {
-        const int channels = im_typed.channels();
-        for (int x = im_typed.dim(0).min(); x < width; x++) {
-            for (int c = im_typed.dim(2).min(); c < channels; c++) {
+        const int cmin = im_typed.dim(2).min();
+        const int cmax = im_typed.dim(2).max();
+        for (int x = xmin; x <= xmax; x++) {
+            for (int c = cmin; c <= cmax; c++) {
                 write_big_endian<ElemType>(im_typed(x, y, c), dst);
                 dst += sizeof(ElemType);
             }
         }
     } else {
-        for (int x = im_typed.dim(0).min(); x < width; x++) {
+        for (int x = xmin; x <= xmax; x++) {
             write_big_endian<ElemType>(im_typed(x, y), dst);
             dst += sizeof(ElemType);
         }
@@ -415,7 +419,9 @@ bool load_png(const std::string &filename, ImageType *im) {
         Internal::read_big_endian_row<uint16_t, ImageType>;
 
     std::vector<uint8_t> row(png_get_rowbytes(png_ptr, info_ptr));
-    for (int y = im->dim(1).min(); y < height; ++y) {
+    const int ymin = im->dim(1).min();
+    const int ymax = im->dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
         png_read_row(png_ptr, row.data(), nullptr);
         copy_to_image(row.data(), y, im);
     }
@@ -497,7 +503,9 @@ bool save_png(ImageType &im, const std::string &filename) {
         Internal::write_big_endian_row<uint16_t, ImageType>;
 
     std::vector<uint8_t> row(png_get_rowbytes(png_ptr, info_ptr));
-    for (int y = im.dim(1).min(); y < height; ++y) {
+    const int ymin = im.dim(1).min();
+    const int ymax = im.dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
         copy_from_image(im, y, row.data());
         png_write_row(png_ptr, row.data());
     }
@@ -567,7 +575,9 @@ bool load_pnm(const std::string &filename, int channels, ImageType *im) {
         Internal::read_big_endian_row<uint16_t, ImageType>;
 
     std::vector<uint8_t> row(width * channels * (bit_depth / 8));
-    for (int y = im->dim(1).min(); y < height; ++y) {
+    const int ymin = im->dim(1).min();
+    const int ymax = im->dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
         if (!check(f.read_vector(&row), "Could not read data")) {
             return false;
         }
@@ -605,7 +615,9 @@ bool save_pnm(ImageType &im, const int channels, const std::string &filename) {
         Internal::write_big_endian_row<uint16_t, ImageType>;
 
     std::vector<uint8_t> row(width * channels * (bit_depth / 8));
-    for (int y = im.dim(1).min(); y < height; ++y) {
+    const int ymin = im.dim(1).min();
+    const int ymax = im.dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
         copy_from_image(im, y, row.data());
         if (!check(f.write_vector(row), "Could not write data")) {
             return false;
@@ -686,7 +698,9 @@ bool load_jpg(const std::string &filename, ImageType *im) {
     auto copy_to_image = Internal::read_big_endian_row<uint8_t, ImageType>;
 
     std::vector<uint8_t> row(width * channels);
-    for (int y = im->dim(1).min(); y < height; ++y) {
+    const int ymin = im->dim(1).min();
+    const int ymax = im->dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
         uint8_t *src = row.data();
         jpeg_read_scanlines(&cinfo, &src, 1);
         copy_to_image(row.data(), y, im);
@@ -743,7 +757,9 @@ bool save_jpg(ImageType &im, const std::string &filename) {
     auto copy_from_image = Internal::write_big_endian_row<uint8_t, ImageType>;
 
     std::vector<uint8_t> row(width * channels);
-    for (int y = im.dim(1).min(); y < height; ++y) {
+    const int ymin = im.dim(1).min();
+    const int ymax = im.dim(1).max();
+    for (int y = ymin; y <= ymax; ++y) {
         uint8_t *dst = row.data();
         copy_from_image(im, y, dst);
         jpeg_write_scanlines(&cinfo, &dst, 1);
