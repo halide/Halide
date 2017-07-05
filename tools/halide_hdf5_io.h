@@ -9,10 +9,14 @@
 #include <map>
 #include <string>
 #include <assert.h>
+#include <cstdarg>
 
 namespace Halide {
 namespace Tools {
 
+namespace {
+
+//Copy elements from one raw buffer to another, with a specified amount of dimensions, and extents + strides for each dimension.
 template<typename ElemType>
 void copy_elems(ElemType *src, ElemType *dst, int dimensions, int *extents, int *src_strides, int *dst_strides) {
     //If 0 dimensions, do the copy.
@@ -29,8 +33,10 @@ void copy_elems(ElemType *src, ElemType *dst, int dimensions, int *extents, int 
     }
 }
 
-template<typename BufferType, typename ElemType>
-ElemType * create_dense_buffer(BufferType &buf) {
+//Create a dense data buffer from the contents of a Halide buffer. The returned pointer should be freed externally.
+template<typename BufferType>
+void * create_dense_buffer(BufferType &buf) {
+    using ElemType = typename BufferType::ElemType;
 
     assert(buf.dimensions() <= 16);
 
@@ -52,11 +58,15 @@ ElemType * create_dense_buffer(BufferType &buf) {
     //Do the copy.
     copy_elems(buf.data(), retval, buf.dimensions(), extents, src_strides, dst_strides);
 
-    return retval;
+    return (void*) retval;
 }
 
-template<typename BufferType, typename ElemType>
-void fill_from_dense_buffer(BufferType &buf, ElemType *data) {
+//Fill the values of a Halide buffer with the contents of a dense data buffer. The shape of the Halide buffer
+//has to be pre-defined and its storage should already be allocated.
+template<typename BufferType>
+void fill_from_dense_buffer(BufferType &buf, void *data) {
+    using ElemType = typename BufferType::ElemType;
+
     assert(buf.dimensions() <= 16);
 
     //Store extent, stride information about the buffer.
@@ -71,67 +81,81 @@ void fill_from_dense_buffer(BufferType &buf, ElemType *data) {
     }
 
     //Do the copy.
-    copy_elems(data, buf.data(), buf.dimensions(), extents, src_strides, dst_strides);
+    copy_elems((ElemType *)data, buf.data(), buf.dimensions(), extents, src_strides, dst_strides);
 }
 
-template<typename BufferType, typename ElemType>
-bool save_hdf5(std::vector<BufferType> buffers, std::vector<std::string> buffer_names, std::string filename) {
+//Add a single Buffer to an open HDF5 file.
+template<typename BufferType>
+void add_to_hdf5(H5::H5File &file, std::vector<std::string> names, int name_idx, BufferType buffer) {
+    using ElemType = typename BufferType::ElemType;
 
-    assert(buffers.size() == buffer_names.size());
+    assert(names.size() > (unsigned)name_idx);
+    assert(buffer.dimensions() <= 16);
 
+    hsize_t dims[16];
+    for(int i=0; i<=buffer.dimensions(); i++){
+        dims[i] = buffer.dim(buffer.dimensions()-1-i).extent();
+    }
+
+    H5::DataSpace dataspace(buffer.dimensions(), dims);
+    H5::DataSet dataset = file.createDataSet(names[name_idx], H5::PredType::STD_I32BE, dataspace);
+
+    ElemType *data = (ElemType *) create_dense_buffer<BufferType>(buffer);
+    dataset.write(data, H5::PredType::NATIVE_INT);
+    free(data);
+}
+
+//Add a set of Buffers to an open HDF5 file.
+template<typename BufferType, typename... NextBufferTypes>
+void add_to_hdf5(H5::H5File &file, std::vector<std::string> names, int name_idx, BufferType buffer, NextBufferTypes... next_buffers) {
+    add_to_hdf5(file, names, name_idx, buffer);
+    add_to_hdf5(file, names, name_idx+1, next_buffers...);
+}
+
+}
+
+//Save a set of Halide buffers into an HDF5 file.
+template<typename... BufferTypes>
+bool save_hdf5(std::vector<std::string> buffer_names, std::string filename, BufferTypes... buffers) {
     //Open the HDF5 file.
     H5::H5File file(filename, H5F_ACC_TRUNC);
 
-    size_t idx = 0;
-    for(BufferType &b : buffers) {
-        assert(b.dimensions() <= 16);
+    //Write the buffers into it.
+    add_to_hdf5(file, buffer_names, 0, buffers...);
 
-        hsize_t dims[16];
-        for(int i=0; i<=b.dimensions(); i++){
-            dims[i] = b.dim(b.dimensions()-1-i).extent();
-        }
-
-        H5::DataSpace dataspace(b.dimensions(), dims);
-        H5::DataSet dataset = file.createDataSet(buffer_names[idx++], H5::PredType::STD_I32BE, dataspace);
-
-        ElemType *data = create_dense_buffer<BufferType, ElemType>(b);
-        dataset.write(data, H5::PredType::NATIVE_INT);
-        free(data);
-    }
+    return true;
 }
 
-template<typename BufferType, typename ElemType>
-std::map<std::string, BufferType> load_from_hdf5(std::string filename, std::vector<std::string> buffer_names) {
-
-    std::map<std::string, BufferType> retval;
+//Load a Halide buffer from an HDF5 file.
+template<typename BufferType>
+BufferType load_from_hdf5(std::string filename, std::string buffer_name) {
+    using ElemType = typename BufferType::ElemType;
 
     //Open the HDF5 file.
     H5::H5File file(filename, H5F_ACC_RDWR);
 
-    for(std::string &s : buffer_names){
-        H5::DataSet dataset = file.openDataSet(s);
-        H5::DataSpace dataspace = dataset.getSpace();
-        int dimensions = dataspace.getSimpleExtentNdims();
-        assert(dimensions <= 16);
+    H5::DataSet dataset = file.openDataSet(buffer_name);
+    H5::DataSpace dataspace = dataset.getSpace();
+    int dimensions = dataspace.getSimpleExtentNdims();
+    assert(dimensions <= 16);
 
-        hsize_t dims[16];
-        std::vector<int> dims_vec;
-        assert( dataspace.getSimpleExtentDims(dims, NULL) == dimensions );
-        for(int d=0; d<dimensions; d++) {
-            dims_vec.insert(dims_vec.begin(), (int)dims[d]);
-        }
-
-        size_t mem_size = dataset.getInMemDataSize();
-        ElemType *data = (ElemType *) malloc(mem_size);
-
-        dataset.read(data, H5::PredType::NATIVE_INT);
-
-        retval[s] = BufferType(BufferType::static_halide_type(), dims_vec);
-        retval[s].allocate();
-        fill_from_dense_buffer<BufferType, ElemType>(retval[s], data);
-
-        free(data);
+    hsize_t dims[16];
+    std::vector<int> dims_vec;
+    assert( dataspace.getSimpleExtentDims(dims, NULL) == dimensions );
+    for(int d=0; d<dimensions; d++) {
+        dims_vec.insert(dims_vec.begin(), (int)dims[d]);
     }
+
+    size_t mem_size = dataset.getInMemDataSize();
+    ElemType *data = (ElemType *) malloc(mem_size);
+
+    dataset.read(data, H5::PredType::NATIVE_INT);
+
+    BufferType retval = BufferType(BufferType::static_halide_type(), dims_vec);
+    retval.allocate();
+    fill_from_dense_buffer<BufferType>(retval, (void*)data);
+
+    free(data);
 
     return retval;
 }
