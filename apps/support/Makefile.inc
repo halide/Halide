@@ -28,7 +28,8 @@ GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+LLVM_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --system-libs)
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags) $(LLVM_SYSTEM_LDFLAGS)
 
 LLVM_CONFIG ?= llvm-config
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)

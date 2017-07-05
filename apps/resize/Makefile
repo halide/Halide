@@ -8,7 +8,7 @@ BIN ?= bin
 
 $(BIN)/resize: ../../ resize.cpp
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) resize.cpp $(LIB_HALIDE) -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS) $(LLVM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) resize.cpp $(LIB_HALIDE) -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS) $(LLVM_SYSTEM_LDFLAGS)
 
 $(BIN)/out.png: $(BIN)/resize
 	@-mkdir -p $(BIN)
