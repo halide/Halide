@@ -83,5 +83,5 @@ cc_library(
     name = "internal_halide_generator_glue",
     srcs = ["tools/GenGen.cpp"],
     includes = ["include"],
-    deps = [":lib_halide_static"],
+    deps = [":language"],
 )
