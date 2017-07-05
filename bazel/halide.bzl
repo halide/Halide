@@ -99,7 +99,7 @@ def halide_opengl_linkopts():
   })
 
 
-# (halide-target-base, cpu, android-cpu, ios-cpu)
+# (halide-target-base, cpus, android-cpu, ios-cpu)
 _HALIDE_TARGET_CONFIG_INFO = [
     # Android
     ("arm-32-android", None, "armeabi-v7a", None),
@@ -113,12 +113,12 @@ _HALIDE_TARGET_CONFIG_INFO = [
     ("x86-32-osx", None, None, "i386"),
     ("x86-64-osx", None, None, "x86_64"),
     # Linux
-    ("arm-64-linux", "arm", None, None),
-    ("powerpc-64-linux", "ppc", None, None),
-    ("x86-64-linux", "k8", None, None),
-    ("x86-32-linux", "piii", None, None),
+    ("arm-64-linux", ["arm"], None, None),
+    ("powerpc-64-linux", ["ppc"], None, None),
+    ("x86-64-linux", ["k8"], None, None),
+    ("x86-32-linux", ["piii"], None, None),
     # Windows
-    ("x86-64-windows", "x64_windows_msvc", None, None),
+    ("x86-64-windows", ["x64_windows_msvc"], None, None),
     # Special case: Android-ARMEABI. Note that we are using an illegal Target
     # string for Halide; this is intentional. It allows us to add another
     # config_setting to match the armeabi-without-v7a required for certain build
@@ -128,7 +128,7 @@ _HALIDE_TARGET_CONFIG_INFO = [
     # Note that this won't produce a build that is useful (it will SIGILL on
     # non-v7a hardware), but isn't intended to be useful for anything other
     # than allowing certain builds to complete.
-    ("armeabi-32-android", "armeabi", "armeabi", None),
+    ("armeabi-32-android", ["armeabi"], "armeabi", None),
 ]
 # TODO: add conditions appropriate for other targets/cpus
 
@@ -191,7 +191,7 @@ def halide_config_settings():
         },
         visibility=["//visibility:public"])
 
-  for base_target, cpu, android_cpu, ios_cpu in _HALIDE_TARGET_CONFIG_INFO:
+  for base_target, _, android_cpu, ios_cpu in _HALIDE_TARGET_CONFIG_INFO:
     if android_cpu == None:
       # "armeabi" is the default value for --android_cpu and isn't considered legal
       # here, so we use the value to assume we aren't building for Android.
@@ -202,21 +202,22 @@ def halide_config_settings():
       # arm32 apps, we consider this value to mean the flag was unspecified; this
       # won't work for 32 bit simulator builds for A6 or older phones.
       ios_cpu = "x86_64"
-    if cpu != None:
-      values = {
-          "cpu": cpu,
-          "android_cpu": android_cpu,
-          "ios_cpu": ios_cpu,
-      }
-    else:
-      values = {
-          "android_cpu": android_cpu,
-          "ios_cpu": ios_cpu,
-      }
-    native.config_setting(
-        name=_config_setting_name(base_target),
-        values=values,
-        visibility=["//visibility:public"])
+    for n, cpu in _config_setting_names_and_cpus(base_target):
+      if cpu != None:
+        values = {
+            "cpu": cpu,
+            "android_cpu": android_cpu,
+            "ios_cpu": ios_cpu,
+        }
+      else:
+        values = {
+            "android_cpu": android_cpu,
+            "ios_cpu": ios_cpu,
+        }
+      native.config_setting(
+          name=n,
+          values=values,
+          visibility=["//visibility:public"])
 
   # Config settings for Sanitizers (currently, only MSAN)
   native.config_setting(
@@ -248,8 +249,7 @@ def _halide_target_to_bazel_rule_name(multitarget):
   return "_".join(subtargets)
 
 
-def _config_setting_name(halide_target):
-  """Take a Halide target string and converts to a unique name suitable for a Bazel config_setting."""
+def _extract_base_target_pieces(halide_target):
   if "," in halide_target:
     fail("Multitarget may not be specified here: %s" % halide_target)
   tokens = halide_target.split("-")
@@ -258,11 +258,35 @@ def _config_setting_name(halide_target):
   halide_arch = tokens[0]
   halide_bits = tokens[1]
   halide_os = tokens[2]
-  return "halide_config_%s_%s_%s" % (halide_arch, halide_bits, halide_os)
+  return (halide_arch, halide_bits, halide_os)
+
+def _blaze_cpus_for_target(halide_target):
+  halide_arch, halide_bits, halide_os = _extract_base_target_pieces(halide_target)
+  key = "%s-%s-%s" % (halide_arch, halide_bits, halide_os)
+  info = None
+  for i in _HALIDE_TARGET_CONFIG_INFO:
+    if i[0] == key:
+      info = i
+      break
+  if info == None:
+    fail("The target %s is not one we understand (yet)" % key)
+  return info[1]
+
+def _config_setting_names_and_cpus(halide_target):
+  """Take a Halide target string and converts to a unique name suitable for a Bazel config_setting."""
+  halide_arch, halide_bits, halide_os = _extract_base_target_pieces(halide_target)
+  cpus = _blaze_cpus_for_target(halide_target)
+  if cpus == None:
+    cpus = [ None ]
+  if len(cpus) > 1:
+    return [("halide_config_%s_%s_%s_%s" % (halide_arch, halide_bits, halide_os, cpu), cpu) for cpu in cpus]
+  else:
+    return [("halide_config_%s_%s_%s" % (halide_arch, halide_bits, halide_os), cpu) for cpu in cpus]
 
 
-def _config_setting(halide_target):
-  return "@halide//:%s" % _config_setting_name(halide_target)
+
+def _config_settings(halide_target):
+  return ["@halide//:%s" % s for (s, _) in _config_setting_names_and_cpus(halide_target)]
 
 
 _output_extensions = {
@@ -479,6 +503,7 @@ def _define_halide_library_runtime(halide_target_features = []):
         visibility=["//visibility:private"])
   condition_deps = {}
   for base_target, _, _, _ in _HALIDE_TARGET_CONFIG_INFO:
+    settings = _config_settings(base_target)
     if base_target == "armeabi-32-android":
       # For armeabi-32-android, just generate an arm-32-android runtime
       halide_target = "arm-32-android"
@@ -502,7 +527,8 @@ def _define_halide_library_runtime(halide_target_features = []):
             "@halide//:__subpackages__",
         ]
     )
-    condition_deps[_config_setting(base_target)] = [":%s.o" % sub_name]
+    for s in settings:
+      condition_deps[s] = [":%s.o" % sub_name]
 
   native.cc_library(
       name=target_name,
@@ -678,9 +704,9 @@ def halide_library_from_generator(name,
         srcs=[":%s.a" % sub_name],
         tags=["manual"] + tags,
         visibility=["//visibility:private"])
-    condition_deps[_config_setting(
-        base_target)] = _HALIDE_RUNTIME_OVERRIDES.get(
-            base_target, []) + [":%s" % libname]
+    settings = _config_settings(base_target)
+    for s in settings:
+      condition_deps[s] = _HALIDE_RUNTIME_OVERRIDES.get(base_target, []) + [":%s" % libname]
 
   # Note that we always build the .h file using the first entry in
   # the _HALIDE_TARGET_CONFIG_INFO table.
