@@ -40,18 +40,15 @@ extern int halide_cuda_run(void *user_context,
  * must be NULL when this routine is called. This call can fail due to
  * being passed an invalid device pointer. The device and host dirty
  * bits are left unmodified. */
-extern int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t *buf, uintptr_t device_ptr);
+extern int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
 
 /** Disconnect this halide_buffer_t from the device pointer it was
  * previously wrapped around. Should only be called for a
  * halide_buffer_t that halide_cuda_wrap_device_ptr was previously
- * called on. Frees any storage associated with the binding of the
- * halide_buffer_t and the device pointer, but does not free the
- * device pointer. The previously wrapped device pointer is
- * returned. . The dev field of the halide_buffer_t will be NULL on
+ * called on. The device field of the halide_buffer_t will be NULL on
  * return.
  */
-extern uintptr_t halide_cuda_detach_device_ptr(void *user_context, struct halide_buffer_t *buf);
+extern int halide_cuda_detach_device_ptr(void *user_context, struct halide_buffer_t *buf);
 
 /** Return the underlying device pointer for a halide_buffer_t. This buffer
  *  must be valid on a Cuda device, or not have any associated device
