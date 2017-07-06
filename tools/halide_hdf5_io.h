@@ -5,6 +5,7 @@
 #define HALIDE_HDF5_IO_H
 
 #include "H5Cpp.h"
+#include "HalideRuntime.h"
 #include <vector>
 #include <map>
 #include <string>
@@ -15,6 +16,115 @@ namespace Halide {
 namespace Tools {
 
 namespace {
+
+enum Endianness {
+    UseNative = 0,
+    BigEndianIfPossible,
+    LittleEndianIfPossible
+};
+
+void type_error(const halide_type_t &type) {
+    fprintf(stderr, "HDF5 I/O cannot handle data with type: %d bits: %d\n", type.code, type.bits);
+    exit(-1);
+}
+
+//Get the HDF5 library's type descriptor matching a Halide type descriptor.
+H5::DataType hdf5_type_from_halide_type(const halide_type_t &type, Endianness endian = UseNative) {
+    switch(type.code) {
+    case halide_type_int:
+        switch(type.bits) {
+        case 8:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_INT8;
+            case BigEndianIfPossible: return H5::PredType::STD_I8BE;
+            case LittleEndianIfPossible: return H5::PredType::STD_I8LE;
+            }
+            break;
+        case 16:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_INT16;
+            case BigEndianIfPossible: return H5::PredType::STD_I16BE;
+            case LittleEndianIfPossible: return H5::PredType::STD_I16LE;
+            }
+            break;
+        case 32:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_INT32;
+            case BigEndianIfPossible: return H5::PredType::STD_I32BE;
+            case LittleEndianIfPossible: return H5::PredType::STD_I32LE;
+            }
+            break;
+        case 64:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_INT64;
+            case BigEndianIfPossible: return H5::PredType::STD_I64BE;
+            case LittleEndianIfPossible: return H5::PredType::STD_I64LE;
+            }
+            break;
+        default:
+            type_error(type);
+        }
+        break;
+    case halide_type_uint:
+        switch(type.bits) {
+        case 8:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_UINT8;
+            case BigEndianIfPossible: return H5::PredType::STD_U8BE;
+            case LittleEndianIfPossible: return H5::PredType::STD_U8LE;
+            }
+            break;
+        case 16:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_UINT16;
+            case BigEndianIfPossible: return H5::PredType::STD_U16BE;
+            case LittleEndianIfPossible: return H5::PredType::STD_U16LE;
+            }
+            break;
+        case 32:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_UINT32;
+            case BigEndianIfPossible: return H5::PredType::STD_U32BE;
+            case LittleEndianIfPossible: return H5::PredType::STD_U32LE;
+            }
+            break;
+        case 64:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_UINT64;
+            case BigEndianIfPossible: return H5::PredType::STD_U64BE;
+            case LittleEndianIfPossible: return H5::PredType::STD_U64LE;
+            }
+            break;
+        default:
+            type_error(type);
+        }
+        break;
+    case halide_type_float:
+        switch(type.bits) {
+        case 32:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_FLOAT;
+            case BigEndianIfPossible: return H5::PredType::INTEL_F32;
+            case LittleEndianIfPossible: return H5::PredType::INTEL_F32;
+            }
+            break;
+        case 64:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_INT64;
+            case BigEndianIfPossible: return H5::PredType::INTEL_F64;
+            case LittleEndianIfPossible: return H5::PredType::INTEL_F64;
+            }
+            break;
+        default:
+            type_error(type);
+        }
+        break;
+    default:
+        type_error(type);
+    }
+
+    return H5::PredType::NATIVE_INT;
+}
 
 //Copy elements from one raw buffer to another, with a specified amount of dimensions, and extents + strides for each dimension.
 template<typename ElemType>
@@ -98,10 +208,12 @@ void add_to_hdf5(H5::H5File &file, std::vector<std::string> names, int name_idx,
     }
 
     H5::DataSpace dataspace(buffer.dimensions(), dims);
-    H5::DataSet dataset = file.createDataSet(names[name_idx], H5::PredType::STD_I32BE, dataspace);
+    H5::DataSet dataset = file.createDataSet(names[name_idx],
+                                             hdf5_type_from_halide_type(halide_type_of<ElemType>(), BigEndianIfPossible),
+                                             dataspace);
 
     ElemType *data = (ElemType *) create_dense_buffer<BufferType>(buffer);
-    dataset.write(data, H5::PredType::NATIVE_INT);
+    dataset.write(data, hdf5_type_from_halide_type(halide_type_of<ElemType>(), UseNative));
     free(data);
 }
 
@@ -149,7 +261,7 @@ BufferType load_from_hdf5(std::string filename, std::string buffer_name) {
     size_t mem_size = dataset.getInMemDataSize();
     ElemType *data = (ElemType *) malloc(mem_size);
 
-    dataset.read(data, H5::PredType::NATIVE_INT);
+    dataset.read(data, hdf5_type_from_halide_type(halide_type_of<ElemType>(), UseNative));
 
     BufferType retval = BufferType(BufferType::static_halide_type(), dims_vec);
     retval.allocate();
