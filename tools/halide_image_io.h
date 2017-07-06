@@ -89,7 +89,7 @@ template<> inline uint8_t convert(const uint16_t &in) {
     // Fast approximation of div-by-257: see http://research.swtch.com/divmult
     return ((tmp * 255 + 255) >> 16);
 }
-template<> inline uint8_t convert(const uint32_t &in) { return (((uint64_t) in) + 0x00808080) / 0x01010101; }
+template<> inline uint8_t convert(const uint32_t &in) { return (uint8_t) ((((uint64_t) in) + 0x00808080) / 0x01010101); }
 // uint64 -> 8 just discards the lower 32 bits: if you were expecting more precision, well, sorry
 template<> inline uint8_t convert(const uint64_t &in) { return convert<uint8_t, uint32_t>(uint32_t(in >> 32)); }
 template<> inline uint8_t convert(const int8_t &in) { return convert<uint8_t, uint8_t>(in); }
@@ -135,8 +135,8 @@ template<> inline uint64_t convert(const int8_t &in) { return convert<uint64_t, 
 template<> inline uint64_t convert(const int16_t &in) { return convert<uint64_t, uint16_t>(in); }
 template<> inline uint64_t convert(const int32_t &in) { return convert<uint64_t, uint64_t>(in); }
 template<> inline uint64_t convert(const int64_t &in) { return convert<uint64_t, uint64_t>(in); }
-template<> inline uint64_t convert(const float &in) { return convert<uint64_t, uint32_t>(in*4294967295.0); }
-template<> inline uint64_t convert(const double &in) { return convert<uint64_t, uint32_t>(in*4294967295.0); }
+template<> inline uint64_t convert(const float &in) { return convert<uint64_t, uint32_t>((uint32_t)(in*4294967295.0)); }
+template<> inline uint64_t convert(const double &in) { return convert<uint64_t, uint32_t>((uint32_t)(in*4294967295.0)); }
 
 // Convert to i8
 template<> inline int8_t convert(const bool &in) { return in; }
@@ -201,7 +201,7 @@ template<> inline float convert(const int16_t &in) { return convert<float, uint1
 template<> inline float convert(const int32_t &in) { return convert<float, uint64_t>(in); }
 template<> inline float convert(const int64_t &in) { return convert<float, uint64_t>(in); }
 template<> inline float convert(const float &in) { return in; }
-template<> inline float convert(const double &in) { return (double) in; }
+template<> inline float convert(const double &in) { return (float) in; }
 
 // Convert to f64
 template<> inline double convert(const bool &in) { return in; }
@@ -1060,7 +1060,7 @@ bool save(ImageType &im, const std::string &filename) {
     if (!Internal::find_imageio<DynamicImageType, check>(filename, &imageio)) {
         return false;
     }
-    if (!check(imageio.query().count({im.type(), im.dimensions()}), "Image cannot be saved in this format")) {
+    if (!check(imageio.query().count({im.type(), im.dimensions()}) > 0, "Image cannot be saved in this format")) {
         return false;
     }
 
