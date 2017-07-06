@@ -176,9 +176,11 @@ if(NOT HDF5_FOUND)
 endif()
 
 function(use_hdf5_io TARGET)
-  target_compile_definitions(${TARGET} PRIVATE ${HDF5_DEFINITIONS})
-  target_include_directories(${TARGET} PRIVATE ${HDF5_INCLUDE_DIRS})
-  target_link_libraries(${TARGET} PRIVATE ${HDF5_LIBRARIES})
+  if(HDF5_FOUND)
+    target_compile_definitions(${TARGET} PRIVATE ${HDF5_DEFINITIONS})
+    target_include_directories(${TARGET} PRIVATE ${HDF5_INCLUDE_DIRS})
+    target_link_libraries(${TARGET} PRIVATE ${HDF5_LIBRARIES})
+  endif()
 endfunction()
 
 # -----------------------------------------------------------------------------
