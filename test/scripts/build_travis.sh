@@ -66,8 +66,8 @@ elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
 
   # Build our one-and-only Bazel test.
   # --verbose_failures so failures are easier to figure out.
-  echo "Testing apps/bazelbuild..."
-  cd apps/bazelbuild
+  echo "Testing apps/bazeldemo..."
+  cd apps/bazeldemo
   bazel build --verbose_failures :all
 
 else
