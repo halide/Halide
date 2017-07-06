@@ -68,7 +68,8 @@ struct Packet : public halide_trace_packet_t {
 
     template<typename T>
     T get_value_as(int idx) const {
-        return value_as<T>(type, (void*)(((const uint8_t*)value())[idx*type.bytes()]) );
+        const uint8_t * val = &(((const uint8_t*)value())[idx*type.bytes()]);
+        return value_as<T>(type, (const void*) val);
     }
 
     // Grab a packet from stdin. Returns false when stdin closes.
