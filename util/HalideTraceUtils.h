@@ -9,7 +9,7 @@ void bad_type_error(halide_type_t type);
 
 // Simple conversion.
 template<typename T>
-T value_as(halide_type_t type, void* value) {
+T value_as(halide_type_t type, const void* value) {
     switch (type.code) {
     case halide_type_int:
         switch (type.bits) {
@@ -68,7 +68,7 @@ struct Packet : public halide_trace_packet_t {
 
     template<typename T>
     T get_value_as(int idx) const {
-        return value_as<T>(type, (void*)(((uint8_t*)value())[idx*type.bytes()]) );
+        return value_as<T>(type, (void*)(((const uint8_t*)value())[idx*type.bytes()]) );
     }
 
     // Grab a packet from stdin. Returns false when stdin closes.
