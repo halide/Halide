@@ -545,6 +545,7 @@ bool read_pnm_header(Internal::FileOpener &f, const std::string &hdr_fmt, int *w
     } else if (maxval == 65535) {
         *bit_depth = 16;
     } else {
+        *bit_depth = 0;
         return check(false, "Invalid bit depth");
     }
 
