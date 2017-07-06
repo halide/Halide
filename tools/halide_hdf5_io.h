@@ -1,10 +1,13 @@
 // This file provides a means to load/store Buffers from/to HDF5 multi-dimensional data files
 // (see https://support.hdfgroup.org/HDF5/).
 
+#ifndef HALIDE_NO_HDF5
+
 #ifndef HALIDE_HDF5_IO_H
 #define HALIDE_HDF5_IO_H
 
 #include "H5Cpp.h"
+
 #include "HalideRuntime.h"
 #include <vector>
 #include <map>
@@ -45,6 +48,7 @@ template<> std::string type_to_string<uint32_t>() { return "uint32"; }
 template<> std::string type_to_string<uint64_t>() { return "uint64"; }
 template<> std::string type_to_string<float>()    { return "float";  }
 template<> std::string type_to_string<double>()   { return "double"; }
+
 
 std::string hdf5_type_to_string(H5::DataType &type) {
     if(type == H5::PredType::NATIVE_INT8) return "int8 (NATIVE_INT8)";
@@ -429,5 +433,6 @@ BufferType load_from_hdf5(std::string filename, std::string buffer_name) {
 }
 
 
-
 #endif
+
+#endif //HALIDE_NO_HDF5

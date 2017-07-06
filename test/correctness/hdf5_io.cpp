@@ -1,3 +1,6 @@
+#include <stdio.h>
+#ifndef HALIDE_NO_HDF5
+
 #include "Halide.h"
 #include "halide_hdf5_io.h"
 
@@ -155,7 +158,11 @@ bool do_roundtrip_test(
     return roundtrip_test(buf, test_name);
 }
 
+#endif //HALIDE_NO_HDF5
+
 int main() {
+
+#ifndef HALIDE_NO_HDF5
     //round-trip tests.
     bool success = true;
     if(!do_roundtrip_test< Runtime::Buffer<int8_t> >({5, 6, 12},     "int8")) success = false;
@@ -170,6 +177,9 @@ int main() {
     if(!do_roundtrip_test< Runtime::Buffer<float> >({10, 2, 3, 6}, "float")) success = false;
     if(!do_roundtrip_test< Runtime::Buffer<double> >({10, 2, 3, 6}, "double")) success = false;
     if(!success) return -1;
+#else
+    printf("HDF5 is not enabled. This test will pass, but HDF5 support will not be available.");
+#endif //HALIDE_NO_HDF5
     return 0;
 }
 

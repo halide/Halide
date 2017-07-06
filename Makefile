@@ -239,9 +239,16 @@ LIBJPEG_CXX_FLAGS ?= $(LIBPNG_INCLUDE_DIRS:=/..)
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
-HDF5_IO_CXX_FLAGS = -I$(HDF5_INCLUDE_DIR)
-HDF5_IO_LDFLAGS = -L$(HDF5_LIB_DIR)
-HDF5_IO_LIBS = -lhdf5 -lhdf5_cpp
+#By default, turn HDF5 support off. It is enabled in CMake.
+#To enable here, replace by (example):
+#HDF5_IO_CXX_FLAGS = -I/usr/include/hdf5/serial
+#HDF5_IO_LIBS = -lhdf5 -lhdf5_serial -lhdf5_cpp
+#HDF5_IO_LIB_DIR = /usr/lib/x86_64-linux-gnu/hdf5/serial
+#HDF5_IO_LDFLAGS = -L$(HDF5_IO_LIB_DIR) $(HDF5_IO_LIBS)
+HDF5_IO_CXX_FLAGS ?= -DHALIDE_NO_HDF5
+HDF5_IO_LIB_DIR ?=
+HDF5_IO_LIBS ?= 
+HDF5_IO_LDFLAGS ?=
 
 # We're building into the current directory $(CURDIR). Find the Halide
 # repo root directory (the location of the makefile)
