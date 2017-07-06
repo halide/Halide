@@ -38,6 +38,7 @@ template<> std::string type_to_string<int8_t>()   { return "int8";   }
 template<> std::string type_to_string<int16_t>()  { return "int16";  }
 template<> std::string type_to_string<int32_t>()  { return "int32";  }
 template<> std::string type_to_string<int64_t>()  { return "int64";  }
+template<> std::string type_to_string<bool>()  { return "bool";  }
 template<> std::string type_to_string<uint8_t>()  { return "uint8";  }
 template<> std::string type_to_string<uint16_t>() { return "uint16"; }
 template<> std::string type_to_string<uint32_t>() { return "uint32"; }
@@ -73,6 +74,9 @@ std::string hdf5_type_to_string(H5::DataType &type) {
     else if(type == H5::PredType::NATIVE_FLOAT) return "float (NATIVE_FLOAT)";
     else if(type == H5::PredType::IEEE_F32BE) return "float (IEEE_F32BE)";
     else if(type == H5::PredType::IEEE_F32LE) return "float (IEEE_F32LE)";
+    else if(type == H5::PredType::NATIVE_DOUBLE) return "float (NATIVE_DOUBLE)";
+    else if(type == H5::PredType::IEEE_F64BE) return "float (IEEE_F64BE)";
+    else if(type == H5::PredType::IEEE_F64LE) return "float (IEEE_F64LE)";
 
     return "<unsupported HDF5 data type>";
 }
@@ -99,6 +103,11 @@ template<> bool type_match<int64_t>(H5::DataType hdf5_type) {
             (hdf5_type == H5::PredType::STD_I64BE) ||
             (hdf5_type == H5::PredType::STD_I64LE);
 }
+template<> bool type_match<bool>(H5::DataType hdf5_type) {
+    return (hdf5_type == H5::PredType::NATIVE_UINT8) ||
+            (hdf5_type == H5::PredType::STD_U8BE) ||
+            (hdf5_type == H5::PredType::STD_U8LE);
+}
 template<> bool type_match<uint8_t>(H5::DataType hdf5_type) {
     return (hdf5_type == H5::PredType::NATIVE_UINT8) ||
             (hdf5_type == H5::PredType::STD_U8BE) ||
@@ -123,6 +132,11 @@ template<> bool type_match<float>(H5::DataType hdf5_type) {
     return (hdf5_type == H5::PredType::NATIVE_FLOAT) ||
             (hdf5_type == H5::PredType::IEEE_F32BE) ||
             (hdf5_type == H5::PredType::IEEE_F32LE);
+}
+template<> bool type_match<double>(H5::DataType hdf5_type) {
+    return (hdf5_type == H5::PredType::NATIVE_DOUBLE) ||
+            (hdf5_type == H5::PredType::IEEE_F64BE) ||
+            (hdf5_type == H5::PredType::IEEE_F64LE);
 }
 
 template<typename T>
@@ -174,6 +188,13 @@ H5::DataType hdf5_type_from_halide_type(const halide_type_t &type, Endianness en
         break;
     case halide_type_uint:
         switch(type.bits) {
+        case 1:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_UINT8;
+            case BigEndian: return H5::PredType::STD_U8BE;
+            case LittleEndian: return H5::PredType::STD_U8LE;
+            }
+            break;
         case 8:
             switch(endian) {
             case UseNative: return H5::PredType::NATIVE_UINT8;
@@ -213,6 +234,13 @@ H5::DataType hdf5_type_from_halide_type(const halide_type_t &type, Endianness en
             case UseNative: return H5::PredType::NATIVE_FLOAT;
             case BigEndian: return H5::PredType::IEEE_F32BE;
             case LittleEndian: return H5::PredType::IEEE_F32LE;
+            }
+            break;
+        case 64:
+            switch(endian) {
+            case UseNative: return H5::PredType::NATIVE_DOUBLE;
+            case BigEndian: return H5::PredType::IEEE_F64BE;
+            case LittleEndian: return H5::PredType::IEEE_F64LE;
             }
             break;
         default:

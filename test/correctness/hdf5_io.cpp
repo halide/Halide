@@ -29,6 +29,11 @@ T random_integer() {
     return dist(random_gen);
 }
 
+bool random_bool() {
+    std::uniform_int_distribution<uint8_t> dist;
+    return (dist(random_gen) > (256/2));
+}
+
 template<typename T>
 T random_real() {
     std::uniform_real_distribution<T> dist;
@@ -43,6 +48,7 @@ template<> int16_t random_number<int16_t>() { return random_integer<int16_t>(); 
 template<> int32_t random_number<int32_t>() { return random_integer<int32_t>(); }
 template<> int64_t random_number<int64_t>() { return random_integer<int64_t>(); }
 
+template<> bool random_number<bool>() { return random_bool(); }
 template<> uint8_t random_number<uint8_t>() { return random_integer<uint8_t>(); }
 template<> uint16_t random_number<uint16_t>() { return random_integer<uint16_t>(); }
 template<> uint32_t random_number<uint32_t>() { return random_integer<uint32_t>(); }
@@ -156,11 +162,13 @@ int main() {
     if(!do_roundtrip_test< Runtime::Buffer<int16_t> >({1, 3, 2, 1}, "int16")) success = false;
     if(!do_roundtrip_test< Runtime::Buffer<int32_t> >({5, 8, 2},    "int32")) success = false;
     if(!do_roundtrip_test< Runtime::Buffer<int64_t> >({7, 6, 2},    "int64")) success = false;
+    if(!do_roundtrip_test< Runtime::Buffer<bool> >({5, 6, 2},     "bool")) success = false;
     if(!do_roundtrip_test< Runtime::Buffer<uint8_t> >({5, 6, 2},     "uint8")) success = false;
     if(!do_roundtrip_test< Runtime::Buffer<uint16_t> >({1, 3, 2, 1, 1}, "uint16")) success = false;
     if(!do_roundtrip_test< Runtime::Buffer<uint32_t> >({5, 8, 2},    "uint32")) success = false;
     if(!do_roundtrip_test< Runtime::Buffer<uint64_t> >({7, 6, 2},    "uint64")) success = false;
     if(!do_roundtrip_test< Runtime::Buffer<float> >({10, 2, 3, 6}, "float")) success = false;
+    if(!do_roundtrip_test< Runtime::Buffer<double> >({10, 2, 3, 6}, "double")) success = false;
     if(!success) return -1;
     return 0;
 }
