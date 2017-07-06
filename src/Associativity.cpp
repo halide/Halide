@@ -56,8 +56,6 @@ class ConvertSelfRef : public IRMutator {
         internal_assert(op);
 
         if ((op->call_type == Call::Halide) && (func == op->name)) {
-            internal_assert(!op->func.defined())
-                << "Func should not have been defined for a self-reference\n";
             internal_assert(args.size() == op->args.size())
                 << "Self-reference should have the same number of args as the original\n";
             for (size_t i = 0; i < op->args.size(); i++) {

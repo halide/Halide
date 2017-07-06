@@ -74,7 +74,8 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
             if (in_func.empty()) { // Global wrapper
                 for (const auto &wrapped_env_iter : wrapped_env) {
                     in_func = wrapped_env_iter.first;
-                    if ((wrapper.name() == in_func) || (all_func_wrappers.find(in_func) != all_func_wrappers.end())) {
+                    if ((wrapped_fname == in_func) ||
+                        (all_func_wrappers.find(in_func) != all_func_wrappers.end())) {
                         // The wrapper should still call the original function,
                         // so we don't want to rewrite the calls done by the
                         // wrapper. We also shouldn't rewrite the original

@@ -49,21 +49,14 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
-    NameMangling extern_mangling;
-    DeviceAPI extern_function_device_api;
-    bool extern_uses_old_buffer_t;
+    NameMangling extern_mangling = NameMangling::Default;
+    DeviceAPI extern_function_device_api = DeviceAPI::Host;
+    bool extern_uses_old_buffer_t = false;
 
-    bool trace_loads, trace_stores, trace_realizations;
+    bool trace_loads = false, trace_stores = false, trace_realizations = false;
 
-    bool frozen;
+    bool frozen = false;
 
-    FunctionContents() : extern_mangling(NameMangling::Default),
-                         extern_function_device_api(DeviceAPI::Host),
-                         extern_uses_old_buffer_t(false),
-                         trace_loads(false),
-                         trace_stores(false),
-                         trace_realizations(false),
-                         frozen(false) {}
 
     void accept(IRVisitor *visitor) const {
         func_schedule.accept(visitor);
@@ -205,25 +198,20 @@ struct CheckVars : public IRGraphVisitor {
     }
 };
 
-struct DeleteSelfReferences : public IRMutator {
+struct CountSelfReferences : public IRVisitor {
     IntrusivePtr<FunctionContents> func;
 
-    // Also count the number of self references so we know if a Func
+    // Count the number of self references so we know if a Func
     // has a recursive definition.
     int count = 0;
 
-    using IRMutator::visit;
+    using IRVisitor::visit;
 
     void visit(const Call *c) {
-        IRMutator::visit(c);
-        c = expr.as<Call>();
-        internal_assert(c);
         if (c->func.same_as(func)) {
-            expr = Call::make(c->type, c->name, c->args, c->call_type,
-                              nullptr, c->value_index,
-                              c->image, c->param);
             count++;
         }
+        IRVisitor::visit(c);
     }
 };
 
@@ -620,21 +608,18 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         check.reduction_domain.set_predicate(lower_random(check.reduction_domain.predicate(), free_vars, tag));
     }
 
-    // The update value and args probably refer back to the
-    // function itself, introducing circular references and hence
-    // memory leaks. We need to break these cycles.
-    DeleteSelfReferences deleter;
-    deleter.func = contents;
-    deleter.count = 0;
+    // Check for self-references, so that we can emit a warning for
+    // shadowed definitions.
+    CountSelfReferences counter;
+    counter.func = contents;
     for (size_t i = 0; i < args.size(); i++) {
-        args[i] = deleter.mutate(args[i]);
+        args[i].accept(&counter);
     }
     for (size_t i = 0; i < values.size(); i++) {
-        values[i] = deleter.mutate(values[i]);
+        values[i].accept(&counter);
     }
     if (check.reduction_domain.defined()) {
-        check.reduction_domain.set_predicate(
-            deleter.mutate(check.reduction_domain.predicate()));
+        check.reduction_domain.predicate().accept(&counter);
     }
 
     Definition r(args, values, check.reduction_domain, false);
@@ -676,7 +661,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
     // the args are pure, then this definition completely hides
     // earlier ones!
     if (!check.reduction_domain.defined() &&
-        deleter.count == 0 &&
+        counter.count == 0 &&
         pure) {
         user_warning
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
@@ -735,6 +720,10 @@ void Function::define_extern(const std::string &function_name,
 
 void Function::accept(IRVisitor *visitor) const {
     contents->accept(visitor);
+}
+
+void Function::mutate(IRMutator *mutator) {
+    contents->mutate(mutator);
 }
 
 const std::string &Function::name() const {

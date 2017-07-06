@@ -365,8 +365,6 @@ class SubstituteSelfReference : public IRMutator {
         internal_assert(c);
 
         if ((c->call_type == Call::Halide) && (func == c->name)) {
-            internal_assert(!c->func.defined())
-                << "func should not have been defined for a self-reference\n";
             debug(4) << "...Replace call to Func \"" << c->name << "\" with "
                      << "\"" << substitute.name() << "\"\n";
             vector<Expr> args;
