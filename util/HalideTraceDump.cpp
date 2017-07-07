@@ -7,7 +7,6 @@
 #include <stdint.h>
 #include <vector>
 #include <map>
-#include <assert.h>
 #include <string>
 #include <unistd.h>
 #include <fcntl.h>
@@ -20,6 +19,9 @@
  *
  * Currently dumps into supported Halide image formats.
  */
+
+using namespace Halide;
+using namespace Internal;
 
 using std::map;
 using std::vector;
@@ -48,7 +50,7 @@ struct Value {
     Value(Packet *p, int lane_idx=0) {
         defined[0] = 1;
         int bytes = p->type.bytes();
-        unsigned long addr = (unsigned long) p->value();
+        uintptr_t addr = (uintptr_t) p->value();
         addr += (bytes*lane_idx);
         memcpy((void*)payload, (void*)addr, bytes);
     }
@@ -65,13 +67,16 @@ struct FuncInfo {
     int extents[16];
     int dimensions;
     halide_type_t type;
-    Value * values;
+    Value *values;
 
-    FuncInfo() : values(NULL) {}
+    FuncInfo() : values(nullptr) {}
     FuncInfo(Packet *p) : values(NULL) {
         int real_dims = p->dimensions/p->type.lanes;
-        assert(real_dims <= 16);
-        for(int i=0; i<real_dims; i++){
+        if (real_dims > 16) {
+            fprintf(stderr, "Error: found trace packet with dimensionality > 16. Aborting.\n");
+            exit(-1);
+        }
+        for (int i = 0; i < real_dims; i++) {
             min_coords[i] = INT32_MAX;
             max_coords[i] = INT32_MIN;
         }
@@ -80,52 +85,69 @@ struct FuncInfo {
         type.lanes = 1;
     }
     ~FuncInfo() {
-        if(values != NULL) {
-            free(values);
-        }
+        free(values);
     }
 
-    void add_preprocess(Packet *p){
+    void add_preprocess(Packet *p) {
         int real_dims = p->dimensions/p->type.lanes;
         int lanes = p->type.lanes;
 
         halide_type_t scalar_type = p->type;
         scalar_type.lanes = 1;
 
-        assert(scalar_type == type);
-        assert(real_dims == dimensions);
+        if (scalar_type != type) {
+            fprintf(stderr, "Error: packet type doesn't match previous packets of same Func. Aborting.\n");
+            exit(-1);
+        }
+        if (real_dims != dimensions) {
+            fprintf(stderr, "Error: packet dimensionality doesn't match previous packets of same Func. Aborting.\n");
+            exit(-1);
+        }
 
-        for(int lane=0; lane < lanes; lane++) {
-            for(int i=0; i<real_dims; i++) {
-                if(p->coordinates()[lanes*i+lane] < min_coords[i]) { min_coords[i] = p->coordinates()[lanes*i+lane]; }
-                if(p->coordinates()[lanes*i+lane] > max_coords[i]) { max_coords[i] = p->coordinates()[lanes*i+lane]; }
+        for (int lane = 0; lane < lanes; lane++) {
+            for (int i = 0; i < real_dims; i++) {
+                if (p->coordinates()[lanes*i+lane] < min_coords[i]) {
+                    min_coords[i] = p->coordinates()[lanes*i+lane];
+                }
+                if (p->coordinates()[lanes*i+lane] > max_coords[i]) {
+                    max_coords[i] = p->coordinates()[lanes*i+lane];
+                }
             }
         }
     }
 
     void allocate() {
         int size = 1;
-        for(int i=0; i<dimensions; i++) {
+        for (int i = 0; i < dimensions; i++) {
             extents[i] = max_coords[i] - min_coords[i] + 1;
             size *= extents[i];
         }
         values = (Value *)malloc(size * sizeof(Value));
-        for(int i=0; i<size; i++) {
+        for (int i = 0; i < size; i++) {
             values[i] = Value();
         }
-        assert(values != NULL);
+        if (values == nullptr) {
+            fprintf(stderr, "Memory allocation failure. Aborting.\n");
+            exit(-1);
+        }
     }
 
     void add(Packet *p) {
         int real_dims = p->dimensions/p->type.lanes;
         int lanes = p->type.lanes;
 
-        assert(values != NULL);
-        assert(real_dims > 0);
+        if (values == nullptr) {
+            fprintf(stderr, "Packet storage not allocated. Aborting.\n");
+            exit(-1);
+        }
+        if (real_dims < 0) {
+            fprintf(stderr, "Negative dimensionality found. Aborting.\n");
+            exit(-1);
+        }
 
-        for(int lane = 0; lane < lanes; lane++) {
+        for (int lane = 0; lane < lanes; lane++) {
             int offset = p->coordinates()[lane];
-            for(int i=1; i<dimensions; i++) {
+            for (int i = 1; i < dimensions; i++) {
                 offset += (p->coordinates()[lanes*i+lane] * extents[i-1]);
             }
             values[offset] = Value(p, lane);
@@ -139,12 +161,16 @@ struct FuncInfo {
     template<typename T, int D>
     Buffer<T, D> get_buffer() {
         halide_buffer_t buf;
+        buf.device = 0;
+        buf.device_interface = nullptr;
+        buf.flags = 0;
+        buf.padding = nullptr;
         buf.host = (uint8_t*)values;
         halide_dimension_t dims[dimensions];
         dims[0].min = 0;
         dims[0].extent = extents[0];
         dims[0].stride = sizeof(Value)/type.bytes();
-        for(int i=1; i<dimensions; i++) {
+        for (int i = 1; i < dimensions; i++) {
             dims[i].min = 0;
             dims[i].extent = extents[i];
             dims[i].stride = (dims[i-1].stride * dims[i-1].extent);
@@ -160,12 +186,13 @@ struct FuncInfo {
 
 template<typename T, int D>
 void save(Buffer<T,D> buf, string filename) {
+    // Rely on save_image() to hard-fail if invalid buf or filename are passed.
     Halide::Tools::save_image(buf, filename);
 }
 
 void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
-    //For now, support only 2D buffers.
-    if(func.dimensions != 2) {
+    // For now, support only 2D buffers.
+    if (func.dimensions != 2) {
         printf("[INFO] Skipping func '%s', which is not 2D (has %d dimensions).\n", name.c_str(), func.dimensions);
     }
 
@@ -185,7 +212,7 @@ void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     }
 
     printf("[INFO] Dumping func '%s' to file: %s\n", name.c_str(), filename.c_str());
-    switch(func.type.code){
+    switch(func.type.code) {
     case halide_type_code_t::halide_type_int:
         switch(func.type.bits) {
         case 8:
@@ -243,58 +270,69 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
 
     printf("\nTrace stats:\n");
     printf("  Funcs:\n");
-    for(auto &pair : func_info) {
+    for (auto &pair : func_info) {
         const string &name = pair.first;
         FuncInfo &info = pair.second;
         printf("    %s:\n", name.c_str());
 
-        //Type
+        // Type
         printf("      Type: ");
-        if(info.type.code == halide_type_code_t::halide_type_int) { printf("int%d\n", info.type.bits); }
-        else if(info.type.code == halide_type_code_t::halide_type_uint) { printf("uint%d\n", info.type.bits); }
-        else if(info.type.code == halide_type_code_t::halide_type_float) { printf("float%d\n", info.type.bits); }
-        else assert(0);
+        if (info.type.code == halide_type_code_t::halide_type_int) {
+            printf("int%d\n", info.type.bits);
+        } else if (info.type.code == halide_type_code_t::halide_type_uint) {
+            printf("uint%d\n", info.type.bits);
+        } else if (info.type.code == halide_type_code_t::halide_type_float) {
+            printf("float%d\n", info.type.bits);
+        }
+        else {
+            fprintf(stderr, "Unsupported Func type. Aborting.\n");
+            exit(-1);
+        }
 
-        //Dimensions
+        // Dimensions
         printf("      Dimensions: %d\n", info.dimensions);
 
-        //Size of the func
+        // Size of the func
         printf("      Size: ");
-        for(int idx=0; idx<info.dimensions; idx++) {
-            if(idx>0) printf("x");
+        for (int idx = 0; idx < info.dimensions; idx++) {
+            if (idx>0) {
+                printf("x");
+            }
             printf("%d", (info.max_coords[idx]-info.min_coords[idx])+1);
         }
         printf("\n");
 
-        //Minima
+        // Minima
         printf("      Minimum stored to in each dim: {");
-        for(int idx=0; idx<info.dimensions; idx++) {
-            if(idx>0) printf(", ");
+        for (int idx = 0; idx < info.dimensions; idx++) {
+            if (idx>0) {
+                printf(", ");
+            }
             printf("%d", info.min_coords[idx]);
         }
         printf("}\n");
 
-        //Maxima
+        // Maxima
         printf("      Maximum stored to in each dim: {");
-        for(int idx=0; idx<info.dimensions; idx++) {
-            if(idx>0) printf(", ");
+        for (int idx = 0; idx < info.dimensions; idx++) {
+            if (idx>0) {
+                printf(", ");
+            }
             printf("%d", info.max_coords[idx]);
         }
         printf("}\n");
     }
 
-    for(auto &pair : func_info) {
+    for (auto &pair : func_info) {
         string name = pair.first;
         FuncInfo &info = pair.second;
         dump_func(name, info, output_opts);
     }
 
     printf("Done.\n");
-
-    return;
 }
 
-void usage(char * const * argv) {
+void usage(char * const *argv) {
     const string usage =
             "Usage: " + string(argv[0]) + " -i trace_file -t output_type\n"
             "  Available output types: png, jpg, pgm\n"
@@ -307,13 +345,13 @@ void usage(char * const * argv) {
     exit(1);
 }
 
-int main(int argc, char * const * argv) {
+int main(int argc, char * const *argv) {
 
-    char * buf_filename = NULL;
-    char * buf_imagetype = NULL;
+    char *buf_filename = nullptr;
+    char *buf_imagetype = nullptr;
     BufferOutputOpts outputopts;
     int c;
-    while ((c = getopt (argc, argv, "i:t:")) != -1)
+    while ((c = getopt (argc, argv, "i:t:")) != -1) {
         switch (c)
         {
         case 'i':
@@ -326,18 +364,29 @@ int main(int argc, char * const * argv) {
         default:
             usage(argv);
         }
+    }
 
-    if(buf_filename == NULL) usage(argv);
-    if(buf_imagetype == NULL) usage(argv);
+    if (buf_filename == nullptr) {
+        usage(argv);
+    }
+    if (buf_imagetype == nullptr) {
+        usage(argv);
+    }
 
     string imagetype(buf_imagetype);
-    if(imagetype == "jpg") { outputopts.type = BufferOutputOpts::JPG; }
-    else if(imagetype == "png") { outputopts.type = BufferOutputOpts::PNG; }
-    else if(imagetype == "pgm") { outputopts.type = BufferOutputOpts::PGM; }
-    else { usage(argv); }
+    if (imagetype == "jpg") {
+        outputopts.type = BufferOutputOpts::JPG;
+    } else if (imagetype == "png") {
+        outputopts.type = BufferOutputOpts::PNG;
+    } else if (imagetype == "pgm") {
+        outputopts.type = BufferOutputOpts::PGM;
+    }
+    else {
+        usage(argv);
+    }
 
     int file_desc = open(buf_filename, O_RDONLY);
-    if(file_desc == -1){
+    if (file_desc == -1) {
         fprintf(stderr, "[Error opening file: %s. Exiting.\n", argv[1]);
         exit(1);
     }
@@ -350,22 +399,22 @@ int main(int argc, char * const * argv) {
 
     printf("[INFO] First pass...\n");
 
-    for(;;) {
+    for (;;) {
         Packet p;
         if (!p.read_from_filedesc(file_desc)) {
             printf("[INFO] Finished pass 1 after %d packets.\n", packet_count);
             break;
         }
 
-        //Packet read was successful.
+        // Packet read was successful.
         packet_count++;
-        if((packet_count % 100000) == 0){
+        if ((packet_count % 100000) == 0) {
             printf("[INFO] Pass 1: Read %d packets so far.\n", packet_count);
         }
 
-        //Check if this was a store packet.
-        if( (p.event == halide_trace_store) || (p.event == halide_trace_load) ) {
-            if(func_info.find(string(p.func())) == func_info.end()) {
+        // Check if this was a store packet.
+        if ( (p.event == halide_trace_store) || (p.event == halide_trace_load) ) {
+            if (func_info.find(string(p.func())) == func_info.end()) {
                 printf("[INFO] Found Func with tracked accesses: %s\n", p.func());
                 func_info[string(p.func())] = FuncInfo(&p);
             }
@@ -375,28 +424,33 @@ int main(int argc, char * const * argv) {
 
     packet_count = 0;
     lseek(file_desc, 0, SEEK_SET);
-    for(auto &pair : func_info) {
+    for (auto &pair : func_info) {
         pair.second.allocate();
     }
 
-    for(;;) {
+    for (;;) {
         Packet p;
         if (!p.read_from_filedesc(file_desc)) {
             printf("[INFO] Finished pass 2 after %d packets.\n", packet_count);
-            if(file_desc > 0) close(file_desc);
+            if (file_desc > 0) {
+                close(file_desc);
+            }
             finish_dump(func_info, outputopts);
             exit(0);
         }
 
-        //Packet read was successful.
+        // Packet read was successful.
         packet_count++;
-        if((packet_count % 100000) == 0){
+        if ((packet_count % 100000) == 0) {
             printf("[INFO] Pass 2: Read %d packets so far.\n", packet_count);
         }
 
-        //Check if this was a store packet.
-        if( (p.event == halide_trace_store) || (p.event == halide_trace_load) ) {
-            assert(func_info.find(string(p.func())) != func_info.end());
+        // Check if this was a store packet.
+        if ( (p.event == halide_trace_store) || (p.event == halide_trace_load) ) {
+            if (func_info.find(string(p.func())) == func_info.end()) {
+                fprintf(stderr, "Unable to find Func on 2nd pass. Aborting.\n");
+                exit(-1);
+            }
             func_info[string(p.func())].add(&p);
         }
     }

@@ -23,6 +23,9 @@ typedef int64_t ssize_t;
 #include "HalideRuntime.h"
 #include "HalideTraceUtils.h"
 
+using namespace Halide;
+using namespace Internal;
+
 namespace {
 
 using std::map;
