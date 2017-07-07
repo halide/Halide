@@ -26,9 +26,9 @@ before_install:
   - export CC=${CC_}
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
   - sudo apt-get update
-  - wget https://github.com/bazelbuild/bazel/releases/download/"${BAZEL_VERSION}"/bazel_"${BAZEL_VERSION}"-installer-linux-x86_64.sh
-  - chmod a+x bazel_"${BAZEL_VERSION}"-installer-linux-x86_64.sh
-  - sudo ./bazel_"${BAZEL_VERSION}"-installer-linux-x86_64.sh
+  - sudo apt-get install openjdk-8-jdk
+  - wget https://github.com/bazelbuild/bazel/releases/download/"${BAZEL_VERSION}"/bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
+  - sudo dpkg -i bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
 install:
   - sudo apt-get -y --force-yes install ${CXX} ${CC} libedit-dev
   # Make gcc4.8 the default gcc version
