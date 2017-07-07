@@ -9,11 +9,11 @@ namespace Halide {
 namespace Internal {
 
 bool Packet::read_from_stdin() {
-    return read_from_filedesc(0);
+    return read_from_filedesc(stdin);
 }
 
-bool Packet::read_from_filedesc(int fdesc){
-    uint32_t header_size = (uint32_t)sizeof(halide_trace_packet_t);
+bool Packet::read_from_filedesc(FILE *fdesc){
+    size_t header_size = sizeof(halide_trace_packet_t);
     if (!Packet::read(this, header_size, fdesc)) {
         return false;
     }
@@ -30,23 +30,18 @@ bool Packet::read_from_filedesc(int fdesc){
     return true;
 }
 
-bool Packet::read(void *d, ssize_t size, int file_desc) {
+bool Packet::read(void *d, ssize_t size, FILE *file_desc) {
     uint8_t *dst = (uint8_t *)d;
     if (!size) return true;
-    for (;;) {
-        ssize_t s = ::read(file_desc, dst, size);
-        if (s == 0) {
-            // EOF
-            return false;
-        } else if (s < 0) {
+    ssize_t s = fread(dst, 1, size, file_desc);
+    if (s != size) {
+        if (ferror(file_desc) || !feof(file_desc)) {
             perror("Failed during read");
             exit(-1);
-            return 0;
-        } else if (s == size) {
-            return true;
         }
-        size -= s;
-        dst += s;
+        return false; //EOF
+    } else if (s == size) {
+        return true;
     }
 }
 
