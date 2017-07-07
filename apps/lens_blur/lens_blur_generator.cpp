@@ -13,13 +13,13 @@ public:
     ImageParam            left_im{UInt(8), 3, "left_im"};
     ImageParam            right_im{UInt(8), 3, "right_im"};
     // The number of displacements to consider
-    Param<int>       slices{"slices"};
+    Param<int>       slices{"slices", 32, 1, 64};
     // The depth to focus on
-    Param<int>       focus_depth{"focus_depth"};
+    Param<int>       focus_depth{"focus_depth", 13, 1, 32};
     // The increase in blur radius with misfocus depth
-    Param<float>     blur_radius_scale{"blur_radius_scale"};
+    Param<float>     blur_radius_scale{"blur_radius_scale", 0.5f, 0.0f, 1.0f};
     // The number of samples of the aperture to use
-    Param<int>       aperture_samples{"aperture_samples"};
+    Param<int>       aperture_samples{"aperture_samples", 32, 1, 64};
 
     Func build() {
         /* THE ALGORITHM */

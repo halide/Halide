@@ -1759,7 +1759,6 @@ DimBounds Partitioner::get_bounds_from_tile_sizes(const FStage &s,
             const Expr &size = iter->second;
             // Check if the bounds allow for tiling with the given tile size,
             // i.e. ensure at least 2 tiles
-            // TODO(psuriana): POTENTIAL BUGS original implementation doesn't check for unknown
             Expr extent = get_extent(bound);
             internal_assert(extent.defined());
             if (can_prove(extent >= 2 * size)) {
@@ -3000,21 +2999,23 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
 // Verify that function 'f' does not have partially specified schedules/bounds.
 // The current auto scheduler cannots handle such cases.
 void validate_no_partial_schedules(const Function &f) {
+    // Verify no compute_root or bounds are specified
+    user_assert(f.schedule().compute_level().is_inline())
+        << "AutoSchedule: cannot auto-schedule function \"" << f.name()
+        << "\" since it is scheduled to be computed at root\n";
+    user_assert(f.schedule().bounds().empty())
+        << "AutoSchedule: cannot auto-schedule function \"" << f.name()
+        << "\" since it has partially specified bounds\n";
+
     int num_stages = f.updates().size() + 1;
     for (int stage = 0; stage < num_stages; ++stage) {
         const Definition &def = get_stage_definition(f, stage);
-        const Schedule &schedule = def.schedule();
+        const StageSchedule &schedule = def.schedule();
 
-        // Verify no compute_root, splits, or bounds are specified
-        user_assert(schedule.compute_level().is_inline())
-            << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-            << "\" since it is scheduled to be computed at root\n";
+        // Verify no splits are specified
         user_assert(schedule.splits().empty())
             << "AutoSchedule: cannot auto-schedule function \"" << f.name()
             << "\" since it has partially specified schedules at stage " << stage << "\n";
-        user_assert(schedule.bounds().empty())
-            << "AutoSchedule: cannot auto-schedule function \"" << f.name()
-            << "\" since it has partially specified bounds at stage " << stage << "\n";
 
         // Verify that none of the dimensions are scheduled to be parallelized or
         // vectorized, or unrolled.
@@ -3066,7 +3067,7 @@ void validate_no_partial_schedules(const Function &f) {
 
                 internal_assert(dims.size() - rvars.size() - 1 <= args.size());
                 int last_index = -1;
-                for (size_t i = rvars.size(); i < dims.size() - 1; ++i) {
+                for (int i = rvars.size(); i < (int)dims.size() - 1; ++i) {
                     const Dim &d = dims[i];
                     user_assert(!d.is_rvar())
                         << "AutoSchedule: cannot auto-schedule function \"" << f.name()
@@ -3093,38 +3094,121 @@ void validate_no_partial_schedules(const Function &f) {
 }
 
 // If the cost of computing a Func is about the same as calling the Func,
-// inline the Func and remove it from 'env'.
-void inline_all_trivial_functions(const vector<Function> &outputs, map<string, Function> &env) {
-    set<string> should_remove;
-    for (auto &iter1 : env) {
+// inline the Func. Return true of any of the Funcs is inlined.
+bool inline_all_trivial_functions(const vector<Function> &outputs,
+                                  const vector<string> &order,
+                                  map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
         bool is_output = false;
         for (const Function &f : outputs) {
-            if (iter1.first == f.name()) {
+            if (order[i] == f.name()) {
                 is_output = true;
                 break;
             }
         }
         if (is_output) {
             // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
             continue;
         }
+        Function f1 = env.at(order[i]);
+        if (is_func_trivial_to_inline(f1)) {
+            inlined = true;
+            debug(4) << "Function \"" << order[i] << "\" is trivial to inline\n";
+            for (int j = i + 1; j < (int)order.size() - (int)outputs.size(); ++j) {
+                internal_assert(order[i] != order[j]);
+                Function f2 = env.at(order[j]);
+                debug(5) << "Inline trivial function \"" << f1.name()
+                         << "\" inside \"" << f2.name() << "\"\n";
+                inline_function(f2, f1);
+            }
+        }
+    }
+    return inlined;
+}
 
-        if (is_func_trivial_to_inline(iter1.second)) {
-            should_remove.insert(iter1.first);
-            for (auto &iter2 : env) {
-                if (iter1.first != iter2.first) {
-                    debug(4) << "Inline trivial function \"" << iter1.first
-                             << "\" inside \"" << iter2.first << "\"\n";
-                    inline_function(iter2.second, iter1.second);
+// Determine if a Func (order[index]) is only consumed by another single Func
+// in element-wise manner. If it is, return the name of the consumer Func;
+// otherwise, return an empty string.
+string is_func_called_element_wise(const vector<string> &order, size_t index,
+                                   const map<string, Function> &env) {
+    Function f1 = env.at(order[index]);
+    if (!f1.can_be_inlined()) {
+        return "";
+    }
+    internal_assert(index < order.size());
+
+    string caller = "";
+    for (size_t i = index + 1; i < order.size(); ++i) {
+        Function f2 = env.at(order[i]);
+        int num_stages = f2.updates().size() + 1;
+        for (int s = 0; s < num_stages; ++s) {
+            Definition def = get_stage_definition(f2, s);
+            FindAllCalls find;
+            def.accept(&find);
+
+            if (find.funcs_called.count(f1.name())) {
+                if (caller.empty()) {
+                    caller = f2.name();
+                } else {
+                    // Found another caller of 'f1'
+                    return "";
+                }
+            }
+            for (const auto &iter : find.call_args) {
+                if (iter.first != f1.name()) {
+                    continue;
+                }
+                if (def.args().size() != iter.second.size()) {
+                    // It's not an element-wise access
+                    return "";
+                }
+                for (size_t j = 0; j < iter.second.size(); ++j) {
+                    if (!equal(def.args()[j], iter.second[j])) {
+                        // It's not an element-wise access
+                        return "";
+                    }
                 }
             }
         }
     }
+    return caller;
+}
 
-    for (const auto &f : should_remove) {
-        debug(4) << "Remove function \"" << f << "\" from 'env' since it is inlined\n";
-        env.erase(f);
+// Inline a Func if its values are only consumed by another single Func in
+// element-wise manner.
+bool inline_all_element_wise_functions(const vector<Function> &outputs,
+                                       const vector<string> &order,
+                                       const map<string, Function> &env) {
+    bool inlined = false;
+    // The very last few functions in 'order' are the last to be realized in the
+    // pipeline (the final producers) so there is no point in checking it.
+    for (int i = 0; i < (int)order.size() - (int)outputs.size(); ++i) {
+        bool is_output = false;
+        for (const Function &f : outputs) {
+            if (order[i] == f.name()) {
+                is_output = true;
+                break;
+            }
+        }
+        if (is_output) {
+            // Should not inline output Func
+            debug(5) << "Skip inlining " << order[i] << " since it is an output\n";
+            continue;
+        }
+        string caller = is_func_called_element_wise(order, i, env);
+        if (!caller.empty()) {
+            inlined = true;
+            debug(4) << "Inline function \"" << order[i] << "\" since it is called only by "
+                     << caller << " in element-wise manner\n";
+            internal_assert(order[i] != caller);
+            inline_function(env.at(caller), get_element(env, order[i]));
+        }
     }
+    return inlined;
 }
 
 // Return true if 'f' is used by some extern Func.
@@ -3195,10 +3279,55 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     // computing a Func is about the same as calling that Func, we should
     // just inline it).
     debug(2) << "Inlining all trivial functions...\n";
-    inline_all_trivial_functions(outputs, env);
+    if (inline_all_trivial_functions(outputs, full_order, env)) {
+        // If any of the Funcs is inlined, we need to recompute 'env', since some
+        // of the Funcs are no longer used and need to be removed from 'env'.
+        //
+        // Instead of recomputing 'env', we could also remove the inlined Func
+        // within inline_all_trivial_functions(); however, it is a bit tricky
+        // to do when dealing with inlined tuple. Consider the following case:
+        //   f(x, y) = x + y;
+        //   g(x, y) = {x, f(x, y)};
+        //   h(x, y) = g(x, y)[0];
+        // When 'g' is inlined in 'h', no one uses 'f' anymore and it can
+        // be removed from 'env'. However, to know this, we need to trace
+        // all the function calls within the pipeline. Thus, we might as well
+        // recompute the 'env' from scratch.
+        env.clear();
+        for (Function f : outputs) {
+            map<string, Function> more_funcs = find_transitive_calls(f);
+            env.insert(more_funcs.begin(), more_funcs.end());
+        }
+    }
+
+    // Compute the realization order of the functions within the pipeline.
+    vector<string> order = realization_order(outputs, env);
+
+    // Run a pre-pass that inline all Funcs which values are accessed by
+    // another single Func in element-wise manner. We need to do this
+    // repeatedly since some inlining decisions may enable further inlining
+    // that previously not possible. Consider the following case:
+    //   f1(x) = x;
+    //   f2(x) = f1(x) + 2;
+    //   f3(x) = f1(x) * 2;
+    //   f4(x) = f2(x) + f3(x);
+    //   f5(x) = f4(x) + 3;
+    // In the first iteration, we cannot inline 'f1' since it is used by two
+    // functions: 'f2' and 'f3'. If 'f2' and 'f4' get inlined and 'f3' is only
+    // used by 'f4', then 'f1' can now also be inlined.
+    debug(2) << "Inlining all element-wise functions...\n";
+    while (inline_all_element_wise_functions(outputs, order, env)) {
+        // We need to recompute 'env' for the same reason as with
+        // inline_all_trivial_functions
+        env.clear();
+        for (Function f : outputs) {
+            map<string, Function> more_funcs = find_transitive_calls(f);
+            env.insert(more_funcs.begin(), more_funcs.end());
+        }
+        order = realization_order(outputs, env);
+    }
 
     // Compute the bounds of function values which are used for dependence analysis.
-    vector<string> order = realization_order(outputs, env);
     debug(2) << "Computing function value bounds...\n";
     FuncValueBounds func_val_bounds = compute_function_value_bounds(order, env);
 
@@ -3280,8 +3409,6 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     std::ostringstream oss;
     oss << sched;
     string sched_string = oss.str();
-
-    std::cout << "\n\n****************************************\nSCHEDULE:\n****************************************\n" << sched_string << "\n\n";
 
     // TODO: Unify both inlining and grouping for fast mem
     // TODO: GPU scheduling

@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     float r_sigma = (float) atof(argv[3]);
     int timing_iterations = atoi(argv[4]);
 
-    Buffer<float> input = load_image(argv[1]);
+    Buffer<float> input = load_and_convert_image(argv[1]);
     Buffer<float> output(input.width(), input.height(), 1);
 
     bilateral_grid(input, r_sigma, output);
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
-    save_image(output, argv[2]);
+    convert_and_save_image(output, argv[2]);
 
     const halide_filter_metadata_t *md = bilateral_grid_metadata();
     // Only compare the performance if target has non-gpu features.

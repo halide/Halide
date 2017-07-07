@@ -34,10 +34,9 @@ extern int halide_hexagon_wrap_device_handle(void *user_context, struct halide_b
  * halide_buffer_t that halide_hexagon_wrap_device_handle was
  * previously called on. Frees any storage associated with the binding
  * of the halide_buffer_t and the device handle, but does not free the
- * device handle. The previously wrapped device handle is
- * returned. The device field of the halide_buffer_t will be NULL on
- * return. */
-extern void *halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf);
+ * device handle. The device field of the halide_buffer_t will be NULL
+ * on return. */
+extern int halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf);
 
 /** Return the underlying device handle for a buffer_t. If there is
  * no device memory (dev field is NULL), this returns 0. */

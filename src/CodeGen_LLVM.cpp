@@ -1038,6 +1038,13 @@ void CodeGen_LLVM::optimize_module() {
 #endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
+
+#if LLVM_VERSION >= 50
+    if (TM) {
+        TM->adjustPassManager(b);
+    }
+#endif
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
@@ -1798,17 +1805,6 @@ void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->lanes);
 }
 
-// Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
-Expr unbroadcast(Expr e) {
-    if (e.type().is_vector()) {
-        const Broadcast *broadcast = e.as<Broadcast>();
-        internal_assert(broadcast);
-        return broadcast->value;
-    } else {
-        return e;
-    }
-}
-
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     internal_assert(vecs.size() >= 1);
     for (size_t i = 1; i < vecs.size(); i++) {
@@ -2299,6 +2295,15 @@ void CodeGen_LLVM::visit(const Call *op) {
             phi->addIncoming(false_value, false_pred);
 
             value = phi;
+        }
+    } else if (op->is_intrinsic(Call::require)) {
+        internal_assert(op->args.size() == 3);
+        Expr cond = op->args[0];
+        if (cond.type().is_vector()) {
+            scalarize(op);
+        } else {
+            create_assertion(codegen(cond), op->args[2]);
+            value = codegen(op->args[1]);
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->type.is_vector()) {

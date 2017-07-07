@@ -68,18 +68,20 @@ int init_sim() {
         }
     }
 
-    // Configue tracing.
-    const char *T = getenv("HL_HEXAGON_SIM_MIN_TRACE");
-    if (T && T[0] != 0) {
-        status = sim->SetTracing(HEX_TRACE_PC_MIN, T);
-        if (status != HEX_STAT_SUCCESS) {
-            printf("HexagonWrapper::SetTracing MIN failed: %d\n", status);
-            return -1;
-        }
-    } else {
-        const char *T = getenv("HL_HEXAGON_SIM_TRACE");
-        if (T && T[0] != 0) {
-            status = sim->SetTracing(HEX_TRACE_PC, T);
+    // Configue various tracing capabilites.
+    struct Trace {
+        const char *env_var;
+        HEXAPI_TracingType hex_trace;
+    };
+    Trace traces[] = {
+        { "HL_HEXAGON_SIM_MIN_TRACE", HEX_TRACE_PC_MIN },
+        { "HL_HEXAGON_SIM_TRACE", HEX_TRACE_PC },
+        { "HL_HEXAGON_SIM_MEM_TRACE", HEX_TRACE_MEM },
+    };
+    for (auto i : traces) {
+        const char *trace = getenv(i.env_var);
+        if (trace && trace[0] != 0) {
+            status = sim->SetTracing(i.hex_trace, trace);
             if (status != HEX_STAT_SUCCESS) {
                 printf("HexagonWrapper::SetTracing failed: %d\n", status);
                 return -1;
@@ -98,6 +100,16 @@ int init_sim() {
             return -1;
         } else {
             debug_mode = true;
+        }
+    }
+
+    // Configure packet analysis for hexagon-prof.
+    const char *packet_analyze = getenv("HL_HEXAGON_PACKET_ANALYZE");
+    if (packet_analyze && packet_analyze[0]) {
+        status = sim->ConfigurePacketAnalysis(packet_analyze);
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::ConfigurePacketAnalysis failed: %d\n", status);
+            return -1;
         }
     }
 

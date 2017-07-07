@@ -73,7 +73,7 @@ using std::vector;
 using std::map;
 
 Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
-             vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
+             const vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
              const vector<IRMutator *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
@@ -337,7 +337,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
     for (const InferredArgument &arg : inferred_args) {
-      if (arg.param.defined() && arg.param.name() == "__user_context") {
+        if (arg.param.defined() && arg.param.name() == "__user_context") {
             // The user context is always in the inferred args, but is
             // not required to be in the args list.
             continue;

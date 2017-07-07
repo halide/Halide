@@ -255,7 +255,7 @@ WEAK int map_arguments(void *user_context, int arg_count,
             // This is a buffer, map it and put the mapped buffer into
             // the result.
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            uint64_t device_handle = *((uint64_t *)args[i]);
+            uint64_t device_handle = ((halide_buffer_t *)args[i])->device;
             ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device_handle);
             debug(user_context) << i << ", " << device_handle << "\n";
             mapped_arg.data = reinterpret_cast<uint8_t*>(ion_handle->buffer);
@@ -483,7 +483,8 @@ WEAK int halide_hexagon_device_free(void *user_context, halide_buffer_t* buf) {
     #endif
 
     uint64_t size = halide_hexagon_get_device_size(user_context, buf);
-    void *ion = halide_hexagon_detach_device_handle(user_context, buf);
+    void *ion = halide_hexagon_get_device_handle(user_context, buf);
+    halide_hexagon_detach_device_handle(user_context, buf);
     if (size >= min_ion_allocation_size) {
         debug(user_context) << "    host_free ion=" << ion << "\n";
         host_free(ion);
@@ -582,24 +583,23 @@ WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct halide_buf
     handle->buffer = ion_buf;
     handle->size = size;
     buf->device_interface = &hexagon_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
     buf->device = reinterpret<uint64_t>(handle);
     return 0;
 }
 
-WEAK void *halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf) {
+WEAK int halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == 0) {
         return NULL;
     }
     halide_assert(user_context, buf->device_interface == &hexagon_device_interface);
     ion_device_handle *handle = reinterpret<ion_device_handle *>(buf->device);
-    void *ion_buf = handle->buffer;
     free(handle);
 
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device = 0;
     buf->device_interface = NULL;
-    return ion_buf;
+    return 0;
 }
 
 WEAK void *halide_hexagon_get_device_handle(void *user_context, struct halide_buffer_t *buf) {
@@ -767,7 +767,7 @@ WEAK void halide_hexagon_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Hexagon {
 
-WEAK halide_device_interface_t hexagon_device_interface = {
+WEAK halide_device_interface_impl_t hexagon_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_hexagon_device_malloc,
@@ -778,6 +778,22 @@ WEAK halide_device_interface_t hexagon_device_interface = {
     halide_hexagon_copy_to_device,
     halide_hexagon_device_and_host_malloc,
     halide_hexagon_device_and_host_free,
+    halide_default_device_wrap_native,
+    halide_default_device_detach_native,
+};
+
+WEAK halide_device_interface_t hexagon_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    halide_device_wrap_native,
+    halide_device_detach_native,
+    &hexagon_device_interface_impl
 };
 
 }}}} // namespace Halide::Runtime::Internal::Hexagon
