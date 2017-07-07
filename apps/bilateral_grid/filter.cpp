@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     float r_sigma = (float) atof(argv[3]);
     int timing_iterations = atoi(argv[4]);
 
-    Buffer<float> input = load_image(argv[1]);
+    Buffer<float> input = load_and_convert_image(argv[1]);
     Buffer<float> output(input.width(), input.height(), 1);
 
     bilateral_grid(input, r_sigma, output);
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     });
     printf("Time: %gms\n", min_t * 1e3);
 
-    save_image(output, argv[2]);
+    convert_and_save_image(output, argv[2]);
 
     return 0;
 }

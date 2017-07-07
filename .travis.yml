@@ -17,7 +17,6 @@ env:
     # Don't build as a static library with cmake. It risks exceeding the travis memory limit.
     - LLVM_VERSION=3.7.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
     - LLVM_VERSION=3.8.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8
-    - LLVM_VERSION=3.7.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
     - LLVM_VERSION=3.8.1 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
 cache: apt
 dist: trusty

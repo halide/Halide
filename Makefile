@@ -776,13 +776,14 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
 
 .PHONY: clean
 clean:
-	rm -rf $(LIB_DIR)/*
-	rm -rf $(BIN_DIR)/*
-	rm -rf $(BUILD_DIR)/*
-	rm -rf $(TMP_DIR)/*
-	rm -rf $(FILTERS_DIR)/*
-	rm -rf $(INCLUDE_DIR)/*
-	rm -rf $(DOC_DIR)/*
+	rm -rf $(LIB_DIR)
+	rm -rf $(BIN_DIR)
+	rm -rf $(BUILD_DIR)
+	rm -rf $(TMP_DIR)
+	rm -rf $(FILTERS_DIR)
+	rm -rf $(INCLUDE_DIR)
+	rm -rf $(DOC_DIR)
+	rm -rf $(DISTRIB_DIR)
 
 .SECONDARY:
 
