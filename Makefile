@@ -1399,7 +1399,10 @@ test_bazel: $(DISTRIB_DIR)/halide.tgz
 	  cp -r $(ROOT_DIR)/apps/bazeldemo apps; \
 	  cp -r $(ROOT_DIR)/tools .; \
 	fi
-	cd apps/bazeldemo; bazel build --verbose_failures :all 
+	cd apps/bazeldemo; \
+	CXX=`echo ${CXX} | sed 's/ccache //'` \
+	CC=`echo ${CC} | sed 's/ccache //'` \
+	bazel build --verbose_failures :all 
 
 .PHONY: test_python
 test_python: $(LIB_DIR)/libHalide.a $(INCLUDE_DIR)/Halide.h
