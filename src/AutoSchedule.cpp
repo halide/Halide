@@ -3124,7 +3124,7 @@ bool inline_all_trivial_functions(const vector<Function> &outputs,
 // in element-wise manner. If it is, return the name of the consumer Func;
 // otherwise, return an empty string.
 string is_func_called_element_wise(const vector<string> &order, size_t index,
-                                   map<string, Function> &env) {
+                                   const map<string, Function> &env) {
     Function f1 = env.at(order[index]);
     if (!f1.can_be_inlined()) {
         return "";
@@ -3169,10 +3169,10 @@ string is_func_called_element_wise(const vector<string> &order, size_t index,
 }
 
 // Inline a Func if its values are only consumed by another single Func in
-// element-wise manner and remove the inlined Func from 'order' and 'env'.
+// element-wise manner.
 bool inline_all_element_wise_functions(const vector<Function> &outputs,
-                                       vector<string> &order,
-                                       map<string, Function> &env) {
+                                       const vector<string> &order,
+                                       const map<string, Function> &env) {
     bool inlined = false;
     // The very last few functions in 'order' are the last to be realized in the
     // pipeline (the final producers) so there is no point in checking it.
@@ -3195,13 +3195,7 @@ bool inline_all_element_wise_functions(const vector<Function> &outputs,
             debug(4) << "Inline function \"" << order[i] << "\" since it is called only by "
                      << caller << " in element-wise manner\n";
             internal_assert(order[i] != caller);
-
-            auto iter = env.find(order[i]);
-            internal_assert(iter != env.end());
-            inline_function(env.at(caller), iter->second);
-            env.erase(iter);
-            order.erase(order.begin() + i);
-            i -= 1;
+            inline_function(env.at(caller), get_element(env, order[i]));
         }
     }
     return inlined;
@@ -3295,8 +3289,27 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     vector<string> order = realization_order(outputs, env);
 
     // Run a pre-pass that inline all Funcs which values are accessed by
-    // another single Func in element-wise manner.
-    inline_all_element_wise_functions(outputs, order, env);
+    // another single Func in element-wise manner. We need to do this
+    // repeatedly since some inlining decisions may enable further inlining
+    // that previously not possible. Consider the following case:
+    //   f1(x) = x;
+    //   f2(x) = f1(x) + 2;
+    //   f3(x) = f1(x) * 2;
+    //   f4(x) = f2(x) + f3(x);
+    //   f5(x) = f4(x) + 3;
+    // In the first iteration, we cannot inline 'f1' since it is used by two
+    // functions: 'f2' and 'f3'. If 'f2' and 'f4' get inlined and 'f3' is only
+    // used by 'f4', then 'f1' can now also be inlined.
+    while (inline_all_element_wise_functions(outputs, order, env)) {
+        // We need to recompute 'env' for the same reason as with
+        // inline_all_trivial_functions
+        env.clear();
+        for (Function f : outputs) {
+            map<string, Function> more_funcs = find_transitive_calls(f);
+            env.insert(more_funcs.begin(), more_funcs.end());
+        }
+        order = realization_order(outputs, env);
+    }
 
     // Compute the bounds of function values which are used for dependence analysis.
     FuncValueBounds func_val_bounds = compute_function_value_bounds(order, env);
