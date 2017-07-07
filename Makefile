@@ -27,6 +27,8 @@ else
 endif
 endif
 
+BAZEL ?= $(shell which bazel)
+
 SHELL = bash
 CXX ?= g++
 PREFIX ?= /usr/local
@@ -1340,7 +1342,7 @@ time_compilation_generator_%: $(BIN_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)
 
 .PHONY: test_apps
-test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
+test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES) test_bazel
 	mkdir -p apps
 	# Make a local copy of the apps if we're building out-of-tree,
 	# because the app Makefiles are written to build in-tree
@@ -1382,6 +1384,13 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	  make -C apps/linear_algebra clean HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
 	  make -C apps/linear_algebra test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
 	fi
+
+# Bazel depends on the distrib archive being built
+.PHONY: test_bazel
+test_bazel: $(DISTRIB_DIR)/halide.tgz
+	# Only test bazeldemo if Bazel is installed
+	if [ -z "$(BAZEL)" ]; then echo "Bazel is not installed"; exit 1; fi
+	cd apps/bazeldemo; bazel build --verbose_failures :all 
 
 .PHONY: test_python
 test_python: $(LIB_DIR)/libHalide.a $(INCLUDE_DIR)/Halide.h
