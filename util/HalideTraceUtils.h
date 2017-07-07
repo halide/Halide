@@ -4,6 +4,8 @@
 #include "HalideRuntime.h"
 #include <stdio.h>
 
+namespace Halide {
+namespace Internal {
 
 void bad_type_error(halide_type_t type);
 
@@ -82,5 +84,8 @@ private:
     // Do a blocking read of some number of bytes from a unistd file descriptor.
     bool read(void *d, ssize_t size, int fdesc);
 };
+
+}
+}
 
 #endif

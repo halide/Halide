@@ -5,6 +5,9 @@
 #include <string.h>
 #include <unistd.h>
 
+namespace Halide {
+namespace Internal {
+
 bool Packet::read_from_stdin() {
     return read_from_filedesc(0);
 }
@@ -14,8 +17,8 @@ bool Packet::read_from_filedesc(int fdesc){
     if (!Packet::read(this, header_size, fdesc)) {
         return false;
     }
-    uint32_t payload_size = size - header_size;
-    if (payload_size > (uint32_t)sizeof(payload)) {
+    size_t payload_size = size - header_size;
+    if (payload_size > sizeof(payload)) {
         fprintf(stderr, "Payload larger than %d bytes in trace stream (%d)\n", (int)sizeof(payload), (int)payload_size);
         abort();
         return false;
@@ -49,4 +52,7 @@ bool Packet::read(void *d, ssize_t size, int file_desc) {
 
 void bad_type_error(halide_type_t type) {
     fprintf(stderr, "Can't convert packet with type: %d bits: %d\n", type.code, type.bits);
+}
+
+}
 }
