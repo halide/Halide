@@ -1503,7 +1503,7 @@ endif
 
 LLVM_SYSTEM_LIBS = $(shell $(LLVM_CONFIG) --system-libs | sed -e 's/[\/&]/\\&/g')
 
-$(BUILD_DIR)/halide_linkopts.bzl: bazel/halide_linkopts.bzl.tpl
+$(BUILD_DIR)/halide_linkopts.bzl: $(ROOT_DIR)/bazel/halide_linkopts.bzl.tpl
 	-mkdir -p $(BUILD_DIR)
 	cat $^ | sed -e 's/%{llvm_system-libs}/$(LLVM_SYSTEM_LIBS)/g' > $@
 
