@@ -69,7 +69,8 @@ class SubstituteVarEstimates: public IRMutator {
     }
 };
 
-/** Return the size of an interval. */
+/** Return the size of an interval. Return an undefined expr if the interval
+ * is unbounded. */
 Expr get_extent(const Interval &i);
 
 /** Return the size of an n-d box. */

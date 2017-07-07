@@ -14,14 +14,7 @@ Expr get_extent(const Interval &i) {
     if (!i.is_bounded()) {
         return Expr();
     }
-    Expr extent = simplify(i.max - i.min + 1);
-    // TODO(psuriana): should make this deal with symbolic constants
-    if (is_const(extent)) {
-        // The extent only makes sense when the max >= min otherwise
-        // it is considered to be zero.
-        return simplify(max(make_zero(Int(64)), extent));
-    }
-    return Expr();
+    return simplify(i.max - i.min + 1);
 }
 
 Expr box_size(const Box &b) {

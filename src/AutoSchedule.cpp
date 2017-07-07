@@ -1977,7 +1977,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
             }
 
             if (model_reuse) {
-                //TODO(psuriana): this is wrong
                 Expr initial_factor =
                     cast<int64_t>(min(1 + initial_footprint * load_slope, arch_params.balance));
                 per_tile_cost.memory += initial_factor * footprint;
@@ -1990,7 +1989,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
             }
         }
 
-        //TODO(psuriana): this is wrong
         Expr cost_factor = cast<int64_t>(min(1 + footprint * load_slope, arch_params.balance));
         per_tile_cost.memory += cost_factor * f_load.second;
     }
