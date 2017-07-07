@@ -40,9 +40,9 @@ bool Packet::read(void *d, ssize_t size, FILE *file_desc) {
             exit(-1);
         }
         return false; //EOF
-    } else if (s == size) {
-        return true;
     }
+
+    return true;
 }
 
 void bad_type_error(halide_type_t type) {
