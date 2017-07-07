@@ -6,6 +6,7 @@ compiler:
 env:
   global:
     - BAZEL_VERSION="0.5.2"
+    - JDK=openjdk8
   matrix:
     # Configurations
     #
@@ -19,6 +20,7 @@ env:
     - LLVM_VERSION=3.7.1 BUILD_SYSTEM=MAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
     - LLVM_VERSION=3.8.1 BUILD_SYSTEM=CMAKE CXX_=g++-4.8 CC_=gcc-4.8 HALIDE_SHARED_LIBRARY=1
 cache: apt
+dist: trusty
 # Note the commands below are written assuming Ubuntu 12.04LTS
 before_install:
   # Needed for new libstdc++ and gcc4.8
@@ -26,7 +28,6 @@ before_install:
   - export CC=${CC_}
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
   - sudo apt-get update
-  - sudo apt-get install oracle-java8-installer
   - wget https://github.com/bazelbuild/bazel/releases/download/"${BAZEL_VERSION}"/bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
   - sudo dpkg -i bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
 install:
