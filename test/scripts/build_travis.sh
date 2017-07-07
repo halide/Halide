@@ -60,6 +60,9 @@ elif [ ${BUILD_SYSTEM} = 'MAKE' ]; then
 
   # Build the docs and run the tests
   make doc test_correctness test_generators
+
+  # Make test_apps (since many apps link against static rather than shared libHalide)
+  make test_apps
 else
   echo "Unexpected BUILD_SYSTEM: \"${BUILD_SYSTEM}\""
   exit 1
