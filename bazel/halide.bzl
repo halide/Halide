@@ -1,3 +1,5 @@
+load("@halide//:halide_linkopts.bzl", "halide_linkopts")
+
 def halide_language_copts():
   _common_opts = [
       "-DGOOGLE_PROTOBUF_NO_RTTI",
@@ -54,7 +56,7 @@ def halide_language_linkopts():
           _osx_opts,
       "//conditions:default":
           _linux_opts,
-  })
+  }) + halide_linkopts().split(" ")
 
 
 def halide_runtime_linkopts():
