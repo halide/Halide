@@ -153,12 +153,12 @@ bool IOCheckFail(bool condition, const char* msg) {
 }
 
 // Replace the standard Halide runtime function to capture print output to info()
-extern "C" void halide_print(void *user_context, const char *message) {
+void rungen_halide_print(void *user_context, const char *message) {
     info() << "halide_print: " << message;
 }
 
 // Replace the standard Halide runtime function to capture Halide errors to fail()
-extern "C" void halide_error(void *user_context, const char *message) {
+void rungen_halide_error(void *user_context, const char *message) {
     fail() << "halide_error: " << message;
 }
 
@@ -720,6 +720,9 @@ int main(int argc, char **argv) {
         usage(argv[0]);
         return 0;
     }
+
+    halide_set_error_handler(rungen_halide_error);
+    halide_set_custom_print(rungen_halide_print);
 
     const halide_filter_metadata_t *md = halide_rungen_redirect_metadata();
 
