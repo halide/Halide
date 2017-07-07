@@ -1390,6 +1390,14 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 test_bazel: $(DISTRIB_DIR)/halide.tgz
 	# Only test bazeldemo if Bazel is installed
 	if [ -z "$(BAZEL)" ]; then echo "Bazel is not installed"; exit 1; fi
+	mkdir -p apps
+	# Make a local copy of the apps if we're building out-of-tree,
+	# because the app Makefiles are written to build in-tree
+	if [ "$(ROOT_DIR)" != "$(CURDIR)" ]; then \
+	  echo "Building out-of-tree, so making local copy of apps"; \
+	  cp -r $(ROOT_DIR)/apps/bazeldemo apps; \
+	  cp -r $(ROOT_DIR)/tools .; \
+	fi
 	cd apps/bazeldemo; bazel build --verbose_failures :all 
 
 .PHONY: test_python
