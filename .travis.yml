@@ -26,7 +26,7 @@ before_install:
   - export CC=${CC_}
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test/
   - sudo apt-get update
-  - sudo apt-get install openjdk-8-jdk
+  - sudo apt-get install oracle-java8-installer
   - wget https://github.com/bazelbuild/bazel/releases/download/"${BAZEL_VERSION}"/bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
   - sudo dpkg -i bazel_"${BAZEL_VERSION}"-linux-x86_64.deb
 install:
