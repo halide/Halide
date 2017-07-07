@@ -385,8 +385,8 @@ int main(int argc, char * const *argv) {
         usage(argv);
     }
 
-    int file_desc = open(buf_filename, O_RDONLY);
-    if (file_desc == -1) {
+    FILE *file_desc = fopen(buf_filename, "r");
+    if (file_desc == nullptr) {
         fprintf(stderr, "[Error opening file: %s. Exiting.\n", argv[1]);
         exit(1);
     }
@@ -423,7 +423,12 @@ int main(int argc, char * const *argv) {
     }
 
     packet_count = 0;
-    lseek(file_desc, 0, SEEK_SET);
+    fseek(file_desc, 0, SEEK_SET);
+    if(ferror(file_desc)){
+        fprintf(stderr, "Error: couldn't seek back to beginning of trace file. Aborting.\n");
+        exit(-1);
+    }
+
     for (auto &pair : func_info) {
         pair.second.allocate();
     }
@@ -433,7 +438,7 @@ int main(int argc, char * const *argv) {
         if (!p.read_from_filedesc(file_desc)) {
             printf("[INFO] Finished pass 2 after %d packets.\n", packet_count);
             if (file_desc > 0) {
-                close(file_desc);
+                fclose(file_desc);
             }
             finish_dump(func_info, outputopts);
             exit(0);

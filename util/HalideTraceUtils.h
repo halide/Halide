@@ -78,11 +78,11 @@ struct Packet : public halide_trace_packet_t {
     bool read_from_stdin();
 
     // Grab a packet from a particular fctl file descriptor. Returns false when end is reached.
-    bool read_from_filedesc(int fdesc);
+    bool read_from_filedesc(FILE *fdesc);
 
 private:
     // Do a blocking read of some number of bytes from a unistd file descriptor.
-    bool read(void *d, ssize_t size, int fdesc);
+    bool read(void *d, ssize_t size, FILE *fdesc);
 };
 
 }
