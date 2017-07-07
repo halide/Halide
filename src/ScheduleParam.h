@@ -91,7 +91,7 @@ protected:
 template<typename FROM, typename TO>
 struct Convert {
     template <typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline static TO2 value(const FROM &from) { return from; }
+    inline static TO2 value(const FROM &from) { return static_cast<TO2>(from); }
 
     template <typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
     inline static TO2 value(const FROM &from) { return from != 0; }

@@ -18,7 +18,9 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Buffer<uint16_t> input = load_image(argv[1]);
+    // Input may be a PNG8
+    Buffer<uint16_t> input = load_and_convert_image(argv[1]);
+
     int levels = atoi(argv[2]);
     float alpha = atof(argv[3]), beta = atof(argv[4]);
     Buffer<uint16_t> output(input.width(), input.height(), 3);
