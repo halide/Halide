@@ -148,6 +148,16 @@ endif()
 # Look for libpng and libjpeg. Some apps and tutorials depend on it
 find_package(PNG)
 find_package(JPEG)
+
+if (NOT PNG_FOUND)
+  message("PNG was not found, defining HALIDE_NO_PNG")
+  add_definitions(-DHALIDE_NO_PNG)
+endif()
+if (NOT JPEG_FOUND)
+  message("JPEG was not found, defining HALIDE_NO_JPEG")
+  add_definitions(-DHALIDE_NO_JPEG)
+endif()
+
 function(use_image_io TARGET)
   target_compile_definitions(${TARGET} PRIVATE ${PNG_DEFINITIONS})
   target_include_directories(${TARGET} PRIVATE ${PNG_INCLUDE_DIRS})

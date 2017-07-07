@@ -59,7 +59,6 @@ set(RUNTIME_CPP
   module_jit_ref_count
   msan
   msan_stubs
-  noos
   old_buffer_t
   opencl
   opengl

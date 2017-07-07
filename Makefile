@@ -571,7 +571,6 @@ RUNTIME_CPP_COMPONENTS = \
   module_jit_ref_count \
   msan \
   msan_stubs \
-  noos \
   old_buffer_t \
   opencl \
   opengl \
@@ -781,13 +780,14 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
 
 .PHONY: clean
 clean:
-	rm -rf $(LIB_DIR)/*
-	rm -rf $(BIN_DIR)/*
-	rm -rf $(BUILD_DIR)/*
-	rm -rf $(TMP_DIR)/*
-	rm -rf $(FILTERS_DIR)/*
-	rm -rf $(INCLUDE_DIR)/*
-	rm -rf $(DOC_DIR)/*
+	rm -rf $(LIB_DIR)
+	rm -rf $(BIN_DIR)
+	rm -rf $(BUILD_DIR)
+	rm -rf $(TMP_DIR)
+	rm -rf $(FILTERS_DIR)
+	rm -rf $(INCLUDE_DIR)
+	rm -rf $(DOC_DIR)
+	rm -rf $(DISTRIB_DIR)
 
 .SECONDARY:
 
@@ -1375,6 +1375,7 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	        $(ROOT_DIR)/apps/c_backend \
 	        $(ROOT_DIR)/apps/HelloMatlab \
 	        $(ROOT_DIR)/apps/fft \
+	        $(ROOT_DIR)/apps/linear_algebra \
 	        $(ROOT_DIR)/apps/images \
 	        $(ROOT_DIR)/apps/support \
                 apps; \
@@ -1403,6 +1404,11 @@ test_apps: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_D
 	make -C apps/fft bench_32x32  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	make -C apps/fft bench_48x48  HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR)
 	cd apps/HelloMatlab; HALIDE_PATH=$(CURDIR) HALIDE_CXX="$(CXX)" ./run_blur.sh
+	# Only test the linear algebra app if cblas.h exists in the expected place
+	if [ -f /usr/include/cblas.h ]; then \
+	  make -C apps/linear_algebra clean HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
+	  make -C apps/linear_algebra test HALIDE_BIN_PATH=$(CURDIR) HALIDE_SRC_PATH=$(ROOT_DIR) ; \
+	fi
 
 .PHONY: test_python
 test_python: $(LIB_DIR)/libHalide.a $(INCLUDE_DIR)/Halide.h
