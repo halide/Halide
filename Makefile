@@ -793,6 +793,7 @@ ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls $(ROOT_DIR)/test/opengl/*.cpp)
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
+GENERATOR_EXTERNAL_TEST_GENERATORS := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 
 -include $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BUILD_DIR)/test_opengl_%.d)
@@ -861,7 +862,23 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generators: $(GENERATOR_AOTCPP_TESTS)
-test_generators: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS)
+
+# This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
+# not all will work directly (e.g. due to missing define_externs at link time), so we blacklist
+# those known to be broken for plausible reasons.
+GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATORS:$(ROOT_DIR)/test/generator/%_generator.cpp=$(FILTERS_DIR)/%.rungen)
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/cxx_mangling.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/cxx_mangling_define_extern.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/define_extern_opencl.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/matlab.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/msan.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
+
+test_generators: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 
 ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators
 
@@ -1030,7 +1047,7 @@ $(FILTERS_DIR)/cxx_mangling_define_extern.a: $(BIN_DIR)/cxx_mangling_define_exte
 $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< -f pyramid $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET) levels=10
+	cd $(TMP_DIR); $(CURDIR)/$< -f pyramid $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime levels=10
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
@@ -1217,6 +1234,20 @@ generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
 # "nested_externs", and has no internal tests in any case.
 test_generator_nested_externs:
 	@echo "Skipping"
+
+$(BUILD_DIR)/RunGen.o: $(ROOT_DIR)/tools/RunGen.cpp $(RUNTIME_EXPORTED_INCLUDES)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
+
+$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGen.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a 
+	$(CXX) -DHL_RUNGEN_FILTER=$* $^ $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+
+RUNARGS ?=
+
+$(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(RUNARGS)
+	@-echo
 
 $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	@ if [[ $@ == *_run ]]; then \
@@ -1494,6 +1525,8 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tutorial/*.sh $(PREFIX)/share/halide/tutorial
 	cp $(ROOT_DIR)/tools/mex_halide.m $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/RunGen.cpp $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
@@ -1521,6 +1554,8 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 	cp $(ROOT_DIR)/tutorial/*.sh $(DISTRIB_DIR)/tutorial
 	cp $(ROOT_DIR)/tools/mex_halide.m $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/RunGen.cpp $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
@@ -1542,7 +1577,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 		halide/WORKSPACE \
 		halide/*.bzl \
 		halide/tools/mex_halide.m \
-		halide/tools/GenGen.cpp \
+		halide/tools/*.cpp \
 		halide/tools/halide_image.h \
 		halide/tools/halide_image_io.h \
 		halide/tools/halide_image_info.h
