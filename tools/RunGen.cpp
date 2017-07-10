@@ -52,7 +52,7 @@ std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
         stream << std::to_string(type.bits);
     }
     if (type.lanes > 1) {
-        stream << ":" + std::to_string(type.lanes);
+        stream << "x" + std::to_string(type.lanes);
     }
     return stream;
 }
