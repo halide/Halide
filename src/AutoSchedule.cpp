@@ -2477,7 +2477,9 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
 // Return true if the vars/rvars in 'ordering' are in the same order as the
 // dim list.
 inline bool operator==(const vector<Dim> &dims, const vector<VarOrRVar> &ordering) {
-    internal_assert(dims.size() == ordering.size() + 1); // The dim list also contains '__outermost'
+    if (dims.size() != ordering.size() + 1) { // The dim list also contains '__outermost'
+        return false;
+    }
     for (size_t i = 0; i < ordering.size(); ++i) {
         if (dims[i].var != ordering[i].name()) {
             return false;
@@ -2557,20 +2559,22 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
         strides.erase(curr_min_var.first);
     }
 
-    vector<VarOrRVar> ordering;
-    for (const auto &o : order) {
-        VarOrRVar o_var(o.first, dims[o.second].is_rvar());
-        ordering.push_back(o_var);
-    }
+    if (order.size() > 1) {
+        vector<VarOrRVar> ordering;
+        for (const auto &o : order) {
+            VarOrRVar o_var(o.first, dims[o.second].is_rvar());
+            ordering.push_back(o_var);
+        }
 
-    string var_order = ordering[0].name();
-    for (size_t o = 1; o < ordering.size(); o++) {
-        var_order += ", " + ordering[o].name();
-    }
+        string var_order = ordering[0].name();
+        for (size_t o = 1; o < ordering.size(); o++) {
+            var_order += ", " + ordering[o].name();
+        }
 
-    if (dims != ordering) {
-        f_handle.reorder(ordering);
-        sched.push_schedule(f_handle.name(), stage_num, "reorder(" + var_order + ")");
+        if (dims != ordering) {
+            f_handle.reorder(ordering);
+            sched.push_schedule(f_handle.name(), stage_num, "reorder(" + var_order + ")");
+        }
     }
 }
 
@@ -2704,15 +2708,16 @@ void Partitioner::generate_group_cpu_schedule(
         for (const auto &v : outer_dims) {
             ordering.push_back(v);
         }
+        if (ordering.size() > 1) {
+            string var_order = ordering[0].name();
+            for (size_t o = 1; o < ordering.size(); o++) {
+                var_order += ", " + ordering[o].name();
+            }
 
-        string var_order = ordering[0].name();
-        for (size_t o = 1; o < ordering.size(); o++) {
-            var_order += ", " + ordering[o].name();
-        }
-
-        if (dims != ordering) {
-            f_handle.reorder(ordering);
-            sched.push_schedule(f_handle.name(), g.output.stage_num, "reorder(" + var_order + ")");
+            if (dims != ordering) {
+                f_handle.reorder(ordering);
+                sched.push_schedule(f_handle.name(), g.output.stage_num, "reorder(" + var_order + ")");
+            }
         }
     }
 
@@ -2759,7 +2764,8 @@ void Partitioner::generate_group_cpu_schedule(
                 if (seq_var != "") {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     f_handle.reorder(seq, v);
-                    sched.push_schedule(f_handle.name(), g.output.stage_num, "reorder(" + seq_var + ")");
+                    sched.push_schedule(f_handle.name(), g.output.stage_num,
+                                        "reorder(" + seq_var + ", " + var + ")");
                 }
                 f_handle.parallel(v);
                 sched.push_schedule(f_handle.name(), g.output.stage_num, "parallel(" + var + ")");
@@ -3382,6 +3388,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     std::ostringstream oss;
     oss << sched;
     string sched_string = oss.str();
+
+    debug(3) << "\n\n*******************************\nSchedule:\n"
+             << "*******************************\n" << sched_string << "\n\n";
 
     // TODO: Unify both inlining and grouping for fast mem
     // TODO: GPU scheduling
