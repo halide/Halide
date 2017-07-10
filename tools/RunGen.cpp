@@ -983,6 +983,15 @@ int main(int argc, char **argv) {
     }
 
     if (track_memory) {
+        // Ensure that we copy any GPU-output buffers back to host before
+        // we report on memory usage.
+        for (auto &arg_pair : args) {
+            auto &arg = arg_pair.second;
+            if (arg.metadata->kind == halide_argument_kind_output_buffer) {
+                Buffer<> &b = arg.buffer_value;
+                b.copy_to_host();
+            }
+        }
         std::cout << "Maximum Halide memory: " << tracker.highwater() 
             << " bytes for output of " << megapixels << " mpix.\n";
     }
