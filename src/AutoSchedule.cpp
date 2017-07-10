@@ -378,7 +378,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
     // Add the query function and its region to the queue
     fs_bounds.emplace(FStage(f, stage_num), bounds);
 
-    while(!fs_bounds.empty()) {
+    while (!fs_bounds.empty()) {
         for (int i = order.size() - 1; i >= 0; --i) {
             const Function &f = env.find(order[i])->second;
             int num_stages = f.updates().size() + 1;
@@ -1725,9 +1725,6 @@ void Partitioner::group(Partitioner::Level level) {
         if (debug::debug_level() >= 3) {
             disp_pipeline_costs();
         }
-        internal_assert((!pre_merge.defined() && !post_merge.defined()) ||
-                        can_prove(pre_merge.arith + pre_merge.memory >=
-                                  post_merge.arith + post_merge.memory));
     }
 }
 
@@ -2008,8 +2005,6 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
         Cost(per_tile_cost.arith * estimate_tiles, per_tile_cost.memory * estimate_tiles),
         parallelism);
     g_analysis.simplify();
-
-    internal_assert(can_prove(g_analysis.cost.memory > 0)) << "g_analysis.cost.memory: " << g_analysis.cost.memory << "\n";
 
     return g_analysis;
 }
@@ -2485,7 +2480,9 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
 // Return true if the vars/rvars in 'ordering' are in the same order as the
 // dim list.
 inline bool operator==(const vector<Dim> &dims, const vector<VarOrRVar> &ordering) {
-    internal_assert(dims.size() == ordering.size() + 1); // The dim list also contains '__outermost'
+    if (dims.size() != ordering.size() + 1) { // The dim list also contains '__outermost'
+        return false;
+    }
     for (size_t i = 0; i < ordering.size(); ++i) {
         if (dims[i].var != ordering[i].name()) {
             return false;
@@ -2513,6 +2510,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     // Iterate until all the dimensions have been assigned an order
     while (strides.size() > 0) {
         // Find the pure dimension (can be vars or rvars) with the smallest stride
+        bool found_pure_dim = false;
         Expr min_pure_stride = Int(64).max();
         string min_pure_var;
         int min_pure_index = -1;
@@ -2527,7 +2525,13 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
                     min_pure_var = var_name;
                     min_pure_index = d;
                 }
+                found_pure_dim = true;
             }
+        }
+        if (found_pure_dim && min_pure_var.empty()) {
+            // Since none of the pure strides can be proven as the minimum, we
+            // should break here otherwise it may cause infinite loop.
+            return;
         }
 
         // Check if the stride of the pure dimension is smaller than
@@ -2572,6 +2576,7 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
         ordering.push_back(o_var);
     }
 
+    internal_assert(!ordering.empty());
     string var_order = ordering[0].name();
     for (size_t o = 1; o < ordering.size(); o++) {
         var_order += ", " + ordering[o].name();
@@ -2767,7 +2772,7 @@ void Partitioner::generate_group_cpu_schedule(
                 if (seq_var != "") {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
                     f_handle.reorder(seq, v);
-                    sched.push_schedule(f_handle.name(), g.output.stage_num, "reorder(" + seq_var + ")");
+                    sched.push_schedule(f_handle.name(), g.output.stage_num, "reorder(" + seq_var + ", " + var + ")");
                 }
                 f_handle.parallel(v);
                 sched.push_schedule(f_handle.name(), g.output.stage_num, "parallel(" + var + ")");
@@ -3407,6 +3412,9 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     std::ostringstream oss;
     oss << sched;
     string sched_string = oss.str();
+
+    debug(3) << "\n\n*******************************\nSchedule:\n"
+             << "*******************************\n" << sched_string << "\n\n";
 
     // TODO: Unify both inlining and grouping for fast mem
     // TODO: GPU scheduling
