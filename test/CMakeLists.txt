@@ -350,6 +350,7 @@ if (WITH_TEST_GENERATORS)
   if (NOT MSVC)
     target_compile_options(cxx_mangling_define_extern_externs PUBLIC "-std=c++11")
   endif()
+  target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_externs)
   halide_add_aot_library_dependency(cxx_mangling_define_extern_externs cxx_mangling)
 
   halide_define_aot_test(cxx_mangling_define_extern
