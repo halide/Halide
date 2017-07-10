@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 
     local_laplacian(input, levels, alpha/(levels-1), beta, output);
 
-    save_image(output, argv[6]);
+    convert_and_save_image(output, argv[6]);
 
     return 0;
 }
