@@ -6,7 +6,7 @@ all: $(BIN)/process
 
 $(BIN)/local_laplacian_exec: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(LLVM_SYSTEM_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/local_laplacian.a: $(BIN)/local_laplacian_exec
 	@-mkdir -p $(BIN)
