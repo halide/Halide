@@ -117,7 +117,14 @@ class ExprCost : public IRVisitor {
             // Each call also counts as an op since it results in a load instruction.
             cost.arith += 1;
             cost.memory += call->type.bytes();
-            detailed_byte_loads[call->name] += call->type.bytes();
+
+            auto iter = detailed_byte_loads.find(call->name);
+            if (iter != detailed_byte_loads.end()) {
+                internal_assert(iter->second.defined());
+                iter->second = simplify(iter->second + make_const(Int(64), call->type.bytes()));
+            } else {
+                detailed_byte_loads.emplace(call->name, make_const(Int(64), call->type.bytes()));
+            }
         } else if (call->call_type == Call::Extern || call->call_type == Call::PureExtern ||
                    call->call_type == Call::ExternCPlusPlus) {
             // TODO: Suffix based matching is kind of sketchy; but going ahead with
@@ -192,21 +199,21 @@ public:
     Cost cost;
     // Detailed breakdown of bytes loaded by the allocation or function
     // they are loaded from.
-    map<string, int64_t> detailed_byte_loads;
+    map<string, Expr> detailed_byte_loads;
 
     ExprCost() : cost(Cost(0, 0)) {}
 };
 
 // Return the number of bytes required to store a single value of the
 // function.
-int64_t get_func_value_size(const Function &f) {
-    int64_t size = 0;
+Expr get_func_value_size(const Function &f) {
+    Expr size = 0;
     const vector<Type> &types = f.output_types();
+    internal_assert(!types.empty());
     for (size_t i = 0; i < types.size(); i++) {
         size += types[i].bytes();
     }
-    internal_assert(!types.empty());
-    return size;
+    return simplify(size);
 }
 
 // Helper class that only accounts for the likely portion of the expression in
@@ -259,10 +266,11 @@ Cost compute_expr_cost(Expr expr) {
     //expr = LikelyExpression().mutate(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
+    cost_visitor.cost.simplify();
     return cost_visitor.cost;
 }
 
-map<string, int64_t> compute_expr_detailed_byte_loads(Expr expr) {
+map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
     // TODO: Handle likely
     //expr = LikelyExpression().mutate(expr);
     ExprCost cost_visitor;
@@ -303,8 +311,8 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bou
         stage_region.push_back(get_element(bounds, dims[d].var));
     }
 
-    int64_t size = box_size(stage_region);
-    if (size == unknown) {
+    Expr size = box_size(stage_region);
+    if (!size.defined()) {
         // Size could not be determined; therefore, it is not possible to
         // determine the arithmetic and memory costs.
         return Cost();
@@ -313,7 +321,10 @@ Cost RegionCosts::stage_region_cost(string func, int stage, const DimBounds &bou
     // If there is nothing to be inlined, use the pre-computed function cost.
     Cost cost = inlines.empty() ? get_element(func_cost, func)[stage]
                                 : get_func_stage_cost(curr_f, stage, inlines);
-    return Cost(size * cost.arith, size * cost.memory);
+    if (!cost.defined()) {
+        return Cost();
+    }
+    return Cost(simplify(size * cost.arith), simplify(size * cost.memory));
 }
 
 Cost RegionCosts::stage_region_cost(string func, int stage, const Box &region,
@@ -338,8 +349,7 @@ Cost RegionCosts::region_cost(string func, const Box &region, const set<string> 
     int num_stages = curr_f.updates().size() + 1;
     for (int s = 0; s < num_stages; s++) {
         Cost stage_cost = stage_region_cost(func, s, region, inlines);
-
-        if (stage_cost.arith == unknown) {
+        if (!stage_cost.defined()) {
             return Cost();
         } else {
             region_cost.arith += stage_cost.arith;
@@ -347,7 +357,8 @@ Cost RegionCosts::region_cost(string func, const Box &region, const set<string> 
         }
     }
 
-    internal_assert(region_cost.arith != unknown && region_cost.memory != unknown);
+    internal_assert(region_cost.defined());
+    region_cost.simplify();
     return region_cost;
 }
 
@@ -362,7 +373,7 @@ Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string>
         }
 
         Cost cost = region_cost(f.first, f.second, inlines);
-        if (cost.arith == unknown) {
+        if (!cost.defined()) {
             return Cost();
         } else {
             total_cost.arith += cost.arith;
@@ -370,14 +381,15 @@ Cost RegionCosts::region_cost(const map<string, Box> &regions, const set<string>
         }
     }
 
-    internal_assert((total_cost.arith != unknown) && (total_cost.memory != unknown));
+    internal_assert(total_cost.defined());
+    total_cost.simplify();
     return total_cost;
 }
 
-map<string, int64_t>
+map<string, Expr>
 RegionCosts::stage_detailed_load_costs(string func, int stage,
                                        const set<string> &inlines) {
-    map<string, int64_t> load_costs;
+    map<string, Expr> load_costs;
     Function curr_f = get_element(env, func);
     Definition def = get_stage_definition(curr_f, stage);
 
@@ -385,15 +397,22 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
         Expr inlined_expr = perform_inline(e, env, inlines);
         inlined_expr = simplify(inlined_expr);
 
-        map<string, int64_t> expr_load_costs = compute_expr_detailed_byte_loads(inlined_expr);
+        map<string, Expr> expr_load_costs = compute_expr_detailed_byte_loads(inlined_expr);
         combine_load_costs(load_costs, expr_load_costs);
-        load_costs[func] += e.type().bytes();
+
+        auto iter = load_costs.find(func);
+        if (iter != load_costs.end()) {
+            internal_assert(iter->second.defined());
+            iter->second = simplify(iter->second + e.type().bytes());
+        } else {
+            load_costs.emplace(func, make_const(Int(64), e.type().bytes()));
+        }
     }
 
     return load_costs;
 }
 
-map<string, int64_t>
+map<string, Expr>
 RegionCosts::stage_detailed_load_costs(string func, int stage,
                                        DimBounds &bounds,
                                        const set<string> &inlines) {
@@ -407,27 +426,27 @@ RegionCosts::stage_detailed_load_costs(string func, int stage,
         stage_region.push_back(get_element(bounds, dims[d].var));
     }
 
-    map<string, int64_t> load_costs = stage_detailed_load_costs(func, stage, inlines);
+    map<string, Expr> load_costs = stage_detailed_load_costs(func, stage, inlines);
 
-    int64_t size = box_size(stage_region);
+    Expr size = box_size(stage_region);
     for (auto &kv : load_costs) {
-        if (kv.second == unknown) {
+        if (!kv.second.defined()) {
             continue;
-        } else if (size == unknown) {
-            kv.second = unknown;
+        } else if (!size.defined()) {
+            kv.second = Expr();
         } else {
-            kv.second *= size;
+            kv.second = simplify(kv.second * size);
         }
     }
 
     return load_costs;
 }
 
-map<string, int64_t>
+map<string, Expr>
 RegionCosts::detailed_load_costs(string func, const Box &region,
                                  const set<string> &inlines) {
     Function curr_f = get_element(env, func);
-    map<string, int64_t> load_costs;
+    map<string, Expr> load_costs;
 
     int num_stages = curr_f.updates().size() + 1;
 
@@ -441,7 +460,7 @@ RegionCosts::detailed_load_costs(string func, const Box &region,
     vector<DimBounds> stage_bounds = get_stage_bounds(curr_f, pure_bounds);
 
     for (int s = 0; s < num_stages; s++) {
-        map<string, int64_t> stage_load_costs = stage_detailed_load_costs(func, s, inlines);
+        map<string, Expr> stage_load_costs = stage_detailed_load_costs(func, s, inlines);
 
         Definition def = get_stage_definition(curr_f, s);
 
@@ -452,14 +471,14 @@ RegionCosts::detailed_load_costs(string func, const Box &region,
             stage_region.push_back(get_element(stage_bounds[s], dims[d].var));
         }
 
-        int64_t size = box_size(stage_region);
+        Expr size = box_size(stage_region);
         for (auto &kv : stage_load_costs) {
-            if (kv.second == unknown) {
+            if (!kv.second.defined()) {
                 continue;
-            } else if (size == unknown) {
-                kv.second = unknown;
+            } else if (!size.defined()) {
+                kv.second = Expr();
             } else {
-                kv.second *= size;
+                kv.second = simplify(kv.second * size);
             }
         }
 
@@ -469,10 +488,10 @@ RegionCosts::detailed_load_costs(string func, const Box &region,
     return load_costs;
 }
 
-map<string, int64_t>
+map<string, Expr>
 RegionCosts::detailed_load_costs(const map<string, Box> &regions,
                                  const set<string> &inlines) {
-    map<string, int64_t> load_costs;
+    map<string, Expr> load_costs;
     for (const auto &r : regions) {
         // The cost for pure inlined functions will be accounted in the
         // consumer of the inlined function so they should be skipped.
@@ -481,7 +500,7 @@ RegionCosts::detailed_load_costs(const map<string, Box> &regions,
             continue;
         }
 
-        map<string, int64_t> partial_load_costs = detailed_load_costs(r.first, r.second, inlines);
+        map<string, Expr> partial_load_costs = detailed_load_costs(r.first, r.second, inlines);
         combine_load_costs(load_costs, partial_load_costs);
     }
 
@@ -502,6 +521,7 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage, const set<st
         inlined_expr = simplify(inlined_expr);
 
         Cost expr_cost = compute_expr_cost(inlined_expr);
+        internal_assert(expr_cost.defined());
         cost.arith += expr_cost.arith;
         cost.memory += expr_cost.memory;
 
@@ -516,11 +536,13 @@ Cost RegionCosts::get_func_stage_cost(const Function &f, int stage, const set<st
             inlined_arg = simplify(inlined_arg);
 
             Cost expr_cost = compute_expr_cost(inlined_arg);
+            internal_assert(expr_cost.defined());
             cost.arith += expr_cost.arith;
             cost.memory += expr_cost.memory;
         }
     }
 
+    cost.simplify();
     return cost;
 }
 
@@ -537,18 +559,19 @@ vector<Cost> RegionCosts::get_func_cost(const Function &f, const set<string> &in
     return func_costs;
 }
 
-int64_t RegionCosts::region_size(string func, const Box &region) {
+Expr RegionCosts::region_size(string func, const Box &region) {
     const Function &f = get_element(env, func);
-    int64_t size = box_size(region);
-    if (size == unknown) {
-        return unknown;
+    Expr size = box_size(region);
+    if (!size.defined()) {
+        return Expr();
     }
-    int64_t size_per_ele = get_func_value_size(f);
-    return size * size_per_ele;
+    Expr size_per_ele = get_func_value_size(f);
+    internal_assert(size_per_ele.defined());
+    return simplify(size * size_per_ele);
 }
 
-int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
-                                      const set<string> &inlined) {
+Expr RegionCosts::region_footprint(const map<string, Box> &regions,
+                                   const set<string> &inlined) {
     map<string, int> num_consumers;
     for (const auto &f : regions) {
         num_consumers[f.first] = 0;
@@ -573,17 +596,17 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
     // Realization order
     vector<string> order = realization_order(outs, env);
 
-    int64_t working_set_size = 0;
-    int64_t curr_size = 0;
+    Expr working_set_size = make_zero(Int(64));
+    Expr curr_size = make_zero(Int(64));
 
-    map<string, int64_t> func_sizes;
+    map<string, Expr> func_sizes;
 
     for (const auto &f : regions) {
         // Inlined functions do not have allocations
         bool is_inlined = inlined.find(f.first) != inlined.end();
-        int64_t size = is_inlined ? 0 : region_size(f.first, f.second);
-        if (size == unknown) {
-            return unknown;
+        Expr size = is_inlined ? make_zero(Int(64)) : region_size(f.first, f.second);
+        if (!size.defined()) {
+            return Expr();
         } else {
             func_sizes.emplace(f.first, size);
         }
@@ -593,7 +616,7 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
         if (regions.find(f) != regions.end()) {
             curr_size += get_element(func_sizes, f);
         }
-        working_set_size = std::max(curr_size, working_set_size);
+        working_set_size = max(curr_size, working_set_size);
         map<string, Function> prods = find_direct_calls(get_element(env, f));
         for (const auto &p : prods) {
             auto iter = num_consumers.find(p.first);
@@ -601,35 +624,36 @@ int64_t RegionCosts::region_footprint(const map<string, Box> &regions,
                 iter->second -= 1;
                 if (iter->second == 0) {
                     curr_size -= get_element(func_sizes, p.first);
-                    internal_assert(curr_size >= 0);
+                    internal_assert(!can_prove(curr_size < 0));
                 }
             }
         }
     }
 
-    return working_set_size;
+    return simplify(working_set_size);
 }
 
-int64_t RegionCosts::input_region_size(string input, const Box &region) {
-    int64_t size = box_size(region);
-    if (size == unknown) {
-        return unknown;
+Expr RegionCosts::input_region_size(string input, const Box &region) {
+    Expr size = box_size(region);
+    if (!size.defined()) {
+        return Expr();
     }
-    int64_t size_per_ele = get_element(inputs, input).bytes();
-    return size * size_per_ele;
+    Expr size_per_ele = make_const(Int(64), get_element(inputs, input).bytes());
+    internal_assert(size_per_ele.defined());
+    return simplify(size * size_per_ele);
 }
 
-int64_t RegionCosts::input_region_size(const map<string, Box> &input_regions) {
-    int64_t total_size = 0;
+Expr RegionCosts::input_region_size(const map<string, Box> &input_regions) {
+    Expr total_size = make_zero(Int(64));
     for (const auto &reg : input_regions) {
-        int64_t size = input_region_size(reg.first, reg.second);
-        if (size == unknown) {
-            return unknown;
+        Expr size = input_region_size(reg.first, reg.second);
+        if (!size.defined()) {
+            return Expr();
         } else {
             total_size += size;
         }
     }
-    return total_size;
+    return simplify(total_size);
 }
 
 void RegionCosts::disp_func_costs() {
@@ -662,19 +686,28 @@ bool is_func_trivial_to_inline(const Function &func) {
     Cost inline_cost(0, 0);
     for (const auto &val : func.values()) {
         Cost cost = compute_expr_cost(val);
-        inline_cost.arith = std::max(cost.arith, inline_cost.arith);
-        inline_cost.memory = std::max(cost.memory, inline_cost.memory);
+        internal_assert(cost.defined());
+        inline_cost.arith = max(cost.arith, inline_cost.arith);
+        inline_cost.memory = max(cost.memory, inline_cost.memory);
     }
 
     // Compute the cost if we were to call the function instead of inline it
-    Cost call_cost(0, 0);
-    call_cost.arith = 1;
+    Cost call_cost(1, 0);
     for (const auto &type : func.output_types()) {
-        call_cost.memory = std::max((int64_t)type.bytes(), call_cost.memory);
+        call_cost.memory = max(type.bytes(), call_cost.memory);
     }
 
-    bool is_trivial = (call_cost.arith + call_cost.memory) >= (inline_cost.arith + inline_cost.memory);
-    return is_trivial;
+    Expr is_trivial = (call_cost.arith + call_cost.memory) >= (inline_cost.arith + inline_cost.memory);
+    return can_prove(is_trivial);
+}
+
+void Cost::simplify() {
+    if (arith.defined()) {
+        arith = Internal::simplify(arith);
+    }
+    if (memory.defined()) {
+        memory = Internal::simplify(memory);
+    }
 }
 
 }
