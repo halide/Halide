@@ -4,6 +4,7 @@ LDFLAGS ?=
 BIN ?= ./bin
 IMAGES ?= ../images
 HL_TARGET ?= host
+UNAME ?= $(shell uname)
 
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
@@ -62,8 +63,6 @@ IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
 
-UNAME = $(shell uname)
-
 PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
 ifeq ($(UNAME), Darwin)
 PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
@@ -72,3 +71,22 @@ endif
 ifneq (, $(findstring opengl,$(HL_TARGET)))
   OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
 endif
+
+$(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp 
+	@mkdir -p $(BIN)
+	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@ 
+
+# Really, .SECONDARY is what we want, but it won't accept wildcards
+.PRECIOUS: $(BIN)/%.rungen
+$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_SRC_PATH)/tools/RunGenStubs.cpp
+	$(CXX) $(CXXFLAGS) -DHL_RUNGEN_FILTER=$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+
+RUNARGS ?=
+
+# Pseudo target that allows us to build-and-run in one step, e.g.
+#
+#     make foo.run RUNARGS='input=a output=baz'
+#
+$(BIN)/%.run: $(BIN)/%.rungen
+	@$(CURDIR)/$< $(RUNARGS)
+
