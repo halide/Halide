@@ -553,15 +553,6 @@ Buffer<> load_input_from_file(const std::string &pathname,
     return b;
 }
 
-template<typename T>
-struct Zeroer {
-    bool operator()(Buffer<> *image) {
-        Buffer<T> &b = image->as<T>();
-        b.fill((T) 0);
-        return true;
-    }
-};
-
 Buffer<> load_input(const std::string &pathname, 
                     const halide_filter_argument_t &metadata) {
     std::vector<std::string> v = split_string(pathname, ":");
@@ -573,7 +564,7 @@ Buffer<> load_input(const std::string &pathname,
     if (v[0] == "zero") {
         auto shape = parse_extents(v[1]);
         Buffer<> b = allocate_buffer(metadata.type, shape);
-        (void) dynamic_type_dispatch<Zeroer>(b.type(), &b);
+        memset(b.data(), 0, b.size_in_bytes());
         return b;
     }
 
