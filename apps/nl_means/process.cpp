@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Buffer<float> input = load_image(argv[1]);
+    Buffer<float> input = load_and_convert_image(argv[1]);
     int patch_size = atoi(argv[2]);
     int search_area = atoi(argv[3]);
     float sigma = atof(argv[4]);
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
-    save_image(output, argv[6]);
+    convert_and_save_image(output, argv[6]);
 
     const halide_filter_metadata_t *md = nl_means_metadata();
     // Only compare the performance if target has non-gpu features.
