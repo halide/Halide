@@ -774,13 +774,14 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
 
 .PHONY: clean
 clean:
-	rm -rf $(LIB_DIR)/*
-	rm -rf $(BIN_DIR)/*
-	rm -rf $(BUILD_DIR)/*
-	rm -rf $(TMP_DIR)/*
-	rm -rf $(FILTERS_DIR)/*
-	rm -rf $(INCLUDE_DIR)/*
-	rm -rf $(DOC_DIR)/*
+	rm -rf $(LIB_DIR)
+	rm -rf $(BIN_DIR)
+	rm -rf $(BUILD_DIR)
+	rm -rf $(TMP_DIR)
+	rm -rf $(FILTERS_DIR)
+	rm -rf $(INCLUDE_DIR)
+	rm -rf $(DOC_DIR)
+	rm -rf $(DISTRIB_DIR)
 
 .SECONDARY:
 
@@ -1008,7 +1009,7 @@ $(FILTERS_DIR)/%.stub.h: $(BIN_DIR)/%.generator
 $(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR); $(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::cxx_mangling"
+	cd $(TMP_DIR); $(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
 
 # Also build with a gpu target to ensure that the GPU-Host generation
 # code handles name mangling properly. (Note that we don't need to
