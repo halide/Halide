@@ -69,11 +69,12 @@ class SubstituteVarEstimates: public IRMutator {
     }
 };
 
-/** Return the size of an interval. */
-int64_t get_extent(const Interval &i);
+/** Return the size of an interval. Return an undefined expr if the interval
+ * is unbounded. */
+Expr get_extent(const Interval &i);
 
 /** Return the size of an n-d box. */
-int64_t box_size(const Box &b);
+Expr box_size(const Box &b);
 
 /** Helper function to print the bounds of a region. */
 void disp_regions(const std::map<std::string, Box> &regions);
@@ -82,8 +83,8 @@ void disp_regions(const std::map<std::string, Box> &regions);
 Definition get_stage_definition(const Function &f, int stage_num);
 
 /** Add partial load costs to the corresponding function in the result costs. */
-void combine_load_costs(std::map<std::string, int64_t> &result,
-                        const std::map<std::string, int64_t> &partial);
+void combine_load_costs(std::map<std::string, Expr> &result,
+                        const std::map<std::string, Expr> &partial);
 
 /** Return the required bounds of an intermediate stage (f, stage_num) of
  * function 'f' given the bounds of the pure dimensions. */
