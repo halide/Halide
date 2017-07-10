@@ -26,6 +26,7 @@ using Halide::Runtime::Buffer;
 using Halide::Tools::FormatInfo;
 
 bool verbose = false;
+bool halide_print_to_stdout = true;
 
 // Standard stream output for halide_type_t
 std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
@@ -152,9 +153,11 @@ bool IOCheckFail(bool condition, const char* msg) {
     return condition;
 }
 
-// Replace the standard Halide runtime function to capture print output to info()
+// Replace the standard Halide runtime function to capture print output to stdout
 void rungen_halide_print(void *user_context, const char *message) {
-    info() << "halide_print: " << message;
+    if (halide_print_to_stdout) {
+        std::cout << "halide_print: " << message;
+    }
 }
 
 // Replace the standard Halide runtime function to capture Halide errors to fail()
@@ -639,6 +642,10 @@ Flags:
     --verbose:      
         emit extra diagnostic output.
 
+    --print:
+        Log calls to halide_print() to stdout. (This is the default; use
+        --print=false to silence noisy Generators.)
+
     --benchmark:    
         Run the filter with the given arguments many times to 
         produce an estimate of average execution time; this currently
@@ -775,6 +782,13 @@ int main(int argc, char **argv) {
                     flag_value = "true";
                 }
                 if (!parse_scalar(flag_value, &verbose)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }
+            } else if (flag_name == "print") {
+                if (flag_value.empty()) {
+                    flag_value = "true";
+                }
+                if (!parse_scalar(flag_value, &halide_print_to_stdout)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "describe") {
