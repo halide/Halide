@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     });
     printf("Auto-scheduled time: %gms\n", best_auto * 1e3);
 
-    save_image(output, argv[6]);
+    convert_and_save_image(output, argv[6]);
 
     const halide_filter_metadata_t *md = local_laplacian_metadata();
     // Only compare the performance if target has non-gpu features.

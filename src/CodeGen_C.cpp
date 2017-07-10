@@ -1507,12 +1507,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     if (!namespaces.empty()) {
-        const char *separator = "";
         for (const auto &ns : namespaces) {
-            stream << separator << "namespace " << ns << " {";
-            separator = " ";
+            stream << "namespace " << ns << " {\n";
         }
-        stream << "\n\n";
+        stream << "\n";
     }
 
     // Emit the function prototype
@@ -1580,17 +1578,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
     if (!namespaces.empty()) {
         stream << "\n";
-        for (size_t i = 0; i < namespaces.size(); i++) {
-            stream << "}";
+        for (size_t i = namespaces.size(); i > 0; i--) {
+            stream << "}  // namespace " << namespaces[i-1] << "\n";
         }
-        stream << " // Close namespaces ";
-        const char *separator = "";
-        for (const auto &ns : namespaces) {
-            stream << separator << ns;
-            separator = "::";
-        }
-
-        stream << "\n\n";
+        stream << "\n";
     }
 }
 
