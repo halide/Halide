@@ -10,6 +10,6 @@ LLVM_SYSTEM_LIBS=`${LLVM_CONFIG} --system-libs | sed -e 's/[\/&]/\\&/g'`
 
 cat <<multiline_literal_EOF
 # Machine-Generated: Do Not Edit
-def halide_linkopts():
+def halide_config_linkopts():
   return "${LLVM_SYSTEM_LIBS}"
 multiline_literal_EOF
