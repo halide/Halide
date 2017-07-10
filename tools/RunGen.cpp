@@ -26,7 +26,7 @@ using Halide::Runtime::Buffer;
 using Halide::Tools::FormatInfo;
 
 bool verbose = false;
-bool halide_print_to_stdout = true;
+bool quiet = false;
 
 // Standard stream output for halide_type_t
 std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
@@ -155,7 +155,7 @@ bool IOCheckFail(bool condition, const char* msg) {
 
 // Replace the standard Halide runtime function to capture print output to stdout
 void rungen_halide_print(void *user_context, const char *message) {
-    if (halide_print_to_stdout) {
+    if (!quiet) {
         std::cout << "halide_print: " << message;
     }
 }
@@ -633,9 +633,8 @@ Flags:
     --verbose:      
         emit extra diagnostic output.
 
-    --print:
-        Log calls to halide_print() to stdout. (This is the default; use
-        --print=false to silence noisy Generators.)
+    --quiet:
+        Don't log calls to halide_print() to stdout.
 
     --benchmark:    
         Run the filter with the given arguments many times to 
@@ -775,11 +774,11 @@ int main(int argc, char **argv) {
                 if (!parse_scalar(flag_value, &verbose)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
-            } else if (flag_name == "print") {
+            } else if (flag_name == "quiet") {
                 if (flag_value.empty()) {
                     flag_value = "true";
                 }
-                if (!parse_scalar(flag_value, &halide_print_to_stdout)) {
+                if (!parse_scalar(flag_value, &quiet)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "describe") {
