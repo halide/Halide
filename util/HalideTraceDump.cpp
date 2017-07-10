@@ -47,7 +47,7 @@ struct Value {
     uint8_t defined[8];
 
     Value() { defined[0] = 0; }
-    Value(Packet *p, int lane_idx=0) {
+    Value(Packet *p, int lane_idx = 0) {
         defined[0] = 1;
         int bytes = p->type.bytes();
         uintptr_t addr = (uintptr_t) p->value();
@@ -184,12 +184,6 @@ struct FuncInfo {
     }
 };
 
-template<typename T, int D>
-void save(Buffer<T,D> buf, string filename) {
-    // Rely on save_image() to hard-fail if invalid buf or filename are passed.
-    Halide::Tools::save_image(buf, filename);
-}
-
 void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     // For now, support only 2D buffers.
     if (func.dimensions != 2) {
@@ -212,58 +206,10 @@ void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     }
 
     printf("[INFO] Dumping func '%s' to file: %s\n", name.c_str(), filename.c_str());
-    switch(func.type.code) {
-    case halide_type_code_t::halide_type_int:
-        switch(func.type.bits) {
-        case 8:
-            save<int8_t, 2>(func.get_buffer<int8_t, 2>(), filename);
-            break;
-        case 16:
-            save<int16_t, 2>(func.get_buffer<int16_t, 2>(), filename);
-            break;
-        case 32:
-            save<int32_t, 2>(func.get_buffer<int32_t, 2>(), filename);
-            break;
-        case 64:
-            save<int64_t, 2>(func.get_buffer<int64_t, 2>(), filename);
-            break;
-        default:
-            bad_type_error(func.type);
-        }
-        break;
-    case halide_type_code_t::halide_type_uint:
-        switch(func.type.bits) {
-        case 8:
-            save<uint8_t, 2>(func.get_buffer<uint8_t, 2>(), filename);
-            break;
-        case 16:
-            save<uint16_t, 2>(func.get_buffer<uint16_t, 2>(), filename);
-            break;
-        case 32:
-            save<uint32_t, 2>(func.get_buffer<uint32_t, 2>(), filename);
-            break;
-        case 64:
-            save<uint64_t, 2>(func.get_buffer<uint64_t, 2>(), filename);
-            break;
-        default:
-            bad_type_error(func.type);
-        }
-        break;
-    case halide_type_code_t::halide_type_float:
-        switch(func.type.bits) {
-        case 32:
-            save<float, 2>(func.get_buffer<float, 2>(), filename);
-            break;
-        case 64:
-            save<double, 2>(func.get_buffer<double, 2>(), filename);
-            break;
-        default:
-            bad_type_error(func.type);
-        }
-        break;
-    default:
-        bad_type_error(func.type);
-    }
+
+    //Rely on save_image to do type-checking
+    auto buf = func.get_buffer<void, 2>();
+    Halide::Tools::save_image(buf, filename);
 }
 
 void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts) {
