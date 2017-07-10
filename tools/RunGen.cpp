@@ -966,9 +966,18 @@ int main(int argc, char **argv) {
         // Run once to warm up cache. Ignore result since our halide_error() should catch everything.
         (void) halide_rungen_redirect_argv(&filter_argv[0]);
 
-        double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv]() { 
+        double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv, &args]() { 
             (void) halide_rungen_redirect_argv(&filter_argv[0]);
-        });
+            // Ensure that all outputs are finished, otherwise we may just be 
+            // measuring how long it takes to do a kernel launch for GPU code.
+            for (auto &arg_pair : args) {
+                auto &arg = arg_pair.second;
+                if (arg.metadata->kind == halide_argument_kind_output_buffer) {
+                    Buffer<> &b = arg.buffer_value;
+                    b.device_sync();
+                }
+            }
+          });
 
         std::cout << "Benchmark for " << md->name << " produces best case of " << time_in_seconds << " sec/iter, over " 
             << benchmark_samples << " blocks of " << benchmark_iterations << " iterations.\n";
