@@ -427,7 +427,6 @@ bool load_png(const std::string &filename, ImageType *im) {
     }
 
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-    im->set_host_dirty();
 
     return true;
 }
@@ -584,7 +583,6 @@ bool load_pnm(const std::string &filename, int channels, ImageType *im) {
         }
         copy_to_image(row.data(), y, im);
     }
-    im->set_host_dirty();
 
     return true;
 }
@@ -880,6 +878,7 @@ struct ImageTypeConversion {
         };
         // TODO: do we need src.copy_to_host() here?
         dst.for_each_value(converter, src);
+        dst.set_host_dirty();
 
         return dst;
     }
@@ -1047,6 +1046,7 @@ bool load(const std::string &filename, ImageType *im) {
         }
     }
     *im = im_d.template as<typename ImageType::ElemType>();
+    im->set_host_dirty();
     return true;
 }
 
