@@ -865,7 +865,6 @@ test_aotcpp_generators: $(GENERATOR_AOTCPP_TESTS)
 # not all will work directly (e.g. due to missing define_externs at link time), so we blacklist
 # those known to be broken for plausible reasons.
 GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATORS:$(ROOT_DIR)/test/generator/%_generator.cpp=$(FILTERS_DIR)/%.rungen)
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/cxx_mangling.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/cxx_mangling_define_extern.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/define_extern_opencl.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/matlab.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
@@ -1248,8 +1247,8 @@ $(BUILD_DIR)/RunGen.o: $(ROOT_DIR)/tools/RunGen.cpp $(RUNTIME_EXPORTED_INCLUDES)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
-$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGen.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a 
-	$(CXX) -DHL_RUNGEN_FILTER=$* $^ $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGen.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a
+	$(CXX) -std=c++11 -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) $^ $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 RUNARGS ?=
 

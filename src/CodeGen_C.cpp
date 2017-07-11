@@ -1583,6 +1583,23 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         }
         stream << "\n";
     }
+
+    if (is_header() && f.linkage == LoweredFunc::ExternalPlusMetadata) {
+        // C syntax for function-that-returns-function-pointer is fun.
+        const string getter = R"INLINE_CODE(
+#ifdef HALIDE_GET_STANDARD_ARGV_FUNCTION
+inline int (*HALIDE_GET_STANDARD_ARGV_FUNCTION())(void**) {
+    return $NAME$_argv;
+}
+#endif
+#ifdef HALIDE_GET_STANDARD_METADATA_FUNCTION
+inline const struct halide_filter_metadata_t* (*HALIDE_GET_STANDARD_METADATA_FUNCTION())() {
+    return $NAME$_metadata;
+}
+#endif
+)INLINE_CODE";
+        stream << replace_all(getter, "$NAME$", f.name) << "\n\n";
+    }
 }
 
 void CodeGen_C::compile(const Buffer<> &buffer) {
