@@ -38,7 +38,7 @@ DASH_D_DEFINES = $(patsubst %, -D%=1, $(UPPERCASE_FILTERS))
 
 $(BIN)/%_generator : %_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3_generator
 	@-mkdir -p $(BIN)/$*
