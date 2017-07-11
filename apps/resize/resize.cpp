@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
     final.compile_jit(target);
 
     printf("Loading '%s'\n", infile.c_str());
-    Buffer<float> in_png = Tools::load_image(infile);
+    Buffer<float> in_png = Tools::load_and_convert_image(infile);
     int out_width = in_png.width() * scaleFactor;
     int out_height = in_png.height() * scaleFactor;
     Buffer<float> out(out_width, out_height, 3);
@@ -191,5 +191,5 @@ int main(int argc, char **argv) {
     double min = Tools::benchmark(10, 1, [&]() { final.realize(out); });
     std::cout << " took min=" << min * 1000 << " msec." << std::endl;
 
-    Tools::save_image(out, outfile);
+    Tools::convert_and_save_image(out, outfile);
 }
