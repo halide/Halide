@@ -1172,11 +1172,7 @@ public:
     Buffer<T, D> embedded(int d, int pos) const {
         assert(d >= 0 && d <= dimensions());
         Buffer<T, D> im(*this);
-        im.add_dimension();
-        im.translate(im.dimensions() - 1, pos);
-        for (int i = im.dimensions(); i > d; i--) {
-            im.transpose();
-        }
+        im.embed(d, pos);
         return im;
     }
 

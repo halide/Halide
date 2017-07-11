@@ -34,7 +34,7 @@ public:
         Func input_clamped = Halide::BoundaryConditions::repeat_edge(
             input, 0, width, 0, height);
 
-        blur(x, y, c) =
+        blur(x, y, c) = 
             (input_clamped(x - 1, y, c) + input_clamped(x + 1, y, c) +
              input_clamped(x, y - 1, c) + input_clamped(x, y + 1, c)) /
             4.0f;

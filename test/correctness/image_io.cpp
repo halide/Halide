@@ -7,11 +7,18 @@ using namespace Halide;
 template<typename T>
 void test_round_trip(Buffer<T> buf, std::string format) {
     // Save it
-    std::string filename = Internal::get_test_tmp_dir() + "test." + format;
+    std::ostringstream o;
+    o << Internal::get_test_tmp_dir() << "test_" << halide_type_of<T>() << "x" << buf.channels() << "." << format;
+    std::string filename = o.str();
     Tools::save_image(buf, filename);
 
     // Reload it
     Buffer<T> reloaded = Tools::load_image(filename);
+
+    // Ensure that reloaded has the same origin as buf
+    for (int d = 0; d < buf.dimensions(); ++d) {
+        reloaded.translate(d, buf.dim(d).min() - reloaded.dim(d).min());
+    }
 
     Tools::save_image(reloaded, Internal::get_test_tmp_dir() + "test_reloaded." + format);
 
@@ -30,7 +37,7 @@ void test_round_trip(Buffer<T> buf, std::string format) {
         max_diff = 32;
     }
     if (diff > max_diff) {
-        printf("Difference of %d when saved and loaded as %s\n", diff, format.c_str());
+        printf("test_round_trip: Difference of %d when saved and loaded as %s\n", diff, format.c_str());
         abort();
     }
 }
@@ -51,7 +58,7 @@ void test_convert_image_s2s(Buffer<T> buf) {
     std::vector<Expr> args = {r.x, r.y, r.z};
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
     if (diff > 0) {
-        printf("test_convert_static: Difference of %d when converted\n", diff);
+        printf("test_convert_image_s2s: Difference of %d when converted\n", diff);
         abort();
     }
 }
@@ -74,7 +81,7 @@ void test_convert_image_d2s(Buffer<T> buf) {
     std::vector<Expr> args = {r.x, r.y, r.z};
     uint32_t diff = evaluate<uint32_t>(maximum(abs(cast<int>(buf(args)) - cast<int>(buf2(args)))));
     if (diff > 0) {
-        printf("test_convert_image_s2d: Difference of %d when converted\n", diff);
+        printf("test_convert_image_d2s: Difference of %d when converted\n", diff);
         abort();
     }
 }
@@ -160,6 +167,11 @@ void do_test() {
 
     Buffer<T> color_buf = f.realize(width, height, 3);
 
+    // Inset it a bit to ensure that saving buffers with nonzero mins works
+    const int inset = 4; 
+    color_buf.crop(0, inset, width-inset*2);
+    color_buf.crop(1, inset, height-inset*2);
+
     test_convert_image_s2s<T>(color_buf);
     test_convert_image_s2d<T>(color_buf);
     test_convert_image_d2s<T>(color_buf);
@@ -180,12 +192,13 @@ void do_test() {
         if (format == "jpg" && halide_type_of<T>() != halide_type_t(halide_type_uint, 8)) {
             continue;
         }
-        std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "\n";
         if (format != "pgm") {
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x3\n";
             // pgm really only supports gray images.
             test_round_trip(color_buf, format);
         }
         if (format != "ppm") {
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x1\n";
             // ppm really only supports RGB images.
             test_round_trip(luma_buf, format);
         }
