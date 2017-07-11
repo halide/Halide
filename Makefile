@@ -292,7 +292,6 @@ SOURCE_FILES = \
   Debug.cpp \
   DebugArguments.cpp \
   DebugToFile.cpp \
-  DeepCopy.cpp \
   Definition.cpp \
   Deinterleave.cpp \
   DeviceArgument.cpp \
@@ -422,7 +421,6 @@ HEADER_FILES = \
   Debug.h \
   DebugArguments.h \
   DebugToFile.h \
-  DeepCopy.h \
   Definition.h \
   Deinterleave.h \
   DeviceArgument.h \
@@ -439,6 +437,7 @@ HEADER_FILES = \
   Float16.h \
   Func.h \
   Function.h \
+  FunctionPtr.h \
   FuseGPUThreadLoops.h \
   FuzzFloatStores.h \
   Generator.h \
