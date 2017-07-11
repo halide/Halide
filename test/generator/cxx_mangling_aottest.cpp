@@ -10,19 +10,6 @@
 
 using namespace Halide::Runtime;
 
-int32_t extract_value_global(int32_t *arg) {
-    return *arg;
-}
-
-namespace HalideTest {
-
-int32_t extract_value_ns(const int32_t *arg) {
-    return *arg;
-}
-
-}
-
-
 namespace my_namespace {
 class my_class {public: int foo;};
 namespace my_subnamespace {
