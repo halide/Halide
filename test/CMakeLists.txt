@@ -121,10 +121,6 @@ function(halide_define_aot_test NAME)
   set(TARGET "generator_aot_${NAME}")
 
   add_executable("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_aottest.cpp")
-  if (MSVC)
-  else()
-    target_compile_options("${TARGET}" PUBLIC "-std=c++11") # HalideBuffer.h needs C++11
-  endif()
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
@@ -275,9 +271,6 @@ if (WITH_TEST_GENERATORS)
 
   add_library(cxx_mangling_externs 
               "${CMAKE_CURRENT_SOURCE_DIR}/generator/cxx_mangling_externs.cpp")
-  if (NOT MSVC)
-    target_compile_options(cxx_mangling_externs PUBLIC "-std=c++11")
-  endif()
 
   halide_define_aot_test(cxx_mangling
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
@@ -347,9 +340,6 @@ if (WITH_TEST_GENERATORS)
 
   add_library(cxx_mangling_define_extern_externs 
               "${CMAKE_CURRENT_SOURCE_DIR}/generator/cxx_mangling_define_extern_externs.cpp")
-  if (NOT MSVC)
-    target_compile_options(cxx_mangling_define_extern_externs PUBLIC "-std=c++11")
-  endif()
   target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_externs)
   halide_add_aot_library_dependency(cxx_mangling_define_extern_externs cxx_mangling)
 
