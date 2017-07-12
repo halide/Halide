@@ -435,6 +435,7 @@ private:
 
         op->b.accept(this);
         if (!interval.is_bounded()) {
+            // Uses interval produced by op->b which might be half bound.
             return;
         }
         Interval b = interval;
@@ -503,12 +504,14 @@ private:
     void visit_compare(const Expr &a_expr, const Expr &b_expr) {
         a_expr.accept(this);
         if (!interval.is_bounded()) {
+            bounds_of_type(Bool());
             return;
         }
         Interval a = interval;
 
         b_expr.accept(this);
         if (!interval.is_bounded()) {
+            bounds_of_type(Bool());
             return;
         }
         Interval b = interval;
@@ -520,7 +523,7 @@ private:
         } else if (can_prove(always_false)) {
             interval = Interval::single_point(const_false());
         } else {
-            bounds_of_type(Bool(a_expr.type().lanes()));
+            bounds_of_type(Bool());
         }
     }
 
@@ -563,12 +566,14 @@ private:
     void visit(const Select *op) {
         op->true_value.accept(this);
         if (!interval.is_bounded()) {
+            // Uses interval produced by op->true_value which might be half bound.
             return;
         }
         Interval a = interval;
 
         op->false_value.accept(this);
         if (!interval.is_bounded()) {
+            // Uses interval produced by op->false_value which might be half bound.
             return;
         }
         Interval b = interval;
