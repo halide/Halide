@@ -26,8 +26,8 @@ int main(int argc, char **argv) {
     h1.vectorize(x, 16);
     h2.vectorize(x, 16);
 
-    Image<int16_t> im1 = h1.realize(1024);
-    Image<int16_t> im2 = h2.realize(1024);
+    Buffer<int16_t> im1 = h1.realize(1024);
+    Buffer<int16_t> im2 = h2.realize(1024);
 
     for (int i = 0; i < im1.width(); i++) {
         if (im1(i) != im2(i)) {

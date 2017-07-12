@@ -40,15 +40,16 @@ int main(int argc, char **argv) {
     // Read out the output
     Func out;
     out(x) = f(x % B, x / B);
-    out.gpu_tile(x, B);
+    Var xi;
+    out.gpu_tile(x, xi, B);
 
     // Only deal with inputs that are a multiple of B
     out.bound(x, 0, im.width()/B * B);
 
-    Image<int> input = lambda(x, cast<int>(floor((sin(x))*100))).realize(N);
+    Buffer<int> input = lambda(x, cast<int>(floor((sin(x))*100))).realize(N);
 
     im.set(input);
-    Image<int> output = out.realize(N);
+    Buffer<int> output = out.realize(N);
 
     int correct = 0;
     for (int i = 0; i < N; i++) {

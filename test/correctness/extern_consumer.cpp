@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 #ifdef _WIN32
@@ -10,20 +12,20 @@ using namespace Halide;
 #endif
 
 extern "C" DLLEXPORT
-int dump_to_file(buffer_t *input, const char *filename,
+int dump_to_file(halide_buffer_t *input, const char *filename,
                  int desired_min, int desired_extent,
-                 buffer_t *) {
+                 halide_buffer_t *) {
     // Note the final output buffer argument is unused.
     if (input->host == nullptr) {
         // Request some range of the input buffer
-        input->min[0] = desired_min;
-        input->extent[0] = desired_extent;
+        input->dim[0].min = desired_min;
+        input->dim[0].extent = desired_extent;
     } else {
         FILE *f = fopen(filename, "w");
         // Depending on the schedule, other consumers, etc, Halide may
         // have evaluated more than we asked for, so don't assume that
         // the min and extents match what we requested.
-        int *base = ((int *)input->host) - input->min[0];
+        int *base = ((int *)input->host) - input->dim[0].min;
         for (int i = desired_min; i < desired_min + desired_extent; i++) {
             fprintf(f, "%d\n", base[i]);
         }
@@ -47,7 +49,9 @@ bool check_result() {
         "64\n"
         "81\n";
 
-    FILE *f = fopen("halide_test_extern_consumer.txt", "r");
+    std::string path = Internal::get_test_tmp_dir() + "halide_test_extern_consumer.txt";
+    Internal::assert_file_exists(path);
+    FILE *f = fopen(path.c_str(), "r");
     char result[1024];
     size_t bytes_read = fread(&result[0], 1, 1023, f);
     result[bytes_read] = 0;
@@ -84,7 +88,10 @@ int main(int argc, char **argv) {
     sink.compile_jit();
 
     // Dump the first 10 squares to a file
-    filename.set("halide_test_extern_consumer.txt");
+    std::string path = Internal::get_test_tmp_dir() + "halide_test_extern_consumer.txt";
+    Internal::ensure_no_file_exists(path);
+
+    filename.set(path.c_str());
     min.set(0);
     extent.set(10);
     sink.realize();
@@ -93,7 +100,7 @@ int main(int argc, char **argv) {
         return -1;
 
     // Test ImageParam ExternFuncArgument via passed in image.
-    Image<int32_t> buf = source.realize(10);
+    Buffer<int32_t> buf = source.realize(10);
     ImageParam passed_in(Int(32), 1);
     passed_in.set(buf);
 

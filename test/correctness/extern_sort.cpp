@@ -11,15 +11,16 @@ using namespace Halide;
 #endif
 
 // Use an extern stage to do a sort
-extern "C" DLLEXPORT int sort_buffer(buffer_t *in, buffer_t *out) {
+extern "C" DLLEXPORT int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) {
     if (!in->host) {
-        in->min[0] = out->min[0];
-        in->extent[0] = out->extent[0];
+        in->dim[0].min = out->dim[0].min;
+        in->dim[0].extent = out->dim[0].extent;
     } else {
-        memcpy(out->host, in->host, out->extent[0] * out->elem_size);
+        memcpy(out->host, in->host, out->dim[0].extent * out->type.bytes());
         float *out_start = (float *)out->host;
-        float *out_end = out_start + out->extent[0];
+        float *out_end = out_start + out->dim[0].extent;
         std::sort(out_start, out_end);
+        out->set_host_dirty();
     }
     return 0;
 }
@@ -35,10 +36,10 @@ int main(int argc, char **argv) {
     std::vector<ExternFuncArgument> args;
     args.push_back(data);
     sorted.define_extern("sort_buffer", args, Float(32), 1);
-    Image<float> output = sorted.realize(100);
+    Buffer<float> output = sorted.realize(100);
 
     // Check the output
-    Image<float> reference = lambda(x, sin(x)).realize(100);
+    Buffer<float> reference = lambda(x, sin(x)).realize(100);
     std::sort(&reference(0), &reference(100));
 
     RDom r(reference);

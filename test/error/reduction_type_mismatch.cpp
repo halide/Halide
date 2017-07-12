@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     f(dom) += 1.0f;          // does not match the type here.
 
     // Should result in an error
-    Image<float> result = f.realize(50);
+    Buffer<float> result = f.realize(50);
 
     printf("Success!\n");
     return 0;

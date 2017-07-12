@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     // program on.  For example, if you compile and run this file on
     // 64-bit linux on an x86 cpu with sse4.1, then the generated code
     // will be suitable for 64-bit linux on x86 with sse4.1.
-    brighter.compile_to_file("lesson_11_host", args);
+    brighter.compile_to_file("lesson_11_host", args, "brighter");
 
     // We can also compile object files suitable for other cpus and
     // operating systems. You do this with an optional third argument
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     std::vector<Target::Feature> arm_features; // A list of features to set
     target.set_features(arm_features);
     // We then pass the target as the last argument to compile_to_file.
-    brighter.compile_to_file("lesson_11_arm_32_android", args, target);
+    brighter.compile_to_file("lesson_11_arm_32_android", args, "brighter", target);
 
     // And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
     target.os = Target::Windows;
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     x86_features.push_back(Target::AVX);
     x86_features.push_back(Target::SSE41);
     target.set_features(x86_features);
-    brighter.compile_to_file("lesson_11_x86_64_windows", args, target);
+    brighter.compile_to_file("lesson_11_x86_64_windows", args, "brighter", target);
 
     // And finally an iOS mach-o object file for one of Apple's 32-bit
     // ARM processors - the A6. It's used in the iPhone 5. The A6 uses
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     std::vector<Target::Feature> armv7s_features;
     armv7s_features.push_back(Target::ARMv7s);
     target.set_features(armv7s_features);
-    brighter.compile_to_file("lesson_11_arm_32_ios", args, target);
+    brighter.compile_to_file("lesson_11_arm_32_ios", args, "brighter", target);
 
 
     // Now let's check these files are what they claim, by examining

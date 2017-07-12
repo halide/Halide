@@ -1,7 +1,7 @@
 // This file defines a generator for a first order IIR low pass filter
 // for a 2D image.
 
-#include <Halide.h>
+#include "Halide.h"
 
 using namespace Halide;
 using namespace Halide::BoundaryConditions;

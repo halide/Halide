@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Image<float> im = h.realize(4, 4);
+    Buffer<float> im = h.realize(4, 4);
 
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {

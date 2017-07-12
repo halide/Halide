@@ -22,13 +22,12 @@ struct Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
-    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl, QuRT, NoOS} os;
+    enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, QuRT, NoOS} os;
 
     /** The architecture used by the target. Determines the
-     * instruction set to use. For the PNaCl target, the "instruction
-     * set" is actually llvm bitcode.
+     * instruction set to use.
      * Corresponds to arch_name_map in Target.cpp. */
-    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, Hexagon, POWERPC} arch;
+    enum Arch {ArchUnknown = 0, X86, ARM, MIPS, Hexagon, POWERPC} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -57,13 +56,12 @@ struct Target {
         CUDACapability32 = halide_target_feature_cuda_capability32,
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
+        CUDACapability61 = halide_target_feature_cuda_capability61,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
-        Renderscript = halide_target_feature_renderscript,
         UserContext = halide_target_feature_user_context,
-        RegisterMetadata = halide_target_feature_register_metadata,
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
@@ -74,6 +72,19 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        HVX_v65 = halide_target_feature_hvx_v65,
+        HVX_v66 = halide_target_feature_hvx_v66,
+        HVX_shared_object = halide_target_feature_hvx_use_shared_object,
+        FuzzFloatStores = halide_target_feature_fuzz_float_stores,
+        SoftFloatABI = halide_target_feature_soft_float_abi,
+        MSAN = halide_target_feature_msan,
+        AVX512 = halide_target_feature_avx512,
+        AVX512_KNL = halide_target_feature_avx512_knl,
+        AVX512_Skylake = halide_target_feature_avx512_skylake,
+        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
+        TraceLoads = halide_target_feature_trace_loads,
+        TraceStores = halide_target_feature_trace_stores,
+        TraceRealizations = halide_target_feature_trace_realizations,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -165,7 +176,7 @@ struct Target {
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-      return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
     }
 
     /** Does this target allow using a certain type. Generally all
@@ -204,8 +215,8 @@ struct Target {
      *
      *   arch-bits-os-feature1-feature2...featureN.
      *
-     * Note that is guaranteed that t2.from_string(t1.to_string()) == t1,
-     * but not that from_string(s).to_string() == s (since there can be
+     * Note that is guaranteed that Target(t1.to_string()) == t1,
+     * but not that Target(s).to_string() == s (since there can be
      * multiple strings that parse to the same Target)...
      * *unless* t1 contains 'unknown' fields (in which case you'll get a string
      * that can't be parsed, which is intentional).
@@ -218,31 +229,50 @@ struct Target {
         user_assert(os != OSUnknown && arch != ArchUnknown && bits != 0)
             << "natural_vector_size cannot be used on a Target with Unknown values.\n";
 
-        const bool is_avx2 = has_feature(Halide::Target::AVX2);
-        const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
         const bool is_integer = t.is_int() || t.is_uint();
         const int data_size = t.bytes();
 
         if (arch == Target::Hexagon) {
             if (is_integer) {
-                // HVX is either 64 or 128 byte vector size.
+                // HVX is either 64 or 128 *byte* vector size.
                 if (has_feature(Halide::Target::HVX_128)) {
                     return 128 / data_size;
                 } else if (has_feature(Halide::Target::HVX_64)) {
                     return 64 / data_size;
+                } else {
+                    user_error << "Target uses hexagon arch without hvx_128 or hvx_64 set.\n";
+                    return 0;
                 }
             } else {
+                // HVX does not have vector float instructions.
                 return 1;
             }
+        } else if (arch == Target::X86) {
+            if (is_integer && (has_feature(Halide::Target::AVX512_Skylake) ||
+                               has_feature(Halide::Target::AVX512_Cannonlake))) {
+                // AVX512BW exists on Skylake and Cannonlake
+                return 64 / data_size;
+            } else if (t.is_float() && (has_feature(Halide::Target::AVX512) ||
+                                        has_feature(Halide::Target::AVX512_KNL) ||
+                                        has_feature(Halide::Target::AVX512_Skylake) ||
+                                        has_feature(Halide::Target::AVX512_Cannonlake))) {
+                // AVX512F is on all AVX512 architectures
+                return 64 / data_size;
+            } else if (has_feature(Halide::Target::AVX2)) {
+                // AVX2 uses 256-bit vectors for everything.
+                return 32 / data_size;
+            } else if (!is_integer && has_feature(Halide::Target::AVX)) {
+                // AVX 1 has 256-bit vectors for float, but not for
+                // integer instructions.
+                return 32 / data_size;
+            } else {
+                // SSE was all 128-bit. We ignore MMX.
+                return 16 / data_size;
+            }
+        } else {
+            // Assume 128-bit vectors on other targets.
+            return 16 / data_size;
         }
-
-        // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
-        // However, AVX has a very limited complement of integer instructions;
-        // restricting us to SSE4.1 size for integer operations produces much
-        // better performance. (AVX2 does have good integer operations for 256-bit
-        // registers.)
-        const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
-        return vector_byte_size / data_size;
     }
 
     /** Given a data type, return an estimate of the "natural" vector size

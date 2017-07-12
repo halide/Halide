@@ -90,95 +90,53 @@ If you wish to use cmake to build Halide, the build procedure is:
 
     % mkdir cmake_build
     % cd cmake_build
-    % export LLVM_ROOT=/path/to/llvm3.7/build
-    % cmake -DLLVM_BIN=${LLVM_ROOT}/bin -DLLVM_INCLUDE="${LLVM_ROOT}/../include;${LLVM_ROOT}/include" -DLLVM_LIB=${LLVM_ROOT}/lib -DLLVM_VERSION=37 ..
+    % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_VERSION=37 /path/to/halide
     % make -j8
 
-#### Building Halide and llvm as 32-bit on 64-bit linux
+LLVM_DIR should be the folder in the LLVM installation or build tree that contains LLVMConfig.cmake.
 
-This is necessary if you want to JIT compile 32-bit code. It is not
-necessary for AOT compiling 32-bit Halide pipelines. The 64-bit
-version of Halide cross-compiles 32-bit code just fine.
+#### Building Halide and LLVM on Windows
 
-To get a 32-bit llvm, configure and compile it like so:
+Acquire MSVC 2015 Update 3 or newer. Earlier versions may work but are
+not part of our tests. MSBuild and cmake should also be in your
+path. The instructions below assume Halide is checked out under
+C:/Code/Halide, and llvm (and clang) is checked out under
+C:/Code/llvm.
 
-    % CC="gcc -m32" CXX="g++ -m32" ./configure --enable-targets=x86,arm,nvptx,aarch64,mips --enable-assertions --enable-optimized --build=i686-pc-linux-gnu
-    % CC="gcc -m32" CXX="g++ -m32" make
+    % mkdir C:\Code\llvm-build
+    % cd C:\Code\llvm-build
+    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=OFF -DCMAKE_BUILD_TYPE=Release ../llvm -G "Visual Studio 14 Win64"
 
-To generate a 32-bit Halide, compile it like so:
+For a 32-bit build use:
 
-    % HL_TARGET=x86-32 LD="ld -melf_i386" CC="gcc -m32" CXX="g++ -m32" make
+    % cmake -DCMAKE_INSTALL_PREFIX=../llvm-install -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_BUILD_32_BITS=ON -DCMAKE_BUILD_TYPE=Release ../llvm -G "Visual Studio 14"
 
-You should then be able to run the JIT tests with a 32-bit target:
+Then build it like so
 
-    % CXX="g++ -m32 -msse4" make build_tests
-    % HL_TARGET=x86-32-sse41 make run_tests
+    % MSBuild.exe /m /t:Build /p:Configuration=Release .\INSTALL.vcxproj
 
-If you have a 32-bit libpng, you can also run the apps in 32-bit:
+You can substitute "Debug" for "Release" in both commands if you want a debug build.
 
-    % HL_TARGET=x86-32-sse41 CXX="g++ -m32 -msse4" make test_apps
+To configure and build Halide:
 
-The tests should pass, but the tutorials will fail to compile unless
-you manually supply a 32-bit libpng.
+    % mkdir C:\Code\halide-build
+    % cd C:\Code\halide-build
+    % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DLLVM_VERSION=37 -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
+    % MSBuild.exe /m /t:Build /p:Configuration=Release .\ALL_BUILD.vcxproj
 
+#### Building Halide and LLVM on Windows using mingw
 
-#### Building Halide with Native Client support
+The makefile method above should work from inside a "mingw64" shell
+(not the default shell) in an msys2 installation.
 
-Halide is capable of generating Native Client (NaCl) object files and
-Portable Native Client (PNaCl) bitcode.  JIT compilation is not
-supported. For both NaCl and PNaCl, the PNaCl llvm tree is used as it
-contains required llvm headers and libraries for compiling to all
-Native Client targets.
+#### If all else fails...
 
-In order to build Halide with Native Client support, one will need the
-PNaCl llvm tree from:
+Do what the build-bots do: https://buildbot.halide-lang.org/master/#/builders
 
-    https://chromium.googlesource.com/native_client/pnacl-llvm.git
-
-and, for good measure, PNaCl's version of clang:
-
-    https://chromium.googlesource.com/native_client/pnacl-clang.git
-
-To check these out:
-
-    % git clone https://chromium.googlesource.com/native_client/pnacl-llvm.git pnacl-llvm
-    % cd pnacl-llvm/tools
-    % git clone https://chromium.googlesource.com/native_client/pnacl-clang.git clang
-    % cd ../..
-
-To enable all Halide targets, build it like so:
-
-    % mkdir build
-    % cd build
-    % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_TERMINFO=OFF -DCMAKE_BUILD_TYPE=Release ..
-    % make -j8
-
-It will possibly be helpful to get the entire dev tree for
-PNaCl. Documentation for this is here:
-
-    http://www.chromium.org/nativeclient/pnacl/developing-pnacl
-
-To use generated code in an application, you'll of course also need
-the Native Client SDK:
-
-    https://developer.chrome.com/native-client/sdk/download
-
-Once The Native Client prerequisites are in place, set the following
-variables (on the command line or by editing the Makefile):
-
-Point LLVM_CONFIG to the llvm-config that lives in your pnacl llvm build. E.g:
-
-    % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/build/bin/llvm-config
-
-Change WITH_NATIVE_CLIENT to "true" (or any non-empty value):
-
-    % export WITH_NATIVE_CLIENT=true
-
-With these variables set, run make. This will build a Halide lib
-capable of generating native client objects. Neither the tests nor
-most of the apps Makefiles have been updated to work with cross
-compilation however. Try the app HelloNacl for a working example.
-
+If the column that best matches your system is red, then maybe things
+aren't just broken for you. If it's green, then you can click the
+"stdio" links in the latest build to see what commands the build bots
+run, and what the output was.
 
 Some useful environment variables
 =================================
@@ -411,21 +369,12 @@ code on the simulator from the Hexagon tools.
 
 To build and run the HelloHexagon example in Halide/apps/HelloHexagon on the simulator:
 
+    cd apps/HelloHexagon
+    export HL_HEXAGON_SIM_REMOTE=../../src/runtime/hexagon_remote/bin/v60/hexagon_sim_remote
     export HL_HEXAGON_TOOLS=$SDK_LOC/Hexagon_Tools/8.0/Tools/
-    LD_LIBRARY_PATH=/.../Halide/src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. make run-host
+    LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. make run-host
 
 #### To build and run the HelloHexagon example in Halide/apps/HelloHexagon on Android:
-
-The device needs to be prepared to run Halide Hexagon code. Halide uses a small
-runtime library that must be present on the device. The device must be signed as
-a debug device to run Hexagon code, or the libhalide\_hexagon\_remote\_skel.so
-library must be signed. Refer to the Hexagon SDK documentation for more information
-about signing Hexagon binaries (see: Hexagon\_SDK/3.0/docs/Tools\_Signing.html).
-
-    adb shell mkdir -p /system/lib/rfsa/adsp
-    adb push src/runtime/hexagon_remote/bin/arm-32-android/libhalide_hexagon_host.so /system/lib/
-    adb push src/runtime/hexagon_remote/bin/arm-64-android/libhalide_hexagon_host.so /system/lib64/
-    adb push src/runtime/hexagon_remote/bin/v60/libhalide_hexagon_remote_skel.so /system/lib/rfsa/adsp/
 
 To build the example for Android, first ensure that you have a standalone toolchain
 created from the NDK using the make-standalone-toolchain.sh script:

@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     // Update rule
     f1(r) = f1(r-1) + f1(r-2);
 
-    Image<int> fib1 = f1.realize(102);
+    Buffer<int> fib1 = f1.realize(102);
 
     // That code needlessly set the entire buffer to zero before
     // computing fibonacci. We know for our use of fibonacci that
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     f2(1) = 0;
     f2(r) = f2(r-1) + f2(r-2);
 
-    Image<int> fib2 = f2.realize(102);
+    Buffer<int> fib2 = f2.realize(102);
 
     int err = evaluate_may_gpu<int>(maximum(fib1(r) - fib2(r)));
     if (err > 0) {

@@ -1,8 +1,9 @@
 #include "Halide.h"
 #include <cstdio>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Func slow, fast;
@@ -24,7 +25,7 @@ int main(int argc, char **argv) {
     slow.compile_jit();
     fast.compile_jit();
 
-    Image<float> out_fast(8), out_slow(8);
+    Buffer<float> out_fast(8), out_slow(8);
 
     double slow_time = benchmark(1, 1, [&]() { slow.realize(out_slow); });
     double fast_time = benchmark(1, 1, [&]() { fast.realize(out_fast); });

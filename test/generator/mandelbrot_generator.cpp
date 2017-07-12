@@ -10,8 +10,7 @@ class Complex {
 public:
     Complex(Expr real, Expr imag) : t(real, imag) {}
     Complex(Tuple tup) : t(tup) {}
-    Complex(FuncRefExpr f) : t(Tuple(f)) {}
-    Complex(FuncRefVar f) : t(Tuple(f)) {}
+    Complex(FuncRef f) : t(Tuple(f)) {}
     Expr real() const { return t[0]; }
     Expr imag() const { return t[1]; }
 
@@ -21,10 +20,6 @@ public:
 // Define the usual complex arithmetic
 Complex operator+(const Complex &a, const Complex &b) {
     return Complex(a.real() + b.real(), a.imag() + b.imag());
-}
-
-Complex operator-(const Complex &a, const Complex &b) {
-    return Complex(a.real() - b.real(), a.imag() - b.imag());
 }
 
 Complex operator*(const Complex &a, const Complex &b) {

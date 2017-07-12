@@ -11,14 +11,14 @@ extern "C" {
  *  Routines specific to the Halide OpenGL Compute runtime.
  */
 
-extern const struct halide_device_interface *halide_openglcompute_device_interface();
+extern const struct halide_device_interface_t *halide_openglcompute_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide Glsl runtime. Do not call them. */
 // @{
 
 /** This function sets up OpenGL context, loads relevant GL functions, then
- *  compiles \src OpenGL compute shader into OpenGL program and stores it for future use.
+ *  compiles src OpenGL compute shader into OpenGL program and stores it for future use.
  */
 extern int halide_openglcompute_initialize_kernels(void *user_context, void **state_ptr,
                                             const char *src, int size);

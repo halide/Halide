@@ -19,7 +19,6 @@ namespace Internal {
 using std::string;
 using std::vector;
 using std::pair;
-using std::make_pair;
 using std::map;
 
 namespace {
@@ -66,10 +65,11 @@ class MarkClampedRampsAsLikely : public IRMutator {
         Expr index = mutate(op->index);
         in_index = old_in_index;
         Expr value = mutate(op->value);
-        if (index.same_as(op->index) && value.same_as(op->value)) {
+        Expr predicate = mutate(op->predicate);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index) && value.same_as(op->value)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, predicate);
         }
     }
 
@@ -217,14 +217,49 @@ struct Simplification {
     Interval interval;
 };
 
+class ExprUsesInvalidBuffers : public IRVisitor {
+    using IRVisitor::visit;
+
+    const Scope<int> &invalid_buffers;
+
+    void visit(const Load *op) {
+        if (invalid_buffers.contains(op->name)) {
+            invalid = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    ExprUsesInvalidBuffers(const Scope<int> &buffers) : invalid_buffers(buffers), invalid(false) {}
+    bool invalid;
+};
+
+/** Check if any references to buffers in an expression is invalid. */
+bool expr_uses_invalid_buffers(Expr e, const Scope<int> &invalid_buffers) {
+    ExprUsesInvalidBuffers uses(invalid_buffers);
+    e.accept(&uses);
+    return uses.invalid;
+}
+
 // Then we define the visitor that hunts for them.
 class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
     Scope<int> depends_on_loop_var;
+    Scope<int> buffers;
+
+    void visit(const Allocate *op) {
+        buffers.push(op->name, 0);
+        IRVisitor::visit(op);
+    }
 
     void new_simplification(Expr condition, Expr old, Expr likely_val, Expr unlikely_val) {
         if (!expr_uses_vars(condition, depends_on_loop_var)) {
+            return;
+        }
+        if (expr_uses_invalid_buffers(condition, buffers)) {
+            // The condition refers to buffer allocated in the inner loop.
+            // We should throw away the condition
             return;
         }
         condition = RemoveLikelyTags().mutate(condition);
@@ -363,7 +398,7 @@ public:
     MakeSimplifications(const vector<Simplification> &s) : simplifications(s) {}
 
     using IRMutator::mutate;
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         for (auto const &s : simplifications) {
             if (e.same_as(s.old_expr)) {
                 return mutate(s.likely_value);
@@ -409,6 +444,14 @@ class PartitionLoops : public IRMutator {
         // barriers, it's not safe to duplicate code.
         if (in_gpu_loop && contains_thread_barrier(body)) {
             IRMutator::visit(op);
+            in_gpu_loop = old_in_gpu_loop;
+            return;
+        }
+
+        // We shouldn't partition GLSL loops - they have control-flow
+        // constraints.
+        if (op->device_api == DeviceAPI::GLSL) {
+            stmt = op;
             in_gpu_loop = old_in_gpu_loop;
             return;
         }
@@ -574,8 +617,11 @@ class PartitionLoops : public IRMutator {
             std::sort(max_vals.begin(), max_vals.end(), IRDeepCompare());
             max_vals.push_back(op->min + op->extent - 1);
             epilogue_val = fold_left(max_vals, Min::make) + 1;
+            // Stop the epilogue from running before the start of the loop/prologue
             if (make_prologue) {
                 epilogue_val = max(epilogue_val, prologue_val);
+            } else {
+                epilogue_val = max(op->min, epilogue_val);
             }
             // epilogue_val = print(epilogue_val, epilogue_name);
             max_steady = Variable::make(Int(32), epilogue_name);
@@ -677,7 +723,13 @@ class RenormalizeGPULoops : public IRMutator {
     vector<pair<string, Expr> > lifted_lets;
 
     void visit(const For *op) {
-        if (ends_with(op->name, Var::gpu_threads().name())) {
+        if (op->device_api == DeviceAPI::GLSL) {
+            // The partitioner did not enter GLSL loops
+            stmt = op;
+            return;
+        }
+
+        if (ends_with(op->name, "__thread_id_x")) {
             in_thread_loop = true;
             IRMutator::visit(op);
             in_thread_loop = false;
@@ -719,7 +771,7 @@ class RenormalizeGPULoops : public IRMutator {
             // we'd better give it a new name.
             string new_name = unique_name('t');
             Expr new_var = Variable::make(op->value.type(), new_name);
-            lifted_lets.push_back(make_pair(new_name, op->value));
+            lifted_lets.push_back({ new_name, op->value });
             stmt = mutate(substitute(op->name, new_var, op->body));
             return;
         }

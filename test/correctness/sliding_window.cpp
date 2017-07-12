@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
         f.store_root().compute_at(g, x);
 
-        Image<int> im = g.realize(100);
+        Buffer<int> im = g.realize(100);
 
         // f should be able to tell that it only needs to compute each value once
         if (count != 101) {
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, x);
         g.compute_at(h, x);
 
-        Image<int> im = h.realize(100);
+        Buffer<int> im = h.realize(100);
         if (count != 101) {
             printf("f was called %d times instead of %d times\n", count, 101);
             return -1;
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
 
         h.reorder(c, x).reorder_storage(c, x).bound(c, 0, 4).vectorize(c);
 
-        Image<int> im = h.realize(100, 4);
+        Buffer<int> im = h.realize(100, 4);
         if (count != 404) {
             printf("f was called %d times instead of %d times\n", count, 404);
             return -1;
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
 
         g(x, y) = f(x, y) + f(x, y-1);
 
-        Image<int> im = g.realize(10, 10);
+        Buffer<int> im = g.realize(10, 10);
 
         // For each value of y, f should be evaluated over (0 .. 100) in
         // x, and (y .. y-1) in y. Sliding window optimization means that
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
         g(x, y) = f(x-1, y) + f(x, y) + f(x, y-1);
         f.store_root().compute_at(g, x);
 
-        Image<int> im = g.realize(10, 10);
+        Buffer<int> im = g.realize(10, 10);
 
         if (count != 11*11) {
             printf("f was called %d times instead of %d times\n", count, 11*11);
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
         g(x, y) = f(x+y, x-y) + f((x-2)+y, (x-2)-y) + f(x+(y-2), x-(y-2));
         f.store_root().compute_at(g, x);
 
-        Image<int> im = g.realize(10, 10);
+        Buffer<int> im = g.realize(10, 10);
         if (count != 1500) {
             printf("f was called %d times instead of %d times\n", count, 1500);
             return -1;
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
         g(x, y) = f(x, y) + f(x+1, y) + f(x, y+1) + f(x+1, y+1);
         f.store_at(g, y).compute_at(g, x);
         g.set_custom_allocator(&my_malloc, &my_free);
-        Image<int> im = g.realize(10, 10);
+        Buffer<int> im = g.realize(10, 10);
     }
 
     printf("Success!\n");

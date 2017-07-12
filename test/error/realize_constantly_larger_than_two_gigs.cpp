@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     grand_total() = cast<uint8_t>(sum(big(r.x, r.y, r.z)));
     grand_total.set_error_handler(&halide_error);
 
-    Image<uint8_t> result = grand_total.realize();
+    Buffer<uint8_t> result = grand_total.realize();
 
     assert(error_occurred);
     printf("Success!\n");

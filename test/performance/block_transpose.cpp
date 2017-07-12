@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <stdio.h>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include <memory>
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 enum {
     scalar_trans,
@@ -11,7 +12,7 @@ enum {
     vec_x_trans
 };
 
-Image<uint16_t> test_transpose(int mode) {
+Buffer<uint16_t> test_transpose(int mode) {
     Func input, block, block_transpose, output;
     Var x, y;
 
@@ -48,7 +49,7 @@ Image<uint16_t> test_transpose(int mode) {
     }
 
 
-    Image<uint16_t> result(1024, 1024);
+    Buffer<uint16_t> result(1024, 1024);
     output.compile_jit();
 
     output.realize(result);
@@ -63,7 +64,7 @@ Image<uint16_t> test_transpose(int mode) {
 
 /* This illustrates how to achieve the same scheduling behavior using the 'in()'
  * directive as opposed to creating dummy Funcs as done in 'test_transpose()' */
-Image<uint16_t> test_transpose_wrap(int mode) {
+Buffer<uint16_t> test_transpose_wrap(int mode) {
     Func input, block_transpose, block, output;
     Var x, y;
 
@@ -98,7 +99,7 @@ Image<uint16_t> test_transpose_wrap(int mode) {
     }
 
 
-    Image<uint16_t> result(1024, 1024);
+    Buffer<uint16_t> result(1024, 1024);
     output.compile_jit();
 
     output.realize(result);
@@ -118,8 +119,8 @@ int main(int argc, char **argv) {
     test_transpose(vec_y_trans);
     test_transpose_wrap(vec_y_trans);
 
-    Image<uint16_t> im1 = test_transpose(vec_x_trans);
-    Image<uint16_t> im2 = test_transpose_wrap(vec_x_trans);
+    Buffer<uint16_t> im1 = test_transpose(vec_x_trans);
+    Buffer<uint16_t> im2 = test_transpose_wrap(vec_x_trans);
 
     // Check correctness of the wrapper version
     for (int y = 0; y < im2.height(); y++) {

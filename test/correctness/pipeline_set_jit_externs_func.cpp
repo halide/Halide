@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
     Pipeline p(f);
     p.set_jit_externs({ { "extern_func", monitor } });
-    Image<float> imf = p.realize(32, 32);
+    Buffer<float> imf = p.realize(32, 32);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {

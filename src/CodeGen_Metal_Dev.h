@@ -44,7 +44,7 @@ protected:
 
     class CodeGen_Metal_C : public CodeGen_C {
     public:
-        CodeGen_Metal_C(std::ostream &s) : CodeGen_C(s) {}
+        CodeGen_Metal_C(std::ostream &s, Target t) : CodeGen_C(s, t) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
@@ -62,9 +62,12 @@ protected:
         std::string print_storage_type(Type type);
         std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
         std::string print_reinterpret(Type type, Expr e);
+        std::string print_extern_call(const Call *op);
 
         std::string get_memory_space(const std::string &);
 
+        void visit(const Min *);
+        void visit(const Max *);
         void visit(const Div *);
         void visit(const Mod *);
         void visit(const For *);
@@ -81,7 +84,6 @@ protected:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     CodeGen_Metal_C metal_c;
-    Target target;
 };
 
 }}

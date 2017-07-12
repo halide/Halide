@@ -39,8 +39,7 @@ def main():
 
     # Realize the function to produce an output image. We'll keep it
     # very small for this lesson.
-    output_realization = gradient.realize(8, 8)
-    output = Image(Int(32), output_realization)
+    output = gradient.realize(8, 8)
 
     # That line compiled and ran the pipeline. Try running this
     # lesson with the environment variable HL_DEBUG_CODEGEN set to
@@ -61,9 +60,7 @@ def main():
     # the generated function should take (none in this case), and the
     # name of the generated function. Have a look inside gradient.cpp
     # after compiling and running this lesson.
-    args = ArgumentsVector()
-    # args stays empty
-    gradient.compile_to_c("gradient.cpp", args, "gradient")
+    gradient.compile_to_c("gradient.cpp", [], "gradient")
 
     # Using these two tricks -- setting HL_DEBUG_CODEGEN and calling
     # compile_to_c -- you can usually figure out what code Halide is

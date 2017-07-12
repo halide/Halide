@@ -1,11 +1,11 @@
 // This header defines several methods useful for debugging programs that
-// operate on the Image class supporting images with arbitrary dimensions.
+// operate on the Buffer class supporting images with arbitrary dimensions.
 //
-//   Image<uint16_t> input = load_image(argv[1]);
+//   Buffer<uint16_t> input = load_image(argv[1]);
 //
-//   info(input, "input");  // Output the Image header info
-//   dump(input, "input");  // Dump the Image data
-//   stats(input, "input"); // Report statistics for the Image
+//   info(input, "input");  // Output the Buffer header info
+//   dump(input, "input");  // Dump the Buffer data
+//   stats(input, "input"); // Report statistics for the Buffer
 //
 //
 #ifndef HALIDE_TOOLS_IMAGE_INFO_H
@@ -19,10 +19,10 @@
 #include <iomanip>
 #include <sstream>
 #include <stdint.h>
+#include <vector>
 
 #include "HalideRuntime.h"
-
-#include "halide_image.h"
+#include "HalideBuffer.h"
 
 namespace Halide {
 namespace Tools {
@@ -37,7 +37,7 @@ static inline void print_dimid(int d, int val) {
     }
 }
 
-static inline void print_loc(int32_t *loc, int dim, int32_t *min) {
+static inline void print_loc(const std::vector<int32_t> &loc, int dim, const int32_t *min) {
     for (int d = 0; d < dim; d++) {
         if (d) { 
             std::cout << ",";
@@ -70,7 +70,7 @@ static inline void print_memalign(intptr_t val) {
 }
 
 template<typename T>
-void info(Image<T> &img, const char *tag = "Image") {
+void info(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -78,7 +78,7 @@ void info(Image<T> &img, const char *tag = "Image") {
     int dim = img.dimensions();
     int img_bpp = buf->elem_size;
     int img_tsize = sizeof(T);
-    int img_csize = sizeof(Image<T>);
+    int img_csize = sizeof(Runtime::Buffer<T>);
     int img_bsize = sizeof(buffer_t);
     int32_t size = 1;
     uint64_t dev = buf->dev;
@@ -87,7 +87,7 @@ void info(Image<T> &img, const char *tag = "Image") {
 
     std::cout << std::endl
               << "-----------------------------------------------------------------------------";
-    std::cout << std::endl << "Image info: " << tag
+    std::cout << std::endl << "Buffer info: " << tag
               << " dim:" << dim << " bpp:" << img_bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
@@ -167,7 +167,7 @@ void info(Image<T> &img, const char *tag = "Image") {
 }
 
 template<typename T>
-void dump(Image<T> &img, const char *tag = "Image") {
+void dump(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -176,7 +176,7 @@ void dump(Image<T> &img, const char *tag = "Image") {
     int bpp = buf->elem_size;
     int32_t size = 1;
 
-    std::cout << std::endl << "Image dump: " << tag
+    std::cout << std::endl << "Buffer dump: " << tag
               << " dim:" << dim << " bpp:" << bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
@@ -185,7 +185,7 @@ void dump(Image<T> &img, const char *tag = "Image") {
 
     // Arbitrary dimension image traversal
     const T *ptr = img.data();
-    int32_t curloc[dim];
+    std::vector<int32_t> curloc(dim);
     for (int d = 1; d < dim; d++) {
         curloc[d] = -1;
     }
@@ -231,7 +231,7 @@ void dump(Image<T> &img, const char *tag = "Image") {
 }
 
 template<typename T>
-void stats(Image<T> &img, const char *tag = "Image") {
+void stats(Runtime::Buffer<T> &img, const char *tag = "Buffer") {
     buffer_t *buf = &(*img);
     int32_t *min = buf->min;
     int32_t *extent = buf->extent;
@@ -239,7 +239,7 @@ void stats(Image<T> &img, const char *tag = "Image") {
     int dim = img.dimensions();
     int bpp = buf->elem_size;
     int32_t size = 1;
-    std::cout << std::endl << "Image stats: " << tag
+    std::cout << std::endl << "Buffer stats: " << tag
               << " dim:" << dim << " bpp:" << bpp;
     for (int d = 0; d < dim; d++) {
         print_dimid(d, extent[d]);
@@ -248,7 +248,7 @@ void stats(Image<T> &img, const char *tag = "Image") {
 
     // Arbitrary dimension image traversal
     const T *ptr = img.data();
-    int32_t curloc[dim];
+    std::vector<int32_t> curloc(dim);
     for (int d = 1; d < dim; d++) {
         curloc[d] = -1;
     }
@@ -259,8 +259,8 @@ void stats(Image<T> &img, const char *tag = "Image") {
     double sum = 0;
     T minval = *ptr;
     T maxval = *ptr;
-    int32_t minloc[dim];
-    int32_t maxloc[dim];
+    std::vector<int32_t> minloc(dim);
+    std::vector<int32_t> maxloc(dim);
     for (int d = 0; d < dim; d++) {
         minloc[d] = 0;
         maxloc[d] = 0;

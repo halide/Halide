@@ -22,7 +22,7 @@
 #using namespace Halide
 from halide import *
 import numpy as np
-import math 
+import math
 
 def main():
     # First we'll declare some Vars to use below.
@@ -76,8 +76,8 @@ def main():
                                 math.sqrt(xx*(yy+1)) +
                                 math.sqrt((xx+1)*yy) +
                                 math.sqrt((xx+1)*(yy+1)))
-            
-        
+
+
         print()
 
         # If we look at the loop nest, the producer doesn't appear
@@ -85,7 +85,7 @@ def main():
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
         print()
-    
+
 
     # Next we'll examine the next simplest option - computing all
     # values required in the producer before computing any of the
@@ -121,14 +121,14 @@ def main():
 
         # Allocate some temporary storage for the producer.
         producer_storage = np.empty((5, 5), dtype=np.float32)
-        
+
 
         # Compute the producer.
         for yy in range(5):
             for xx in range(5):
                 producer_storage[yy][xx] = math.sqrt(xx * yy)
-            
-        
+
+
 
         # Compute the consumer. Skip the prints this time.
         for yy in range(4):
@@ -137,8 +137,8 @@ def main():
                                 producer_storage[yy+1][xx] +
                                 producer_storage[yy][xx+1] +
                                 producer_storage[yy+1][xx+1])
-            
-        
+
+
 
         # Note that consumer was evaluated over a 4x4 box, so Halide
         # automatically inferred that producer was needed over a 5x5
@@ -151,7 +151,7 @@ def main():
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
         print()
-    
+
 
     # Let's compare the two approaches above from a performance
     # perspective.
@@ -230,8 +230,8 @@ def main():
             for py in range(yy, yy + 2):
                 for px in range(5):
                     producer_storage[py-yy][px] = math.sqrt(px * py)
-                
-            
+
+
 
             # Compute a scanline of the consumer.
             for xx in range(4):
@@ -239,8 +239,8 @@ def main():
                                 producer_storage[1][xx] +
                                 producer_storage[0][xx+1] +
                                 producer_storage[1][xx+1])
-            
-        
+
+
 
         # Again, if we print the loop nest, we'll see something very
         # similar to the C above.
@@ -260,7 +260,7 @@ def main():
         # - Loads: 64
         # - Stores: 56
         # - Calls to sqrt: 40
-    
+
 
     # We could also say producer.compute_at(consumer, x), but this
     # would be very similar to full inlining (the default
@@ -305,7 +305,7 @@ def main():
 
         # producer.store_root() implies that storage goes here:
         producer_storage = np.empty((5, 5), dtype=np.float32)
-        
+
         # There's an outer loop over scanlines of consumer:
         for yy in range(4):
 
@@ -321,8 +321,8 @@ def main():
 
                 for px in range(5):
                     producer_storage[py][px] = math.sqrt(px * py)
-                
-            
+
+
 
             # Compute a scanline of the consumer.
             for xx in range(4):
@@ -330,8 +330,8 @@ def main():
                                 producer_storage[yy+1][xx] +
                                 producer_storage[yy][xx+1] +
                                 producer_storage[yy+1][xx+1])
-            
-        
+
+
 
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
@@ -358,18 +358,18 @@ def main():
         if True:
             # Actually store 2 scanlines instead of 5
             producer_storage = np.empty((2, 5), dtype=np.float32)
-            
+
             for yy in range(4):
                 for py in range(yy, yy + 2):
-                
+
                     if y > 0 and py == yy:
                         continue
-    
+
                     for px in range(5):
                         # Stores to producer_storage have their y coordinate bit-masked.
                         producer_storage[py & 1][px] = math.sqrt(px * py)
-                    
-                
+
+
 
                 # Compute a scanline of the consumer.
                 for xx in range(4):
@@ -378,10 +378,10 @@ def main():
                                     producer_storage[(yy+1) & 1][xx] +
                                     producer_storage[yy & 1][xx+1] +
                                     producer_storage[(yy+1) & 1][xx+1])
-                
-            
-        
-    
+
+
+
+
 
     # We can do even better, by leaving the storage outermost, but
     # moving the computation into the innermost loop:
@@ -413,11 +413,11 @@ def main():
         # we can fold it down into a circular buffer of two
         # scanlines:
         producer_storage = np.empty((2, 5), dtype=np.float32)
-        
+
         # For every pixel of the consumer:
         for yy in range(4):
             for xx in range(4):
-            
+
                 # Compute enough of the producer to satisfyy this
                 # pixxel of the consumer, but skip values that we've
                 # alreadyy computed:
@@ -427,15 +427,15 @@ def main():
                     producer_storage[yy & 1][xx+1] = math.sqrt((xx+1)*yy)
                 if xx == 0:
                     producer_storage[(yy+1) & 1][xx] = math.sqrt(xx*(yy+1))
-                    
+
                 producer_storage[(yy+1) & 1][xx+1] = math.sqrt((xx+1)*(yy+1))
 
                 result[yy][xx] = (producer_storage[yy & 1][xx] +
                                 producer_storage[(yy+1) & 1][xx] +
                                 producer_storage[yy & 1][xx+1] +
                                 producer_storage[(yy+1) & 1][xx+1])
-            
-        
+
+
 
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
@@ -450,7 +450,7 @@ def main():
         # - Loads: 48
         # - Stores: 56
         # - Calls to sqrt: 40
-    
+
 
     # So what's the catch? Why not always do
     # producer.store_root().compute_at(consumer, x) for this type of
@@ -525,8 +525,8 @@ def main():
                 for py in range(y_base, y_base + 3):
                     for px in range(x_base + 3):
                         producer_storage[py-y_base][px-x_base] = math.sqrt(px * py)
-                    
-                
+
+
 
                 # Compute this tile of the consumer
                 for y_inner in range(2):
@@ -537,7 +537,7 @@ def main():
                                         producer_storage[yy - y_base + 1][xx - x_base] +
                                         producer_storage[yy - y_base][xx - x_base + 1] +
                                         producer_storage[yy - y_base + 1][xx - x_base + 1])
-                    
+
 
 
         print("Pseudo-code for the schedule:")
@@ -549,7 +549,7 @@ def main():
         # computed independently in parallel, and the redundant work
         # done by each tile isn't so bad once the tiles get large
         # enough.
-    
+
 
     # Let's try a mixed strategy that combines what we have done with
     # splitting, parallelizing, and vectorizing. This is one that
@@ -588,7 +588,7 @@ def main():
         # consumer.trace_stores()
         # producer.trace_stores()
 
-        halide_result = Image(Float(32), consumer.realize(800, 600))
+        halide_result = consumer.realize(800, 600)
 
         # Here's the equivalent (serial) C:
 
@@ -619,7 +619,7 @@ def main():
                         # 4 doesn't divide 801, so push the last vector left (see lesson 05).
                         if x_base > (801 - 4):
                             x_base = 801 - 4
-                            
+
                         # If you're on x86, Halide generates SSE code for this part:
                         xx = [x_base + 0, x_base + 1, x_base + 2, x_base + 3]
                         vec= [math.sqrt(xx[0] * py),
@@ -630,8 +630,8 @@ def main():
                         producer_storage[py & 1][xx[1]] = vec[1]
                         producer_storage[py & 1][xx[2]] = vec[2]
                         producer_storage[py & 1][xx[3]] = vec[3]
-                    
-                
+
+
 
                 # Now compute consumer for this scanline:
                 for x_vec in range(800//4):
@@ -654,14 +654,14 @@ def main():
                         (producer_storage[yy & 1][xx[3]] +
                          producer_storage[(yy+1) & 1][xx[3]] +
                          producer_storage[yy & 1][xx[3]+1] +
-                         producer_storage[(yy+1) & 1][xx[3]+1]) 
+                         producer_storage[(yy+1) & 1][xx[3]+1])
                     ]
 
                     c_result[yy][xx[0]] = vec[0]
                     c_result[yy][xx[1]] = vec[1]
                     c_result[yy][xx[2]] = vec[2]
                     c_result[yy][xx[3]] = vec[3]
-                
+
 
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
@@ -680,11 +680,11 @@ def main():
                     raise Exception("halide_result(%d, %d) = %f instead of %f" % (
                            xx, yy, halide_result(xx, yy), c_result[yy][xx]))
                     return -1
-                
-            
-        
 
-    
+
+
+
+
 
     # This stuff is hard. We ended up in a three-way trade-off
     # between memory bandwidth, redundant work, and
@@ -723,4 +723,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

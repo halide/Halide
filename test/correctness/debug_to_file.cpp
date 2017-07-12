@@ -1,9 +1,19 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
+
+    std::string f_tmp = Internal::get_test_tmp_dir() + "f.tmp";
+    std::string g_tmp = Internal::get_test_tmp_dir() + "g.tmp";
+    std::string h_tmp = Internal::get_test_tmp_dir() + "h.tmp";
+
+    Internal::ensure_no_file_exists(f_tmp);
+    Internal::ensure_no_file_exists(g_tmp);
+    Internal::ensure_no_file_exists(h_tmp);
 
     {
         Func f, g, h, j;
@@ -14,21 +24,26 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.compute_root().gpu_tile(x, y, 1, 1).debug_to_file("f.tmp");
-            g.compute_root().gpu_tile(x, y, 1, 1).debug_to_file("g.tmp");
-            h.compute_root().gpu_tile(x, y, 1, 1).debug_to_file("h.tmp");
+            Var xi, yi;
+            f.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(f_tmp);
+            g.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(g_tmp);
+            h.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(h_tmp);
         } else {
-            f.compute_root().debug_to_file("f.tmp");
-            g.compute_root().debug_to_file("g.tmp");
-            h.compute_root().debug_to_file("h.tmp");
+            f.compute_root().debug_to_file(f_tmp);
+            g.compute_root().debug_to_file(g_tmp);
+            h.compute_root().debug_to_file(h_tmp);
         }
 
-        Image<float> im = h.realize(10, 10, target);
+        Buffer<float> im = h.realize(10, 10, target);
     }
 
-    FILE *f = fopen("f.tmp", "rb");
-    FILE *g = fopen("g.tmp", "rb");
-    FILE *h = fopen("h.tmp", "rb");
+    Internal::assert_file_exists(f_tmp);
+    Internal::assert_file_exists(g_tmp);
+    Internal::assert_file_exists(h_tmp);
+
+    FILE *f = fopen(f_tmp.c_str(), "rb");
+    FILE *g = fopen(g_tmp.c_str(), "rb");
+    FILE *h = fopen(h_tmp.c_str(), "rb");
     assert(f && g && h);
 
     int header[5];

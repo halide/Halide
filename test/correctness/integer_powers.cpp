@@ -48,16 +48,16 @@ int main(int argc, char **argv) {
         exact_sin(x) = sin(xf);
 
         // Evaluate from 0 to 5
-        Image<float> approx_result_1 = approx_sin_1.realize(256*5);
-        Image<float> approx_result_2 = approx_sin_2.realize(256*5);
-        Image<float> exact_result = exact_sin.realize(256*5);
+        Buffer<float> approx_result_1 = approx_sin_1.realize(256*5);
+        Buffer<float> approx_result_2 = approx_sin_2.realize(256*5);
+        Buffer<float> exact_result = exact_sin.realize(256*5);
 
         Func rms_1, rms_2;
         RDom r(exact_result);
         rms_1() = sqrt(sum(pow(approx_result_1(r) - exact_result(r), 2), "rms_1_sum"));
         rms_2() = sqrt(sum(pow(approx_result_2(r) - exact_result(r), 2), "rms_2_sum"));
-        Image<float> error_1 = rms_1.realize();
-        Image<float> error_2 = rms_2.realize();
+        Buffer<float> error_1 = rms_1.realize();
+        Buffer<float> error_2 = rms_2.realize();
 
         if (error_1(0) > 0.0001 || error_2(0) > 0.0001) {
             printf("Approximate sin errors too large: %1.20f %1.20f\n", error_1(0), error_2(0));
@@ -90,16 +90,16 @@ int main(int argc, char **argv) {
         exact_exp(x) = exp(1.0f/xf);
 
         // Evaluate from 0 to 5
-        Image<float> approx_result_1 = approx_exp_1.realize(256*5);
-        Image<float> approx_result_2 = approx_exp_2.realize(256*5);
-        Image<float> exact_result = exact_exp.realize(256*5);
+        Buffer<float> approx_result_1 = approx_exp_1.realize(256*5);
+        Buffer<float> approx_result_2 = approx_exp_2.realize(256*5);
+        Buffer<float> exact_result = exact_exp.realize(256*5);
 
         Func rms_1, rms_2;
         RDom r(exact_result);
         rms_1() = sqrt(sum(pow(approx_result_1(r) - exact_result(r), 2), "rms_1_neg_sum"));
         rms_2() = sqrt(sum(pow(approx_result_2(r) - exact_result(r), 2), "rms_2_neg_sum"));
-        Image<float> error_1 = rms_1.realize();
-        Image<float> error_2 = rms_2.realize();
+        Buffer<float> error_1 = rms_1.realize();
+        Buffer<float> error_2 = rms_2.realize();
 
         if (error_1(0) > 0.0001 || error_2(0) > 0.0001) {
             printf("Approximate exp errors too large: %1.20f %1.20f\n", error_1(0), error_2(0));

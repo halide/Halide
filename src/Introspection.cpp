@@ -712,7 +712,6 @@ public:
 
     // Look up n stack frames and get the source location as filename:line
     std::string get_source_location() {
-
         debug(5) << "Finding source location\n";
 
         if (!source_lines.size()) {
@@ -884,7 +883,7 @@ private:
 
         obj = maybe_obj.get().getBinary();
 
-        #elif LLVM_VERSION >= 36
+        #else
 
         llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile>> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
@@ -895,31 +894,11 @@ private:
         }
 
         obj = maybe_obj.get().getBinary();
-
-        #elif LLVM_VERSION >= 35
-
-        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile>> maybe_obj =
-            llvm::object::ObjectFile::createObjectFile(binary);
-
-        if (!maybe_obj) {
-            debug(1) << "Failed to load binary:" << binary << "\n";
-            return;
-        }
-
-        obj = maybe_obj.get().get();
-
-        #else
-        obj = llvm::object::ObjectFile::createObjectFile(binary);
         #endif
 
         if (obj) {
             working = true;
             parse_object_file(obj);
-
-            #if LLVM_VERSION < 35
-            // It's not memory-managed in older LLVMs.
-            delete obj;
-            #endif
         } else {
             debug(1) << "Could not load object file: " << binary << "\n";
             working = false;
@@ -936,14 +915,8 @@ private:
         std::string prefix = ".";
 #endif
 
-#if LLVM_VERSION > 34
         for (llvm::object::section_iterator iter = obj->section_begin();
              iter != obj->section_end(); ++iter) {
-#else
-        llvm::error_code err;
-        for (llvm::object::section_iterator iter = obj->begin_sections();
-             iter != obj->end_sections(); iter.increment(err)) {
-#endif
             llvm::StringRef name;
             iter->getName(name);
             debug(2) << "Section: " << name.str() << "\n";
@@ -1585,7 +1558,7 @@ private:
 
                 } else if (fmt.tag == tag_function) {
                     if (fmt.has_children) {
-                        func_stack.push_back(std::make_pair(func, stack_depth));
+                        func_stack.push_back({ func, stack_depth });
                     } else {
                         functions.push_back(func);
                     }
@@ -1594,7 +1567,7 @@ private:
                            fmt.tag == tag_array_type ||
                            fmt.tag == tag_base_type) {
                     if (fmt.has_children) {
-                        type_stack.push_back(std::make_pair(type_info, stack_depth));
+                        type_stack.push_back({ type_info, stack_depth });
                     } else {
                         types.push_back(type_info);
                     }
@@ -1608,11 +1581,11 @@ private:
                     if (namespace_name.empty()) {
                         namespace_name = "{anonymous}";
                     }
-                    namespace_stack.push_back(std::make_pair(namespace_name, stack_depth));
+                    namespace_stack.push_back({ namespace_name, stack_depth });
                 } else if ((fmt.tag == tag_inlined_subroutine ||
                             fmt.tag == tag_lexical_block) &&
                            live_ranges.size() && fmt.has_children) {
-                    live_range_stack.push_back(std::make_pair(live_ranges, stack_depth));
+                    live_range_stack.push_back({ live_ranges, stack_depth });
                 }
             }
         }

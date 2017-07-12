@@ -1,9 +1,10 @@
 #include "Halide.h"
 #include <cstdio>
 #include <algorithm>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 Var x("x"), y("y");
 
@@ -143,7 +144,7 @@ int main(int argc, char **argv) {
 
     const int N = 1 << 10;
 
-    Image<int> data(N);
+    Buffer<int> data(N);
     for (int i = 0; i < N; i++) {
         data(i) = rand() & 0xfffff;
     }
@@ -154,7 +155,7 @@ int main(int argc, char **argv) {
     f.bound(x, 0, N);
     f.compile_jit();
     printf("Running...\n");
-    Image<int> bitonic_sorted(N);
+    Buffer<int> bitonic_sorted(N);
     f.realize(bitonic_sorted);
     double t_bitonic = benchmark(1, 10, [&]() {
         f.realize(bitonic_sorted);
@@ -165,13 +166,13 @@ int main(int argc, char **argv) {
     f.bound(x, 0, N);
     f.compile_jit();
     printf("Running...\n");
-    Image<int> merge_sorted(N);
+    Buffer<int> merge_sorted(N);
     f.realize(merge_sorted);
     double t_merge = benchmark(1, 10, [&]() {
         f.realize(merge_sorted);
     });
 
-    Image<int> correct(N);
+    Buffer<int> correct(N);
     for (int i = 0; i < N; i++) {
         correct(i) = data(i);
     }

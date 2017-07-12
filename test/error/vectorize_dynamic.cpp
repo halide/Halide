@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x, y;
 
-    Image<int> input(5, 5);
+    Buffer<int> input(5, 5);
     Func f;
     f(x, y) = input(x, y) * 2;
     Var xo, xi;
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     // Should result in an error
     vector_size.set(4);
-    Image<int> out = f.realize(5, 5);
+    Buffer<int> out = f.realize(5, 5);
 
     printf("Success!\n");
     return 0;

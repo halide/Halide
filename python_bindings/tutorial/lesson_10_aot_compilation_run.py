@@ -104,8 +104,8 @@ def main():
         # uses. For the 8-bit image we use in this test it's one.
         input_buf.elem_size = output_buf.elem_size = 1
     else:
-        input_buf = Image(input).buffer()
-        output_buf = Image(output).buffer()
+        input_buf = Buffer(input).buffer()
+        output_buf = Buffer(output).buffer()
 
 
     # To avoid repeating all the boilerplate above, We recommend you
@@ -182,7 +182,7 @@ def main():
 
         uint8_p_t = ctypes.POINTER(ctypes.c_ubyte)
         # host_p0 is the complicated way...
-        #host_p0 = image_to_ndarray(Image(UInt(8), b)).ctypes.data
+        #host_p0 = buffer_to_ndarray(Buffer(UInt(8), b)).ctypes.data
         # host_ptr_as_int is the easy way
         host_p = buffer.host_ptr_as_int()
         bb.host = ctypes.cast(host_p, uint8_p_t)

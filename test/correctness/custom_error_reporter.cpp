@@ -4,6 +4,19 @@
 
 using namespace Halide;
 
+int evaluated = 0;
+
+int should_be_evaluated() {
+    printf("Should be evaluated\n");
+    evaluated += 1;
+    return 0;
+}
+
+int should_never_be_evaluated() {
+    printf("Should never be evaluated\n");
+    exit(-1);
+    return 0;
+}
 
 class MyCustomErrorReporter : public Halide::CompileTimeErrorReporter {
 public:
@@ -21,8 +34,8 @@ public:
         printf("Custom error: %s\n", msg);
         errors_occurred++;
 
-        if (warnings_occurred != 1 || errors_occurred != 1) {
-            printf("There should have been 1 warning and 1 error\n");
+        if (warnings_occurred != 1 || errors_occurred != 1 || evaluated != 1) {
+            printf("There should have been 1 warning and 1 error and 1 evaluated assertion argument\n");
             exit(-1);
         }
 
@@ -34,13 +47,17 @@ public:
 
 int main(int argc, char **argv) {
 
+    // Use argc here so that the compiler cannot optimize it away:
+    // we know argc > 0 always, but compiler (probably) doesn't.
+    _halide_user_assert(argc > 0) << should_never_be_evaluated();
+
     MyCustomErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
-    Halide::Internal::ErrorReport("", 0, nullptr, false, true, true, false) << "Here is a warning.";
+    Halide::Internal::ErrorReport("", 0, nullptr, Halide::Internal::ErrorReport::User | Halide::Internal::ErrorReport::Warning) << "Here is a warning.";
 
     // This call should not return.
-    Halide::Internal::ErrorReport("", 0, nullptr, false, true, false, false) << "Here is an error.";
+    _halide_user_assert(argc == 0) << should_be_evaluated();
 
     printf("CompileTimeErrorReporter::error() must not return.\n");
     return -1;

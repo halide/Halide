@@ -13,7 +13,7 @@ void h_assert(bool condition, const char* msg) {
 }
 
 int main() {
-    Halide::Image<float16_t> simple(/*x=*/10, /*y=*/3);
+    Halide::Buffer<float16_t> simple(/*x=*/10, /*y=*/3);
 
     h_assert(sizeof(float16_t) == 2, "float16_t has invalid size");
 
@@ -38,19 +38,6 @@ int main() {
         for (int y = simple.min(1); y < simple.extent(1); ++y) {
             h_assert(simple(x, y) == zeroPointTwoFive, "Invalid value read back");
             h_assert(simple(x, y).to_bits() == 0x3400, "Bit pattern incorrect");
-        }
-    }
-
-    // Check we can also access via the raw buffer
-    buffer_t* rawImage = simple.raw_buffer();
-    for (int x = simple.min(0); x < simple.extent(0); ++x) {
-        for (int y = simple.min(1); y < simple.extent(1); ++y) {
-            uint8_t* loc = rawImage->host +
-                sizeof(float16_t)*((x - rawImage->min[0])*rawImage->stride[0] +
-                                   (y - rawImage->min[1])*rawImage->stride[1]);
-            float16_t* pixel = (float16_t*) loc;
-            h_assert(*pixel == zeroPointTwoFive, "Failed to read value back via buffer_t");
-            h_assert(pixel->to_bits() == 0x3400, "Bit pattern incorrect via buffer_t");
         }
     }
 

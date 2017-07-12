@@ -10,7 +10,7 @@
 # "lesson_15_generate".
 
 # To run this script:
-# bash lesson_15_generators_build.sh
+# bash lesson_15_generators_usage.sh
 
 # First we define a helper function that checks that a file exists
 check_file_exists()
@@ -29,7 +29,7 @@ check_symbol()
     SYM=$2
     if !(nm $FILE | grep $SYM > /dev/null); then
         echo "$SYM not found in $FILE"
-	exit -1
+    exit -1
     fi
 }
 
@@ -155,14 +155,14 @@ check_symbol      my_second_generator_3.a my_second_generator_3
 # files.
 
 echo "The halide runtime:"
-nm my_second_generator_1.a | grep "[SW] _\?halide_"
+nm my_second_generator_1.a | grep "[SWT] _\?halide_"
 
 # Let's define some functions to check that the runtime exists in a file.
 check_runtime()
 {
     if !(nm $1 | grep "[TSW] _\?halide_" > /dev/null); then
         echo "Halide runtime not found in $1"
-	exit -1
+    exit -1
     fi
 }
 
@@ -170,7 +170,7 @@ check_no_runtime()
 {
     if nm $1 | grep "[TSW] _\?halide_" > /dev/null; then
         echo "Halide runtime found in $1"
-	exit -1
+    exit -1
     fi
 }
 

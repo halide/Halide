@@ -1,0 +1,118 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure("2") do |config|
+  # The most common configuration options are documented and commented below.
+  # For a complete reference, please see the online documentation at
+  # https://docs.vagrantup.com.
+
+  # Every Vagrant development environment requires a box. You can search for
+  # boxes at https://atlas.hashicorp.com/search.
+  config.vm.define "u14", autostart: false do |u14|
+    u14.vm.box = "bento/ubuntu-14.04"
+    u14.vm.provision "shell", inline: <<-SHELL
+        # Create and start headless X service using upstart
+        cp /vagrant/provision/etc/init/xdummy.conf /etc/init/
+        service xdummy start
+    SHELL
+  end
+  config.vm.define "u16", primary: true do |u16|
+    u16.vm.box = "bento/ubuntu-16.04"
+    u16.vm.provision "shell", inline: <<-SHELL
+        # Create and start headless X service using systemd
+        cp /vagrant/provision/etc/systemd/system/xdummy.service /etc/systemd/system/
+        systemctl start xdummy
+    SHELL
+  end
+
+  config.vm.boot_timeout = 600
+
+
+  # Disable automatic box update checking. If you disable this, then
+  # boxes will only be checked for updates when the user runs
+  # `vagrant box outdated`. This is not recommended.
+  # config.vm.box_check_update = false
+
+  # Create a forwarded port mapping which allows access to a specific port
+  # within the machine from a port on the host machine. In the example below,
+  # accessing "localhost:8080" will access port 80 on the guest machine.
+  # config.vm.network "forwarded_port", guest: 80, host: 8080
+
+  # Create a private network, which allows host-only access to the machine
+  # using a specific IP.
+  # config.vm.network "private_network", ip: "192.168.33.10"
+
+  # Create a public network, which generally matched to bridged network.
+  # Bridged networks make the machine appear as another physical device on
+  # your network.
+  # config.vm.network "public_network"
+
+  # Share an additional folder to the guest VM. The first argument is
+  # the path on the host to the actual folder. The second argument is
+  # the path on the guest to mount the folder. And the optional third
+  # argument is a set of non-required options.
+  # config.vm.synced_folder "../data", "/vagrant_data"
+  config.vm.synced_folder "../../..", "/Halide"
+
+  # Provider-specific configuration so you can fine-tune various
+  # backing providers for Vagrant. These expose provider-specific options.
+  # Example for VirtualBox:
+  #
+  config.vm.provider "virtualbox" do |vb|
+    # Display the VirtualBox GUI when booting the machine
+    vb.gui = false
+
+    # Customize the amount of memory on the VM:
+    vb.memory = "2048"
+  end
+  #
+  # View the documentation for the provider you are using for more
+  # information on available options.
+
+  # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
+  # such as FTP and Heroku are also available. See the documentation at
+  # https://docs.vagrantup.com/v2/push/atlas.html for more information.
+  # config.push.define "atlas" do |push|
+  #   push.app = "YOUR_ATLAS_USERNAME/YOUR_APPLICATION_NAME"
+  # end
+
+  # Enable provisioning with a shell script. Additional provisioners such as
+  # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
+  # documentation for more information about their specific syntax and use.
+  config.vm.provision "shell", inline: <<-SHELL
+
+    # Global environment variables, both for system purposes (PATH, LC_ALL)
+    # and for convenience of building and running Halide opengl tests
+    # (DISPLAY, LLVM_CONFIG, CLANG, HL_JIT_TARGET)
+    cp /vagrant/provision/etc/environment /etc/environment
+
+    apt-get update
+
+    # Install resources for headless X service (final provisioning of the service is machine-specific)
+    apt-get install -y xserver-xorg-video-dummy
+    cp /vagrant/provision/usr/share/X11/xorg.conf.d/xdummy.conf /usr/share/X11/xorg.conf.d/xdummy.conf
+
+    # Install llvm-3.8 as llvm
+    apt-get install -y llvm-3.8 llvm-3.8-dev clang-3.8 lldb-3.8
+    for ll in /usr/bin/*-3.8 ; do ln -s -f $ll `echo $ll | sed -e s/-3.8//` ; done
+
+    # Build OpenGL (mesa) using software driver (gallium / llvmpipe). Can't
+    # use the prebuilt mesa packages because they expect video hardware drivers.
+    apt-get install -y build-essential scons python-mako flex bison zlib1g-dev libudev-dev pkg-config libx11-dev libxext-dev libxdamage-dev x11proto-gl-dev libx11-xcb-dev
+    cd /usr/local/src
+    test -f mesa-12.0.2.tar.xz || wget -q https://mesa.freedesktop.org/archive/12.0.2/mesa-12.0.2.tar.xz
+    test -d mesa-12.0.2 || tar xkf mesa-12.0.2.tar.xz
+    cd mesa-12.0.2
+    scons build=release texture_float=yes libgl-xlib
+    ln -s -f `pwd`/include/GL* /usr/local/include/
+    cp `pwd`/build/linux-x86_64/gallium/targets/libgl-xlib/libGL.* /usr/local/lib
+    ldconfig
+
+    # Machine-specific provisioning will happpen next
+  SHELL
+
+end

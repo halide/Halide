@@ -86,7 +86,7 @@ def main():
         assert f1.output_types()[0] == UInt(8)
 
         f2 = Func("f2")
-        f2[x] = Tuple(x, sin(x))
+        f2[x] = (x, sin(x))
         assert f2.output_types()[0] == Int(32) and \
                f2.output_types()[1] == Float(32)
 

@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     // brightens an image.
 
     // First we'll load the input image we wish to brighten.
-    Halide::Image<uint8_t> input = load_image("images/rgb.png");
+    Halide::Buffer<uint8_t> input = load_image("images/rgb.png");
 
     // See figures/lesson_02_input.jpg for a smaller version.
 
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     // smaller size. If we request a larger size Halide will throw an
     // error at runtime telling us we're trying to read out of bounds
     // on the input image.
-    Halide::Image<uint8_t> output =
+    Halide::Buffer<uint8_t> output =
         brighter.realize(input.width(), input.height(), input.channels());
 
     // Save the output for inspection. It should look like a bright parrot.

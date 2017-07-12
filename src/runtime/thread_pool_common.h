@@ -59,9 +59,28 @@ struct work_queue_t {
 };
 WEAK work_queue_t work_queue;
 
-WEAK int default_do_task(void *user_context, halide_task_t f, int idx,
-                        uint8_t *closure) {
-    return f(user_context, idx, closure);
+WEAK int clamp_num_threads(int desired_num_threads) {
+    if (desired_num_threads > MAX_THREADS) {
+        desired_num_threads = MAX_THREADS;
+    } else if (desired_num_threads < 1) {
+        desired_num_threads = 1;
+    }
+    return desired_num_threads;
+}
+
+WEAK int default_desired_num_threads() {
+    int desired_num_threads = 0;
+    char *threads_str = getenv("HL_NUM_THREADS");
+    if (!threads_str) {
+        // Legacy name for HL_NUM_THREADS
+        threads_str = getenv("HL_NUMTHREADS");
+    }
+    if (threads_str) {
+        desired_num_threads = atoi(threads_str);
+    } else {
+        desired_num_threads = halide_host_cpu_count();
+    }
+    return desired_num_threads;
 }
 
 WEAK void worker_thread_already_locked(work *owned_job) {
@@ -130,15 +149,30 @@ WEAK void worker_thread_already_locked(work *owned_job) {
     }
 }
 
-
 WEAK void worker_thread(void *) {
     halide_mutex_lock(&work_queue.mutex);
     worker_thread_already_locked(NULL);
     halide_mutex_unlock(&work_queue.mutex);
 }
 
-WEAK int default_do_par_for(void *user_context, halide_task_t f,
-                            int min, int size, uint8_t *closure) {
+}}}  // namespace Halide::Runtime::Internal
+
+using namespace Halide::Runtime::Internal;
+
+extern "C" {
+
+WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
+                                uint8_t *closure) {
+    return f(user_context, idx, closure);
+}
+
+WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
+                                   int min, int size, uint8_t *closure) {
+    // Our for loops are expected to gracefully handle sizes <= 0
+    if (size <= 0) {
+        return 0;
+    }
+
     // Grab the lock. If it hasn't been initialized yet, then the
     // field will be zero-initialized because it's a static global.
     halide_mutex_lock(&work_queue.mutex);
@@ -154,22 +188,9 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
         // can also mess with this value, but only when the work queue
         // is locked.
         if (!work_queue.desired_num_threads) {
-            char *threads_str = getenv("HL_NUM_THREADS");
-            if (!threads_str) {
-                // Legacy name for HL_NUM_THREADS
-                threads_str = getenv("HL_NUMTHREADS");
-            }
-            if (threads_str) {
-                work_queue.desired_num_threads = atoi(threads_str);
-            } else {
-                work_queue.desired_num_threads = halide_host_cpu_count();
-            }
+            work_queue.desired_num_threads = default_desired_num_threads();
         }
-        if (work_queue.desired_num_threads > MAX_THREADS) {
-            work_queue.desired_num_threads = MAX_THREADS;
-        } else if (work_queue.desired_num_threads < 1) {
-            work_queue.desired_num_threads = 1;
-        }
+        work_queue.desired_num_threads = clamp_num_threads(work_queue.desired_num_threads);
         work_queue.threads_created = 0;
 
         // Everyone starts on the a team.
@@ -232,19 +253,19 @@ WEAK int default_do_par_for(void *user_context, halide_task_t f,
     return job.exit_status;
 }
 
-}}} // namespace Halide::Runtime::Internal
-
-using namespace Halide::Runtime::Internal;
-
-extern "C" {
-
 WEAK int halide_set_num_threads(int n) {
+    if (n < 0) {
+        halide_error(NULL, "halide_set_num_threads: must be >= 0.");
+    }
     // Don't make this an atomic swap - we don't want to be changing
     // the desired number of threads while another thread is in the
     // middle of a sequence of non-atomic operations.
     halide_mutex_lock(&work_queue.mutex);
+    if (n == 0) {
+        n = default_desired_num_threads();
+    }
     int old = work_queue.desired_num_threads;
-    work_queue.desired_num_threads = n;
+    work_queue.desired_num_threads = clamp_num_threads(n);
     halide_mutex_unlock(&work_queue.mutex);
     return old;
 }

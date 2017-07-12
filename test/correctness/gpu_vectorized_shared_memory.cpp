@@ -20,11 +20,11 @@ int main(int argc, char **argv) {
 
         Var xo, xi;
         h.split(x, xo, xi, 16).vectorize(xi, 4).gpu_threads(xi).gpu_blocks(xo);
-        g.compute_at(h, Var::gpu_blocks());
+        g.compute_at(h, xo);
         g.split(x, xo, xi, 4).gpu_threads(xo).vectorize(xi);
         g.update().split(x, xo, xi, 4).gpu_threads(xo).vectorize(xi);
 
-        Image<int> out = h.realize(512);
+        Buffer<int> out = h.realize(512);
 
         for (int x = 0; x < out.width(); x++) {
             int correct = 4*x + 90;

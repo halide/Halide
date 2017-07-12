@@ -4,16 +4,12 @@
 
 using namespace Halide;
 
-Expr min3(Expr a, Expr b, Expr c) {
-    return min(min(a, b), c);
-}
-
 int main(int argc, char **argv) {
     Var x, y;
 
     const int size = 32;
 
-    Image<float> noise(size, size);
+    Buffer<float> noise(size, size);
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
             noise(j,i) = (float)rand() / RAND_MAX;
@@ -30,12 +26,12 @@ int main(int argc, char **argv) {
     Expr xm = max(r.x - 1, 0), xp = min(r.x + 1, noise.width() - 1);
     energy(x, y) = 0.0f;
     energy(x, 0) = noise(x, 0); // The first row is just the first row of the input.
-    energy(r.x, r.y) = noise(r.x, r.y) + min3(energy(xm,  r.y - 1),
-                                              energy(r.x, r.y - 1),
-                                              energy(xp,  r.y - 1));
+    energy(r.x, r.y) = noise(r.x, r.y) + min(energy(xm, r.y - 1),
+                                             energy(r.x, r.y - 1),
+                                             energy(xp, r.y - 1));
 
-    Image<float> im_energy = energy.realize(size,size);
-    Image<float> ref_energy(size, size);
+    Buffer<float> im_energy = energy.realize(size,size);
+    Buffer<float> ref_energy(size, size);
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
             int xm = std::max(x - 1, 0);

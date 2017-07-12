@@ -4,18 +4,10 @@
 #include <string.h>
 #include <cmath>
 #include <algorithm>
+#include <future>
+#include <random>
 
 using namespace Halide;
-
-#ifdef _MSC_VER
-bool is_finite(double x) {
-    return _finite(x);
-}
-#else
-bool is_finite(double x) {
-    return std::isfinite(x);
-}
-#endif
 
 // Make some functions for turning types into strings
 template<typename A>
@@ -120,7 +112,7 @@ struct with_unsigned<int64_t> {
 
 
 template<typename A>
-bool test(int lanes) {
+bool test(int lanes, int seed) {
     const int W = 320;
     const int H = 16;
 
@@ -128,10 +120,14 @@ bool test(int lanes) {
 
     printf("Testing %sx%d\n", string_of_type<A>(), lanes);
 
-    Image<A> input(W+16, H+16);
+    // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
+    std::mt19937 rng(seed);
+    std::uniform_int_distribution<> dis(0, 1023);
+
+    Buffer<A> input(W+16, H+16);
     for (int y = 0; y < H+16; y++) {
         for (int x = 0; x < W+16; x++) {
-            input(x, y) = (A)((rand() % 1024)*0.125 + 1.0);
+            input(x, y) = (A)(dis(rng)*0.125 + 1.0);
             if ((A)(-1) < 0) {
                 input(x, y) -= 10;
             }
@@ -144,7 +140,7 @@ bool test(int lanes) {
     Func f1;
     f1(x, y) = input(x, y) + input(x+1, y);
     f1.vectorize(x, lanes);
-    Image<A> im1 = f1.realize(W, H);
+    Buffer<A> im1 = f1.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -161,7 +157,7 @@ bool test(int lanes) {
     Func f2;
     f2(x, y) = input(x, y) - input(x+1, y);
     f2.vectorize(x, lanes);
-    Image<A> im2 = f2.realize(W, H);
+    Buffer<A> im2 = f2.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -178,7 +174,7 @@ bool test(int lanes) {
     Func f3;
     f3(x, y) = input(x, y) * input(x+1, y);
     f3.vectorize(x, lanes);
-    Image<A> im3 = f3.realize(W, H);
+    Buffer<A> im3 = f3.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -195,7 +191,7 @@ bool test(int lanes) {
     Func f4;
     f4(x, y) = select(input(x, y) > input(x+1, y), input(x+2, y), input(x+3, y));
     f4.vectorize(x, lanes);
-    Image<A> im4 = f4.realize(W, H);
+    Buffer<A> im4 = f4.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -215,7 +211,7 @@ bool test(int lanes) {
     Expr yCoord = clamp(cast<int>(input(x+1, y)), 0, H-1);
     f5(x, y) = input(xCoord, yCoord);
     f5.vectorize(x, lanes);
-    Image<A> im5 = f5.realize(W, H);
+    Buffer<A> im5 = f5.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -240,7 +236,7 @@ bool test(int lanes) {
     Func f5a;
     f5a(x, y) = input(x, y)*cast<A>(2);
     f5a.vectorize(y, lanes);
-    Image<A> im5a = f5a.realize(W, H);
+    Buffer<A> im5a = f5a.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -261,7 +257,7 @@ bool test(int lanes) {
 
     f6.update().vectorize(x, lanes);
 
-    Image<int> im6 = f6.realize(W, H);
+    Buffer<int> im6 = f6.realize(W, H);
 
     for (int x = 0; x < W; x++) {
         int yCoord = x*x;
@@ -281,7 +277,7 @@ bool test(int lanes) {
     Func f7;
     f7(x, y) = clamp(input(x, y), cast<A>(10), cast<A>(20));
     f7.vectorize(x, lanes);
-    Image<A> im7 = f7.realize(W, H);
+    Buffer<A> im7 = f7.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -297,7 +293,7 @@ bool test(int lanes) {
     Func f8;
     f8(x, y) = hypot(1.1f, cast<float>(input(x, y)));
     f8.vectorize(x, lanes);
-    Image<float> im8 = f8.realize(W, H);
+    Buffer<float> im8 = f8.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -315,7 +311,7 @@ bool test(int lanes) {
     Func f9;
     f9(x, y) = input(x, y) / clamp(input(x+1, y), cast<A>(1), cast<A>(3));
     f9.vectorize(x, lanes);
-    Image<A> im9 = f9.realize(W, H);
+    Buffer<A> im9 = f9.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -337,25 +333,25 @@ bool test(int lanes) {
     // Divide by small constants
     if (verbose) printf("Dividing by small constants\n");
     for (int c = 2; c < 16; c++) {
-	Func f10;
-	f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
-	f10.vectorize(x, lanes);
-	Image<A> im10 = f10.realize(W, H);
+        Func f10;
+        f10(x, y) = (input(x, y)) / cast<A>(Expr(c));
+        f10.vectorize(x, lanes);
+        Buffer<A> im10 = f10.realize(W, H);
 
-	for (int y = 0; y < H; y++) {
-	    for (int x = 0; x < W; x++) {
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
                 A correct = divide(input(x, y), (A)c);
 
                 if (!close_enough(im10(x, y), correct)) {
-		    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
-			   (double)(input(x, y)), c,
-			   (double)(im10(x, y)),
-			   (double)(correct));
-		    printf("Error when dividing by %d\n", c);
-		    return false;
-		}
-	    }
-	}
+                    printf("im10(%d, %d) = %f/%d = %f instead of %f\n", x, y,
+                           (double)(input(x, y)), c,
+                           (double)(im10(x, y)),
+                           (double)(correct));
+                    printf("Error when dividing by %d\n", c);
+                    return false;
+                }
+            }
+        }
     }
 
     // Interleave
@@ -363,7 +359,7 @@ bool test(int lanes) {
     Func f11;
     f11(x, y) = select((x%2)==0, input(x/2, y), input(x/2, y+1));
     f11.vectorize(x, lanes);
-    Image<A> im11 = f11.realize(W, H);
+    Buffer<A> im11 = f11.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -380,7 +376,7 @@ bool test(int lanes) {
     Func f12;
     f12(x, y) = input(W-1-x, H-1-y);
     f12.vectorize(x, lanes);
-    Image<A> im12 = f12.realize(W, H);
+    Buffer<A> im12 = f12.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -397,7 +393,7 @@ bool test(int lanes) {
     Func f13;
     f13(x, y) = input(x+3, y);
     f13.vectorize(x, lanes);
-    Image<A> im13 = f13.realize(W, H);
+    Buffer<A> im13 = f13.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -413,7 +409,7 @@ bool test(int lanes) {
         if (verbose) printf("Absolute value\n");
         Func f14;
         f14(x, y) = cast<A>(abs(input(x, y)));
-        Image<A> im14 = f14.realize(W, H);
+        Buffer<A> im14 = f14.realize(W, H);
 
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
@@ -434,8 +430,8 @@ bool test(int lanes) {
         f16(x, y) = cast<int>(input(x, y)) * input(x, y+2) - cast<int>(input(x, y+1)) * input(x, y+3);
         f15.vectorize(x, lanes);
         f16.vectorize(x, lanes);
-        Image<int32_t> im15 = f15.realize(W, H);
-        Image<int32_t> im16 = f16.realize(W, H);
+        Buffer<int32_t> im15 = f15.realize(W, H);
+        Buffer<int32_t> im16 = f16.realize(W, H);
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 int correct15 = input(x, y)*input(x, y+2) + input(x, y+1)*input(x, y+3);
@@ -462,12 +458,12 @@ bool test(int lanes) {
         f18(x, y) = fast_log(a);
         f19(x, y) = fast_exp(b);
         f20(x, y) = fast_pow(a, b/16.0f);
-        Image<float> im15 = f15.realize(W, H);
-        Image<float> im16 = f16.realize(W, H);
-        Image<float> im17 = f17.realize(W, H);
-        Image<float> im18 = f18.realize(W, H);
-        Image<float> im19 = f19.realize(W, H);
-        Image<float> im20 = f20.realize(W, H);
+        Buffer<float> im15 = f15.realize(W, H);
+        Buffer<float> im16 = f16.realize(W, H);
+        Buffer<float> im17 = f17.realize(W, H);
+        Buffer<float> im18 = f18.realize(W, H);
+        Buffer<float> im19 = f19.realize(W, H);
+        Buffer<float> im20 = f20.realize(W, H);
 
         int worst_log_mantissa = 0;
         int worst_exp_mantissa = 0;
@@ -510,15 +506,15 @@ bool test(int lanes) {
                     worst_pow_mantissa = std::max(worst_pow_mantissa, pow_mantissa_error);
                 }
 
-                if (is_finite(correct_log)) {
+                if (std::isfinite(correct_log)) {
                     worst_fast_log_mantissa = std::max(worst_fast_log_mantissa, fast_log_mantissa_error);
                 }
 
-                if (is_finite(correct_exp)) {
+                if (std::isfinite(correct_exp)) {
                     worst_fast_exp_mantissa = std::max(worst_fast_exp_mantissa, fast_exp_mantissa_error);
                 }
 
-                if (is_finite(correct_pow) && a > 0) {
+                if (std::isfinite(correct_pow) && a > 0) {
                     worst_fast_pow_mantissa = std::max(worst_fast_pow_mantissa, fast_pow_mantissa_error);
                 }
 
@@ -535,15 +531,15 @@ bool test(int lanes) {
                     printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
                 }
-                if (is_finite(correct_log) && fast_log_mantissa_error > 64) {
+                if (std::isfinite(correct_log) && fast_log_mantissa_error > 64) {
                     printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, im18(x, y), correct_log, correct_log_mantissa, fast_log_mantissa);
                 }
-                if (is_finite(correct_exp) && fast_exp_mantissa_error > 64) {
+                if (std::isfinite(correct_exp) && fast_exp_mantissa_error > 64) {
                     printf("fast_exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            b, im19(x, y), correct_exp, correct_exp_mantissa, fast_exp_mantissa);
                 }
-                if (a >= 0 && is_finite(correct_pow) && fast_pow_mantissa_error > 128) {
+                if (a >= 0 && std::isfinite(correct_pow) && fast_pow_mantissa_error > 128) {
                     printf("fast_pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa);
                 }
@@ -571,7 +567,7 @@ bool test(int lanes) {
         weight = cast(UInt(t.bits(), t.lanes()), max(0, weight));
     }
     f21(x, y) = lerp(input(x, y), input(x+1, y), weight);
-    Image<A> im21 = f21.realize(W, H);
+    Buffer<A> im21 = f21.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -604,7 +600,7 @@ bool test(int lanes) {
     Func f22;
     f22(x, y) = absd(input(x, y), input(x+1, y));
     f22.vectorize(x, lanes);
-    Image<typename with_unsigned<A>::type> im22 = f22.realize(W, H);
+    Buffer<typename with_unsigned<A>::type> im22 = f22.realize(W, H);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -621,18 +617,26 @@ bool test(int lanes) {
 
 int main(int argc, char **argv) {
 
-    bool ok = true;
+    int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
+    std::cout << "vector_math test seed: " << seed << std::endl;
 
     // Only native vector widths - llvm doesn't handle others well
-    ok = ok && test<float>(4);
-    ok = ok && test<float>(8);
-    ok = ok && test<double>(2);
-    ok = ok && test<uint8_t>(16);
-    ok = ok && test<int8_t>(16);
-    ok = ok && test<uint16_t>(8);
-    ok = ok && test<int16_t>(8);
-    ok = ok && test<uint32_t>(4);
-    ok = ok && test<int32_t>(4);
+    Halide::Internal::ThreadPool<bool> pool;
+    std::vector<std::future<bool>> futures;
+    futures.push_back(pool.async(test<float>, 4, seed));
+    futures.push_back(pool.async(test<float>, 8, seed));
+    futures.push_back(pool.async(test<double>, 2, seed));
+    futures.push_back(pool.async(test<uint8_t>, 16, seed));
+    futures.push_back(pool.async(test<int8_t>, 16, seed));
+    futures.push_back(pool.async(test<uint16_t>, 8, seed));
+    futures.push_back(pool.async(test<int16_t>, 8, seed));
+    futures.push_back(pool.async(test<uint32_t>, 4, seed));
+    futures.push_back(pool.async(test<int32_t>, 4, seed));
+
+    bool ok = true;
+    for (auto &f : futures) {
+        ok &= f.get();
+    }
 
     if (!ok) return -1;
     printf("Success!\n");

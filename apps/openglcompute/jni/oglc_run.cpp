@@ -8,42 +8,39 @@
 #include "avg_filter_float_arm.h"
 #include <sstream>
 
+#include "HalideBuffer.h"
 #include "HalideRuntimeOpenGLCompute.h"
 
 #define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
 
-extern "C" int halide_copy_to_host(void *, buffer_t *);
-extern "C" int halide_device_sync(void *, buffer_t *);
-extern "C" int halide_device_free(void *, buffer_t* buf);
-extern "C" void halide_device_release(void *, const halide_device_interface *interface);
+using Halide::Runtime::Buffer;
 
-typedef int (*filter_t) (buffer_t *, buffer_t *);
+typedef int (*filter_t) (halide_buffer_t *, halide_buffer_t *);
 
 struct timing {
     filter_t filter;
-    buffer_t *bt_input;
-    buffer_t *bt_output;
+    Buffer<> *input;
+    Buffer<> *output;
     double worst_t = 0;
     int worst_rep = 0;
     double best_t = DBL_MAX;
     int best_rep = 0;
 
-    timing(filter_t _filter, buffer_t *_bt_input, buffer_t *_bt_output):
-        filter(_filter), bt_input(_bt_input), bt_output(_bt_output) {}
+    template<typename T>
+    timing(filter_t filter, Buffer<T> *input, Buffer<T> *output):
+        filter(filter), input(&input->template as<void>()), output(&output->template as<void>()) {}
 
     int run(int n_reps, bool with_copying) {
         timeval t1, t2;
         for (int i = 0; i < n_reps; i++) {
-            bt_input->host_dirty = true;
+            input->set_host_dirty();
             gettimeofday(&t1, NULL);
-            int error = filter(bt_input, bt_output);
-            halide_device_sync(NULL, bt_output);
+            int error = filter(*input, *output);
+            output->device_sync();
 
             if (with_copying) {
-                if (bt_output->dev) {
-                    halide_copy_to_host(NULL, bt_output);
-                }
+                output->copy_to_host();
             }
             gettimeofday(&t2, NULL);
             if (error) {
@@ -65,11 +62,17 @@ struct timing {
 
 template<class T> class Tester;
 
-template<class T> bool doBlur(Tester<T> *tester, buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm) {
+template<class T> bool doBlur(Tester<T> *tester,
+                              Buffer<T> bt_input,
+                              Buffer<T> bt_output,
+                              Buffer<T> bt_output_arm) {
     return false; // This abstract implementation should never be called
 }
 
-template<class T> bool doCopy(Tester<T> *tester, buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm) {
+template<class T> bool doCopy(Tester<T> *tester,
+                              Buffer<T> bt_input,
+                              Buffer<T> bt_output,
+                              Buffer<T> bt_output_arm) {
     return false; // This abstract implementation should never be called
 }
 
@@ -80,64 +83,39 @@ template<class T> class Tester {
 
   private:
 
-    bool validate(buffer_t actual, buffer_t expected) {
+    bool validate(Buffer<T> actual, Buffer<T> expected) {
         int count_mismatches = 0;
-        for (int i = 0; i < actual.extent[0]; i++) {
-            for (int j = 0; j < actual.extent[1]; j++) {
-                for (int k = 0; k < actual.extent[2]; k++) {
-                    T actual_value =
-                        ((T*)actual.host)[i * actual.stride[0] +
-                                          j * actual.stride[1] +
-                                          k * actual.stride[2]];
-                    T expected_value =
-                        ((T*)expected.host)[i * expected.stride[0] +
-                                            j * expected.stride[1] +
-                                            k * expected.stride[2]];
-                    const float EPSILON = 0.00001f;
-                    if (abs((double((actual_value - expected_value)) > EPSILON))) {
-                        if (count_mismatches < 100) {
-                            std::ostringstream str;
-                            str << "actual and expected results differ at "
-                                << "(" << i << ", " << j << ", " << k << "):"
-                                << +actual_value << " != " << +expected_value
-                                << "\n";
-                            LOGI("%s", str.str().c_str());
-                        }
-                        count_mismatches++;
-                    }
+        actual.for_each_element([&](int x, int y, int c) {
+            T actual_value = actual(x, y, c);
+            T expected_value = expected(x, y, c);
+            const float EPSILON = 0.00001f;
+            if (abs((double((actual_value - expected_value)) > EPSILON))) {
+                if (count_mismatches < 100) {
+                    std::ostringstream str;
+                    str << "actual and expected results differ at "
+                        << "(" << x << ", " << y << ", " << c << "):"
+                        << +actual_value << " != " << +expected_value
+                        << "\n";
+                    LOGI("%s", str.str().c_str());
                 }
+                count_mismatches++;
             }
-        }
+        });
 
         return count_mismatches == 0;
     }
 
-    buffer_t make_interleaved_image(int width, int height, int channels, T host[]) {
-        buffer_t bt_input = { 0 };
-        bt_input.host = (uint8_t*)&host[0];
-        bt_input.stride[0] = channels;
-        bt_input.extent[0] = width;
-        bt_input.stride[1] = channels * width;
-        bt_input.extent[1] = height;
-        bt_input.stride[2] = 1;
-        bt_input.extent[2] = channels;
-        bt_input.elem_size = sizeof(T);
-        return bt_input;
-    }
-
-    void print(buffer_t bt) {
-        for (int j = 0; j < std::min(bt.extent[1], 10); j++) {
+    void print(Buffer<T> buf) {
+        for (int j = 0; j < std::min(buf.height(), 10); j++) {
             std::stringstream oss;
-            for (int i = 0; i < std::min(bt.extent[0], 10); i++) {
+            for (int i = 0; i < std::min(buf.width(), 10); i++) {
                 oss << " [";
-                for (int k = 0; k < bt.extent[2]; k++) {
+                for (int k = 0; k < buf.channels(); k++) {
                     oss << std::fixed << std::setprecision(1);
                     if (k > 0) {
                         oss << std::setw(4);
                     }
-                    oss << +((T*)bt.host)[i * bt.stride[0] +
-                                          j * bt.stride[1] +
-                                          k * bt.stride[2]];
+                    oss << +buf(i, j, k);
                 }
                 oss << "]";
             }
@@ -146,16 +124,19 @@ template<class T> class Tester {
     }
 
   public:
-    bool test(buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm,
-        filter_t avg_filter, filter_t avg_filter_arm) {
+    bool test(Buffer<T> input,
+              Buffer<T> output,
+              Buffer<T> output_arm,
+              filter_t avg_filter,
+              filter_t avg_filter_arm) {
 
         // Performance check
-        bt_input.host_dirty = true;
-        timing openglcompute(avg_filter, &bt_input, &bt_output);
-        bt_input.host_dirty = true;
-        timing openglcompute_with_copying(avg_filter, &bt_input, &bt_output);
-        bt_input.host_dirty = true;
-        timing arm(avg_filter_arm, &bt_input, &bt_output_arm);
+        input.set_host_dirty();
+        timing openglcompute(avg_filter, &input, &output);
+        input.set_host_dirty();
+        timing openglcompute_with_copying(avg_filter, &input, &output);
+        input.set_host_dirty();
+        timing arm(avg_filter_arm, &input, &output_arm);
 
         const int N_REPS = 10;
         arm.run(N_REPS, false);
@@ -180,24 +161,21 @@ template<class T> class Tester {
                 arm.worst_t, arm.worst_rep);
 
         // Data correctness check
-        bt_input.host_dirty = true;
-        avg_filter(&bt_input, &bt_output);
+        input.set_host_dirty();
+        avg_filter(input, output);
         LOGI("Filter is done.");
-        halide_device_sync(NULL, &bt_output);
+        output.device_sync();
         LOGI("Sync is done");
-        halide_copy_to_host(NULL, &bt_output);
+        output.copy_to_host();
 
         LOGI("Output arm:");
-        print(bt_output_arm);
+        print(output_arm);
         LOGI("Output openglcompute:");
-        print(bt_output);
+        print(output);
 
-        bool matches = validate(bt_output, bt_output_arm);
+        bool matches = validate(output, output_arm);
         LOGI(matches? "Test passed.\n": "Test failed.\n");
 
-        halide_device_free(NULL, &bt_input);
-        halide_device_free(NULL, &bt_output);
-        halide_device_free(NULL, &bt_output_arm);
         return matches;
     }
 
@@ -206,41 +184,37 @@ template<class T> class Tester {
         int height = 2048;
         int channels = 4;
 
-        T *input = (T*)malloc(width * height * channels * sizeof(T));
-        T *output = (T*)malloc(width * height * channels * sizeof(T));
-        T *output_arm = (T*)malloc(width * height * channels * sizeof(T));
+        auto input = Buffer<T>::make_interleaved(width, height, channels);
         LOGI("Allocated memory for %dx%dx%d image", width, height, channels);
 
-        buffer_t bt_input = make_interleaved_image(width, height, channels, input);
-        for (int i = 0; i < std::min(bt_input.extent[0], width); i++) {
-            for (int j = 0; j < std::min(bt_input.extent[1], height); j++) {
-                for (int k = 0; k < bt_input.extent[2]; k++) {
-                    input[i * bt_input.stride[0] +
-                          j * bt_input.stride[1] +
-                          k * bt_input.stride[2]] = ((i + j) % 2) * 6;
-                }
-            }
-        }
-        bt_input.host_dirty = true;
+        input.for_each_element([&](int i, int j, int k) {
+            input(i, j, k) = ((i + j) % 2) * 6;
+        });
 
         LOGI("Input :\n");
-        print(bt_input);
+        print(input);
 
-        buffer_t bt_output = make_interleaved_image(width, height, channels, output);
-        buffer_t bt_output_arm = make_interleaved_image(width, height, channels, output_arm);
+        auto output = Buffer<T>::make_interleaved(width, height, channels);
+        auto output_arm = Buffer<T>::make_interleaved(width, height, channels);
 
-        doBlur(this, bt_input, bt_output, bt_output_arm);
+        doBlur(this, input, output, output_arm);
     }
 };
 
-template<> bool doBlur<float>(Tester<float> *tester, buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm) {
+template<> bool doBlur<float>(Tester<float> *tester,
+                              Buffer<float> bt_input,
+                              Buffer<float> bt_output,
+                              Buffer<float> bt_output_arm) {
     return tester->test(bt_input,
                         bt_output, bt_output_arm,
                         avg_filter_float,
                         avg_filter_float_arm);
 }
 
-template<> bool doBlur<uint32_t>(Tester<uint32_t> *tester, buffer_t bt_input, buffer_t bt_output, buffer_t bt_output_arm) {
+template<> bool doBlur<uint32_t>(Tester<uint32_t> *tester,
+                                 Buffer<uint32_t> bt_input,
+                                 Buffer<uint32_t> bt_output,
+                                 Buffer<uint32_t> bt_output_arm) {
     return tester->test(bt_input,
                         bt_output, bt_output_arm,
                         avg_filter_uint32t,

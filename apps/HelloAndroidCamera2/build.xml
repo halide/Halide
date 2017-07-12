@@ -87,6 +87,7 @@
          in order to avoid having your file be overridden by tools such as "android update project"
     -->
     <!-- version-tag: 1 -->
+    <property name="native.libs.absolute.dir" location="bin/lib" />
     <import file="${sdk.dir}/tools/ant/build.xml" />
 
 </project>

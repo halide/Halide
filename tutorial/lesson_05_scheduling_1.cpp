@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         // slowly. x is the column and y is the row, so this is a
         // row-major traversal.
         printf("Evaluating gradient row-major\n");
-        Image<int> output = gradient.realize(4, 4);
+        Buffer<int> output = gradient.realize(4, 4);
 
         // See figures/lesson_05_row_major.gif for a visualization of
         // what this did.
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         // traversal.
 
         printf("Evaluating gradient column-major\n");
-        Image<int> output = gradient.realize(4, 4);
+        Buffer<int> output = gradient.realize(4, 4);
 
         // See figures/lesson_05_col_major.gif for a visualization of
         // what this did.
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
         // also added within the loops.
 
         printf("Evaluating gradient with x split into x_outer and x_inner \n");
-        Image<int> output = gradient.realize(4, 4);
+        Buffer<int> output = gradient.realize(4, 4);
 
         printf("Equivalent C:\n");
         for (int y = 0; y < 4; y++) {
@@ -168,7 +168,7 @@ int main(int argc, char **argv) {
         gradient.fuse(x, y, fused);
 
         printf("Evaluating gradient with x and y fused\n");
-        Image<int> output = gradient.realize(4, 4);
+        Buffer<int> output = gradient.realize(4, 4);
 
         printf("Equivalent C:\n");
         for (int fused = 0; fused < 4*4; fused++) {
@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
         gradient.trace_stores();
 
         // Now that we can both split and reorder, we can do tiled
-        // evaluation. Let's split both x and y by a factor of two,
+        // evaluation. Let's split both x and y by a factor of four,
         // and then reorder the vars to express a tiled traversal.
         //
         // A tiled traversal splits the domain into small rectangular
@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
         // gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4);
 
         printf("Evaluating gradient in 4x4 tiles\n");
-        Image<int> output = gradient.realize(8, 8);
+        Buffer<int> output = gradient.realize(8, 8);
 
         // See figures/lesson_05_tiled.gif for a visualization of this
         // schedule.
@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
         // This time we'll evaluate over an 8x4 box, so that we have
         // more than one vector of work per scanline.
         printf("Evaluating gradient with x_inner vectorized \n");
-        Image<int> output = gradient.realize(8, 4);
+        Buffer<int> output = gradient.realize(8, 4);
 
         // See figures/lesson_05_vectors.gif for a visualization.
 
@@ -320,7 +320,7 @@ int main(int argc, char **argv) {
         // gradient.unroll(x, 2);
 
         printf("Evaluating gradient unrolled by a factor of two\n");
-        Image<int> result = gradient.realize(4, 4);
+        Buffer<int> result = gradient.realize(4, 4);
 
         printf("Equivalent C:\n");
         for (int y = 0; y < 4; y++) {
@@ -362,7 +362,7 @@ int main(int argc, char **argv) {
         gradient.split(x, x_outer, x_inner, 3);
 
         printf("Evaluating gradient over a 7x2 box with x split by three \n");
-        Image<int> output = gradient.realize(7, 2);
+        Buffer<int> output = gradient.realize(7, 2);
 
         // See figures/lesson_05_split_7_by_3.gif for a visualization
         // of what happened. Note that some points get evaluated more
@@ -449,7 +449,7 @@ int main(int argc, char **argv) {
 
 
         printf("Evaluating gradient tiles in parallel\n");
-        Image<int> output = gradient.realize(8, 8);
+        Buffer<int> output = gradient.realize(8, 8);
 
         // The tiles should occur in arbitrary order, but within each
         // tile the pixels will be traversed in row-major order. See
@@ -457,9 +457,9 @@ int main(int argc, char **argv) {
 
         printf("Equivalent (serial) C:\n");
         // This outermost loop should be a parallel for loop, but that's hard in C.
-        for (int tile_index = 0; tile_index < 16; tile_index++) {
-            int y_outer = tile_index / 4;
-            int x_outer = tile_index % 4;
+        for (int tile_index = 0; tile_index < 4; tile_index++) {
+            int y_outer = tile_index / 2;
+            int x_outer = tile_index % 2;
             for (int y_inner = 0; y_inner < 4; y_inner++) {
                 for (int x_inner = 0; x_inner < 4; x_inner++) {
                     int y = y_outer * 4 + y_inner;
@@ -510,7 +510,7 @@ int main(int argc, char **argv) {
         // If you like you can turn on tracing, but it's going to
         // produce a lot of printfs. Instead we'll compute the answer
         // both in C and Halide and see if the answers match.
-        Image<int> result = gradient_fast.realize(350, 250);
+        Buffer<int> result = gradient_fast.realize(350, 250);
 
         // See figures/lesson_05_fast.mp4 for a visualization.
 

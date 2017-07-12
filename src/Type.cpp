@@ -188,13 +188,11 @@ bool Type::same_handle_type(const Type &other) const {
         return true;
     }
 
-    static halide_handle_cplusplus_type void_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"));
-
     if (first == nullptr) {
-        first = &void_type;
+        first = halide_handle_traits<void*>::type_info();
     }
     if (second == nullptr) {
-        second = &void_type;
+        second = halide_handle_traits<void*>::type_info();
     }
 
     return first->inner_name == second->inner_name &&

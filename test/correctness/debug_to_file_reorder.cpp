@@ -1,11 +1,21 @@
 #include "Halide.h"
 #include <stdio.h>
 
+#include "test/common/halide_test_dirs.h"
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
     const int size_x = 766;
     const int size_y = 311;
+
+    std::string f_tmp = Internal::get_test_tmp_dir() + "f2.tmp";
+    std::string g_tmp = Internal::get_test_tmp_dir() + "g2.tmp";
+    std::string h_tmp = Internal::get_test_tmp_dir() + "h2.tmp";
+
+    Internal::ensure_no_file_exists(f_tmp);
+    Internal::ensure_no_file_exists(g_tmp);
+    Internal::ensure_no_file_exists(h_tmp);
 
     {
         Func f, g, h, j;
@@ -16,21 +26,26 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.compute_root().gpu_tile(x, y, 1, 1).reorder_storage(y, x).debug_to_file("f2.tmp");
-            g.compute_root().gpu_tile(x, y, 1, 1).reorder_storage(y, x).debug_to_file("g2.tmp");
-            h.compute_root().gpu_tile(x, y, 1, 1).debug_to_file("h2.tmp");
+            Var xi, yi;
+            f.compute_root().gpu_tile(x, y, xi, yi, 1, 1).reorder_storage(y, x).debug_to_file(f_tmp);
+            g.compute_root().gpu_tile(x, y, xi, yi, 1, 1).reorder_storage(y, x).debug_to_file(g_tmp);
+            h.compute_root().gpu_tile(x, y, xi, yi, 1, 1).debug_to_file(h_tmp);
         } else {
-            f.compute_root().reorder_storage(y, x).debug_to_file("f2.tmp");
-            g.compute_root().reorder_storage(y, x).debug_to_file("g2.tmp");
-            h.compute_root().debug_to_file("h2.tmp");
+            f.compute_root().reorder_storage(y, x).debug_to_file(f_tmp);
+            g.compute_root().reorder_storage(y, x).debug_to_file(g_tmp);
+            h.compute_root().debug_to_file(h_tmp);
         }
 
-        Image<float> im = h.realize(size_x, size_y, target);
+        Buffer<float> im = h.realize(size_x, size_y, target);
     }
 
-    FILE *f = fopen("f2.tmp", "rb");
-    FILE *g = fopen("g2.tmp", "rb");
-    FILE *h = fopen("h2.tmp", "rb");
+    Internal::assert_file_exists(f_tmp);
+    Internal::assert_file_exists(g_tmp);
+    Internal::assert_file_exists(h_tmp);
+
+    FILE *f = fopen(f_tmp.c_str(), "rb");
+    FILE *g = fopen(g_tmp.c_str(), "rb");
+    FILE *h = fopen(h_tmp.c_str(), "rb");
     assert(f && g && h);
 
     int header[5];

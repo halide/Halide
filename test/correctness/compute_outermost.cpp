@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     blur_fn1.compute_at(out, t);
     blur_fn2.compute_at(out, t);
 
-    Image<int> result = out.realize(256, 256);
+    Buffer<int> result = out.realize(256, 256);
     for (int y = 0; y < 256; y++) {
         for (int x = 0; x < 256; x++) {
             int correct = 3*x + 4*y;

@@ -33,7 +33,7 @@ from datetime import datetime
 
 
 # Define some Vars to use.
-x, y, c, i = Var("x"), Var("y"), Var("c"), Var("i")
+x, y, c, i, ii, xi, yi = Var("x"), Var("y"), Var("c"), Var("i"), Var("ii"), Var("xi"), Var("yi")
 
 # We're going to want to schedule a pipeline in several ways, so we
 # define the pipeline in a class so that we can recreate it several
@@ -42,7 +42,7 @@ class MyPipeline:
 
     def __init__(self, input):
 
-        assert type(input) == Image_uint8
+        assert type(input) == Buffer_uint8
 
         self.lut = Func("lut")
         self.padded = Func("padded")
@@ -75,8 +75,6 @@ class MyPipeline:
         # Then apply the LUT.
         self.curved[x, y, c] = self.lut[self.sharpen[x, y, c]]
 
-        return
-
 
     # Now we define methods that give our pipeline several different
     # schedules.
@@ -100,7 +98,7 @@ class MyPipeline:
         # previous values computed within the same strip of 16
         # scanlines.
         self.sharpen.store_at(self.curved, yo) \
-               .compute_at(self.curved, yi)
+                    .compute_at(self.curved, yi)
 
         # Vectorize the sharpen. It's 16-bit so we'll vectorize it 8-wide.
         self.sharpen.vectorize(x, 8)
@@ -109,7 +107,7 @@ class MyPipeline:
         # sharpen. We'll leave the cast to 16-bit inlined into
         # sharpen.
         self.padded.store_at(self.curved, yo) \
-              .compute_at(self.curved, yi)
+            .compute_at(self.curved, yi)
 
         # Also vectorize the padding. It's 8-bit, so we'll vectorize
         # 16-wide.
@@ -144,12 +142,12 @@ class MyPipeline:
         # correspond to CUDA's notions of blocks and threads, or
         # OpenCL's notions of thread groups and threads.
         self.lut.gpu_blocks(block) \
-           .gpu_threads(thread)
+                .gpu_threads(thread)
 
         # This is a very common scheduling pattern on the GPU, so
         # there's a shorthand for it:
 
-        # lut.gpu_tile(i, 16)
+        # lut.gpu_tile(i, ii, 16)
 
         # Func::gpu_tile method is similar to Func::tile, except that
         # it also specifies that the tile coordinates correspond to
@@ -159,11 +157,11 @@ class MyPipeline:
         # Compute color channels innermost. Promise that there will
         # be three of them and unroll across them.
         self.curved.reorder(c, x, y) \
-              .bound(c, 0, 3) \
-              .unroll(c)
+                   .bound(c, 0, 3) \
+                   .unroll(c)
 
         # Compute curved in 2D 8x8 tiles using the GPU.
-        self.curved.gpu_tile(x, y, 8, 8)
+        self.curved.gpu_tile(x, y, xi, yi, 8, 8)
 
         # This is equivalent to:
         # curved.tile(x, y, xo, yo, xi, yi, 8, 8)
@@ -176,7 +174,7 @@ class MyPipeline:
         # intermediate result in shared memory. Var::gpu_blocks, and
         # Var::gpu_threads exist to help you schedule producers within
         # GPU threads and blocks.
-        self.padded.compute_at(self.curved, Var.gpu_blocks())
+        self.padded.compute_at(self.curved, x)
 
         # Use the GPU threads for the x and y coordinates of the
         # padded input.
@@ -217,32 +215,13 @@ class MyPipeline:
 
         self.curved.compile_jit(target)
 
-        return
-
     def test_performance(self):
         # Test the performance of the scheduled MyPipeline.
 
-        # If we realize curved into a Halide::Image, that will
-        # unfairly penalize GPU performance by including a GPU->CPU
-        # copy in every run. Halide::Image objects always exist on
-        # the CPU.
-
-        # Halide::Buffer, however, represents a buffer that may
-        # exist on either CPU or GPU or both.
-        output = Buffer(UInt(8), \
+        output = Buffer(UInt(8),
                         self.input.width(),
                         self.input.height(),
                         self.input.channels())
-        output = Buffer(UInt(8), \
-                        self.input.width(),
-                        self.input.height(),
-                        self.input.channels(),
-                        name="output")
-        output = Buffer(UInt(8), \
-                        x_size=self.input.width(),
-                        y_size=self.input.height(),
-                        z_size=self.input.channels(),
-                        name="output")
 
         # Run the filter once to initialize any GPU runtime state.
         self.curved.realize(output)
@@ -269,17 +248,13 @@ class MyPipeline:
 
         print("%1.4f milliseconds" % (best_time * 1000))
 
-        return
-
-
     def test_correctness(self, reference_output):
 
-        assert type(reference_output) == Image_uint8
-        output_r = self.curved.realize(self.input.width(), self.input.height(),
-                                  self.input.channels())
-        assert type(output_r) == Realization
-        output = Image(UInt(8), output_r)
-        assert type(output) == Image_uint8
+        assert type(reference_output) == Buffer_uint8
+        output = self.curved.realize(self.input.width(),
+                                     self.input.height(),
+                                     self.input.channels())
+        assert type(output) == Buffer_uint8
 
         # Check against the reference output.
         for c in range(self.input.channels()):
@@ -287,24 +262,24 @@ class MyPipeline:
                 for x in range(self.input.width()):
                     if output(x, y, c) != reference_output(x, y, c):
                         print(
-                        "Mismatch between output (%d) and "
-                               "reference output (%d) at %d, %d, %d" % (
-                               output(x, y, c),
-                               reference_output(x, y, c),
-                               x, y, c))
+                            "Mismatch between output (%d) and "
+                            "reference output (%d) at %d, %d, %d" % (
+                                output(x, y, c),
+                                reference_output(x, y, c),
+                                x, y, c))
                         return
 
         print("CPU and GPU outputs are consistent.")
-        return
+
 
 def main():
     # Load an input image.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
     input_data = imread(image_path)
-    input = Image(input_data)
+    input = Buffer(input_data)
 
     # Allocated an image that will store the correct output
-    reference_output = Image(UInt(8), input.width(), input.height(), input.channels())
+    reference_output = Buffer(UInt(8), input.width(), input.height(), input.channels())
 
     print("Testing performance on CPU:")
     p1 = MyPipeline(input)
@@ -321,7 +296,7 @@ def main():
     else:
         print("Not testing performance on GPU, "
               "because I can't find the opencl library")
-    
+
     return 0
 
 

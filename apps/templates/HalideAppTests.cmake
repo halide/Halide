@@ -155,13 +155,13 @@ function(halide_add_osx_generator_to_app)
   endif()
 
   # Add a build step to call the generator
-  halide_add_generator_dependency(
-    TARGET ${args_TARGET}
-    GENERATOR_TARGET ${args_GENERATOR_TARGET}
-    GENERATOR_NAME ${args_GENERATOR_NAME}
-    GENERATED_FUNCTION ${args_GENERATED_FUNCTION}
-    GENERATOR_ARGS ${args_GENERATOR_ARGS}
-    )
+  set(AOT_LIBRARY_TARGET "${args_GENERATED_FUNCTION}_generator_lib")
+  halide_add_aot_library("${AOT_LIBRARY_TARGET}"
+                         GENERATOR_TARGET ${args_GENERATOR_TARGET}
+                         GENERATOR_NAME ${args_GENERATOR_NAME}
+                         GENERATED_FUNCTION ${args_GENERATED_FUNCTION}
+                         GENERATOR_ARGS ${args_GENERATOR_ARGS}
+  halide_add_aot_library_dependency(${args_TARGET} "${AOT_LIBRARY_TARGET}")
 
 endfunction(halide_add_osx_generator_to_app)
 
@@ -298,13 +298,13 @@ function(halide_add_ios_generator_to_app)
     LINK_FLAGS "${existing_link_flags} -Xlinker -exported_symbol -Xlinker _${args_GENERATED_FUNCTION}"
     )
 
-  halide_add_generator_dependency(
-    TARGET ${args_TARGET}
-    GENERATOR_TARGET ${args_GENERATOR_TARGET}
-    GENERATOR_NAME ${args_GENERATOR_NAME}
-    GENERATED_FUNCTION ${args_GENERATED_FUNCTION}
-    GENERATOR_ARGS ${args_GENERATOR_ARGS}
-    )
+  set(AOT_LIBRARY_TARGET "${args_GENERATED_FUNCTION}_generator_lib")
+  halide_add_aot_library("${AOT_LIBRARY_TARGET}"
+                         GENERATOR_TARGET ${args_GENERATOR_TARGET}
+                         GENERATOR_NAME ${args_GENERATOR_NAME}
+                         GENERATED_FUNCTION ${args_GENERATED_FUNCTION}
+                         GENERATOR_ARGS ${args_GENERATOR_ARGS}
+  halide_add_aot_library_dependency(${args_TARGET} "${AOT_LIBRARY_TARGET}")
 
 endfunction(halide_add_ios_generator_to_app)
 

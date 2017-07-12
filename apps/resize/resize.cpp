@@ -5,8 +5,8 @@ using namespace Halide;
 #include <iostream>
 #include <limits>
 
-#include <halide_image_io.h>
-#include <benchmark.h>
+#include "halide_image_io.h"
+#include "halide_benchmark.h"
 
 enum InterpolationType {
     BOX, LINEAR, CUBIC, LANCZOS
@@ -177,10 +177,10 @@ int main(int argc, char **argv) {
     final.compile_jit(target);
 
     printf("Loading '%s'\n", infile.c_str());
-    Image<float> in_png = Tools::load_image(infile);
+    Buffer<float> in_png = Tools::load_and_convert_image(infile);
     int out_width = in_png.width() * scaleFactor;
     int out_height = in_png.height() * scaleFactor;
-    Image<float> out(out_width, out_height, 3);
+    Buffer<float> out(out_width, out_height, 3);
     input.set(in_png);
     printf("Resampling '%s' from %dx%d to %dx%d using %s interpolation\n",
            infile.c_str(),
@@ -188,8 +188,8 @@ int main(int argc, char **argv) {
            out_width, out_height,
            kernelInfo[interpolationType].name);
 
-    double min = benchmark(10, 1, [&]() { final.realize(out); });
+    double min = Tools::benchmark(10, 1, [&]() { final.realize(out); });
     std::cout << " took min=" << min * 1000 << " msec." << std::endl;
 
-    Tools::save_image(out, outfile);
+    Tools::convert_and_save_image(out, outfile);
 }

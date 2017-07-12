@@ -2,6 +2,7 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "IROperator.h"
+#include "IREquality.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -28,25 +29,25 @@ private:
     template<typename T>
     void mutate_binary_operator(const T *op) {
         Expr a = mutate(op->a);
-        if (!expr.defined()) return;
+        if (!a.defined()) return;
         Expr b = mutate(op->b);
-        if (!expr.defined()) return;
+        if (!b.defined()) return;
         if (a.same_as(op->a) &&
             b.same_as(op->b)) {
             expr = op;
         } else {
-            expr = T::make(a, b);
+            expr = T::make(std::move(a), std::move(b));
         }
         stmt = Stmt();
     }
 
     void visit(const Cast *op) {
         Expr value = mutate(op->value);
-        if (!expr.defined()) return;
+        if (!value.defined()) return;
         if (value.same_as(op->value)) {
             expr = op;
         } else {
-            expr = Cast::make(op->type, value);
+            expr = Cast::make(op->type, std::move(value));
         }
     }
 
@@ -68,7 +69,7 @@ private:
 
     void visit(const Not *op) {
         Expr a = mutate(op->a);
-        if (!expr.defined()) return;
+        if (!a.defined()) return;
         if (a.same_as(op->a)) {
             expr = op;
         }
@@ -116,20 +117,22 @@ private:
     }
 
     void visit(const Load *op) {
+        Expr pred = mutate(op->predicate);
+        if (!pred.defined()) return;
         Expr index = mutate(op->index);
-        if (!expr.defined()) return;
-        if (index.same_as(op->index)) {
+        if (!index.defined()) return;
+        if (pred.same_as(op->predicate) && index.same_as(op->index)) {
             expr = op;
         } else {
-            expr = Load::make(op->type, op->name, index, op->image, op->param);
+            expr = Load::make(op->type, op->name, index, op->image, op->param, pred);
         }
     }
 
     void visit(const Ramp *op) {
         Expr base = mutate(op->base);
-        if (!expr.defined()) return;
+        if (!base.defined()) return;
         Expr stride = mutate(op->stride);
-        if (!expr.defined()) return;
+        if (!stride.defined()) return;
         if (base.same_as(op->base) &&
             stride.same_as(op->stride)) {
             expr = op;
@@ -140,7 +143,7 @@ private:
 
     void visit(const Broadcast *op) {
         Expr value = mutate(op->value);
-        if (!expr.defined()) return;
+        if (!value.defined()) return;
         if (value.same_as(op->value)) expr = op;
         else expr = Broadcast::make(value, op->lanes);
     }
@@ -158,7 +161,7 @@ private:
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!expr.defined()) return;
+            if (!new_arg.defined()) return;
             if (!new_arg.same_as(old_arg)) changed = true;
             new_args[i] = new_arg;
         }
@@ -180,7 +183,7 @@ private:
         if (!value.defined()) {
             dead_vars.pop(op->name);
         }
-        if (!expr.defined()) return;
+        if (!body.defined()) return;
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
             expr = op;
@@ -201,7 +204,7 @@ private:
         if (!value.defined()) {
             dead_vars.pop(op->name);
         }
-        if (!stmt.defined()) return;
+        if (!body.defined()) return;
         if (value.same_as(op->value) &&
             body.same_as(op->body)) {
             stmt = op;
@@ -214,13 +217,13 @@ private:
 
     void visit(const AssertStmt *op) {
         Expr condition = mutate(op->condition);
-        if (!expr.defined()) {
+        if (!condition.defined()) {
             stmt = Stmt();
             return;
         }
 
         Expr message = mutate(op->message);
-        if (!expr.defined()) {
+        if (!message.defined()) {
             stmt = Stmt();
             return;
         }
@@ -233,35 +236,28 @@ private:
     }
 
     void visit(const ProducerConsumer *op) {
-        Stmt produce = mutate(op->produce);
-        if (!produce.defined()) {
-            produce = Evaluate::make(Expr("Produce step elided due to use of Halide::undef"));
-        }
-        Stmt update = mutate(op->update);
-        Stmt consume = mutate(op->consume);
-        if (!stmt.defined()) return;
-        if (produce.same_as(op->produce) &&
-            update.same_as(op->update) &&
-            consume.same_as(op->consume)) {
+        Stmt body = mutate(op->body);
+        if (!body.defined()) return;
+        if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         }
     }
 
     void visit(const For *op) {
         Expr min = mutate(op->min);
-        if (!expr.defined()) {
+        if (!min.defined()) {
             stmt = Stmt();
             return;
         }
         Expr extent = mutate(op->extent);
-        if (!expr.defined()) {
+        if (!extent.defined()) {
             stmt = Stmt();
             return;
         }
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
+        if (!body.defined()) return;
         if (min.same_as(op->min) &&
             extent.same_as(op->extent) &&
             body.same_as(op->body)) {
@@ -274,6 +270,7 @@ private:
     void visit(const Store *op) {
         predicate = Expr();
 
+        Expr pred = mutate(op->predicate);
         Expr value = mutate(op->value);
         if (!value.defined()) {
             stmt = Stmt();
@@ -288,13 +285,14 @@ private:
 
         if (predicate.defined()) {
             // This becomes a conditional store
-            stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param));
+            stmt = IfThenElse::make(predicate, Store::make(op->name, value, index, op->param, pred));
             predicate = Expr();
-        } else if (value.same_as(op->value) &&
+        } else if (pred.same_as(op->predicate) &&
+                   value.same_as(op->value) &&
                    index.same_as(op->index)) {
             stmt = op;
         } else {
-            stmt = Store::make(op->name, value, index, op->param);
+            stmt = Store::make(op->name, value, index, op->param, pred);
         }
     }
 
@@ -303,29 +301,56 @@ private:
 
         vector<Expr> new_args(op->args.size());
         vector<Expr> new_values(op->values.size());
+        vector<Expr> args_predicates;
+        vector<Expr> values_predicates;
         bool changed = false;
 
         // Mutate the args
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
+            predicate = Expr();
             Expr new_arg = mutate(old_arg);
-            if (!expr.defined()) {
+            if (!new_arg.defined()) {
                 stmt = Stmt();
                 return;
             }
+            args_predicates.push_back(predicate);
             if (!new_arg.same_as(old_arg)) changed = true;
             new_args[i] = new_arg;
         }
 
+        for (size_t i = 1; i < args_predicates.size(); i++) {
+            user_assert(equal(args_predicates[i-1], args_predicates[i]))
+                << "Conditionally-undef args in a Tuple should have the same conditions\n"
+                << "  Condition " << i-1 << ": " << args_predicates[i-1] << "\n"
+                << "  Condition " << i << ": " << args_predicates[i] << "\n";
+        }
+
+        bool all_values_undefined = true;
         for (size_t i = 0; i < op->values.size(); i++) {
             Expr old_value = op->values[i];
+            predicate = Expr();
             Expr new_value = mutate(old_value);
-            if (!expr.defined()) {
-                stmt = Stmt();
-                return;
+            if (!new_value.defined()) {
+                new_value = undef(old_value.type());
+            } else {
+                all_values_undefined = false;
+                values_predicates.push_back(predicate);
             }
             if (!new_value.same_as(old_value)) changed = true;
             new_values[i] = new_value;
+        }
+
+        if (all_values_undefined) {
+            stmt = Stmt();
+            return;
+        }
+
+        for (size_t i = 1; i < values_predicates.size(); i++) {
+            user_assert(equal(values_predicates[i-1], values_predicates[i]))
+                << "Conditionally-undef values in a Tuple should have the same conditions\n"
+                << "  Condition " << i-1 << ": " << values_predicates[i-1] << "\n"
+                << "  Condition " << i << ": " << values_predicates[i] << "\n";
         }
 
         if (predicate.defined()) {
@@ -343,7 +368,7 @@ private:
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
             new_extents.push_back(mutate(op->extents[i]));
-            if (!expr.defined()) {
+            if (!new_extents.back().defined()) {
                 stmt = Stmt();
                 return;
             }
@@ -383,12 +408,12 @@ private:
             Expr old_min    = op->bounds[i].min;
             Expr old_extent = op->bounds[i].extent;
             Expr new_min    = mutate(old_min);
-            if (!expr.defined()) {
+            if (!new_min.defined()) {
                 stmt = Stmt();
                 return;
             }
             Expr new_extent = mutate(old_extent);
-            if (!expr.defined()) {
+            if (!new_extent.defined()) {
                 stmt = Stmt();
                 return;
             }
@@ -429,7 +454,7 @@ private:
 
     void visit(const IfThenElse *op) {
         Expr condition = mutate(op->condition);
-        if (!expr.defined()) {
+        if (!condition.defined()) {
             stmt = Stmt();
             return;
         }
@@ -458,7 +483,7 @@ private:
 
     void visit(const Evaluate *op) {
         Expr v = mutate(op->value);
-        if (!expr.defined()) {
+        if (!v.defined()) {
             stmt = Stmt();
         } else if (v.same_as(op->value)) {
             stmt = op;

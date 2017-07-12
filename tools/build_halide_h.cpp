@@ -11,6 +11,11 @@ void dump_header(std::string header) {
     if (done.find(header) != done.end()) return;
     done.insert(header);
 
+    if (header.find("runtime_internal") != std::string::npos) {
+        fprintf(stdout, "#error \"COMPILING_HALIDE_RUNTIME should never be defined for Halide.h\"\n");
+        return;
+    }
+
     FILE *f = fopen(header.c_str(), "r");
 
     if (f == NULL) {

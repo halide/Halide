@@ -4,31 +4,28 @@
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 #define HALIDE_NUMPY_INTERNAL_MAIN
-#include "internal.hpp"
 #include "dtype.hpp"
+#include "internal.hpp"
 
-namespace Halide 
-{
-namespace numpy 
-{
+namespace Halide {
+namespace numpy {
 
 #if PY_MAJOR_VERSION == 2
 static void wrap_import_array() {
     import_array();
 }
 #else
-static void * wrap_import_array() {
+static void *wrap_import_array() {
     import_array();
+    return nullptr;
 }
 #endif
 
-void initialize(bool register_scalar_converters) 
-{
-  wrap_import_array();
-  import_ufunc();
-  if (register_scalar_converters)
-	dtype::register_scalar_converters();
+void initialize(bool register_scalar_converters) {
+    wrap_import_array();
+    import_ufunc();
+    if (register_scalar_converters)
+        dtype::register_scalar_converters();
 }
-
 }
 }

@@ -20,7 +20,7 @@ using std::map;
 
 
 CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_Dev(Target target)
-    : glc(src_stream), target(target) {
+    : glc(src_stream, target) {
 }
 
 namespace {
@@ -122,7 +122,9 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Call *op) {
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        internal_assert(loop->for_type == ForType::Parallel) << "kernel loop must be parallel\n";
+        internal_assert((loop->for_type == ForType::GPUBlock) ||
+                        (loop->for_type == ForType::GPUThread))
+            << "kernel loop must be either gpu block or gpu thread\n";
         internal_assert(is_zero(loop->min));
 
         debug(4) << "loop extent is " << loop->extent << "\n";
@@ -179,18 +181,10 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Broadcast *
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
-    string id_index;
-    const Ramp *ramp = op->index.as<Ramp>();
-    if (ramp) {
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-        user_assert(stride && stride->value == 1 && ramp->lanes == 4) <<
-            "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute.";
-
-        // Buffer type is 4-elements wide, that's why we divide by ramp->lanes.
-        id_index = print_expr(Div::make(ramp->base, ramp->lanes));
-    } else {
-        id_index = print_expr(op->index);
-    }
+    user_assert(is_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
+    // TODO: support vectors
+    internal_assert(op->type.is_scalar());
+    string id_index = print_expr(op->index);
 
     ostringstream oss;
     oss << print_name(op->name);
@@ -202,21 +196,10 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Load *op) {
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Store *op) {
-    string id_index;
-    const Ramp *ramp = op->index.as<Ramp>();
-    if (ramp) {
-        const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-        user_assert(stride && stride->value == 1 && ramp->lanes == 4)
-            << "Only trivial packed 4x vectors(stride==1, lanes==4) are supported by OpenGLCompute."
-            << " Got integer stride "
-            << (stride ? std::to_string(stride->value): "undefined")
-            << " and lanes " << ramp->lanes << " instead.";
-
-        // Buffer type is 4-elements wide, that's why we divide by ramp->lanes.
-        id_index = print_expr(Div::make(ramp->base, ramp->lanes));
-    } else {
-        id_index = print_expr(op->index);
-    }
+    user_assert(is_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
+    // TODO: support vectors
+    internal_assert(op->value.type().is_scalar());
+    string id_index = print_expr(op->index);
 
     string id_value = print_expr(op->value);
 
@@ -252,7 +235,7 @@ void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
-    glc.add_kernel(s, target, name, args);
+    glc.add_kernel(s, name, args);
 }
 
 namespace {
@@ -272,7 +255,6 @@ public:
 }
 
 void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::add_kernel(Stmt s,
-                                                                    Target target,
                                                                     const string &name,
                                                                     const vector<DeviceArgument> &args) {
 
@@ -346,7 +328,6 @@ void CodeGen_OpenGLCompute_Dev::CodeGen_OpenGLCompute_C::visit(const Allocate *o
     do_indent();
     Allocation alloc;
     alloc.type = op->type;
-    alloc.free_function = op->free_function;
     allocations.push(op->name, alloc);
 
     internal_assert(op->extents.size() >= 1);

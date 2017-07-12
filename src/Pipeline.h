@@ -9,9 +9,8 @@
 
 #include <vector>
 
-#include "Buffer.h"
+#include "ExternalCode.h"
 #include "IntrusivePtr.h"
-#include "Image.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "Tuple.h"
@@ -59,7 +58,6 @@ class Pipeline {
     Internal::IntrusivePtr<PipelineContents> contents;
 
     std::vector<Argument> infer_arguments(Internal::Stmt body);
-    std::vector<Buffer> validate_arguments(const std::vector<Argument> &args, Internal::Stmt body);
     std::vector<const void *> prepare_jit_call_arguments(Realization dst, const Target &target);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
@@ -103,9 +101,9 @@ public:
      * and C function name. If you're compiling a pipeline with a
      * single output Func, see also Func::compile_to_llvm_assembly. */
     EXPORT void compile_to_llvm_assembly(const std::string &filename,
-                                   const std::vector<Argument> &args,
-                                   const std::string &fn_name,
-                                   const Target &target = get_target_from_environment());
+                                         const std::vector<Argument> &args,
+                                         const std::string &fn_name,
+                                         const Target &target = get_target_from_environment());
 
     /** Statically compile a pipeline with multiple output functions to an
      * object file, with the given filename (which should probably end in
@@ -161,17 +159,17 @@ public:
     EXPORT void print_loop_nest();
 
     /** Compile to object file and header pair, with the given
-     * arguments. Also names the C function to match the filename
-     * argument. */
+     * arguments. */
     EXPORT void compile_to_file(const std::string &filename_prefix,
                                 const std::vector<Argument> &args,
+                                const std::string &fn_name,
                                 const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair, with the given
-     * arguments. Also names the C function to match the filename
-     * argument. */
+     * arguments. */
     EXPORT void compile_to_static_library(const std::string &filename_prefix,
                                           const std::vector<Argument> &args,
+                                          const std::string &fn_name,
                                           const Target &target = get_target_from_environment());
 
     /** Compile to static-library file and header pair once for each target;
@@ -181,7 +179,7 @@ public:
      * (e.g., SSE4.1/AVX/AVX2 on x86 desktop machines).
      * All targets must have identical arch-os-bits.
      */
-    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix, 
+    EXPORT void compile_to_multitarget_static_library(const std::string &filename_prefix,
                                                       const std::vector<Argument> &args,
                                                       const std::vector<Target> &targets);
 
@@ -190,7 +188,7 @@ public:
     EXPORT Module compile_to_module(const std::vector<Argument> &args,
                                     const std::string &fn_name,
                                     const Target &target = get_target_from_environment(),
-                                    const Internal::LoweredFunc::LinkageType linkage_type = Internal::LoweredFunc::External);
+                                    const Internal::LoweredFunc::LinkageType linkage_type = Internal::LoweredFunc::ExternalPlusMetadata);
 
    /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -286,7 +284,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
-    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *));
+    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
 
     /** Set the function called to print messages from the runtime.
      * If you are compiling statically, you can also just define your
@@ -342,6 +340,7 @@ public:
     /** Get the custom lowering passes. */
     EXPORT const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
+    /** See Func::realize */
     // @{
     EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
@@ -350,26 +349,21 @@ public:
                                const Target &target = Target());
     EXPORT Realization realize(int x_size, int y_size,
                                const Target &target = Target());
-    EXPORT Realization realize(int x_size = 0,
+    EXPORT Realization realize(int x_size,
                                const Target &target = Target());
+    EXPORT Realization realize(const Target &target = Target());
     // @}
 
-    /** Evaluate this function into an existing allocated buffer or
+    /** Evaluate this Pipeline into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
      * function, strange things may happen, as the pipeline isn't
-     * necessarily safe to run in-place. If you pass multiple buffers,
-     * they must have matching sizes. */
-    // @{
+     * necessarily safe to run in-place. The realization should
+     * contain one Buffer per tuple component per output Func. For
+     * each individual output Func, all Buffers must have the same
+     * shape, but the shape can vary across the different output
+     * Funcs. This form of realize does *not* automatically copy data
+     * back from the GPU. */
     EXPORT void realize(Realization dst, const Target &target = Target());
-    EXPORT void realize(Buffer dst, const Target &target = Target());
-
-    template<typename T>
-    NO_INLINE void realize(Image<T> dst, const Target &target = Target()) {
-        // Images are expected to exist on-host.
-        realize(Buffer(dst), target);
-        dst.copy_to_host();
-    }
-    // @}
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -379,7 +373,6 @@ public:
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
     EXPORT void infer_input_bounds(Realization dst);
-    EXPORT void infer_input_bounds(Buffer dst);
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
@@ -402,79 +395,80 @@ public:
 
 private:
     std::string generate_function_name() const;
-    std::vector<Argument> build_public_args(const std::vector<Argument> &args, const Target &target) const;
-
 };
 
-namespace {
+struct ExternSignature {
+private:
+    Type ret_type_;       // Only meaningful if is_void_return is false; must be default value otherwise
+    bool is_void_return_{false};
+    std::vector<Type> arg_types_;
 
-template <typename T>
-bool voidable_halide_type(Type &t) {
-    t = type_of<T>();
-    return false;
-}
+public:
+    ExternSignature() = default;
 
-template<>
-inline bool voidable_halide_type<void>(Type &t) {
-    return true;
-}
-
-template <typename T>
-bool scalar_arg_type_or_buffer(Type &t) {
-    t = type_of<T>();
-    return false;
-}
-
-template <>
-inline bool scalar_arg_type_or_buffer<struct buffer_t *>(Type &t) {
-    return true;
-}
-
-template <typename T>
-ScalarOrBufferT arg_type_info() {
-    ScalarOrBufferT result;
-    result.is_buffer = scalar_arg_type_or_buffer<T>(result.scalar_type);
-    return result;
-}
-
-template <typename A1, typename... Args>
-struct make_argument_list {
-    static void add_args(std::vector<ScalarOrBufferT> &arg_types) {
-       arg_types.push_back(arg_type_info<A1>());
-       make_argument_list<Args...>::add_args(arg_types);
+    ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<Type> &arg_types)
+        : ret_type_(ret_type),
+          is_void_return_(is_void_return),
+          arg_types_(arg_types) {
+        internal_assert(!(is_void_return && ret_type != Type()));
     }
-};
-
-template <>
-struct make_argument_list<void> {
-    static void add_args(std::vector<ScalarOrBufferT> &) { }
-};
-
-
-template <typename... Args>
-void init_arg_types(std::vector<ScalarOrBufferT> &arg_types) {
-    make_argument_list<Args..., void>::add_args(arg_types);
-}
-
-}
-
-struct JITExtern {
-    // assert pipeline.defined() == (c_function == nullptr) -- strictly one or the other
-    // which should be enforced by the constructors.
-    Pipeline pipeline;
-
-    void *c_function;
-    ExternSignature signature;
-
-    EXPORT JITExtern(Pipeline pipeline);
-    EXPORT JITExtern(Func func);
 
     template <typename RT, typename... Args>
-    JITExtern(RT (*f)(Args... args)) {
-        c_function = (void *)f;
-        signature.is_void_return = voidable_halide_type<RT>(signature.ret_type);
-        init_arg_types<Args...>(signature.arg_types);
+    ExternSignature(RT (*f)(Args... args))
+        : ret_type_(type_of<RT>()),
+          is_void_return_(std::is_void<RT>::value),
+          arg_types_({type_of<Args>()...}) {
     }
+
+    const Type &ret_type() const {
+        internal_assert(!is_void_return());
+        return ret_type_;
+    }
+
+    bool is_void_return() const {
+        return is_void_return_;
+    }
+
+    const std::vector<Type> &arg_types() const {
+        return arg_types_;
+    }
+};
+
+struct ExternCFunction {
+private:
+    void *address_{nullptr};
+    ExternSignature signature_;
+
+public:
+    ExternCFunction() = default;
+
+    ExternCFunction(void *address, const ExternSignature &signature)
+        : address_(address), signature_(signature) {}
+
+    template <typename RT, typename... Args>
+    ExternCFunction(RT (*f)(Args... args)) : ExternCFunction((void *)f, ExternSignature(f)) {}
+
+    void *address() const { return address_; }
+    const ExternSignature &signature() const { return signature_; }
+};
+
+struct JITExtern {
+private:
+    // Note that exactly one of pipeline_ and extern_c_function_
+    // can be set in a given JITExtern instance.
+    Pipeline pipeline_;
+    ExternCFunction extern_c_function_;
+
+public:
+    EXPORT JITExtern(Pipeline pipeline);
+    EXPORT JITExtern(Func func);
+    EXPORT JITExtern(const ExternCFunction &extern_c_function);
+
+    template <typename RT, typename... Args>
+    JITExtern(RT (*f)(Args... args)) : JITExtern(ExternCFunction(f)) {}
+
+    const Pipeline &pipeline() const { return pipeline_; }
+    const ExternCFunction &extern_c_function() const { return extern_c_function_; }
 };
 
 }  // namespace Halide

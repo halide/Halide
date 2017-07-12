@@ -17,16 +17,16 @@ int main(int argc, char **argv) {
     f(r) += f(r-1);
 
     // Make some test data.
-    Image<float> data = lambda(x, sin(x)).realize(100);
+    Buffer<float> data = lambda(x, sin(x)).realize(100);
 
     f.realize(data);
 
     // Do the same thing not in-place
-    Image<float> reference_in = lambda(x, sin(x)).realize(100);
+    Buffer<float> reference_in = lambda(x, sin(x)).realize(100);
     Func g;
     g(x) = reference_in(x);
     g(r) += g(r-1);
-    Image<float> reference_out = g.realize(100);
+    Buffer<float> reference_out = g.realize(100);
 
     float err = evaluate_may_gpu<float>(sum(abs(data(r) - reference_out(r))));
 

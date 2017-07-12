@@ -78,7 +78,7 @@ Func constant_exterior(const Func &source, Tuple value,
 
 Func constant_exterior(const Func &source, Expr value,
                        const std::vector<std::pair<Expr, Expr>> &bounds) {
-    return constant_exterior(source, Tuple({value}), bounds);
+    return constant_exterior(source, Tuple(value), bounds);
 }
 
 

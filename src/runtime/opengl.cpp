@@ -59,6 +59,7 @@
     GLFUNC(PFNGLDRAWELEMENTSPROC, DrawElements);                        \
     GLFUNC(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray);  \
     GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray); \
+    GLFUNC(PFNGLGETVERTEXATTRIBIVPROC, GetVertexAttribiv);              \
     GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                          \
     GLFUNC(PFNGLREADPIXELS, ReadPixels);                                \
     GLFUNC(PFNGLGETSTRINGPROC, GetString);                              \
@@ -81,7 +82,7 @@ using namespace Halide::Runtime::Internal;
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
-extern WEAK halide_device_interface opengl_device_interface;
+extern WEAK halide_device_interface_t opengl_device_interface;
 
 WEAK const char *gl_error_name(int32_t err) {
   const char *result;
@@ -157,19 +158,11 @@ struct Argument {
 };
 
 struct KernelInfo {
+    char *name;
     char *source;
     Argument *arguments;
     GLuint shader_id;
     GLuint program_id;
-};
-
-// Information about each known texture.
-struct TextureInfo {
-    GLuint id;
-    GLint min[4];
-    GLint extent[4];
-    bool halide_allocated;              // allocated by us or host app?
-    TextureInfo *next;
 };
 
 struct ModuleState {
@@ -177,15 +170,6 @@ struct ModuleState {
     ModuleState *next;
 };
 
-// OpenGL state to save and restore before/after
-// running a filter.
-struct SavedGLState {
-    GLint active_texture;
-          GLint program;
-          GLint viewport[4];
-    GLboolean cull_face;
-    GLboolean depth_test;
-};
 
 // All persistent state maintained by the runtime.
 struct GlobalState {
@@ -208,14 +192,6 @@ struct GlobalState {
     GLuint vertex_buffer;
     GLuint element_buffer;
 
-    // A list of all textures that are still active
-    TextureInfo *textures;
-
-    // Saved OpenGL state prior to running filter
-    struct SavedGLState saved_state;
-    void SaveGLState();
-    void RestoreGLState();
-
     // Declare pointers used OpenGL functions
 #define GLFUNC(PTYPE,VAR) PTYPE VAR
     USED_GL_FUNCTIONS;
@@ -233,33 +209,103 @@ WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *locat
     return false;
 }
 
-WEAK void GlobalState::SaveGLState() {
-    this->GetIntegerv(GL_ACTIVE_TEXTURE, &(saved_state.active_texture));
-    this->GetIntegerv(GL_CURRENT_PROGRAM, &(saved_state.program));
-    this->GetIntegerv(GL_VIEWPORT, saved_state.viewport);
-    this->GetBooleanv(GL_CULL_FACE, &(saved_state.cull_face));
-    this->GetBooleanv(GL_DEPTH_TEST, &(saved_state.depth_test));
+WEAK GlobalState global_state;
+
+// Saves & restores OpenGL state
+class GLStateSaver {
+    public:
+
+    __attribute__((always_inline)) GLStateSaver() { save(); }
+    __attribute__((always_inline)) ~GLStateSaver() { restore(); }
+
+    private:
+
+    // The state variables
+    GLint active_texture;
+    GLint array_buffer_binding;
+    GLint element_array_buffer_binding;
+    GLint framebuffer_binding;
+    GLint program;
+    GLint vertex_array_binding;
+    GLint viewport[4];
+    GLboolean cull_face;
+    GLboolean depth_test;
+    int max_combined_texture_image_units;
+    GLint *texture_2d_binding;
+    int max_vertex_attribs;
+    GLint *vertex_attrib_array_enabled;
+
+    // Define these out-of-line as WEAK, to avoid LLVM error "MachO doesn't support COMDATs"
+    void save();
+    void restore();
+};
+
+WEAK void GLStateSaver::save()
+{
+    global_state.GetIntegerv(GL_ACTIVE_TEXTURE, &active_texture);
+    global_state.GetIntegerv(GL_ARRAY_BUFFER_BINDING, &array_buffer_binding);
+    global_state.GetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &element_array_buffer_binding);
+    global_state.GetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer_binding);
+    global_state.GetIntegerv(GL_CURRENT_PROGRAM, &program);
+    global_state.GetBooleanv(GL_CULL_FACE, &cull_face);
+    global_state.GetBooleanv(GL_DEPTH_TEST, &depth_test);
+    global_state.GetIntegerv(GL_VIEWPORT, viewport);
+
+    global_state.GetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &max_combined_texture_image_units);
+    texture_2d_binding = (GLint *) malloc(max_combined_texture_image_units * sizeof(GLint));
+    for (int i=0; i < max_combined_texture_image_units; i++) {
+        global_state.ActiveTexture(GL_TEXTURE0 + i);
+        global_state.GetIntegerv(GL_TEXTURE_BINDING_2D, &texture_2d_binding[i]);
+    }
+
+    global_state.GetIntegerv(GL_MAX_VERTEX_ATTRIBS, &max_vertex_attribs);
+    vertex_attrib_array_enabled = (GLint *) malloc(max_vertex_attribs * sizeof(GLint));
+    for (int i=0; i< max_vertex_attribs; i++) {
+        global_state.GetVertexAttribiv(i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &vertex_attrib_array_enabled[i]);
+    }
+
+    if (global_state.have_vertex_array_objects) {
+        global_state.GetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertex_array_binding);
+    }
 
 #ifdef DEBUG_RUNTIME
     debug(NULL) << "Saved OpenGL state\n";
 #endif
 }
 
-WEAK void GlobalState::RestoreGLState() {
+WEAK void GLStateSaver::restore()
+{
 #ifdef DEBUG_RUNTIME
     debug(NULL) << "Restoring OpenGL state\n";
 #endif
 
-    this->ActiveTexture(saved_state.active_texture);
-    this->UseProgram(saved_state.program);
-    this->Viewport(saved_state.viewport[0], saved_state.viewport[1],
-         saved_state.viewport[2], saved_state.viewport[3]);
-    (saved_state.cull_face ? this->Enable : this->Disable)(GL_CULL_FACE);
-    (saved_state.depth_test ? this->Enable : this->Disable)(GL_DEPTH_TEST);
+    for (int i=0; i < max_combined_texture_image_units; i++) {
+        global_state.ActiveTexture(GL_TEXTURE0 + i);
+        global_state.BindTexture(GL_TEXTURE_2D, texture_2d_binding[i]);
+    }
+    free(texture_2d_binding);
+
+    for (int i=0; i< max_vertex_attribs; i++) {
+        if (vertex_attrib_array_enabled[i])
+            global_state.EnableVertexAttribArray(i);
+        else
+            global_state.DisableVertexAttribArray(i);
+    }
+    free(vertex_attrib_array_enabled);
+
+    if (global_state.have_vertex_array_objects) {
+        global_state.BindVertexArray(vertex_array_binding);
+    }
+
+    global_state.ActiveTexture(active_texture);
+    global_state.BindFramebuffer(GL_FRAMEBUFFER, framebuffer_binding);
+    global_state.BindBuffer(GL_ARRAY_BUFFER, array_buffer_binding);
+    global_state.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_array_buffer_binding);
+    global_state.UseProgram(program);
+    global_state.Viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    (cull_face ? global_state.Enable : global_state.Disable)(GL_CULL_FACE);
+    (depth_test ? global_state.Enable : global_state.Disable)(GL_DEPTH_TEST);
 }
-
-
-WEAK GlobalState global_state;
 
 // A list of module-specific state. Each module corresponds to a single Halide filter
 WEAK ModuleState *state_list;
@@ -279,20 +325,22 @@ WEAK char *strndup(const char *s, size_t n) {
     return p;
 }
 
-WEAK void debug_buffer(void *user_context, buffer_t *buf) {
-    debug(user_context)
-        << "  dev: " << buf->dev << "\n"
-        << "  texture_id: " << (GLuint)halide_get_device_handle(buf->dev) << "\n"
-        << "  host: " << buf->host << "\n"
-        << "  extent: " << buf->extent[0] << " " << buf->extent[1]
-        << " " << buf->extent[2] << " " << buf->extent[3] <<  "\n"
-        << "  stride: " << buf->stride[0] << " " << buf->stride[1]
-        << " " << buf->stride[2] << " " << buf->stride[3] <<  "\n"
-        << "  min: " << buf->min[0] << " " << buf->min[1]
-        << " " << buf->min[2] << " " << buf->min[3] <<  "\n"
-        << "  elem_size: " << buf->elem_size << "\n"
-        << "  host_dirty: " << buf->host_dirty << "\n"
-        << "  dev_dirty: " << buf->dev_dirty << "\n";
+// Strip whitespace from the right side of
+// a string
+WEAK char *strstrip(char *str, size_t n) {
+    char *pos = str;
+    while (pos != str+n
+           && *pos != '\0'
+           && *pos != '\n'
+           && *pos != ' ') {
+        pos++;
+    }
+    *pos = '\0';
+    return str;
+}
+
+WEAK void debug_buffer(void *user_context, halide_buffer_t *buf) {
+    debug(user_context) << *buf << "\n";
 }
 
 WEAK GLuint make_shader(void *user_context, GLenum type,
@@ -407,7 +455,8 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
 
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
-            // ignore
+            // set name
+            kernel->name = strstrip(strndup(args, next_line - args), next_line - args);
         } else if ((args = match_prefix(line, uniform_marker))) {
             if (Argument *arg =
                 parse_argument(user_context, args, next_line - 1)) {
@@ -487,6 +536,7 @@ WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
         arg = next;
     }
     free(kernel->source);
+    free(kernel->name);
     free(kernel);
 }
 
@@ -505,7 +555,6 @@ WEAK void GlobalState::init() {
     minor_version = 0;
     framebuffer_id = 0;
     vertex_array_object = vertex_buffer = element_buffer = 0;
-    textures = NULL;
     have_vertex_array_objects = false;
     have_texture_rg = false;
     have_texture_rgb8_rgba8 = false;
@@ -704,28 +753,6 @@ WEAK int halide_opengl_device_release(void *user_context) {
         mod = next;
     }
 
-    // Delete all textures that were allocated by us.
-    TextureInfo *tex = global_state.textures;
-    int freed_textures = 0;
-    while (tex) {
-        TextureInfo *next = tex->next;
-        if (tex->halide_allocated) {
-            debug(user_context) << "halide_opengl_device_release: Deleting texture " << tex->id << "\n";
-            global_state.DeleteTextures(1, &tex->id);
-            if (global_state.CheckAndReportError(user_context, "halide_opengl_device_release DeleteTextures")) {
-                return 1;
-            }
-            freed_textures++;
-        }
-        free(tex);
-        tex = next;
-    }
-
-    if (freed_textures > 0) {
-        debug(user_context) << "halide_opengl_release: deleted "
-                            << freed_textures << " dangling texture(s).\n";
-    }
-
     global_state.DeleteBuffers(1, &global_state.vertex_buffer);
     global_state.DeleteBuffers(1, &global_state.element_buffer);
     if (global_state.have_vertex_array_objects) {
@@ -737,21 +764,22 @@ WEAK int halide_opengl_device_release(void *user_context) {
     return 0;
 }
 
-// Determine OpenGL texture format and channel type for a given buffer_t.
-WEAK bool get_texture_format(void *user_context, buffer_t *buf,
+
+// Determine OpenGL texture format and channel type for a given halide_buffer_t.
+WEAK bool get_texture_format(void *user_context, halide_buffer_t *buf,
                              GLint *internal_format, GLint *format, GLint *type) {
-    if (buf->elem_size == 1) {
+    if (buf->type == halide_type_of<uint8_t>()) {
         *type = GL_UNSIGNED_BYTE;
-    } else if (buf->elem_size == 2) {
+    } else if (buf->type == halide_type_of<uint16_t>()) {
         *type = GL_UNSIGNED_SHORT;
-    } else if (buf->elem_size == 4) {
+    } else if (buf->type == halide_type_of<float>()) {
         *type = GL_FLOAT;
     } else {
         error(user_context) << "OpenGL: Only uint8, uint16, and float textures are supported.";
         return false;
     }
 
-    const int channels = buf->extent[2];
+    const int channels = (buf->dimensions > 2) ? buf->dim[2].extent : 0;
 
     // GL_LUMINANCE and GL_LUMINANCE_ALPHA aren't color-renderable in ES2, period,
     // thus can't be read back via ReadPixels, thus are nearly useless to us.
@@ -818,67 +846,33 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
 }
 
 // This function returns the width, height and number of color channels that the
-// texture for the specified buffer_t will contain. It provides a single place
+// texture for the specified halide_buffer_t will contain. It provides a single place
 // to implement the logic snapping zero sized dimensions to one element.
-WEAK bool get_texture_dimensions(void *user_context, buffer_t *buf, GLint *width,
-                            GLint *height, GLint *channels) {
+WEAK bool get_texture_dimensions(void *user_context, halide_buffer_t *buf, GLint *width,
+                                 GLint *height, GLint *channels) {
+    if (buf->dimensions > 3) {
+        error(user_context) << "The GL backend supports buffers of at most 3 dimensions\n";
+        return false;
+    }
 
-    *width = buf->extent[0];
+    *width = buf->dim[0].extent;
     if (*width == 0) {
-        error(user_context) << "Invalid extent[0]: " << *width << "\n";
+        error(user_context) << "Invalid dim[0].extent: " << *width << "\n";
         return false;
     }
 
     // GLES 2.0 supports GL_TEXTURE_2D (plus cube map), but not 1d or 3d. If we
     // end up with a buffer that has a zero extent, set the corresponding size
     // to one.
-    *height = (buf->extent[1]) ? buf->extent[1] : 1;
-    *channels = (buf->extent[2]) ? buf->extent[2] : 1;
+    *height = (buf->dimensions > 1) ? buf->dim[1].extent : 1;
+    *channels = (buf->dimensions > 2) ? buf->dim[2].extent : 1;
 
     return true;
 }
 
-WEAK TextureInfo *find_texture_info(GLuint tex) {
-    TextureInfo *texinfo = global_state.textures;
-    while (texinfo && texinfo->id != tex) {
-        texinfo = texinfo->next;
-    }
-    return texinfo;
-}
-
-// Allocate new TextureInfo, fill it in, add to global list.
-WEAK TextureInfo *new_texture_info(GLuint tex, int32_t min[4], int32_t extent[4], bool halide_allocated) {
-    TextureInfo *texinfo = (TextureInfo*)malloc(sizeof(TextureInfo));
-    texinfo->id = tex;
-    for (int i=0; i<3; i++) {
-        texinfo->min[i] = min[i];
-        texinfo->extent[i] = extent[i];
-    }
-    texinfo->halide_allocated = halide_allocated;
-
-    texinfo->next = global_state.textures;
-    global_state.textures = texinfo;
-
-   return texinfo;
-}
-
-// Find TextureInfo with the given texture ID and remove it from the global list,
-// but DO NOT free the TextureInfo itself. If not found, return NULL.
-WEAK TextureInfo *unlink_texture_info(GLuint tex) {
-    TextureInfo **ptr = &global_state.textures;
-    TextureInfo *texinfo = *ptr;
-    for (; texinfo != NULL; ptr = &texinfo->next, texinfo = *ptr) {
-        if (texinfo->id == tex) {
-            *ptr = texinfo->next;
-            texinfo->next = NULL;
-            return texinfo;
-        }
-    }
-    return NULL;
-}
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
-WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
+WEAK int halide_opengl_device_malloc(void *user_context, halide_buffer_t *buf) {
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
@@ -894,7 +888,7 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
     GLuint tex = 0;
     bool halide_allocated = false;
 
-    if (buf->dev) {
+    if (buf->device) {
 #ifdef HAVE_GLES3
         // Look up the width and the height from the existing texture. Note that
         // glGetTexLevelParameteriv does not support GL_TEXTURE_WIDTH or
@@ -906,19 +900,19 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
         if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc binding texture (GLES3)")) {
             return 1;
         }
-        if (width < buf->extent[0] || height < buf->extent[1]) {
+        if (width < buf->dim[0].extent || height < buf->dim[1].extent) {
             error(user_context)
                 << "Existing texture is smaller than buffer. "
                 << "Texture size: " << width << "x" << height
-                << ", buffer size: " << buf->extent[0] << "x" << buf->extent[1];
+                << ", buffer size: " << buf->dim[0].extent << "x" << buf->dim[1].extent;
             return 1;
         }
 #endif
-        uint64_t handle = halide_get_device_handle(buf->dev);
+        uint64_t handle = buf->device;
         tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
     } else {
-        if (buf->extent[3] > 1) {
-            error(user_context) << "3D textures are not supported";
+        if (buf->dimensions > 3) {
+            error(user_context) << "high-dimensional textures are not supported";
             return 1;
         }
 
@@ -960,12 +954,9 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
             return 1;
         }
 
-        buf->dev = halide_new_device_wrapper(tex, &opengl_device_interface);
-        if (buf->dev == 0) {
-            error(user_context) << "OpenGL: out of memory allocating device wrapper.\n";
-            global_state.DeleteTextures(1, &tex);
-            return -1;
-        }
+        buf->device = tex;
+        buf->device_interface = &opengl_device_interface;
+        buf->device_interface->impl->use_module();
         halide_allocated = true;
         debug(user_context) << "Allocated texture " << tex
                             << " of size " << width << " x " << height << "\n";
@@ -973,55 +964,34 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
         global_state.BindTexture(GL_TEXTURE_2D, 0);
     }
 
-    // Record main information about texture and remember it for later. In
-    // halide_opengl_run we are only given the texture ID and not the full
-    // buffer_t, so we copy the interesting information here.  Note: there can
-    // be multiple dev_malloc calls for the same buffer_t; only record texture
-    // information once.
-    if (!find_texture_info(tex)) {
-        (void) new_texture_info(tex, buf->min, buf->extent, halide_allocated);
-    }
     return 0;
 }
 
-// Delete all texture information associated with a buffer. The OpenGL texture
-// itself is only deleted if it was actually allocated by Halide and not
-// provided by the host application.
-WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
+// Delete all texture information associated with a buffer.
+WEAK int halide_opengl_device_free(void *user_context, halide_buffer_t *buf) {
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized in call to halide_opengl_device_free.";
         return 1;
     }
 
-    if (buf->dev == 0) {
+    if (buf->device == 0) {
         return 0;
     }
 
-    uint64_t handle = halide_get_device_handle(buf->dev);
+    uint64_t handle = buf->device;
     GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
 
-    // Look up corresponding TextureInfo and unlink it from the list.
-    TextureInfo *texinfo = unlink_texture_info(tex);
-    if (!texinfo) {
-        error(user_context) << "Internal error: texture " << tex << " not found.";
-        return 1;
-    }
-
-    // Delete texture if it was allocated by us.
     int result = 0;
-    if (texinfo->halide_allocated) {
-        debug(user_context) << "halide_opengl_device_free: Deleting texture " << tex << "\n";
-        global_state.DeleteTextures(1, &tex);
-        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_free DeleteTextures")) {
-            result = 1;
-            // do not return: we want to delete the wrapper and zero the dev field,
-            // even if we can't delete the texture.
-        }
-        halide_delete_device_wrapper(buf->dev);
-        buf->dev = 0;
+    debug(user_context) << "halide_opengl_device_free: Deleting texture " << tex << "\n";
+    global_state.DeleteTextures(1, &tex);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_device_free DeleteTextures")) {
+        result = 1;
+        // do not return: we want to zero out the interface and
+        // device fields even if we can't delete the texture.
     }
-
-    free(texinfo);
+    buf->device = 0;
+    buf->device_interface->impl->release_module();
+    buf->device_interface = NULL;
 
     return result;
 }
@@ -1030,19 +1000,20 @@ WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
 template<typename T> __attribute__((always_inline)) T std_min(T a, T b) { return (a < b) ? a : b; }
 template<typename T> __attribute__((always_inline)) T std_max(T a, T b) { return (a > b) ? a : b; }
 
+
 // This method copies image data from the layout specified by the strides of the
-// buffer_t to the packed interleaved format needed by GL. It is assumed that
+// halide_buffer_t to the packed interleaved format needed by GL. It is assumed that
 // src and dst have the same number of channels.
 template <class T>
  __attribute__((always_inline))
- void halide_to_interleaved(const buffer_t *src_buf, T *dst) {
+ void halide_to_interleaved(const halide_buffer_t *src_buf, T *dst) {
     const T *src = reinterpret_cast<const T *>(src_buf->host);
-    int width = std_max<int>(1, src_buf->extent[0]);
-    int height = std_max<int>(1, src_buf->extent[1]);
-    int channels = std_max<int>(1, src_buf->extent[2]);
-    int x_stride = src_buf->stride[0];
-    int y_stride = src_buf->stride[1];
-    int c_stride = src_buf->stride[2];
+    int width = (src_buf->dimensions > 0) ? src_buf->dim[0].extent : 1;
+    int height = (src_buf->dimensions > 1) ? src_buf->dim[1].extent : 1;
+    int channels = (src_buf->dimensions > 2) ? src_buf->dim[2].extent : 1;
+    int x_stride = (src_buf->dimensions > 0) ? src_buf->dim[0].stride : 0;
+    int y_stride = (src_buf->dimensions > 1) ? src_buf->dim[1].stride : 0;
+    int c_stride = (src_buf->dimensions > 2) ? src_buf->dim[2].stride : 0;
     for (int y = 0; y < height; y++) {
         int dstidx = y * width * channels;
         for (int x = 0; x < width; x++) {
@@ -1057,21 +1028,22 @@ template <class T>
 }
 
 // This method copies image data from the packed interleaved format needed by GL
-// to the arbitrary strided layout specified by the buffer_t. If src has fewer
+// to the arbitrary strided layout specified by the halide_buffer_t. If src has fewer
 // channels than dst, the excess in dst will be left untouched; if src has
 // more channels than dst, the excess will be ignored.
 template <class T>
 __attribute__((always_inline))
-void interleaved_to_halide(void *user_context, const T *src, int src_channels, buffer_t *dst_buf) {
+void interleaved_to_halide(void *user_context, const T *src, int src_channels, halide_buffer_t *dst_buf) {
     T *dst = reinterpret_cast<T*>(dst_buf->host);
-    int width = std_max<int>(1, dst_buf->extent[0]);
-    int height = std_max<int>(1, dst_buf->extent[1]);
-    int dst_channels = std_max<int>(1, dst_buf->extent[2]);
-    int channels = std_min<int>(src_channels, dst_channels);
-    int x_stride = dst_buf->stride[0];
-    int y_stride = dst_buf->stride[1];
-    int c_stride = dst_buf->stride[2];
+    int width = (dst_buf->dimensions > 0) ? dst_buf->dim[0].extent : 1;
+    int height = (dst_buf->dimensions > 1) ? dst_buf->dim[1].extent : 1;
+    int dst_channels = (dst_buf->dimensions > 2) ? dst_buf->dim[2].extent : 1;
+    int x_stride = (dst_buf->dimensions > 0) ? dst_buf->dim[0].stride : 0;
+    int y_stride = (dst_buf->dimensions > 1) ? dst_buf->dim[1].stride : 0;
+    int c_stride = (dst_buf->dimensions > 2) ? dst_buf->dim[2].stride : 0;
     int src_skip = std_max(0, src_channels - dst_channels);
+    int channels = std_min<int>(src_channels, dst_channels);
+
     for (int y = 0; y < height; y++) {
         int srcidx = y * width * src_channels;
         for (int x = 0; x < width; x++) {
@@ -1087,24 +1059,26 @@ void interleaved_to_halide(void *user_context, const T *src, int src_channels, b
 }
 
 // Copy image data from host memory to texture.
-WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
+WEAK int halide_opengl_copy_to_device(void *user_context, halide_buffer_t *buf) {
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_opengl_copy_to_device).";
         return 1;
     }
+
+    GLStateSaver state_saver;
 
     int err = halide_opengl_device_malloc(user_context, buf);
     if (err) {
         return err;
     }
 
-    if (!buf->host || !buf->dev) {
+    if (!buf->host || !buf->device) {
         debug_buffer(user_context, buf);
-        error(user_context) << "Invalid copy_to_device operation: host or dev NULL";
+        error(user_context) << "Invalid copy_to_device operation: host or device NULL";
         return 1;
     }
 
-    uint64_t handle = halide_get_device_handle(buf->dev);
+    uint64_t handle = buf->device;
     if (handle == HALIDE_OPENGL_RENDER_TARGET) {
         // TODO: this isn't correct; we want to ensure we copy to the current render_target.
         debug(user_context) << "halide_opengl_copy_to_device: called for HALIDE_OPENGL_RENDER_TARGET\n";
@@ -1117,12 +1091,6 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device BindTexture")) {
         return 1;
     }
-    struct BindTextureCleanup {
-        ~BindTextureCleanup() {
-            global_state.BindTexture(GL_TEXTURE_2D, 0);
-        }
-    } bind_texture_cleanup;
-
     GLint internal_format, format, type;
     if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
         error(user_context) << "Invalid texture format";
@@ -1138,12 +1106,11 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     // To use TexSubImage2D directly, the colors must be stored interleaved
     // and rows must be stored consecutively.
     // (Single-channel buffers are "interleaved" for our purposes here.)
-    bool is_interleaved = (buffer_channels == 1) || (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
-    bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
+    bool is_interleaved = (buffer_channels == 1) || (buf->dim[2].stride == 1 && buf->dim[0].stride == buf->dim[2].extent);
+    bool is_packed = (buf->dim[1].stride == buf->dim[0].extent * buf->dim[0].stride);
     if (is_interleaved && is_packed) {
         global_state.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        uint8_t *host_ptr = buf->host;
-        global_state.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, host_ptr);
+        global_state.TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, format, type, buf->host);
         if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device TexSubImage2D(1)")) {
             return 1;
         }
@@ -1151,7 +1118,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         debug(user_context)
             << "Warning: In copy_to_device, host buffer is not interleaved. Doing slow interleave.\n";
 
-        size_t texture_size = width * height * buffer_channels * buf->elem_size;
+        size_t texture_size = width * height * buffer_channels * buf->type.bytes();
         HalideMalloc tmp(user_context, texture_size);
         if (!tmp.ptr) {
             error(user_context) << "halide_malloc failed inside copy_to_device";
@@ -1181,13 +1148,15 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
 }
 
 // Copy image data from texture back to host memory.
-WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
+WEAK int halide_opengl_copy_to_host(void *user_context, halide_buffer_t *buf) {
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_opengl_copy_to_host).";
         return 1;
     }
 
-    if (!buf->host || !buf->dev) {
+    GLStateSaver state_saver;
+
+    if (!buf->host || !buf->device) {
         debug_buffer(user_context, buf);
         error(user_context) << "Invalid copy_to_host operation: host or dev NULL";
         return 1;
@@ -1206,15 +1175,8 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     }
     GLint texture_channels = buffer_channels;
 
-    // Ensure that Framebuffer is cleaned up regardless of subsequent return point
-    struct FramebufferCleanup {
-        ~FramebufferCleanup() {
-            global_state.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-            global_state.BindFramebuffer(GL_FRAMEBUFFER, 0);
-        }
-    } framebuffer_cleanup;
 
-    uint64_t handle = halide_get_device_handle(buf->dev);
+    uint64_t handle = buf->device;
     if (handle != HALIDE_OPENGL_RENDER_TARGET) {
         GLuint tex = (GLuint)handle;
         debug(user_context) << "halide_copy_to_host: texture " << tex << "\n";
@@ -1263,15 +1225,14 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     // To download the texture directly, the colors must be stored interleaved
     // and rows must be stored consecutively.
     // (Single-channel buffers are "interleaved" for our purposes here.)
-    bool is_interleaved = (buffer_channels == 1) || (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
-    bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
+    bool is_interleaved = (buffer_channels == 1) || (buf->dim[2].stride == 1 && buf->dim[0].stride == buf->dim[2].extent);
+    bool is_packed = (buf->dim[1].stride == buf->dim[0].extent * buf->dim[0].stride);
     if (is_interleaved && is_packed && texture_channels == buffer_channels) {
         global_state.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        uint8_t *host_ptr = buf->host;
 #ifdef DEBUG_RUNTIME
         int64_t t1 = halide_current_time_ns(user_context);
 #endif
-        global_state.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, host_ptr);
+        global_state.ReadPixels(0, 0, buf->dim[0].extent, buf->dim[1].extent, format, type, buf->host);
 #ifdef DEBUG_RUNTIME
         int64_t t2 = halide_current_time_ns(user_context);
 #endif
@@ -1279,13 +1240,13 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
             return 1;
         }
 #ifdef DEBUG_RUNTIME
-        debug(user_context)<<"ReadPixels(1) time: "<<(t2-t1)/1e3<<"usec\n";
+        debug(user_context) << "ReadPixels(1) time: "<<(t2-t1)/1e3<<"usec\n";
 #endif
     } else {
         debug(user_context)
             << "Warning: In copy_to_host, host buffer is not interleaved, or not a native format. Doing slow deinterleave.\n";
 
-        size_t texture_size = width * height * texture_channels * buf->elem_size;
+        size_t texture_size = width * height * texture_channels * buf->type.bytes();
         HalideMalloc tmp(user_context, texture_size);
         if (!tmp.ptr) {
             error(user_context) << "halide_malloc failed inside copy_to_host";
@@ -1296,7 +1257,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 #ifdef DEBUG_RUNTIME
         int64_t t1 = halide_current_time_ns(user_context);
 #endif
-        global_state.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, tmp.ptr);
+        global_state.ReadPixels(0, 0, buf->dim[0].extent, buf->dim[1].extent, format, type, tmp.ptr);
 #ifdef DEBUG_RUNTIME
         int64_t t2 = halide_current_time_ns(user_context);
         debug(user_context)<<"ReadPixels(2) time: "<<(t2-t1)/1e3<<"usec\n";
@@ -1335,6 +1296,23 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
 using namespace Halide::Runtime::Internal::OpenGL;
 
+// Find the correct module for the called function
+// TODO: This currently takes O(# of GLSL'd stages) and can
+// be optimized
+WEAK ModuleState* find_module(const char *stage_name) {
+    ModuleState* state_ptr = state_list;
+
+    while (state_ptr != NULL) {
+        KernelInfo *kernel = state_ptr->kernel;
+        if (kernel && strcmp(stage_name, kernel->name) == 0) {
+            return state_ptr;
+        }
+        state_ptr = state_ptr->next;
+    }
+
+    return NULL;
+}
+
 //  Create wrappers that satisfy old naming conventions
 
 extern "C" {
@@ -1355,20 +1333,16 @@ WEAK int halide_opengl_run(void *user_context,
         return 1;
     }
 
-    // save current OpenGL state
-    global_state.SaveGLState();
+    GLStateSaver state_saver;
 
-    ModuleState *mod = (ModuleState *)state_ptr;
+    // Find the right module
+    ModuleState *mod = find_module(entry_name);
     if (!mod) {
-        error(user_context) << "Internal error: module state is NULL";
-        return -1;
+      error(user_context) << "Internal error: module state for stage " << entry_name << " not found\n";
+      return 1;
     }
 
     KernelInfo *kernel = mod->kernel;
-    if (!kernel) {
-        error(user_context) << "Internal error: unknown kernel named '" << entry_name << "'";
-        return 1;
-    }
 
     global_state.UseProgram(kernel->program_id);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_run UseProgram")) {
@@ -1440,15 +1414,14 @@ WEAK int halide_opengl_run(void *user_context,
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
 
         if (kernel_arg->kind == Argument::Outbuf) {
-            halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
+            halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.");
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
-            uint64_t dev = *(uint64_t *)args[i];
-            if (!dev) {
+            uint64_t handle = ((halide_buffer_t *)args[i])->device;
+            if (!handle) {
                 error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
                 return 1;
             }
-            uint64_t handle = halide_get_device_handle(dev);
             if (handle == HALIDE_OPENGL_RENDER_TARGET) {
                 bind_render_targets = false;
             }
@@ -1465,12 +1438,11 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
-            uint64_t dev = *(uint64_t *)args[i];
-            if (!dev) {
+            uint64_t handle = ((halide_buffer_t *)args[i])->device;
+            if (!handle) {
                 error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
                 return 1;
             }
-            uint64_t handle = halide_get_device_handle(dev);
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
             global_state.BindTexture(GL_TEXTURE_2D, handle == HALIDE_OPENGL_RENDER_TARGET ? 0 : (GLuint)handle);
             global_state.Uniform1iv(loc, 1, &num_active_textures);
@@ -1599,12 +1571,13 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        uint64_t dev = *(uint64_t *)args[i];
-        if (!dev) {
+        halide_buffer_t *buf = (halide_buffer_t *)args[i];
+        halide_assert(user_context, buf->dimensions >= 2);
+        uint64_t handle = buf->device;
+        if (!handle) {
             error(user_context) << "GLSL: Encountered invalid NULL dev pointer";
             return 1;
         }
-        uint64_t handle = halide_get_device_handle(dev);
         GLuint tex = (handle == HALIDE_OPENGL_RENDER_TARGET) ? 0 : (GLuint)handle;
 
         // Check to see if the object name is actually a FBO
@@ -1619,15 +1592,10 @@ WEAK int halide_opengl_run(void *user_context,
             }
         }
 
-        TextureInfo *texinfo = find_texture_info(tex);
-        if (!texinfo) {
-            error(user_context) << "Undefined output texture " << tex;
-            return 1;
-        }
-        output_min[0] = texinfo->min[0];
-        output_min[1] = texinfo->min[1];
-        output_extent[0] = texinfo->extent[0];
-        output_extent[1] = texinfo->extent[1];
+        output_min[0] = buf->dim[0].min;
+        output_min[1] = buf->dim[1].min;
+        output_extent[0] = buf->dim[0].extent;
+        output_extent[1] = buf->dim[1].extent;
         num_output_textures++;
     }
     // TODO: GL_MAX_DRAW_BUFFERS
@@ -1809,39 +1777,18 @@ WEAK int halide_opengl_run(void *user_context,
         return 1;
     }
 
-    for (int i=0;i!=num_packed_attributes;++i) {
-        if (attrib_ids[i] != -1)
-            global_state.DisableVertexAttribArray(attrib_ids[i]);
-    }
-
     // Cleanup
-    for (int i = 0; i < num_active_textures; i++) {
-        global_state.ActiveTexture(GL_TEXTURE0 + i);
-        global_state.BindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    if (bind_render_targets) {
-        global_state.BindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
-    global_state.BindBuffer(GL_ARRAY_BUFFER, 0);
-    global_state.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
     if (global_state.have_vertex_array_objects) {
-        global_state.BindVertexArray(0);
         global_state.DeleteVertexArrays(1, &vertex_array_object);
     }
 
     global_state.DeleteBuffers(1, &vertex_buffer_id);
     global_state.DeleteBuffers(1, &element_buffer_id);
 
-    // Restore OpenGL state
-    global_state.RestoreGLState();
-
     return 0;
 }
 
-WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
+WEAK int halide_opengl_device_sync(void *user_context, struct halide_buffer_t *) {
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_opengl_device_sync).";
         return 1;
@@ -1862,31 +1809,45 @@ WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
 // code into a fragment shader.
 WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
                                           const char *src, int size) {
+    debug(user_context) << "In initialize_kernels\n";
+
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
 
+    const char *this_kernel = src;
+
     ModuleState **state = (ModuleState **)state_ptr;
     ModuleState *module = *state;
-    if (!module) {
+
+    while (this_kernel) {
+        // Find the start of the next kernel
+        const char *next_kernel = strstr(this_kernel+1, kernel_marker);
+
+        // Use that to compute the length of this kernel
+        int len = 0;
+        if (!next_kernel) {
+            len = strlen(this_kernel);
+        } else {
+            len = next_kernel - this_kernel;
+        }
+
+        // Construct a new ModuleState and add it to the global list
         module = (ModuleState *)malloc(sizeof(ModuleState));
         module->kernel = NULL;
         module->next = state_list;
         state_list = module;
         *state = module;
-    }
 
-    KernelInfo *kernel = module->kernel;
-    if (!kernel) {
-        kernel = create_kernel(user_context, src, size);
+        KernelInfo *kernel = module->kernel;
         if (!kernel) {
-            error(user_context) << "Invalid kernel: " << src;
-            return -1;
+            kernel = create_kernel(user_context, this_kernel, len);
+            if (!kernel) {
+                error(user_context) << "Invalid kernel: " << this_kernel;
+                return -1;
+            }
+            module->kernel = kernel;
         }
-        module->kernel = kernel;
-    }
-
-    if (kernel->program_id == 0) {
 
         // Create the vertex shader. The runtime will output boilerplate for the
         // vertex shader based on a fixed program plus arguments obtained from
@@ -1977,19 +1938,21 @@ WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
             return -1;
         }
         kernel->program_id = program;
+
+        this_kernel = next_kernel;
     }
     return 0;
 }
 
-WEAK int halide_opengl_device_and_host_malloc(void *user_context, struct buffer_t *buf) {
+WEAK int halide_opengl_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_malloc(user_context, buf, &opengl_device_interface);
 }
 
-WEAK int halide_opengl_device_and_host_free(void *user_context, struct buffer_t *buf) {
+WEAK int halide_opengl_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     return halide_default_device_and_host_free(user_context, buf, &opengl_device_interface);
 }
 
-WEAK const halide_device_interface *halide_opengl_device_interface() {
+WEAK const halide_device_interface_t *halide_opengl_device_interface() {
     return &opengl_device_interface;
 }
 
@@ -2002,100 +1965,64 @@ WEAK void halide_opengl_context_lost(void *user_context) {
         mod->kernel->program_id = 0;
     }
 
-    TextureInfo *tex = global_state.textures;
-    while (tex) {
-        TextureInfo *next = tex->next;
-        free(tex);
-        tex = next;
-    }
-
     global_state.init();
     return;
 }
 
-WEAK int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t texture_id) {
-  if (!global_state.initialized) {
-      // Must initialize here: if not, we risk having the TextureInfo
-      // blown away when global state really is inited.
-      if (int error = halide_opengl_init(user_context)) {
-          return error;
-      }
+WEAK int halide_opengl_wrap_texture(void *user_context, halide_buffer_t *buf, uint64_t texture_id) {
+    if (!global_state.initialized) {
+        if (int error = halide_opengl_init(user_context)) {
+            return error;
+        }
     }
     if (texture_id == 0) {
         error(user_context) << "Texture " << texture_id << " is not a valid texture name.";
         return -3;
     }
-    halide_assert(user_context, buf->dev == 0);
-    if (buf->dev != 0) {
+    halide_assert(user_context, buf->device == 0);
+    if (buf->device != 0) {
         return -2;
     }
-    if (find_texture_info(texture_id)) {
-        error(user_context) << "Internal error: texture " << texture_id << " is already wrapped.";
-        return -3;
-    }
-    (void) new_texture_info(texture_id, buf->min, buf->extent, /* halide_allocated */ false);
-    buf->dev = halide_new_device_wrapper(texture_id, &opengl_device_interface);
-    if (buf->dev == 0) {
-        return -1;
-    }
+    buf->device = texture_id;
+    buf->device_interface = &opengl_device_interface;
+    buf->device_interface->impl->use_module();
     return 0;
 }
 
-WEAK int halide_opengl_wrap_render_target(void *user_context, struct buffer_t *buf) {
+WEAK int halide_opengl_wrap_render_target(void *user_context, halide_buffer_t *buf) {
     if (!global_state.initialized) {
-        // Must initialize here: if not, we risk having the TextureInfo
-        // blown away when global state really is inited.
         if (int error = halide_opengl_init(user_context)) {
             return error;
         }
     }
-    halide_assert(user_context, buf->dev == 0);
-    if (buf->dev != 0) {
+    halide_assert(user_context, buf->device == 0);
+    if (buf->device != 0) {
         return -2;
     }
-    const GLuint tex = 0;
-    if (find_texture_info(tex)) {
-        error(user_context) << "Internal error: texture " << tex << " is already wrapped.";
-        return -3;
-    }
-    (void) new_texture_info(tex, buf->min, buf->extent, /* halide_allocated */ false);
-    buf->dev = halide_new_device_wrapper(HALIDE_OPENGL_RENDER_TARGET, &opengl_device_interface);
-    if (buf->dev == 0) {
-        return -1;
-    }
+    buf->device = HALIDE_OPENGL_RENDER_TARGET;
+    buf->device_interface = &opengl_device_interface;
+    buf->device_interface->impl->use_module();
     return 0;
 }
 
-WEAK uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf) {
-    if (buf->dev == NULL) {
+WEAK int halide_opengl_detach_texture(void *user_context, halide_buffer_t *buf) {
+    if (buf->device == 0) {
         return 0;
     }
-    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opengl_device_interface);
-    uint64_t handle = halide_get_device_handle(buf->dev);
-    halide_delete_device_wrapper(buf->dev);
-    buf->dev = 0;
-    if (handle == HALIDE_OPENGL_RENDER_TARGET) {
-        const GLuint tex = 0;
-        TextureInfo *texinfo = unlink_texture_info(tex);
-        if (!texinfo) {
-            error(user_context) << "Internal error: texture " << tex << " not found.";
-            return -3;
-        }
-        halide_assert(user_context, !texinfo->halide_allocated);
-        free(texinfo);
-        // client_bound always return 0 here.
-        return 0;
-    } else {
-        return (uintptr_t)handle;
-    }
+
+    halide_assert(user_context, buf->device_interface == &opengl_device_interface);
+    buf->device = 0;
+    buf->device_interface->impl->release_module();
+    buf->device_interface = NULL;
+    return 0;
 }
 
-WEAK uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *buf) {
-    if (buf->dev == NULL) {
+WEAK uintptr_t halide_opengl_get_texture(void *user_context, halide_buffer_t *buf) {
+    if (buf->device == 0) {
         return 0;
     }
-    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opengl_device_interface);
-    uint64_t handle = halide_get_device_handle(buf->dev);
+    halide_assert(user_context, buf->device_interface == &opengl_device_interface);
+    uint64_t handle = buf->device;
     // client_bound always return 0 here.
     return handle == HALIDE_OPENGL_RENDER_TARGET ? 0 : (uintptr_t)handle;
 }
@@ -2112,7 +2039,7 @@ WEAK void halide_opengl_cleanup() {
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
-WEAK halide_device_interface opengl_device_interface = {
+WEAK halide_device_interface_impl_t opengl_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_opengl_device_malloc,
@@ -2123,6 +2050,22 @@ WEAK halide_device_interface opengl_device_interface = {
     halide_opengl_copy_to_device,
     halide_opengl_device_and_host_malloc,
     halide_opengl_device_and_host_free,
+    halide_opengl_wrap_texture,
+    halide_opengl_detach_texture
+};
+
+WEAK halide_device_interface_t opengl_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    halide_device_wrap_native,
+    halide_device_detach_native,
+    &opengl_device_interface_impl
 };
 
 }}}} // namespace Halide::Runtime::Internal::OpenGL

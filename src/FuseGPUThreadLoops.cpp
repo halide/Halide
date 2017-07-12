@@ -12,6 +12,7 @@
 #include "Simplify.h"
 #include "IRPrinter.h"
 #include "ExprUsesVar.h"
+#include "CSE.h"
 
 namespace Halide {
 namespace Internal {
@@ -43,29 +44,6 @@ class InjectThreadBarriers : public IRMutator {
         IRMutator::visit(op);
 
         in_threads = old_in_threads;
-    }
-
-    void visit(const ProducerConsumer *op) {
-        if (!in_threads) {
-            Stmt produce = mutate(op->produce);
-            if (!is_no_op(produce)) {
-                produce = Block::make(produce, barrier);
-            }
-
-            Stmt update;
-            if (op->update.defined()) {
-                update = mutate(op->update);
-                if (!is_no_op(update)) {
-                    update = Block::make(update, barrier);
-                }
-            }
-
-            Stmt consume = mutate(op->consume);
-
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
-        } else {
-            IRMutator::visit(op);
-        }
     }
 
     void visit(const Block *op) {
@@ -117,6 +95,7 @@ class ExtractBlockSize : public IRVisitor {
         for (int i = 0; i < 4; i++) {
             if (block_extent[i].defined() &&
                 expr_uses_var(block_extent[i], op->name)) {
+                block_extent[i] = simplify(common_subexpression_elimination(block_extent[i]));
                 block_extent[i] = simplify(bounds_of_expr_in_scope(block_extent[i], scope).max);
             }
         }
@@ -167,27 +146,10 @@ class NormalizeDimensionality : public IRMutator {
         }
         while (max_depth < block_size.dimensions()) {
             string name = thread_names[max_depth];
-            s = For::make("." + name, 0, 1, ForType::Parallel, device_api, s);
+            s = For::make("." + name, 0, 1, ForType::GPUThread, device_api, s);
             max_depth++;
         }
         return s;
-    }
-
-    void visit(const ProducerConsumer *op) {
-        Stmt produce = wrap(op->produce);
-        Stmt update;
-        if (op->update.defined()) {
-            update = wrap(op->update);
-        }
-        Stmt consume = wrap(op->consume);
-
-        if (produce.same_as(op->produce) &&
-            update.same_as(op->update) &&
-            consume.same_as(op->consume)) {
-            stmt = op;
-        } else {
-            stmt = ProducerConsumer::make(op->name, produce, update, consume);
-        }
     }
 
     void visit(const Block *op) {
@@ -347,34 +309,6 @@ class ExtractSharedAllocations : public IRMutator {
         }
     }
 
-
-    void visit(const ProducerConsumer *op) {
-        if (!in_threads) {
-            Stmt produce = mutate(op->produce);
-            if (!is_no_op(produce)) {
-                barrier_stage++;
-            }
-            Stmt update;
-            if (op->update.defined()) {
-                update = mutate(op->update);
-                if (!is_no_op(update)) {
-                    barrier_stage++;
-                }
-            }
-            Stmt consume = mutate(op->consume);
-
-            if (produce.same_as(op->produce) &&
-                update.same_as(op->update) &&
-                consume.same_as(op->consume)) {
-                stmt = op;
-            } else {
-                stmt = ProducerConsumer::make(op->name, produce, update, consume);
-            }
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
     void visit(const Block *op) {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
@@ -422,13 +356,16 @@ class ExtractSharedAllocations : public IRMutator {
 
     void visit(const Load *op) {
         if (shared.count(op->name)) {
+            Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             shared[op->name].max = barrier_stage;
             if (device_api == DeviceAPI::OpenGLCompute) {
-                expr = Load::make(op->type, shared_mem_name + "_" + op->name, index, op->image, op->param);
+                expr = Load::make(op->type, shared_mem_name + "_" + op->name,
+                                  index, op->image, op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                expr = Load::make(op->type, shared_mem_name, base + index, op->image, op->param);
+                expr = Load::make(op->type, shared_mem_name, base + index,
+                                  op->image, op->param, predicate);
             }
 
         } else {
@@ -439,13 +376,15 @@ class ExtractSharedAllocations : public IRMutator {
     void visit(const Store *op) {
         if (shared.count(op->name)) {
             shared[op->name].max = barrier_stage;
+            Expr predicate = mutate(op->predicate);
             Expr index = mutate(op->index);
             Expr value = mutate(op->value);
             if (device_api == DeviceAPI::OpenGLCompute) {
-                stmt = Store::make(shared_mem_name + "_" + op->name, value, index, op->param);
+                stmt = Store::make(shared_mem_name + "_" + op->name, value, index,
+                                   op->param, predicate);
             } else {
                 Expr base = Variable::make(Int(32), op->name + ".shared_offset");
-                stmt = Store::make(shared_mem_name, value, base + index, op->param);
+                stmt = Store::make(shared_mem_name, value, base + index, op->param, predicate);
             }
         } else {
             IRMutator::visit(op);
@@ -673,12 +612,12 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
 
             // Rewrap the whole thing in the loop over threads
             for (int i = 0; i < block_size.dimensions(); i++) {
-                body = For::make("." + thread_names[i], 0, block_size.extent(i), ForType::Parallel, op->device_api, body);
+                body = For::make("." + thread_names[i], 0, block_size.extent(i), ForType::GPUThread, op->device_api, body);
             }
 
             // There at least needs to be a loop over __thread_id_x as a marker for codegen
             if (block_size.dimensions() == 0) {
-                body = For::make(".__thread_id_x", 0, 1, ForType::Parallel, op->device_api, body);
+                body = For::make(".__thread_id_x", 0, 1, ForType::GPUThread, op->device_api, body);
             }
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";

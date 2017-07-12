@@ -3,4 +3,4 @@
 
 void defineOperators();
 
-#endif // IROPERATOR_H
+#endif  // IROPERATOR_H

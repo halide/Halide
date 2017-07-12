@@ -4,8 +4,8 @@
 using namespace Halide;
 
 struct MultiDevicePipeline {
-    Var x, y, c;
-    Func stage[4];
+    Var x, y, c, xi, yi;
+    Func stage[5];
     size_t current_stage;
 
     MultiDevicePipeline(Func input) {
@@ -17,31 +17,42 @@ struct MultiDevicePipeline {
         Target jit_target(get_jit_target_from_environment());
         if (jit_target.has_feature(Target::OpenCL)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, TailStrategy::Auto, DeviceAPI::OpenCL);
+            stage[current_stage].compute_root().reorder(c, x, y)
+                .gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
             current_stage++;
         }
         if (jit_target.has_feature(Target::CUDA)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, TailStrategy::Auto, DeviceAPI::CUDA);
+            stage[current_stage].compute_root().reorder(c, x, y)
+                .gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::CUDA);
+            current_stage++;
+        }
+        if (jit_target.has_feature(Target::Metal)) {
+            stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
+            stage[current_stage].compute_root().reorder(c, x, y)
+                .gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::Metal);
             current_stage++;
         }
         if (jit_target.has_feature(Target::OpenGL)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().bound(c, 0, 3).reorder(c, x, y).glsl(x, y, c).vectorize(c);
+            stage[current_stage].compute_root()
+                .bound(c, 0, 3).reorder(c, x, y).glsl(x, y, c).vectorize(c);
             current_stage++;
         }
         if (jit_target.has_feature(Target::OpenGLCompute)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, TailStrategy::Auto, DeviceAPI::OpenGLCompute);
+            stage[current_stage].compute_root().reorder(c, x, y)
+                .gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenGLCompute);
             current_stage++;
         }
     }
 
-    void run(Image<float> &result) {
+    void run(Buffer<float> &result) {
         stage[current_stage - 1].realize(result);
+        result.copy_to_host();
     }
 
-    bool verify(const Image<float> &result, size_t stages, const char * test_case) {
+    bool verify(const Buffer<float> &result, size_t stages, const char * test_case) {
         for (int i = 0; i < 100; i++) {
             for (int j = 0; j < 100; j++) {
                 for (int k = 0; k < 3; k++) {
@@ -69,7 +80,7 @@ int main(int argc, char **argv) {
             return 0;
         }
 
-        Image<float> output1(100, 100, 3);
+        Buffer<float> output1(100, 100, 3);
         pipe1.run(output1);
 
         if (!pipe1.verify(output1, pipe1.current_stage - 1, "const input")) {
@@ -81,15 +92,15 @@ int main(int argc, char **argv) {
         MultiDevicePipeline pipe2(const_input);
 
         ImageParam gpu_buffer(Float(32), 3);
-        gpu_buffer.set_bounds(2, 0, 3);
+        gpu_buffer.dim(2).set_bounds(0, 3);
         Func buf_input;
         buf_input(x, y, c) = gpu_buffer(x, y, c);
         MultiDevicePipeline pipe3(buf_input);
 
-        Image<float> output2(100, 100, 3);
+        Buffer<float> output2(100, 100, 3);
         pipe2.run(output2);
 
-        Image<float> output3(100, 100, 3);
+        Buffer<float> output3(100, 100, 3);
         gpu_buffer.set(output2);
         pipe3.run(output3);
 

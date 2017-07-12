@@ -10,8 +10,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Func f, g, h, out;
-    Var x, y, z;
+    Func f("f"), g("g"), h("h"), out("out");
+    Var x("x"), y("y"), z("z");
 
     f(x, y, z) = x + y + z;
     f(x, y, z) += 1;
@@ -22,18 +22,17 @@ int main(int argc, char **argv) {
     out(x, y, z) = h(x, y, z);
     out(x, y, z) += 1;
 
-    out.gpu_tile(x, y, z, 4, 4, 4);
-    out.update().gpu_tile(x, y, 4, 4);
-    h.compute_at(out, Var::gpu_blocks()).gpu_threads(x, y);
+    Var xi("xi"), yi("yi"), zi("zi");
+    out.gpu_tile(x, y, z, xi, yi, zi, 4, 4, 4);
+    out.update().gpu_tile(x, y, xi, yi, 4, 4);
+    h.compute_at(out, x).gpu_threads(x, y);
     h.update().gpu_threads(x);
-    // Normally it isn't useful to schedule things at in-between
-    // thread levels, so Halide doesn't expose a clean name for it.
-    g.compute_at(h, Var("__thread_id_y")).gpu_threads(x);
+    g.compute_at(h, y).gpu_threads(x);
     g.update();
-    f.compute_at(g, Var::gpu_threads());
+    f.compute_at(g, x);
     f.update();
 
-    Image<int> o = out.realize(64, 64, 64);
+    Buffer<int> o = out.realize(64, 64, 64);
 
     for (int z = 0; z < 64; z++) {
         for (int y = 0; y < 64; y++) {

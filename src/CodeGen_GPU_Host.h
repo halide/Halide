@@ -10,7 +10,6 @@
 #include "CodeGen_ARM.h"
 #include "CodeGen_X86.h"
 #include "CodeGen_MIPS.h"
-#include "CodeGen_PNaCl.h"
 #include "CodeGen_PowerPC.h"
 
 #include "IR.h"
@@ -53,15 +52,6 @@ protected:
     using CodeGen_CPU::sym_pop;
     using CodeGen_CPU::sym_get;
     using CodeGen_CPU::sym_exists;
-    using CodeGen_CPU::buffer_dev_dirty_ptr;
-    using CodeGen_CPU::buffer_host_dirty_ptr;
-    using CodeGen_CPU::buffer_elem_size_ptr;
-    using CodeGen_CPU::buffer_min_ptr;
-    using CodeGen_CPU::buffer_stride_ptr;
-    using CodeGen_CPU::buffer_extent_ptr;
-    using CodeGen_CPU::buffer_host_ptr;
-    using CodeGen_CPU::buffer_dev;
-    using CodeGen_CPU::buffer_dev_ptr;
     using CodeGen_CPU::llvm_type_of;
     using CodeGen_CPU::create_alloca_at_entry;
     using CodeGen_CPU::i8_t;

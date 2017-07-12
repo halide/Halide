@@ -35,9 +35,7 @@ def main():
 
     # Realize the function over an 8x8 region.
     print("Evaluating gradient")
-    output_realization = gradient.realize(8, 8)
-    output = Image(Int(32), output_realization)
-
+    output = gradient.realize(8, 8)
 
     # This will print out all the times gradient(x, y) gets
     # evaluated.
@@ -76,4 +74,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

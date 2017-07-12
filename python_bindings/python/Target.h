@@ -3,4 +3,4 @@
 
 void defineTarget();
 
-#endif // TARGET_H
+#endif  // TARGET_H

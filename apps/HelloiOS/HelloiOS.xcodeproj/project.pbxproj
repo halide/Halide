@@ -7,25 +7,40 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		296DAF091B39E74F00555E8A /* reaction_diffusion_2_init.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 296DAF061B39E74F00555E8A /* reaction_diffusion_2_init.o */; };
-		296DAF0A1B39E74F00555E8A /* reaction_diffusion_2_render.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 296DAF071B39E74F00555E8A /* reaction_diffusion_2_render.o */; };
-		296DAF0B1B39E74F00555E8A /* reaction_diffusion_2_update.o in Frameworks */ = {isa = PBXBuildFile; fileRef = 296DAF081B39E74F00555E8A /* reaction_diffusion_2_update.o */; };
+		1440FDD11DDF9E2600B55760 /* HalideViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1440FDD01DDF9E2600B55760 /* HalideViewController.mm */; };
+		14F463431E1F0BC2002C2EA2 /* reaction_diffusion_2_init.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 14F463421E1F0BC2002C2EA2 /* reaction_diffusion_2_init.a */; };
+		14F463461E1F14C5002C2EA2 /* reaction_diffusion_2_render.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 14F463441E1F14C5002C2EA2 /* reaction_diffusion_2_render.a */; };
+		14F463471E1F14C5002C2EA2 /* reaction_diffusion_2_update.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 14F463451E1F14C5002C2EA2 /* reaction_diffusion_2_update.a */; };
+		14F463511E1F1501002C2EA2 /* reaction_diffusion_2_metal_init.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 14F463491E1F1501002C2EA2 /* reaction_diffusion_2_metal_init.a */; };
+		14F463521E1F1501002C2EA2 /* reaction_diffusion_2_metal_render.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 14F4634B1E1F1501002C2EA2 /* reaction_diffusion_2_metal_render.a */; };
+		14F463531E1F1501002C2EA2 /* reaction_diffusion_2_metal_update.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 14F4634D1E1F1501002C2EA2 /* reaction_diffusion_2_metal_update.a */; };
 		29A23DAC1B33E68C00A92A6F /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 29A23DAB1B33E68C00A92A6F /* Metal.framework */; };
 		3D6C4DBB198051DB002AD41E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DBA198051DB002AD41E /* Foundation.framework */; };
 		3D6C4DBD198051DB002AD41E /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DBC198051DB002AD41E /* CoreGraphics.framework */; };
 		3D6C4DBF198051DB002AD41E /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DBE198051DB002AD41E /* UIKit.framework */; };
 		3D6C4DC5198051DB002AD41E /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 3D6C4DC3198051DB002AD41E /* InfoPlist.strings */; };
-		3D6C4DC7198051DB002AD41E /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DC6198051DB002AD41E /* main.m */; };
-		3D6C4DCB198051DB002AD41E /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DCA198051DB002AD41E /* AppDelegate.m */; };
+		3D6C4DC7198051DB002AD41E /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DC6198051DB002AD41E /* main.mm */; };
+		3D6C4DCB198051DB002AD41E /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DCA198051DB002AD41E /* AppDelegate.mm */; };
 		3D6C4DCD198051DB002AD41E /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3D6C4DCC198051DB002AD41E /* Images.xcassets */; };
-		3D6C4DEB19805225002AD41E /* HalideView.m in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DEA19805225002AD41E /* HalideView.m */; };
+		3D6C4DEB19805225002AD41E /* HalideView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3D6C4DEA19805225002AD41E /* HalideView.mm */; };
 		3D6C4DF619805438002AD41E /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D6C4DF519805438002AD41E /* QuartzCore.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		296DAF061B39E74F00555E8A /* reaction_diffusion_2_init.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_init.o; path = "../../Intermediates/HelloiOS.build/Debug-iphoneos/HelloiOS.build/DerivedSources/reaction_diffusion_2_init.o"; sourceTree = BUILT_PRODUCTS_DIR; };
-		296DAF071B39E74F00555E8A /* reaction_diffusion_2_render.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_render.o; path = "../../Intermediates/HelloiOS.build/Debug-iphoneos/HelloiOS.build/DerivedSources/reaction_diffusion_2_render.o"; sourceTree = BUILT_PRODUCTS_DIR; };
-		296DAF081B39E74F00555E8A /* reaction_diffusion_2_update.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; name = reaction_diffusion_2_update.o; path = "../../Intermediates/HelloiOS.build/Debug-iphoneos/HelloiOS.build/DerivedSources/reaction_diffusion_2_update.o"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1440FDCF1DDF9E2600B55760 /* HalideViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = HalideViewController.h; sourceTree = "<group>"; };
+		1440FDD01DDF9E2600B55760 /* HalideViewController.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HalideViewController.mm; sourceTree = "<group>"; };
+		14F463421E1F0BC2002C2EA2 /* reaction_diffusion_2_init.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = reaction_diffusion_2_init.a; sourceTree = "<group>"; };
+		14F463441E1F14C5002C2EA2 /* reaction_diffusion_2_render.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = reaction_diffusion_2_render.a; sourceTree = "<group>"; };
+		14F463451E1F14C5002C2EA2 /* reaction_diffusion_2_update.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = reaction_diffusion_2_update.a; sourceTree = "<group>"; };
+		14F463481E1F1501002C2EA2 /* reaction_diffusion_2_init.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = reaction_diffusion_2_init.h; sourceTree = "<group>"; };
+		14F463491E1F1501002C2EA2 /* reaction_diffusion_2_metal_init.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = reaction_diffusion_2_metal_init.a; sourceTree = "<group>"; };
+		14F4634A1E1F1501002C2EA2 /* reaction_diffusion_2_metal_init.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = reaction_diffusion_2_metal_init.h; sourceTree = "<group>"; };
+		14F4634B1E1F1501002C2EA2 /* reaction_diffusion_2_metal_render.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = reaction_diffusion_2_metal_render.a; sourceTree = "<group>"; };
+		14F4634C1E1F1501002C2EA2 /* reaction_diffusion_2_metal_render.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = reaction_diffusion_2_metal_render.h; sourceTree = "<group>"; };
+		14F4634D1E1F1501002C2EA2 /* reaction_diffusion_2_metal_update.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = reaction_diffusion_2_metal_update.a; sourceTree = "<group>"; };
+		14F4634E1E1F1501002C2EA2 /* reaction_diffusion_2_metal_update.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = reaction_diffusion_2_metal_update.h; sourceTree = "<group>"; };
+		14F4634F1E1F1501002C2EA2 /* reaction_diffusion_2_render.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = reaction_diffusion_2_render.h; sourceTree = "<group>"; };
+		14F463501E1F1501002C2EA2 /* reaction_diffusion_2_update.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = reaction_diffusion_2_update.h; sourceTree = "<group>"; };
 		29A23DAB1B33E68C00A92A6F /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		3D6C4DB7198051DB002AD41E /* HelloiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HelloiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D6C4DBA198051DB002AD41E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -33,15 +48,14 @@
 		3D6C4DBE198051DB002AD41E /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		3D6C4DC2198051DB002AD41E /* HelloiOS-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "HelloiOS-Info.plist"; sourceTree = "<group>"; };
 		3D6C4DC4198051DB002AD41E /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		3D6C4DC6198051DB002AD41E /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		3D6C4DC6198051DB002AD41E /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.mm; sourceTree = "<group>"; };
 		3D6C4DC8198051DB002AD41E /* HelloiOS-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "HelloiOS-Prefix.pch"; sourceTree = "<group>"; };
 		3D6C4DC9198051DB002AD41E /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
-		3D6C4DCA198051DB002AD41E /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		3D6C4DCA198051DB002AD41E /* AppDelegate.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.mm; sourceTree = "<group>"; };
 		3D6C4DCC198051DB002AD41E /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
-		3D6C4DD3198051DB002AD41E /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
 		3D6C4DE919805225002AD41E /* HalideView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = HalideView.h; sourceTree = "<group>"; };
-		3D6C4DEA19805225002AD41E /* HalideView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HalideView.m; sourceTree = "<group>"; };
-		3D6C4DEC1980522C002AD41E /* reaction_diffusion_2.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = reaction_diffusion_2.cpp; sourceTree = "<group>"; };
+		3D6C4DEA19805225002AD41E /* HalideView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HalideView.mm; sourceTree = "<group>"; };
+		3D6C4DEC1980522C002AD41E /* reaction_diffusion_2_generator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = reaction_diffusion_2_generator.cpp; sourceTree = "<group>"; };
 		3D6C4DF519805438002AD41E /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -50,20 +64,42 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				296DAF0B1B39E74F00555E8A /* reaction_diffusion_2_update.o in Frameworks */,
 				29A23DAC1B33E68C00A92A6F /* Metal.framework in Frameworks */,
-				296DAF091B39E74F00555E8A /* reaction_diffusion_2_init.o in Frameworks */,
+				14F463431E1F0BC2002C2EA2 /* reaction_diffusion_2_init.a in Frameworks */,
+				14F463471E1F14C5002C2EA2 /* reaction_diffusion_2_update.a in Frameworks */,
 				3D6C4DF619805438002AD41E /* QuartzCore.framework in Frameworks */,
-				296DAF0A1B39E74F00555E8A /* reaction_diffusion_2_render.o in Frameworks */,
+				14F463461E1F14C5002C2EA2 /* reaction_diffusion_2_render.a in Frameworks */,
 				3D6C4DBD198051DB002AD41E /* CoreGraphics.framework in Frameworks */,
 				3D6C4DBF198051DB002AD41E /* UIKit.framework in Frameworks */,
+				14F463511E1F1501002C2EA2 /* reaction_diffusion_2_metal_init.a in Frameworks */,
 				3D6C4DBB198051DB002AD41E /* Foundation.framework in Frameworks */,
+				14F463531E1F1501002C2EA2 /* reaction_diffusion_2_metal_update.a in Frameworks */,
+				14F463521E1F1501002C2EA2 /* reaction_diffusion_2_metal_render.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		14F4631C1E1EE4EE002C2EA2 /* Derived */ = {
+			isa = PBXGroup;
+			children = (
+				14F463481E1F1501002C2EA2 /* reaction_diffusion_2_init.h */,
+				14F463491E1F1501002C2EA2 /* reaction_diffusion_2_metal_init.a */,
+				14F4634A1E1F1501002C2EA2 /* reaction_diffusion_2_metal_init.h */,
+				14F4634B1E1F1501002C2EA2 /* reaction_diffusion_2_metal_render.a */,
+				14F4634C1E1F1501002C2EA2 /* reaction_diffusion_2_metal_render.h */,
+				14F4634D1E1F1501002C2EA2 /* reaction_diffusion_2_metal_update.a */,
+				14F4634E1E1F1501002C2EA2 /* reaction_diffusion_2_metal_update.h */,
+				14F4634F1E1F1501002C2EA2 /* reaction_diffusion_2_render.h */,
+				14F463501E1F1501002C2EA2 /* reaction_diffusion_2_update.h */,
+				14F463421E1F0BC2002C2EA2 /* reaction_diffusion_2_init.a */,
+				14F463441E1F14C5002C2EA2 /* reaction_diffusion_2_render.a */,
+				14F463451E1F14C5002C2EA2 /* reaction_diffusion_2_update.a */,
+			);
+			name = Derived;
+			sourceTree = DERIVED_FILE_DIR;
+		};
 		3D6C4DAE198051DB002AD41E = {
 			isa = PBXGroup;
 			children = (
@@ -84,15 +120,12 @@
 		3D6C4DB9198051DB002AD41E /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				296DAF061B39E74F00555E8A /* reaction_diffusion_2_init.o */,
-				296DAF071B39E74F00555E8A /* reaction_diffusion_2_render.o */,
-				296DAF081B39E74F00555E8A /* reaction_diffusion_2_update.o */,
+				14F4631C1E1EE4EE002C2EA2 /* Derived */,
 				29A23DAB1B33E68C00A92A6F /* Metal.framework */,
 				3D6C4DF519805438002AD41E /* QuartzCore.framework */,
 				3D6C4DBA198051DB002AD41E /* Foundation.framework */,
 				3D6C4DBC198051DB002AD41E /* CoreGraphics.framework */,
 				3D6C4DBE198051DB002AD41E /* UIKit.framework */,
-				3D6C4DD3198051DB002AD41E /* XCTest.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -101,10 +134,12 @@
 			isa = PBXGroup;
 			children = (
 				3D6C4DC9198051DB002AD41E /* AppDelegate.h */,
-				3D6C4DCA198051DB002AD41E /* AppDelegate.m */,
-				3D6C4DEC1980522C002AD41E /* reaction_diffusion_2.cpp */,
+				3D6C4DCA198051DB002AD41E /* AppDelegate.mm */,
+				3D6C4DEC1980522C002AD41E /* reaction_diffusion_2_generator.cpp */,
 				3D6C4DE919805225002AD41E /* HalideView.h */,
-				3D6C4DEA19805225002AD41E /* HalideView.m */,
+				3D6C4DEA19805225002AD41E /* HalideView.mm */,
+				1440FDCF1DDF9E2600B55760 /* HalideViewController.h */,
+				1440FDD01DDF9E2600B55760 /* HalideViewController.mm */,
 				3D6C4DCC198051DB002AD41E /* Images.xcassets */,
 				3D6C4DC1198051DB002AD41E /* Supporting Files */,
 			);
@@ -116,7 +151,7 @@
 			children = (
 				3D6C4DC2198051DB002AD41E /* HelloiOS-Info.plist */,
 				3D6C4DC3198051DB002AD41E /* InfoPlist.strings */,
-				3D6C4DC6198051DB002AD41E /* main.m */,
+				3D6C4DC6198051DB002AD41E /* main.mm */,
 				3D6C4DC8198051DB002AD41E /* HelloiOS-Prefix.pch */,
 			);
 			name = "Supporting Files";
@@ -149,7 +184,7 @@
 		3D6C4DAF198051DB002AD41E /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0510;
+				LastUpgradeCheck = 0820;
 				ORGANIZATIONNAME = "Andrew Adams";
 			};
 			buildConfigurationList = 3D6C4DB2198051DB002AD41E /* Build configuration list for PBXProject "HelloiOS" */;
@@ -188,22 +223,28 @@
 			files = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/reaction_diffusion_2.cpp",
+				"$(SRCROOT)/reaction_diffusion_2_generator.cpp",
 				"$(SRCROOT)/../../bin/libHalide.a",
 				"$(SRCROOT)/../../include/Halide.h",
 			);
 			outputPaths = (
 				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_generator",
-				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_init.o",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_init.a",
 				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_init.h",
-				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_update.o",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_update.a",
 				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_update.h",
-				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_render.o",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_render.a",
 				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_render.h",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_metal_init.a",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_metal_init.h",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_metal_update.a",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_metal_update.h",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_metal_render.a",
+				"$(DERIVED_FILE_DIR)/reaction_diffusion_2_metal_render.h",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n\n# xcode puts all sorts of junk in the environment which prevents building a binary for osx (instead of ios). sudo'ing to yourself gives a fresh environment.\nsudo -u ${USER} c++ reaction_diffusion_2.cpp -std=c++11 -I ${SRCROOT}/../../include -I ${SRCROOT}/../../build/include -arch x86_64 -L ${SRCROOT}/../../bin -lHalide -o ${DERIVED_FILE_DIR}/reaction_diffusion_2_generator\n\n(cd ${DERIVED_FILE_DIR}; HL_TARGET=arm-64-ios DYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib ./reaction_diffusion_2_generator)";
+			shellScript = "echo \"${SRCROOT}\"\ncd \"${SRCROOT}/HelloiOS\"\n\n# Echoing commands to output makes it easier to debug XCode failures.\n# Failure on undefined vars is always a good idea.\nset -ex\n\n# xcode puts all sorts of junk in the environment which\n# prevents building a binary for osx (instead of ios).\n# sudo'ing to yourself gives a fresh environment.\nsudo -u ${USER} \\\nc++ reaction_diffusion_2_generator.cpp ${SRCROOT}/../../tools/GenGen.cpp \\\n-std=c++11 \\\n-fno-rtti \\\n-I ${SRCROOT}/../../include \\\n-I ${SRCROOT}/../../build/include \\\n-I ${SRCROOT}/../../tools \\\n-arch x86_64 \\\n-L ${SRCROOT}/../../bin \\\n-lHalide \\\n-o ${DERIVED_FILE_DIR}/reaction_diffusion_2_generator\n\n\nif [ \"${arch}\" == \"x86_64\" ]\nthen\n# assume simulator, which requires osx rather than ios\nTARGET=x86-64-osx\nelse\n# TODO: sniff arm-32 builds here; for now, just assume arm-64 only\nTARGET=arm-64-ios\nfi\n\nfor GEN in init update render; do\n(cd ${DERIVED_FILE_DIR}; \\\nDYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib \\\n./reaction_diffusion_2_generator -g reaction_diffusion_2_${GEN} -f reaction_diffusion_2_${GEN} -n reaction_diffusion_2_${GEN} -o ${DERIVED_FILE_DIR} target=${TARGET}-user_context)\ndone\n\nfor GEN in init update render; do\n(cd ${DERIVED_FILE_DIR}; \\\nDYLD_LIBRARY_PATH=${SRCROOT}/../../bin:${SRCROOT}/../../build/lib \\\n./reaction_diffusion_2_generator -g reaction_diffusion_2_${GEN} -f reaction_diffusion_2_metal_${GEN} -n reaction_diffusion_2_metal_${GEN} -o ${DERIVED_FILE_DIR} target=${TARGET}-metal-user_context)\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -212,9 +253,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3D6C4DEB19805225002AD41E /* HalideView.m in Sources */,
-				3D6C4DCB198051DB002AD41E /* AppDelegate.m in Sources */,
-				3D6C4DC7198051DB002AD41E /* main.m in Sources */,
+				3D6C4DEB19805225002AD41E /* HalideView.mm in Sources */,
+				3D6C4DCB198051DB002AD41E /* AppDelegate.mm in Sources */,
+				3D6C4DC7198051DB002AD41E /* main.mm in Sources */,
+				1440FDD11DDF9E2600B55760 /* HalideViewController.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -236,7 +278,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = arm64;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
@@ -246,13 +287,19 @@
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
@@ -265,7 +312,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 7.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 8.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -276,7 +323,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = arm64;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
@@ -286,20 +332,25 @@
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = YES;
 				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 7.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 8.0;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
@@ -311,11 +362,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_BITCODE = NO;
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "HelloiOS/HelloiOS-Prefix.pch";
 				INFOPLIST_FILE = "HelloiOS/HelloiOS-Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "Halide.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)../../../include/";
 				"USER_HEADER_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/../../include/";
@@ -328,11 +382,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_BITCODE = NO;
 				GCC_INPUT_FILETYPE = sourcecode.cpp.objcpp;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "HelloiOS/HelloiOS-Prefix.pch";
 				INFOPLIST_FILE = "HelloiOS/HelloiOS-Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = "Halide.${PRODUCT_NAME:rfc1034identifier}";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/../../include/";
 				"USER_HEADER_SEARCH_PATHS[arch=*]" = ../../../../include/;

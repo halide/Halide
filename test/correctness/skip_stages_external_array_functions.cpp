@@ -11,16 +11,14 @@ using namespace Halide;
 
 int bounds_query_count[4];
 int call_count[4];
-extern "C" DLLEXPORT int call_counter(buffer_t *input, int x, int idx, buffer_t *output) {
+extern "C" DLLEXPORT int call_counter(halide_buffer_t *input, int x, int idx, halide_buffer_t *output) {
     if (input->host == nullptr) {
         bounds_query_count[idx]++;
-        input->min[0] = output->min[0];
-        input->extent[0] = output->extent[0];
-        input->elem_size = 1;
+        input->dim[0] = output->dim[0];
         return 0;
     }
     call_count[idx]++;
-    for (int32_t i = 0; i < output->extent[0]; i++) {
+    for (int32_t i = 0; i < output->dim[0].extent; i++) {
         output->host[i] = input->host[i] + x;
     }
 
@@ -75,7 +73,7 @@ int main(int argc, char **argv) {
 
         reset_counts();
         toggle1.set(true);
-        Image<uint8_t> result1 = f4.realize(10);
+        Buffer<uint8_t> result1 = f4.realize(10);
         for (int32_t i = 0; i < 10; i++) {
             assert(result1(i) == i + 1);
         }
@@ -84,7 +82,7 @@ int main(int argc, char **argv) {
 
         reset_counts();
         toggle1.set(false);
-        Image<uint8_t> result2 = f4.realize(10);
+        Buffer<uint8_t> result2 = f4.realize(10);
         for (int32_t i = 0; i < 10; i++) {
             assert(result2(i) == i + 2);
         }

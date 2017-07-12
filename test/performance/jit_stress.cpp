@@ -1,15 +1,16 @@
 #include "Halide.h"
 
 #include <cstdio>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     Var x;
 
     ImageParam a(Int(32), 1);
-    Image<int> b(1), c(1);
+    Buffer<int> b(1), c(1);
     b(0) = 17;
     c(0) = 0;
     a.set(c);

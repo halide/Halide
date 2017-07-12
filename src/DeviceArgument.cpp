@@ -13,19 +13,19 @@ HostClosure::HostClosure(Stmt s, const std::string &loop_variable) {
 
 std::vector<DeviceArgument> HostClosure::arguments() {
     std::vector<DeviceArgument> res;
-    for (const std::pair<std::string, Type> &i : vars) {
-        debug(2) << "var: " << i.first << "\n";
-        res.push_back(DeviceArgument(i.first, false, i.second, 0));
+    for (const auto &v : vars) {
+        debug(2) << "var: " << v.first << "\n";
+        res.push_back(DeviceArgument(v.first, false, v.second, 0));
     }
-    for (const std::pair<std::string, BufferRef> &i : buffers) {
-        debug(2) << "buffer: " << i.first << " " << i.second.size;
-        if (i.second.read) debug(2) << " (read)";
-        if (i.second.write) debug(2) << " (write)";
+    for (const auto &b : buffers) {
+        debug(2) << "buffer: " << b.first << " " << b.second.size;
+        if (b.second.read) debug(2) << " (read)";
+        if (b.second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        DeviceArgument arg(i.first, true, i.second.type, i.second.dimensions, i.second.size);
-        arg.read = i.second.read;
-        arg.write = i.second.write;
+        DeviceArgument arg(b.first, true, b.second.type, b.second.dimensions, b.second.size);
+        arg.read = b.second.read;
+        arg.write = b.second.write;
         res.push_back(arg);
     }
     return res;
@@ -49,7 +49,7 @@ void HostClosure::visit(const Call *op) {
         internal_assert(string_imm);
 
         std::string bufname = string_imm->value;
-        BufferRef &ref = buffers[bufname];
+        Buffer &ref = buffers[bufname];
         ref.type = op->type;
         // TODO: do we need to set ref.dimensions?
 

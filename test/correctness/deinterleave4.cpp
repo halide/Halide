@@ -26,8 +26,8 @@ int main(int argc, char **argv) {
     Func f2 = build();
     f2.bound(x, 0, 64).vectorize(x);
 
-    Image<int> o1 = f1.realize(64);
-    Image<int> o2 = f2.realize(64);
+    Buffer<int> o1 = f1.realize(64);
+    Buffer<int> o2 = f2.realize(64);
 
     for (int x = 0; x < o2.width(); x++) {
         if (o1(x) != o2(x)) {

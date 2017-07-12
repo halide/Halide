@@ -83,12 +83,12 @@ vector<Expr> A(vector<Expr> l, const vector<T> &r) {
 
 // Get call references to the first N elements of dimension dim of x. If temps
 // is set, grab references to elements [-N, -1] instead.
-typedef FuncRefExprT<ComplexExpr> ComplexFuncRefExpr;
-vector<ComplexFuncRefExpr> get_func_refs(ComplexFunc x, int N, bool temps = false) {
+typedef FuncRefT<ComplexExpr> ComplexFuncRef;
+vector<ComplexFuncRef> get_func_refs(ComplexFunc x, int N, bool temps = false) {
     vector<Var> args(x.args());
     args.erase(args.begin());
 
-    vector<ComplexFuncRefExpr> refs;
+    vector<ComplexFuncRef> refs;
     for (int i = 0; i < N; i++) {
         if (temps) {
             refs.push_back(x(A({Expr(-i - 1)}, args)));
@@ -112,8 +112,8 @@ ComplexFunc dft2(ComplexFunc f, const string& prefix) {
     ComplexFunc F(prefix + "X2");
     F(f.args()) = undef_z(type);
 
-    vector<ComplexFuncRefExpr> x = get_func_refs(f, 2);
-    vector<ComplexFuncRefExpr> X = get_func_refs(F, 2);
+    vector<ComplexFuncRef> x = get_func_refs(f, 2);
+    vector<ComplexFuncRef> X = get_func_refs(F, 2);
 
     X[0] = x[0] + x[1];
     X[1] = x[0] - x[1];
@@ -127,9 +127,9 @@ ComplexFunc dft4(ComplexFunc f, int sign, const string& prefix) {
     ComplexFunc F(prefix + "X4");
     F(f.args()) = undef_z(type);
 
-    vector<ComplexFuncRefExpr> x = get_func_refs(f, 4);
-    vector<ComplexFuncRefExpr> X = get_func_refs(F, 4);
-    vector<ComplexFuncRefExpr> T = get_func_refs(F, 2, true);
+    vector<ComplexFuncRef> x = get_func_refs(f, 4);
+    vector<ComplexFuncRef> X = get_func_refs(F, 4);
+    vector<ComplexFuncRef> T = get_func_refs(F, 2, true);
     // We can re-use these two temps. T[0], T[2] and T[1], T[3] do not have
     // overlapping lifetime.
     T.push_back(T[1]);
@@ -150,7 +150,7 @@ ComplexFunc dft4(ComplexFunc f, int sign, const string& prefix) {
 
 ComplexFunc dft6(ComplexFunc f, int sign, const string& prefix) {
     const float re_W1_3 = -0.5f;
-    const float im_W1_3 = sign*0.866025404;
+    const float im_W1_3 = sign*0.866025404f;
 
     ComplexExpr W1_3(re_W1_3, im_W1_3);
     ComplexExpr W2_3(re_W1_3, -im_W1_3);
@@ -161,9 +161,9 @@ ComplexFunc dft6(ComplexFunc f, int sign, const string& prefix) {
     ComplexFunc F(prefix + "X8");
     F(f.args()) = undef_z(type);
 
-    vector<ComplexFuncRefExpr> x = get_func_refs(f, 6);
-    vector<ComplexFuncRefExpr> X = get_func_refs(F, 6);
-    vector<ComplexFuncRefExpr> T = get_func_refs(F, 6, true);
+    vector<ComplexFuncRef> x = get_func_refs(f, 6);
+    vector<ComplexFuncRef> X = get_func_refs(F, 6);
+    vector<ComplexFuncRef> T = get_func_refs(F, 6, true);
 
     // Prime factor FFT, N=2*3, no twiddle factors!
     T[0] = (x[0] + x[3]);
@@ -192,9 +192,9 @@ ComplexFunc dft8(ComplexFunc f, int sign, const string& prefix) {
     ComplexFunc F(prefix + "X8");
     F(f.args()) = undef_z(type);
 
-    vector<ComplexFuncRefExpr> x = get_func_refs(f, 8);
-    vector<ComplexFuncRefExpr> X = get_func_refs(F, 8);
-    vector<ComplexFuncRefExpr> T = get_func_refs(F, 8, true);
+    vector<ComplexFuncRef> x = get_func_refs(f, 8);
+    vector<ComplexFuncRef> X = get_func_refs(F, 8);
+    vector<ComplexFuncRef> T = get_func_refs(F, 8, true);
 
     X[0] = (x[0] + x[4]);
     X[2] = (x[2] + x[6]);
@@ -229,7 +229,7 @@ ComplexFunc dft8(ComplexFunc f, int sign, const string& prefix) {
 }
 
 // Compute the complex DFT of size N on dimension 0 of x.
-ComplexFunc dftN(ComplexFunc x, int N, float sign, const string& prefix) {
+ComplexFunc dftN(ComplexFunc x, int N, int sign, const string& prefix) {
     vector<Var> args(x.args());
     args.erase(args.begin());
 
@@ -384,7 +384,7 @@ ComplexFunc fft_dim1(ComplexFunc x,
 
         exchange.update().unroll(r_);
         // Remember this stage for scheduling later.
-        stages.push_back(std::make_pair(exchange, rs));
+        stages.push_back({ exchange, rs });
 
         x = exchange;
         S *= R;
@@ -433,7 +433,7 @@ std::pair<FuncType, FuncType> tiled_transpose(FuncType f, int max_tile_size,
     // transpose the tiles themselves (dense vector load/stores), then transpose
     // the data within each tile (stride 4 loads).
     if (target.arch != Target::ARM && !always_tile) {
-        return std::make_pair(transpose(f), FuncType());
+        return { transpose(f), FuncType() };
     }
 
     const int tile_size =
@@ -466,7 +466,7 @@ std::pair<FuncType, FuncType> tiled_transpose(FuncType f, int max_tile_size,
         .vectorize(x, tile_size)
         .unroll(y, tile_size);
 
-    return std::make_pair(fT, f_tiledT);
+    return { fT, f_tiledT };
 }
 
 }  // namespace
@@ -828,7 +828,7 @@ ComplexFunc fft2d_r2c(Func r,
 
     // Schedule the final DFT transpose and unzipping updates.
     dft.vectorize(n0, target.natural_vector_size<float>())
-        .unroll(n0, std::min(N0 / target.natural_vector_size<float>(), 4));
+        .unroll(n0, gcd(N0 / target.natural_vector_size<float>(), 4));
 
     // The Nyquist bin at n0z = N0/2 looks like a race condition because it
     // simplifies to an expression similar to the DC bin. However, we include it
@@ -998,7 +998,7 @@ Func fft2d_c2r(ComplexFunc c,
     // logic.
     unzipped
         .vectorize(n0, zip_width)
-        .unroll(n0, std::min(N0 / zip_width, 4));
+        .unroll(n0, gcd(N0 / zip_width, 4));
 
     return unzipped;
 }
