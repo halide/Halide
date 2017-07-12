@@ -37,7 +37,7 @@ __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_initialize_kernels_
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_get_symbol_v4)(halide_hexagon_remote_handle_t module_ptr, const char* name, int nameLen, halide_hexagon_remote_handle_t* sym_ptr) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_power_hvx_on)(void) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_power_hvx_off)(void) __QAIC_HEADER_ATTRIBUTE;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_run_v2)(halide_hexagon_remote_handle_t module_ptr, halide_hexagon_remote_handle_t symbol, const halide_hexagon_remote_buffer* input_buffers, int input_buffersLen, halide_hexagon_remote_buffer* output_buffers, int output_buffersLen, int scalar_count, const unsigned char* small, int smallLen) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_run_v2)(halide_hexagon_remote_handle_t module_ptr, halide_hexagon_remote_handle_t symbol, const halide_hexagon_remote_buffer* input_buffers, int input_buffersLen, halide_hexagon_remote_buffer* output_buffers, int output_buffersLen, int scalar_count, const unsigned char* small_input_args, int small_input_argsLen) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_release_kernels_v2)(halide_hexagon_remote_handle_t module_ptr) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_poll_log)(char* log, int logLen, int* read_size) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_poll_profiler_state)(int* func, int* threads) __QAIC_HEADER_ATTRIBUTE;

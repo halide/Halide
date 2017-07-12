@@ -316,7 +316,8 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
 int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
                                  const buffer *input_buffersPtrs, int input_buffersLen,
                                  buffer *output_buffersPtrs, int output_buffersLen,
-                                 int scalar_count, const unsigned char *small, int smallLen) {
+                                 int scalar_count,
+                                 const unsigned char *small_input_args, int small_input_argsLen) {
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
@@ -332,6 +333,8 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     void **args = (void **)__builtin_alloca((input_buffersLen + scalar_count + output_buffersLen) * sizeof(void *));
     buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
 
+    const unsigned char *small_input_args_end = small_input_args + small_input_argsLen;
+
     void **next_arg = &args[0];
     buffer_t *next_buffer_t = &buffers[0];
     // Input buffers come first.
@@ -340,7 +343,12 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
             // This buffer is passed directly.
             next_buffer_t->host = input_buffersPtrs[i].data;
         } else {
-            next_buffer_t->host = const_cast<unsigned char *>(read_buffer(small));
+            next_buffer_t->host = const_cast<unsigned char *>(read_buffer(small_input_args));
+            if (small_input_args > small_input_args_end) {
+                log_printf("Input buffer %d read past the end of small_input_args [%p, %p)\n",
+                           i, small_input_args - small_input_args_end);
+                return halide_error_code_access_out_of_bounds;
+            }
         }
         *next_arg = next_buffer_t;
     }
@@ -352,7 +360,12 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     }
     // Input scalars are last.
     for (int i = 0; i < scalar_count; i++, next_arg++) {
-        *next_arg = const_cast<unsigned char *>(read_buffer(small));
+        *next_arg = const_cast<unsigned char *>(read_buffer(small_input_args));
+        if (small_input_args > small_input_args_end) {
+            log_printf("Input scalar %d read past the end of small_input_args by %d bytes\n",
+                       i, small_input_args - small_input_args_end);
+            return halide_error_code_access_out_of_bounds;
+        }
     }
 
     // Prior to running the pipeline, power HVX on (if it was not already on).

@@ -16,27 +16,29 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     const int buffer_alignment = 128;
     const int scalar_alignment = 4;
 
-    int small_size = 0;
+    int small_input_args_size = 0;
 
-    // Add up the number and size of the small input buffers.
+    // Add up the number and size of the small input buffers. Buffers
+    // are considered small if they are less than
+    // min_input_buffer_size bytes.
     const int min_input_buffer_size = 4096;
     for (int i = 0; i < input_buffersLen; i++) {
         if (input_buffersPtrs[i].dataLen < min_input_buffer_size) {
-            small_size += packed_buffer_size(input_buffersPtrs[i].dataLen, buffer_alignment);
+            small_input_args_size += packed_buffer_size(input_buffersPtrs[i].dataLen, buffer_alignment);
         }
     }
 
     // Add up the number and size of the scalars.
     for (int i = 0; i < input_scalarsLen; i++) {
-        small_size += packed_buffer_size(input_scalarsPtrs[i].dataLen, scalar_alignment);
+        small_input_args_size += packed_buffer_size(input_scalarsPtrs[i].dataLen, scalar_alignment);
     }
 
     // Allocate a buffer to hold the packed small buffers and scalars.
-    unsigned char *small = (unsigned char *)__builtin_alloca(small_size + buffer_alignment);
-    small = (unsigned char *)(((uintptr_t)small + buffer_alignment - 1) & ~(buffer_alignment - 1));
+    unsigned char *small_input_args = (unsigned char *)__builtin_alloca(small_input_args_size + buffer_alignment);
+    small_input_args = (unsigned char *)(((uintptr_t)small_input_args + buffer_alignment - 1) & ~(buffer_alignment - 1));
 
     // Pack up the small buffers.
-    unsigned char *write = small;
+    unsigned char *write = small_input_args;
     for (int i = 0; i < input_buffersLen; i++) {
         if (input_buffersPtrs[i].dataLen < min_input_buffer_size) {
             write_buffer(write, input_buffersPtrs[i].data, input_buffersPtrs[i].dataLen, buffer_alignment);
@@ -56,7 +58,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     return halide_hexagon_remote_run_v2(module_ptr, function,
                                         input_buffersPtrs, input_buffersLen,
                                         output_buffersPtrs, output_buffersLen,
-                                        input_scalarsLen, small, small_size);
+                                        input_scalarsLen, small_input_args, small_input_args_size);
 }
 
 }  // extern "C"
