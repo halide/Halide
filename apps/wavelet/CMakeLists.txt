@@ -21,7 +21,7 @@ include_directories("${HALIDE_SRC_DIR}/include")
 include_directories("${HALIDE_SRC_DIR}/tools")
 
 add_executable(wavelet "${CMAKE_CURRENT_SOURCE_DIR}/wavelet.cpp")
-target_compile_options(wavelet PRIVATE "-std=c++11" "-fno-rtti")
+target_compile_options(wavelet PRIVATE "-fno-rtti")
 
 find_package(PNG)
 target_link_libraries(wavelet PRIVATE ${PNG_LIBRARIES})
@@ -42,7 +42,7 @@ foreach(GEN_SRC ${GENS})
     # GEN_EXECUTABLE := *.generator
     string(REPLACE "_generator.cpp" "" GEN_EXECUTABLE "${GEN_SRC}.generator")
     add_executable("${GEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/GenGen.cpp" "${GEN_SRC}")
-    target_compile_options("${GEN_EXECUTABLE}" PRIVATE "-std=c++11" "-fno-rtti")
+    target_compile_options("${GEN_EXECUTABLE}" PRIVATE "-fno-rtti")
     target_link_libraries("${GEN_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../lib/libHalide.a" z)
 
     halide_add_aot_library("${GEN_NAME}"

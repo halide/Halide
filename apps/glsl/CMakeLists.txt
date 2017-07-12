@@ -19,7 +19,6 @@ if (OpenGL_FOUND)
     add_executable(opengl_test opengl_test.cpp)
     halide_add_aot_library_dependency(opengl_test halide_blur_glsl)
     halide_add_aot_library_dependency(opengl_test halide_ycc_glsl)
-    target_compile_options(opengl_test PRIVATE "-std=c++11")
 
     if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         target_link_libraries(opengl_test PRIVATE pthread dl X11 GL)
