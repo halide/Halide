@@ -70,7 +70,7 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   # Parse arguments
   set(options )
   set(oneValueArgs GENERATOR_TARGET GENERATOR_NAME GENERATED_FUNCTION)
-  set(multiValueArgs GENERATOR_ARGS GENERATOR_OUTPUTS)
+  set(multiValueArgs GENERATOR_ARGS GENERATOR_OUTPUTS FILTER_DEPS)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   if (args_GENERATED_FUNCTION STREQUAL "")
@@ -134,9 +134,10 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
 
   set(RUNGEN "${AOT_LIBRARY_TARGET}.rungen")
   add_executable("${RUNGEN}" "${CMAKE_SOURCE_DIR}/tools/RunGenStubs.cpp")
-  target_compile_definitions("${RUNGEN}" PRIVATE "-DHL_RUNGEN_FILTER=${AOT_LIBRARY_TARGET}")
+  target_compile_definitions("${RUNGEN}" PRIVATE "-DHL_RUNGEN_FILTER_HEADER=\"${AOT_LIBRARY_TARGET}.h\"")
   target_link_libraries("${RUNGEN}" PRIVATE HalideToolsRunGen)
   halide_add_aot_library_dependency("${RUNGEN}" "${AOT_LIBRARY_TARGET}")
+  target_link_libraries("${RUNGEN}" PRIVATE ${args_FILTER_DEPS})
 
   # Not all Generators will build properly with RunGen (e.g., missing
   # external dependencies), so exclude them from the "ALL" targets

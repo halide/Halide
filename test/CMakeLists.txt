@@ -150,13 +150,12 @@ function(halide_define_aot_test NAME)
                            GENERATOR_TARGET "${NAME}.generator"
                            GENERATOR_NAME "${args_GENERATOR_NAME}"
                            GENERATED_FUNCTION "${args_GENERATED_FUNCTION}"
-                           GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}")
+                           GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}"
+                           FILTER_DEPS "${args_FILTER_DEPS}")
     halide_add_aot_library_dependency("${TARGET}" "${AOT_LIBRARY_TARGET}")
   endif()
 
-  foreach(F ${args_FILTER_DEPS})
-    target_link_libraries("${TARGET}" PRIVATE ${F})
-  endforeach()
+  target_link_libraries("${TARGET}" PRIVATE ${args_FILTER_DEPS})
 
 endfunction(halide_define_aot_test)
 
