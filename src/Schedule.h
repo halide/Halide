@@ -6,17 +6,21 @@
  */
 
 #include "Expr.h"
+#include "Parameter.h"
 
 #include <map>
 
 namespace Halide {
 
 class Func;
+template <typename T> class ScheduleParam;
 struct VarOrRVar;
 
 namespace Internal {
 class Function;
 struct FunctionContents;
+struct LoopLevelContents;
+class ScheduleParamBase;
 }  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
@@ -64,6 +68,26 @@ enum class TailStrategy {
     Auto
 };
 
+/** Different ways to handle accesses outside the original extents in a prefetch. */
+enum class PrefetchBoundStrategy {
+    /** Clamp the prefetched exprs by intersecting the prefetched region with
+     * the original extents. This may make the exprs of the prefetched region
+     * more complicated. */
+    Clamp,
+
+    /** Guard the prefetch with if-guards that ignores the prefetch if
+     * any of the prefetched region ever goes beyond the original extents
+     * (i.e. all or nothing). */
+    GuardWithIf,
+
+    /** Leave the prefetched exprs as are (no if-guards around the prefetch
+     * and no intersecting with the original extents). This makes the prefetch
+     * exprs simpler but this may cause prefetching of region outside the original
+     * extents. This is good if prefetch won't fault when accessing region
+     * outside the original extents. */
+    NonFaulting
+};
+
 /** A reference to a site in a Halide statement at the top of the
  * body of a particular for loop. Evaluating a region of a halide
  * function is done by generating a loop nest that spans its
@@ -71,15 +95,18 @@ enum class TailStrategy {
  * recursively injecting realizations for them at particular sites
  * in this loop nest. A LoopLevel identifies such a site. */
 class LoopLevel {
-    // Note: func_ is nullptr for inline or root.
-    Internal::IntrusivePtr<Internal::FunctionContents> function_contents;
-    // TODO: these two fields should really be VarOrRVar,
-    // but cyclical include dependencies make this challenging.
-    std::string var_name;
-    bool is_rvar;
+    template <typename T> friend class ScheduleParam;
+    friend class ::Halide::Internal::ScheduleParamBase;
 
-    EXPORT LoopLevel(Internal::IntrusivePtr<Internal::FunctionContents> f, const std::string &var_name, bool is_rvar);
-    EXPORT std::string func_name() const;
+    Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
+
+    explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c) : contents(c) {}
+    EXPORT LoopLevel(const std::string &func_name, const std::string &var_name, bool is_rvar);
+
+    /** Mutate our contents to match the contents of 'other'. This is a potentially
+     * dangerous operation to do if you aren't careful, and exists solely to make
+     * ScheduleParam<LoopLevel> easy to implement; hence its private status. */
+    EXPORT void copy_from(const LoopLevel &other);
 
 public:
     /** Identify the loop nest corresponding to some dimension of some function */
@@ -88,16 +115,22 @@ public:
     EXPORT LoopLevel(Func f, VarOrRVar v);
     // @}
 
-    /** Construct an empty LoopLevel, which is interpreted as
-     * 'inline'. This is a special LoopLevel value that implies
-     * that a function should be inlined away */
-    LoopLevel() : function_contents(nullptr), var_name(""), is_rvar(false) {}
+    /** Construct an undefined LoopLevel. Calling any method on an undefined
+     * LoopLevel (other than defined() or operator==) will assert. */
+    LoopLevel() = default;
 
-    /** Return the Func. Asserts if the LoopLevel is_root() or is_inline(). */
-    EXPORT Func func() const;
+    /** Return true iff the LoopLevel is defined. */
+    EXPORT bool defined() const;
+
+    /** Return the Func name. Asserts if the LoopLevel is_root() or is_inline(). */
+    EXPORT std::string func() const;
 
     /** Return the VarOrRVar. Asserts if the LoopLevel is_root() or is_inline(). */
     EXPORT VarOrRVar var() const;
+
+    /** inlined is a special LoopLevel value that implies
+     * that a function should be inlined away. */
+    EXPORT static LoopLevel inlined();
 
     /** Test if a loop level corresponds to inlining the function */
     EXPORT bool is_inline() const;
@@ -172,14 +205,17 @@ struct Dim {
 
     bool is_pure() const {return (dim_type == PureVar) || (dim_type == PureRVar);}
     bool is_rvar() const {return (dim_type == PureRVar) || (dim_type == ImpureRVar);}
+    bool is_parallel() const {
+        return (for_type == ForType::Parallel ||
+                for_type == ForType::GPUBlock ||
+                for_type == ForType::GPUThread);
+    }
 };
 
 struct Bound {
     std::string var;
     Expr min, extent, modulus, remainder;
 };
-
-struct ScheduleContents;
 
 struct StorageDim {
     std::string var;
@@ -188,74 +224,46 @@ struct StorageDim {
     bool fold_forward;
 };
 
-struct Prefetch {
+struct PrefetchDirective {
+    std::string name;
     std::string var;
     Expr offset;
+    PrefetchBoundStrategy strategy;
+    // If it's a prefetch load from an image parameter, this points to that.
+    Parameter param;
 };
 
+struct FuncScheduleContents;
+struct StageScheduleContents;
 struct FunctionContents;
 
-/** A schedule for a single stage of a Halide pipeline. Right now this
- * interface is basically a struct, offering mutable access to its
- * innards. In the future it may become more encapsulated. */
-class Schedule {
-    IntrusivePtr<ScheduleContents> contents;
+/** A schedule for a Function of a Halide pipeline. This schedule is
+ * applied to all stages of the Function. Right now this interface is
+ * basically a struct, offering mutable access to its innards.
+ * In the future it may become more encapsulated. */
+class FuncSchedule {
+    IntrusivePtr<FuncScheduleContents> contents;
 
 public:
 
-    Schedule(IntrusivePtr<ScheduleContents> c) : contents(c) {}
-    Schedule(const Schedule &other) : contents(other.contents) {}
-    EXPORT Schedule();
+    FuncSchedule(IntrusivePtr<FuncScheduleContents> c) : contents(c) {}
+    FuncSchedule(const FuncSchedule &other) : contents(other.contents) {}
+    EXPORT FuncSchedule();
 
-    /** Return a deep copy of this Schedule. It recursively deep copies all called
-     * functions, schedules, specializations, and reduction domains. This method
-     * takes a map of <old FunctionContents, deep-copied version> as input and
-     * would use the deep-copied FunctionContents from the map if exists instead
-     * of creating a new deep-copy to avoid creating deep-copies of the same
-     * FunctionContents multiple times.
+    /** Return a deep copy of this FuncSchedule. It recursively deep copies all
+     * called functions, schedules, specializations, and reduction domains. This
+     * method takes a map of <old FunctionContents, deep-copied version> as input
+     * and would use the deep-copied FunctionContents from the map if exists
+     * instead of creating a new deep-copy to avoid creating deep-copies of the
+     * same FunctionContents multiple times.
      */
-    EXPORT Schedule deep_copy(
+    EXPORT FuncSchedule deep_copy(
         std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
 
     /** This flag is set to true if the schedule is memoized. */
     // @{
     bool &memoized();
     bool memoized() const;
-    // @}
-
-    /** This flag is set to true if the dims list has been manipulated
-     * by the user (or if a ScheduleHandle was created that could have
-     * been used to manipulate it). It controls the warning that
-     * occurs if you schedule the vars of the pure step but not the
-     * update steps. */
-    // @{
-    bool &touched();
-    bool touched() const;
-    // @}
-
-    /** The traversal of the domain of a function can have some of its
-     * dimensions split into sub-dimensions. See ScheduleHandle::split */
-    // @{
-    const std::vector<Split> &splits() const;
-    std::vector<Split> &splits();
-    // @}
-
-    /** The list and ordering of dimensions used to evaluate this
-     * function, after all splits have taken place. The first
-     * dimension in the vector corresponds to the innermost for loop,
-     * and the last is the outermost. Also specifies what type of for
-     * loop to use for each dimension. Does not specify the bounds on
-     * each dimension. These get inferred from how the function is
-     * used, what the splits are, and any optional bounds in the list below. */
-    // @{
-    const std::vector<Dim> &dims() const;
-    std::vector<Dim> &dims();
-    // @}
-
-    /** RVars of reduction domain associated with this schedule if there is any. */
-    // @{
-    const std::vector<ReductionVariable> &rvars() const;
-    std::vector<ReductionVariable> &rvars();
     // @}
 
     /** The list and order of dimensions used to store this
@@ -273,13 +281,6 @@ public:
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
-    // @}
-
-    /** You may perform prefetching in some of the dimensions of a
-     * function. See \ref Func::prefetch */
-    // @{
-    const std::vector<Prefetch> &prefetches() const;
-    std::vector<Prefetch> &prefetches();
     // @}
 
     /** Mark calls of a function by 'f' to be replaced with its wrapper
@@ -303,6 +304,73 @@ public:
     const LoopLevel &compute_level() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
+    // @}
+
+    /** Pass an IRVisitor through to all Exprs referenced in the
+     * Schedule. */
+    void accept(IRVisitor *) const;
+
+    /** Pass an IRMutator through to all Exprs referenced in the
+     * Schedule. */
+    void mutate(IRMutator *);
+};
+
+
+/** A schedule for a single stage of a Halide pipeline. Right now this
+ * interface is basically a struct, offering mutable access to its
+ * innards. In the future it may become more encapsulated. */
+class StageSchedule {
+    IntrusivePtr<StageScheduleContents> contents;
+
+public:
+
+    StageSchedule(IntrusivePtr<StageScheduleContents> c) : contents(c) {}
+    StageSchedule(const StageSchedule &other) : contents(other.contents) {}
+    EXPORT StageSchedule();
+
+    /** Return a copy of this StageSchedule. */
+    EXPORT StageSchedule get_copy() const;
+
+    /** This flag is set to true if the dims list has been manipulated
+     * by the user (or if a ScheduleHandle was created that could have
+     * been used to manipulate it). It controls the warning that
+     * occurs if you schedule the vars of the pure step but not the
+     * update steps. */
+    // @{
+    bool &touched();
+    bool touched() const;
+    // @}
+
+    /** RVars of reduction domain associated with this schedule if there is any. */
+    // @{
+    const std::vector<ReductionVariable> &rvars() const;
+    std::vector<ReductionVariable> &rvars();
+    // @}
+
+    /** The traversal of the domain of a function can have some of its
+     * dimensions split into sub-dimensions. See \ref Func::split */
+    // @{
+    const std::vector<Split> &splits() const;
+    std::vector<Split> &splits();
+    // @}
+
+    /** The list and ordering of dimensions used to evaluate this
+     * function, after all splits have taken place. The first
+     * dimension in the vector corresponds to the innermost for loop,
+     * and the last is the outermost. Also specifies what type of for
+     * loop to use for each dimension. Does not specify the bounds on
+     * each dimension. These get inferred from how the function is
+     * used, what the splits are, and any optional bounds in the list below. */
+    // @{
+    const std::vector<Dim> &dims() const;
+    std::vector<Dim> &dims();
+    // @}
+
+    /** You may perform prefetching in some of the dimensions of a
+     * function. See \ref Func::prefetch */
+    // @{
+    const std::vector<PrefetchDirective> &prefetches() const;
+    std::vector<PrefetchDirective> &prefetches();
     // @}
 
     /** Are race conditions permitted? */

@@ -3,7 +3,7 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
-#include "../../src/InlineReductions.h"
+#include "Halide.h"
 
 #include "Expr.h"
 

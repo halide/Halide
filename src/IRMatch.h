@@ -37,7 +37,7 @@ EXPORT bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
  * For example:
  \code
  Var x("x"), y("y");
- match(x*(x + 1), a*(a + b), result)
+ match(x*(x + y), a*(a + b), result)
  \endcode
  * should return true, and set result["x"] = a, and result["y"] = b.
  */

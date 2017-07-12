@@ -36,7 +36,21 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Module &);
 /** Emit a halide device api type in a human readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
+/** Emit a halide LoopLevel in a human readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
+
 namespace Internal {
+
+struct AssociativePattern;
+struct AssociativeOp;
+
+/** Emit a halide associative pattern on an output stream (such as std::cout)
+ * in a human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
+
+/** Emit a halide associative op on an output stream (such as std::cout) in a
+ * human-readable form */
+EXPORT std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
@@ -45,6 +59,9 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */
 EXPORT std::ostream &operator<<(std::ostream &stream, const ForType &);
+
+/** Emit a halide name mangling value in a human readable format */
+EXPORT std::ostream &operator<<(std::ostream &stream, const NameMangling &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -61,6 +78,10 @@ public:
 
     /** emit a statement on the output stream */
     EXPORT void print(Stmt);
+
+    /** emit a comma delimited list of exprs, without any leading or
+     * trailing punctuation. */
+    EXPORT void print_list(const std::vector<Expr> &exprs);
 
     EXPORT static void test();
 
@@ -115,6 +136,8 @@ protected:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
+    void visit(const Shuffle *);
+    void visit(const Prefetch *);
 };
 }
 }

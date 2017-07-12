@@ -6,7 +6,7 @@
  */
 
 #include "Expr.h"
-#include "BufferPtr.h"
+#include "Buffer.h"
 
 namespace Halide {
 
@@ -14,6 +14,7 @@ class OutputImageParam;
 
 namespace Internal {
 
+class Constrainable;
 struct ParameterContents;
 
 /** A reference-counted handle to a parameter to a halide
@@ -48,7 +49,7 @@ public:
      * ObjectInstanceRegistry. */
     EXPORT Parameter(Type t, bool is_buffer, int dimensions,
                      const std::string &name, bool is_explicit_name = false,
-                     bool register_instance = true);
+                     bool register_instance = true, bool is_bound_before_lowering = false);
 
     /** Copy ctor, operator=, and dtor, needed for ObjectRegistry accounting. */
     EXPORT Parameter(const Parameter&);
@@ -66,6 +67,11 @@ public:
 
     /** Return true iff the name was explicitly specified */
     EXPORT bool is_explicit_name() const;
+
+    /** Return true iff this Parameter is expected to be replaced with a 
+     * constant at the start of lowering, and thus should not be used to
+     * infer arguments */
+    EXPORT bool is_bound_before_lowering() const;
 
     /** Does this parameter refer to a buffer/image? */
     EXPORT bool is_buffer() const;
@@ -98,11 +104,11 @@ public:
 
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
-    EXPORT BufferPtr get_buffer() const;
+    EXPORT Buffer<> get_buffer() const;
 
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
-    EXPORT void set_buffer(BufferPtr b);
+    EXPORT void set_buffer(Buffer<> b);
 
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never
@@ -202,6 +208,7 @@ public:
 
 private:
     friend class ::Halide::OutputImageParam;
+    friend class Constrainable;
 
     /** Construct a Dimension representing dimension d of some
      * Internal::Parameter p. Only friends may construct

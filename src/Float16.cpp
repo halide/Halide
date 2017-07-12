@@ -1,9 +1,6 @@
 #include "Float16.h"
 #include "Error.h"
-#include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/ErrorHandling.h"
+#include "LLVM_Headers.h"
 
 using namespace Halide;
 
@@ -32,7 +29,7 @@ getLLVMAPFRoundingMode(Halide::RoundingMode mode) {
 float16_t toFP16(llvm::APFloat v) {
     uint64_t bits = v.bitcastToAPInt().getZExtValue();
     internal_assert(bits <= 0xFFFF) << "Invalid bits for float16_t\n";
-    return float16_t::make_from_bits(bits);
+    return float16_t::make_from_bits((uint16_t) bits);
 }
 
 llvm::APFloat toLLVMAPF(float16_t v) {
@@ -114,7 +111,15 @@ uint16_t getBitsFrom(int64_t value, RoundingMode roundingMode, const char *typeN
 #else
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
 #endif
+#if LLVM_VERSION >= 50
+    // A comment in LLVM's APFloat.h indicates we should perhaps use
+    // llvm::APInt::WordType directly. However this type matches the
+    // prototype of the method it is passed to below, so it seems more
+    // correct. This code will likely have to change again.
+    llvm::APFloatBase::integerPart asIP = value;
+#else
     llvm::integerPart asIP = value;
+#endif
     llvm::APFloat::opStatus status = convertedValue.convertFromSignExtendedInteger(
         &asIP,
         /*srcCount=*/1, // All bits are contained within a single int64_t

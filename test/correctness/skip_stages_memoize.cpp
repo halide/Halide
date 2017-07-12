@@ -7,7 +7,7 @@ int buffer_index = 0;
 bool set_toggle1 = false;
 bool set_toggle2 = false;
 
-int single_toggle_trace(void *user_context, const halide_trace_event *e) {
+int single_toggle_trace(void *user_context, const halide_trace_event_t *e) {
     if (!set_toggle1) {
         std::string buffer_name = "f1_" + std::to_string(buffer_index);
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
@@ -19,7 +19,7 @@ int single_toggle_trace(void *user_context, const halide_trace_event *e) {
     return 0;
 }
 
-int double_toggle_trace(void *user_context, const halide_trace_event *e) {
+int double_toggle_trace(void *user_context, const halide_trace_event_t *e) {
     if (!set_toggle1) {
         std::string buffer_name = "f1_" + std::to_string(buffer_index);
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
@@ -92,7 +92,7 @@ int single_memoize_test(int index) {
 
     f2.compile_jit();
 
-    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+    for (bool toggle_val : { false, true }) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
         Buffer<int> out = f2.realize(10);
@@ -121,7 +121,7 @@ int tuple_memoize_test(int index) {
 
     f2.compile_jit();
 
-    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+    for (bool toggle_val : { false, true }) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
         Realization out = f2.realize(128);
@@ -160,7 +160,7 @@ int non_trivial_allocate_predicate_test(int index) {
 
     f3.compile_jit();
 
-    for (int toggle_val = 0; toggle_val <= 1; toggle_val++) {
+    for (bool toggle_val : { false, true }) {
         set_toggle1 = toggle_val;
         set_toggle2 = toggle_val;
         toggle.set(set_toggle1);

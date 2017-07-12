@@ -67,9 +67,12 @@ inline NO_INLINE Func func_like_to_func(const T &func_like) {
  *  constant, though the code currently allows accessing the arguments
  *  of source.
  *
- *  An ImageParam, Buffer<T>, or similar can be passed instead of a Func. If this
- *  is done and no bounds are given, the boundaries will be taken from the
- *  min and extent methods of the passed object.
+ *  An ImageParam, Buffer<T>, or similar can be passed instead of a
+ *  Func. If this is done and no bounds are given, the boundaries will
+ *  be taken from the min and extent methods of the passed
+ *  object. Note that objects are taken by mutable ref. Pipelines
+ *  capture Buffers via mutable refs, because running a pipeline might
+ *  alter the Buffer metadata (e.g. device allocation state).
  *
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_BORDER
  *   and putting value in the border of the texture.)
@@ -87,7 +90,7 @@ template <typename T>
 inline NO_INLINE Func constant_exterior(const T &func_like, Tuple value) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
+        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
     }
 
     return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
@@ -133,7 +136,7 @@ template <typename T>
 inline NO_INLINE Func repeat_edge(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
+        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
     }
 
     return repeat_edge(Internal::func_like_to_func(func_like), object_bounds);
@@ -169,7 +172,7 @@ template <typename T>
 inline NO_INLINE Func repeat_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
+        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
     }
 
     return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
@@ -204,7 +207,7 @@ template <typename T>
 inline NO_INLINE Func mirror_image(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
+        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
     }
 
     return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
@@ -242,7 +245,7 @@ template <typename T>
 inline NO_INLINE Func mirror_interior(const T &func_like) {
     std::vector<std::pair<Expr, Expr>> object_bounds;
     for (int i = 0; i < func_like.dimensions(); i++) {
-        object_bounds.push_back(std::make_pair(Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())));
+        object_bounds.push_back({ Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent()) });
     }
 
     return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);

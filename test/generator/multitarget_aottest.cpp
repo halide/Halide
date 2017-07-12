@@ -5,7 +5,7 @@
 #include "multitarget.h"
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 void my_error_handler(void *user_context, const char *message) {
     printf("Saw Error: (%s)\n", message);
@@ -16,7 +16,7 @@ std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
         size_t read = 0;
         #ifdef _MSC_VER
         char lvl[32];
-        getenv_s(&read, lvl, env_var_name);
+        if (getenv_s(&read, lvl, env_var_name) != 0) read = 0;
         #else
         char *lvl = getenv(env_var_name);
         read = (lvl)?1:0;
@@ -90,10 +90,10 @@ int main(int argc, char **argv) {
     {
         // Verify that the multitarget wrapper code propagates nonzero error
         // results back to the caller properly.
-        Buffer<uint8_t> bad_elem_size(W, H);
-        int result = HalideTest::multitarget(bad_elem_size);
-        if (result != halide_error_code_bad_elem_size) {
-            printf("Error: expected to fail with halide_error_code_bad_elem_size (%d) but actually got %d!\n", (int) halide_error_code_bad_elem_size, result);
+        Buffer<uint8_t> bad_type(W, H);
+        int result = HalideTest::multitarget(bad_type);
+        if (result != halide_error_code_bad_type) {
+            printf("Error: expected to fail with halide_error_code_bad_type (%d) but actually got %d!\n", (int) halide_error_code_bad_type, result);
             return -1;
         }
     }

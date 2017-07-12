@@ -89,6 +89,16 @@ public:
         return *this;
     }
 
+    Printer &operator<<(const halide_type_t &t) {
+        dst = halide_type_to_string(dst, end, &t);
+        return *this;
+    }
+
+    Printer &operator<<(const halide_buffer_t &buf) {
+        dst = halide_buffer_to_string(dst, end, &buf);
+        return *this;
+    }
+
     // Use it like a stringstream.
     const char *str() {
         if (buf) {
@@ -126,15 +136,22 @@ public:
         return "Printer buffer allocation failed.\n";
     }
 
+    void msan_annotate_is_initialized() {
+        halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
+    }
+
     ~Printer() {
         if (!buf) {
             halide_error(user_context, allocation_error());
-        } else if (type == ErrorPrinter) {
-            halide_error(user_context, buf);
-        } else if (type == BasicPrinter) {
-            halide_print(user_context, buf);
         } else {
-            // It's a stringstream. Do nothing.
+            msan_annotate_is_initialized();
+            if (type == ErrorPrinter) {
+                halide_error(user_context, buf);
+            } else if (type == BasicPrinter) {
+                halide_print(user_context, buf);
+            } else {
+                // It's a stringstream. Do nothing.
+            }
         }
 
         if (own_mem) {

@@ -1,8 +1,10 @@
 #include "bin/mat_mul.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "HalideBuffer.h"
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
+
+using Halide::Runtime::Buffer;
 
 int main(int argc, char **argv) {
     int size = 1024;
@@ -11,7 +13,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        Halide::Buffer<float> A(size, size), B(size, size), C(size, size);
+        Buffer<float> A(size, size), B(size, size), C(size, size);
         double t = benchmark(10, 10, [&]() {
             mat_mul(A, B, C);
             C.device_sync();

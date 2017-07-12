@@ -8,7 +8,5 @@ halide_add_aot_library(bilateral_grid
 # Final executable
 add_executable(filter filter.cpp)
 halide_add_aot_library_dependency(filter bilateral_grid)
-target_link_libraries(filter PRIVATE ${PNG_LIBRARIES})
-target_include_directories(filter PRIVATE "${PNG_INCLUDE_DIRS}")
-target_compile_definitions(filter PRIVATE ${PNG_DEFINITIONS})
+use_image_io(filter)
 target_compile_options(filter PRIVATE "-std=c++11")

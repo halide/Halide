@@ -9,7 +9,7 @@
 #include <functional>
 
 #include "Argument.h"
-#include "BufferPtr.h"
+#include "ExternalCode.h"
 #include "IR.h"
 #include "ModulusRemainder.h"
 #include "Outputs.h"
@@ -49,14 +49,27 @@ struct LoweredFunc {
     /** Type of linkage a function can have. */
     enum LinkageType {
         External, ///< Visible externally.
+        ExternalPlusMetadata, ///< Visible externally. Argument metadata and an argv wrapper are also generated.
         Internal, ///< Not visible externally, similar to 'static' linkage in C.
     };
 
     /** The linkage of this function. */
     LinkageType linkage;
 
-    LoweredFunc(const std::string &name, const std::vector<LoweredArgument> &args, Stmt body, LinkageType linkage);
-    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage);
+    /** The name-mangling choice for the function. Defaults to using
+     * the Target. */
+    NameMangling name_mangling;
+
+    LoweredFunc(const std::string &name,
+                const std::vector<LoweredArgument> &args,
+                Stmt body,
+                LinkageType linkage,
+                NameMangling mangling = NameMangling::Default);
+    LoweredFunc(const std::string &name,
+                const std::vector<Argument> &args,
+                Stmt body,
+                LinkageType linkage,
+                NameMangling mangling = NameMangling::Default);
 };
 
 }
@@ -69,6 +82,7 @@ struct ModuleContents;
  * definitions and buffers. */
 class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
+
 public:
     EXPORT Module(const std::string &name, const Target &target);
 
@@ -81,19 +95,37 @@ public:
 
     /** The declarations contained in this module. */
     // @{
-    EXPORT const std::vector<Internal::BufferPtr> &buffers() const;
+    EXPORT const std::vector<Buffer<>> &buffers() const;
     EXPORT const std::vector<Internal::LoweredFunc> &functions() const;
+    EXPORT std::vector<Internal::LoweredFunc> &functions();
+    EXPORT const std::vector<Module> &submodules() const;
+    EXPORT const std::vector<ExternalCode> &external_code() const;
     // @}
+
+    /** Return the function with the given name. If no such function
+    * exists in this module, assert. */
+    EXPORT Internal::LoweredFunc get_function_by_name(const std::string &name) const;
 
     /** Add a declaration to this module. */
     // @{
-    EXPORT void append(const Internal::BufferPtr &buffer);
+    EXPORT void append(const Buffer<> &buffer);
     EXPORT void append(const Internal::LoweredFunc &function);
+    EXPORT void append(const Module &module);
+    EXPORT void append(const ExternalCode &external_code);
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
     EXPORT void compile(const Outputs &output_files) const;
+
+    /** Compile a halide Module to in-memory object code. Currently
+     * only supports LLVM based compilation, but should be extended to
+     * handle source code backends. */
+    EXPORT Buffer<uint8_t> compile_to_buffer() const;
+
+    /** Return a new module with all submodules compiled to buffers on
+     * on the result Module. */
+    EXPORT Module resolve_submodules() const;
 };
 
 /** Link a set of modules together into one module. */
