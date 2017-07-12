@@ -22,6 +22,8 @@
 #include "jpeglib.h"
 #endif
 
+#include "HalideRuntime.h"  // for halide_type_t
+
 namespace Halide {
 namespace Tools {
 
@@ -923,7 +925,7 @@ struct ImageTypeConversion {
             case Internal::halide_type_code(halide_type_uint, 64): 
                 return convert_image<DstElemType>(src.template as<uint64_t>());
             default:
-                assert(!"Unsupported type");
+                assert(false && "Unsupported type");
                 using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
                 return DstImageType();
         }
@@ -968,7 +970,7 @@ struct ImageTypeConversion {
             case Internal::halide_type_code(halide_type_uint, 64): 
                 return convert_image<uint64_t>(src);
             default:
-                assert(!"Unsupported type");
+                assert(false && "Unsupported type");
                 return ImageType();
         }
     }
@@ -1015,7 +1017,7 @@ struct ImageTypeConversion {
             case Internal::halide_type_code(halide_type_uint, 64): 
                 return convert_image(src.template as<uint64_t>(), dst_type);
             default:
-                assert(!"Unsupported type");
+                assert(false && "Unsupported type");
                 return ImageType();
         }
     }
