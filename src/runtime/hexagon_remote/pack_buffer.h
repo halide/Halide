@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+// This header implements a simple buffer packing protocol for packing
+// and unpacking scalars and buffers into a larger buffer.
+
 template <typename T>
 void write_scalar(unsigned char *&write, const T& value) {
     *(T *)write = value;
@@ -34,6 +37,8 @@ inline uint32_t aligned_offset(const unsigned char *start, uint32_t offset, uint
     return x - (uintptr_t)start;
 }
 
+// Buffers are stored with two offsets, indicating the start and end
+// of the buffer from the start.
 inline void write_buffer(unsigned char *&write, const unsigned char *buffer, uint32_t size, uint32_t alignment) {
     unsigned char *start = write;
     uint32_t header_size = sizeof(uint32_t) * 2;

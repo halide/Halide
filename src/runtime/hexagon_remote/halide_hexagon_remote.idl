@@ -23,7 +23,7 @@ interface halide_hexagon_remote
     long run_v2(in handle_t module_ptr, in handle_t symbol,
                 in sequence<buffer> input_buffers,
                 rout sequence<buffer> output_buffers,
-                in long scalar_count, in buffer small);
+                in long scalar_count, in buffer small_input_args);
 
     // Routine to clean up a module on the remote side.
     long release_kernels_v2(in handle_t module_ptr);
