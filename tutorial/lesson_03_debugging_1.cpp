@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
     // Realize the function to produce an output image. We'll keep it
     // very small for this lesson.
-    Image<int> output = gradient.realize(8, 8);
+    Buffer<int> output = gradient.realize(8, 8);
 
     // That line compiled and ran the pipeline. Try running this
     // lesson with the environment variable HL_DEBUG_CODEGEN set to

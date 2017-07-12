@@ -16,6 +16,7 @@
 #include "Reduction.h"
 #include "Interval.h"
 #include "Associativity.h"
+#include "Generator.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -37,6 +38,7 @@ int main(int argc, const char **argv) {
     split_predicate_test();
     interval_test();
     associativity_test();
+    generator_test();
 
     return 0;
 }

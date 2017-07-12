@@ -6,7 +6,6 @@
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
-#include "CodeGen_Renderscript_Dev.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Debug.h"
@@ -97,16 +96,12 @@ private:
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) : CodeGen_CPU(target) {
     // For the default GPU, the order of preferences is: Metal,
-    // OpenCL, CUDA, OpenGLCompute, Renderscript, and OpenGL last.
+    // OpenCL, CUDA, OpenGLCompute, and OpenGL last.
     // The code is in reverse order to allow later tests to override
     // earlier ones.
     if (target.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
-    }
-    if (target.has_feature(Target::Renderscript)) {
-        debug(1) << "Constructing Renderscript device codegen\n";
-        cgdev[DeviceAPI::Renderscript] = new CodeGen_Renderscript_Dev(target);
     }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
@@ -140,7 +135,7 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
                                                  const std::string &simple_name,
-                                                 const std::string &/* extern_name */) {
+                                                 const std::string &extern_name) {
     function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
@@ -149,7 +144,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     }
 
     // Call the base implementation to create the function.
-    CodeGen_CPU::compile_func(f, f.name, f.name);
+    CodeGen_CPU::compile_func(f, simple_name, extern_name);
 
     // We need to insert code after the existing entry block, so that
     // the destructor stack slots exist before we do the assertions
@@ -202,10 +197,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
         }
 
         Value *user_context = get_user_context();
-        debug(2) << "CodeGen_CPU_Host compile_func user_context:";
-        if (debug::debug_level >= 2) {
-            user_context->dump();
-        }
         Value *kernel_size = ConstantInt::get(i32_t, kernel_src.size());
         std::string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
         Value *init = module->getFunction(init_kernels_name);
@@ -277,7 +268,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
             // Look up the allocation for the vertex buffer and cast it to the
             // right type
-            gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
+            gpu_vertex_buffer = codegen(Variable::make(type_of<float *>(), "glsl.vertex_buffer"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
                                                            CodeGen_LLVM::f32_t->getPointerTo());
         }
@@ -287,10 +278,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // Determine the arguments that must be passed into the halide function
         vector<DeviceArgument> closure_args = c.arguments();
-
-        if (loop->device_api == DeviceAPI::Renderscript) {
-            closure_args.insert(closure_args.begin(), DeviceArgument(".rs_slot_offset", false, Int(32), 0));
-        }
 
         // Halide allows passing of scalar float and integer arguments. For
         // OpenGL, pack these into vec4 uniforms and varying attributes
@@ -324,12 +311,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         }
 
         CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
-        int slots_taken = 0;
-        if (target.has_feature(Target::Renderscript)) {
-            slots_taken = gpu_codegen->slots_taken();
-            debug(4) << "Slots taken = " << slots_taken << "\n";
-        }
-
         user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
@@ -376,59 +357,50 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             Value *val;
 
             if (closure_args[i].is_buffer) {
-                // If it's a buffer, dereference the dev handle
-                val = buffer_dev(sym_get(name + ".buffer"));
+                // If it's a buffer, get the .buffer symbol
+                val = sym_get(name + ".buffer");
             } else if (ends_with(name, ".varying")) {
                 // Expressions for varying attributes are passed in the
                 // expression mesh. Pass a non-nullptr value in the argument array
                 // to keep it in sync with the argument names encoded in the
                 // shader header
                 val = ConstantInt::get(target_size_t_type, 1);
-            } else if (name.compare(".rs_slot_offset") == 0) {
-                user_assert(target.has_feature(Target::Renderscript)) <<
-                    ".rs_slot_offset variable is used by Renderscript only.";
-                // First argument for Renderscript _run method is slot offset.
-                val = ConstantInt::get(target_size_t_type, slots_taken);
             } else {
                 // Otherwise just look up the symbol
                 val = sym_get(name);
             }
 
-            // allocate stack space to mirror the closure element. It
-            // might be in a register and we need a pointer to it for
-            // the gpu args array.
-            Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
-            // store the closure value into the stack space
-            builder->CreateStore(val, ptr);
+            if (!closure_args[i].is_buffer) {
+                // allocate stack space to mirror the closure element. It
+                // might be in a register and we need a pointer to it for
+                // the gpu args array.
+                Value *ptr = create_alloca_at_entry(val->getType(), 1, false, name+".stack");
+                // store the closure value into the stack space
+                builder->CreateStore(val, ptr);
+                val = ptr;
+            }
 
             // store a void * pointer to the argument into the gpu_args_arr
-            Value *bits = builder->CreateBitCast(ptr, arg_t);
+            Value *bits = builder->CreateBitCast(val, arg_t);
             builder->CreateStore(bits,
                                  builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                     gpu_args_arr_type,
-#endif
                                     gpu_args_arr,
                                     0,
                                     i));
 
-            // store the size of the argument. Buffer arguments get
-            // the dev field, which is 64-bits.
-            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits();
-            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
+            // store the size of the argument.
+            int size_bytes = (closure_args[i].is_buffer) ? 8 : closure_args[i].type.bytes();
+            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bytes),
                                  builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                     gpu_arg_sizes_arr_type,
-#endif
                                     gpu_arg_sizes_arr,
                                     0,
                                     i));
 
             builder->CreateStore(ConstantInt::get(i8_t, closure_args[i].is_buffer),
                                  builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                     gpu_arg_is_buffer_arr_type,
-#endif
                                     gpu_arg_is_buffer_arr,
                                     0,
                                     i));
@@ -436,25 +408,19 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // nullptr-terminate the lists
         builder->CreateStore(ConstantPointerNull::get(arg_t),
                              builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                 gpu_args_arr_type,
-#endif
                                 gpu_args_arr,
                                 0,
                                 num_args));
         builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
                              builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                 gpu_arg_sizes_arr_type,
-#endif
                                 gpu_arg_sizes_arr,
                                 0,
                                 num_args));
         builder->CreateStore(ConstantInt::get(i8_t, 0),
                              builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                                 gpu_arg_is_buffer_arr_type,
-#endif
                                 gpu_arg_is_buffer_arr,
                                 0,
                                 num_args));
@@ -463,7 +429,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
-        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
+        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]))
+            << bounds.num_threads[3] << ", " << bounds.num_blocks[3] << "\n";
         debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
         debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
         debug(3) << "bounds.num_blocks[1] = " << bounds.num_blocks[1] << "\n";
@@ -479,25 +446,19 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
             builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                 gpu_arg_sizes_arr_type,
-#endif
                 gpu_arg_sizes_arr,
                 0,
                 0,
                 "gpu_arg_sizes_ar_ref" + api_unique_name),
             builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                 gpu_args_arr_type,
-#endif
                 gpu_args_arr,
                 0,
                 0,
                 "gpu_args_arr_ref" + api_unique_name),
             builder->CreateConstGEP2_32(
-#if LLVM_VERSION >= 37
                 gpu_arg_is_buffer_arr_type,
-#endif
                 gpu_arg_is_buffer_arr,
                 0,
                 0,
@@ -556,10 +517,6 @@ template class CodeGen_GPU_Host<CodeGen_MIPS>;
 
 #ifdef WITH_POWERPC
 template class CodeGen_GPU_Host<CodeGen_PowerPC>;
-#endif
-
-#ifdef WITH_NATIVE_CLIENT
-template class CodeGen_GPU_Host<CodeGen_PNaCl>;
 #endif
 
 }}

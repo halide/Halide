@@ -13,8 +13,8 @@ public:
 
     using IRVisitor::visit;
 
-    void visit(const Call *op) {
-        if (op->is_intrinsic(Call::interleave_vectors)) {
+    void visit(const Shuffle *op) {
+        if (op->is_interleave()) {
             result++;
         }
         IRVisitor::visit(op);
@@ -26,7 +26,8 @@ int count_interleaves(Func f) {
     t.set_feature(Target::NoBoundsQuery);
     t.set_feature(Target::NoAsserts);
     f.compute_root();
-    Stmt s = Internal::lower({f.function()}, f.name(), t);
+    std::vector<Module> submodules;
+    Stmt s = Internal::lower_main_stmt({f.function()}, f.name(), t);
     CountInterleaves i;
     s.accept(&i);
     return i.result;
@@ -41,8 +42,7 @@ void check_interleave_count(Func f, int correct) {
     }
 }
 
-template <typename FuncRefVarOrExpr>
-void define(FuncRefVarOrExpr f, std::vector<Expr> values) {
+void define(FuncRef f, std::vector<Expr> values) {
     if (values.size() == 1) {
         f = values[0];
     } else {
@@ -50,8 +50,7 @@ void define(FuncRefVarOrExpr f, std::vector<Expr> values) {
     }
 }
 
-template <typename FuncRefVarOrExpr>
-void define(FuncRefVarOrExpr f, Expr value, int count) {
+void define(FuncRef f, Expr value, int count) {
     std::vector<Expr> values;
     for (int i = 0; i < count; i++) {
         values.push_back(value);
@@ -59,8 +58,7 @@ void define(FuncRefVarOrExpr f, Expr value, int count) {
     define(f, values);
 }
 
-template <typename FuncRefVarOrExpr>
-Expr element(FuncRefVarOrExpr f, int i) {
+Expr element(FuncRef f, int i) {
     if (f.size() == 1) {
         assert(i == 0);
         return f;
@@ -111,7 +109,7 @@ int main(int argc, char **argv) {
 
         Realization results = h.realize(16);
         for (int i = 0; i < elements; i++) {
-            Image<float> result = results[i];
+            Buffer<float> result = results[i];
             for (int x = 0; x < 16; x++) {
                 float correct = ((x % 2) == 0) ? (1.0f/(sinf(x/2 + i))) : (cosf(x/2 + i)*17.0f);
                 float delta = result(x) - correct;
@@ -143,28 +141,26 @@ int main(int argc, char **argv) {
 
         interleaved
             .output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 3)
-            .set_stride(1, 1)
-            .set_extent(1, 3);
+            .dim(0)
+                .set_stride(3)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(3);
 
-        Buffer buff3;
-        buff3 = Buffer(Float(32), 16, 3, 0, 0, (uint8_t *)0);
-        buff3.raw_buffer()->stride[0] = 3;
-        buff3.raw_buffer()->stride[1] = 1;
+        Buffer<float> buff3(3, 16);
+        buff3.transpose(0, 1);
 
-        Realization r3({buff3});
-        interleaved.realize(r3);
+        interleaved.realize(buff3);
 
         check_interleave_count(interleaved, 1);
 
-        Image<float> result3 = r3[0];
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 3; y++) {
                 float correct = 3*x + y;
-                float delta = result3(x,y) - correct;
+                float delta = buff3(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, result3(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff3(x,y), correct);
                     return -1;
                 }
             }
@@ -193,28 +189,26 @@ int main(int argc, char **argv) {
             .vectorize(x, 4);
 
         output4.output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 4)
-            .set_stride(1, 1)
-            .set_extent(1, 4);
+            .dim(0)
+                .set_stride(4)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(4);
 
         check_interleave_count(output4, 1);
 
-        Buffer buff4;
-        buff4 = Buffer(Float(32), 16, 4, 0, 0, (uint8_t *)0);
-        buff4.raw_buffer()->stride[0] = 4;
-        buff4.raw_buffer()->stride[1] = 1;
+        Buffer<float> buff4(4, 16);
+        buff4.transpose(0, 1);
 
-        Realization r4({buff4});
-        output4.realize(r4);
+        output4.realize(buff4);
 
-        Image<float> result4 = r4[0];
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 4; y++) {
                 float correct = sin((y+1)*x);
-                float delta = result4(x,y) - correct;
+                float delta = buff4(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, result4(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff4(x,y), correct);
                     return -1;
                 }
             }
@@ -235,29 +229,27 @@ int main(int argc, char **argv) {
             .vectorize(x, 4);
 
         output5.output_buffer()
-            .set_min(1, 0)
-            .set_stride(0, 5)
-            .set_stride(1, 1)
-            .set_extent(1, 5);
+            .dim(0)
+                .set_stride(5)
+            .dim(1)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(5);
 
 
         check_interleave_count(output5, 1);
 
-        Buffer buff5;
-        buff5 = Buffer(Float(32), 16, 5, 0, 0, (uint8_t *)0);
-        buff5.raw_buffer()->stride[0] = 5;
-        buff5.raw_buffer()->stride[1] = 1;
+        Buffer<float> buff5(5, 16);
+        buff5.transpose(0, 1);
 
-        Realization r5({buff5});
-        output5.realize(r5);
+        output5.realize(buff5);
 
-        Image<float> result5 = r5[0];
         for (int x = 0; x < 16; x++) {
             for (int y = 0; y < 5; y++) {
                 float correct = sin((y+1)*x);
-                float delta = result5(x,y) - correct;
+                float delta = buff5(x, y) - correct;
                 if (delta > 0.01 || delta < -0.01) {
-                    printf("result(%d) = %f instead of %f\n", x, result5(x,y), correct);
+                    printf("result(%d) = %f instead of %f\n", x, buff5(x,y), correct);
                     return -1;
                 }
             }
@@ -331,8 +323,8 @@ int main(int argc, char **argv) {
 
                 Realization outs = output6.realize(50, 4);
                 for (int e = 0; e < elements; e++) {
-                    Image<uint8_t> ref = (*refs)[e];
-                    Image<uint8_t> out = outs[e];
+                    Buffer<uint8_t> ref = (*refs)[e];
+                    Buffer<uint8_t> out = outs[e];
                     for (int y = 0; y < ref.height(); y++) {
                         for (int x = 0; x < ref.width(); x++) {
                             if (out(x, y) != ref(x, y)) {
@@ -376,17 +368,27 @@ int main(int argc, char **argv) {
             .vectorize(y);
 
         trans1.output_buffer()
-            .set_min(0,0).set_min(1,0)
-            .set_stride(0,1).set_stride(1,8)
-            .set_extent(0,8).set_extent(1,8);
+            .dim(0)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(8)
+            .dim(1)
+                .set_min(0)
+                .set_stride(8)
+                .set_extent(8);
 
         trans2.output_buffer()
-            .set_min(0,0).set_min(1,0)
-            .set_stride(0,1).set_stride(1,8)
-            .set_extent(0,8).set_extent(1,8);
+            .dim(0)
+                .set_min(0)
+                .set_stride(1)
+                .set_extent(8)
+            .dim(1)
+                .set_min(0)
+                .set_stride(8)
+                .set_extent(8);
 
-        Image<uint16_t> result6(8,8);
-        Image<uint16_t> result7(8,8);
+        Buffer<uint16_t> result6(8, 8);
+        Buffer<uint16_t> result7(8, 8);
         trans1.realize(result6);
         trans2.realize(result7);
 

@@ -3,4 +3,4 @@
 
 void defineArgument();
 
-#endif // ARGUMENT_H
+#endif  // ARGUMENT_H

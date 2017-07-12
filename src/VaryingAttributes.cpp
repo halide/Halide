@@ -112,17 +112,23 @@ protected:
 
     virtual void visit(const For *op) {
         bool old_in_glsl_loops = in_glsl_loops;
+        bool kernel_loop = op->device_api == DeviceAPI::GLSL;
+        bool within_kernel_loop = !kernel_loop && in_glsl_loops;
         // Check if the loop variable is a GPU variable thread variable and for GLSL
-        if ((CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) ||
-            (in_glsl_loops && op->device_api == DeviceAPI::None)) {
+        if (kernel_loop) {
             loop_vars.push_back(op->name);
             in_glsl_loops = true;
+        } else if (within_kernel_loop) {
+            // The inner loop variable is non-linear w.r.t the glsl pixel coordinate.
+            scope.push(op->name, 2);
         }
 
         Stmt mutated_body = mutate(op->body);
 
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)  && op->device_api == DeviceAPI::GLSL) {
+        if (kernel_loop) {
             loop_vars.pop_back();
+        } else if (within_kernel_loop) {
+            scope.pop(op->name);
         }
 
         in_glsl_loops = old_in_glsl_loops;
@@ -579,6 +585,7 @@ protected:
     virtual void visit(const Or *op) { visit_binary_op(op); }
 
     virtual void visit(const Select *op)  {
+        Expr mutated_condition = mutate(op->condition);
         Expr mutated_true_value = mutate(op->true_value);
         Expr mutated_false_value = mutate(op->false_value);
 
@@ -595,7 +602,29 @@ protected:
             }
         }
 
-        expr = Select::make(op->condition, mutated_true_value, mutated_false_value);
+        expr = Select::make(mutated_condition, mutated_true_value, mutated_false_value);
+    }
+
+    virtual void visit(const Ramp *op) {
+        Expr mutated_base = mutate(op->base);
+        Expr mutated_stride = mutate(op->stride);
+
+        // If either base or stride is a float, then make sure both are float
+        bool base_float = mutated_base.type().is_float();
+        bool stride_float = mutated_stride.type().is_float();
+        if (!base_float && stride_float) {
+            mutated_base = Cast::make(float_type(op->base), mutated_base);
+        }
+        else if (base_float && !stride_float) {
+            mutated_stride = Cast::make(float_type(op->stride), mutated_stride);
+        }
+
+        if (mutated_base.same_as(op->base) && mutated_stride.same_as(op->stride)) {
+            expr = op;
+        }
+        else {
+            expr = Ramp::make(mutated_base, mutated_stride, op->lanes);
+        }
     }
 
     virtual void visit(const Let *op) {
@@ -770,7 +799,7 @@ void IRFilter::visit(const Select *op)  {
 }
 
 void IRFilter::visit(const Load *op) {
-    mutate_operator(this, op, op->index, &stmt);
+    mutate_operator(this, op, op->predicate, op->index, &stmt);
 }
 
 void IRFilter::visit(const Ramp *op) {
@@ -812,7 +841,7 @@ void IRFilter::visit(const AssertStmt *op) {
 }
 
 void IRFilter::visit(const ProducerConsumer *op) {
-    mutate_operator(this, op, op->produce, op->update, op->consume, &stmt);
+    mutate_operator(this, op, op->body, &stmt);
 }
 
 void IRFilter::visit(const For *op) {
@@ -820,7 +849,7 @@ void IRFilter::visit(const For *op) {
 }
 
 void IRFilter::visit(const Store *op) {
-    mutate_operator(this, op, op->value, op->index, &stmt);
+    mutate_operator(this, op, op->predicate, op->value, op->index, &stmt);
 }
 
 void IRFilter::visit(const Provide *op) {
@@ -921,7 +950,8 @@ public:
             Expr offset_expression = Variable::make(Int(32), "gpu.vertex_offset") +
                                      attribute_order[attribute_name];
 
-            stmt = Store::make(vertex_buffer_name, op->args[1], offset_expression, Parameter());
+            stmt = Store::make(vertex_buffer_name, op->args[1], offset_expression,
+                               Parameter(), const_true(op->args[1].type().lanes()));
         } else {
             IRFilter::visit(op);
         }
@@ -1020,12 +1050,14 @@ public:
                 // order
                 mutated_body = make_block(Store::make(vertex_buffer_name,
                                                       coord1,
-                                                      gpu_varying_offset + 1, Parameter()),
+                                                      gpu_varying_offset + 1,
+                                                      Parameter(), const_true()),
                                            mutated_body);
 
                 mutated_body = make_block(Store::make(vertex_buffer_name,
                                                        coord0,
-                                                       gpu_varying_offset + 0, Parameter()),
+                                                       gpu_varying_offset + 0,
+                                                       Parameter(), const_true()),
                                            mutated_body);
 
                 // TODO: The value 2 in this expression must be changed to reflect

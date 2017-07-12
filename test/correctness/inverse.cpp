@@ -19,7 +19,7 @@ int bits_diff(float fa, float fb) {
 }
 
 // Check the mantissas match except for the last few bits.
-void check(Image<float> a, Image<float> b) {
+void check(Buffer<float> a, Buffer<float> b) {
     for (int i = 0; i < a.width(); i++) {
         int err = bits_diff(a(i), b(i));
         if (err > 13) {
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     Func f1, f2, f3, f4, f5;
     Func g1, g2, g3, g4, g5;
 
-    Var x;
+    Var x, xi;
     Expr v = x*1.34f + 1.0142f;
 
     Param<float> p;
@@ -74,21 +74,21 @@ int main(int argc, char **argv) {
 
     Target t = get_jit_target_from_environment();
     if (t.has_gpu_feature()) {
-        f5.gpu_tile(x, 16);
-        g5.gpu_tile(x, 16);
+        f5.gpu_tile(x, xi, 16);
+        g5.gpu_tile(x, xi, 16);
     }
 
-    Image<float> imf1 = f1.realize(10000);
-    Image<float> imf2 = f2.realize(10000);
-    Image<float> imf3 = f3.realize(10000);
-    Image<float> imf4 = f4.realize(10000);
-    Image<float> imf5 = f5.realize(10000);
+    Buffer<float> imf1 = f1.realize(10000);
+    Buffer<float> imf2 = f2.realize(10000);
+    Buffer<float> imf3 = f3.realize(10000);
+    Buffer<float> imf4 = f4.realize(10000);
+    Buffer<float> imf5 = f5.realize(10000);
 
-    Image<float> img1 = g1.realize(10000);
-    Image<float> img2 = g2.realize(10000);
-    Image<float> img3 = g3.realize(10000);
-    Image<float> img4 = g4.realize(10000);
-    Image<float> img5 = g5.realize(10000);
+    Buffer<float> img1 = g1.realize(10000);
+    Buffer<float> img2 = g2.realize(10000);
+    Buffer<float> img3 = g3.realize(10000);
+    Buffer<float> img4 = g4.realize(10000);
+    Buffer<float> img5 = g5.realize(10000);
 
     printf("Testing accuracy of inverse\n");
     check(imf1, imf2);

@@ -6,13 +6,13 @@ using namespace Halide;
 Var x;
 
 template <class T>
-bool test(Expr e, const char *funcname, int vector_width, int N, Image<T> &input, T *result) {
+bool test(Expr e, const char *funcname, int vector_width, int N, Buffer<T> &input, T *result) {
     Func f;
     f(x) = e;
     if (vector_width > 1) {
         f.vectorize(x, vector_width);
     }
-    Image<T> im = f.realize(N);
+    Buffer<T> im = f.realize(N);
 
     printf("Testing %s (%s x %d)\n", funcname, type_of<T>() == Float(32) ? "float" : "double", vector_width);
     bool ok = true;
@@ -26,7 +26,7 @@ bool test(Expr e, const char *funcname, int vector_width, int N, Image<T> &input
 }
 
 template <class T>
-bool test(Expr e, const char *funcname, int N, Image<T> &input, T *result) {
+bool test(Expr e, const char *funcname, int N, Buffer<T> &input, T *result) {
     return test(e, funcname, 1, N, input, result)
         && test(e, funcname, 2, N, input, result)
         && test(e, funcname, 4, N, input, result)
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
             8388609, -8388609, 16777216, -16777218,
         };
 
-        Image<float> input(N);
+        Buffer<float> input(N);
         for (int i = 0; i < N; i++) {
             input(i) = inputdata[i];
         }
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
             8388609, -8388610, 16777216, -16777218,
             4503599627370497, -4503599627370497
         };
-        Image<double> input(N);
+        Buffer<double> input(N);
         for (int i = 0; i < N; i++) {
             input(i) = inputdata[i];
         }

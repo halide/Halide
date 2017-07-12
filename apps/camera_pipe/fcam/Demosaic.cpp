@@ -49,7 +49,7 @@ void makeLUT(float contrast, int blackLevel, int whiteLevel, float gamma, unsign
 
 // From the Halide camera_pipe's color_correct
 void makeColorMatrix(float colorMatrix[], float colorTemp) {
-    float alpha = (1.0 / colorTemp - 1.0/3200) / (1.0/7000 - 1.0/3200);
+    float alpha = (1.f / colorTemp - 1.f/3200.f) / (1.f/7000.f - 1.f/3200.f);
 
     colorMatrix[0] = alpha*1.6697f     + (1-alpha)*2.2997f;
     colorMatrix[1] = alpha*-0.2693f    + (1-alpha)*-0.4478f;
@@ -72,7 +72,7 @@ inline short max(short a, short b) {return a>b ? a : b;}
 inline short max(short a, short b, short c, short d) {return max(max(a, b), max(c, d));}
 inline short min(short a, short b) {return a<b ? a : b;}
 
-void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
+void demosaic(Halide::Runtime::Buffer<uint16_t> input, Halide::Runtime::Buffer<uint8_t> out, float colorTemp, float contrast, bool denoise, int blackLevel, int whiteLevel, float gamma) {
     const int BLOCK_WIDTH = 40;
     const int BLOCK_HEIGHT = 24;
     const int G = 0, GR = 0, R = 1, B = 2, GB = 3;
@@ -89,8 +89,9 @@ void demosaic(Halide::Tools::Image<uint16_t> input, Halide::Tools::Image<uint8_t
     outHeight *= BLOCK_HEIGHT;
 
     // Prepare the lookup table
-    unsigned char lut[whiteLevel+1];
-    makeLUT(contrast, blackLevel, whiteLevel, gamma, lut);
+    std::vector<unsigned char> lut;
+    lut.resize(whiteLevel+1);
+    makeLUT(contrast, blackLevel, whiteLevel, gamma, &lut[0]);
 
     // Grab the color matrix
     float colorMatrix[12];

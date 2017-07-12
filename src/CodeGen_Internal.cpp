@@ -1,5 +1,6 @@
 #include "CodeGen_Internal.h"
 #include "IROperator.h"
+#include "IRMutator.h"
 #include "CSE.h"
 #include "Debug.h"
 
@@ -17,11 +18,11 @@ namespace {
 
 vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_t, LLVMContext &context) {
     vector<llvm::Type *> res;
-    for (const pair<string, Type> &i : closure.vars) {
-        res.push_back(llvm_type_of(&context, i.second));
+    for (const auto &v : closure.vars) {
+        res.push_back(llvm_type_of(&context, v.second));
     }
-    for (const pair<string, Closure::BufferRef> &i : closure.buffers) {
-        res.push_back(llvm_type_of(&context, i.second.type)->getPointerTo());
+    for (const auto &b : closure.buffers) {
+        res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
         res.push_back(buffer_t->getPointerTo());
     }
     return res;
@@ -29,17 +30,15 @@ vector<llvm::Type*> llvm_types(const Closure& closure, llvm::StructType *buffer_
 
 }  // namespace
 
-StructType *build_closure_type(const Closure& closure, llvm::StructType *buffer_t, LLVMContext *context) {
+StructType *build_closure_type(const Closure& closure,
+                               llvm::StructType *buffer_t,
+                               LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
     struct_t->setBody(llvm_types(closure, buffer_t, *context), false);
     return struct_t;
 }
 
-void pack_closure(llvm::Type *
-#if LLVM_VERSION >= 37
-                  type
-#endif
-                  ,
+void pack_closure(llvm::StructType *type,
                   Value *dst,
                   const Closure& closure,
                   const Scope<Value *> &src,
@@ -47,57 +46,66 @@ void pack_closure(llvm::Type *
                   IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    LLVMContext &context = builder->getContext();
-    vector<string> nm = closure.names();
-    vector<llvm::Type*> ty = llvm_types(closure, buffer_t, context);
-    for (size_t i = 0; i < nm.size(); i++) {
-#if LLVM_VERSION >= 37
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx);
-#else
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(dst, 0, idx);
-#endif
-        Value *val;
-        if (!ends_with(nm[i], ".buffer") || src.contains(nm[i])) {
-            val = src.get(nm[i]);
-            if (val->getType() != ty[i]) {
-                val = builder->CreateBitCast(val, ty[i]);
-            }
-        } else {
-            // Skip over buffers not in the symbol table. They must not be needed.
-            val = ConstantPointerNull::get(buffer_t->getPointerTo());
-        }
+    for (const auto &v : closure.vars) {
+        llvm::Type *t = type->elements()[idx];
+        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+        Value *val = src.get(v.first);
+        val = builder->CreateBitCast(val, t);
         builder->CreateStore(val, ptr);
-        idx++;
+    }
+    for (const auto &b : closure.buffers) {
+        // For buffers we pass through base address (the symbol with
+        // the same name as the buffer), and the .buffer symbol (GPU
+        // code might implicitly need it).
+        // FIXME: This dependence should be explicitly encoded in the IR.
+        {
+            llvm::Type *t = type->elements()[idx];
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+            Value *val = src.get(b.first);
+            val = builder->CreateBitCast(val, t);
+            builder->CreateStore(val, ptr);
+        }
+        {
+            llvm::PointerType *t = buffer_t->getPointerTo();
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
+            Value *val = nullptr;
+            if (src.contains(b.first + ".buffer")) {
+                val = src.get(b.first + ".buffer");
+                val = builder->CreateBitCast(val, t);
+            } else {
+                val = ConstantPointerNull::get(t);
+            }
+            builder->CreateStore(val, ptr);
+        }
     }
 }
 
 void unpack_closure(const Closure& closure,
                     Scope<Value *> &dst,
-                    llvm::Type *
-#if LLVM_VERSION >= 37
-                    type
-#endif
-                    ,
+                    llvm::StructType *type,
                     Value *src,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    LLVMContext &context = builder->getContext();
-    vector<string> nm = closure.names();
-    for (size_t i = 0; i < nm.size(); i++) {
-#if LLVM_VERSION >= 37
+    for (const auto &v : closure.vars) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-#else
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(src, 0, idx++);
-#endif
         LoadInst *load = builder->CreateLoad(ptr);
-        if (load->getType()->isPointerTy()) {
-            // Give it a unique type so that tbaa tells llvm that this can't alias anything
-            LLVMMDNodeArgumentType md_args[] = {MDString::get(context, nm[i])};
-            load->setMetadata("tbaa", MDNode::get(context, md_args));
+        dst.push(v.first, load);
+        load->setName(v.first);
+    }
+    for (const auto &b : closure.buffers) {
+        {
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            dst.push(b.first, load);
+            load->setName(b.first);
         }
-        dst.push(nm[i], load);
-        load->setName(nm[i]);
+        {
+            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
+            LoadInst *load = builder->CreateLoad(ptr);
+            dst.push(b.first + ".buffer", load);
+            load->setName(b.first + ".buffer");
+        }
     }
 }
 
@@ -157,6 +165,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_device_release",
         "halide_start_clock",
         "halide_trace",
+        "halide_trace_helper",
         "halide_memoization_cache_lookup",
         "halide_memoization_cache_store",
         "halide_memoization_cache_release",
@@ -164,12 +173,18 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_run",
         "halide_opengl_run",
         "halide_openglcompute_run",
-        "halide_renderscript_run",
         "halide_metal_run",
+        "halide_msan_annotate_buffer_is_initialized_as_destructor",
+        "halide_msan_annotate_buffer_is_initialized",
+        "halide_msan_annotate_memory_is_initialized",
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
-        "halide_hexagon_host_get_symbol",
+        "halide_hexagon_power_hvx_on",
+        "halide_hexagon_power_hvx_on_mode",
+        "halide_hexagon_power_hvx_on_perf",
+        "halide_hexagon_power_hvx_off",
+        "halide_hexagon_power_hvx_off_as_destructor",
         "halide_qurt_hvx_lock",
         "halide_qurt_hvx_unlock",
         "halide_qurt_hvx_unlock_as_destructor",
@@ -177,9 +192,11 @@ bool function_takes_user_context(const std::string &name) {
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
-        "halide_renderscript_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_get_gpu_device",
+        "halide_upgrade_buffer_t",
+        "halide_downgrade_buffer_t",
+        "halide_downgrade_buffer_t_device_fields",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
@@ -192,7 +209,7 @@ bool function_takes_user_context(const std::string &name) {
     return starts_with(name, "halide_error_");
 }
 
-bool can_allocation_fit_on_stack(int32_t size) {
+bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
     return (size <= 1024 * 16);
 }
@@ -237,29 +254,115 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         // Match this non-overflowing C code
         /*
           T r = a % b;
-          r = r + (r < 0 ? abs(b) : 0);
+          T sign_mask = (r >> (sizeof(r)*8 - 1));
+          r = r + sign_mask & abs(b);
         */
 
-        r = select(r < 0, r + abs(b), r);
+        Expr sign_mask = r >> (a.type().bits()-1);
+        r += sign_mask & abs(b);
         return common_subexpression_elimination(r);
     } else {
         return r;
     }
 }
 
-bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
+namespace {
+
+// This mutator rewrites predicated loads and stores as unpredicated
+// loads/stores with explicit conditions, scalarizing if necessary.
+class UnpredicateLoadsStores : public IRMutator {
+    void visit(const Load *op) {
+        if (is_one(op->predicate)) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        Expr predicate = mutate(op->predicate);
+        Expr index = mutate(op->index);
+        Expr condition;
+
+        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
+            Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
+                                                const_true(op->type.lanes()));
+            expr = Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
+                              Call::PureIntrinsic);
+        } else {
+            string index_name = "scalarized_load_index";
+            Expr index_var = Variable::make(index.type(), index_name);
+            string predicate_name = "scalarized_load_predicate";
+            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
+
+            vector<Expr> lanes;
+            vector<int> ramp;
+            for (int i = 0; i < op->type.lanes(); i++) {
+                Expr idx_i = Shuffle::make({index_var}, {i});
+                Expr pred_i = Shuffle::make({predicate_var}, {i});
+                Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
+                                                    const_true());
+                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load,
+                                make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
+                ramp.push_back(i);
+            }
+            expr = Shuffle::make(lanes, ramp);
+            expr = Let::make(predicate_name, predicate, expr);
+            expr = Let::make(index_name, index, expr);
+        }
+    }
+
+    void visit(const Store *op) {
+        if (is_one(op->predicate)) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        Expr predicate = mutate(op->predicate);
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+
+        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
+            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()));
+            stmt = IfThenElse::make(scalar_pred->value, unpredicated_store);
+        } else {
+            string value_name = "scalarized_store_value";
+            Expr value_var = Variable::make(value.type(), value_name);
+            string index_name = "scalarized_store_index";
+            Expr index_var = Variable::make(index.type(), index_name);
+            string predicate_name = "scalarized_store_predicate";
+            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
+
+            vector<Stmt> lanes;
+            for (int i = 0; i < predicate.type().lanes(); i++) {
+                Expr pred_i = Shuffle::make({predicate_var}, {i});
+                Expr value_i = Shuffle::make({value_var}, {i});
+                Expr index_i = Shuffle::make({index_var}, {i});
+                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true()));
+                lanes.push_back(lane);
+            }
+            stmt = Block::make(lanes);
+            stmt = LetStmt::make(predicate_name, predicate, stmt);
+            stmt = LetStmt::make(value_name, value, stmt);
+            stmt = LetStmt::make(index_name, index, stmt);
+       }
+    }
+
+    using IRMutator::visit;
+};
+
+}  // namespace
+
+Stmt unpredicate_loads_stores(Stmt s) {
+    return UnpredicateLoadsStores().mutate(s);
+}
+
+bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
     }
-    #if LLVM_VERSION < 36
-    llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
-    #else
     llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
     if (!cam) {
         return false;
     }
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
-    #endif
     if (!c) {
         return false;
     }
@@ -267,28 +370,16 @@ bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
     return true;
 }
 
-bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
+bool get_md_string(llvm::Metadata *value, std::string &result) {
     if (!value) {
         result = "";
         return false;
     }
-    #if LLVM_VERSION < 36
-    if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
-        result = "";
-        return true;
-    }
-    llvm::ConstantDataArray *c = llvm::cast<llvm::ConstantDataArray>(value);
-    if (c) {
-        result = c->getAsCString();
-        return true;
-    }
-    #else
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
         result = c->getString();
         return true;
     }
-    #endif
     return false;
 }
 
@@ -299,40 +390,27 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
 
     options = llvm::TargetOptions();
+    #if LLVM_VERSION < 50
     options.LessPreciseFPMADOption = true;
+    #endif
     options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
 
-    #if LLVM_VERSION >= 37
-    #ifndef WITH_NATIVE_CLIENT
+    #if LLVM_VERSION < 40
     // Turn off approximate reciprocals for division. It's too
-    // inaccurate even for us.
+    // inaccurate even for us. In LLVM 4.0+ this moved to be a
+    // function attribute.
     options.Reciprocals.setDefaults("all", false, 0);
-    #endif
     #endif
 
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
-    #if LLVM_VERSION < 37
-    options.NoFramePointerElim = false;
-    options.UseSoftFloat = false;
-    #endif
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-    #if LLVM_VERSION < 37
-    options.DisableTailCalls = false;
-    #endif
     options.StackAlignmentOverride = 0;
-    #if LLVM_VERSION < 37
-    options.TrapFuncName = "";
-    #endif
     options.FunctionSections = true;
-    #ifdef WITH_NATIVE_CLIENT
-    options.UseInitArray = true;
-    #else
     options.UseInitArray = false;
-    #endif
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     #if LLVM_VERSION >= 39
@@ -348,25 +426,18 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
     llvm::LLVMContext &context = to.getContext();
 
     bool use_soft_float_abi = false;
-    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi))
+    if (get_md_bool(from.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi)) {
         to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
+    }
 
     std::string mcpu;
     if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
-        #if LLVM_VERSION < 36
-        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::ConstantDataArray::getString(context, mcpu));
-        #else
         to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
-        #endif
     }
 
     std::string mattrs;
     if (get_md_string(from.getModuleFlag("halide_mattrs"), mattrs)) {
-        #if LLVM_VERSION < 36
-        to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::ConstantDataArray::getString(context, mattrs));
-        #else
         to.addModuleFlag(llvm::Module::Warning, "halide_mattrs", llvm::MDString::get(context, mattrs));
-        #endif
     }
 }
 
@@ -376,7 +447,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!target) {
         std::cout << error_string << std::endl;
+#if LLVM_VERSION < 50
         llvm::TargetRegistry::printRegisteredTargetsForVersion();
+#else
+        llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
+#endif
     }
     internal_assert(target) << "Could not create target for " << module.getTargetTriple() << "\n";
 
@@ -391,6 +466,14 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 llvm::Reloc::PIC_,
                                                 llvm::CodeModel::Default,
                                                 llvm::CodeGenOpt::Aggressive));
+}
+
+void set_function_attributes_for_target(llvm::Function *fn, Target t) {
+    #if LLVM_VERSION >= 40
+    // Turn off approximate reciprocals for division. It's too
+    // inaccurate even for us.
+    fn->addFnAttr("reciprocal-estimates", "none");
+    #endif
 }
 
 }

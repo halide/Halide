@@ -12,8 +12,8 @@ int main(int argc, char **argv) {
 
     g.bound(c, 0, 3);
 
-    Image<int> imf = f.realize(32, 32);
-    Image<int> img = g.realize(32, 32, 3);
+    Buffer<int> imf = f.realize(32, 32);
+    Buffer<int> img = g.realize(32, 32, 3);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {

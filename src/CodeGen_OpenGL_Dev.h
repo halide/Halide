@@ -52,7 +52,7 @@ private:
   */
 class CodeGen_GLSLBase : public CodeGen_C {
 public:
-    CodeGen_GLSLBase(std::ostream &s);
+    CodeGen_GLSLBase(std::ostream &s, Target t);
 
     std::string print_name(const std::string &name);
     std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
@@ -65,6 +65,17 @@ protected:
     void visit(const Mod *op);
     void visit(const Call *op);
 
+    // these have specific functions
+    // in GLSL that operate on vectors
+    void visit(const EQ *);
+    void visit(const NE *);
+    void visit(const LT *);
+    void visit(const LE *);
+    void visit(const GT *);
+    void visit(const GE *);
+
+    void visit(const Shuffle *);
+
 private:
     std::map<std::string, std::string> builtin;
 };
@@ -73,7 +84,7 @@ private:
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_GLSLBase {
 public:
-    CodeGen_GLSL(std::ostream &s, const Target &target) : CodeGen_GLSLBase(s), target(target) {}
+    CodeGen_GLSL(std::ostream &s, const Target &t) : CodeGen_GLSLBase(s, t) {}
 
     void add_kernel(Stmt stmt,
                     std::string name,
@@ -95,6 +106,8 @@ protected:
 
     void visit(const Load *);
     void visit(const Store *);
+    void visit(const Allocate *);
+    void visit(const Free *);
 
     void visit(const Call *);
     void visit(const AssertStmt *);
@@ -106,7 +119,9 @@ protected:
 private:
     std::string get_vector_suffix(Expr e);
 
-    const Target target;
+    std::vector<std::string> print_lanes(Expr expr);
+
+    Scope<int> scalar_vars, vector_vars;
 };
 
 }}

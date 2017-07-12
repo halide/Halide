@@ -6,33 +6,32 @@
 #include "Halide.h"
 #include <cstdio>
 #include <vector>
+#include <cmath>  // for log2
+
 #include "fft.h"
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 #ifdef WITH_FFTW
 #include <fftw3.h>
 #endif
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 Var x("x"), y("y");
 
 template <typename T>
-Func make_real(const Image<T> &re) {
+Func make_real(const Buffer<T> &re) {
     Func ret;
     ret(x, y) = re(x, y);
     return ret;
 }
 
 template <typename T>
-ComplexFunc make_complex(const Image<T> &re) {
+ComplexFunc make_complex(const Buffer<T> &re) {
     ComplexFunc ret;
     ret(x, y) = re(x, y);
     return ret;
-}
-
-double log2(double x) {
-    return log(x)/log(2.0);
 }
 
 int main(int argc, char **argv) {
@@ -42,9 +41,13 @@ int main(int argc, char **argv) {
         W = atoi(argv[1]);
         H = atoi(argv[2]);
     }
+    std::string output_dir;
+    if (argc >= 4) {
+        output_dir = argv[3];
+    }
 
     // Generate a random image to convolve with.
-    Image<float> in(W, H);
+    Buffer<float> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = (float)rand()/(float)RAND_MAX;
@@ -53,7 +56,7 @@ int main(int argc, char **argv) {
 
     // Construct a box filter kernel centered on the origin.
     const int box = 3;
-    Image<float> kernel(W, H);
+    Buffer<float> kernel(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             int u = x < (W - x) ? x : (W - x);
@@ -104,8 +107,8 @@ int main(int argc, char **argv) {
         filtered_r2c = fft2d_c2r(dft_filtered, W, H, target, inv_desc);
     }
 
-    Image<float> result_c2c = filtered_c2c.realize(W, H, target);
-    Image<float> result_r2c = filtered_r2c.realize(W, H, target);
+    Buffer<float> result_c2c = filtered_c2c.realize(W, H, target);
+    Buffer<float> result_r2c = filtered_r2c.realize(W, H, target);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -137,8 +140,8 @@ int main(int argc, char **argv) {
 
     Var rep("rep");
 
-    Image<float> re_in = lambda(x, y, 0.0f).realize(W, H);
-    Image<float> im_in = lambda(x, y, 0.0f).realize(W, H);
+    Buffer<float> re_in = lambda(x, y, 0.0f).realize(W, H);
+    Buffer<float> im_in = lambda(x, y, 0.0f).realize(W, H);
 
     printf("%12s %5s%11s%5s %5s%11s%5s\n", "", "", "Halide", "", "", "FFTW", "");
     printf("%12s %10s %10s %10s %10s %10s\n", "DFT type", "Time (us)", "MFLOP/s", "Time (us)", "MFLOP/s", "Ratio");
@@ -150,15 +153,15 @@ int main(int argc, char **argv) {
     // locality.
     c2c_in(x, y, rep) = {re_in(x, y), im_in(x, y)};
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1, target, fwd_desc);
-    bench_c2c.compile_to_lowered_stmt("c2c.html", bench_c2c.infer_arguments(), HTML);
+    bench_c2c.compile_to_lowered_stmt(output_dir + "c2c.html", bench_c2c.infer_arguments(), HTML);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
     // Write all reps to the same place in memory. This means the
     // output appears to be cached on all but the first
     // iteration. This seems to match the behavior of FFTW's benchmark
     // code, and like the input, it is a reasonable assumption for a well
     // optimized real world system.
-    R_c2c[0].raw_buffer()->stride[2] = 0;
-    R_c2c[1].raw_buffer()->stride[2] = 0;
+    R_c2c[0].raw_buffer()->dim[2].stride = 0;
+    R_c2c[1].raw_buffer()->dim[2].stride = 0;
 
     double halide_t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); })*1e6/reps;
 #ifdef WITH_FFTW
@@ -169,7 +172,7 @@ int main(int argc, char **argv) {
 #else
     double fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
+    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "c2c",
            halide_t,
            5*W*H*(log2(W) + log2(H))/halide_t,
@@ -181,11 +184,11 @@ int main(int argc, char **argv) {
     // All reps read from the same input. See notes on c2c_in.
     r2c_in(x, y, rep) = re_in(x, y);
     Func bench_r2c = fft2d_r2c(r2c_in, W, H, target, fwd_desc);
-    bench_r2c.compile_to_lowered_stmt("r2c.html", bench_r2c.infer_arguments(), HTML);
+    bench_r2c.compile_to_lowered_stmt(output_dir + "r2c.html", bench_r2c.infer_arguments(), HTML);
     Realization R_r2c = bench_r2c.realize(W, H/2 + 1, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
-    R_r2c[0].raw_buffer()->stride[2] = 0;
-    R_r2c[1].raw_buffer()->stride[2] = 0;
+    R_r2c[0].raw_buffer()->dim[2].stride = 0;
+    R_r2c[1].raw_buffer()->dim[2].stride = 0;
 
     halide_t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); })*1e6/reps;
 #ifdef WITH_FFTW
@@ -195,7 +198,7 @@ int main(int argc, char **argv) {
 #else
     fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
+    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "r2c",
            halide_t,
            2.5*W*H*(log2(W) + log2(H))/halide_t,
@@ -207,10 +210,10 @@ int main(int argc, char **argv) {
     // All reps read from the same input. See notes on c2c_in.
     c2r_in(x, y, rep) = {re_in(x, y), im_in(x, y)};
     Func bench_c2r = fft2d_c2r(c2r_in, W, H, target, inv_desc);
-    bench_c2r.compile_to_lowered_stmt("c2r.html", bench_c2r.infer_arguments(), HTML);
+    bench_c2r.compile_to_lowered_stmt(output_dir + "c2r.html", bench_c2r.infer_arguments(), HTML);
     Realization R_c2r = bench_c2r.realize(W, H, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
-    R_c2r[0].raw_buffer()->stride[2] = 0;
+    R_c2r[0].raw_buffer()->dim[2].stride = 0;
 
     halide_t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); })*1e6/reps;
 #ifdef WITH_FFTW
@@ -219,7 +222,7 @@ int main(int argc, char **argv) {
 #else
     fftw_t = 0;
 #endif
-    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n", 
+    printf("%12s %10.3f %10.2f %10.3f %10.2f %10.3g\n",
            "c2r",
            halide_t,
            2.5*W*H*(log2(W) + log2(H))/halide_t,

@@ -1,6 +1,10 @@
 HALIDE_BIN_PATH ?= ../..
 HALIDE_SRC_PATH ?= ../..
-LDFLAGS ?= 
+LDFLAGS ?=
+BIN ?= ./bin
+IMAGES ?= ../images
+HL_TARGET ?= host
+UNAME ?= $(shell uname)
 
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
@@ -13,7 +17,7 @@ CXX ?= g++
 GXX ?= g++
 
 CFLAGS += -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
-CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/ 
+CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
 
 ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
@@ -25,14 +29,15 @@ GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+HALIDE_SYSTEM_LDFLAGS = $(shell $(LLVM_CONFIG) --system-libs)
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags) $(HALIDE_SYSTEM_LDFLAGS)
 
 LLVM_CONFIG ?= llvm-config
 LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
-LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
 LLVM_SHARED_LIBS =
 else
 LLVM_STATIC_LIBS =
@@ -49,9 +54,15 @@ LIBPNG_LIBS ?= -lpng
 endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
-PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
 
-UNAME = $(shell uname)
+LIBJPEG_LIBS = -ljpeg
+LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
+LIBJPEG_CXX_FLAGS ?= $(LIBPNG_INCLUDE_DIRS:=/..)
+
+IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
+IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
+
+IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
 
 PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
 ifeq ($(UNAME), Darwin)
@@ -62,4 +73,21 @@ ifneq (, $(findstring opengl,$(HL_TARGET)))
   OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
 endif
 
+$(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp 
+	@mkdir -p $(BIN)
+	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@ 
+
+# Really, .SECONDARY is what we want, but it won't accept wildcards
+.PRECIOUS: $(BIN)/%.rungen
+$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_SRC_PATH)/tools/RunGenStubs.cpp
+	$(CXX) $(CXXFLAGS) -DHL_RUNGEN_FILTER=$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+
+RUNARGS ?=
+
+# Pseudo target that allows us to build-and-run in one step, e.g.
+#
+#     make foo.run RUNARGS='input=a output=baz'
+#
+$(BIN)/%.run: $(BIN)/%.rungen
+	@$(CURDIR)/$< $(RUNARGS)
 

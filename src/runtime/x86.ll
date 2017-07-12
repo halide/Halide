@@ -138,7 +138,7 @@ define weak_odr <2 x double> @max_f64x2(<2 x double> %a, <2 x double> %b) nounwi
 ; and info[0...3] as output. This is regrettable but solves two issues:
 ; -- A saner API can easily be written that spills to/from the stack internally,
 ; but it's not feasible to write one that is compatible across all LLVM versions we
-; support. (Once LLVM3.6 is dropped this may change.)
+; support. (TODO: now that LLVM3.6 is no longer supported, this could change.)
 ; -- A version without stack spills tends to confuse the x86-32 code generator
 ; and cause it to fail via running out of registers.
 define weak_odr void @x86_cpuid_halide(i32* %info) nounwind uwtable {

@@ -1,108 +1,14 @@
 #include "Halide.h"
-#include <assert.h>
+#include "test/common/check_call_graphs.h"
+
 #include <stdio.h>
-#include <algorithm>
-#include <functional>
 #include <map>
-#include <numeric>
 
 using std::map;
-using std::vector;
 using std::string;
 
 using namespace Halide;
 using namespace Halide::Internal;
-
-typedef map<string, vector<string>> CallGraphs;
-
-class CheckCalls : public IRVisitor {
-public:
-    CallGraphs calls; // Caller -> vector of callees
-    string producer = "";
-private:
-    using IRVisitor::visit;
-
-    void visit(const ProducerConsumer *op) {
-        string old_producer = producer;
-        producer = op->name;
-        calls[producer]; // Make sure each producer is allocated a slot
-        op->produce.accept(this);
-        producer = old_producer;
-
-        if (op->update.defined()) {
-            // Just lump all the update stages together
-            producer = op->name + ".update(" + std::to_string(0) + ")";
-            calls[producer]; // Make sure each producer is allocated a slot
-            op->update.accept(this);
-            producer = old_producer;
-        }
-        op->consume.accept(this);
-        producer = old_producer;
-    }
-
-    void visit(const Load *op) {
-        IRVisitor::visit(op);
-        if (!producer.empty()) {
-            assert(calls.count(producer) > 0);
-            vector<string> &callees = calls[producer];
-            if(std::find(callees.begin(), callees.end(), op->name) == callees.end()) {
-                callees.push_back(op->name);
-            }
-        }
-    }
-};
-
-
-int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
-    if (result.size() != expected.size()) {
-        printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
-        return -1;
-    }
-    for (auto &iter : expected) {
-        if (result.count(iter.first) == 0) {
-            printf("Expect %s to be in the call graphs\n", iter.first.c_str());
-            return -1;
-        }
-        vector<string> &expected_callees = iter.second;
-        vector<string> &result_callees = result[iter.first];
-        std::sort(expected_callees.begin(), expected_callees.end());
-        std::sort(result_callees.begin(), result_callees.end());
-        if (expected_callees != result_callees) {
-            string expected_str = std::accumulate(
-                expected_callees.begin(), expected_callees.end(), std::string{},
-                [](const string &a, const string &b) {
-                    return a.empty() ? b : a + ", " + b;
-                });
-            string result_str = std::accumulate(
-                result_callees.begin(), result_callees.end(), std::string{},
-                [](const string &a, const string &b) {
-                    return a.empty() ? b : a + ", " + b;
-                });
-
-            printf("Expect calless of %s to be (%s); got (%s) instead\n",
-                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
-            return -1;
-        }
-
-    }
-    return 0;
-}
-
-int check_image(const Image<int> &im, const std::function<int(int,int,int)> &func) {
-    for (int z = 0; z < im.channels(); z++) {
-        for (int y = 0; y < im.height(); y++) {
-            for (int x = 0; x < im.width(); x++) {
-                int correct = func(x, y, z);
-                if (im(x, y, z) != correct) {
-                    printf("im(%d, %d, %d) = %d instead of %d\n",
-                           x, y, z, im(x, y, z), correct);
-                    return -1;
-                }
-            }
-        }
-    }
-    return 0;
-}
 
 int simple_rfactor_test(bool compile_module) {
     Func f("f"), g("g");
@@ -129,17 +35,15 @@ int simple_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm.name(), g.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {f.name(), intm.name()}},
+            {g.name(), {intm.name(), g.name()}},
+            {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
             return -1;
         }
     } else {
-        Image<int> im = g.realize(80, 80);
+        Buffer<int> im = g.realize(80, 80);
         auto func = [](int x, int y, int z) {
             return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::max(40 + x + y, 40) : 40;
         };
@@ -179,19 +83,16 @@ int reorder_split_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm2.name(), g.name()}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {intm1.name(), intm2.name()}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {f.name(), intm1.name()}},
+            {g.name(), {intm2.name(), g.name()}},
+            {intm2.name(), {intm1.name(), intm2.name()}},
+            {intm1.name(), {f.name(), intm1.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
             return -1;
         }
     } else {
-        Image<int> im = g.realize(80, 80);
+        Buffer<int> im = g.realize(80, 80);
         auto func = [](int x, int y, int z) {
             return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
         };
@@ -201,6 +102,59 @@ int reorder_split_rfactor_test(bool compile_module) {
     }
     return 0;
 }
+
+int multi_split_rfactor_test(bool compile_module) {
+    Func f("f"), g("g");
+    Var x("x"), y("y");
+
+    RDom r(10, 20, 20, 30);
+
+    f(x, y) = x - y;
+    f.compute_root();
+
+    g(x, y) = 1;
+    g(r.x, r.y) += f(r.x, r.y);
+    g.update(0).reorder({r.y, r.x});
+
+    RVar rxi("rxi"), rxo("rxo"), ryi("ryi"), ryo("ryo"), ryoo("ryoo"), ryoi("ryoi");
+    Var u("u"), v("v"), w("w");
+
+    g.update(0).split(r.x, rxo, rxi, 2);
+    Func intm1 = g.update(0).rfactor({{rxo, u}, {r.y, v}});
+
+    g.update(0).split(r.y, ryo, ryi, 2, TailStrategy::GuardWithIf);
+    g.update(0).split(ryo, ryoo, ryoi, 4, TailStrategy::GuardWithIf);
+    Func intm2 = g.update(0).rfactor({{rxo, u}, {ryoo, v}, {ryoi, w}});
+    intm2.compute_root();
+    intm1.compute_root();
+
+    if (compile_module) {
+        // Check the call graphs.
+        Module m = g.compile_to_module({g.infer_arguments()});
+        CheckCalls checker;
+        m.functions().front().body.accept(&checker);
+
+        CallGraphs expected = {
+            {g.name(), {intm2.name(), g.name()}},
+            {intm2.name(), {intm1.name(), intm2.name()}},
+            {intm1.name(), {f.name(), intm1.name()}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(checker.calls, expected) != 0) {
+            return -1;
+        }
+    } else {
+        Buffer<int> im = g.realize(80, 80);
+        auto func = [](int x, int y, int z) {
+            return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
+        };
+        if (check_image(im, func)) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 
 int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
     Func f("f"), g("g");
@@ -221,6 +175,7 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
     Func intm = g.update(0).rfactor(r.z, u);
     RVar rfi("rfi"), rfo("rfo");
     intm.update(0).split(rf, rfi, rfo, 2);
+    intm.compute_at(g, r.z);
 
     Func wrapper = f.in(intm).compute_root();
     f.compute_root();
@@ -232,18 +187,16 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm.name(), g.name()}},
+            {g.name(), {intm.name(), g.name()}},
             {wrapper.name(), {f.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {wrapper.name(), intm.name()}},
+            {intm.name(), {wrapper.name(), intm.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
             return -1;
         }
     } else {
-        Image<int> im = g.realize(20, 20, 20);
+        Buffer<int> im = g.realize(20, 20, 20);
         auto func = [](int x, int y, int z) {
             return ((5 <= x && x <= 14) && (5 <= y && y <= 14) &&
                     (5 <= z && z <= 14)) ? x + y + z + 1 : 1;
@@ -269,7 +222,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
     b.compute_root();
     c.compute_root();
 
-    Image<int> im_ref(20, 20, 20);
+    Buffer<int> im_ref(20, 20, 20);
 
     {
         Func f("f"), g("g");
@@ -297,6 +250,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
         RVar rzi("rzi"), rzo("rzo");
         Func intm = f.update(0).rfactor({{r.x, u}, {r.y, v}});
         intm.update(0).split(r.z, rzo, rzi, 2);
+        intm.compute_root();
 
         if (compile_module) {
             // Check the call graphs.
@@ -306,10 +260,8 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
 
             CallGraphs expected = {
                 {g.name(), {f.name()}},
-                {f.name(), {}},
-                {f.update(0).name(), {f.name(), intm.name()}},
-                {intm.name(), {}},
-                {intm.update(0).name(), {a.name(), b.name(), c.name(), intm.name()}},
+                {f.name(), {f.name(), intm.name()}},
+                {intm.name(), {a.name(), b.name(), c.name(), intm.name()}},
                 {a.name(), {}},
                 {b.name(), {}},
                 {c.name(), {}},
@@ -318,7 +270,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
                 return -1;
             }
         } else {
-            Image<int> im = g.realize(20, 20, 20);
+            Buffer<int> im = g.realize(20, 20, 20);
             auto func = [im_ref](int x, int y, int z) {
                 return im_ref(x, y, z);
             };
@@ -356,10 +308,8 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {f.name(), intm.name(), g.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {f.name(), intm.name()}},
+            {g.name(), {f.name(), intm.name(), g.name()}},
+            {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -368,7 +318,7 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
     } else {
         {
             p.set(0);
-            Image<int> im = g.realize(80, 80);
+            Buffer<int> im = g.realize(80, 80);
             auto func = [](int x, int y, int z) {
                 return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::min(x + y + 2, 40) : 40;
             };
@@ -378,7 +328,7 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
         }
         {
             p.set(20);
-            Image<int> im = g.realize(80, 80);
+            Buffer<int> im = g.realize(80, 80);
             auto func = [](int x, int y, int z) {
                 return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::min(x + y + 2, 40) : 40;
             };
@@ -417,17 +367,15 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm.name(), g.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {f.name(), intm.name()}},
+            {g.name(), {intm.name(), g.name()}},
+            {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
             return -1;
         }
     } else {
-        Image<int> im = g.realize(20, 20, 20);
+        Buffer<int> im = g.realize(20, 20, 20);
         auto func = [](int x, int y, int z) {
             return (5 <= x && x <= 14) && (5 <= y && y <= 14) &&
                    (0 <= z && z <= 19) && (x < y) && (x + 2*y <= z) ? x + y + z + 1 : 1;
@@ -448,13 +396,14 @@ int histogram_rfactor_test(bool compile_module) {
         reference_hist[i] = 0;
     }
 
-    Image<float> in(W, H);
+    Buffer<float> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = float(rand() & 0x000000ff);
             reference_hist[uint8_t(in(x, y))] += 1;
         }
     }
+
 
     Func hist("hist"), g("g");
     Var x("x");
@@ -479,17 +428,15 @@ int histogram_rfactor_test(bool compile_module) {
 
         CallGraphs expected = {
             {g.name(), {hist.name()}},
-            {hist.name(), {}},
-            {hist.update(0).name(), {intm.name(), hist.name()}},
-            {intm.name(), {}},
-            {intm.update(0).name(), {in.name(), intm.name()}},
+            {hist.name(), {intm.name(), hist.name()}},
+            {intm.name(), {in.name(), intm.name()}},
 
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
             return -1;
         }
     } else {
-        Image<int32_t> histogram = g.realize(10); // buckets 10-20 only
+        Buffer<int32_t> histogram = g.realize(10); // buckets 10-20 only
         for (int i = 10; i < 20; i++) {
             if (histogram(i-10) != reference_hist[i]) {
                 printf("Error: bucket %d is %d instead of %d\n",
@@ -517,7 +464,7 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     Func dot_ref("dot");
     dot_ref() = 0;
     dot_ref() += a(r.x)*b(r.x);
-    Image<int32_t> ref = dot_ref.realize();
+    Buffer<int32_t> ref = dot_ref.realize();
 
     Func dot("dot");
     dot() = 0;
@@ -528,8 +475,6 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     Var u("u");
     Func intm1 = dot.update(0).rfactor(rxo, u);
     RVar rxio("rxio"), rxii("rxii");
-    intm1.compute_root();
-    intm1.update(0).parallel(u);
     intm1.update(0).split(rxi, rxio, rxii, 8);
 
     Var v("v");
@@ -537,7 +482,10 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
     intm2.compute_at(intm1, u);
     intm2.update(0).vectorize(v, 8);
 
-    Image<int32_t> im = dot.realize();
+    intm1.compute_root();
+    intm1.update(0).parallel(u);
+
+    Buffer<int32_t> im = dot.realize();
 
     if (compile_module) {
         // Check the call graphs.
@@ -546,12 +494,9 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {dot.name(), {}},
-            {dot.update(0).name(), {intm1.name(), dot.name()}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {intm2.name(), intm1.name()}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {a.name(), b.name(), intm2.name()}},
+            {dot.name(), {intm1.name(), dot.name()}},
+            {intm1.name(), {intm2.name(), intm1.name()}},
+            {intm2.name(), {a.name(), b.name(), intm2.name()}},
             {a.name(), {}},
             {b.name(), {}},
         };
@@ -559,7 +504,7 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Image<int32_t> im = dot.realize();
+        Buffer<int32_t> im = dot.realize();
         if (ref(0) != im(0)) {
             printf("result = %d instead of %d\n", im(0), ref(0));
             return -1;
@@ -587,19 +532,20 @@ int tuple_rfactor_test(bool compile_module) {
     g.reorder({y, x});
 
     Var xi("xi"), yi("yi");
-    g.update(0).tile(x, y, xi, yi, 2, 2);
+    g.update(0).tile(x, y, xi, yi, 4, 4);
 
     Var u("u");
     Func intm1 = g.update(0).rfactor(r.y, u);
-    intm1.update(0).parallel(u, 2);
     RVar rxi("rxi"), rxo("rxo");
-    intm1.tile(x, y, xi, yi, 2, 2);
+    intm1.tile(x, y, xi, yi, 4, 4);
     intm1.update(0).split(r.x, rxo, rxi, 2);
 
     Var v("v");
     Func intm2 = intm1.update(0).rfactor(rxo, v);
-    intm2.update(0).vectorize(v);
     intm2.compute_at(intm1, rxo);
+
+    intm1.update(0).parallel(u, 2);
+    intm1.compute_root();
 
     if (compile_module) {
         // Check the call graphs.
@@ -608,15 +554,12 @@ int tuple_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm1.name() + ".0", intm1.name() + ".1",
-                                  g.name() + ".0", g.name() + ".1"}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {intm2.name() + ".0", intm2.name() + ".1",
-                                      intm1.name() + ".0", intm1.name() + ".1"}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {f.name() + ".0", f.name() + ".1",
-                                      intm2.name() + ".0", intm2.name() + ".1"}},
+            {g.name(), {intm1.name() + ".0", intm1.name() + ".1",
+                        g.name() + ".0", g.name() + ".1"}},
+            {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1",
+                            intm1.name() + ".0", intm1.name() + ".1"}},
+            {intm2.name(), {f.name() + ".0", f.name() + ".1",
+                            intm2.name() + ".0", intm2.name() + ".1"}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -624,11 +567,11 @@ int tuple_rfactor_test(bool compile_module) {
         }
     } else {
         Realization rn = g.realize(80, 80);
-        Image<int> im1(rn[0]);
-        Image<int> im2(rn[1]);
+        Buffer<int> im1(rn[0]);
+        Buffer<int> im2(rn[1]);
 
-        Image<int> ref_im1(ref_rn[0]);
-        Image<int> ref_im2(ref_rn[1]);
+        Buffer<int> ref_im1(ref_rn[0]);
+        Buffer<int> ref_im2(ref_rn[1]);
 
         auto func1 = [&ref_im1](int x, int y, int z) {
             return ref_im1(x, y);
@@ -672,14 +615,15 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
 
     Var u("u"), v("v"), w("w");
     Func intm1 = g.update(0).specialize(p >= 5).rfactor({{r.y, v}, {r.z, w}});
-    intm1.update(0).parallel(v, 2);
+    intm1.update(0).parallel(v, 4);
+    intm1.compute_root();
 
     RVar rxi("rxi"), rxo("rxo");
     intm1.update(0).split(r.x, rxo, rxi, 2);
     Var t("t");
-    Func intm2 = intm1.update(0).specialize(q).rfactor(rxi, t);
-    Func intm3 = intm1.update(0).specialize(!q).rfactor(rxo, t);
-    Func intm4 = g.update(0).rfactor({{r.x, u}, {r.z, w}});
+    Func intm2 = intm1.update(0).specialize(q).rfactor(rxi, t).compute_root();
+    Func intm3 = intm1.update(0).specialize(!q).rfactor(rxo, t).compute_root();
+    Func intm4 = g.update(0).rfactor({{r.x, u}, {r.z, w}}).compute_root();
     intm4.update(0).vectorize(u);
 
     if (compile_module) {
@@ -689,23 +633,18 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
         m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
-            {g.name(), {}},
-            {g.update(0).name(), {intm1.name() + ".0", intm1.name() + ".1",
-                                  intm4.name() + ".0", intm4.name() + ".1",
-                                  g.name() + ".0", g.name() + ".1"}},
-            {intm1.name(), {}},
-            {intm1.update(0).name(), {intm2.name() + ".0", intm2.name() + ".1",
-                                      intm3.name() + ".0", intm3.name() + ".1",
-                                      intm1.name() + ".0", intm1.name() + ".1"}},
-            {intm2.name(), {}},
-            {intm2.update(0).name(), {f.name() + ".0", f.name() + ".1",
-                                      intm2.name() + ".0", intm2.name() + ".1"}},
-            {intm3.name(), {}},
-            {intm3.update(0).name(), {f.name() + ".0", f.name() + ".1",
-                                      intm3.name() + ".0", intm3.name() + ".1"}},
-            {intm4.name(), {}},
-            {intm4.update(0).name(), {f.name() + ".0", f.name() + ".1",
-                                      intm4.name() + ".0", intm4.name() + ".1"}},
+            {g.name(), {intm1.name() + ".0", intm1.name() + ".1",
+                        intm4.name() + ".0", intm4.name() + ".1",
+                        g.name() + ".0", g.name() + ".1"}},
+            {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1",
+                            intm3.name() + ".0", intm3.name() + ".1",
+                            intm1.name() + ".0", intm1.name() + ".1"}},
+            {intm2.name(), {f.name() + ".0", f.name() + ".1",
+                            intm2.name() + ".0", intm2.name() + ".1"}},
+            {intm3.name(), {f.name() + ".0", f.name() + ".1",
+                            intm3.name() + ".0", intm3.name() + ".1"}},
+            {intm4.name(), {f.name() + ".0", f.name() + ".1",
+                            intm4.name() + ".0", intm4.name() + ".1"}},
             {f.name(), {}},
         };
         if (check_call_graphs(checker.calls, expected) != 0) {
@@ -716,11 +655,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             p.set(10);
             q.set(true);
             Realization rn = g.realize(10, 10);
-            Image<int> im1(rn[0]);
-            Image<int> im2(rn[1]);
+            Buffer<int> im1(rn[0]);
+            Buffer<int> im2(rn[1]);
 
-            Image<int> ref_im1(ref_rn[0]);
-            Image<int> ref_im2(ref_rn[1]);
+            Buffer<int> ref_im1(ref_rn[0]);
+            Buffer<int> ref_im2(ref_rn[1]);
 
             auto func1 = [&ref_im1](int x, int y, int z) {
                 return ref_im1(x, y, z);
@@ -739,11 +678,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             p.set(10);
             q.set(false);
             Realization rn = g.realize(10, 10);
-            Image<int> im1(rn[0]);
-            Image<int> im2(rn[1]);
+            Buffer<int> im1(rn[0]);
+            Buffer<int> im2(rn[1]);
 
-            Image<int> ref_im1(ref_rn[0]);
-            Image<int> ref_im2(ref_rn[1]);
+            Buffer<int> ref_im1(ref_rn[0]);
+            Buffer<int> ref_im2(ref_rn[1]);
 
             auto func1 = [&ref_im1](int x, int y, int z) {
                 return ref_im1(x, y, z);
@@ -762,11 +701,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             p.set(0);
             q.set(true);
             Realization rn = g.realize(10, 10);
-            Image<int> im1(rn[0]);
-            Image<int> im2(rn[1]);
+            Buffer<int> im1(rn[0]);
+            Buffer<int> im2(rn[1]);
 
-            Image<int> ref_im1(ref_rn[0]);
-            Image<int> ref_im2(ref_rn[1]);
+            Buffer<int> ref_im1(ref_rn[0]);
+            Buffer<int> ref_im2(ref_rn[1]);
 
             auto func1 = [&ref_im1](int x, int y, int z) {
                 return ref_im1(x, y, z);
@@ -785,11 +724,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             p.set(0);
             q.set(false);
             Realization rn = g.realize(10, 10);
-            Image<int> im1(rn[0]);
-            Image<int> im2(rn[1]);
+            Buffer<int> im1(rn[0]);
+            Buffer<int> im2(rn[1]);
 
-            Image<int> ref_im1(ref_rn[0]);
-            Image<int> ref_im2(ref_rn[1]);
+            Buffer<int> ref_im1(ref_rn[0]);
+            Buffer<int> ref_im2(ref_rn[1]);
 
             auto func1 = [&ref_im1](int x, int y, int z) {
                 return ref_im1(x, y, z);
@@ -808,11 +747,11 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
     return 0;
 }
 
-int subtraction_rfactor_test() {
+int complex_multiply_rfactor_test() {
     Func f("f"), g("g"), ref("ref");
     Var x("x"), y("y");
 
-    f(x, y) = x + y;
+    f(x, y) = Tuple(x + y, x - y);
     f.compute_root();
 
     Param<int> inner_extent, outer_extent;
@@ -820,11 +759,13 @@ int subtraction_rfactor_test() {
     inner_extent.set(20);
     outer_extent.set(40);
 
-    ref(x, y) = 40;
-    ref(x, y) -= f(r.x, r.y);
+    ref(x, y) = Tuple(10, 20);
+    ref(x, y) = Tuple(ref(x, y)[0]*f(r.x, r.y)[0] - ref(x, y)[1]*f(r.x, r.y)[1],
+                      ref(x, y)[0]*f(r.x, r.y)[1] + ref(x, y)[1]*f(r.x, r.y)[0]);
 
-    g(x, y) = 40;
-    g(x, y) -= f(r.x, r.y);
+    g(x, y) = Tuple(10, 20);
+    g(x, y) = Tuple(g(x, y)[0]*f(r.x, r.y)[0] - g(x, y)[1]*f(r.x, r.y)[1],
+                    g(x, y)[0]*f(r.x, r.y)[1] + g(x, y)[1]*f(r.x, r.y)[0]);
 
     RVar rxi("rxi"), rxo("rxo");
     g.update(0).split(r.x, rxo, rxi, 2);
@@ -834,10 +775,255 @@ int subtraction_rfactor_test() {
     intm.compute_root();
     intm.update(0).vectorize(u, 2);
 
-    Image<int> im_ref = ref.realize(80, 80);
-    Image<int> im = g.realize(80, 80);
-    auto func = [&im_ref](int x, int y, int z) {
+    Realization ref_rn = ref.realize(80, 80);
+    Buffer<int> ref_im1(ref_rn[0]);
+    Buffer<int> ref_im2(ref_rn[1]);
+    Realization rn = g.realize(80, 80);
+    Buffer<int> im1(rn[0]);
+    Buffer<int> im2(rn[1]);
+
+    auto func1 = [&ref_im1](int x, int y, int z) {
+        return ref_im1(x, y);
+    };
+    if (check_image(im1, func1)) {
+        return -1;
+    }
+
+    auto func2 = [&ref_im2](int x, int y, int z) {
+        return ref_im2(x, y);
+    };
+    if (check_image(im2, func2)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int argmin_rfactor_test() {
+    Func f("f"), g("g"), ref("ref");
+    Var x("x"), y("y"), z("z");
+
+    f(x, y) = x + y;
+    f.compute_root();
+
+    Param<int> inner_extent, outer_extent;
+    RDom r(10, inner_extent, 30, outer_extent);
+    inner_extent.set(20);
+    outer_extent.set(40);
+
+    ref() = Tuple(10, 20, 30);
+    ref() = Tuple(min(ref()[0], f(r.x, r.y)),
+                  select(ref()[0] < f(r.x, r.y), ref()[1], r.x),
+                  select(ref()[0] < f(r.x, r.y), ref()[2], r.y));
+
+    g() = Tuple(10, 20, 30);
+    g() = Tuple(min(g()[0], f(r.x, r.y)),
+                select(g()[0] < f(r.x, r.y), g()[1], r.x),
+                select(g()[0] < f(r.x, r.y), g()[2], r.y));
+
+    RVar rxi("rxi"), rxo("rxo");
+    g.update(0).split(r.x, rxo, rxi, 2);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(rxo, u);
+    intm.compute_root();
+    intm.update(0).vectorize(u, 2);
+
+    Realization ref_rn = ref.realize();
+    Buffer<int> ref_im1(ref_rn[0]);
+    Buffer<int> ref_im2(ref_rn[1]);
+    Buffer<int> ref_im3(ref_rn[2]);
+    Realization rn = g.realize();
+    Buffer<int> im1(rn[0]);
+    Buffer<int> im2(rn[1]);
+    Buffer<int> im3(rn[2]);
+
+    auto func1 = [&ref_im1](int x, int y, int z) {
+        return ref_im1(x, y);
+    };
+    if (check_image(im1, func1)) {
+        return -1;
+    }
+
+    auto func2 = [&ref_im2](int x, int y, int z) {
+        return ref_im2(x, y);
+    };
+    if (check_image(im2, func2)) {
+        return -1;
+    }
+
+    auto func3 = [&ref_im3](int x, int y, int z) {
+        return ref_im3(x, y);
+    };
+    if (check_image(im3, func3)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *e) {
+    // The schedule implies that f will be stored from 0 to 1
+    if (e->event == 2 && std::string(e->func) == "f") {
+        if (e->coordinates[1] != 2) {
+            printf("Bounds on realization of f were supposed to be [0, 2]\n"
+                   "Instead they are: [%d, %d]\n", e->coordinates[0], e->coordinates[1]);
+            exit(-1);
+        }
+    }
+    return 0;
+}
+
+int check_allocation_bound_test() {
+    Var x("x"), u("u");
+    Func f("f"), g("g");
+
+    RDom r(0, 31);
+    f(x) = x;
+    g(x) = 1;
+    g(r.x) += f(r.x);
+
+    RVar rxo("rxo"), rxi("rxi");
+    g.update(0).split(r.x, rxo, rxi, 2);
+    f.compute_at(g, rxo);
+    g.update(0).rfactor({{rxo, u}}).compute_at(g, rxo);
+
+    f.trace_realizations();
+    g.set_custom_trace(allocation_bound_test_trace);
+    g.realize(23);
+
+    return 0;
+}
+
+int rfactor_tile_reorder_test() {
+    Func ref("ref"), f("f");
+    Var x("x");
+    RDom r(0, 8, 0, 8);
+
+    // Create an input with random values
+    Buffer<uint8_t> input(8, 8, "input");
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            input(x, y) = (rand() % 256);
+        }
+    }
+
+    ref(x) = 0;
+    ref(input(r.x, r.y) % 8) += 1;
+
+    f(x) = 0;
+    f(input(r.x, r.y) % 8) += 1;
+
+    Var u("u"), v("v"), ui("ui"), vi("vi");
+    f.update()
+        .rfactor({{r.x, u}, {r.y, v}})
+        .compute_root()
+        .update().tile(u, v, ui, vi, 4, 4)
+        .parallel(u).parallel(v);
+
+    Buffer<int> im_ref = ref.realize(8);
+    Buffer<int> im = f.realize(8);
+    auto func = [&im_ref](int x, int y) {
         return im_ref(x, y);
+    };
+    if (check_image(im, func)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int tuple_partial_reduction_rfactor_test(bool compile_module) {
+    Func f("f"), g("g");
+    Var x("x"), y("y");
+
+    f(x, y) = Tuple(x + y, x - y);
+    f.compute_root();
+
+    RDom r(10, 20, 30, 40);
+
+    Func ref("ref");
+    ref(x, y) = Tuple(1, 3);
+    ref(x, y) = Tuple(ref(x , y)[0] + f(r.x, r.y)[0] + 3, ref(x , y)[1]);
+    Realization ref_rn = ref.realize(80, 80);
+
+    g(x, y) = Tuple(1, 3);
+    g(x , y) = Tuple(g(x , y)[0] + f(r.x, r.y)[0] + 3, g(x , y)[1]);
+    g.reorder({y, x});
+
+    Var xi("xi"), yi("yi");
+    g.update(0).tile(x, y, xi, yi, 4, 4);
+
+    Var u("u");
+    Func intm1 = g.update(0).rfactor(r.y, u);
+    RVar rxi("rxi"), rxo("rxo");
+    intm1.tile(x, y, xi, yi, 4, 4);
+    intm1.update(0).split(r.x, rxo, rxi, 2);
+
+    Var v("v");
+    Func intm2 = intm1.update(0).rfactor(rxo, v);
+    intm2.compute_at(intm1, rxo);
+
+    intm1.update(0).parallel(u, 2);
+    intm1.compute_root();
+
+    if (compile_module) {
+        // Check the call graphs.
+        Module m = g.compile_to_module({g.infer_arguments()});
+        CheckCalls checker;
+        m.functions().front().body.accept(&checker);
+
+        CallGraphs expected = {
+            {g.name(), {intm1.name() + ".0", g.name() + ".0", g.name() + ".1"}},
+            {intm1.name(), {intm2.name() + ".0",
+                            intm1.name() + ".0", intm1.name() + ".1"}},
+            {intm2.name(), {f.name() + ".0",
+                            intm2.name() + ".0", intm2.name() + ".1"}},
+            {f.name(), {}},
+        };
+        if (check_call_graphs(checker.calls, expected) != 0) {
+            return -1;
+        }
+    } else {
+        Realization rn = g.realize(80, 80);
+        Buffer<int> im1(rn[0]);
+        Buffer<int> im2(rn[1]);
+
+        Buffer<int> ref_im1(ref_rn[0]);
+        Buffer<int> ref_im2(ref_rn[1]);
+
+        auto func1 = [&ref_im1](int x, int y, int z) {
+            return ref_im1(x, y);
+        };
+        if (check_image(im1, func1)) {
+            return -1;
+        }
+
+        auto func2 = [&ref_im2](int x, int y, int z) {
+            return ref_im2(x, y);
+        };
+        if (check_image(im2, func2)) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int self_assignment_rfactor_test() {
+    Func g("g");
+    Var x("x"), y("y");
+
+    g(x, y) = x + y;
+    RDom r(0, 10, 0, 10);
+    g(r.x, r.y) = g(r.x, r.y);
+
+    Var u("u");
+    Func intm = g.update(0).rfactor(r.y, u);
+    intm.compute_root();
+
+    Buffer<int> im = g.realize(10, 10);
+    auto func = [](int x, int y, int z) {
+        return x + y;
     };
     if (check_image(im, func)) {
         return -1;
@@ -846,6 +1032,11 @@ int subtraction_rfactor_test() {
 }
 
 int main(int argc, char **argv) {
+    printf("Running self assignment rfactor test\n");
+    if (self_assignment_rfactor_test() != 0) {
+        return -1;
+    }
+
     printf("Running simple rfactor test\n");
     printf("    checking call graphs...\n");
     if (simple_rfactor_test(true) != 0) {
@@ -863,6 +1054,16 @@ int main(int argc, char **argv) {
     }
     printf("    checking output img correctness...\n");
     if (reorder_split_rfactor_test(false) != 0) {
+        return -1;
+    }
+
+    printf("Running multiple split rfactor test\n");
+    printf("    checking call graphs...\n");
+    if (multi_split_rfactor_test(true) != 0) {
+        return -1;
+    }
+    printf("    checking output img correctness...\n");
+    if (multi_split_rfactor_test(false) != 0) {
         return -1;
     }
 
@@ -946,9 +1147,44 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    printf("Running subtraction rfactor test\n");
+    printf("Running parallel dot product rfactor test\n");
+    printf("    checking call graphs...\n");
+    if (parallel_dot_product_rfactor_test(true) != 0) {
+        return -1;
+    }
     printf("    checking output img correctness...\n");
-    if (subtraction_rfactor_test() != 0) {
+    if (parallel_dot_product_rfactor_test(false) != 0) {
+        return -1;
+    }
+
+    printf("Running tuple partial reduction rfactor test\n");
+    printf("    checking call graphs...\n");
+    if (tuple_partial_reduction_rfactor_test(true) != 0) {
+        return -1;
+    }
+    printf("    checking output img correctness...\n");
+    if (tuple_partial_reduction_rfactor_test(false) != 0) {
+        return -1;
+    }
+
+    printf("Running check allocation bound test\n");
+    if (check_allocation_bound_test() != 0) {
+        return -1;
+    }
+
+    printf("Running rfactor tile reorder test\n");
+    printf("    checking output img correctness...\n");
+    if (rfactor_tile_reorder_test() != 0) {
+        return -1;
+    }
+
+    printf("Running complex multiply rfactor test\n");
+    if (complex_multiply_rfactor_test() != 0) {
+        return -1;
+    }
+
+    printf("Running argmin rfactor test\n");
+    if (argmin_rfactor_test() != 0) {
         return -1;
     }
 

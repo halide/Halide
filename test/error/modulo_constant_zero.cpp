@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Var x;
     f(x) = x % 0;
 
-    Buffer result = f.realize(10);
+    f.realize(10);
 
     printf("Success!\n");
     return 0;

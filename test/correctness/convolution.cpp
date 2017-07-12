@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     //int W = 64*3, H = 64*3;
     const int W = 128, H = 48;
 
-    Image<uint16_t> in(W, H);
+    Buffer<uint16_t> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = rand() & 0xff;
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    Image<uint16_t> tent(3, 3);
+    Buffer<uint16_t> tent(3, 3);
     tent(0, 0) = 1;
     tent(0, 1) = 2;
     tent(0, 2) = 1;
@@ -68,30 +68,26 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
+        Var xi("xi"), yi("yi");
+
         // Initialization (basically memset) done in a GPU kernel
-        blur1.gpu_tile(x, y, 16, 16);
+        blur1.gpu_tile(x, y, xi, yi, 16, 16);
 
         // Summation is done as an outermost loop on the cpu
-        blur1.update().reorder(x, y, r.x, r.y).gpu_tile(x, y, 16, 16);
+        blur1.update().reorder(x, y, r.x, r.y).gpu_tile(x, y, xi, yi, 16, 16);
 
         // Summation is done as a sequential loop within each gpu thread
-        blur2.gpu_tile(x, y, 16, 16);
-    } else if (target.has_feature(Target::HVX_64)) {
+        blur2.gpu_tile(x, y, xi, yi, 16, 16);
+    } else if (target.has_feature(Target::HVX_64) || target.has_feature(Target::HVX_128)) {
+        int hvx_vector_width = target.has_feature(Target::HVX_128) ? 64 : 32;
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
         blur1.hexagon().tile(x, y, xi, yi, 6, 6);
         // TODO: Add parallel to the schedule.
-        blur1.update().hexagon().tile(x, y, xi, yi, 32, 4).vectorize(xi);
+        blur1.update().hexagon().tile(x, y, xi, yi, hvx_vector_width, 4).vectorize(xi);
 
         // TODO: Add parallel to the schedule.
-        blur2.hexagon().vectorize(x, 32);
-    } else if (target.has_feature(Target::HVX_128)) {
-        Var xi("xi"), yi("yi");
-
-        blur1.hexagon().tile(x, y, xi, yi, 6, 6);
-        blur1.update().hexagon().tile(x, y, xi, yi, 64, 4).vectorize(xi);
-
-        blur2.hexagon().vectorize(x, 64);
+        blur2.hexagon().vectorize(x, hvx_vector_width);
     } else {
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
@@ -101,8 +97,8 @@ int main(int argc, char **argv) {
         blur2.vectorize(x, 4).parallel(y);
     }
 
-    Image<uint16_t> out1 = blur1.realize(W, H, target);
-    Image<uint16_t> out2 = blur2.realize(W, H, target);
+    Buffer<uint16_t> out1 = blur1.realize(W, H, target);
+    Buffer<uint16_t> out2 = blur2.realize(W, H, target);
 
     for (int y = 1; y < H-1; y++) {
         for (int x = 1; x < W-1; x++) {

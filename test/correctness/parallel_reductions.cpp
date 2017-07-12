@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         // Vectorize by a factor of four, then parallelize the rest
         f1.compute_root().vectorize(i, 4).parallel(i);
 
-        Image<int> im = f2.realize();
+        Buffer<int> im = f2.realize();
 
         int correct = (256*255)/2;
         if (im(0) != correct) {
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         Var i, j;
 
         // Now we'll try a parallelized and vectorized prefix sum
-        Image<int> input(256), correct(256);
+        Buffer<int> input(256), correct(256);
         for (int i = 0; i < 256; i++) {
             input(i) = rand() % 16;
             correct(i) = input(i);
@@ -70,9 +70,9 @@ int main(int argc, char **argv) {
         sum_rows.update().parallel(j);
         sum_cols.compute_root().vectorize(j, 4);
         sum_cols.update();
-        out.output_buffer().set_bounds(0, 0, 256);
+        out.output_buffer().dim(0).set_bounds(0, 256);
 
-        Image<int> result = out.realize(256);
+        Buffer<int> result = out.realize(256);
 
         for (int i = 0; i < 256; i++) {
             if (result(i) != correct(i)) {

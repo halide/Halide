@@ -50,7 +50,7 @@ They are listed in jni/Application.mk APP_ABI variable
 and in build.gradle archs map. For example, if your Halide installation was
 built without mips support or without arm64-v8a, remove them from APP_ABI and
 archs. Both list and map should match, otherwise you will be getting compilation
-errors complaining about a missing halide_generated.h file:
+errors complaining about a missing hello.h file:
 
 ```
 :compileDebugNdkClassic FAILED
@@ -61,8 +61,8 @@ FAILURE: Build failed with an exception.
 Execution failed for task ':compileDebugNdkClassic'.
 ...
   Output:
-    /private/tmp/7/halide/apps/HelloAndroid/jni/native.cpp:9:30: fatal error: halide_generated.h: No such file or directory
-     #include "halide_generated.h"
+    /private/tmp/7/halide/apps/HelloAndroid/jni/native.cpp:9:30: fatal error: hello.h: No such file or directory
+     #include "hello.h"
 
 ```
 

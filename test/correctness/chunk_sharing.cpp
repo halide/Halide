@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Image<int> im = d.realize(32, 32);
+    Buffer<int> im = d.realize(32, 32);
 
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {

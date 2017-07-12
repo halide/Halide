@@ -4,7 +4,7 @@ using namespace Halide;
 
 int num_vector_stores = 0;
 int num_scalar_stores = 0;
-int my_trace(void *user_context, const halide_trace_event *e) {
+int my_trace(void *user_context, const halide_trace_event_t *e) {
     if (e->event == halide_trace_store) {
         if (e->type.lanes > 1) {
             num_vector_stores++;
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     f.set_custom_trace(&my_trace);
     f.trace_stores();
 
-    Image<int> result = f.realize(w);
+    Buffer<int> result = f.realize(w);
 
     if (num_vector_stores != expected_vector_stores) {
         printf("There were %d vector stores instead of %d\n",

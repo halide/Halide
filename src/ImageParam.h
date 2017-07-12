@@ -36,11 +36,18 @@ public:
      * dimensionality, with the given name */
     EXPORT ImageParam(Type t, int d, const std::string &n);
 
-    /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
-    EXPORT void set(Buffer b);
+    /** Bind an Image to this ImageParam. Only relevant for jitting */
+    // @{
+    EXPORT void set(Buffer<> im);
+    // @}
 
-    /** Get the buffer bound to this ImageParam. Only relevant for jitting */
-    EXPORT Buffer get() const;
+    /** Get a reference to the Buffer bound to this ImageParam. Only relevant for jitting. */
+    // @{
+    EXPORT Buffer<> get() const;
+    // @}
+
+    /** Unbind any bound Buffer */
+    EXPORT void reset();
 
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
@@ -48,11 +55,10 @@ public:
      * (see \ref Var::implicit)
      */
     // @{
-    EXPORT Expr operator()() const;
-    EXPORT Expr operator()(Expr x) const;
-    EXPORT Expr operator()(Expr x, Expr y) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
-    EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
+    template <typename... Args>
+    NO_INLINE Expr operator()(Args&&... args) const {
+        return func(std::forward<Args>(args)...);
+    }
     EXPORT Expr operator()(std::vector<Expr>) const;
     EXPORT Expr operator()(std::vector<Var>) const;
     // @}
@@ -101,13 +107,13 @@ public:
      \code
      ImageParam img(Int(32), 2);
      output(x, y) = img(y, x);
-     output.compute_root().gpu_tile(x, y, 8, 8);
-     img.in().compute_at(output, Var::gpu_blocks()).unroll(_0, 2).unroll(_1, 2).gpu_threads(x, y);
+     Var tx, ty;
+     output.compute_root().gpu_tile(x, y, tx, ty, 8, 8);
+     img.in().compute_at(output, x).unroll(_0, 2).unroll(_1, 2).gpu_threads(_0, _1);
      \endcode
      *
-     * Note that we use implicit vars to name the dimensions of the wrapper Func
-     * (See \ref ImageParam::in for more details). See \ref Func::in for more
-     * possible use cases of the 'in()' directive.
+     * Note that we use implicit vars to name the dimensions of the wrapper Func.
+     * See \ref Func::in for more possible use cases of the 'in()' directive.
      */
     // @{
     EXPORT Func in(const Func &f);

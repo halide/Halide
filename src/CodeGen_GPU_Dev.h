@@ -58,11 +58,10 @@ struct CodeGen_GPU_Dev {
      * uniform within the workgroup. */
     static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
 
-    /** For Renderscript Codegen kernel variables are put into script-shared slots. This
-    function returns number of slots taken so far by the script. It is passed
-    during runtime to the _run() function, which uses that as an offset to ensure
-    it uses its set of slots. */
-    virtual size_t slots_taken() const { return -1; }
+    /** Return the total size of an allocation. If the size is not constant,
+     * this returns its upper bound. If the result overflows, this throws an
+     * assertion. If there is no constant upper bound, this returns 0. */
+    static int32_t get_constant_bound_allocation_size(const Allocate *alloc);
 };
 
 }}

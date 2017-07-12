@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     ImageParam im1(UInt(8), 1);
-    Image<uint8_t> im2(10), im3(20);
+    Buffer<uint8_t> im2(10), im3(20);
     Param<int> j;
 
     assert(im1.dimensions() == 1);
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
 
     j.set(3);
     im1.set(im3);
-    Image<int> result = f.realize(100);
+    Buffer<int> result = f.realize(100);
 
     for (int i = 0; i < 100; i++) {
         int correct = i < im2(3) ? 37 : (i+20);

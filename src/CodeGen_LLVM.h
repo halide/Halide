@@ -75,13 +75,16 @@ public:
     /** Tell the code generator which LLVM context to use. */
     void set_context(llvm::LLVMContext &context);
 
+    /** Initialize internal llvm state for the enabled targets. */
+    static void initialize_llvm();
+
 protected:
     CodeGen_LLVM(Target t);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
     virtual void compile_func(const LoweredFunc &func, const std::string &simple_name, const std::string &extern_name);
-    virtual void compile_buffer(const Buffer &buffer);
+    virtual void compile_buffer(const Buffer<> &buffer);
     // @}
 
     /** Helper functions for compiling Halide functions to llvm
@@ -112,9 +115,6 @@ protected:
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
 
-    /** Initialize internal llvm state for the enabled targets. */
-    static void initialize_llvm();
-
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
      * generated llvm value. */
@@ -128,6 +128,7 @@ protected:
     static bool llvm_Mips_enabled;
     static bool llvm_PowerPC_enabled;
 
+    const Module *input_module;
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
@@ -150,6 +151,9 @@ protected:
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
+
+    /** Add external_code entries to llvm module. */
+    void add_external_code(const Module &halide_module);
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
@@ -175,7 +179,13 @@ protected:
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
-    llvm::StructType *buffer_t_type, *metadata_t_type, *argument_t_type, *scalar_value_t_type;
+    llvm::StructType *buffer_t_type,
+        *type_t_type,
+        *dimension_t_type,
+        *metadata_t_type,
+        *argument_t_type,
+        *scalar_value_t_type,
+        *device_interface_t_type;
     // @}
 
     /** Some useful llvm types for subclasses */
@@ -224,15 +234,9 @@ protected:
     /** Codegen a vector Expr by codegenning each lane and combining. */
     void scalarize(Expr);
 
-    /** Take an llvm Value representing a pointer to a buffer_t,
-     * and populate the symbol table with its constituent parts.
-     */
-    void push_buffer(const std::string &name, llvm::Value *buffer);
-    void pop_buffer(const std::string &name);
-
     /** Some destructors should always be called. Others should only
      * be called if the pipeline is exiting with an error code. */
-    enum DestructorType {Always, OnError};
+    enum DestructorType {Always, OnError, OnSuccess};
 
     /* Call this at the location of object creation to register how an
      * object should be destroyed. This does three things:
@@ -274,35 +278,18 @@ protected:
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int lanes);
 
-    /** Given an llvm value representing a pointer to a buffer_t, extract various subfields.
-     * The *_ptr variants return a pointer to the struct element, while the basic variants
-     * load the actual value. */
-    // @{
-    llvm::Value *buffer_host(llvm::Value *);
-    llvm::Value *buffer_dev(llvm::Value *);
-    llvm::Value *buffer_host_dirty(llvm::Value *);
-    llvm::Value *buffer_dev_dirty(llvm::Value *);
-    llvm::Value *buffer_min(llvm::Value *, int);
-    llvm::Value *buffer_extent(llvm::Value *, int);
-    llvm::Value *buffer_stride(llvm::Value *, int);
-    llvm::Value *buffer_elem_size(llvm::Value *);
-    llvm::Value *buffer_host_ptr(llvm::Value *);
-    llvm::Value *buffer_dev_ptr(llvm::Value *);
-    llvm::Value *buffer_host_dirty_ptr(llvm::Value *);
-    llvm::Value *buffer_dev_dirty_ptr(llvm::Value *);
-    llvm::Value *buffer_min_ptr(llvm::Value *, int);
-    llvm::Value *buffer_extent_ptr(llvm::Value *, int);
-    llvm::Value *buffer_stride_ptr(llvm::Value *, int);
-    llvm::Value *buffer_elem_size_ptr(llvm::Value *);
-    // @}
-
     /** Generate a pointer into a named buffer at a given index, of a
      * given type. The index counts according to the scalar type of
      * the type passed in. */
     // @{
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, llvm::Value *index);
     llvm::Value *codegen_buffer_pointer(std::string buffer, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
+    llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
+
+    /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
+    llvm::Value *make_halide_type_t(Type);
 
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
@@ -367,6 +354,8 @@ protected:
     virtual void visit(const Block *);
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
+    virtual void visit(const Shuffle *);
+    virtual void visit(const Prefetch *);
     // @}
 
     /** Generate code for an allocate node. It has no default
@@ -491,9 +480,12 @@ private:
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e);
 
-    void register_metadata(const std::string &name, llvm::Function *metadata_getter, llvm::Function *argv_wrapper);
-
     llvm::Function *add_argv_wrapper(const std::string &name);
+
+    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
+
+    virtual void codegen_predicated_vector_load(const Load *op);
+    virtual void codegen_predicated_vector_store(const Store *op);
 };
 
 }

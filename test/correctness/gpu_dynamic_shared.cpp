@@ -9,18 +9,18 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    Func f, g;
-    Var x;
+    Func f("f"), g("g");
+    Var x("x"), xi("xi");
 
     f(x) = x;
     g(x) = f(x) + f(2*x);
 
-    g.gpu_tile(x, 16);
-    f.compute_at(g, Var::gpu_blocks()).gpu_threads(x);
+    g.gpu_tile(x, xi, 16);
+    f.compute_at(g, x).gpu_threads(x);
 
     // The amount of shared memory required varies with x
 
-    Image<int> out = g.realize(100);
+    Buffer<int> out = g.realize(100);
     for (int x = 0; x < 100; x++) {
         int correct = 3*x;
         if (out(x) != correct) {

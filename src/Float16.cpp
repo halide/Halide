@@ -1,9 +1,6 @@
 #include "Float16.h"
 #include "Error.h"
-#include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/ErrorHandling.h"
+#include "LLVM_Headers.h"
 
 using namespace Halide;
 
@@ -32,12 +29,16 @@ getLLVMAPFRoundingMode(Halide::RoundingMode mode) {
 float16_t toFP16(llvm::APFloat v) {
     uint64_t bits = v.bitcastToAPInt().getZExtValue();
     internal_assert(bits <= 0xFFFF) << "Invalid bits for float16_t\n";
-    return float16_t::make_from_bits(bits);
+    return float16_t::make_from_bits((uint16_t) bits);
 }
 
 llvm::APFloat toLLVMAPF(float16_t v) {
     llvm::APInt bitRepr(16, (uint64_t)v.to_bits(), /*isSigned=*/false);
+#if LLVM_VERSION >= 40
+    llvm::APFloat repr(llvm::APFloat::IEEEhalf(), bitRepr);
+#else
     llvm::APFloat repr(llvm::APFloat::IEEEhalf, bitRepr);
+#endif
     // use assert to avoid cost of conversion in release builds
     assert(v.to_bits() == toFP16(repr).to_bits() && "Converting to APFloat and back failed");
     return repr;
@@ -77,7 +78,11 @@ uint16_t getBitsFrom(T value, RoundingMode roundingMode, const char *typeName) {
     llvm::APFloat convertedValue(value);
     bool losesInfo = false;
     llvm::APFloat::opStatus status = convertedValue.convert(
+#if LLVM_VERSION >= 40
+        llvm::APFloat::IEEEhalf(),
+#else
         llvm::APFloat::IEEEhalf,
+#endif
         getLLVMAPFRoundingMode(roundingMode),
         &losesInfo);
     checkConversion(status, value, typeName, convertedValue);
@@ -86,7 +91,11 @@ uint16_t getBitsFrom(T value, RoundingMode roundingMode, const char *typeName) {
 
 template <>
 uint16_t getBitsFrom(const char *value, RoundingMode roundingMode, const char *typeName) {
+#if LLVM_VERSION >= 40
+    llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf());
+#else
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
+#endif
     // TODO: Sanitize value
     llvm::APFloat::opStatus status = convertedValue.convertFromString(value,
         getLLVMAPFRoundingMode(roundingMode));
@@ -97,8 +106,20 @@ uint16_t getBitsFrom(const char *value, RoundingMode roundingMode, const char *t
 
 template <>
 uint16_t getBitsFrom(int64_t value, RoundingMode roundingMode, const char *typeName) {
+#if LLVM_VERSION >= 40
+    llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf());
+#else
     llvm::APFloat convertedValue(llvm::APFloat::IEEEhalf);
+#endif
+#if LLVM_VERSION >= 50
+    // A comment in LLVM's APFloat.h indicates we should perhaps use
+    // llvm::APInt::WordType directly. However this type matches the
+    // prototype of the method it is passed to below, so it seems more
+    // correct. This code will likely have to change again.
+    llvm::APFloatBase::integerPart asIP = value;
+#else
     llvm::integerPart asIP = value;
+#endif
     llvm::APFloat::opStatus status = convertedValue.convertFromSignExtendedInteger(
         &asIP,
         /*srcCount=*/1, // All bits are contained within a single int64_t
@@ -153,7 +174,11 @@ float16_t::operator float() const {
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so
     // just pick any.
+#if LLVM_VERSION >= 40 
+    convertedValue.convert(llvm::APFloat::IEEEsingle(), llvm::APFloat::rmNearestTiesToEven, &losesInfo);
+#else
     convertedValue.convert(llvm::APFloat::IEEEsingle, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
+#endif
     internal_assert(!losesInfo) << "Unexpected information loss\n";
     return convertedValue.convertToFloat();
 }
@@ -163,23 +188,39 @@ float16_t::operator double() const {
     bool losesInfo = false;
     // Converting to a more precise type so the rounding mode does not matter, so
     // just pick any.
+#if LLVM_VERSION >= 40
+    convertedValue.convert(llvm::APFloat::IEEEdouble(), llvm::APFloat::rmNearestTiesToEven, &losesInfo);
+#else
     convertedValue.convert(llvm::APFloat::IEEEdouble, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
+#endif
     internal_assert(!losesInfo) << "Unexpected information loss\n";
     return convertedValue.convertToDouble();
 }
 
 float16_t float16_t::make_zero(bool positive) {
+#if LLVM_VERSION >= 40
+    llvm::APFloat zero = llvm::APFloat::getZero(llvm::APFloat::IEEEhalf(), !positive);
+#else
     llvm::APFloat zero = llvm::APFloat::getZero(llvm::APFloat::IEEEhalf, !positive);
+#endif
     return toFP16(zero);
 }
 
 float16_t float16_t::make_infinity(bool positive) {
+#if LLVM_VERSION >= 40
+    llvm::APFloat inf = llvm::APFloat::getInf(llvm::APFloat::IEEEhalf(), !positive);
+#else
     llvm::APFloat inf = llvm::APFloat::getInf(llvm::APFloat::IEEEhalf, !positive);
+#endif
     return toFP16(inf);
 }
 
 float16_t float16_t::make_nan() {
+#if LLVM_VERSION >= 40
+    llvm::APFloat nan = llvm::APFloat::getNaN(llvm::APFloat::IEEEhalf());
+#else
     llvm::APFloat nan = llvm::APFloat::getNaN(llvm::APFloat::IEEEhalf);
+#endif
     return toFP16(nan);
 }
 

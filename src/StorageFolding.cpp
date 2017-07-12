@@ -29,7 +29,7 @@ class CountProducers : public IRVisitor {
     const std::string &name;
 
     void visit(const ProducerConsumer *op) {
-        if (op->name == name) {
+        if (op->is_producer && (op->name == name)) {
             count++;
         } else {
             IRVisitor::visit(op);
@@ -192,10 +192,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     Scope<Interval> scope;
                     scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
                                                   Variable::make(Int(32), op->name + ".loop_max")));
-                    Expr max_extent = simplify(bounds_of_expr_in_scope(extent, scope).max);
+                    Expr max_extent = find_constant_bound(extent, Direction::Upper, scope);
                     scope.pop(op->name);
-
-                    max_extent = find_constant_bound(max_extent, Direction::Upper);
 
                     const int max_fold = 1024;
                     const int64_t *const_max_extent = as_const_int(max_extent);

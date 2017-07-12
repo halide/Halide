@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     g(x, y) = f(x+5, y+5);
 
     f.compute_root();
-    Image<int> result = g.realize(10, 1);
+    Buffer<int> result = g.realize(10, 1);
 
 
     // The init step of f should fill in (-11, 5) -- (14, 5) inclusive, to

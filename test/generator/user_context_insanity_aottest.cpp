@@ -3,29 +3,29 @@
 #include <assert.h>
 
 #include "HalideRuntime.h"
-#include "halide_image.h"
+#include "HalideBuffer.h"
 #include "user_context_insanity.h"
 
-using namespace Halide::Tools;
+using namespace Halide::Runtime;
 
 const int num_launcher_tasks = 1000;
 
 static bool got_context[num_launcher_tasks];
 
-int32_t my_halide_trace(void *context, const halide_trace_event *e) {
+int32_t my_halide_trace(void *context, const halide_trace_event_t *e) {
     bool *bool_ptr = (bool *)context;
     *bool_ptr = true;
     return 0;
 }
 
 int launcher_task(void *user_context, int index, uint8_t *closure) {
-    Image<float> input(10, 10);
+    Buffer<float> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
-            input(x, y) = x * y;
+            input(x, y) = (float)(x * y);
         }
     }
-    Image<float> output(10, 10);
+    Buffer<float> output(10, 10);
 
     user_context_insanity(&got_context[index], input, output);
 
@@ -33,7 +33,7 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
 }
 
 int main(int argc, char **argv) {
-    halide_set_custom_trace(&my_halide_trace);
+    halide_set_custom_trace(my_halide_trace);
 
     // Hijack halide's runtime to run a bunch of instances of this function
     // in parallel.

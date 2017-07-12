@@ -4,7 +4,7 @@
 
 using namespace Halide;
 
-bool validate(const Image<int> &im, int add)
+bool validate(const Buffer<int> &im, int add)
 {
     // Check the result was what we expected
     for (int i = 0; i < im.width(); i++) {
@@ -21,7 +21,7 @@ bool validate(const Image<int> &im, int add)
 
 int main(int argc, char **argv) {
 
-    Var x("x"), y("y");
+    Var x("x"), y("y"), xi("xi"), yi("yi");
 
     Func g("g");
 
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         f(x, y) = x*y + 1;
 
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 8, 8);
+            f.gpu_tile(x, y, xi, yi, 8, 8);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             f.hexagon().vectorize(x, 32);
         }
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         {
             printf("Realizing function f...\n");
 
-            Image<int> imf = f.realize(32, 32, target);
+            Buffer<int> imf = f.realize(32, 32, target);
             if (!validate(imf, 1)) {
                 return -1;
             }
@@ -53,14 +53,14 @@ int main(int argc, char **argv) {
         g(x, y) = x*y + 2;
 
         if (target.has_gpu_feature()) {
-            g.gpu_tile(x, y, 8, 8);
+            g.gpu_tile(x, y, xi, yi, 8, 8);
         } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
             g.hexagon().vectorize(x, 32);
         }
 
         printf("Realizing function g...\n");
 
-        Image<int> img1 = g.realize(32, 32, target);
+        Buffer<int> img1 = g.realize(32, 32, target);
         if (!validate(img1, 2)) {
             return -1;
         }
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     // Try using g again to ensure it is still valid (after f's destruction).
     printf("Realizing function g again...\n");
 
-    Image<int> img2 = g.realize(32, 32, target);
+    Buffer<int> img2 = g.realize(32, 32, target);
     if (!validate(img2, 2.0f)) {
         return -1;
     }

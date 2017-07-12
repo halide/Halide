@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     //int W = 64*3, H = 64*3;
     const int W = 64, H = 16;
 
-    Image<uint16_t> in(W, H);
+    Buffer<uint16_t> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = rand() & 0xff;
@@ -41,14 +41,15 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        blur.gpu_tile(x, y, 16, 16);
+        Var xi("xi"), yi("yi");
+        blur.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.has_feature(Target::HVX_64)) {
         blur.hexagon().vectorize(x, 32);
     } else if (target.has_feature(Target::HVX_128)) {
         blur.hexagon().vectorize(x, 64);
     }
 
-    Image<uint16_t> out = blur.realize(W, H, target);
+    Buffer<uint16_t> out = blur.realize(W, H, target);
 
     for (int y = 2; y < H-2; y++) {
         for (int x = 2; x < W-2; x++) {

@@ -14,12 +14,14 @@ namespace Internal {
  * that the boolean operation is being used to operate on. For
  * example, instead of select(i1x8, u16x8, u16x8), the target would
  * prefer to see select(u16x8, u16x8, u16x8), where the first argument
- * is a vector of integers that are either all ones or all zeros. This
- * pass converts vectors of bools to vectors of integers to meet this
- * requirement. This is done by casting boolean vectors to integers
- * (with sign extension), using bitwise instead of logical operators,
- * and replacing the conditions of select with a not equals zero
- * expression. */
+ * is a vector of integers representing a mask. This pass converts
+ * vectors of bools to vectors of integers to meet this
+ * requirement. This is done by injecting intrinsics to convert bools
+ * to architecture-specific masks, and using a select_mask instrinsic
+ * instead of a Select node. Because the masks are architecture
+ * specific, they may not be stored or loaded. On Stores, the masks
+ * are converted to UInt(8) with a value of 0 or 1, which is our
+ * canonical in-memory representation of a bool. */
 ///@{
 EXPORT Stmt eliminate_bool_vectors(Stmt s);
 EXPORT Expr eliminate_bool_vectors(Expr s);

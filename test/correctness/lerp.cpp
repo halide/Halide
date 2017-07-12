@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <limits>
 
+#ifdef _MSC_VER
+#pragma warning(disable:4800)  // forcing value to bool 'true' or 'false'
+#endif
+
 using namespace Halide;
 
 Var zero_val, one_val, weight;
@@ -83,7 +87,7 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
              cast<value_t>((one_val + one_min) * one_scale_p + one_offset_p),
              cast<weight_t>((weight + weight_min) * weight_scale_p + weight_offset_p));
 
-    Image<value_t> result(zero_extent, one_extent, weight_extent);
+    Buffer<value_t> result(zero_extent, one_extent, weight_extent);
     lerp_test.realize(result);
 
     for (int32_t i = 0; i < result.extent(0); i++) {
@@ -190,34 +194,34 @@ int main(int argc, char **argv) {
                                     "<uint32_t, uint32_t> all zero starts");
   #endif
 
-    check_range<float, float>(0, 100, 0, .01,
-                              0, 100, 0, .01,
-                              0, 100, 0, .01,
+    check_range<float, float>(0, 100, 0, .01f,
+                              0, 100, 0, .01f,
+                              0, 100, 0, .01f,
                               "<float, float> float values 0 to 1 by 1/100ths");
 
-    check_range<float, float>(0, 100, -5, .1,
-                              0, 100, 0, .1,
-                              0, 100, 0, .1,
+    check_range<float, float>(0, 100, -5, .1f,
+                              0, 100, 0, .1f,
+                              0, 100, 0, .1f,
                               "<float, float> float values -5 to 5 by 1/100ths");
 
     // Verify float values with integer weights
-    check_range<float, uint8_t>(0, 100, -5, .1,
-                              0, 100, 0, .1,
+    check_range<float, uint8_t>(0, 100, -5, .1f,
+                              0, 100, 0, .1f,
                               0, 255, 0, 1,
                               "<float, uint8_t> float values -5 to 5 by 1/100ths");
-    check_range<float, uint16_t>(0, 100, -5, .1,
-                                 0, 100, 0, .1,
+    check_range<float, uint16_t>(0, 100, -5, .1f,
+                                 0, 100, 0, .1f,
                                  0, 255, 0, 257,
                                  "<float, uint16_t> float values -5 to 5 by 1/100ths");
-    check_range<float, uint32_t>(0, 100, -5, .1,
-                                 0, 100, 0, .1,
+    check_range<float, uint32_t>(0, 100, -5, .1f,
+                                 0, 100, 0, .1f,
                                  std::numeric_limits<int32_t>::min(), 257, 255 * 65535, 1,
                                  "<float, uint32_t> float values -5 to 5 by 1/100ths");
 
     // Check constant and constant case:
     Func lerp_constants("lerp_constants");
     lerp_constants() = lerp(0, cast<uint32_t>(1023), .5f);
-    Image<uint32_t> result = lerp_constants.realize();
+    Buffer<uint32_t> result = lerp_constants.realize();
 
     uint32_t expected = evaluate<uint32_t>(cast<uint32_t>(lerp(0, cast<uint16_t>(1023), .5f)));
     if (result(0) != expected)
@@ -227,14 +231,14 @@ int main(int argc, char **argv) {
     // Add a little more coverage for uint32_t as this was failing
     // without being detected for a long time.
 
-    Image<uint8_t> input_a_img(16, 16);
-    Image<uint8_t> input_b_img(16, 16);
+    Buffer<uint8_t> input_a_img(16, 16);
+    Buffer<uint8_t> input_b_img(16, 16);
 
     for (int i = 0; i < 16; i ++) {
         for (int j = 0; j < 16; j ++) {
-  	    input_a_img(i, j) = (i << 4) + j;
-	    input_b_img(i, j) = ((15 - i) << 4) + (15 - j);
-	}
+            input_a_img(i, j) = (i << 4) + j;
+                  input_b_img(i, j) = ((15 - i) << 4) + (15 - j);
+              }
     }
 
     ImageParam input_a(UInt(8), 2);
@@ -250,15 +254,15 @@ int main(int argc, char **argv) {
     input_b.set(input_b_img);
 
     w.set(0.0f);
-    Image<int32_t> result_should_be_a = lerp_with_casts.realize(16, 16);
+    Buffer<int32_t> result_should_be_a = lerp_with_casts.realize(16, 16);
     w.set(1.0f);
-    Image<int32_t> result_should_be_b = lerp_with_casts.realize(16, 16);
+    Buffer<int32_t> result_should_be_b = lerp_with_casts.realize(16, 16);
 
     for (int i = 0; i < 16; i ++) {
         for (int j = 0; j < 16; j ++) {
-	    assert(input_a_img(i, j) == result_should_be_a(i, j));
-	    assert(input_b_img(i, j) == result_should_be_b(i, j));
-	}
+            assert(input_a_img(i, j) == result_should_be_a(i, j));
+            assert(input_b_img(i, j) == result_should_be_b(i, j));
+        }
     }
 
     std::cout << "Success!" << std::endl;

@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
         reference_hist[i] = 0;
     }
 
-    Image<float> in(W, H);
+    Buffer<float> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = float(rand() & 0x000000ff);
@@ -38,12 +38,14 @@ int main(int argc, char **argv) {
     /*
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-	hist.gpu_tile(x, 64);
-	hist.update().gpu_tile(r.x, r.y, 16, 16);
+        Var xi;
+        hist.gpu_tile(x, xi, 64);
+        RVar rxi, ryi;
+        hist.update().gpu_tile(r.x, r.y, rxi, ryi, 16, 16);
     }
     */
 
-    Image<int32_t> histogram = g.realize(10); // buckets 10-20 only
+    Buffer<int32_t> histogram = g.realize(10); // buckets 10-20 only
 
     for (int i = 10; i < 20; i++) {
         if (histogram(i-10) != reference_hist[i]) {

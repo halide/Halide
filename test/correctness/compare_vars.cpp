@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     Var x, y;
     f(x, y) = select(x == y, 1, 0);
 
-    Image<int> im = f.realize(10, 10);
+    Buffer<int> im = f.realize(10, 10);
 
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {

@@ -26,23 +26,21 @@ public:
             input.set_bounds(2, 0, channels);
             output.glsl(x, y, c);
         } else {
-            if (get_target().arch != Target::PNaCl) {
-                Expr input_planar = input.stride(0) == 1;
-                Expr input_chunky = input.stride(2) == 1;
-                Expr output_planar = output.output_buffer().stride(0) == 1;
-                Expr output_chunky = output.output_buffer().stride(2) == 1;
-                Expr stride_specializations[] = {
-                  input_planar && output_planar,
-                  input_planar,
-                  output_planar,
-                  input_chunky && output_chunky
-                };
-                for (Expr condition : stride_specializations) {
-                  output
-                      .specialize(condition)
-                      .vectorize(x, natural_vector_size<float>())
-                      .parallel(y);
-                }
+            Expr input_planar = input.stride(0) == 1;
+            Expr input_chunky = input.stride(2) == 1;
+            Expr output_planar = output.output_buffer().stride(0) == 1;
+            Expr output_chunky = output.output_buffer().stride(2) == 1;
+            Expr stride_specializations[] = {
+              input_planar && output_planar,
+              input_planar,
+              output_planar,
+              input_chunky && output_chunky
+            };
+            for (Expr condition : stride_specializations) {
+              output
+                  .specialize(condition)
+                  .vectorize(x, natural_vector_size<float>())
+                  .parallel(y);
             }
         }
 

@@ -1,8 +1,9 @@
 #include "Halide.h"
 #include <cstdio>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 void simple_version(float* A, float *B, float *C, int width, int stride) {
     for (int iy = 0; iy < width; iy++) {
@@ -50,9 +51,9 @@ int main(int argc, char **argv) {
 
     const int iterations = 50;
 
-    Image<float> mat_A(matrix_size, matrix_size);
-    Image<float> mat_B(matrix_size, matrix_size);
-    Image<float> output(matrix_size, matrix_size);
+    Buffer<float> mat_A(matrix_size, matrix_size);
+    Buffer<float> mat_B(matrix_size, matrix_size);
+    Buffer<float> output(matrix_size, matrix_size);
 
     // init randomly
     for (int iy = 0; iy < matrix_size; iy++) {
@@ -72,8 +73,8 @@ int main(int argc, char **argv) {
     });
 
     // check results
-    Image<float> output_ref(matrix_size, matrix_size);
-    Image<float> output_halide(matrix_size, matrix_size);
+    Buffer<float> output_ref(matrix_size, matrix_size);
+    Buffer<float> output_halide(matrix_size, matrix_size);
 
     simple_version(mat_A.data(), mat_B.data(), output_ref.data(), mat_A.width(), mat_A.stride(1));
     matrix_mul.realize(output_halide);
@@ -101,7 +102,7 @@ int main(int argc, char **argv) {
     }
     */
 
-    float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e6;
+    float gflops = 2.0f * matrix_size * matrix_size * matrix_size / 1e6f;
 
     printf("Halide: %fms, %f GFLOP/s\n\n", t * 1e3, (gflops / t));
 

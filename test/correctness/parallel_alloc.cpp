@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
         g.compute_at(f, y);
         f.parallel(y);
 
-        Image<int> im = f.realize(8, 8);
+        Buffer<int> im = f.realize(8, 8);
         f.realize(im);
 
         for (int x = 0; x < 8; x++) {

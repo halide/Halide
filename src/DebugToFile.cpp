@@ -91,6 +91,25 @@ public:
     DebugToFile(const map<string, Function> &e) : env(e) {}
 };
 
+class RemoveDummyRealizations : public IRMutator {
+    const vector<Function> &outputs;
+
+    using IRMutator::visit;
+
+    void visit(const Realize *op) {
+        for (Function f : outputs) {
+            if (op->name == f.name()) {
+                stmt = mutate(op->body);
+                return;
+            }
+        }
+        IRMutator::visit(op);
+    }
+
+public:
+    RemoveDummyRealizations(const vector<Function> &o) : outputs(o) {}
+};
+
 Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Function> &env) {
     // Temporarily wrap the statement in a realize node for the output functions
     for (Function out : outputs) {
@@ -106,17 +125,7 @@ Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Fu
     s = DebugToFile(env).mutate(s);
 
     // Remove the realize node we wrapped around the output
-    for (Function out : outputs) {
-        if (const Realize *r = s.as<Realize>()) {
-            s = r->body;
-        } else if (const Block *b = s.as<Block>()) {
-            const Realize *r = b->rest.as<Realize>();
-            internal_assert(r);
-            s = Block::make(b->first, r->body);
-        } else {
-            internal_error << "Could not unwrap stmt after debug_to_file\n";
-        }
-    }
+    s = RemoveDummyRealizations(outputs).mutate(s);
 
     return s;
 }

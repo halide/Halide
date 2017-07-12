@@ -3,4 +3,4 @@
 
 void defineFuncRef();
 
-#endif // FUNC_REF_H
+#endif  // FUNC_REF_H

@@ -23,11 +23,11 @@ ERROR_internal_hpp_is_for_internal_use_only
 #endif
 #define PY_ARRAY_UNIQUE_SYMBOL HALIDE_NUMPY_ARRAY_API
 #define PY_UFUNC_UNIQUE_SYMBOL HALIDE_UFUNC_ARRAY_API
+#include "numpy.hpp"
 #include <numpy/arrayobject.h>
 #include <numpy/ufuncobject.h>
-#include "numpy.hpp"
 
-#define NUMPY_OBJECT_MANAGER_TRAITS_IMPL(pytype,manager)                \
-    PyTypeObject const * object_manager_traits<manager>::get_pytype() { return &pytype; }
+#define NUMPY_OBJECT_MANAGER_TRAITS_IMPL(pytype, manager) \
+    PyTypeObject const *object_manager_traits<manager>::get_pytype() { return &pytype; }
 
-#endif // !HALIDE_NUMPY_INTERNAL_HPP_INCLUDED
+#endif  // !HALIDE_NUMPY_INTERNAL_HPP_INCLUDED

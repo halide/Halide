@@ -25,7 +25,10 @@ public:
         Invalid,
         Generator,
         GeneratorParam,
-        FilterParam
+        GeneratorInput,
+        GeneratorOutput,
+        FilterParam,
+        ScheduleParam
     };
 
     /** Add an instance to the registry. The size may be 0 for Param Kinds,

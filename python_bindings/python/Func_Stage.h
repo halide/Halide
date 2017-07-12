@@ -3,4 +3,4 @@
 
 void defineStage();
 
-#endif // FUNC_STAGE_H
+#endif  // FUNC_STAGE_H

@@ -1,13 +1,10 @@
 #include "Halide.h"
+#include "halide_benchmark.h"
 #include <cstdio>
 #include <chrono>
 
 using namespace Halide;
-
-double current_time() {
-    auto now = std::chrono::system_clock::now().time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::microseconds>(now).count() / 1e3;
-}
+using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     ImageParam src(UInt(8), 1);
@@ -15,46 +12,31 @@ int main(int argc, char **argv) {
     Var x;
     dst(x) = src(x);
 
+    dst.vectorize(x, 32, TailStrategy::GuardWithIf);
 
-    Var xo;
-    dst.split(x, xo, x, 8*4096);
-    // dst.parallel(xo); speeds up halide's memcpy considerably, but doesn't seem sporting
-    dst.vectorize(x, 16);
-
-    dst.compile_to_assembly("memcpy.s", {src}, "memcpy");
+    dst.compile_to_assembly("halide_memcpy.s", {src}, "halide_memcpy");
     dst.compile_jit();
 
     const int32_t buffer_size = 12345678;
-    const int iterations = 50;
 
-    Image<uint8_t> input(buffer_size);
-    Image<uint8_t> output(buffer_size);
+    Buffer<uint8_t> input(buffer_size);
+    Buffer<uint8_t> output(buffer_size);
 
     src.set(input);
 
-    // Get past one-time set-up issues for the ptx backend.
-    dst.realize(output);
+    double t1 = benchmark(10, 10, [&]() {
+        dst.realize(output);
+    });
 
-    double halide = 0, system = 0;
-    for (int i = 0; i < iterations; i++) {
-        double t1 = current_time();
-        dst.realize(output);
-        dst.realize(output);
-        dst.realize(output);
-        double t2 = current_time();
+    double t2 = benchmark(10, 10, [&]() {
         memcpy(output.data(), input.data(), input.width());
-        memcpy(output.data(), input.data(), input.width());
-        memcpy(output.data(), input.data(), input.width());
-        double t3 = current_time();
-        system += t3-t2;
-        halide += t2-t1;
-    }
+    });
 
-    printf("system memcpy: %.3e byte/s\n", (buffer_size / system) * 3 * 1000 * iterations);
-    printf("halide memcpy: %.3e byte/s\n", (buffer_size / halide) * 3 * 1000 * iterations);
+    printf("system memcpy: %.3e byte/s\n", buffer_size / t2);
+    printf("halide memcpy: %.3e byte/s\n", buffer_size / t1);
 
     // memcpy will win by a little bit for large inputs because it uses streaming stores
-    if (halide > system * 3) {
+    if (t1 > t2 * 3) {
         printf("Halide memcpy is slower than it should be.\n");
         return -1;
     }

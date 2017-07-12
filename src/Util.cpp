@@ -7,6 +7,7 @@
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <iomanip>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -18,10 +19,17 @@
 #include <sys/stat.h>
 
 #ifdef __linux__
+#define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
 #endif
 #ifdef _WIN32
 #include <windows.h>
+#include <Objbase.h>  // needed for CoCreateGuid
+#include <Shlobj.h>  // needed for SHGetFolderPath
+#endif
+#ifdef __APPLE__
+#define CAN_GET_RUNNING_PROGRAM_NAME
+#include <mach-o/dyld.h>
 #endif
 
 namespace Halide {
@@ -32,45 +40,46 @@ using std::vector;
 using std::ostringstream;
 using std::map;
 
-std::string get_env_variable(char const *env_var_name, size_t &read) {
+std::string get_env_variable(char const *env_var_name) {
     if (!env_var_name) {
         return "";
     }
-    read = 0;
 
     #ifdef _MSC_VER
-    char lvl[32];
-    getenv_s(&read, lvl, env_var_name);
+    char lvl[128];
+    size_t read = 0;
+    if (getenv_s(&read, lvl, env_var_name) != 0) read = 0;
+    if (read) return std::string(lvl);
     #else
     char *lvl = getenv(env_var_name);
-    read = (lvl)?1:0;
+    if (lvl) return std::string(lvl);
     #endif
 
-    if (read) {
-        return std::string(lvl);
-    }
-    else {
-        return "";
-    }
+    return "";
 }
 
 string running_program_name() {
-    // linux specific currently.
-    #ifndef __linux__
-    return "";
-    #else
-    string program_name;
-    char path[PATH_MAX];
-    ssize_t len = ::readlink("/proc/self/exe", path, sizeof(path)-1);
-    if (len != -1) {
-        path[len] = '\0';
-        string tmp = std::string(path);
-        program_name = tmp.substr(tmp.find_last_of("/")+1);
-    }
-    else {
+    #ifndef CAN_GET_RUNNING_PROGRAM_NAME
         return "";
-    }
-    return program_name;
+    #else
+        string program_name;
+        char path[PATH_MAX] = { 0 };
+        uint32_t size = sizeof(path);
+        #if defined(__linux__)
+            ssize_t len = ::readlink("/proc/self/exe", path, size - 1);
+        #elif defined(__APPLE__)
+            ssize_t len = ::_NSGetExecutablePath(path, &size);
+        #endif
+        if (len != -1) {
+            #if defined(__linux__)
+                path[len] = '\0';
+            #endif
+            string tmp = std::string(path);
+            program_name = tmp.substr(tmp.find_last_of("/") + 1);
+        } else {
+            return "";
+        }
+        return program_name;
     #endif
 }
 
@@ -225,11 +234,36 @@ bool file_exists(const std::string &name) {
     #endif
 }
 
+void assert_file_exists(const std::string &name) {
+    internal_assert(file_exists(name)) << "File not found: " << name;
+}
+
+void assert_no_file_exists(const std::string &name) {
+    internal_assert(!file_exists(name)) << "File (wrongly) found: " << name;
+}
+
 void file_unlink(const std::string &name) {
     #ifdef _MSC_VER
     _unlink(name.c_str());
     #else
     ::unlink(name.c_str());
+    #endif
+}
+
+void ensure_no_file_exists(const std::string &name) {
+    if (file_exists(name)) {
+        file_unlink(name);
+    }
+    assert_no_file_exists(name);
+}
+
+void dir_rmdir(const std::string &name) {
+    #ifdef _MSC_VER
+    BOOL r = RemoveDirectoryA(name.c_str());
+    internal_assert(r != 0) << "Unable to remove dir: " << name << ":" << GetLastError() << "\n";
+    #else
+    int r = ::rmdir(name.c_str());
+    internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
     #endif
 }
 
@@ -252,6 +286,28 @@ FileStat file_stat(const std::string &name) {
             static_cast<uint32_t>(a.st_mode)};
 }
 
+#ifdef _WIN32
+namespace {
+
+// GetTempPath() will fail rudely if env vars aren't set properly,
+// which is the case when we run under a tool in Bazel. Instead,
+// look for the current user's AppData/Local/Temp path, which
+// should be valid and writable in all versions of Windows that
+// we support for compilation purposes.
+std::string get_windows_tmp_dir() {
+    char local_app_data_path[MAX_PATH];
+    DWORD ret = SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, local_app_data_path);
+    internal_assert(ret == 0) << "Unable to get Local AppData folder.";
+    std::string tmp = local_app_data_path;
+    tmp = replace_all(tmp, "\\", "/");
+    if (tmp.back() != '/') tmp += '/';
+    tmp += "Temp/";
+    return tmp;
+}
+
+}  //  namespace
+#endif
+
 std::string file_make_temp(const std::string &prefix, const std::string &suffix) {
     internal_assert(prefix.find("/") == string::npos &&
                     prefix.find("\\") == string::npos &&
@@ -260,11 +316,10 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
-    TCHAR tmp_path[MAX_PATH], tmp_file[MAX_PATH];
-    DWORD ret = GetTempPath(MAX_PATH, tmp_path);
-    internal_assert(ret != 0);
-    // Note that GetTempFileName() actually creates the file.
-    ret = GetTempFileName(tmp_path, prefix.c_str(), 0, tmp_file);
+    std::string tmp_dir = get_windows_tmp_dir();
+    char tmp_file[MAX_PATH];
+    // Note that GetTempFileNameA() actually creates the file.
+    DWORD ret = GetTempFileNameA(tmp_dir.c_str(), prefix.c_str(), 0, tmp_file);
     internal_assert(ret != 0);
     return std::string(tmp_file);
     #else
@@ -276,6 +331,54 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     internal_assert(fd != -1) << "Unable to create temp file for (" << &buf[0] << ")\n";
     close(fd);
     return std::string(&buf[0]);
+    #endif
+}
+
+std::string dir_make_temp() {
+    #ifdef _WIN32
+    std::string tmp_dir = get_windows_tmp_dir();
+    // There's no direct API to do this in Windows;
+    // our clunky-but-adequate approach here is to use 
+    // CoCreateGuid() to create a probably-unique name.
+    // Add a limit on the number of tries just in case.
+    for (int tries = 0; tries < 100; ++tries) {
+        GUID guid;
+        HRESULT hr = CoCreateGuid(&guid);
+        internal_assert(hr == S_OK);
+        std::ostringstream name;
+        name << std::hex
+             << std::setfill('0')
+             << std::setw(8)
+             << guid.Data1
+             << std::setw(4)
+             << guid.Data2
+             << guid.Data3
+             << std::setw(2);
+        for (int i = 0; i < 8; i++) {
+            name << (int)guid.Data4[i];
+        }       
+        std::string dir = tmp_dir + name.str();
+        BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
+        if (result) {
+            debug(1) << "temp dir is: " << dir << "\n";
+            return dir;
+        }
+        // If name already existed, just loop and try again.
+        // Any other error, break from loop and fail.
+        if (GetLastError() != ERROR_ALREADY_EXISTS) {
+            break;
+        }
+    }
+    internal_assert(false) << "Unable to create temp directory in " << tmp_dir << "\n";
+    return "";
+    #else
+    std::string templ = "/tmp/XXXXXX";
+    // Copy into a temporary buffer, since mkdtemp modifies the buffer in place.
+    std::vector<char> buf(templ.size() + 1);
+    strcpy(&buf[0], templ.c_str());
+    char* result = mkdtemp(&buf[0]);
+    internal_assert(result != nullptr) << "Unable to create temp directory.\n";
+    return std::string(result);
     #endif
 }
 

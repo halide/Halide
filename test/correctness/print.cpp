@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
         f(x) = print(x * x, "the answer is", 42.0f, "unsigned", cast<uint32_t>(145));
         f.set_custom_print(halide_print);
-        Image<int32_t> result = f.realize(10);
+        Buffer<int32_t> result = f.realize(10);
 
         for (int32_t i = 0; i < 10; i++) {
             if (result(i) != i * i) {
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
         // Test a string containing a printf format specifier (It should print it as-is).
         f(x) = print_when(x == 3, x * x, "g", 42.0f, "%s", param);
         f.set_custom_print(halide_print);
-        Image<int32_t> result = f.realize(10);
+        Buffer<int32_t> result = f.realize(10);
 
         for (int32_t i = 0; i < 10; i++) {
             if (result(i) != i * i) {
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
         }
         f(x) = print(args);
         f.set_custom_print(halide_print);
-        Image<uint64_t> result = f.realize(1);
+        Buffer<uint64_t> result = f.realize(1);
 
         if (result(0) != 100) {
             return -1;
@@ -151,17 +151,19 @@ int main(int argc, char **argv) {
         f(x) = print(e);
 
         f.set_custom_print(halide_print);
-        Image<float> imf = f.realize(N);
+        Buffer<float> imf = f.realize(N);
 
         assert(messages.size() == (size_t)N);
 
         char correct[1024];
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%f\n", imf(i));
-            // OS X prints -nan as nan
-            #ifdef __APPLE__
+            // Some versions of the std library can emit some NaN patterns
+            // as "-nan", due to sloppy conversion (or not) of the sign bit.
+            // Halide considers all NaN's equivalent, so paper over this
+            // noise in the test by normalizing all -nan -> nan.
             if (messages[i] == "-nan\n") messages[i] = "nan\n";
-            #endif
+            if (!strcmp(correct, "-nan\n")) strcpy(correct, "nan\n");
             if (messages[i] != correct) {
                 printf("float %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, imf(i));
                 return -1;
@@ -172,15 +174,18 @@ int main(int argc, char **argv) {
 
         g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_uint()) << 32) | random_uint()));
         g.set_custom_print(halide_print);
-        Image<double> img = g.realize(N);
+        Buffer<double> img = g.realize(N);
 
         assert(messages.size() == (size_t)N);
 
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%e\n", img(i));
-            #ifdef __APPLE__
+            // Some versions of the std library can emit some NaN patterns
+            // as "-nan", due to sloppy conversion (or not) of the sign bit.
+            // Halide considers all NaN's equivalent, so paper over this
+            // noise in the test by normalizing all -nan -> nan.
             if (messages[i] == "-nan\n") messages[i] = "nan\n";
-            #endif
+            if (!strcmp(correct, "-nan\n")) strcpy(correct, "nan\n");
             if (messages[i] != correct) {
                 printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
                 return -1;

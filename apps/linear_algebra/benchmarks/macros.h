@@ -1,10 +1,25 @@
-#include "../support/benchmark.h"
+#include "halide_benchmark.h"
+
+#ifdef ENABLE_FTZ_DAZ
+# include <xmmintrin.h>
+# include <pmmintrin.h>
+#endif
+
+inline void set_math_flags() {
+#ifdef ENABLE_FTZ_DAZ
+  // Flush denormals to zero (the FTZ flag).
+  _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+  // Interpret denormal inputs as zero (the DAZ flag).
+  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+#endif
+}
 
 #define time_it(code)                                        \
+    set_math_flags();                                        \
     double elapsed = 0;                                      \
     for (int iters = 1; ; iters *= 2) {                      \
         /* Best of 5 */                                      \
-        elapsed = 1e6 * benchmark(5, iters, [&]() {code;});  \
+        elapsed = 1e6 * Halide::Tools::benchmark(5, iters, [&]() {code;});  \
         /* spend at least 5x20ms benchmarking */             \
         if (elapsed * iters > 20000) {                       \
             break;                                           \

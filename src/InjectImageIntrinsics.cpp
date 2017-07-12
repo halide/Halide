@@ -17,13 +17,15 @@ public:
     InjectImageIntrinsics(const map<string, Function> &e) : inside_kernel_loop(false), env(e) {}
     Scope<int> scope;
     bool inside_kernel_loop;
+    Scope<int> kernel_scope_allocations;
     const map<string, Function> &env;
 
 private:
     using IRMutator::visit;
 
     void visit(const Provide *provide) {
-        if (!inside_kernel_loop) {
+        if (!inside_kernel_loop ||
+            kernel_scope_allocations.contains(provide->name)) {
             IRMutator::visit(provide);
             return;
         }
@@ -38,7 +40,7 @@ private:
         Expr value_arg = mutate(provide->values[0]);
         vector<Expr> args = {
             provide->name,
-            Variable::make(type_of<struct buffer_t *>(), provide->name + ".buffer"),
+            Variable::make(type_of<struct halide_buffer_t *>(), provide->name + ".buffer"),
             provide->args[0],
             provide->args[1],
             provide->args[2],
@@ -53,7 +55,8 @@ private:
     void visit(const Call *call) {
         if (!inside_kernel_loop ||
             (call->call_type != Call::Halide &&
-             call->call_type != Call::Image)) {
+             call->call_type != Call::Image) ||
+            kernel_scope_allocations.contains(call->name)) {
             IRMutator::visit(call);
             return;
         }
@@ -78,7 +81,7 @@ private:
         // for coordinates normalization.
         vector<Expr> args(2);
         args[0] = call->name;
-        args[1] = Variable::make(type_of<struct buffer_t *>(), call->name + ".buffer");
+        args[1] = Variable::make(type_of<struct halide_buffer_t *>(), call->name + ".buffer");
         for (size_t i = 0; i < padded_call_args.size(); i++) {
 
             // If this is an ordinary dimension, insert a variable that will be
@@ -140,13 +143,22 @@ private:
 
     void visit(const For *loop) {
         bool old_kernel_loop = inside_kernel_loop;
-        if (loop->for_type == ForType::Parallel &&
-            (loop->device_api == DeviceAPI::GLSL ||
-                loop->device_api == DeviceAPI::Renderscript)) {
+        if ((loop->for_type == ForType::GPUBlock || loop->for_type == ForType::GPUThread) &&
+            loop->device_api == DeviceAPI::GLSL) {
             inside_kernel_loop = true;
         }
         IRMutator::visit(loop);
         inside_kernel_loop = old_kernel_loop;
+    }
+
+    void visit(const Realize *op) {
+        if (inside_kernel_loop) {
+            kernel_scope_allocations.push(op->name, 0);
+            IRMutator::visit(op);
+            kernel_scope_allocations.pop(op->name);
+        } else {
+            IRMutator::visit(op);
+        }
     }
 };
 
