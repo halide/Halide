@@ -88,6 +88,8 @@ private:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
+    void visit(const Shuffle *);
+    void visit(const Prefetch *);
 };
 
 template<typename T>
@@ -134,7 +136,7 @@ IRComparer::CmpResult IRComparer::compare_expr(const Expr &a, const Expr &b) {
     //   return result;
     // }
 
-    if (compare_scalar(a->type_info(), b->type_info()) != Equal) {
+    if (compare_scalar(a->node_type, b->node_type) != Equal) {
         return result;
     }
 
@@ -183,7 +185,7 @@ IRComparer::CmpResult IRComparer::compare_stmt(const Stmt &a, const Stmt &b) {
         return result;
     }
 
-    if (compare_scalar(a->type_info(), b->type_info()) != Equal) {
+    if (compare_scalar(a->node_type, b->node_type) != Equal) {
         return result;
     }
 
@@ -199,6 +201,7 @@ IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     compare_scalar(a.code(), b.code());
     compare_scalar(a.bits(), b.bits());
     compare_scalar(a.lanes(), b.lanes());
+    compare_scalar((uintptr_t)a.handle_type, (uintptr_t)b.handle_type);
 
     return result;
 }
@@ -298,6 +301,7 @@ void IRComparer::visit(const Select *op) {
 void IRComparer::visit(const Load *op) {
     const Load *e = expr.as<Load>();
     compare_names(op->name, e->name);
+    compare_expr(e->predicate, op->predicate);
     compare_expr(e->index, op->index);
 }
 
@@ -368,6 +372,7 @@ void IRComparer::visit(const Store *op) {
 
     compare_names(s->name, op->name);
 
+    compare_expr(s->predicate, op->predicate);
     compare_expr(s->value, op->value);
     compare_expr(s->index, op->index);
 }
@@ -435,24 +440,46 @@ void IRComparer::visit(const Evaluate *op) {
     compare_expr(s->value, op->value);
 }
 
+void IRComparer::visit(const Shuffle *op) {
+    const Shuffle *e = expr.as<Shuffle>();
+
+    compare_expr_vector(e->vectors, op->vectors);
+
+    compare_scalar(e->indices.size(), op->indices.size());
+    for (size_t i = 0; (i < e->indices.size()) && result == Equal; i++) {
+        compare_scalar(e->indices[i], op->indices[i]);
+    }
+}
+
+void IRComparer::visit(const Prefetch *op) {
+    const Prefetch *s = expr.as<Prefetch>();
+
+    compare_names(s->name, op->name);
+    compare_scalar(s->bounds.size(), op->bounds.size());
+    for (size_t i = 0; (result == Equal) && (i < s->bounds.size()); i++) {
+        compare_expr(s->bounds[i].min, op->bounds[i].min);
+        compare_expr(s->bounds[i].extent, op->bounds[i].extent);
+    }
+}
+
 } // namespace
 
 
 // Now the methods exposed in the header.
-bool equal(Expr a, Expr b) {
+bool equal(const Expr &a, const Expr &b) {
     return IRComparer().compare_expr(a, b) == IRComparer::Equal;
 }
 
-bool graph_equal(Expr a, Expr b) {
+bool graph_equal(const Expr &a, const Expr &b) {
     IRCompareCache cache(8);
     return IRComparer(&cache).compare_expr(a, b) == IRComparer::Equal;
 }
 
-bool equal(Stmt a, Stmt b) {
+bool equal(const Stmt &a, const Stmt &b) {
     return IRComparer().compare_stmt(a, b) == IRComparer::Equal;
 }
 
-bool graph_equal(Stmt a, Stmt b) {
+bool graph_equal(const Stmt &a, const Stmt &b) {
     IRCompareCache cache(8);
     return IRComparer(&cache).compare_stmt(a, b) == IRComparer::Equal;
 }
@@ -488,7 +515,7 @@ IRComparer::CmpResult flip_result(IRComparer::CmpResult r) {
     return IRComparer::Unknown;
 }
 
-void check_equal(Expr a, Expr b) {
+void check_equal(const Expr &a, const Expr &b) {
     IRCompareCache cache(5);
     IRComparer::CmpResult r = IRComparer(&cache).compare_expr(a, b);
     internal_assert(r == IRComparer::Equal)
@@ -498,7 +525,7 @@ void check_equal(Expr a, Expr b) {
         << "\nand\n" << b << "\n";
 }
 
-void check_not_equal(Expr a, Expr b) {
+void check_not_equal(const Expr &a, const Expr &b) {
     IRCompareCache cache(5);
     IRComparer::CmpResult r1 = IRComparer(&cache).compare_expr(a, b);
     IRComparer::CmpResult r2 = IRComparer(&cache).compare_expr(b, a);

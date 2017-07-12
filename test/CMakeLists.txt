@@ -29,9 +29,6 @@ endfunction(test_plain_c_includes)
 
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" "${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp")
-  if (WIN32)
-    LIST(REMOVE_ITEM TESTS "simd_op_check.cpp") # Relies on shell stuff that doesn't work on windows
-  endif()
   set(TEST_NAMES "")
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name "${file}")
@@ -46,6 +43,7 @@ endfunction(tests)
 
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
+  use_image_io(correctness_image_io)
   test_plain_c_includes()
 endif()
 if (WITH_TEST_ERROR)
@@ -95,13 +93,13 @@ function(halide_define_jit_test NAME)
   foreach(STUB ${args_STUB_DEPS})
     list(APPEND ALLSTUBS $<TARGET_OBJECTS:${STUB}.objlib>)
   endforeach()
-  
-  halide_project("generator_jit_${NAME}" 
-                 "generator" 
+
+  halide_project("generator_jit_${NAME}"
+                 "generator"
                  "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_jittest.cpp"
                  ${ALLSTUBS})
   foreach(STUB_DEP ${args_STUB_DEPS})
-    halide_add_generator_stub_dependency(TARGET "generator_jit_${NAME}" 
+    halide_add_generator_stub_dependency(TARGET "generator_jit_${NAME}"
                                          STUB_GENERATOR_TARGET ${STUB_DEP})
   endforeach()
 endfunction(halide_define_jit_test)
@@ -131,7 +129,7 @@ function(halide_define_aot_test NAME)
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
   set_target_properties("${TARGET}" PROPERTIES FOLDER "generator")
   foreach(STUB_DEP ${args_STUB_DEPS})
-    halide_add_generator_stub_dependency(TARGET "${TARGET}" 
+    halide_add_generator_stub_dependency(TARGET "${TARGET}"
                                          STUB_GENERATOR_TARGET ${STUB_DEP})
   endforeach()
   if (MSVC)
@@ -197,6 +195,7 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(cleanup_on_error)
   add_test_generator(cxx_mangling_define_extern)
   add_test_generator(cxx_mangling)
+  add_test_generator(define_extern_opencl)
   add_test_generator(embed_image)
   add_test_generator(error_codes)
   add_test_generator(example WITH_STUB)
@@ -218,7 +217,7 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(stubuser
                      GENERATOR_NAME stubuser
                      STUB_DEPS stubtest.generator)
-  add_test_generator(tiled_blur_blur)
+  add_test_generator(blur2x2)
   add_test_generator(tiled_blur)
   add_test_generator(user_context)
   add_test_generator(user_context_insanity)
@@ -242,6 +241,7 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(argvcall)
   halide_define_aot_test(can_use_target)
   halide_define_aot_test(cleanup_on_error)
+  halide_define_aot_test(define_extern_opencl)
   halide_define_aot_test(embed_image)
   halide_define_aot_test(error_codes)
   halide_define_aot_test(example)
@@ -268,7 +268,7 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(user_context_insanity
                          GENERATOR_HALIDE_TARGET host-user_context)
 
-  halide_define_aot_test(cxx_mangling 
+  halide_define_aot_test(cxx_mangling
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
                          GENERATED_FUNCTION HalideTest::cxx_mangling)
   if (TARGET_PTX)
@@ -287,19 +287,27 @@ if (WITH_TEST_GENERATORS)
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types
   # concrete via generator args.
+  #
+  # Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
+  # that setting ScheduleParam via generator_args works properly.
   set(STUBTEST_GENERATOR_ARGS
+      untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3
       simple_input.type=float32
       array_input.type=float32 array_input.size=2
       int_arg.size=2
       tuple_output.type=float32,float32
+      vectorize=true
   )
   halide_define_aot_test(stubtest
                          GENERATOR_NAME StubNS1::StubNS2::StubTest
                          GENERATOR_ARGS "${STUBTEST_GENERATOR_ARGS}")
 
   # Tests that require additional dependencies, args, etc
-  set(MDTEST_GEN_ARGS 
+  set(MDTEST_GEN_ARGS
       input.type=uint8 input.dim=3
+      type_only_input_buffer.dim=3
+      dim_only_input_buffer.type=uint8
+      untyped_input_buffer.type=uint8 untyped_input_buffer.dim=3
       output.type=float32,float32 output.dim=3
       input_not_nod.type=uint8 input_not_nod.dim=3
       input_nod.dim=3
@@ -321,13 +329,13 @@ if (WITH_TEST_GENERATORS)
 
   halide_define_aot_test(tiled_blur)
   halide_add_aot_test_dependency(tiled_blur
-                                 GENERATOR_TARGET tiled_blur_blur
-                                 AOT_LIBRARY_TARGET tiled_blur_blur)
+                                 GENERATOR_TARGET blur2x2
+                                 AOT_LIBRARY_TARGET blur2x2)
 
   halide_define_aot_test(cxx_mangling_define_extern
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-user_context
                          GENERATED_FUNCTION HalideTest::cxx_mangling_define_extern)
-  # The cxx_mangling library was already defined implicitly, above, 
+  # The cxx_mangling library was already defined implicitly, above,
   # so just add a dependency on it
   halide_add_aot_library_dependency(generator_aot_cxx_mangling_define_extern cxx_mangling)
 

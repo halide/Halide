@@ -99,6 +99,8 @@ private:
             out << " in [" << min_val << ", " << max_val << "]";
         }
 
+        out << op->device_api;
+
         out << ":\n";
         indent += 2;
         op->body.accept(this);

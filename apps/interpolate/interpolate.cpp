@@ -5,10 +5,11 @@ using namespace Halide;
 #include <iostream>
 #include <limits>
 
-#include "benchmark.h"
+#include "halide_benchmark.h"
 #include "halide_image_io.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 using std::vector;
 
@@ -154,7 +155,7 @@ int main(int argc, char **argv) {
 
         // Some gpus don't have enough memory to process the entire
         // image, so we process the image in tiles.
-        Var yo, yi, xo, xi;
+        Var yo, yi, xo, xi, ci;
 
         // We can't compute the entire output stage at once on the GPU
         // - it takes too much GPU memory on some of our build bots,
@@ -170,7 +171,7 @@ int main(int argc, char **argv) {
         normalize
             .compute_at(cpu_wrapper, xo)
             .reorder(c, x, y)
-            .gpu_tile(x, y, 16, 16)
+            .gpu_tile(x, y, xi, yi, 16, 16)
             .unroll(c);
 
         // Start from level 1 to save memory - level zero will be computed on demand
@@ -180,15 +181,15 @@ int main(int argc, char **argv) {
             if (tile_size > 8) tile_size = 8;
             downsampled[l]
                 .compute_root()
-                .gpu_tile(x, y, c, tile_size, tile_size, 4);
+                .gpu_tile(x, y, c, xi, yi, ci, tile_size, tile_size, 4);
             if (l == 1 || l == 4) {
                 interpolated[l]
                     .compute_at(cpu_wrapper, xo)
-                    .gpu_tile(x, y, c, 8, 8, 4);
+                    .gpu_tile(x, y, c, xi, yi, ci, 8, 8, 4);
             } else {
                 int parent = l > 4 ? 4 : 1;
                 interpolated[l]
-                    .compute_at(interpolated[parent], Var::gpu_blocks())
+                    .compute_at(interpolated[parent], x)
                     .gpu_threads(x, y, c);
             }
         }

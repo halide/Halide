@@ -44,7 +44,7 @@ protected:
 
     class CodeGen_Metal_C : public CodeGen_C {
     public:
-        CodeGen_Metal_C(std::ostream &s) : CodeGen_C(s) {}
+        CodeGen_Metal_C(std::ostream &s, Target t) : CodeGen_C(s, t) {}
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
@@ -81,7 +81,6 @@ protected:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     CodeGen_Metal_C metal_c;
-    Target target;
 };
 
 }}

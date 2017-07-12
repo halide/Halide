@@ -19,6 +19,7 @@ namespace Halide {
 namespace Internal {
 
 namespace {
+
 // Used in both Windows and Itanium manglers to track pieces of a type name
 // in both their final form in the output and their canonical substituted form.
 struct MangledNamePart {
@@ -29,6 +30,13 @@ struct MangledNamePart {
     MangledNamePart(const std::string &mangled) : full_name(mangled), with_substitutions(mangled) { }
     MangledNamePart(const char *mangled) : full_name(mangled), with_substitutions(mangled) { }
 };
+
+Type non_null_void_star_type() {
+    static halide_handle_cplusplus_type t(halide_handle_cplusplus_type(
+        halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"),
+        { }, { }, { halide_handle_cplusplus_type::Pointer }));
+    return Handle(1, &t);
+}
 
 }
 
@@ -46,7 +54,7 @@ struct PreviousDeclarations {
                 sub = i->second;
             }
         } else {
-            auto insert_result = table.insert(std::make_pair(name, table.size()));
+            auto insert_result = table.insert({ name, table.size() });
             if (!insert_result.second) {
                 sub = insert_result.first->second;
             }
@@ -128,10 +136,10 @@ struct QualsState {
     QualsState(const Type &type, const std::string &base_mode) : type(type), base_mode(base_mode) { }
 
     void handle_modifier(uint8_t modifier) {
-        bool is_pointer = modifier & halide_handle_cplusplus_type::Pointer;
-        bool last_is_const = modifier & halide_handle_cplusplus_type::Const;
-        bool last_is_volatile = modifier & halide_handle_cplusplus_type::Volatile;
-        bool last_is_restrict = modifier & halide_handle_cplusplus_type::Restrict;
+        bool is_pointer = (modifier & halide_handle_cplusplus_type::Pointer) != 0;
+        bool last_is_const = (modifier & halide_handle_cplusplus_type::Const) != 0;
+        bool last_is_volatile = (modifier & halide_handle_cplusplus_type::Volatile) != 0;
+        bool last_is_restrict = (modifier & halide_handle_cplusplus_type::Restrict) != 0;
 
         if (finished ||
             (!is_pointer && !last_is_pointer &&
@@ -256,11 +264,8 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
         return "";
     } else if (type.is_handle()) {
-        if (type.handle_type == nullptr) {
-            return "PX"; // TODO: make this depend on other code?
-        } else {
-          return mangle_inner_name(type, target, prev_decls);
-        }
+        return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
+                                 target, prev_decls);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
     return "";
@@ -287,7 +292,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
         result += "X";
     } else {
         for (const auto &arg : args) {
-            result += prev_decls.check_and_enter_type(mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct buffer_t *>(), target, prev_decls));
+            result += prev_decls.check_and_enter_type(mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct halide_buffer_t *>(), target, prev_decls));
         }
         // I think ending in a 'Z' only happens for nested function types, which never
         // occurs with Halide, but putting it in anyway per.
@@ -364,7 +369,7 @@ struct PrevPrefixes {
     std::map<std::string, int32_t> prev_seen;
 
     bool check_and_enter(const std::string &prefix, std::string &substitute) {
-       auto place = prev_seen.insert(std::make_pair(prefix, prev_seen.size()));
+        auto place = prev_seen.insert({ prefix, prev_seen.size() });
         if (place.first->second == 0) {
             substitute = "S_";
         } else {
@@ -430,7 +435,7 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
         }
         if (modifier & halide_handle_cplusplus_type::Const) {
             quals += "K";
-        } 
+        }
 
         if (!quals.empty()) {
             prevs.prepend_name_part(quals, name_part);
@@ -442,7 +447,7 @@ MangledNamePart apply_indirection_and_cvr_quals(const Type &type, MangledNamePar
           break;
         }
     }
- 
+
     if (type.handle_type->reference_type == halide_handle_cplusplus_type::LValueReference) {
         prevs.prepend_name_part("R", name_part);
     } else if (type.handle_type->reference_type == halide_handle_cplusplus_type::RValueReference) {
@@ -560,11 +565,8 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
         internal_error << "Unexpected floating-point type size: " << type.bits() << ".\n";
         return "";
     } else if (type.is_handle()) {
-        if (type.handle_type == nullptr) {
-            return "Pv"; // TODO: make this depend on other code?
-        } else {
-            return mangle_inner_name(type, target, prevs);
-        }
+        return mangle_inner_name((type.handle_type != nullptr) ? type : non_null_void_star_type(),
+                                 target, prevs);
     }
     internal_error << "Unexpected kind of type. Code: " << type.code() << "\n";
     return "";
@@ -575,7 +577,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
                                             const Target &target) {
     std::string result("_Z");
 
-    PrevPrefixes prevs; 
+    PrevPrefixes prevs;
     result += mangle_qualified_name(name, namespaces, {}, false, prevs).full_name;
 
     if (args.size() == 0) {
@@ -583,7 +585,7 @@ std::string cplusplus_function_mangled_name(const std::string &name, const std::
     }
 
     for (const auto &arg : args) {
-        result += mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct buffer_t *>(), target, prevs);
+        result += mangle_type(arg.is_expr() ? arg.expr.type() : type_of<struct halide_buffer_t *>(), target, prevs);
     }
 
     return result;
@@ -615,10 +617,10 @@ MangleResult ItaniumABIMangling_main[] = {
   { "_ZN3foo13test_functionEv", "int32_t foo::test_function(void)" },
   { "_ZN3foo3bar13test_functionEv", "int32_t foo::bar::test_function(void)" },
   { "_ZN3foo3bar13test_functionEi", "int32_t foo::test_function(int32_t)" },
-  { "_ZN3foo3bar13test_functionEiP8buffer_t", "int32_t foo::test_function(int32_t, struct buffer_t *)" },
+  { "_ZN3foo3bar13test_functionEiP15halide_buffer_t", "int32_t foo::test_function(int32_t, struct halide_buffer_t *)" },
   { "_ZN14test_namespace14test_namespace13test_functionENS0_15enclosing_class11test_structE",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct)" },
-  { "_ZN3foo3bar13test_functionEiP8buffer_tS2_", "foo::bar::test_function(int, buffer_t*, buffer_t*)" },
+  { "_ZN3foo3bar13test_functionEiP15halide_buffer_tS2_", "foo::bar::test_function(int, halide_buffer_t*, halide_buffer_t*)" },
   { "_ZN14test_namespace14test_namespace13test_functionEPNS_11test_structEPKS1_", "test_namespace::test_namespace::test_function(test_namespace::test_struct*, test_namespace::test_struct const*)" },
   { "_ZN14test_namespace14test_namespace13test_functionENS0_15enclosing_class11test_structES2_",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct, test_namespace::test_namespace::enclosing_class::test_struct)" },
@@ -635,10 +637,10 @@ MangleResult win32_expecteds[] = {
   { "\001?test_function@foo@@YAHXZ", "int32_t foo::test_function(void)" },
   { "\001?test_function@bar@foo@@YAHXZ", "int32_t foo::bar::test_function(void)" },
   { "\001?test_function@bar@foo@@YAHH@Z", "int32_t foo::test_function(int32_t)" },
-  { "\001?test_function@bar@foo@@YAHHPAUbuffer_t@@@Z", "int32_t foo::test_function(int32_t, struct buffer_t *)" },
+  { "\001?test_function@bar@foo@@YAHHPAUhalide_buffer_t@@@Z", "int32_t foo::test_function(int32_t, struct halide_buffer_t *)" },
   { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@@Z",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct)" },
-  { "\001?test_function@bar@foo@@YAHHPAUbuffer_t@@0@Z", "foo::bar::test_function(int, buffer_t*, buffer_t*)" },
+  { "\001?test_function@bar@foo@@YAHHPAUhalide_buffer_t@@0@Z", "foo::bar::test_function(int, halide_buffer_t*, halide_buffer_t*)" },
   { "\001?test_function@test_namespace@1@YAHPAUtest_struct@1@PBU21@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_struct*, test_namespace::test_struct const*)" },
   { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@0@Z",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct, test_namespace::test_namespace::enclosing_class::test_struct)" },
@@ -655,10 +657,10 @@ MangleResult win64_expecteds[] = {
   { "\001?test_function@foo@@YAHXZ", "int32_t foo::test_function(void)" },
   { "\001?test_function@bar@foo@@YAHXZ", "int32_t foo::bar::test_function(void)" },
   { "\001?test_function@bar@foo@@YAHH@Z", "int32_t foo::test_function(int32_t)" },
-  { "\001?test_function@bar@foo@@YAHHPEAUbuffer_t@@@Z", "int32_t foo::test_function(int32_t, struct buffer_t *)" },
+  { "\001?test_function@bar@foo@@YAHHPEAUhalide_buffer_t@@@Z", "int32_t foo::test_function(int32_t, struct halide_buffer_t *)" },
   { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@@Z",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct)" },
-  { "\001?test_function@bar@foo@@YAHHPEAUbuffer_t@@0@Z", "foo::bar::test_function(int, buffer_t*, buffer_t*)" },
+  { "\001?test_function@bar@foo@@YAHHPEAUhalide_buffer_t@@0@Z", "foo::bar::test_function(int, halide_buffer_t*, halide_buffer_t*)" },
   { "\001?test_function@test_namespace@1@YAHPEAUtest_struct@1@PEBU21@@Z", "test_namespace::test_namespace::test_function(test_namespace::test_struct*, test_namespace::test_struct const*)" },
   { "\001?test_function@test_namespace@1@YAHUtest_struct@enclosing_class@11@0@Z",
     "test_namespace::test_namespace::test_function(test_namespace::test_namespace::enclosing_class::test_struct, test_namespace::test_namespace::enclosing_class::test_struct)" },
@@ -772,6 +774,18 @@ MangleResult all_mods_win64[] = {
   { "\001?test_function@@YAHPEDUs@@AEAPEDU1@$$QEAPEDU1@@Z", "test_function(s const volatile restrict*, s const volatile restrict*&, s const volatile restrict*&&)" },
 };
 
+MangleResult two_void_stars_itanium[] = {
+  { "_Z13test_functionPvS_", "test_function(void *, void *)" },
+};
+
+MangleResult two_void_stars_win64[] = {
+  { "\001?test_function@@YAHPEAX0@Z", "test_function(void *, void *)" },
+};
+
+MangleResult two_void_stars_win32[] = {
+  { "\001?test_function@@YAHPAX0@Z", "test_function(void *, void *)" },
+};
+
 void check_result(const MangleResult *expecteds, size_t &expected_index,
                   const Target &target, const std::string &mangled_name) {
     internal_assert(mangled_name == expecteds[expected_index].expected) << "Mangling for " <<
@@ -797,7 +811,7 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32),
-                                                 { ExternFuncArgument(42), ExternFuncArgument(BufferPtr()) }, target));
+                                                 { ExternFuncArgument(42), ExternFuncArgument(Buffer<>()) }, target));
 
     halide_handle_cplusplus_type enclosed_type_info(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),
@@ -811,8 +825,8 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
     check_result(expecteds, expecteds_index, target,
                  cplusplus_function_mangled_name("test_function", { "foo", "bar" }, Int(32),
-                                                 { ExternFuncArgument(42), ExternFuncArgument(BufferPtr()),
-                                                   ExternFuncArgument(BufferPtr()) }, target));
+                                                 { ExternFuncArgument(42), ExternFuncArgument(Buffer<>()),
+                                                   ExternFuncArgument(Buffer<>()) }, target));
 
     halide_handle_cplusplus_type qual1(halide_handle_cplusplus_type(
         halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "test_struct"),
@@ -1001,6 +1015,21 @@ void cplusplus_mangle_test() {
                 check_result(expecteds, expecteds_index, target,
                          cplusplus_function_mangled_name("test_function", { }, Int(32), args, target));
             }
+        }
+    }
+
+    {
+        // Test two void * arguments to ensure substititon handles void * correctly.
+        // (This is a special case as "void *" is represented using nullptr for the type info.)
+        for (const auto &target : targets) {
+            size_t expecteds_index = 0;
+            std::vector<ExternFuncArgument> args;
+            args.push_back(make_zero(Handle(1, nullptr)));
+            args.push_back(make_zero(Handle(1, nullptr)));
+
+            MangleResult *expecteds = (target.os == Target::Windows) ? (target.bits == 64 ? two_void_stars_win64 : two_void_stars_win32) : two_void_stars_itanium;
+            check_result(expecteds, expecteds_index, target,
+                         cplusplus_function_mangled_name("test_function", { }, Int(32), args, target));
         }
     }
 }

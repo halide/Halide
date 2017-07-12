@@ -2,9 +2,10 @@
 #include <cstdio>
 #include <memory>
 #include <algorithm>
-#include "benchmark.h"
+#include "halide_benchmark.h"
 
 using namespace Halide;
+using namespace Halide::Tools;
 
 double test_copy(Buffer<uint8_t> src, Buffer<uint8_t> dst) {
     Var x, y, c;

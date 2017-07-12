@@ -1,6 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
-#include <stdlib.h>
+
+#include "testing.h"
 
 using namespace Halide;
 
@@ -26,17 +27,8 @@ int shifted_domains() {
     gradient.realize(result, target);
     result.copy_to_host();
 
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 8; x++) {
-            float actual = result(x, y);
-            float expected = float(x + y);
-            if (actual != expected) {
-                printf("Error at %d,%d result %f should be %f\n",
-                       x, y, actual, expected);
-                errors++;
-            }
-        }
-    }
+    if (!Testing::check_result<float>(result, 5e-5, [](int x, int y) { return float(x + y); }))
+        errors++;
 
     Buffer<float> shifted(5, 7, 1);
     shifted.set_min(100, 50);
@@ -46,17 +38,8 @@ int shifted_domains() {
     gradient.realize(shifted, target);
     shifted.copy_to_host();
 
-    for (int y = 50; y < 57; y++) {
-        for (int x = 100; x < 105; x++) {
-            float actual = shifted(x, y);
-            float expected = float(x + y);
-            if (actual != expected) {
-                printf("Error at %d,%d result %f should be %f\n",
-                       x, y, actual, expected);
-                errors++;
-            }
-        }
-    }
+    if (!Testing::check_result<float>(shifted, 5e-5, [](int x, int y) { return float(x + y); }))
+        errors++;
 
     // Test with a negative min
     shifted.set_min(-100, -50);
@@ -66,26 +49,18 @@ int shifted_domains() {
     gradient.realize(shifted, target);
     shifted.copy_to_host();
 
-    for (int y = -50; y < -44; y++) {
-        for (int x = -100; x < -96; x++) {
-            float actual = shifted(x, y);
-            float expected = float(x + y);
-            if (actual != expected) {
-                printf("Error at %d,%d result %f should be %f\n",
-                       x, y, actual, expected);
-                errors++;
-            }
-        }
-    }
+    if (!Testing::check_result<float>(shifted, 5e-5, [](int x, int y) { return float(x + y); }))
+        errors++;
 
     return errors;
 }
 
 int main() {
 
-    if (shifted_domains() == 0) {
-        printf("PASSED\n");
+    if (shifted_domains() != 0) {
+        return 1;
     }
 
+    printf("Success\n");
     return 0;
 }

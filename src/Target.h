@@ -56,6 +56,7 @@ struct Target {
         CUDACapability32 = halide_target_feature_cuda_capability32,
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
+        CUDACapability61 = halide_target_feature_cuda_capability61,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         OpenGL = halide_target_feature_opengl,
@@ -71,13 +72,19 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        HVX_v65 = halide_target_feature_hvx_v65,
+        HVX_v66 = halide_target_feature_hvx_v66,
+        HVX_shared_object = halide_target_feature_hvx_use_shared_object,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,
         AVX512 = halide_target_feature_avx512,
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
-        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,        
+        AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
+        TraceLoads = halide_target_feature_trace_loads,
+        TraceStores = halide_target_feature_trace_stores,
+        TraceRealizations = halide_target_feature_trace_realizations,
         FeatureEnd = halide_target_feature_end
     };
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
@@ -169,7 +176,7 @@ struct Target {
      * Func::gpu_tile.
      * TODO: Should OpenGLCompute be included here? */
     bool has_gpu_feature() const {
-      return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
+        return has_feature(CUDA) || has_feature(OpenCL) || has_feature(Metal);
     }
 
     /** Does this target allow using a certain type. Generally all
@@ -307,13 +314,6 @@ EXPORT Target get_target_from_environment();
  * and OS of the target do not match the host target, so this is only
  * useful for controlling the feature set. */
 EXPORT Target get_jit_target_from_environment();
-
-/** Return a const ref to the jit target from HL_JIT_TARGET. Calls
- * get_jit_target_from_environment once and caches the result in a
- * static. This function exists so that there is a way to get the jit
- * target in a context in which Target is still an incomplete type (in
- * HalideBuffer.h) */
-EXPORT const Target &get_const_ref_to_jit_target_from_environment(); 
 
 /** Get the Target feature corresponding to a DeviceAPI. For device
  * apis that do not correspond to any single target feature, returns

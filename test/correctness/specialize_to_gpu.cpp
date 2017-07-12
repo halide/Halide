@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     // A sequence of stages which may or may not run on the gpu.
     Func f, g, h;
     ImageParam in(Int(32), 1);
-    Var x;
+    Var x, xi;
 
     f(x) = in(x) + in(x + 1);
     g(x) = f(x * 2);
@@ -20,9 +20,9 @@ int main(int argc, char **argv) {
 
     Param<bool> gpu_f, gpu_g, gpu_h;
 
-    f.compute_root().specialize(gpu_f).gpu_tile(x, 16);
-    g.compute_root().specialize(gpu_g).gpu_tile(x, 16);
-    h.compute_root().specialize(gpu_h).gpu_tile(x, 16);
+    f.compute_root().specialize(gpu_f).gpu_tile(x, x, xi, 16);
+    g.compute_root().specialize(gpu_g).gpu_tile(x, x, xi, 16);
+    h.compute_root().specialize(gpu_h).gpu_tile(x, x, xi, 16);
 
     Buffer<int> out(128), reference(128), input(256);
 
@@ -35,9 +35,9 @@ int main(int argc, char **argv) {
     h.realize(reference);
 
     for (int i = 1; i < 8; i++) {
-        gpu_f.set((bool)(i & 1));
-        gpu_g.set((bool)(i & 2));
-        gpu_h.set((bool)(i & 4));
+        gpu_f.set((i & 1) != 0);
+        gpu_g.set((i & 2) != 0);
+        gpu_h.set((i & 4) != 0);
 
         h.realize(out);
 

@@ -6,7 +6,7 @@
 
 #include "argvcall.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int kSize = 32;
 
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     // also produces the correct result
     float arg0 = 1.234f;
     float arg1 = 3.456f;
-    void* args[3] = { &arg0, &arg1, (buffer_t *)output };
+    void* args[3] = { &arg0, &arg1, (halide_buffer_t *)output };
     result = argvcall_argv(args);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);

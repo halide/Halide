@@ -372,7 +372,7 @@ class SlidingWindow : public IRMutator {
 
         // If the Function in question has the same compute_at level
         // as its store_at level, skip it.
-        const Schedule &sched = iter->second.schedule();
+        const FuncSchedule &sched = iter->second.schedule();
         if (sched.compute_level() == sched.store_level()) {
             IRMutator::visit(op);
             return;

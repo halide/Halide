@@ -13,23 +13,31 @@ struct ParameterContents {
     const int dimensions;
     const std::string name;
     const std::string handle_type;
-    BufferPtr buffer;
+    Buffer<> buffer;
     uint64_t data;
     int host_alignment;
-    Expr min_constraint[4];
-    Expr extent_constraint[4];
-    Expr stride_constraint[4];
+    std::vector<Expr> min_constraint;
+    std::vector<Expr> extent_constraint;
+    std::vector<Expr> stride_constraint;
     Expr min_value, max_value;
     const bool is_buffer;
     const bool is_explicit_name;
     const bool is_registered;
-    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
-        : type(t), dimensions(d), name(n), buffer(BufferPtr()), data(0), 
-          host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r) {
+    const bool is_bound_before_lowering;
+    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r, bool is_bound_before_lowering)
+        : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
+          host_alignment(t.bytes()), is_buffer(b), is_explicit_name(e), is_registered(r),
+          is_bound_before_lowering(is_bound_before_lowering) {
+
+        min_constraint.resize(dimensions);
+        extent_constraint.resize(dimensions);
+        stride_constraint.resize(dimensions);
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
-        stride_constraint[0] = 1;
+        if (dimensions > 0) {
+            stride_constraint[0] = 1;
+        }
     }
 };
 
@@ -63,7 +71,7 @@ Parameter::Parameter() : contents(nullptr) {
 }
 
 Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true, false)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
     if (contents.defined() && contents->is_registered) {
@@ -71,8 +79,8 @@ Parameter::Parameter(Type t, bool is_buffer, int d) :
     }
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance) :
-    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance, bool is_bound_before_lowering) :
+    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance, is_bound_before_lowering)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     if (contents.defined() && contents->is_registered) {
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, nullptr);
@@ -134,6 +142,11 @@ bool Parameter::is_buffer() const {
     return contents->is_buffer;
 }
 
+bool Parameter::is_bound_before_lowering() const {
+    check_defined();
+    return contents->is_bound_before_lowering;
+}
+
 Expr Parameter::get_scalar_expr() const {
     check_is_scalar();
     const Type t = type();
@@ -167,19 +180,19 @@ Expr Parameter::get_scalar_expr() const {
     return Expr();
 }
 
-BufferPtr Parameter::get_buffer() const {
+Buffer<> Parameter::get_buffer() const {
     check_is_buffer();
     return contents->buffer;
 }
 
-void Parameter::set_buffer(BufferPtr b) {
+void Parameter::set_buffer(Buffer<> b) {
     check_is_buffer();
     if (b.defined()) {
         user_assert(contents->type == b.type())
             << "Can't bind Parameter " << name()
             << " of type " << contents->type
             << " to Buffer " << b.name()
-            << " of type " << b.type() << "\n";
+            << " of type " << Type(b.type()) << "\n";
     }
     contents->buffer = b;
 }
@@ -244,11 +257,13 @@ int Parameter::host_alignment() const {
 }
 void Parameter::set_min_value(Expr e) {
     check_is_scalar();
-    user_assert(e.type() == contents->type)
-        << "Can't set parameter " << name()
-        << " of type " << contents->type
-        << " to have min value " << e
-        << " of type " << e.type() << "\n";
+    if (e.defined()) {
+        user_assert(e.type() == contents->type)
+            << "Can't set parameter " << name()
+            << " of type " << contents->type
+            << " to have min value " << e
+            << " of type " << e.type() << "\n";
+    }
     contents->min_value = e;
 }
 
@@ -259,11 +274,13 @@ Expr Parameter::get_min_value() const {
 
 void Parameter::set_max_value(Expr e) {
     check_is_scalar();
-    user_assert(e.type() == contents->type)
-        << "Can't set parameter " << name()
-        << " of type " << contents->type
-        << " to have max value " << e
-        << " of type " << e.type() << "\n";
+    if (e.defined()) {
+        user_assert(e.type() == contents->type)
+            << "Can't set parameter " << name()
+            << " of type " << contents->type
+            << " to have max value " << e
+            << " of type " << e.type() << "\n";
+    }
     contents->max_value = e;
 }
 

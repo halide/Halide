@@ -19,7 +19,7 @@ using std::string;
 stack<string> stack_trace;
 
 
-int my_trace(void *user_context, const halide_trace_event *e) {
+int my_trace(void *user_context, const halide_trace_event_t *e) {
     const string event_types[] = {"Load ",
                                   "Store ",
                                   "Begin realization ",
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 
     // Loads from this image will barf, because we've messed up the host pointer
     Buffer<int> input(100, 100);
-    buffer_t *buf = input.raw_buffer();
+    halide_buffer_t *buf = input.raw_buffer();
     buf->host = (uint8_t *)17;
 
     Func f("f"), g("g"), h("h");

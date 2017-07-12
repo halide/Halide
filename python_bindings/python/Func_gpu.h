@@ -4,7 +4,7 @@
 // to avoid compiler confusion, python.hpp must be include before Halide headers
 #include <boost/python.hpp>
 
-#include "../../src/Func.h"
+#include "Halide.h"
 
 /// Define all gpu related methods
 void defineFuncGpuMethods(boost::python::class_<Halide::Func> &func_class);
@@ -67,19 +67,77 @@ FuncOrStage &func_gpu2(FuncOrStage &that, hh::VarOrRVar block_x, hh::VarOrRVar b
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_gpu_tile0(FuncOrStage &that, hh::VarOrRVar x, int x_size, hh::DeviceAPI device_api) {
-    return that.gpu_tile(x, x_size, hh::TailStrategy::Auto, device_api);
+FuncOrStage &func_gpu_tile0(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar bx,
+                            hh::Var tx, int x_size, hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, bx, tx, x_size, hh::TailStrategy::Auto, device_api);
+}
+template <typename FuncOrStage>
+FuncOrStage &func_gpu_tile1(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar bx,
+                            hh::RVar tx, int x_size, hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, bx, tx, x_size, hh::TailStrategy::Auto, device_api);
 }
 
 template <typename FuncOrStage>
-FuncOrStage &func_gpu_tile1(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
+FuncOrStage &func_gpu_tile2(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar tx,
+                            int x_size, hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, tx, x_size, hh::TailStrategy::Auto, device_api);
+}
+
+template <typename FuncOrStage>
+FuncOrStage &func_gpu_tile3(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
+                            hh::VarOrRVar bx, hh::VarOrRVar by,
+                            hh::VarOrRVar tx, hh::VarOrRVar ty,
+                            int x_size, int y_size,
+                            hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, y, bx, by, tx, ty, x_size, y_size, hh::TailStrategy::Auto, device_api);
+}
+
+template <typename FuncOrStage>
+FuncOrStage &func_gpu_tile4(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
+                            hh::VarOrRVar tx, hh::Var ty,
+                            int x_size, int y_size,
+                            hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, y, tx, ty, x_size, y_size, hh::TailStrategy::Auto, device_api);
+}
+template <typename FuncOrStage>
+FuncOrStage &func_gpu_tile5(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
+                            hh::VarOrRVar tx, hh::RVar ty,
+                            int x_size, int y_size,
+                            hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, y, tx, ty, x_size, y_size, hh::TailStrategy::Auto, device_api);
+}
+
+template <typename FuncOrStage>
+FuncOrStage &func_gpu_tile6(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y, hh::VarOrRVar z,
+                            hh::VarOrRVar bx, hh::VarOrRVar by, hh::VarOrRVar bz,
+                            hh::VarOrRVar tx, hh::VarOrRVar ty, hh::VarOrRVar tz,
+                            int x_size, int y_size, int z_size,
+                            hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, y, z, bx, by, bz, tx, ty, tz, x_size, y_size, z_size, hh::TailStrategy::Auto, device_api);
+}
+
+template <typename FuncOrStage>
+FuncOrStage &func_gpu_tile7(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y, hh::VarOrRVar z,
+                            hh::VarOrRVar tx, hh::VarOrRVar ty, hh::VarOrRVar tz,
+                            int x_size, int y_size, int z_size,
+                            hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, y, z, tx, ty, tx, x_size, y_size, z_size, hh::TailStrategy::Auto, device_api);
+}
+
+// Will be deprecated
+template <typename FuncOrStage>
+FuncOrStage &func_gpu_tile8(FuncOrStage &that, hh::VarOrRVar x, int x_size,
+                            hh::DeviceAPI device_api) {
+    return that.gpu_tile(x, x_size, hh::TailStrategy::Auto, device_api);
+}
+template <typename FuncOrStage>
+FuncOrStage &func_gpu_tile9(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y,
                             int x_size, int y_size,
                             hh::DeviceAPI device_api) {
     return that.gpu_tile(x, y, x_size, y_size, hh::TailStrategy::Auto, device_api);
 }
-
 template <typename FuncOrStage>
-FuncOrStage &func_gpu_tile2(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y, hh::VarOrRVar z,
+FuncOrStage &func_gpu_tile10(FuncOrStage &that, hh::VarOrRVar x, hh::VarOrRVar y, hh::VarOrRVar z,
                             int x_size, int y_size, int z_size,
                             hh::DeviceAPI device_api) {
     return that.gpu_tile(x, y, z, x_size, y_size, z_size, hh::TailStrategy::Auto, device_api);
@@ -167,10 +225,9 @@ void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class) {
              bp::return_internal_reference<1>());
 
     func_or_stage_class
-        .def("gpu_tile", &func_gpu_tile2<FuncOrStage>,
+        .def("gpu_tile", &func_gpu_tile0<FuncOrStage>,
              (bp::arg("self"),
-              bp::arg("x"), bp::arg("y"), bp::arg("z"),
-              bp::arg("x_size"), bp::arg("y_size"), bp::arg("z_size"),
+              bp::arg("x"), bp::arg("bx"), bp::arg("tx"), bp::arg("x_size"),
               bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
              bp::return_internal_reference<1>(),
              "Short-hand for tiling a domain and mapping the tile indices "
@@ -179,13 +236,68 @@ void defineFuncOrStageGpuMethods(bp::class_<FuncOrStage> &func_or_stage_class) {
              "other scheduling first.")
         .def("gpu_tile", &func_gpu_tile1<FuncOrStage>,
              (bp::arg("self"),
+              bp::arg("x"), bp::arg("bx"), bp::arg("tx"), bp::arg("x_size"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+        .def("gpu_tile", &func_gpu_tile2<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("x"), bp::arg("tx"), bp::arg("x_size"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+        .def("gpu_tile", &func_gpu_tile3<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("x"), bp::arg("y"),
+              bp::arg("bx"), bp::arg("by"),
+              bp::arg("tx"), bp::arg("ty"),
+              bp::arg("x_size"), bp::arg("y_size"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+        .def("gpu_tile", &func_gpu_tile4<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("x"), bp::arg("y"),
+              bp::arg("tx"), bp::arg("ty"),
+              bp::arg("x_size"), bp::arg("y_size"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+        .def("gpu_tile", &func_gpu_tile5<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("x"), bp::arg("y"),
+              bp::arg("tx"), bp::arg("ty"),
+              bp::arg("x_size"), bp::arg("y_size"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+        .def("gpu_tile", &func_gpu_tile6<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("x"), bp::arg("y"), bp::arg("z"),
+              bp::arg("bx"), bp::arg("by"), bp::arg("bz"),
+              bp::arg("tx"), bp::arg("ty"), bp::arg("tz"),
+              bp::arg("x_size"), bp::arg("y_size"), bp::arg("z_size"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+        .def("gpu_tile", &func_gpu_tile7<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("x"), bp::arg("y"), bp::arg("z"),
+              bp::arg("tx"), bp::arg("ty"), bp::arg("tz"),
+              bp::arg("x_size"), bp::arg("y_size"), bp::arg("z_size"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+
+        // Will be deprecated
+        .def("gpu_tile", &func_gpu_tile8<FuncOrStage>,
+             (bp::arg("self"),
+              bp::arg("x"), bp::arg("x_size"),
+              bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
+             bp::return_internal_reference<1>())
+        .def("gpu_tile", &func_gpu_tile9<FuncOrStage>,
+             (bp::arg("self"),
               bp::arg("x"), bp::arg("y"),
               bp::arg("x_size"), bp::arg("y_size"),
               bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
              bp::return_internal_reference<1>())
-        .def("gpu_tile", &func_gpu_tile0<FuncOrStage>,
+        .def("gpu_tile", &func_gpu_tile10<FuncOrStage>,
              (bp::arg("self"),
-              bp::arg("x"), bp::arg("x_size"),
+              bp::arg("x"), bp::arg("y"), bp::arg("z"),
+              bp::arg("x_size"), bp::arg("y_size"), bp::arg("z_size"),
               bp::arg("device_api") = hh::DeviceAPI::Default_GPU),
              bp::return_internal_reference<1>());
 

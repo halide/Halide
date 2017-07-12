@@ -17,13 +17,14 @@ int main(int argc, char **argv) {
 #include "acquire_release.h"
 
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 const int W = 256, H = 256;
 
 #if defined(TEST_OPENCL)
 // Implement OpenCL custom context.
 
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #ifdef __APPLE__
 #include <OpenCL/cl.h>
 #else
@@ -116,7 +117,7 @@ extern "C" int halide_release_cl_context(void *user_context) {
     printf("Releasing CL context %p\n", cl_ctx);
     return 0;
 }
-#elif defined(TEST_PTX)
+#elif defined(TEST_CUDA)
 // Implement CUDA custom context.
 #include <cuda.h>
 

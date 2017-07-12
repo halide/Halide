@@ -45,12 +45,12 @@ public:
             switch (schedule) {
             case BlurGPUSchedule::Inline:
                 // - Fully inlining.
-                blur_y.gpu_tile(x, y, tile_x, tile_y);
+                blur_y.gpu_tile(x, y, xi, yi, tile_x, tile_y);
                 break;
             case BlurGPUSchedule::Cache:
                 // - Cache blur_x calculation.
-                blur_y.gpu_tile(x, y, tile_x, tile_y);
-                blur_x.compute_at(blur_y, Var::gpu_blocks()).gpu_threads(x, y);
+                blur_y.gpu_tile(x, y, xi, yi, tile_x, tile_y);
+                blur_x.compute_at(blur_y, x).gpu_threads(x, y);
                 break;
             case BlurGPUSchedule::Slide: {
                 // - Instead caching blur_x calculation explicitly, the
@@ -58,18 +58,18 @@ public:
                 //   in CUDA to calculate more rows of blur_y so that temporary
                 //   blur_x calculation is re-used implicitly. This achieves
                 //   the similar schedule of sliding window.
-                Var yi("yi");
-                blur_y.split(y, y, yi, tile_y).reorder(yi, x).unroll(yi)
-                    .gpu_tile(x, y, tile_x, 1);
+                Var y_inner("y_inner");
+                blur_y.split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner)
+                    .gpu_tile(x, y, xi, yi, tile_x, 1);
                 break;
             }
             case BlurGPUSchedule::SlideVectorize: {
                 // Vectorization factor.
                 int factor = sizeof(int)/sizeof(short);
-                Var yi("yi");
+                Var y_inner("y_inner");
                 blur_y.vectorize(x, factor)
-                    .split(y, y, yi, tile_y).reorder(yi, x).unroll(yi)
-                    .gpu_tile(x, y, tile_x, 1);
+                    .split(y, y, y_inner, tile_y).reorder(y_inner, x).unroll(y_inner)
+                    .gpu_tile(x, y, xi, yi, tile_x, 1);
                 break;
             }
             default:

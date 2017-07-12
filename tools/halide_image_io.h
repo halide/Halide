@@ -11,8 +11,12 @@
 #include <string>
 #include <vector>
 
-#ifndef HALIDE_NOPNG
+#ifndef HALIDE_NO_PNG
 #include "png.h"
+#endif
+
+#ifndef HALIDE_NO_JPEG
+#include "jpeglib.h"
 #endif
 
 namespace Halide {
@@ -115,7 +119,7 @@ struct FileOpener {
     FILE * const f;
 };
 
-#ifndef HALIDE_NOPNG
+#ifndef HALIDE_NO_PNG
 struct PngRowPointers {
     PngRowPointers(int height, int rowbytes) : p(new png_bytep[height]), height(height) {
         if (p != nullptr) {
@@ -135,16 +139,17 @@ struct PngRowPointers {
     png_bytep* const p;
     int const height;
 };
-#endif // HALIDE_NOPNG
+#endif // HALIDE_NO_PNG
 
 }  // namespace Internal
 
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load_png(const std::string &filename, ImageType *im) {
-#ifdef HALIDE_NOPNG
+#ifdef HALIDE_NO_PNG
+    check(false, "png not supported in this build\n");
     return false;
-#else // HALIDE_NOPNG
+#else // HALIDE_NO_PNG
     png_byte header[8];
     png_structp png_ptr;
     png_infop info_ptr;
@@ -199,7 +204,7 @@ bool load_png(const std::string &filename, ImageType *im) {
 
     // convert the data to ImageType::ElemType
 
-    int c_stride = (im->channels() == 1) ? 0 : ((&(*im)(0, 0, 1)) - (&(*im)(0, 0, 0)));
+    int64_t c_stride = (im->channels() == 1) ? 0 : ((&(*im)(0, 0, 1)) - (&(*im)(0, 0, 0)));
     typename ImageType::ElemType *ptr = (typename ImageType::ElemType*)im->data();
     if (bit_depth == 8) {
         for (int y = 0; y < im->height(); y++) {
@@ -229,15 +234,16 @@ bool load_png(const std::string &filename, ImageType *im) {
 
     im->set_host_dirty();
     return true;
-#endif // HALIDE_NOPNG
+#endif // HALIDE_NO_PNG
 }
 
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_png(ImageType &im, const std::string &filename) {
-#ifdef HALIDE_NOPNG
+#ifdef HALIDE_NO_PNG
+    check(false, "png not supported in this build\n");
     return false;
-#else // HALIDE_NOPNG
+#else // HALIDE_NO_PNG
     png_structp png_ptr;
     png_infop info_ptr;
     png_byte color_type;
@@ -283,9 +289,11 @@ bool save_png(ImageType &im, const std::string &filename) {
 
     Internal::PngRowPointers row_pointers(im.height(), png_get_rowbytes(png_ptr, info_ptr));
 
-    // im.copyToHost(); // in case the image is on the gpu
-
-    int c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
+    // We don't require that the image type provided has any
+    // particular way to get at the strides, so take differences of
+    // addresses of pixels to compute them.
+    int64_t c_stride = (im.channels() == 1) ? 0 : ((&im(0, 0, 1)) - (&im(0, 0, 0)));
+    int64_t x_stride = (int)((&im(1, 0, 0)) - (&im(0, 0, 0)));
     typename ImageType::ElemType *srcPtr = (typename ImageType::ElemType*)im.data();
 
     for (int y = 0; y < im.height(); y++) {
@@ -299,7 +307,7 @@ bool save_png(ImageType &im, const std::string &filename) {
                     *dstPtr++ = out >> 8;
                     *dstPtr++ = out & 0xff;
                 }
-                srcPtr++;
+                srcPtr += x_stride;
             }
         } else if (bit_depth == 8) {
             // convert to uint8_t
@@ -309,7 +317,7 @@ bool save_png(ImageType &im, const std::string &filename) {
                     Internal::convert(srcPtr[c*c_stride], out);
                     *dstPtr++ = out;
                 }
-                srcPtr++;
+                srcPtr += x_stride;
             }
         } else {
             if (!check(bit_depth == 8 || bit_depth == 16, "We only support saving 8- and 16-bit images.")) return false;
@@ -329,7 +337,7 @@ bool save_png(ImageType &im, const std::string &filename) {
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
     return true;
-#endif // HALIDE_NOPNG
+#endif // HALIDE_NO_PNG
 }
 
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
@@ -375,7 +383,7 @@ bool load_pgm(const std::string &filename, ImageType *im) {
             }
         }
     } else if (bit_depth == 16) {
-        int little_endian = Internal::is_little_endian();
+        bool little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height);
         if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height, f.f) == (size_t) (width*height), "Could not read PGM 16-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
@@ -419,7 +427,7 @@ bool save_pgm(ImageType &im, const std::string &filename, unsigned int channel =
         }
         if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height, f.f) == (size_t) (width*height), "Could not write PGM 8-bit data\n")) return false;
     } else if (bit_depth == 16) {
-        int little_endian = Internal::is_little_endian();
+        bool little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height);
         uint16_t *p = &data[0];
         for (int y = 0; y < height; y++) {
@@ -482,7 +490,7 @@ bool load_ppm(const std::string &filename, ImageType *im) {
             }
         }
     } else if (bit_depth == 16) {
-        int little_endian = Internal::is_little_endian();
+        bool little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
         if (!check(fread((void *) &data[0], sizeof(uint16_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not read PPM 16-bit data\n")) return false;
         typename ImageType::ElemType *im_data = (typename ImageType::ElemType*) im->data();
@@ -510,6 +518,8 @@ bool load_ppm(const std::string &filename, ImageType *im) {
 // "im" is not const-ref because copy_to_host() is not const.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_ppm(ImageType &im, const std::string &filename) {
+    if (!check(im.channels() == 3, "save_ppm() requires a 3-channel image.\n")) { return false; }
+
     im.copy_to_host();
 
     unsigned int bit_depth = sizeof(typename ImageType::ElemType) == 1 ? 8: 16;
@@ -542,7 +552,7 @@ bool save_ppm(ImageType &im, const std::string &filename) {
         }
         if (!check(fwrite((void *) &data[0], sizeof(uint8_t), width*height*3, f.f) == (size_t) (width*height*3), "Could not write PPM 8-bit data\n")) return false;
     } else if (bit_depth == 16) {
-        int little_endian = Internal::is_little_endian();
+        bool little_endian = Internal::is_little_endian();
         std::vector<uint16_t> data(width*height*3);
         uint16_t *p = &data[0];
         // unroll inner loop for 3 channel RGB (common case)
@@ -580,17 +590,151 @@ bool save_ppm(ImageType &im, const std::string &filename) {
     return true;
 }
 
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool save_jpg(ImageType &im, const std::string &filename) {
+#ifdef HALIDE_NO_JPEG
+    check(false, "jpg not supported in this build\n");
+    return false;
+#else
+    im.copy_to_host();
+
+    int channels = 1;
+    if (im.dimensions() == 3) {
+        channels = im.channels();
+    }
+
+    if (!check((im.dimensions() == 2 ||
+                im.dimensions() == 3) &&
+               (channels == 1 ||
+                channels == 3),
+               "Can only save jpg images with 1 or 3 channels\n")) {
+        return false;
+    }
+
+    // TODO: Make this an argument?
+    const int quality = 99;
+
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+
+    Internal::FileOpener f(filename.c_str(), "wb");
+    if (!check(f.f != nullptr,
+               "File %s could not be opened for writing\n", filename.c_str())) {
+        return false;
+    }
+
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+    jpeg_stdio_dest(&cinfo, f.f);
+
+    cinfo.image_width = im.width();
+    cinfo.image_height = im.height();
+    cinfo.input_components = channels;
+    if (channels == 3) {
+        cinfo.in_color_space = JCS_RGB;
+    } else { // channels must be 1
+        cinfo.in_color_space = JCS_GRAYSCALE;
+    }
+
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, quality, TRUE);
+
+    jpeg_start_compress(&cinfo, TRUE);
+
+    std::vector<JSAMPLE> row(im.width() * channels);
+
+    for (int y = 0; y < im.height(); y++) {
+        JSAMPLE *dst = row.data();
+        if (im.dimensions() == 2) {
+            for (int x = 0; x < im.width(); x++) {
+                *dst++ = (JSAMPLE)(im(x, y));
+            }
+        } else {
+            for (int x = 0; x < im.width(); x++) {
+                for (int c = 0; c < channels; c++) {
+                    *dst++ = (JSAMPLE)(im(x, y, c));
+                }
+            }
+        }
+        JSAMPROW row_ptr = row.data();
+        jpeg_write_scanlines(&cinfo, &row_ptr, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+    jpeg_destroy_compress(&cinfo);
+
+    return true;
+#endif
+}
+
+template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
+bool load_jpg(const std::string &filename, ImageType *im) {
+#ifdef HALIDE_NO_JPEG
+    check(false, "jpg not supported in this build\n");
+    return false;
+#else
+    struct jpeg_decompress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+
+    Internal::FileOpener f(filename.c_str(), "rb");
+    if (!check(f.f != nullptr,
+               "File %s could not be opened for reading\n", filename.c_str())) {
+        return false;
+    }
+
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_decompress(&cinfo);
+    jpeg_stdio_src(&cinfo, f.f);
+
+    jpeg_read_header(&cinfo, TRUE);
+    jpeg_start_decompress(&cinfo);
+
+    int channels = cinfo.output_components;
+    if (channels > 1) {
+        *im = ImageType(cinfo.output_width, cinfo.output_height, channels);
+    } else {
+        *im = ImageType(cinfo.output_width, cinfo.output_height);
+    }
+    std::vector<JSAMPLE> row(im->width() * channels);
+
+    for (int y = 0; y < im->height(); y++) {
+        JSAMPLE *src = row.data();
+        jpeg_read_scanlines(&cinfo, &src, 1);
+        if (channels > 1) {
+            for (int x = 0; x < im->width(); x++) {
+                for (int c = 0; c < channels; c++) {
+                    (*im)(x, y, c) = *src++;
+                }
+            }
+        } else {
+            for (int x = 0; x < im->width(); x++) {
+                (*im)(x, y) = *src++;
+            }
+        }
+    }
+
+    jpeg_finish_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
+
+    return true;
+#endif
+}
+
+
 // Returns false upon failure.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool load(const std::string &filename, ImageType *im) {
     if (Internal::ends_with_ignore_case(filename, ".png")) {
         return load_png<ImageType, check>(filename, im);
+    } else if (Internal::ends_with_ignore_case(filename, ".jpg") ||
+               Internal::ends_with_ignore_case(filename, ".jpeg")) {
+        return load_jpg<ImageType, check>(filename, im);
     } else if (Internal::ends_with_ignore_case(filename, ".pgm")) {
         return load_pgm<ImageType, check>(filename, im);
     } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
         return load_ppm<ImageType, check>(filename, im);
     } else {
-        return check(false, "[load] unsupported file extension (png|pgm|ppm supported)");
+        return check(false, "[load] unsupported file extension (png|jpg|pgm|ppm supported)");
     }
 }
 // Returns false upon failure.
@@ -598,12 +742,15 @@ template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save(ImageType &im, const std::string &filename) {
     if (Internal::ends_with_ignore_case(filename, ".png")) {
         return save_png<ImageType, check>(im, filename);
+    } else if (Internal::ends_with_ignore_case(filename, ".jpg") ||
+               Internal::ends_with_ignore_case(filename, ".jpeg")) {
+        return save_jpg<ImageType, check>(im, filename);
     } else if (Internal::ends_with_ignore_case(filename, ".pgm")) {
         return save_pgm<ImageType, check>(im, filename);
     } else if (Internal::ends_with_ignore_case(filename, ".ppm")) {
         return save_ppm<ImageType, check>(im, filename);
     } else {
-        return check(false, "[save] unsupported file extension (png|pgm|ppm supported)");
+        return check(false, "[save] unsupported file extension (png|jpg|pgm|ppm supported)");
     }
 }
 

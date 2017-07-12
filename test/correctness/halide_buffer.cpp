@@ -1,7 +1,7 @@
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
-using namespace Halide;
+using namespace Halide::Runtime;
 
 template<typename T1, typename T2>
 void check_equal_shape(const Buffer<T1> &a, const Buffer<T2> &b) {
@@ -37,8 +37,13 @@ int main(int argc, char **argv) {
         a.transpose(1, 2);
 
         a.fill(1.0f);
+
+        b.fill([&](int x, int y, int c) {
+            return x + 100.0f * y + 100000.0f * c;
+        });
+
         b.for_each_element([&](int x, int y, int c) {
-            b(x, y, c) = x + 100.0f * y + 100000.0f * c;
+            assert(b(x, y, c) == x + 100.0f * y + 100000.0f * c);
         });
 
         check_equal(a, a.copy());
@@ -68,7 +73,7 @@ int main(int argc, char **argv) {
         Buffer<float, 2> a(100, 80);
         Buffer<const float, 3> b(a); // statically safe
         Buffer<const void, 4> c(b);  // statically safe
-        Buffer<const float, 3> d(c); // does runtime checks of actual dimensionality and type.
+        Buffer<const float, 3> d(c); // does runtime check of actual type.
         Buffer<void, 3> e(a);        // statically safe
         Buffer<float, 2> f(e);       // runtime checks
     }
@@ -123,5 +128,6 @@ int main(int argc, char **argv) {
         });
     }
 
+    printf("Success!\n");
     return 0;
 }
