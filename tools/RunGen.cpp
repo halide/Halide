@@ -335,6 +335,31 @@ struct ScalarParser {
     }
 };
 
+// Override for int8 and uint8, to avoid parsing as char variants
+template<>
+bool ScalarParser<int8_t>::operator()(const std::string &str, halide_scalar_value_t *v) {
+    std::istringstream iss(str);
+    int i;
+    iss >> i;
+    if (i < -128 || i > 127) {
+      return false;
+    }
+    v->u.i8 = (int8_t) i;
+    return true;
+}
+
+template<>
+bool ScalarParser<uint8_t>::operator()(const std::string &str, halide_scalar_value_t *v) {
+    std::istringstream iss(str);
+    unsigned int u;
+    iss >> u;
+    if (u > 255) {
+      return false;
+    }
+    v->u.u8 = (uint8_t) u;
+    return true;
+}
+
 // Override for bool, since istream just expects '1' or '0'.
 template<>
 bool ScalarParser<bool>::operator()(const std::string &str, halide_scalar_value_t *v) {
