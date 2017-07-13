@@ -116,6 +116,14 @@ private:
             Function f = iter->second.first;
             const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
             const vector<string> &args = f.args();
+            debug(0) << "Args:\n";
+            for (string s : args) {
+                debug(0) << " " << s << "\n";
+            }
+            debug(0) << "Storage dims:\n";
+            for (StorageDim d : storage_dims) {
+                debug(0) << " " << d.var << "\n";
+            }
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j] == storage_dims[i].var) {

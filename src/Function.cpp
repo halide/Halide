@@ -52,6 +52,7 @@ struct FunctionContents {
     NameMangling extern_mangling;
     DeviceAPI extern_function_device_api;
     bool extern_uses_old_buffer_t;
+    Expr extern_proxy_expr;
 
     bool trace_loads, trace_stores, trace_realizations;
 
@@ -80,6 +81,9 @@ struct FunctionContents {
                 } else if (i.is_expr()) {
                     i.expr.accept(visitor);
                 }
+            }
+            if (extern_proxy_expr.defined()) {
+                extern_proxy_expr.accept(visitor);
             }
         }
 
@@ -115,6 +119,7 @@ struct FunctionContents {
                     i.expr = mutator->mutate(i.expr);
                 }
             }
+            extern_proxy_expr = mutator->mutate(extern_proxy_expr);
         }
     }
 };
@@ -291,6 +296,7 @@ ExternFuncArgument deep_copy_extern_func_argument_helper(
     if (copied_func.defined()) {
         copy.func = copied_func;
     } else {
+        debug(0) << "Deep copy: " << Function(src.func).name() << "\n";
         copy.func = deep_copy_function_contents_helper(src.func, copied_map);
         copied_map[src.func] = copy.func;
     }
@@ -724,11 +730,14 @@ void Function::define_extern(const std::string &function_name,
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
     auto &pure_def_args = contents->init_def.args();
-    pure_def_args.resize(dimensionality);
+    while ((int)pure_def_args.size() < dimensionality) {
+        pure_def_args.push_back(Var(unique_name('e')));
+    }
+    // Reset the storage dims to match the pure args
+    vector<string> arg_names = this->args();
+    contents->func_schedule.storage_dims().clear();
     for (int i = 0; i < dimensionality; i++) {
-        string arg = unique_name('e');
-        pure_def_args[i] = Var(arg);
-        StorageDim sd = {arg};
+        StorageDim sd {arg_names[i]};
         contents->func_schedule.storage_dims().push_back(sd);
     }
 }
@@ -846,6 +855,14 @@ Expr Function::make_call_to_extern_definition(const std::vector<Expr> &args,
 
 bool Function::extern_definition_uses_old_buffer_t() const {
     return contents->extern_uses_old_buffer_t;
+}
+
+Expr Function::extern_definition_proxy_expr() const {
+    return contents->extern_proxy_expr;
+}
+
+Expr &Function::extern_definition_proxy_expr() {
+    return contents->extern_proxy_expr;
 }
 
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {

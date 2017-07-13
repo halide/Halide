@@ -111,9 +111,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // specializations' conditions
     simplify_specializations(env);
 
-    bool any_memoized = false;
-
     debug(1) << "Creating initial loop nests...\n";
+    bool any_memoized = false;
     Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 

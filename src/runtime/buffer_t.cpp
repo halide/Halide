@@ -153,7 +153,12 @@ halide_buffer_t *_halide_buffer_crop(halide_buffer_t *dst,
         dst->dim[i].extent = extent[i];
         offset += (min[i] - src->dim[i].min) * src->dim[i].stride;
     }
-    dst->host += offset * src->type.bytes();
+    offset *= src->type.bytes();
+    dst->host += offset;
+    if (dst->device) {
+        // Assume that pointer arithmetic is valid (FIXME: This is only true for opencl and cuda!)
+        dst->device += offset;
+    }
     return dst;
 }
 
