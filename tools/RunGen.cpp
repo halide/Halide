@@ -404,15 +404,18 @@ bool parse_scalar(const halide_type_t &type,
 //    [extent0, extent1...]
 //
 // Return a vector<halide_dimension_t> (aka a "shape") with the extents filled in,
-// but with the min and stride of each dimension set to zero.
+// but with the min of each dimension set to zero and the stride set to the
+// planar-default value.
 Shape parse_extents(const std::string &extent_list) {
     if (extent_list.empty() || extent_list[0] != '[' || extent_list.back() != ']') {
         fail() << "Invalid format for extents: " << extent_list;
     }
     Shape result;
     std::vector<std::string> extents = split_string(extent_list.substr(1, extent_list.size()-2), ",");
-    for (auto &s : extents) {
-        halide_dimension_t d = {0, 0, 0};
+    for (size_t i = 0; i < extents.size(); i++) {
+      const std::string &s = extents[i];
+        const int stride = (i == 0) ? 1 : result[i-1].stride * result[i-1].extent;
+        halide_dimension_t d = {0, 0, stride};
         if (!parse_scalar(s, &d.extent)) {
             fail() << "Invalid value for extents: " << s << " (" << extent_list << ")";
         }
