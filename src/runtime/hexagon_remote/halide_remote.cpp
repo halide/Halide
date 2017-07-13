@@ -343,6 +343,7 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
             // This buffer is passed directly.
             next_buffer_t->host = input_buffersPtrs[i].data;
         } else {
+            // This input buffer was passed in the small_input_args buffer.
             next_buffer_t->host = const_cast<unsigned char *>(read_buffer(small_input_args));
             if (small_input_args > small_input_args_end) {
                 log_printf("Input buffer %d read past the end of small_input_args [%p, %p)\n",
