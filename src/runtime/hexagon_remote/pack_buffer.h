@@ -55,7 +55,12 @@ inline const unsigned char *read_buffer(const unsigned char *&read) {
     uint32_t offset_start = read_scalar<uint32_t>(read);
     uint32_t offset_end = read_scalar<uint32_t>(read);
     read = start + offset_end;
-    return start + offset_start;
+    if (offset_end > offset_start) {
+        return start + offset_start;
+    } else {
+        // This was an empty buffer.
+        return NULL;
+    }
 }
 
 #endif
