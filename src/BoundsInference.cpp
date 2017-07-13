@@ -229,6 +229,10 @@ public:
             exprs.clear();
             rvars.clear();
 
+            if (func.extern_definition_proxy_expr().defined()) {
+                exprs.push_back(CondValue(const_true(), func.extern_definition_proxy_expr()));
+            }
+
             bool is_update = (stage != 0);
             vector<vector<CondValue>> result;
             if (!is_update) {
@@ -314,7 +318,8 @@ public:
                 }
             }
 
-            if (func.has_extern_definition()) {
+            if (func.has_extern_definition() &&
+                !func.extern_definition_proxy_expr().defined()) {
                 // After we define our bounds required, we need to
                 // figure out what we're actually going to compute,
                 // and what inputs we need. To do this we:
@@ -334,7 +339,6 @@ public:
 
                 // 4)
                 s = do_bounds_query(s, in_pipeline, target);
-
 
                 if (!in_pipeline.empty()) {
                     // 3)
@@ -724,7 +728,8 @@ public:
             // Compute all the boxes of the producers this consumer
             // uses.
             map<string, Box> boxes;
-            if (consumer.func.has_extern_definition()) {
+            if (consumer.func.has_extern_definition() &&
+                !consumer.func.extern_definition_proxy_expr().defined()) {
 
                 const vector<ExternFuncArgument> &args = consumer.func.extern_arguments();
                 // Stage::define_bounds is going to compute a query
@@ -747,7 +752,6 @@ public:
                         merge_boxes(boxes[f.name()], b);
                     }
                 }
-
             } else {
                 for (const auto &cval : consumer.exprs) {
                     map<string, Box> new_boxes;

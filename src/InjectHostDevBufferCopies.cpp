@@ -28,35 +28,6 @@ Stmt call_extern_and_assert(const string& name, const vector<Expr>& args) {
 
 namespace {
 
-Expr make_device_interface_call(DeviceAPI device_api) {
-    std::string interface_name;
-    switch (device_api) {
-    case DeviceAPI::CUDA:
-        interface_name = "halide_cuda_device_interface";
-        break;
-    case DeviceAPI::OpenCL:
-        interface_name = "halide_opencl_device_interface";
-        break;
-    case DeviceAPI::Metal:
-        interface_name = "halide_metal_device_interface";
-        break;
-    case DeviceAPI::GLSL:
-        interface_name = "halide_opengl_device_interface";
-        break;
-    case DeviceAPI::OpenGLCompute:
-        interface_name = "halide_openglcompute_device_interface";
-        break;
-    case DeviceAPI::Hexagon:
-        interface_name = "halide_hexagon_device_interface";
-        break;
-    default:
-        internal_error << "Bad DeviceAPI " << static_cast<int>(device_api) << "\n";
-        break;
-    }
-    return Call::make(type_of<const char *>(), interface_name, {}, Call::Extern);
-}
-
-
 class FindBufferUsage : public IRVisitor {
     using IRVisitor::visit;
 

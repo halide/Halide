@@ -138,6 +138,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
 // functions that takes a user_context pointer as its first parameter.
 bool function_takes_user_context(const std::string &name) {
     static const char *user_context_runtime_funcs[] = {
+        "halide_buffer_copy",
         "halide_copy_to_host",
         "halide_copy_to_device",
         "halide_current_time_ns",

@@ -1841,6 +1841,79 @@ Func Func::in() {
     return Func(wrapper);
 }
 
+Func Func::copy_to_device(DeviceAPI d) {
+    user_assert(defined())
+        << "copy_to_device on Func " << name() << " with no definition\n";
+    user_assert(outputs() == 1)
+        << "copy_to_device on a Tuple-valued Func " << name() << " not yet supported\n";
+    user_assert(!has_update_definition())
+        << "copy_to_device on Func " << name() << " with update definition\n";
+    user_assert(!is_extern())
+        << "copy_to_device on Func " << name() << " with extern definition\n";
+    Expr rhs = value();
+    const Call *call = rhs.as<Call>();
+    user_assert(call)
+        << "Func " << name() << " is scheduled as copy_to_host/device, "
+        << "but has value: " << rhs << "\n"
+        << "Expected a single call to another Func.\n";
+    user_assert(call->args.size() == args().size())
+        << "Func " << name() << " has a different dimensionality to the "
+        << "Func it calls, so cannot be scheduled as copy_to_host/device.\n";
+    // TODO: it would be good to support translations, transpositions, slices, embeds, etc.
+    vector<Expr> expected_args;
+    for (Var v : args()) {
+        expected_args.push_back(v);
+    }
+    // TODO: allow reinterpret casts
+    Expr expected_rhs =
+        Call::make(call->type, call->name, expected_args, call->call_type,
+                   call->func, call->value_index, call->image, call->param);
+    user_assert(equal(rhs, expected_rhs))
+        << "Func " << name() << " cannot be scheduled as copy_to_host/device. "
+        << "Its value is not of the required form.\n"
+        << "value: " << rhs << "\n"
+        << "expected value: " << expected_rhs << "\n";
+
+    //NOTE TO SELF: This seems to be causing an infinite loop of some type in deep_copy_function_contents
+
+    // We'll preserve the pure vars
+    func.definition().values().clear();
+    func.extern_definition_proxy_expr() = rhs;
+    string buffer_name = call->name;
+    if (Function(call->func).outputs() > 1) {
+        buffer_name += "." + std::to_string(call->value_index);
+    }
+    buffer_name += ".buffer";
+    ReductionDomain rdom;
+    ExternFuncArgument buffer;
+    if (call->call_type == Call::Halide) {
+        buffer = call->func;
+    } else if (call->image.defined()) {
+        buffer = call->image;
+    } else {
+        internal_assert(call->param.defined());
+        buffer = call->param;
+    }
+
+    ExternFuncArgument device_interface = make_device_interface_call(d);
+    func.define_extern("halide_buffer_copy", {buffer, device_interface},
+                       {call->type}, (int)call->args.size(),
+                       NameMangling::C, d, false);
+    return *this;
+}
+
+Func Func::copy_to_host() {
+    user_assert(defined())
+        << "copy_to_host on Func " << name() << " with no definition\n";
+    user_assert(outputs() == 1)
+        << "copy_to_host on a Tuple-valued Func " << name() << " not yet supported\n";
+    user_assert(!has_update_definition())
+        << "copy_to_host on Func " << name() << " with update definition\n";
+    user_assert(!is_extern())
+        << "copy_to_host on Func " << name() << " with extern definition\n";
+    return copy_to_device(DeviceAPI::Host);
+}
+
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule()).split(old, outer, inner, factor, tail);

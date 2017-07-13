@@ -15,6 +15,7 @@
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
+    (void *)&halide_buffer_copy,
     (void *)&halide_buffer_to_string,
     (void *)&halide_can_use_target_features,
     (void *)&halide_cond_broadcast,

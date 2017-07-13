@@ -209,6 +209,15 @@ public:
      * buffer_t type. */
     EXPORT bool extern_definition_uses_old_buffer_t() const;
 
+    /** Get the proxy Expr for the extern stage. This is an expression
+     * known to have the same data access pattern as the extern
+     * stage. For most Functions, including those with extern
+     * definitions, this will be an undefined Expr. */
+    // @{
+    EXPORT Expr extern_definition_proxy_expr() const;
+    EXPORT Expr &extern_definition_proxy_expr();
+    // @}
+
     /** Add an external definition of this Func. */
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
