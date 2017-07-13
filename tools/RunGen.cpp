@@ -249,7 +249,7 @@ class HalideMemoryTracker {
 
 /* static */ HalideMemoryTracker *HalideMemoryTracker::active{nullptr};
 
-std::vector<std::string> split_string(const std::string &source, 
+std::vector<std::string> split_string(const std::string &source,
                                       const std::string &delim) {
     std::vector<std::string> elements;
     size_t start = 0;
@@ -267,8 +267,8 @@ std::vector<std::string> split_string(const std::string &source,
     return elements;
 }
 
-std::string replace_all(const std::string &str, 
-                        const std::string &find, 
+std::string replace_all(const std::string &str,
+                        const std::string &find,
                         const std::string &replace) {
     size_t pos = 0;
     std::string result = str;
@@ -300,7 +300,7 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 // variants *will* be instantiated (increasing code size), so this approach
 // should only be used when strictly necessary.
 template<template<typename> class Functor, typename... Args>
-auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) -> 
+auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
     decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
 #define HANDLE_CASE(CODE, BITS, TYPE) \
@@ -530,14 +530,14 @@ bool dims_in_range_are_trivial(const Buffer<> &b, int first, int last) {
     return true;
 }
 
-// Add or subtract dimensions to the given buffer to match dims_needed, 
+// Add or subtract dimensions to the given buffer to match dims_needed,
 // emitting warnings if we do so.
 Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, const int dims_needed, Buffer<> b) {
     const int dims_actual = b.dimensions();
     if (dims_actual > dims_needed) {
         // Warn that we are ignoring dimensions, but only if at least one of the ignored dimensions has extent > 1
         if (!dims_in_range_are_trivial(b, dims_needed, dims_actual - 1)) {
-            warn() << "Image for " << title << " \"" << name << "\" has " 
+            warn() << "Image for " << title << " \"" << name << "\" has "
                  << dims_actual << " dimensions, but only the first "
                  << dims_needed << " were used; data loss may have occurred.";
         }
@@ -547,7 +547,7 @@ Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, c
         }
         info() << "Shape for " << name << " changed: " << old_shape << " -> " << get_shape(b);
     } else if (dims_actual < dims_needed) {
-        warn() << "Image for " << title << " \"" << name << "\" has " 
+        warn() << "Image for " << title << " \"" << name << "\" has "
              << dims_actual << " dimensions, but this argument requires at least "
              << dims_needed << " dimensions: adding dummy dimensions of extent 1.";
         auto old_shape = get_shape(b);
@@ -561,7 +561,7 @@ Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, c
 
 // Load a buffer from a pathname, adjusting the type and dimensions to
 // fit the metadata's requirements as needed.
-Buffer<> load_input_from_file(const std::string &pathname, 
+Buffer<> load_input_from_file(const std::string &pathname,
                               const halide_filter_argument_t &metadata) {
     Buffer<> b = Buffer<>(metadata.type, 0);
     info() << "Loading input " << metadata.name << " from " << pathname << " ...";
@@ -572,7 +572,7 @@ Buffer<> load_input_from_file(const std::string &pathname,
         b = adjust_buffer_dims("Input", metadata.name, metadata.dimensions, b);
     }
     if (b.type() != metadata.type) {
-        warn() << "Image loaded for argument \"" << metadata.name << "\" is type " 
+        warn() << "Image loaded for argument \"" << metadata.name << "\" is type "
              << b.type() << " but this argument expects type "
              << metadata.type << "; data loss may have occurred.";
         b = Halide::Tools::ImageTypeConversion::convert_image(b, metadata.type);
@@ -580,7 +580,7 @@ Buffer<> load_input_from_file(const std::string &pathname,
     return b;
 }
 
-Buffer<> load_input(const std::string &pathname, 
+Buffer<> load_input(const std::string &pathname,
                     const halide_filter_argument_t &metadata) {
     std::vector<std::string> v = split_string(pathname, ":");
     if (v.size() != 2 || v[0].size() == 1) {
@@ -911,8 +911,8 @@ int main(int argc, char **argv) {
         switch (arg.metadata->kind) {
         case halide_argument_kind_input_scalar: {
             if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
-                fail() << "Argument value for: " << arg_name << " could not be parsed as type " 
-                     << arg.metadata->type << ": " 
+                fail() << "Argument value for: " << arg_name << " could not be parsed as type "
+                     << arg.metadata->type << ": "
                      << arg.raw_string;
             }
             filter_argv[arg.index] = &arg.scalar_value;
@@ -920,8 +920,9 @@ int main(int argc, char **argv) {
         }
         case halide_argument_kind_input_buffer: {
             arg.buffer_value = load_input(arg.raw_string, *arg.metadata);
+            info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
             // If there was no default_output_shape specified, use the shape of
-            // the first input buffer (if any). 
+            // the first input buffer (if any).
             // TODO: this is often a better-than-nothing guess, but not always. Add a way to defeat it?
             if (default_output_shape.empty()) {
                 default_output_shape = get_shape(arg.buffer_value);
@@ -993,9 +994,9 @@ int main(int argc, char **argv) {
         // Run once to warm up cache. Ignore result since our halide_error() should catch everything.
         (void) halide_rungen_redirect_argv(&filter_argv[0]);
 
-        double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv, &args]() { 
+        double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv, &args]() {
             (void) halide_rungen_redirect_argv(&filter_argv[0]);
-            // Ensure that all outputs are finished, otherwise we may just be 
+            // Ensure that all outputs are finished, otherwise we may just be
             // measuring how long it takes to do a kernel launch for GPU code.
             for (auto &arg_pair : args) {
                 auto &arg = arg_pair.second;
@@ -1006,7 +1007,7 @@ int main(int argc, char **argv) {
             }
           });
 
-        std::cout << "Benchmark for " << md->name << " produces best case of " << time_in_seconds << " sec/iter, over " 
+        std::cout << "Benchmark for " << md->name << " produces best case of " << time_in_seconds << " sec/iter, over "
             << benchmark_samples << " blocks of " << benchmark_iterations << " iterations.\n";
         std::cout << "Best output throughput is " << (megapixels / time_in_seconds) << " mpix/sec.\n";
 
@@ -1028,7 +1029,7 @@ int main(int argc, char **argv) {
                 b.copy_to_host();
             }
         }
-        std::cout << "Maximum Halide memory: " << tracker.highwater() 
+        std::cout << "Maximum Halide memory: " << tracker.highwater()
             << " bytes for output of " << megapixels << " mpix.\n";
     }
 
@@ -1050,7 +1051,7 @@ int main(int argc, char **argv) {
                     b = adjust_buffer_dims("Output", arg_name, best.dimensions, b);
                 }
                 if (best.type != b.type()) {
-                    warn() << "Image for argument \"" << arg_name << "\" is of type " 
+                    warn() << "Image for argument \"" << arg_name << "\" is of type "
                          << b.type() << " but is being saved as type "
                          << best.type << "; data loss may have occurred.";
                     b = Halide::Tools::ImageTypeConversion::convert_image(b, best.type);
