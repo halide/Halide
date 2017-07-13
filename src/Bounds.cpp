@@ -15,6 +15,7 @@
 #include "CSE.h"
 #include "Deinterleave.h"
 #include "Param.h"
+#include "Solve.h"
 
 namespace Halide {
 namespace Internal {
@@ -1046,6 +1047,42 @@ bool box_contains(const Box &outer, const Box &inner) {
     return is_one(simplify(condition));
 }
 
+// Place innermost vars in an IfThenElse's condition as far to the left as possible.
+class SolveIfThenElse : public IRMutator {
+    // List of variables (LetStmt or For) encountered starting from outermost
+    // to innermost
+    vector<string> vars;
+
+    using IRMutator::visit;
+
+    void visit(const LetStmt *op) {
+        vars.push_back(op->name);
+        IRMutator::visit(op);
+        vars.pop_back();
+    }
+
+    void visit(const For *op) {
+        vars.push_back(op->name);
+        IRMutator::visit(op);
+        vars.pop_back();
+    }
+
+    void visit(const IfThenElse *op) {
+        IRMutator::visit(op);
+        op = stmt.as<IfThenElse>();
+        internal_assert(op);
+        for (size_t i = vars.size(); i > 0; --i) {
+            if (expr_uses_var(op->condition, vars[i-1])) {
+                Expr condition = solve_expression(op->condition, vars[i-1]).result;
+                if (!condition.same_as(op->condition)) {
+                    stmt = IfThenElse::make(condition, op->then_case, op->else_case);
+                }
+                break;
+            }
+        }
+    }
+};
+
 // Compute the box produced by a statement
 class BoxesTouched : public IRGraphVisitor {
 
@@ -1382,6 +1419,13 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    // Move the innermost vars in an IfThenElse's condition as far to the left
+    // as possible, so that BoxesTouched can prune the variable scope tighter
+    // when encountering the IfThenElse.
+    if (s.defined()) {
+        s = SolveIfThenElse().mutate(s);
+    }
+
     // Do calls and provides separately, for better simplification.
     BoxesTouched calls(consider_calls, false, fn, &scope, fb);
     BoxesTouched provides(false, consider_provides, fn, &scope, fb);
