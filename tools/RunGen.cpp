@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -330,7 +331,8 @@ template<typename T>
 struct ScalarParser {
     bool operator()(const std::string &str, halide_scalar_value_t *v) {
         std::istringstream iss(str);
-        iss >> *(T*)v;
+        // std::setbase(0) means "infer base from input", and allows hex and octal constants
+        iss >> std::setbase(0) >> *(T*)v;
         return !iss.fail() && iss.get() == EOF;
     }
 };
@@ -340,8 +342,8 @@ template<>
 bool ScalarParser<int8_t>::operator()(const std::string &str, halide_scalar_value_t *v) {
     std::istringstream iss(str);
     int i;
-    iss >> i;
-    if (i < -128 || i > 127) {
+    iss >> std::setbase(0) >> i;
+    if (!(!iss.fail() && iss.get() == EOF) || i < -128 || i > 127) {
       return false;
     }
     v->u.i8 = (int8_t) i;
@@ -352,8 +354,8 @@ template<>
 bool ScalarParser<uint8_t>::operator()(const std::string &str, halide_scalar_value_t *v) {
     std::istringstream iss(str);
     unsigned int u;
-    iss >> u;
-    if (u > 255) {
+    iss >> std::setbase(0) >> u;
+    if (!(!iss.fail() && iss.get() == EOF) || u > 255) {
       return false;
     }
     v->u.u8 = (uint8_t) u;
