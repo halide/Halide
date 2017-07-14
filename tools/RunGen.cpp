@@ -474,7 +474,7 @@ void fix_chunky_strides(const Shape &constrained_shape, Shape *new_shape) {
     if (new_shape->size() >= 3) {
         if (constrained_shape[2].stride == 1) {
             if (constrained_shape[0].stride >= 1) {
-                // If we have stride[0] and stride[2] std::set to obviously-chunky,
+                // If we have stride[0] and stride[2] set to obviously-chunky,
                 // then force extent[2] to match stride[0].
                 (*new_shape)[2].extent = constrained_shape[0].stride;
             } else {
@@ -1112,29 +1112,11 @@ int main(int argc, char **argv) {
         if (benchmark) {
             info() << "Benchmarking filter...";
 
-<<<<<<< Updated upstream
-        double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv, &args]() {
-            (void) halide_rungen_redirect_argv(&filter_argv[0]);
-            // Ensure that all outputs are finished, otherwise we may just be
-            // measuring how long it takes to do a kernel launch for GPU code.
-            for (auto &arg_pair : args) {
-                auto &arg = arg_pair.second;
-                if (arg.metadata->kind == halide_argument_kind_output_buffer) {
-                    Buffer<> &b = arg.buffer_value;
-                    b.device_sync();
-                }
-=======
             for (int i = 0; i < benchmark_warmup; ++i) {
                 // Ignore result since our halide_error() should catch everything.
                 (void) halide_rungen_redirect_argv(&filter_argv[0]);
->>>>>>> Stashed changes
             }
 
-<<<<<<< Updated upstream
-        std::cout << "Benchmark for " << md->name << " produces best case of " << time_in_seconds << " sec/iter, over "
-            << benchmark_samples << " blocks of " << benchmark_iterations << " iterations.\n";
-        std::cout << "Best output throughput is " << (megapixels / time_in_seconds) << " mpix/sec.\n";
-=======
             double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv, &args]() {
                 // Ignore result since our halide_error() should catch everything.
                 (void) halide_rungen_redirect_argv(&filter_argv[0]);
@@ -1148,7 +1130,6 @@ int main(int argc, char **argv) {
                     }
                 }
               });
->>>>>>> Stashed changes
 
             std::cout << "Benchmark for " << md->name << " produces best case of " << time_in_seconds << " sec/iter, over "
                 << benchmark_samples << " blocks of " << benchmark_iterations << " iterations.\n";
