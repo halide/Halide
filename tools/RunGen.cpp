@@ -478,7 +478,7 @@ void fix_chunky_strides(const Shape &constrained_shape, Shape *new_shape) {
                 // then force extent[2] to match stride[0].
                 (*new_shape)[2].extent = constrained_shape[0].stride;
             } else {
-                // If we have stride[2] == 1 but stride[0] <= 1,
+                // If we have stride[2] == 1 but stride[0] < 1,
                 // force stride[0] = extent[2]
                 (*new_shape)[0].stride = (*new_shape)[2].extent;
             }
@@ -498,17 +498,17 @@ bool adapt_input_buffer_layout(const Shape &constrained_shape, Buffer<> *buf) {
         fail() << "Dimension mismatch";
     }
     for (size_t i = 0; i < constrained_shape.size(); ++i) {
-        // min of nonzero means "min"
+        // min of nonzero means "largest value for min"
         if (constrained_shape[i].min != 0 && new_shape[i].min > constrained_shape[i].min) {
             new_shape[i].min = constrained_shape[i].min;
             shape_changed = true;
         }
-        // extent of nonzero means "max"
+        // extent of nonzero means "largest value for extent"
         if (constrained_shape[i].extent != 0 && new_shape[i].extent > constrained_shape[i].extent) {
             new_shape[i].extent = constrained_shape[i].extent;
             shape_changed = true;
         }
-        // stride of 0 means "no constraints"
+        // stride of nonzero means "required stride", stride of zero means "no constraints"
         if (constrained_shape[i].stride != 0 && new_shape[i].stride != constrained_shape[i].stride) {
             new_shape[i].stride = constrained_shape[i].stride;
             shape_changed = true;
