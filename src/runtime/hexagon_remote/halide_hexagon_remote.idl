@@ -1,7 +1,10 @@
+#include "AEEStdDef.idl"
+
 interface halide_hexagon_remote
 {
     typedef sequence<octet> buffer;
     typedef unsigned long handle_t;
+    typedef unsigned long long scalar_t;
 
     // Routine to initialize a module on the remote side. Returns a pointer to the module.
     long initialize_kernels_v3(in buffer code, rout handle_t module_ptr);
@@ -17,16 +20,11 @@ interface halide_hexagon_remote
     long power_hvx_off();
 
     // Routine to run a pipeline on the remote side.
-    // v2: Pass all scalars and small input buffers in a
-    // small_input_args buffer. The small_input_args buffer is packed
-    // using the protocol in pack_buffer.h. It contains the input
-    // buffers first, followed by the scalars. An input buffer is
-    // passed in the small_input_args buffer if the input buffer is
-    // null.
+    // v2: Pass all scalars in a single buffer as an array of scalar_t.
     long run_v2(in handle_t module_ptr, in handle_t symbol,
                 in sequence<buffer> input_buffers,
                 rout sequence<buffer> output_buffers,
-                in long scalar_count, in buffer small_input_args);
+                in sequence<scalar_t> scalars);
 
     // Routine to clean up a module on the remote side.
     long release_kernels_v2(in handle_t module_ptr);

@@ -15,13 +15,13 @@ extern "C" {
 #include "dlib.h"
 #include "pipeline_context.h"
 #include "log.h"
-#include "pack_buffer.h"
 
 const int stack_alignment = 128;
 const int stack_size = 1024 * 1024;
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
+typedef halide_hexagon_remote_scalar_t scalar_t;
 
 extern "C" {
 
@@ -316,8 +316,7 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
 int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
                                  const buffer *input_buffersPtrs, int input_buffersLen,
                                  buffer *output_buffersPtrs, int output_buffersLen,
-                                 int scalar_count,
-                                 const unsigned char *small_input_args, int small_input_argsLen) {
+                                 const scalar_t *scalars, int scalarsLen) {
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
@@ -330,43 +329,24 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
         uint64_t dev;
         uint8_t* host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + scalar_count + output_buffersLen) * sizeof(void *));
+    void **args = (void **)__builtin_alloca((input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *));
     buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
-
-    const unsigned char *small_input_args_end = small_input_args + small_input_argsLen;
 
     void **next_arg = &args[0];
     buffer_t *next_buffer_t = &buffers[0];
     // Input buffers come first.
     for (int i = 0; i < input_buffersLen; i++, next_arg++, next_buffer_t++) {
-        if (input_buffersPtrs[i].data) {
-            // This buffer is passed directly.
-            next_buffer_t->host = input_buffersPtrs[i].data;
-        } else {
-            // This input buffer was passed in the small_input_args buffer.
-            next_buffer_t->host = const_cast<unsigned char *>(read_buffer(small_input_args));
-            if (small_input_args > small_input_args_end) {
-                log_printf("Input buffer %d read past the end of small_input_args [%p, %p)\n",
-                           i, small_input_args - small_input_args_end);
-                return halide_error_code_access_out_of_bounds;
-            }
-        }
+        next_buffer_t->host = input_buffersPtrs[i].data;
         *next_arg = next_buffer_t;
     }
-
     // Output buffers are next.
     for (int i = 0; i < output_buffersLen; i++, next_arg++, next_buffer_t++) {
         next_buffer_t->host = output_buffersPtrs[i].data;
         *next_arg = next_buffer_t;
     }
     // Input scalars are last.
-    for (int i = 0; i < scalar_count; i++, next_arg++) {
-        *next_arg = const_cast<unsigned char *>(read_buffer(small_input_args));
-        if (small_input_args > small_input_args_end) {
-            log_printf("Input scalar %d read past the end of small_input_args by %d bytes\n",
-                       i, small_input_args - small_input_args_end);
-            return halide_error_code_access_out_of_bounds;
-        }
+    for (int i = 0; i < scalarsLen; i++, next_arg++) {
+        *next_arg = const_cast<scalar_t *>(&scalars[i]);
     }
 
     // Prior to running the pipeline, power HVX on (if it was not already on).
