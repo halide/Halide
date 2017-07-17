@@ -129,9 +129,7 @@ struct FunctionContents {
 
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument &i : extern_arguments) {
-                if (i.is_func()) {
-                    i.func->mutate(mutator);
-                } else if (i.is_expr()) {
+                if (i.is_expr()) {
                     i.expr = mutator->mutate(i.expr);
                 }
             }
