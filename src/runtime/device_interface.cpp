@@ -41,7 +41,7 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
         debug(user_context) << "copy_to_host_already_locked " << buf << " interface is NULL\n";
         return halide_error_code_no_device_interface;
     }
-    int result = interface->copy_to_host(user_context, buf);
+    int result = interface->impl->copy_to_host(user_context, buf);
     if (result != 0) {
         debug(user_context) << "copy_to_host_already_locked " << buf << " device copy_to_host returned an error\n";
         return halide_error_code_copy_to_host_failed;
@@ -52,12 +52,35 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
     return result;
 }
 
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
+
+/** Release all data associated with the current GPU backend, in particular
+ * all resources (memory, texture, context handles) allocated by Halide. Must
+ * be called explicitly when using AOT compilation. */
+WEAK void halide_device_release(void *user_context, const halide_device_interface_t *device_interface) {
+    device_interface->impl->device_release(user_context);
+}
+
+/** Copy image data from device memory to host memory. This must be called
+ * explicitly to copy back the results of a GPU-based filter. */
+WEAK int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
+    ScopedMutexLock lock(&device_copy_mutex);
+
+    debug(NULL) << "halide_copy_to_host " << buf << "\n";
+
+    return copy_to_host_already_locked(user_context, buf);
+}
+
 /** Copy image data from host memory to device memory. This should not be
  * called directly; Halide handles copying to the device automatically. */
 WEAK int copy_to_device_already_locked(void *user_context,
                                        struct halide_buffer_t *buf,
                                        const halide_device_interface_t *device_interface) {
     int result = 0;
+
+    ScopedMutexLock lock(&device_copy_mutex);
 
     debug(user_context)
         << "halide_copy_to_device " << buf
@@ -107,7 +130,7 @@ WEAK int copy_to_device_already_locked(void *user_context,
             debug(user_context) << "halide_copy_to_device " << buf << " dev_dirty is true error\n";
             return halide_error_code_copy_to_device_failed;
         } else {
-            result = device_interface->copy_to_device(user_context, buf);
+            result = device_interface->impl->copy_to_device(user_context, buf);
             if (result == 0) {
                 buf->set_host_dirty(false);
             } else {
@@ -157,7 +180,7 @@ WEAK int halide_device_sync(void *user_context, struct halide_buffer_t *buf) {
         debug(user_context) << "halide_device_sync on buffer with no interface\n";
         return halide_error_code_no_device_interface;
     }
-    int result = device_interface->device_sync(user_context, buf);
+    int result = device_interface->impl->device_sync(user_context, buf);
     if (result) {
         return halide_error_code_device_sync_failed;
     } else {
@@ -185,9 +208,9 @@ WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
 
     // Ensure code is not freed prematurely.
     // TODO: Exception safety...
-    device_interface->use_module();
-    int result = device_interface->device_malloc(user_context, buf);
-    device_interface->release_module();
+    device_interface->impl->use_module();
+    int result = device_interface->impl->device_malloc(user_context, buf);
+    device_interface->impl->release_module();
 
     if (result) {
         return halide_error_code_device_malloc_failed;
@@ -206,9 +229,9 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
         if (device_interface != NULL) {
             // Ensure interface is not freed prematurely.
             // TODO: Exception safety...
-            device_interface->use_module();
-            int result = device_interface->device_free(user_context, buf);
-            device_interface->release_module();
+            device_interface->impl->use_module();
+            int result = device_interface->impl->device_free(user_context, buf);
+            device_interface->impl->release_module();
             halide_assert(user_context, buf->device == 0);
             if (result) {
                 return halide_error_code_device_free_failed;
@@ -255,9 +278,9 @@ WEAK int halide_device_and_host_malloc(void *user_context, struct halide_buffer_
 
     // Ensure code is not freed prematurely.
     // TODO: Exception safety...
-    device_interface->use_module();
-    int result = device_interface->device_and_host_malloc(user_context, buf);
-    device_interface->release_module();
+    device_interface->impl->use_module();
+    int result = device_interface->impl->device_and_host_malloc(user_context, buf);
+    device_interface->impl->release_module();
 
     if (result) {
         halide_error(user_context, "allocating host and device memory failed\n");
@@ -277,9 +300,9 @@ WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t 
         if (device_interface != NULL) {
             // Ensure interface is not freed prematurely.
             // TODO: Exception safety...
-            device_interface->use_module();
-            int result = device_interface->device_and_host_free(user_context, buf);
-            device_interface->release_module();
+            device_interface->impl->use_module();
+            int result = device_interface->impl->device_and_host_free(user_context, buf);
+            device_interface->impl->release_module();
             halide_assert(user_context, buf->device == 0);
             if (result) {
                 return halide_error_code_device_free_failed;
@@ -325,6 +348,59 @@ WEAK int halide_default_device_and_host_free(void *user_context, struct halide_b
     return result;
 }
 
+
+WEAK int halide_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
+                                   const halide_device_interface_t *device_interface) {
+    const halide_device_interface_t *current_interface = buf->device_interface;
+
+    if (current_interface != NULL && current_interface != device_interface) {
+        error(user_context) << "halide_device_wrap_native doesn't support switching interfaces\n";
+        return halide_error_code_device_wrap_native_failed;
+    }
+
+    device_interface->impl->use_module();
+    buf->device_interface = device_interface;
+    int result = device_interface->impl->wrap_native(user_context, buf, handle);
+    device_interface->impl->release_module();
+
+    if (result) {
+        return halide_error_code_device_malloc_failed;
+    } else {
+        return 0;
+    }
+}
+
+WEAK int halide_device_detach_native(void *user_context, struct halide_buffer_t *buf) {
+    const halide_device_interface_t *device_interface = buf->device_interface;
+    int result = 0;
+    if (device_interface != NULL) {
+        device_interface->impl->use_module();
+        result = device_interface->impl->detach_native(user_context, buf);
+        device_interface->impl->release_module();
+        halide_assert(user_context, buf->device == 0);
+        if (result) {
+            result = halide_error_code_device_detach_native_failed;
+        }
+    }
+    return result;
+}
+
+WEAK int halide_default_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle) {
+    buf->device_interface->impl->use_module();
+    buf->device = handle;
+    return 0;
+}
+
+WEAK int halide_default_device_detach_native(void *user_context, struct halide_buffer_t *buf) {
+    if (buf->device == 0) {
+        return 0;
+    }
+    buf->device_interface->impl->release_module();
+    buf->device = 0;
+    buf->device_interface = NULL;
+    return 0;
+}
+
 /** Free any host and device memory associated with a buffer_t and ignore any
  * error. Used when freeing as a destructor on an error. */
 WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *obj) {
@@ -356,7 +432,7 @@ WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *
     if (from_device && to_device) {
         // dev -> dev via dst host memory
         debug(user_context) << " dev -> src via src host memory\n";
-        err = src->device_interface->buffer_copy(user_context, src, NULL, dst);
+        err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
         err = err || copy_to_device_already_locked(user_context, dst, dst_device_interface);
     } else if (from_device && to_host) {
         // dev -> host via src host memory
@@ -427,10 +503,10 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
         // device interface to copy to host memory in the *dst* buffer
         // first (so that only the subset required is copied), and
         // then do a copy_to_device from there.
-        err = dst_device_interface->buffer_copy(user_context, src, dst_device_interface, dst);
+        err = dst_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
     } else if (src_device_interface) {
         // The src device interface can handle copies to host
-        err = src_device_interface->buffer_copy(user_context, src, dst_device_interface, dst);
+        err = src_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
     } else {
         // This is a host->host copy. The default implementation can
         // handle this.

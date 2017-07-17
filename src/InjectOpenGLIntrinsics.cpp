@@ -71,7 +71,7 @@ private:
 
             expr = Call::make(call->type, Call::glsl_texture_load,
                               vector<Expr>(&args[0], &args[5]),
-                              Call::Intrinsic, nullptr, 0,
+                              Call::Intrinsic, FunctionPtr(), 0,
                               call->image, call->param);
         } else if (call->is_intrinsic(Call::image_store)) {
             user_assert(call->args.size() == 6)
