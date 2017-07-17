@@ -56,8 +56,6 @@ class ConvertSelfRef : public IRMutator {
         internal_assert(op);
 
         if ((op->call_type == Call::Halide) && (func == op->name)) {
-            internal_assert(!op->func.defined())
-                << "Func should not have been defined for a self-reference\n";
             internal_assert(args.size() == op->args.size())
                 << "Self-reference should have the same number of args as the original\n";
             for (size_t i = 0; i < op->args.size(); i++) {
@@ -543,7 +541,7 @@ void associativity_test() {
         Expr x = Variable::make(t, "x");
         Expr y = Variable::make(t, "y");
         Expr x_idx = Variable::make(Int(32), "x_idx");
-        Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, nullptr, 0);
+        Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, FunctionPtr(), 0);
 
         // f(x) = uint8(uint16(x + y), 255)
         check_associativity("f", {x_idx}, {Cast::make(UInt(8), min(Cast::make(UInt(16), y + f_call_0), make_const(t, 255)))},
@@ -588,7 +586,7 @@ void associativity_test() {
         Expr x = Variable::make(t, "x");
         Expr y = Variable::make(t, "y");
         Expr x_idx = Variable::make(Int(32), "x_idx");
-        Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, nullptr, 0);
+        Expr f_call_0 = Call::make(t, "f", {x_idx}, Call::CallType::Halide, FunctionPtr(), 0);
 
         // f(x) = y && f(x)
         check_associativity("f", {x_idx}, {And::make(y, f_call_0)},
@@ -622,11 +620,11 @@ void associativity_test() {
         zs[i] = Variable::make(t, "z" + std::to_string(i));
     }
 
-    Expr f_call_0 = Call::make(t, "f", {x}, Call::CallType::Halide, nullptr, 0);
-    Expr f_call_1 = Call::make(t, "f", {x}, Call::CallType::Halide, nullptr, 1);
-    Expr f_call_2 = Call::make(t, "f", {x}, Call::CallType::Halide, nullptr, 2);
-    Expr g_call_0 = Call::make(t, "g", {rx}, Call::CallType::Halide, nullptr, 0);
-    Expr g_call_1 = Call::make(t, "g", {rx}, Call::CallType::Halide, nullptr, 1);
+    Expr f_call_0 = Call::make(t, "f", {x}, Call::CallType::Halide, FunctionPtr(), 0);
+    Expr f_call_1 = Call::make(t, "f", {x}, Call::CallType::Halide, FunctionPtr(), 1);
+    Expr f_call_2 = Call::make(t, "f", {x}, Call::CallType::Halide, FunctionPtr(), 2);
+    Expr g_call_0 = Call::make(t, "g", {rx}, Call::CallType::Halide, FunctionPtr(), 0);
+    Expr g_call_1 = Call::make(t, "g", {rx}, Call::CallType::Halide, FunctionPtr(), 1);
 
     // f(x) = f(x)
     check_associativity("f", {x}, {f_call_0},
@@ -759,11 +757,11 @@ void associativity_test() {
 
     {
         Expr ry = Variable::make(t, "ry");
-        Expr f_xy_call_0 = Call::make(t, "f", {x, y}, Call::CallType::Halide, nullptr, 0);
-        Expr f_xy_call_1 = Call::make(t, "f", {x, y}, Call::CallType::Halide, nullptr, 1);
-        Expr f_xy_call_2 = Call::make(t, "f", {x, y}, Call::CallType::Halide, nullptr, 2);
-        Expr f_xy_call_3 = Call::make(t, "f", {x, y}, Call::CallType::Halide, nullptr, 3);
-        Expr g_xy_call_0 = Call::make(t, "g", {rx, ry}, Call::CallType::Halide, nullptr, 0);
+        Expr f_xy_call_0 = Call::make(t, "f", {x, y}, Call::CallType::Halide, FunctionPtr(), 0);
+        Expr f_xy_call_1 = Call::make(t, "f", {x, y}, Call::CallType::Halide, FunctionPtr(), 1);
+        Expr f_xy_call_2 = Call::make(t, "f", {x, y}, Call::CallType::Halide, FunctionPtr(), 2);
+        Expr f_xy_call_3 = Call::make(t, "f", {x, y}, Call::CallType::Halide, FunctionPtr(), 3);
+        Expr g_xy_call_0 = Call::make(t, "g", {rx, ry}, Call::CallType::Halide, FunctionPtr(), 0);
 
         // 2D argmin + trivial update:
         // f(x, y) = Tuple(min(f(x, y)[0], g(r.x, r.y)[0]),
