@@ -507,9 +507,7 @@ class InjectBufferCopies : public IRMutator {
         string buffer_name = op->name + ".buffer";
         Expr buffer = Variable::make(Handle(), buffer_name);
 
-        // Device what type of allocation to make. Note that we ignore
-        // finder.touched_by_extern. Extern stages just have to deal
-        // with whatever we decide to do here.
+        // Device what type of allocation to make.
 
         if (touched_on_host && finder.devices_touched.size() == 2) {
             // Touched on a single device and the host. Use a combined allocation.
@@ -543,8 +541,10 @@ class InjectBufferCopies : public IRMutator {
             }
 
             Expr condition = op->condition;
-            if (!touched_on_host) {
-                // Only touched on device
+            if (finder.devices_touched.size() == 1 &&
+                !touched_on_host &&
+                !finder.touched_by_extern) {
+                // Only touched on one device, and never passed to an extern stage.
                 condition = const_false();
                 // There's no host allocation, so substitute any
                 // references to it (e.g. the one in the make_buffer

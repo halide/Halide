@@ -113,11 +113,7 @@ bool LoopLevel::operator==(const LoopLevel &other) const {
 
 namespace Internal {
 
-typedef std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> DeepCopyMap;
-
-IntrusivePtr<FunctionContents> deep_copy_function_contents_helper(
-    const IntrusivePtr<FunctionContents> &src,
-    DeepCopyMap &copied_map);
+typedef std::map<FunctionPtr, FunctionPtr> DeepCopyMap;
 
 /** A schedule for a halide function, which defines where, when, and
  * how it should be evaluated. */
@@ -127,7 +123,7 @@ struct FuncScheduleContents {
     LoopLevel store_level, compute_level;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
-    std::map<std::string, IntrusivePtr<Internal::FunctionContents>> wrappers;
+    std::map<std::string, Internal::FunctionPtr> wrappers;
     bool memoized;
 
     FuncScheduleContents() :
@@ -215,7 +211,7 @@ EXPORT void destroy<StageScheduleContents>(const StageScheduleContents *p) {
 FuncSchedule::FuncSchedule() : contents(new FuncScheduleContents) {}
 
 FuncSchedule FuncSchedule::deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const {
+        std::map<FunctionPtr, FunctionPtr> &copied_map) const {
 
     internal_assert(contents.defined()) << "Cannot deep-copy undefined FuncSchedule\n";
     FuncSchedule copy;
@@ -225,17 +221,11 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->bounds = contents->bounds;
     copy.contents->memoized = contents->memoized;
 
-    // Deep-copy wrapper functions. If function has already been deep-copied before,
-    // i.e. it's in the 'copied_map', use the deep-copied version from the map instead
-    // of creating a new deep-copy
+    // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
-        IntrusivePtr<FunctionContents> &copied_func = copied_map[iter.second];
-        if (copied_func.defined()) {
-            copy.contents->wrappers[iter.first] = copied_func;
-        } else {
-            copy.contents->wrappers[iter.first] = deep_copy_function_contents_helper(iter.second, copied_map);
-            copied_map[iter.second] = copy.contents->wrappers[iter.first];
-        }
+        FunctionPtr &copied_func = copied_map[iter.second];
+        internal_assert(copied_func.defined()) << Function(iter.second).name() << "\n";
+        copy.contents->wrappers[iter.first] = copied_func;
     }
     internal_assert(copy.contents->wrappers.size() == contents->wrappers.size());
     return copy;
@@ -265,16 +255,16 @@ const std::vector<Bound> &FuncSchedule::bounds() const {
     return contents->bounds;
 }
 
-std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &FuncSchedule::wrappers() {
+std::map<std::string, Internal::FunctionPtr> &FuncSchedule::wrappers() {
     return contents->wrappers;
 }
 
-const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &FuncSchedule::wrappers() const {
+const std::map<std::string, Internal::FunctionPtr> &FuncSchedule::wrappers() const {
     return contents->wrappers;
 }
 
 void FuncSchedule::add_wrapper(const std::string &f,
-                               const IntrusivePtr<Internal::FunctionContents> &wrapper) {
+                               const Internal::FunctionPtr &wrapper) {
     if (contents->wrappers.count(f)) {
         if (f.empty()) {
             user_warning << "Replacing previous definition of global wrapper in function \""

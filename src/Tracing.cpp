@@ -73,7 +73,9 @@ private:
         bool trace_it = false;
         Expr trace_parent;
         if (op->call_type == Call::Halide) {
-            Function f = env.find(op->name)->second;
+            auto it = env.find(op->name);
+            internal_assert(it != env.end()) << op->name << " not in environment\n";
+            Function f = it->second;
             internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inline());
 
             trace_it = f.is_tracing_loads() || trace_all_loads;
