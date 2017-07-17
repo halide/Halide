@@ -1,6 +1,6 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.1.3)
 
 find_package(LLVM REQUIRED CONFIG)
 
@@ -9,6 +9,11 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+# Require C++11 for everything.
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_MACOSX_RPATH ON)
 
@@ -96,7 +101,6 @@ function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
   else()
-    target_compile_options("${name}" PUBLIC "-std=c++11") # Halide clients need C++11
     target_compile_options("${name}" PUBLIC "-fno-rtti")
   endif()
   target_link_libraries("${name}" PRIVATE Halide)

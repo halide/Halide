@@ -11,30 +11,36 @@ using std::set;
 using std::string;
 using std::vector;
 
-typedef map<Function, Function, Function::Compare> SubstitutionMap;
+typedef map<FunctionPtr, FunctionPtr> SubstitutionMap;
 
 namespace {
 
-void insert_func_wrapper_helper(map<Function, SubstitutionMap, Function::Compare> &func_wrappers_map,
-                                const Function &in_func, const Function &wrapped_func,
-                                const Function &wrapper) {
-    internal_assert(in_func.get_contents().defined() && wrapped_func.get_contents().defined() &&
-                    wrapper.get_contents().defined());
+void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers_map,
+                                FunctionPtr in_func,
+                                FunctionPtr wrapped_func,
+                                FunctionPtr wrapper) {
+    internal_assert(in_func.defined() &&
+                    wrapped_func.defined() &&
+                    wrapper.defined());
     internal_assert(func_wrappers_map[in_func].count(wrapped_func) == 0)
         << "Should only have one wrapper for each function call in a Func\n";
 
     SubstitutionMap &wrappers_map = func_wrappers_map[in_func];
     for (auto iter = wrappers_map.begin(); iter != wrappers_map.end(); ++iter) {
         if (iter->second.same_as(wrapped_func)) {
-            debug(4) << "Merging wrapper of " << in_func.name() << " [" << iter->first.name()
-                     << ", " << iter->second.name() << "] with [" << wrapped_func.name() << ", "
-                     << wrapper.name() << "]\n";
+            debug(4) << "Merging wrapper of " << Function(in_func).name()
+                     << " [" << Function(iter->first).name()
+                     << ", " << Function(iter->second).name()
+                     << "] with [" << Function(wrapped_func).name() << ", "
+                     << Function(wrapper).name() << "]\n";
             iter->second = wrapper;
             return;
         } else if (wrapper.same_as(iter->first)) {
-            debug(4) << "Merging wrapper of " << in_func.name() << " [" << wrapped_func.name()
-                     << ", " << wrapper.name() << "] with [" << iter->first.name() << ", "
-                     << iter->second.name() << "]\n";
+            debug(4) << "Merging wrapper of " << Function(in_func).name()
+                     << " [" << Function(wrapped_func).name()
+                     << ", " << Function(wrapper).name()
+                     << "] with [" << Function(iter->first).name()
+                     << ", " << Function(iter->second).name() << "]\n";
             wrappers_map.emplace(wrapped_func, iter->second);
             wrappers_map.erase(iter);
             return;
@@ -48,17 +54,17 @@ void insert_func_wrapper_helper(map<Function, SubstitutionMap, Function::Compare
 map<string, Function> wrap_func_calls(const map<string, Function> &env) {
     map<string, Function> wrapped_env;
 
-    map<Function, SubstitutionMap, Function::Compare> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
+    map<FunctionPtr, SubstitutionMap> func_wrappers_map; // In Func -> [wrapped Func -> wrapper]
 
     for (const auto &iter : env) {
         wrapped_env.emplace(iter.first, iter.second);
-        func_wrappers_map[iter.second];
+        func_wrappers_map[iter.second.get_contents()];
     }
 
     for (const auto &it : env) {
         string wrapped_fname = it.first;
-        const Function &wrapped_func = it.second;
-        const auto &wrappers = wrapped_func.schedule().wrappers();
+        FunctionPtr wrapped_func = it.second.get_contents();
+        const auto &wrappers = it.second.schedule().wrappers();
 
         // Put the names of all wrappers of this Function into the set for
         // faster comparison during the substitution.
@@ -69,17 +75,19 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
 
         for (const auto &iter : wrappers) {
             string in_func = iter.first;
-            const Function &wrapper = Function(iter.second); // This is already the deep-copy version
+            FunctionPtr wrapper = iter.second;
 
             if (in_func.empty()) { // Global wrapper
                 for (const auto &wrapped_env_iter : wrapped_env) {
                     in_func = wrapped_env_iter.first;
-                    if ((wrapper.name() == in_func) || (all_func_wrappers.find(in_func) != all_func_wrappers.end())) {
+                    if ((wrapped_fname == in_func) ||
+                        (all_func_wrappers.find(in_func) != all_func_wrappers.end())) {
                         // The wrapper should still call the original function,
                         // so we don't want to rewrite the calls done by the
                         // wrapper. We also shouldn't rewrite the original
                         // function itself.
-                        debug(4) << "Skip over replacing \"" << in_func << "\" with \"" << wrapper.name() << "\"\n";
+                        debug(4) << "Skip over replacing \"" << in_func
+                                 << "\" with \"" << Function(wrapper).name() << "\"\n";
                         continue;
                     }
                     if (wrappers.count(in_func)) {
@@ -90,13 +98,15 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                     }
                     debug(4) << "Global wrapper: replacing reference of \""
                              << wrapped_fname <<  "\" in \"" << in_func
-                             << "\" with \"" << wrapper.name() << "\"\n";
-                    insert_func_wrapper_helper(func_wrappers_map, wrapped_env_iter.second, wrapped_func, wrapper);
+                             << "\" with \"" << Function(wrapper).name() << "\"\n";
+                    insert_func_wrapper_helper(func_wrappers_map,
+                                               wrapped_env_iter.second.get_contents(),
+                                               wrapped_func, wrapper);
                 }
             } else { // Custom wrapper
                 debug(4) << "Custom wrapper: replacing reference of \""
                          << wrapped_fname <<  "\" in \"" << in_func << "\" with \""
-                         << wrapper.name() << "\"\n";
+                         << Function(wrapper).name() << "\"\n";
 
                 const auto &in_func_iter = wrapped_env.find(in_func);
                 if (in_func_iter == wrapped_env.end()) {
@@ -111,17 +121,20 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                     // f.in(g);
                     // f.realize(..);
                     debug(4) << "    skip custom wrapper for " << in_func << " [" << wrapped_fname
-                             << " -> " << wrapper.name() << "] since it's not in the pipeline\n";
+                             << " -> " << Function(wrapper).name() << "] since it's not in the pipeline\n";
                     continue;
                 }
-                insert_func_wrapper_helper(func_wrappers_map, wrapped_env[in_func], wrapped_func, wrapper);
+                insert_func_wrapper_helper(func_wrappers_map,
+                                           wrapped_env[in_func].get_contents(),
+                                           wrapped_func,
+                                           wrapper);
             }
         }
     }
 
     // Perform the substitution
     for (auto &iter : wrapped_env) {
-        const auto &substitutions = func_wrappers_map[iter.second];
+        const auto &substitutions = func_wrappers_map[iter.second.get_contents()];
         if (!substitutions.empty()) {
             iter.second.substitute_calls(substitutions);
         }

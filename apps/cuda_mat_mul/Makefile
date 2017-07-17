@@ -7,7 +7,7 @@ all: $(BIN)/runner
 
 $(BIN)/mat_mul_exec: mat_mul_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/mat_mul.a: $(BIN)/mat_mul_exec
 	@-mkdir -p $(BIN)
