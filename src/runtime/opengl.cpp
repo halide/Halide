@@ -2064,6 +2064,7 @@ WEAK halide_device_interface_t opengl_device_interface = {
     halide_copy_to_device,
     halide_device_and_host_malloc,
     halide_device_and_host_free,
+    halide_buffer_copy,
     halide_device_wrap_native,
     halide_device_detach_native,
     &opengl_device_interface_impl
