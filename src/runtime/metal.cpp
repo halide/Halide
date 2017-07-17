@@ -806,6 +806,7 @@ WEAK halide_device_interface_impl_t metal_device_interface_impl = {
     halide_metal_copy_to_device,
     halide_metal_device_and_host_malloc,
     halide_metal_device_and_host_free,
+    halide_default_buffer_copy,
     halide_metal_wrap_buffer,
     halide_metal_detach_buffer
 };
@@ -819,6 +820,7 @@ WEAK halide_device_interface_t metal_device_interface = {
     halide_copy_to_device,
     halide_device_and_host_malloc,
     halide_device_and_host_free,
+    halide_buffer_copy,
     halide_device_wrap_native,
     halide_device_detach_native,
     &metal_device_interface_impl

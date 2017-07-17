@@ -632,7 +632,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
         halide_assert(user_context, dst_device_interface == &cuda_device_interface);
         // If the source is not cuda or host memory, ask the source
         // device interface to copy to dst host memory first.
-        int err = src->device_interface->buffer_copy(user_context, src, NULL, dst);
+        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
         if (err) return err;
         // Now just copy from src to host
         src = dst;
@@ -921,7 +921,7 @@ WEAK halide_device_interface_impl_t cuda_device_interface_impl = {
     halide_cuda_copy_to_device,
     halide_cuda_device_and_host_malloc,
     halide_cuda_device_and_host_free,
-    halide_default_buffer_copy,
+    halide_cuda_buffer_copy,
     halide_cuda_wrap_device_ptr,
     halide_cuda_detach_device_ptr,
 };
@@ -935,6 +935,7 @@ WEAK halide_device_interface_t cuda_device_interface = {
     halide_copy_to_device,
     halide_device_and_host_malloc,
     halide_device_and_host_free,
+    halide_buffer_copy,
     halide_device_wrap_native,
     halide_device_detach_native,
     &cuda_device_interface_impl

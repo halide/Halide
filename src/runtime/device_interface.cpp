@@ -67,9 +67,7 @@ WEAK void halide_device_release(void *user_context, const halide_device_interfac
  * explicitly to copy back the results of a GPU-based filter. */
 WEAK int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
     ScopedMutexLock lock(&device_copy_mutex);
-
     debug(NULL) << "halide_copy_to_host " << buf << "\n";
-
     return copy_to_host_already_locked(user_context, buf);
 }
 
@@ -79,8 +77,6 @@ WEAK int copy_to_device_already_locked(void *user_context,
                                        struct halide_buffer_t *buf,
                                        const halide_device_interface_t *device_interface) {
     int result = 0;
-
-    ScopedMutexLock lock(&device_copy_mutex);
 
     debug(user_context)
         << "halide_copy_to_device " << buf
@@ -142,24 +138,6 @@ WEAK int copy_to_device_already_locked(void *user_context,
     }
 
     return 0;
-}
-
-}}} // namespace Halide::Runtime::Internal
-
-extern "C" {
-
-/** Release all data associated with the current GPU backend, in particular
- * all resources (memory, texture, context handles) allocated by Halide. Must
- * be called explicitly when using AOT compilation. */
-WEAK void halide_device_release(void *user_context, const halide_device_interface_t *device_interface) {
-    device_interface->device_release(user_context);
-}
-
-/** Copy image data from device memory to host memory. This must be called
- * explicitly to copy back the results of a GPU-based filter. */
-WEAK int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
-    ScopedMutexLock lock(&device_copy_mutex);
-    return copy_to_host_already_locked(user_context, buf);
 }
 
 WEAK int halide_copy_to_device(void *user_context,
@@ -458,14 +436,6 @@ WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *
 WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
                             const struct halide_device_interface_t *dst_device_interface,
                             struct halide_buffer_t *dst) {
-    // Temporary hack: Make this act like a valid extern stage
-    if (src->host == NULL && src->device == 0) {
-        for (int i = 0; i < src->dimensions; i++) {
-            src->dim[i] = dst->dim[i];
-        }
-        return 0;
-    }
-
     ScopedMutexLock lock(&device_copy_mutex);
 
     debug(user_context) << "halide_buffer_copy:\n"
@@ -489,10 +459,10 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
     }
 
     if (dst_device_interface) {
-        dst_device_interface->use_module();
+        dst_device_interface->impl->use_module();
     }
     if (src_device_interface) {
-        src_device_interface->use_module();
+        src_device_interface->impl->use_module();
     }
 
     if (dst_device_interface) {
@@ -526,10 +496,10 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
     }
 
     if (dst_device_interface) {
-        dst_device_interface->release_module();
+        dst_device_interface->impl->release_module();
     }
     if (src_device_interface) {
-        src_device_interface->release_module();
+        src_device_interface->impl->release_module();
     }
 
     return err;
