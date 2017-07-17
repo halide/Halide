@@ -37,7 +37,7 @@ $(BIN)/%/filters.h:
 
 $(BIN)/driver-%: driver.cpp $(BIN)/%/filters.h
 	@-mkdir -p $(BIN)/$*
-	$(CXX-$*) $(CXXFLAGS-$*) -I ../../include -O3 -I $(BIN)/$* driver.cpp $(BIN)/$*/test_*.o $(BIN)/$*/simd_op_check_runtime.o -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) -I ../../include -O3 -I $(BIN)/$* driver.cpp $(BIN)/$*/test_*.o $(BIN)/$*/simd_op_check_runtime.o -o $@ $(LDFLAGS-$*) $(HALIDE_SYSTEM_LDFLAGS)
 
 clean:
 	rm -rf $(BIN)

@@ -40,7 +40,7 @@ function(halide_generator_add_exec_generator_target EXEC_TARGET)
   set_target_properties(${EXEC_TARGET} PROPERTIES FOLDER "generator")
 endfunction()
 
-# This function adds custom build steps to invoke a Halide generator exectuable
+# This function adds custom build steps to invoke a Halide generator executable
 # and produce a static library containing the generated code.
 #
 # The generator executable must be produced separately, e.g. using a call to the
@@ -70,7 +70,7 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   # Parse arguments
   set(options )
   set(oneValueArgs GENERATOR_TARGET GENERATOR_NAME GENERATED_FUNCTION)
-  set(multiValueArgs GENERATOR_ARGS GENERATOR_OUTPUTS)
+  set(multiValueArgs GENERATOR_ARGS GENERATOR_OUTPUTS FILTER_DEPS)
   cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   if (args_GENERATED_FUNCTION STREQUAL "")
@@ -129,6 +129,27 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
     GENFILES_DIR     ${GENFILES_DIR}
     OUTPUTS          ${OUTPUTS}
   )
+
+  # ------ Code to build the RunGen target
+
+  set(RUNGEN "${AOT_LIBRARY_TARGET}.rungen")
+  add_executable("${RUNGEN}" "${CMAKE_SOURCE_DIR}/tools/RunGenStubs.cpp")
+  target_compile_definitions("${RUNGEN}" PRIVATE "-DHL_RUNGEN_FILTER_HEADER=\"${AOT_LIBRARY_TARGET}.h\"")
+  target_link_libraries("${RUNGEN}" PRIVATE HalideToolsRunGen)
+  halide_add_aot_library_dependency("${RUNGEN}" "${AOT_LIBRARY_TARGET}")
+  target_link_libraries("${RUNGEN}" PRIVATE ${args_FILTER_DEPS})
+
+  # Not all Generators will build properly with RunGen (e.g., missing
+  # external dependencies), so exclude them from the "ALL" targets
+  set_target_properties("${RUNGEN}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+  add_custom_target("${AOT_LIBRARY_TARGET}.run" 
+                    COMMAND "${RUNGEN}" "$(RUNARGS)"
+                    DEPENDS "${RUNGEN}")
+  set_target_properties("${AOT_LIBRARY_TARGET}.run" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+  # ---------
+
 endfunction(halide_add_aot_library)
 
 # Usage:

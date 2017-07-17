@@ -7,7 +7,6 @@ halide_add_generator(blas_l3.generator SRCS blas_l3_generators.cpp)
 add_library(halide_blas
   halide_blas.cpp
 )
-target_compile_options(halide_blas PRIVATE -std=c++11)
 
 set(GENERATOR_OUTPUTS h static_library)
 set(GENERATOR_TARGET host-no_asserts-no_bounds_query)
