@@ -515,6 +515,8 @@ struct halide_device_interface_t {
     int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf,
                                   const struct halide_device_interface_t *device_interface);
     int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+    int (*buffer_copy)(void *user_context, struct halide_buffer_t *src,
+                       const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                        const struct halide_device_interface_t *device_interface);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
@@ -835,11 +837,6 @@ enum halide_error_code_t {
     /** A specialize_fail() schedule branch was selected at runtime. */
     halide_error_code_specialize_fail = -31,
 
-    /** The Halide runtime encountered an error while trying to copy
-     * from one buffer to another. Turn on -debug in your target
-     * string to see more details. */
-    halide_error_code_device_buffer_copy_failed = -32,
-=======
     /** The Halide runtime encountered an error while trying to wrap a
      * native device handle.  Turn on -debug in your target string to
      * see more details. */
@@ -850,7 +847,10 @@ enum halide_error_code_t {
      * to see more details. */
     halide_error_code_device_detach_native_failed = -33,
 
->>>>>>> fix_wrapper_leak
+    /** The Halide runtime encountered an error while trying to copy
+     * from one buffer to another. Turn on -debug in your target
+     * string to see more details. */
+    halide_error_code_device_buffer_copy_failed = -34,
 };
 
 /** Halide calls the functions below on various error conditions. The
