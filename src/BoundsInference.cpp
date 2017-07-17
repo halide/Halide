@@ -229,10 +229,6 @@ public:
             exprs.clear();
             rvars.clear();
 
-            if (func.extern_definition_proxy_expr().defined()) {
-                exprs.push_back(CondValue(const_true(), func.extern_definition_proxy_expr()));
-            }
-
             bool is_update = (stage != 0);
             vector<vector<CondValue>> result;
             if (!is_update) {
@@ -243,6 +239,11 @@ public:
             }
             internal_assert(result.size() == 2);
             exprs = result[0];
+
+            if (func.extern_definition_proxy_expr().defined()) {
+                exprs.push_back(CondValue(const_true(), func.extern_definition_proxy_expr()));
+            }
+
             exprs.insert(exprs.end(), result[1].begin(), result[1].end());
         }
 
