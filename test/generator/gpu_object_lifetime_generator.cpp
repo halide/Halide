@@ -15,8 +15,7 @@ public:
             Var xo, xi;
             f.gpu_tile(x, xo, xi, 16);
         }
-        // The test requires gpu_debug to examine the output.
-        target.set_feature(Target::Debug);
+
         return f;
     }
 };
