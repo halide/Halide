@@ -699,6 +699,7 @@ $(INCLUDE_DIR)/HalideBuffer.h: $(SRC_DIR)/runtime/HalideBuffer.h
 	cp $< $(INCLUDE_DIR)/
 
 $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
+	@-mkdir -p $(BIN_DIR)
 	$(CXX) $< -o $@
 
 -include $(OBJECTS:.o=.d)
@@ -1236,7 +1237,7 @@ $(BUILD_DIR)/RunGen.o: $(ROOT_DIR)/tools/RunGen.cpp $(RUNTIME_EXPORTED_INCLUDES)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
-$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGen.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a 
+$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGen.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a
 	$(CXX) -DHL_RUNGEN_FILTER=$* $^ $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 RUNARGS ?=
