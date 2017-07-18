@@ -159,7 +159,7 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
     dst->device_interface = 0;
     dst->device = 0;
     if (src->device_interface) {
-        src->device_interface->buffer_crop(user_context, src, dst);
+        src->device_interface->device_crop(user_context, src, dst);
     }
     return dst;
 }

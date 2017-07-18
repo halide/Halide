@@ -21,10 +21,10 @@ struct halide_device_interface_impl_t {
     int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
     int (*buffer_copy)(void *user_context, struct halide_buffer_t *src,
                        const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
-    int (*buffer_crop)(void *user_context,
+    int (*device_crop)(void *user_context,
                        const struct halide_buffer_t *src,
                        struct halide_buffer_t *dst);
-    int (*buffer_release_crop)(void *user_context,
+    int (*device_release_crop)(void *user_context,
                                struct halide_buffer_t *buf);
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
@@ -37,9 +37,9 @@ extern WEAK int halide_default_device_and_host_free(void *user_context, struct h
 extern WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                            const struct halide_device_interface_t *dst_device_interface,
                                            struct halide_buffer_t *dst);
-extern WEAK int halide_default_buffer_crop(void *user_context, const struct halide_buffer_t *src,
+extern WEAK int halide_default_device_crop(void *user_context, const struct halide_buffer_t *src,
                                            struct halide_buffer_t *dst);
-extern WEAK int halide_default_buffer_release_crop(void *user_context, struct halide_buffer_t *buf);
+extern WEAK int halide_default_device_release_crop(void *user_context, struct halide_buffer_t *buf);
 extern WEAK int halide_default_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle);
 extern WEAK int halide_default_device_detach_native(void *user_context, struct halide_buffer_t *buf);
 

@@ -2097,7 +2097,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         vector<Value *> args = {user_context, char_ptr, codegen(op->args[1])};
 
         Value *buffer = codegen(op->args[2]);
-        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+        buffer = builder->CreatePointerCast(buffer, debug_to_file->getFunctionType()->getParamType(3));
         args.push_back(buffer);
 
         value = builder->CreateCall(debug_to_file, args);
