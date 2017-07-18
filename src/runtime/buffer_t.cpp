@@ -164,6 +164,50 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
     return dst;
 }
 
+// Called on return from an extern stage where the output buffer was a
+// crop of some other larger buffer. This happens for extern stages
+// with distinct store_at/compute_at levels. Each call to the stage
+// only fills in part of the buffer.
+HALIDE_BUFFER_HELPER_ATTRS
+void _halide_buffer_retire_crop(void *user_context,
+                                void *obj) {
+    halide_buffer_t **buffers = (halide_buffer_t **)obj;
+    halide_buffer_t *crop = buffers[0];
+    halide_buffer_t *parent = buffers[1];
+
+    if (crop->device) {
+        if (!parent->device) {
+            // We have been given a device allocation by the extern
+            // stage. It only represents the cropped region, so we
+            // can't just give it to the parent.
+            if (crop->device_dirty()) {
+                crop->device_interface->copy_to_host(user_context, crop);
+            }
+            crop->device_interface->device_free(user_context, crop);
+        } else {
+            // We are a crop of an existing device allocation.
+            if (crop->device_dirty()) {
+                parent->set_device_dirty();
+            }
+            crop->device_interface->device_release_crop(user_context, crop);
+        }
+    }
+    if (crop->host_dirty()) {
+        parent->set_host_dirty();
+    }
+
+}
+
+HALIDE_BUFFER_HELPER_ATTRS
+void _halide_buffer_retire_crops(void *user_context,
+                                 void *obj) {
+    halide_buffer_t **buffers = (halide_buffer_t **)obj;
+    while (*buffers) {
+        _halide_buffer_retire_crop(user_context, buffers);
+        buffers += 2;
+    }
+}
+
 }
 
 #undef HALIDE_BUFFER_HELPER_ATTRS

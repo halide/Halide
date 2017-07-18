@@ -784,6 +784,7 @@ void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stac
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
+    stack_slot = builder->CreatePointerCast(stack_slot, i8_t->getPointerTo()->getPointerTo());
     Value *should_call = ConstantInt::get(i1_t, 1);
     Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
     builder->CreateCall(call_destructor, args);
@@ -2470,12 +2471,11 @@ void CodeGen_LLVM::visit(const Call *op) {
                 value = create_alloca_at_entry(i8_t, *sz);
             }
         }
-    } else if (op->is_intrinsic(Call::register_destructor)) {
+    } else if (op->is_intrinsic(Call::register_destructor) ||
+               op->is_intrinsic(Call::trigger_destructor)) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
         internal_assert(fn);
-        Expr arg = op->args[1];
-        internal_assert(arg.type().is_handle());
         llvm::Function *f = module->getFunction(fn->value);
         if (!f) {
             llvm::Type *arg_types[] = {i8_t->getPointerTo(), i8_t->getPointerTo()};
@@ -2483,7 +2483,14 @@ void CodeGen_LLVM::visit(const Call *op) {
             f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module.get());
             f->setCallingConv(CallingConv::C);
         }
-        register_destructor(f, codegen(arg), Always);
+        internal_assert(op->args[1].type().is_handle());
+        Value *arg = codegen(op->args[1]);
+        if (op->is_intrinsic(Call::register_destructor)) {
+            value = register_destructor(f, arg, Always);
+        } else {
+            trigger_destructor(f, arg);
+            value = ConstantInt::get(i32_t, 0);
+        }
     } else if (op->is_intrinsic(Call::call_cached_indirect_function)) {
         // Arguments to call_cached_indirect_function are of the form
         //

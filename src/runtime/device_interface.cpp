@@ -530,15 +530,18 @@ WEAK int halide_device_crop(void *user_context,
     src->device_interface->impl->use_module();
     int err = src->device_interface->impl->device_crop(user_context, src, dst);
 
-    debug(0) << "halide_device_crop " << "\n"
-             << " src: " << *src << "\n"
-             << " dst: " << *dst << "\n";
+    debug(user_context) << "halide_device_crop " << "\n"
+                        << " src: " << *src << "\n"
+                        << " dst: " << *dst << "\n";
 
     return err;
 }
 
 WEAK int halide_default_device_release_crop(void *user_context,
                                             struct halide_buffer_t *buf) {
+    if (!buf->device) {
+        return 0;
+    }
     error(user_context) << "device_interface does not support cropping\n";
     return halide_error_code_device_crop_unsupported;
 }
@@ -546,15 +549,17 @@ WEAK int halide_default_device_release_crop(void *user_context,
 
 WEAK int halide_device_release_crop(void *user_context,
                                     struct halide_buffer_t *buf) {
-    ScopedMutexLock lock(&device_copy_mutex);
-
     if (!buf->device) {
         return 0;
     }
 
-    int result = buf->device_interface->impl->device_release_crop(user_context, buf);
-    buf->device_interface->impl->release_module();
-    return result;
+    {
+        ScopedMutexLock lock(&device_copy_mutex);
+        const struct halide_device_interface_t *interface = buf->device_interface;
+        int result = interface->impl->device_release_crop(user_context, buf);
+        interface->impl->release_module();
+        return result;
+    }
 }
 
 } // extern "C" linkage

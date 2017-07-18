@@ -7,11 +7,6 @@ class BufferCopy : public Halide::Generator<BufferCopy> {
 public:
     Input<Func> input {"input", Float(32), 2 };
 
-    // We're going to be calling some runtime functions as if they
-    // were extern stages, so we want a device_interface_t param.
-    Input<const struct halide_device_interface_t *>
-       device_interface {"device_interface"};
-
     Output<Func> output {"output", Float(32), 2 };
 
     Func dev_1, host_1, dev_2;

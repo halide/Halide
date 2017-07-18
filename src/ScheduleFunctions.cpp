@@ -386,6 +386,7 @@ Stmt build_produce(Function f, const Target &target) {
         // ones already injected by allocation bounds inference. If
         // it's the output to the pipeline then it will similarly be
         // in the symbol table.
+        vector<pair<Expr, Expr>> cropped_buffers;
         if (f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
@@ -445,6 +446,7 @@ Stmt build_produce(Function f, const Target &target) {
                 // Since this is a temporary, internal-only buffer, make sure it's marked.
                 // (but not the contents! callee is expected to fill that in.)
                 buffers_to_annotate.push_back({extern_call_args.back(), f.dimensions()});
+                cropped_buffers.push_back({extern_call_args.back(), src_buffer});
                 lets.push_back({ buf_name, output_buffer_t });
             }
         }
@@ -496,6 +498,49 @@ Stmt build_produce(Function f, const Target &target) {
         Stmt check = AssertStmt::make(EQ::make(result, 0), error);
         check = LetStmt::make(result_name, e, check);
 
+        if (!cropped_buffers.empty()) {
+            // We need to clean up the temporary crops we made for the
+            // outputs in case any of them have device allocations.
+            vector<Expr> cleanup_args;
+
+            // Make a struct with the buffers and their uncropped parents
+            for (auto p : cropped_buffers) {
+                // The cropped buffer_t
+                cleanup_args.push_back(p.first);
+                // Its parent
+                cleanup_args.push_back(p.second);
+            }
+
+            if (cropped_buffers.size() > 1) {
+                // NULL-terminate it
+                cleanup_args.push_back(make_zero(type_of<struct halide_buffer_t *>()));
+            }
+
+            Expr cleanup_struct = Call::make(Handle(),
+                                             Call::make_struct,
+                                             cleanup_args,
+                                             Call::Intrinsic);
+
+            // We have to anticipate failures in the extern stage, so
+            // call this by registering a destructor before the extern
+            // call and triggering it afterwards.
+            string destructor_name = unique_name('d');
+            Expr destructor = Variable::make(Handle(), destructor_name);
+            Expr fn = (cropped_buffers.size() == 1 ?
+                       Expr("_halide_buffer_retire_crop") :
+                       Expr("_halide_buffer_retire_crops"));
+            Expr trigger_destructor = Call::make(Int(32),
+                                                 Call::trigger_destructor,
+                                                 {fn, destructor},
+                                                 Call::Intrinsic);
+            check = Block::make(check, Evaluate::make(trigger_destructor));
+            Expr register_destructor = Call::make(Handle(),
+                                                  Call::register_destructor,
+                                                  {fn, cleanup_struct},
+                                                  Call::Intrinsic);
+            check = LetStmt::make(destructor_name, register_destructor, check);
+        }
+
         for (size_t i = 0; i < lets.size(); i++) {
             check = LetStmt::make(lets[i].first, lets[i].second, check);
         }
@@ -503,6 +548,7 @@ Stmt build_produce(Function f, const Target &target) {
         if (annotate.defined()) {
             check = Block::make(annotate, check);
         }
+
         return check;
     } else {
 

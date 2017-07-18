@@ -1872,8 +1872,6 @@ Func Func::copy_to_device(DeviceAPI d) {
         << "value: " << rhs << "\n"
         << "expected value: " << expected_rhs << "\n";
 
-    //NOTE TO SELF: This seems to be causing an infinite loop of some type in deep_copy_function_contents
-
     // We'll preserve the pure vars
     func.definition().values().clear();
     func.extern_definition_proxy_expr() = rhs;
