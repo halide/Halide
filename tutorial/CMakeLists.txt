@@ -81,10 +81,6 @@ if (BUILD_AOT_TUTORIAL)
   target_include_directories(lesson_10_aot_compilation_run PRIVATE "${FILTER_DIR}")
   # Needed to find HalideBuffer.h
   target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_BINARY_DIR}/include")
-  # HalideBuffer.h requires C++11
-  if (NOT MSVC)
-    target_compile_options(lesson_10_aot_compilation_run PUBLIC "-std=c++11")
-  endif()
 
   if (NOT WIN32)
     target_link_libraries(lesson_10_aot_compilation_run PRIVATE dl pthread)

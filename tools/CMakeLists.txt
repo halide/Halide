@@ -11,6 +11,5 @@ target_compile_definitions(HalideToolsRunGen PUBLIC "-D_CRT_SECURE_NO_WARNINGS" 
 use_image_io(HalideToolsRunGen)
 if (MSVC)
 else()
-  target_compile_options(HalideToolsRunGen PUBLIC "-std=c++11") # Halide clients need C++11
   target_compile_options(HalideToolsRunGen PUBLIC "-fno-rtti")
 endif()

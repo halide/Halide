@@ -26,7 +26,7 @@ all: $(BIN)/process-host $(BIN)/process-arm-64-android $(BIN)/process-arm-32-and
 
 $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/pipeline_cpu.o: $(BIN)/pipeline
 	@-mkdir -p $(BIN)/$*

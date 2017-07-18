@@ -1,20 +1,13 @@
-#ifndef HL_RUNGEN_FILTER
-    #error "You must define HL_RUNGEN_FILTER"
-#endif
+#define HALIDE_GET_STANDARD_ARGV_FUNCTION halide_rungen_redirect_argv_getter
+#define HALIDE_GET_STANDARD_METADATA_FUNCTION halide_rungen_redirect_metadata_getter
 
-#define HL_RUNGEN_NAME__(prefix, suffix) prefix##suffix
-#define HL_RUNGEN_NAME_(prefix, suffix) HL_RUNGEN_NAME__(prefix, suffix)
-#define HL_RUNGEN_NAME(suffix) HL_RUNGEN_NAME_(HL_RUNGEN_FILTER, suffix)
-
-struct halide_filter_metadata_t;
-
-extern "C" int HL_RUNGEN_NAME(_argv)(void **args);
-extern "C" const struct halide_filter_metadata_t *HL_RUNGEN_NAME(_metadata)();
+// This is legal C, as long as the macro expands to a single quoted (or <>-enclosed) string literal
+#include HL_RUNGEN_FILTER_HEADER
 
 extern "C" int halide_rungen_redirect_argv(void **args) {
-    return HL_RUNGEN_NAME(_argv)(args);
+    return halide_rungen_redirect_argv_getter()(args);
 }
 
 extern "C" const struct halide_filter_metadata_t *halide_rungen_redirect_metadata() {
-    return HL_RUNGEN_NAME(_metadata)();
+    return halide_rungen_redirect_metadata_getter()();
 }

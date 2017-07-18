@@ -630,7 +630,6 @@ if (MSVC)
     target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
   endif()
 else()
-  target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
   target_compile_options(Halide PUBLIC "-fno-rtti")
 endif()
 

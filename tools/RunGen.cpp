@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -248,7 +249,7 @@ class HalideMemoryTracker {
 
 /* static */ HalideMemoryTracker *HalideMemoryTracker::active{nullptr};
 
-std::vector<std::string> split_string(const std::string &source, 
+std::vector<std::string> split_string(const std::string &source,
                                       const std::string &delim) {
     std::vector<std::string> elements;
     size_t start = 0;
@@ -266,8 +267,8 @@ std::vector<std::string> split_string(const std::string &source,
     return elements;
 }
 
-std::string replace_all(const std::string &str, 
-                        const std::string &find, 
+std::string replace_all(const std::string &str,
+                        const std::string &find,
                         const std::string &replace) {
     size_t pos = 0;
     std::string result = str;
@@ -299,7 +300,7 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 // variants *will* be instantiated (increasing code size), so this approach
 // should only be used when strictly necessary.
 template<template<typename> class Functor, typename... Args>
-auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) -> 
+auto dynamic_type_dispatch(const halide_type_t &type, Args&&... args) ->
     decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
 #define HANDLE_CASE(CODE, BITS, TYPE) \
@@ -330,10 +331,36 @@ template<typename T>
 struct ScalarParser {
     bool operator()(const std::string &str, halide_scalar_value_t *v) {
         std::istringstream iss(str);
-        iss >> *(T*)v;
+        // std::setbase(0) means "infer base from input", and allows hex and octal constants
+        iss >> std::setbase(0) >> *(T*)v;
         return !iss.fail() && iss.get() == EOF;
     }
 };
+
+// Override for int8 and uint8, to avoid parsing as char variants
+template<>
+bool ScalarParser<int8_t>::operator()(const std::string &str, halide_scalar_value_t *v) {
+    std::istringstream iss(str);
+    int i;
+    iss >> std::setbase(0) >> i;
+    if (!(!iss.fail() && iss.get() == EOF) || i < -128 || i > 127) {
+      return false;
+    }
+    v->u.i8 = (int8_t) i;
+    return true;
+}
+
+template<>
+bool ScalarParser<uint8_t>::operator()(const std::string &str, halide_scalar_value_t *v) {
+    std::istringstream iss(str);
+    unsigned int u;
+    iss >> std::setbase(0) >> u;
+    if (!(!iss.fail() && iss.get() == EOF) || u > 255) {
+      return false;
+    }
+    v->u.u8 = (uint8_t) u;
+    return true;
+}
 
 // Override for bool, since istream just expects '1' or '0'.
 template<>
@@ -377,21 +404,48 @@ bool parse_scalar(const halide_type_t &type,
 //    [extent0, extent1...]
 //
 // Return a vector<halide_dimension_t> (aka a "shape") with the extents filled in,
-// but with the min and stride of each dimension set to zero.
+// but with the min of each dimension set to zero and the stride set to the
+// planar-default value.
 Shape parse_extents(const std::string &extent_list) {
     if (extent_list.empty() || extent_list[0] != '[' || extent_list.back() != ']') {
         fail() << "Invalid format for extents: " << extent_list;
     }
     Shape result;
     std::vector<std::string> extents = split_string(extent_list.substr(1, extent_list.size()-2), ",");
-    for (auto &s : extents) {
-        halide_dimension_t d = {0, 0, 0};
+    for (size_t i = 0; i < extents.size(); i++) {
+      const std::string &s = extents[i];
+        const int stride = (i == 0) ? 1 : result[i-1].stride * result[i-1].extent;
+        halide_dimension_t d = {0, 0, stride};
         if (!parse_scalar(s, &d.extent)) {
             fail() << "Invalid value for extents: " << s << " (" << extent_list << ")";
         }
         result.push_back(d);
     }
     return result;
+}
+
+// Given a Buffer<>, return its shape in the form of a vector<halide_dimension_t>.
+// (Oddly, Buffer<> has no API to do this directly.)
+Shape get_shape(const Buffer<> &b) {
+    Shape s;
+    for (int i = 0; i < b.dimensions(); ++i) {
+        s.push_back(b.raw_buffer()->dim[i]);
+    }
+    return s;
+}
+
+// Given a type and shape, create a new Buffer<> but *don't* allocate allocate storage for it.
+Buffer<> make_with_shape(const halide_type_t &type, const Shape &shape) {
+    return Buffer<>(type, nullptr, (int) shape.size(), &shape[0]);
+}
+
+// Given a type and shape, create a new Buffer<> and allocate storage for it.
+// (Oddly, Buffer<> has an API to do this with vector-of-extent, but not vector-of-halide_dimension_t.)
+Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
+    Buffer<> b = make_with_shape(type, shape);
+    b.check_overflow();
+    b.allocate();
+    return b;
 }
 
 // BEGIN TODO: hacky algorithm inspired by Safelight
@@ -408,7 +462,72 @@ Shape choose_output_extents(int dimensions, const Shape &defaults) {
     return s;
 }
 
-Shape fix_bounds_query_shape(const Shape &constrained_shape) {
+void fix_chunky_strides(const Shape &constrained_shape, Shape *new_shape) {
+    // Special-case Chunky: most "chunky" generators tend to constrain stride[0]
+    // and stride[2] to exact values, leaving stride[1] unconstrained;
+    // in practice, we must ensure that stride[1] == stride[0] * extent[0]
+    // and stride[0] = extent[2] to get results that are not garbled.
+    // This is unpleasantly hacky and will likely need aditional enhancements.
+    // (Note that there are, theoretically, other stride combinations that might
+    // need fixing; in practice, ~all generators that aren't planar tend
+    // to be classically chunky.)
+    if (new_shape->size() >= 3) {
+        if (constrained_shape[2].stride == 1) {
+            if (constrained_shape[0].stride >= 1) {
+                // If we have stride[0] and stride[2] set to obviously-chunky,
+                // then force extent[2] to match stride[0].
+                (*new_shape)[2].extent = constrained_shape[0].stride;
+            } else {
+                // If we have stride[2] == 1 but stride[0] < 1,
+                // force stride[0] = extent[2]
+                (*new_shape)[0].stride = (*new_shape)[2].extent;
+            }
+            // Ensure stride[1] is reasonable.
+            (*new_shape)[1].stride = (*new_shape)[0].extent * (*new_shape)[0].stride;
+        }
+    }
+}
+
+// Given a constraint Shape (generally produced by a bounds query), update
+// the input Buffer to meet those constraints, allocating and copying into 
+// a new Buffer if necessary.
+bool adapt_input_buffer_layout(const Shape &constrained_shape, Buffer<> *buf) {
+    bool shape_changed = false;
+    Shape new_shape = get_shape(*buf);
+    if (new_shape.size() != constrained_shape.size()) {
+        fail() << "Dimension mismatch";
+    }
+    for (size_t i = 0; i < constrained_shape.size(); ++i) {
+        // min of nonzero means "largest value for min"
+        if (constrained_shape[i].min != 0 && new_shape[i].min > constrained_shape[i].min) {
+            new_shape[i].min = constrained_shape[i].min;
+            shape_changed = true;
+        }
+        // extent of nonzero means "largest value for extent"
+        if (constrained_shape[i].extent != 0 && new_shape[i].extent > constrained_shape[i].extent) {
+            new_shape[i].extent = constrained_shape[i].extent;
+            shape_changed = true;
+        }
+        // stride of nonzero means "required stride", stride of zero means "no constraints"
+        if (constrained_shape[i].stride != 0 && new_shape[i].stride != constrained_shape[i].stride) {
+            new_shape[i].stride = constrained_shape[i].stride;
+            shape_changed = true;
+        }
+    }
+    if (shape_changed) {
+        fix_chunky_strides(constrained_shape, &new_shape);
+        Buffer<> new_buf = allocate_buffer(buf->type(), new_shape);
+        new_buf.copy_from(*buf);
+        *buf = new_buf;
+    }
+    return shape_changed;
+}
+
+// Given a constraint Shape (generally produced by a bounds query), create a new
+// Shape that can legally be used to create and allocate a new Buffer:
+// ensure that extents/strides aren't zero, do some reality checking
+// on planar vs interleaved, and generally try to guess at a reasonable result.
+Shape make_legal_output_buffer_shape(const Shape &constrained_shape) {
     Shape new_shape = constrained_shape;
 
     // Make sure that the extents and strides for these are nonzero.
@@ -432,38 +551,16 @@ Shape fix_bounds_query_shape(const Shape &constrained_shape) {
         }
     }
 
-    // Special-case Chunky: most "chunky" generators tend to constrain stride[0]
-    // and stride[2] to exact values, leaving stride[1] unconstrained;
-    // in practice, we must ensure that stride[1] == stride[0] * extent[0]
-    // and stride[0] = extent[2] to get results that are not garbled.
-    // This is unpleasantly hacky and will likely need aditional enhancements.
-    // (Note that there are, theoretically, other stride combinations that might
-    // need fixing; in practice, ~all generators that aren't planar tend
-    // to be classically chunky.)
-    if (new_shape.size() >= 3) {
-        if (constrained_shape[2].stride == 1) {
-            if (constrained_shape[0].stride >= 1) {
-                // If we have stride[0] and stride[2] std::set to obviously-chunky,
-                // then force extent[2] to match stride[0].
-                new_shape[2].extent = constrained_shape[0].stride;
-            } else {
-                // If we have stride[2] == 1 but stride[0] <= 1,
-                // force stride[0] = extent[2]
-                new_shape[0].stride = new_shape[2].extent;
-            }
-            // Ensure stride[1] is reasonable.
-            new_shape[1].stride = new_shape[0].extent * new_shape[0].stride;
-        }
-    }
+    fix_chunky_strides(constrained_shape, &new_shape);
 
     // If anything else is zero, just set strides to planar and hope for the best.
-    bool zero_strides = false;
+    bool any_strides_zero = false;
     for (size_t i = 0; i < new_shape.size(); ++i) {
         if (!new_shape[i].stride) {
-            zero_strides = true;
+            any_strides_zero = true;
         }
     }
-    if (zero_strides) {
+    if (any_strides_zero) {
         // Planar
         new_shape[0].stride = 1;
         for (size_t i = 1; i < new_shape.size(); ++i) {
@@ -473,25 +570,6 @@ Shape fix_bounds_query_shape(const Shape &constrained_shape) {
     return new_shape;
 }
 // END TODO: hacky algorithm inspired by Safelight
-
-// Given a Buffer<>, return its shape in the form of a vector<halide_dimension_t>.
-// (Oddly, Buffer<> has no API to do this directly.)
-Shape get_shape(const Buffer<> &b) {
-    Shape s;
-    for (int i = 0; i < b.dimensions(); ++i) {
-        s.push_back(b.raw_buffer()->dim[i]);
-    }
-    return s;
-}
-
-// Given a type and shape, create a new Buffer<> and allocate storage for it.
-// (Oddly, Buffer<> has an API to do this with vector-of-extent, but not vector-of-halide_dimension_t.)
-Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
-    Buffer<> b(type, nullptr, (int) shape.size(), &shape[0]);
-    b.check_overflow();
-    b.allocate();
-    return b;
-}
 
 // Return true iff all of the dimensions in the range [first, last] have an extent of <= 1.
 bool dims_in_range_are_trivial(const Buffer<> &b, int first, int last) {
@@ -503,14 +581,14 @@ bool dims_in_range_are_trivial(const Buffer<> &b, int first, int last) {
     return true;
 }
 
-// Add or subtract dimensions to the given buffer to match dims_needed, 
+// Add or subtract dimensions to the given buffer to match dims_needed,
 // emitting warnings if we do so.
 Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, const int dims_needed, Buffer<> b) {
     const int dims_actual = b.dimensions();
     if (dims_actual > dims_needed) {
         // Warn that we are ignoring dimensions, but only if at least one of the ignored dimensions has extent > 1
         if (!dims_in_range_are_trivial(b, dims_needed, dims_actual - 1)) {
-            warn() << "Image for " << title << " \"" << name << "\" has " 
+            warn() << "Image for " << title << " \"" << name << "\" has "
                  << dims_actual << " dimensions, but only the first "
                  << dims_needed << " were used; data loss may have occurred.";
         }
@@ -520,7 +598,7 @@ Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, c
         }
         info() << "Shape for " << name << " changed: " << old_shape << " -> " << get_shape(b);
     } else if (dims_actual < dims_needed) {
-        warn() << "Image for " << title << " \"" << name << "\" has " 
+        warn() << "Image for " << title << " \"" << name << "\" has "
              << dims_actual << " dimensions, but this argument requires at least "
              << dims_needed << " dimensions: adding dummy dimensions of extent 1.";
         auto old_shape = get_shape(b);
@@ -534,7 +612,7 @@ Buffer<> adjust_buffer_dims(const std::string &title, const std::string &name, c
 
 // Load a buffer from a pathname, adjusting the type and dimensions to
 // fit the metadata's requirements as needed.
-Buffer<> load_input_from_file(const std::string &pathname, 
+Buffer<> load_input_from_file(const std::string &pathname,
                               const halide_filter_argument_t &metadata) {
     Buffer<> b = Buffer<>(metadata.type, 0);
     info() << "Loading input " << metadata.name << " from " << pathname << " ...";
@@ -545,7 +623,7 @@ Buffer<> load_input_from_file(const std::string &pathname,
         b = adjust_buffer_dims("Input", metadata.name, metadata.dimensions, b);
     }
     if (b.type() != metadata.type) {
-        warn() << "Image loaded for argument \"" << metadata.name << "\" is type " 
+        warn() << "Image loaded for argument \"" << metadata.name << "\" is type "
              << b.type() << " but this argument expects type "
              << metadata.type << "; data loss may have occurred.";
         b = Halide::Tools::ImageTypeConversion::convert_image(b, metadata.type);
@@ -553,7 +631,7 @@ Buffer<> load_input_from_file(const std::string &pathname,
     return b;
 }
 
-Buffer<> load_input(const std::string &pathname, 
+Buffer<> load_input(const std::string &pathname,
                     const halide_filter_argument_t &metadata) {
     std::vector<std::string> v = split_string(pathname, ":");
     if (v.size() != 2 || v[0].size() == 1) {
@@ -574,6 +652,79 @@ Buffer<> load_input(const std::string &pathname,
 
     fail() << "Unknown input: " << pathname;
     return Buffer<>();
+}
+
+struct ArgData {
+    size_t index{0};
+    const halide_filter_argument_t *metadata{nullptr};
+    std::string raw_string;
+    halide_scalar_value_t scalar_value;
+    Buffer<> buffer_value;
+};
+
+// Run a bounds-query call with the given args, and return the shapes
+// to which we are constrained.
+std::vector<Shape> run_bounds_query(const std::map<std::string, ArgData> &args, 
+                                    const Shape &default_output_shape) {
+    std::vector<void*> filter_argv(args.size(), nullptr);
+    // These vectors are larger than needed, but simplifies logic downstream.
+    std::vector<Buffer<>> bounds_query_buffers(args.size());
+    std::vector<Shape> constrained_shapes(args.size());
+    for (auto &arg_pair : args) {
+        auto &arg = arg_pair.second;
+        switch (arg.metadata->kind) {
+        case halide_argument_kind_input_scalar:
+            filter_argv[arg.index] = const_cast<halide_scalar_value_t*>(&arg.scalar_value);
+            break;
+        case halide_argument_kind_input_buffer: 
+        case halide_argument_kind_output_buffer:
+            Shape shape = (arg.metadata->kind == halide_argument_kind_input_buffer) ? 
+                           get_shape(arg.buffer_value) :
+                           choose_output_extents(arg.metadata->dimensions, default_output_shape);
+            bounds_query_buffers[arg.index] = make_with_shape(arg.metadata->type, shape);
+            filter_argv[arg.index] = bounds_query_buffers[arg.index].raw_buffer();
+            break;
+        }
+    }
+
+    info() << "Running bounds query...";
+    // Ignore result since our halide_error() should catch everything.
+    (void) halide_rungen_redirect_argv(&filter_argv[0]);
+
+    for (auto &arg_pair : args) {
+        auto &arg = arg_pair.second;
+        switch (arg.metadata->kind) {
+        case halide_argument_kind_input_scalar:
+            break;
+        case halide_argument_kind_input_buffer:
+        case halide_argument_kind_output_buffer:
+            constrained_shapes[arg.index] = get_shape(bounds_query_buffers[arg.index]);
+            break;
+        }
+    }
+    return constrained_shapes;
+}
+
+uint64_t calc_pixels_out(const std::map<std::string, ArgData> &args) {
+    uint64_t pixels_out = 0;
+    for (auto &arg_pair : args) {
+        auto &arg = arg_pair.second;
+        switch (arg.metadata->kind) {
+            case halide_argument_kind_output_buffer: {
+                // TODO: this assumes that most output is "pixel-ish", and counting the size of the first
+                // two dimensions approximates the "pixel size". This is not, in general, a valid assumption,
+                // but is a useful metric for benchmarking.
+                Shape shape = get_shape(arg.buffer_value);
+                if (shape.size() >= 2) {
+                    pixels_out += shape[0].extent * shape[1].extent;
+                } else {
+                    pixels_out += shape[0].extent;
+                }
+                break;
+            }
+        }
+    }
+    return pixels_out;
 }
 
 void usage(const char *argv0) {
@@ -650,6 +801,10 @@ Flags:
         Override the default number of benchmarking iterations; ignored if 
         --benchmark is not also specified.
 
+    --benchmark_warmup=NUM: 
+        Number of iterations to run before timing, to warm up caches; ignored if 
+        --benchmark is not also specified.
+
     --track_memory: 
         Override Halide memory allocator to track high-water mark of memory 
         allocation during run; note that this may slow down execution, so 
@@ -723,14 +878,6 @@ int main(int argc, char **argv) {
 
     const halide_filter_metadata_t *md = halide_rungen_redirect_metadata();
 
-    struct ArgData {
-        size_t index{0};
-        const halide_filter_argument_t *metadata{nullptr};
-        std::string raw_string;
-        halide_scalar_value_t scalar_value;
-        Buffer<> buffer_value;
-    };
-
     std::map<std::string, ArgData> args;
     std::set<std::string> found;
     for (size_t i = 0; i < (size_t) md->num_arguments; ++i) {
@@ -748,13 +895,13 @@ int main(int argc, char **argv) {
     }
 
     Shape default_output_shape;
-    std::vector<void*> filter_argv(md->num_arguments, nullptr);
     std::vector<std::string> unknown_args;
     bool benchmark = false;
     bool track_memory = false;
     bool describe = false;
     int benchmark_samples = 3;
     int benchmark_iterations = 10;
+    int benchmark_warmup = 1;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
@@ -808,6 +955,10 @@ int main(int argc, char **argv) {
                 }
             } else if (flag_name == "benchmark_iterations") {
                 if (!parse_scalar(flag_value, &benchmark_iterations)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }
+            } else if (flag_name == "benchmark_warmup") {
+                if (!parse_scalar(flag_value, &benchmark_warmup)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
             } else if (flag_name == "output_extents") {
@@ -884,22 +1035,21 @@ int main(int argc, char **argv) {
         switch (arg.metadata->kind) {
         case halide_argument_kind_input_scalar: {
             if (!parse_scalar(arg.metadata->type, arg.raw_string, &arg.scalar_value)) {
-                fail() << "Argument value for: " << arg_name << " could not be parsed as type " 
-                     << arg.metadata->type << ": " 
+                fail() << "Argument value for: " << arg_name << " could not be parsed as type "
+                     << arg.metadata->type << ": "
                      << arg.raw_string;
             }
-            filter_argv[arg.index] = &arg.scalar_value;
             break;
         }
         case halide_argument_kind_input_buffer: {
             arg.buffer_value = load_input(arg.raw_string, *arg.metadata);
+            info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
             // If there was no default_output_shape specified, use the shape of
-            // the first input buffer (if any). 
+            // the first input buffer (if any).
             // TODO: this is often a better-than-nothing guess, but not always. Add a way to defeat it?
             if (default_output_shape.empty()) {
                 default_output_shape = get_shape(arg.buffer_value);
             }
-            filter_argv[arg.index] = arg.buffer_value.raw_buffer();
             break;
         }
         case halide_argument_kind_output_buffer:
@@ -908,51 +1058,35 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Run a bounds query, so we can allocate output buffers appropriately.
-    {
-        for (auto &arg_pair : args) {
-            auto &arg = arg_pair.second;
-            switch (arg.metadata->kind) {
-            case halide_argument_kind_output_buffer:
-                auto bounds_query_shape = choose_output_extents(arg.metadata->dimensions, default_output_shape);
-                arg.buffer_value = Buffer<>(arg.metadata->type, nullptr, (int) bounds_query_shape.size(), &bounds_query_shape[0]);
-                filter_argv[arg.index] = arg.buffer_value.raw_buffer();
-                break;
-            }
-        }
+    // Run a bounds query: we need to figure out how to allocate the output buffers,
+    // and the input buffers might need reshaping to satisfy constraints (e.g. a chunky/interleaved layout).
+    std::vector<Shape> constrained_shapes = run_bounds_query(args, default_output_shape);
 
-        info() << "Running bounds query...";
-        int result = halide_rungen_redirect_argv(&filter_argv[0]);
-        if (result != 0) {
-            fail() << "Bounds query failed with result code: " << result;
-        }
-    }
-
-    // Allocate the output buffers we'll need.
-    double pixels_out = 0.f;
     for (auto &arg_pair : args) {
         auto &arg_name = arg_pair.first;
         auto &arg = arg_pair.second;
+        const Shape &constrained_shape = constrained_shapes[arg.index];
         switch (arg.metadata->kind) {
-        case halide_argument_kind_output_buffer:
-            auto constrained_shape = get_shape(arg.buffer_value);
-            info() << "Output " << arg_name << ": BoundsQuery result is " << constrained_shape;
-            Shape shape = fix_bounds_query_shape(constrained_shape);
-            arg.buffer_value = allocate_buffer(arg.metadata->type, shape);
-            info() << "Output " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
-            filter_argv[arg.index] = arg.buffer_value.raw_buffer();
-            // TODO: this assumes that most output is "pixel-ish", and counting the size of the first
-            // two dimensions approximates the "pixel size". This is not, in general, a valid assumption,
-            // but is a useful metric for benchmarking.
-            if (shape.size() >= 2) {
-                pixels_out += shape[0].extent * shape[1].extent;
-            } else {
-                pixels_out += shape[0].extent;
+            case halide_argument_kind_input_buffer: {
+                info() << "Input " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
+                bool updated = adapt_input_buffer_layout(constrained_shape, &arg.buffer_value);
+                info() << "Input " << arg_name << ": BoundsQuery result is " << constrained_shape;
+                if (updated) {
+                    info() << "Input " << arg_name << ": Updated Shape is " << get_shape(arg.buffer_value);
+                }
+                break;
             }
-            break;
+            case halide_argument_kind_output_buffer: {
+                arg.buffer_value = allocate_buffer(arg.metadata->type, make_legal_output_buffer_shape(constrained_shape));
+                info() << "Output " << arg_name << ": BoundsQuery result is " << constrained_shape;
+                info() << "Output " << arg_name << ": Shape is " << get_shape(arg.buffer_value);
+                break;
+            }
         }
     }
-    double megapixels = pixels_out / (1024.0 * 1024.0);
+
+    uint64_t pixels_out = calc_pixels_out(args);
+    double megapixels = (double) pixels_out / (1024.0 * 1024.0);
 
     // If we're tracking memory, install the memory tracker *after* doing a bounds query.
     HalideMemoryTracker tracker;
@@ -960,34 +1094,51 @@ int main(int argc, char **argv) {
         tracker.install();
     }
 
-    if (benchmark) {
-        info() << "Benchmarking filter...";
-
-        // Run once to warm up cache. Ignore result since our halide_error() should catch everything.
-        (void) halide_rungen_redirect_argv(&filter_argv[0]);
-
-        double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv, &args]() { 
-            (void) halide_rungen_redirect_argv(&filter_argv[0]);
-            // Ensure that all outputs are finished, otherwise we may just be 
-            // measuring how long it takes to do a kernel launch for GPU code.
-            for (auto &arg_pair : args) {
-                auto &arg = arg_pair.second;
-                if (arg.metadata->kind == halide_argument_kind_output_buffer) {
-                    Buffer<> &b = arg.buffer_value;
-                    b.device_sync();
-                }
+    {
+        std::vector<void*> filter_argv(args.size(), nullptr);
+        for (auto &arg_pair : args) {
+            auto &arg = arg_pair.second;
+            switch (arg.metadata->kind) {
+                case halide_argument_kind_input_scalar:
+                    filter_argv[arg.index] = &arg.scalar_value;
+                    break;
+                case halide_argument_kind_input_buffer:
+                case halide_argument_kind_output_buffer:
+                    filter_argv[arg.index] = arg.buffer_value.raw_buffer();
+                    break;
             }
-          });
+        }
 
-        std::cout << "Benchmark for " << md->name << " produces best case of " << time_in_seconds << " sec/iter, over " 
-            << benchmark_samples << " blocks of " << benchmark_iterations << " iterations.\n";
-        std::cout << "Best output throughput is " << (megapixels / time_in_seconds) << " mpix/sec.\n";
+        if (benchmark) {
+            info() << "Benchmarking filter...";
 
-    } else {
-        info() << "Running filter...";
-        int result = halide_rungen_redirect_argv(&filter_argv[0]);
-        if (result != 0) {
-            fail() << "Filter failed with result code: " << result;
+            for (int i = 0; i < benchmark_warmup; ++i) {
+                // Ignore result since our halide_error() should catch everything.
+                (void) halide_rungen_redirect_argv(&filter_argv[0]);
+            }
+
+            double time_in_seconds = Halide::Tools::benchmark(benchmark_samples, benchmark_iterations, [&filter_argv, &args]() {
+                // Ignore result since our halide_error() should catch everything.
+                (void) halide_rungen_redirect_argv(&filter_argv[0]);
+                // Ensure that all outputs are finished, otherwise we may just be
+                // measuring how long it takes to do a kernel launch for GPU code.
+                for (auto &arg_pair : args) {
+                    auto &arg = arg_pair.second;
+                    if (arg.metadata->kind == halide_argument_kind_output_buffer) {
+                        Buffer<> &b = arg.buffer_value;
+                        b.device_sync();
+                    }
+                }
+              });
+
+            std::cout << "Benchmark for " << md->name << " produces best case of " << time_in_seconds << " sec/iter, over "
+                << benchmark_samples << " blocks of " << benchmark_iterations << " iterations.\n";
+            std::cout << "Best output throughput is " << (megapixels / time_in_seconds) << " mpix/sec.\n";
+
+        } else {
+            info() << "Running filter...";
+            // Ignore result since our halide_error() should catch everything.
+            (void) halide_rungen_redirect_argv(&filter_argv[0]);
         }
     }
 
@@ -1001,7 +1152,7 @@ int main(int argc, char **argv) {
                 b.copy_to_host();
             }
         }
-        std::cout << "Maximum Halide memory: " << tracker.highwater() 
+        std::cout << "Maximum Halide memory: " << tracker.highwater()
             << " bytes for output of " << megapixels << " mpix.\n";
     }
 
@@ -1023,7 +1174,7 @@ int main(int argc, char **argv) {
                     b = adjust_buffer_dims("Output", arg_name, best.dimensions, b);
                 }
                 if (best.type != b.type()) {
-                    warn() << "Image for argument \"" << arg_name << "\" is of type " 
+                    warn() << "Image for argument \"" << arg_name << "\" is of type "
                          << b.type() << " but is being saved as type "
                          << best.type << "; data loss may have occurred.";
                     b = Halide::Tools::ImageTypeConversion::convert_image(b, best.type);
