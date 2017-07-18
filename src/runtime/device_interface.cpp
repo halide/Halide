@@ -505,4 +505,56 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
     return err;
 }
 
+
+WEAK int halide_default_buffer_crop(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    struct halide_buffer_t *dst) {
+    error(user_context) << "device_interface does not support cropping\n";
+    return halide_error_code_buffer_crop_unsupported;
+}
+
+WEAK int halide_buffer_crop(void *user_context,
+                            const struct halide_buffer_t *src,
+                            struct halide_buffer_t *dst) {
+    ScopedMutexLock lock(&device_copy_mutex);
+
+    if (!src->device) {
+        return 0;
+    }
+
+    if (dst->device) {
+        error(user_context) << "destination buffer already has a device allocation\n";
+        return halide_error_code_buffer_crop_failed;
+    }
+
+    src->device_interface->impl->use_module();
+    int err = src->device_interface->impl->buffer_crop(user_context, src, dst);
+
+    debug(0) << "halide_buffer_crop " << "\n"
+             << " src: " << *src << "\n"
+             << " dst: " << *dst << "\n";
+
+    return err;
+}
+
+WEAK int halide_default_buffer_release_crop(void *user_context,
+                                            struct halide_buffer_t *buf) {
+    error(user_context) << "device_interface does not support cropping\n";
+    return halide_error_code_buffer_crop_unsupported;
+}
+
+
+WEAK int halide_buffer_release_crop(void *user_context,
+                                    struct halide_buffer_t *buf) {
+    ScopedMutexLock lock(&device_copy_mutex);
+
+    if (!buf->device) {
+        return 0;
+    }
+
+    int result = buf->device_interface->impl->buffer_release_crop(user_context, buf);
+    buf->device_interface->impl->release_module();
+    return result;
+}
+
 } // extern "C" linkage

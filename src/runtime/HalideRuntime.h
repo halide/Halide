@@ -517,6 +517,9 @@ struct halide_device_interface_t {
     int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
     int (*buffer_copy)(void *user_context, struct halide_buffer_t *src,
                        const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
+    int (*buffer_crop)(void *user_context, const struct halide_buffer_t *src,
+                       struct halide_buffer_t *dst);
+    int (*buffer_release_crop)(void *user_context, struct halide_buffer_t *buf);
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                        const struct halide_device_interface_t *device_interface);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
@@ -554,6 +557,24 @@ extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf
 extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
                               const struct halide_device_interface_t *dst_device_interface,
                               struct halide_buffer_t *dst);
+
+/** Make one buffer an alias for a subregion of another. Modifies the
+ * device field and the device_dirty flag only. Only supported by some
+ * device APIs. Do not call device_free on the resulting buffer. Call
+ * halide_buffer_release_crop instead to clean up any resources
+ * associated with the cropped view. The source buffer must outlive
+ * the cropped view. Note that the two buffers do not share dirty
+ * flags, so care must be taken to update them together as
+ * needed. Note also that device interfaces which support cropping may
+ * still not support cropping a crop. */
+extern int halide_buffer_crop(void *user_context,
+                              const struct halide_buffer_t *src,
+                              struct halide_buffer_t *dst);
+
+/** Release any resources associated with a cropped view of another
+ * buffer. */
+extern int halide_buffer_release_crop(void *user_context,
+                                      struct halide_buffer_t *buf);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
@@ -851,6 +872,14 @@ enum halide_error_code_t {
      * from one buffer to another. Turn on -debug in your target
      * string to see more details. */
     halide_error_code_device_buffer_copy_failed = -34,
+
+    /** Attempted to make cropped alias of a buffer with a device
+     * field, but the device_interface does not support cropping. */
+    halide_error_code_buffer_crop_unsupported = -35,
+
+    /** Cropping a buffer failed for some other reason. Turn on -debug
+     * in your target string. */
+    halide_error_code_buffer_crop_failed = -36,
 };
 
 /** Halide calls the functions below on various error conditions. The
