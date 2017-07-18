@@ -106,6 +106,10 @@ bin/%/host_malloc.o: host_malloc.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c host_malloc.cpp -o $@
 
+bin/%/host_shim.o: host_shim.cpp
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c host_shim.cpp -o $@
+
 bin/%/nearbyint.o: nearbyint.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c nearbyint.cpp -o $@
@@ -129,7 +133,7 @@ bin/%/signed_by_debug/libhalide_hexagon_remote_skel.so: bin/%/libhalide_hexagon_
 	mkdir -p $(@D)
 	python $(HEXAGON_ELFSIGNER) --no_disclaimer -i $^ -o `dirname $@`
 
-bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o
+bin/%/libhalide_hexagon_host.so: bin/src/halide_hexagon_remote_stub.c bin/%/host_malloc.o bin/%/host_shim.o
 	mkdir -p $(@D)
 	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
