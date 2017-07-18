@@ -678,6 +678,23 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     return err;
 }
 
+WEAK int halide_cuda_buffer_crop(void *user_context, const struct halide_buffer_t *src,
+                                 struct halide_buffer_t *dst) {
+    // Pointer arithmetic works fine.
+    int64_t offset = 0;
+    for (int i = 0; i < src->dimensions; i++) {
+        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
+    }
+    offset *= src->type.bytes();
+    dst->device = src->device + offset;
+    dst->set_device_dirty(src->device_dirty());
+    return 0;
+}
+
+WEAK int halide_cuda_buffer_release_crop(void *user_context, struct halide_buffer_t *dst) {
+    return 0;
+}
+
 WEAK int halide_cuda_copy_to_device(void *user_context, halide_buffer_t* buf) {
     return halide_cuda_buffer_copy(user_context, buf, &cuda_device_interface, buf);
 }
@@ -922,6 +939,8 @@ WEAK halide_device_interface_impl_t cuda_device_interface_impl = {
     halide_cuda_device_and_host_malloc,
     halide_cuda_device_and_host_free,
     halide_cuda_buffer_copy,
+    halide_cuda_buffer_crop,
+    halide_cuda_buffer_release_crop,
     halide_cuda_wrap_device_ptr,
     halide_cuda_detach_device_ptr,
 };
@@ -936,6 +955,8 @@ WEAK halide_device_interface_t cuda_device_interface = {
     halide_device_and_host_malloc,
     halide_device_and_host_free,
     halide_buffer_copy,
+    halide_buffer_crop,
+    halide_buffer_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
     &cuda_device_interface_impl

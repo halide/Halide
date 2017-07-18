@@ -140,7 +140,8 @@ halide_buffer_t *_halide_buffer_init_from_buffer(halide_buffer_t *dst,
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
-halide_buffer_t *_halide_buffer_crop(halide_buffer_t *dst,
+halide_buffer_t *_halide_buffer_crop(void *user_context,
+                                     halide_buffer_t *dst,
                                      halide_dimension_t *dst_shape,
                                      const halide_buffer_t *src,
                                      const int *min, const int *extent) {
@@ -155,9 +156,10 @@ halide_buffer_t *_halide_buffer_crop(halide_buffer_t *dst,
     }
     offset *= src->type.bytes();
     dst->host += offset;
-    if (dst->device) {
-        // Assume that pointer arithmetic is valid (FIXME: This is only true for opencl and cuda!)
-        dst->device += offset;
+    dst->device_interface = 0;
+    dst->device = 0;
+    if (src->device_interface) {
+        src->device_interface->buffer_crop(user_context, src, dst);
     }
     return dst;
 }
