@@ -779,8 +779,8 @@ WEAK halide_device_interface_impl_t hexagon_device_interface_impl = {
     halide_hexagon_device_and_host_malloc,
     halide_hexagon_device_and_host_free,
     halide_default_buffer_copy,
-    halide_default_buffer_crop,
-    halide_default_buffer_release_crop,
+    halide_default_device_crop,
+    halide_default_device_release_crop,
     halide_default_device_wrap_native,
     halide_default_device_detach_native,
 };
@@ -795,8 +795,8 @@ WEAK halide_device_interface_t hexagon_device_interface = {
     halide_device_and_host_malloc,
     halide_device_and_host_free,
     halide_buffer_copy,
-    halide_buffer_crop,
-    halide_buffer_release_crop,
+    halide_device_crop,
+    halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
     &hexagon_device_interface_impl

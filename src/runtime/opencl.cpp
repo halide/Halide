@@ -753,7 +753,8 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
+WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
+                                  const device_copy &c,
                                   int64_t src_idx, int64_t dst_idx,
                                   int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
@@ -778,22 +779,22 @@ WEAK int do_multidimensional_copy(void *user_context, const device_copy &c,
         } else if (!from_host && !to_host) {
             err = clEnqueueCopyBuffer(ctx.cmd_queue, (cl_mem)c.src, (cl_mem)c.dst,
                                       src_idx, dst_idx, c.chunk_size,
-                                      0, NULL, NULL)
-        } else if (dst != src) {
+                                      0, NULL, NULL);
+        } else if (c.dst != c.src) {
             // Could reach here if a user called directly into the
             // opencl API for a device->host copy on a source buffer
             // with device_dirty = false.
-            memcpy((void *)dst, (void *)src, c.chunk_size);
+            memcpy((void *)c.dst, (void *)c.src, c.chunk_size);
         }
 
         if (err) {
-            error(user_context) << "CL: " << copy_name << " failed: " << get_opencl_error_name(err);
+            error(user_context) << "CL: buffer copy failed: " << get_opencl_error_name(err);
             return (int)err;
         }
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, c,
+            int err = do_multidimensional_copy(user_context, ctx, c,
                                                src_idx + src_off, dst_idx + dst_off,
                                                d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d-1];
@@ -835,7 +836,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
 
     int err = 0;
     {
-        Context ctx(user_context);
+        ClContext ctx(user_context);
         if (ctx.error != CL_SUCCESS) {
             return ctx.error;
         }
@@ -854,18 +855,18 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         }
         #endif
 
-        err = do_multidimensional_copy(user_context, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
+        err = do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
+
+        // The reads/writes above are all non-blocking, so empty the command
+        // queue before we proceed so that other host code won't write
+        // to the buffer while the above writes are still running.
+        clFinish(ctx.cmd_queue);
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
         debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
         #endif
     }
-
-    // The reads/writes above are all non-blocking, so empty the command
-    // queue before we proceed so that other host code won't write
-    // to the buffer while the above writes are still running.
-    clFinish(ctx.cmd_queue);
 
     return err;
 }
@@ -1052,7 +1053,7 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, halide_buffer_t *buf
     return (uintptr_t)buf->device;
 }
 
-WEAK int halide_opencl_buffer_crop(void *user_context,
+WEAK int halide_opencl_device_crop(void *user_context,
                                     const struct halide_buffer_t *src,
                                     struct halide_buffer_t *dst) {
     dst->device_interface = src->device_interface;
@@ -1071,13 +1072,13 @@ WEAK int halide_opencl_buffer_crop(void *user_context,
 
     if (err) {
         error(user_context) << "CL: Crop failed with error code " << get_opencl_error_name(err);
-        return halide_error_code_buffer_crop_failed;
+        return halide_error_code_device_crop_failed;
     }
 
     return 0;
 }
 
-WEAK int halide_opencl_buffer_release_crop(void *user_context,
+WEAK int halide_opencl_device_release_crop(void *user_context,
                                             struct halide_buffer_t *buf) {
     // Sub-buffers are released with clReleaseMemObject
     halide_opencl_device_free(user_context, buf);
@@ -1163,8 +1164,8 @@ WEAK halide_device_interface_impl_t opencl_device_interface_impl = {
     halide_opencl_device_and_host_malloc,
     halide_opencl_device_and_host_free,
     halide_opencl_buffer_copy,
-    halide_opencl_buffer_crop,
-    halide_opencl_buffer_release_crop,
+    halide_opencl_device_crop,
+    halide_opencl_device_release_crop,
     halide_opencl_wrap_cl_mem,
     halide_opencl_detach_cl_mem,
 };
