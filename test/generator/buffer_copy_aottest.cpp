@@ -63,12 +63,12 @@ int main(int argc, char **argv) {
     }
 
     // Then a test of the pipeline that uses it in complicated ways
-    if (1) {
+    {
         Buffer<float> input(128, 128);
         Buffer<float> output(128, 128);
         input.fill([&](int x, int y) {return (float)(x + y);});
 
-        int result = buffer_copy(input, dev, output);
+        int result = buffer_copy(input, output);
 
         if (result != 0) {
             printf("error code: %d\n", result);

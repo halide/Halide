@@ -552,21 +552,23 @@ extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf
  * pulled from either device or host memory on the source, depending
  * on the dirty flags. host is preferred if both are valid. The
  * dst_device_interface parameter controls the destination memory
- * space. NULL means host memory.
- */
+ * space. NULL means host memory. */
 extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
                               const struct halide_device_interface_t *dst_device_interface,
                               struct halide_buffer_t *dst);
 
-/** Make one buffer an alias for a subregion of another. Modifies the
- * device field and the device_dirty flag only. Only supported by some
- * device APIs. Do not call device_free on the resulting buffer. Call
- * halide_device_release_crop instead to clean up any resources
- * associated with the cropped view. The source buffer must outlive
- * the cropped view. Note that the two buffers do not share dirty
- * flags, so care must be taken to update them together as
- * needed. Note also that device interfaces which support cropping may
- * still not support cropping a crop. */
+/** Give the destination buffer a device allocation which is an alias
+ * for the same coordinate range in the source buffer. Modifies the
+ * device, device_interface, and the device_dirty flag only. Only
+ * supported by some device APIs (others will return
+ * halide_error_code_device_crop_unsupported). Do not call device_free
+ * on the resulting buffer. Call halide_device_release_crop instead to
+ * clean up any resources associated with the cropped view. Do not
+ * call device_free on the source buffer while the destination buffer
+ * still lives.  Note that the two buffers do not share dirty flags,
+ * so care must be taken to update them together as needed. Note also
+ * that device interfaces which support cropping may still not support
+ * cropping a crop. */
 extern int halide_device_crop(void *user_context,
                               const struct halide_buffer_t *src,
                               struct halide_buffer_t *dst);
