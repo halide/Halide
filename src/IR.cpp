@@ -806,7 +806,6 @@ Call::ConstString Call::alloca = "alloca";
 Call::ConstString Call::likely = "likely";
 Call::ConstString Call::likely_if_innermost = "likely_if_innermost";
 Call::ConstString Call::register_destructor = "register_destructor";
-Call::ConstString Call::trigger_destructor = "trigger_destructor";
 Call::ConstString Call::div_round_to_zero = "div_round_to_zero";
 Call::ConstString Call::mod_round_to_zero = "mod_round_to_zero";
 Call::ConstString Call::call_cached_indirect_function = "call_cached_indirect_function";

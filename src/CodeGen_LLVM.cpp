@@ -2471,8 +2471,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 value = create_alloca_at_entry(i8_t, *sz);
             }
         }
-    } else if (op->is_intrinsic(Call::register_destructor) ||
-               op->is_intrinsic(Call::trigger_destructor)) {
+    } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
         internal_assert(fn);
@@ -2485,12 +2484,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
         internal_assert(op->args[1].type().is_handle());
         Value *arg = codegen(op->args[1]);
-        if (op->is_intrinsic(Call::register_destructor)) {
-            value = register_destructor(f, arg, Always);
-        } else {
-            trigger_destructor(f, arg);
-            value = ConstantInt::get(i32_t, 0);
-        }
+        value = register_destructor(f, arg, Always);
     } else if (op->is_intrinsic(Call::call_cached_indirect_function)) {
         // Arguments to call_cached_indirect_function are of the form
         //
