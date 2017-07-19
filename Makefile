@@ -840,6 +840,9 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENER
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_old_buffer_t,$(GENERATOR_AOTCPP_TESTS))
 
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_buffer_copy,$(GENERATOR_AOTCPP_TESTS))
+
 # https://github.com/halide/Halide/issues/2071
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context,$(GENERATOR_AOTCPP_TESTS))
 
