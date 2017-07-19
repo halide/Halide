@@ -4623,7 +4623,9 @@ private:
             } else {
                 expr = op;
             }
-
+        } else if (op->is_intrinsic(Call::likely) &&
+                   is_const(op->args[0])) {
+            expr = op->args[0];
         } else {
             IRMutator::visit(op);
         }
