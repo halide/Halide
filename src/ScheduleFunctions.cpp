@@ -523,22 +523,13 @@ Stmt build_produce(Function f, const Target &target) {
 
             // We have to anticipate failures in the extern stage, so
             // call this by registering a destructor before the extern
-            // call and triggering it afterwards.
+            // call and triggering it afterwards using an Allocate node.
             string destructor_name = unique_name('d');
-            Expr destructor = Variable::make(Handle(), destructor_name);
-            Expr fn = (cropped_buffers.size() == 1 ?
-                       Expr("_halide_buffer_retire_crop") :
-                       Expr("_halide_buffer_retire_crops"));
-            Expr trigger_destructor = Call::make(Int(32),
-                                                 Call::trigger_destructor,
-                                                 {fn, destructor},
-                                                 Call::Intrinsic);
-            check = Block::make(check, Evaluate::make(trigger_destructor));
-            Expr register_destructor = Call::make(Handle(),
-                                                  Call::register_destructor,
-                                                  {fn, cleanup_struct},
-                                                  Call::Intrinsic);
-            check = LetStmt::make(destructor_name, register_destructor, check);
+            const char *fn = (cropped_buffers.size() == 1 ?
+                              "_halide_buffer_retire_crop" :
+                              "_halide_buffer_retire_crops");
+            check = Allocate::make(destructor_name, Handle(), {},
+                                   const_true(), check, cleanup_struct, fn);
         }
 
         for (size_t i = 0; i < lets.size(); i++) {
