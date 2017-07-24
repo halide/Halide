@@ -687,6 +687,7 @@ WEAK int halide_cuda_device_crop(void *user_context, const struct halide_buffer_
     }
     offset *= src->type.bytes();
     dst->device = src->device + offset;
+    dst->device_interface = src->device_interface;
     dst->set_device_dirty(src->device_dirty());
     return 0;
 }
