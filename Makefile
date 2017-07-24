@@ -1480,6 +1480,10 @@ ifneq (,$(findstring clang version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 6.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
