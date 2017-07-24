@@ -182,6 +182,8 @@ struct Target {
     /** Does this target allow using a certain type. Generally all
      * types except 64-bit float and int/uint should be supported by
      * all backends.
+     *
+     * It is likely better to call the version below which takes a DeviceAPI.
      */
     bool supports_type(const Type &t) const {
         if (t.bits() == 64) {
@@ -192,6 +194,33 @@ struct Target {
                 return !has_feature(Metal);
             }
         }
+        return true;
+    }
+
+    /** Does this target allow using a certain type on a certain device.
+     * This is the prefered version of this routine.
+     */
+    bool supports_type(const Type &t, DeviceAPI device) const {
+        if (device == DeviceAPI::Default_GPU) {
+            device = get_default_device_api_for_target(*this);
+        }
+
+        if (device == DeviceAPI::Hexagon) {
+            // HVX supports doubles and long long in the scalar unit only.
+            if (t.is_float() || t.bits() == 64) {
+                return t.lanes() == 1;
+            }
+        } else if (device == DeviceAPI::Metal) {
+            // Metal spec says no double or long long.
+            if (t.bits() == 64) {
+                return false;
+            }
+        } else if (device == DeviceAPI::OpenCL) {
+            if (t.is_float() && t.bits() == 64) {
+                return has_feature(Target::CLDoubles);
+            }
+        }
+
         return true;
     }
 
