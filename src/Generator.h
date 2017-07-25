@@ -1648,6 +1648,7 @@ public:
     HALIDE_OUTPUT_FORWARD_CONST(outputs)
     HALIDE_OUTPUT_FORWARD(parallel)
     HALIDE_OUTPUT_FORWARD(prefetch)
+    HALIDE_OUTPUT_FORWARD(print_loop_nest)
     HALIDE_OUTPUT_FORWARD(rename)
     HALIDE_OUTPUT_FORWARD(reorder)
     HALIDE_OUTPUT_FORWARD(reorder_storage)

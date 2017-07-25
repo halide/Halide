@@ -15,7 +15,6 @@
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
-#include "DeepCopy.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
@@ -83,8 +82,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Compute an environment
     map<string, Function> env;
     for (Function f : output_funcs) {
-        map<string, Function> more_funcs = find_transitive_calls(f);
-        env.insert(more_funcs.begin(), more_funcs.end());
+        populate_environment(f, env);
     }
 
     // Create a deep-copy of the entire graph of Funcs.
@@ -378,6 +376,26 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
             user_error << err.str();
         }
     }
+
+    // We're about to drop the environment and outputs vector, which
+    // contain the only strong refs to Functions that may still be
+    // pointed to by the IR. So make those refs strong.
+    class StrengthenRefs : public IRMutator {
+        using IRMutator::visit;
+        void visit(const Call *c) {
+            IRMutator::visit(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+            if (c->func.defined()) {
+                FunctionPtr ptr = c->func;
+                ptr.strengthen();
+                expr = Call::make(c->type, c->name, c->args, c->call_type,
+                                  ptr, c->value_index,
+                                  c->image, c->param);
+            }
+        }
+    };
+    s = StrengthenRefs().mutate(s);
 
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
 

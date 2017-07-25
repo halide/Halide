@@ -148,16 +148,17 @@ public:
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
 
-    /** Is this Buffer responsible for managing its own memory */
-    bool manages_memory() const {
+    /** Does this Buffer own the host memory it refers to? */
+    bool owns_host_memory() const {
         return alloc != nullptr;
     }
 
 private:
     /** Increment the reference count of any owned allocation */
     void incref() const {
-        if (!manages_memory()) return;
-        alloc->ref_count++;
+        if (owns_host_memory()) {
+            alloc->ref_count++;
+        }
         if (buf.device) {
             if (!dev_ref_count) {
                 // I seem to have a non-zero dev field but no
@@ -174,15 +175,15 @@ private:
     /** Decrement the reference count of any owned allocation and free host
      * and device memory if it hits zero. Sets alloc to nullptr. */
     void decref() {
-        if (!manages_memory()) return;
-        int new_count = --(alloc->ref_count);
-        if (new_count == 0) {
-            void (*fn)(void *) = alloc->deallocate_fn;
-            fn(alloc);
+        if (owns_host_memory()) {
+            int new_count = --(alloc->ref_count);
+            if (new_count == 0) {
+                void (*fn)(void *) = alloc->deallocate_fn;
+                fn(alloc);
+            }
+            buf.host = nullptr;
+            alloc = nullptr;
         }
-        buf.host = nullptr;
-        alloc = nullptr;
-
         decref_dev();
     }
 
@@ -249,6 +250,10 @@ private:
     void initialize_from_buffer(const halide_buffer_t &b) {
         memcpy(&buf, &b, sizeof(halide_buffer_t));
         copy_shape_from(b);
+        if (b.device) {
+            dev_ref_count = new DeviceRefCount;
+            dev_ref_count->wrapping_native_device_handle = true;
+        }
     }
 
     /** Initialize the shape from a parameter pack of ints */
@@ -672,22 +677,19 @@ public:
         buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
     }
 
-    /** Drop reference to any owned memory, possibly freeing it, if
-     * this buffer held the last reference to it. Retains the shape of
-     * the buffer. Does nothing if this buffer did not allocate its
-     * own memory. */
+    /** Drop reference to any owned host or device memory, possibly
+     * freeing it, if this buffer held the last reference to
+     * it. Retains the shape of the buffer. Does nothing if this
+     * buffer did not allocate its own memory. */
     void deallocate() {
         decref();
     }
 
     /** Drop reference to any owned device memory, possibly freeing it
-     * if this buffer held the last reference to it. Does nothing if
-     * this buffer did not allocate its own memory. Asserts that
+     * if this buffer held the last reference to it. Asserts that
      * device_dirty is false. */
     void device_deallocate() {
-        if (manages_memory()) {
-            decref_dev();
-        }
+        decref_dev();
     }
 
     /** Allocate a new image of the given size with a runtime
@@ -963,7 +965,7 @@ public:
      * original, with holes compacted away. */
     Buffer<T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
                       void (*deallocate_fn)(void *) = nullptr) const {
-        Buffer<T, D> dst = make_with_shape_of(*this);
+        Buffer<T, D> dst = make_with_shape_of(*this, allocate_fn, deallocate_fn);
         dst.copy_from(*this);
         return dst;
     }
@@ -1420,7 +1422,7 @@ public:
         }
 
         Buffer<T, D> dst(nullptr, src.dimensions(), shape);
-        dst.allocate();
+        dst.allocate(allocate_fn, deallocate_fn);
 
         return dst;
     }
