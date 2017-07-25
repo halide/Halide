@@ -2,11 +2,7 @@
 /apps/*/bin
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
-bazel-bin
-bazel-genfiles
-bazel-Halide
-bazel-out
-bazel-testlogs
+bazel-*
 bin/*
 build-64/*
 build-ios/*

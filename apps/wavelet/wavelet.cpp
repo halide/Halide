@@ -33,7 +33,7 @@ T clamp(T x, T min, T max) {
 
 template<typename T>
 void save_untransformed(Buffer<T> t, const std::string& filename) {
-    save_image(t, filename);
+    convert_and_save_image(t, filename);
     printf("Saved %s\n", filename.c_str());
 }
 
@@ -46,7 +46,7 @@ void save_transformed(Buffer<T> t, const std::string& filename) {
             rearranged(x + t.width(), y, 0) = clamp(t(x, y, 1)*4.f + 0.5f, 0.0f, 1.0f);
         }
     }
-    save_image(rearranged, filename);
+    convert_and_save_image(rearranged, filename);
     printf("Saved %s\n", filename.c_str());
 }
 
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     const std::string src_image = argv[1];
     const std::string dirname = argv[2];
 
-    Buffer<float> input = load_image(src_image);
+    Buffer<float> input = load_and_convert_image(src_image);
     Buffer<float> transformed(input.width()/2, input.height(), 2);
     Buffer<float> inverse_transformed(input.width(), input.height(), 1);
 

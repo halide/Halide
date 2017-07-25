@@ -6,7 +6,7 @@ all: $(BIN)/opengl_test
 
 $(BIN)/halide_blur_glsl_exec: halide_blur_glsl_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/halide_blur_glsl.a: $(BIN)/halide_blur_glsl_exec
 	@-mkdir -p $(BIN)
@@ -14,7 +14,7 @@ $(BIN)/halide_blur_glsl.a: $(BIN)/halide_blur_glsl_exec
 
 $(BIN)/halide_ycc_glsl_exec: halide_ycc_glsl_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/halide_ycc_glsl.a: $(BIN)/halide_ycc_glsl_exec
 	@-mkdir -p $(BIN)

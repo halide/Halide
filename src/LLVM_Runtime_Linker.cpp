@@ -223,6 +223,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
+            } else if (target.os == Target::IOS) {
+                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
                 return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
             } else if (target.os == Target::Windows) {
@@ -234,6 +236,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         } else { // 64-bit
             if (target.os == Target::OSX) {
                 return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
+            } else if (target.os == Target::IOS) {
+               return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
                 return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
             } else if (target.os == Target::Windows) {

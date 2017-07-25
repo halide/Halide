@@ -149,13 +149,20 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         min_required = min_req;
                         max_required = max_req;
                     }
+                } else if (!min_required.defined() &&
+                           i == func.dimensions() - 1) {
+                    // The footprint doesn't depend on the loop var. Just compute everything on the first loop iteration.
+                    dim = func_args[i];
+                    dim_idx = i;
+                    min_required = min_req;
+                    max_required = max_req;
                 }
             }
 
             if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
-                         << func.name() << " over " << loop_var << " because either zero "
-                         << "or many dimensions of the function dependended on the loop var\n";
+                         << func.name() << " over " << loop_var << " because multiple "
+                         << "dimensions of the function dependended on the loop var\n";
                 return;
             }
 
