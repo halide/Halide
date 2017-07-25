@@ -250,6 +250,10 @@ private:
     void initialize_from_buffer(const halide_buffer_t &b) {
         memcpy(&buf, &b, sizeof(halide_buffer_t));
         copy_shape_from(b);
+        if (b.device) {
+            dev_ref_count = new DeviceRefCount;
+            dev_ref_count->wrapping_native_device_handle = true;
+        }
     }
 
     /** Initialize the shape from a parameter pack of ints */
