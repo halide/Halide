@@ -246,7 +246,6 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(error_codes)
   halide_define_aot_test(example)
   halide_define_aot_test(float16_t)
-  halide_define_aot_test(gpu_object_lifetime)
   halide_define_aot_test(gpu_only)
   halide_define_aot_test(image_from_array)
   halide_define_aot_test(mandelbrot)
@@ -281,6 +280,9 @@ if (WITH_TEST_GENERATORS)
                                  AOT_LIBRARY_TARGET cxx_mangling_gpu
                                  GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
                                  GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
+
+    halide_define_aot_test(gpu_object_lifetime
+                           GENERATOR_HALIDE_TARGET host-cuda-debug)
   endif()
 
   halide_define_aot_test(pyramid

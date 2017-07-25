@@ -119,7 +119,7 @@ private:
                        Call::image_load,
                        args,
                        Call::PureIntrinsic,
-                       nullptr,
+                       FunctionPtr(),
                        0,
                        call->image,
                        call->param);

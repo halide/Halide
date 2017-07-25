@@ -21,6 +21,7 @@ const int stack_size = 1024 * 1024;
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
+typedef halide_hexagon_remote_scalar_t scalar_t;
 
 extern "C" {
 
@@ -312,12 +313,10 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
     return *sym_ptr != 0 ? 0 : -1;
 }
 
-
-int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
-                              const buffer *input_buffersPtrs, int input_buffersLen,
-                              buffer *output_buffersPtrs, int output_buffersLen,
-                              const buffer *input_scalarsPtrs, int input_scalarsLen) {
-
+int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
+                                 const buffer *input_buffersPtrs, int input_buffersLen,
+                                 buffer *output_buffersPtrs, int output_buffersLen,
+                                 const scalar_t *scalars, int scalarsLen) {
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
@@ -330,7 +329,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         uint64_t dev;
         uint8_t* host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
+    void **args = (void **)__builtin_alloca((input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *));
     buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
 
     void **next_arg = &args[0];
@@ -346,8 +345,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         *next_arg = next_buffer_t;
     }
     // Input scalars are last.
-    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
-        *next_arg = input_scalarsPtrs[i].data;
+    for (int i = 0; i < scalarsLen; i++, next_arg++) {
+        *next_arg = const_cast<scalar_t *>(&scalars[i]);
     }
 
     // Prior to running the pipeline, power HVX on (if it was not already on).
