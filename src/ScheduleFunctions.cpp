@@ -704,6 +704,9 @@ private:
         // Dig through any let statements
         vector<pair<string, Expr>> lets;
         while (const LetStmt *l = body.as<LetStmt>()) {
+            if (!is_pure(l->value)) {
+                break;
+            }
             lets.push_back({ l->name, l->value });
             body = l->body;
         }
