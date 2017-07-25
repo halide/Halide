@@ -8,6 +8,8 @@
 #include "HalideRuntimeCuda.h"
 #elif defined(TEST_OPENCL)
 #include "HalideRuntimeOpenCL.h"
+#elif defined(TEST_METAL)
+#include "HalideRuntimeMetal.h"
 #endif
 
 #include "gpu_object_lifetime.h"
@@ -77,6 +79,8 @@ int main(int argc, char **argv) {
         halide_device_release(nullptr, halide_cuda_device_interface());
 #elif defined(TEST_OPENCL)
         halide_device_release(nullptr, halide_opencl_device_interface());
+#elif defined(TEST_METAL)
+        halide_device_release(nullptr, halide_metal_device_interface());
 #endif
     }
 
