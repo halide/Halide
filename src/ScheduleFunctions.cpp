@@ -503,6 +503,11 @@ Stmt build_produce(Function f, const Target &target) {
         if (annotate.defined()) {
             check = Block::make(annotate, check);
         }
+
+        // Add the dummy outermost loop.
+        LoopLevel outermost(f, Var::outermost());
+        check = For::make(outermost.to_string(), 0, 1, ForType::Serial, DeviceAPI::None, check);
+
         return check;
     } else {
 
