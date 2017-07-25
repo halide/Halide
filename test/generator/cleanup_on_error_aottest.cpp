@@ -45,7 +45,7 @@ void my_halide_error(void *user_context, const char *msg) {
 // the number of calls to free matches the number of calls to malloc.
 extern "C" int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
     device_frees++;
-    return buf->device_interface->device_free(user_context, buf);
+    return buf->device_interface->impl->device_free(user_context, buf);
 }
 
 extern "C" int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
@@ -53,7 +53,7 @@ extern "C" int halide_device_malloc(void *user_context, struct halide_buffer_t *
     if (!buf->device) {
         device_mallocs++;
     }
-    return interface->device_malloc(user_context, buf);
+    return interface->impl->device_malloc(user_context, buf);
 }
 #endif
 

@@ -31,7 +31,6 @@ endif()
 add_executable(halide_benchmarks halide_benchmarks.cpp)
 target_include_directories(halide_benchmarks PRIVATE ${halide_blas_INCLUDE_DIRS})
 target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE ${MISC_DEFINITIONS})
-target_compile_options(halide_benchmarks PRIVATE -std=c++11)
 target_link_libraries(halide_benchmarks PRIVATE halide_blas)
 list(APPEND BLAS_NAMES halide)
 
@@ -43,7 +42,7 @@ if (Eigen3_FOUND)
     eigen_benchmarks.cpp
   )
   target_compile_definitions(eigen_benchmarks PRIVATE -DEIGEN_DONT_PARALLELIZE ${MISC_DEFINITIONS})
-  target_compile_options(eigen_benchmarks PRIVATE -std=c++11 -Wno-error=unused-variable)
+  target_compile_options(eigen_benchmarks PRIVATE -Wno-error=unused-variable)
   target_link_libraries(eigen_benchmarks
     PRIVATE
       Eigen3::Eigen
@@ -66,7 +65,7 @@ else()
     )
     string(TOUPPER ${BLAS_VENDOR} DEFINE_SUFFIX)
     target_compile_definitions(${TARGET} PRIVATE -DUSE_${DEFINE_SUFFIX} ${MISC_DEFINITIONS})
-    target_compile_options(${TARGET} PRIVATE -std=c++11 -Wno-error=unused-variable)
+    target_compile_options(${TARGET} PRIVATE -Wno-error=unused-variable)
     target_link_libraries(${TARGET}
       PRIVATE
        ${BLAS_${NAME}_LIBRARY}

@@ -308,6 +308,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
+    #if LLVM_VERSION >= 60
+    module->setDataLayout(target_machine->createDataLayout());
+    #endif
+
     // Set up passes
     llvm::SmallString<8> outstr;
     raw_svector_ostream ostream(outstr);

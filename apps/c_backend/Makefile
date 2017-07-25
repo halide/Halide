@@ -8,7 +8,7 @@ all: $(BIN)/test
 
 $(BIN)/pipeline_exec: pipeline_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/pipeline_native.a: $(BIN)/pipeline_exec
 	@-mkdir -p $(BIN)
@@ -23,7 +23,7 @@ $(BIN)/run: run.cpp $(BIN)/pipeline_c.cpp $(BIN)/pipeline_native.a
 
 $(BIN)/pipeline_cpp_exec: pipeline_cpp_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/pipeline_cpp_cpp.cpp: $(BIN)/pipeline_cpp_exec
 	@-mkdir -p $(BIN)

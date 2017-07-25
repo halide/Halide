@@ -10,19 +10,6 @@
 
 using namespace Halide::Runtime;
 
-int32_t extract_value_global(int32_t *arg) {
-    return *arg;
-}
-
-namespace HalideTest {
-
-int32_t extract_value_ns(const int32_t *arg) {
-    return *arg;
-}
-
-}
-
-
 namespace my_namespace {
 class my_class {public: int foo;};
 namespace my_subnamespace {
@@ -43,7 +30,7 @@ int main(int argc, char **argv) {
 
     Buffer<double> result(100);
 
-    const halide_filter_metadata_t *m = HalideTest::cxx_mangling_metadata();
+    const halide_filter_metadata_t *m = HalideTest::AnotherNamespace::cxx_mangling_metadata();
     assert(m != NULL);
     printf("Name is: %s\n", m->name);
     assert(strcmp(m->name, "cxx_mangling") == 0);
@@ -79,7 +66,8 @@ int main(int argc, char **argv) {
     my_namespace::my_subnamespace::my_struct ms;
     my_union mu;
 
-    int r = HalideTest::cxx_mangling(input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
+    int r = HalideTest::AnotherNamespace::cxx_mangling(
+                                     input, -1, 0xff, -1, 0xffff, -1, 0xffffffff,
                                      -1, 0xffffffffffffffffLL, true, 42.0, 4239.0f,
                                      int_ptr, const_int_ptr, void_ptr, const_void_ptr,
                                      string_ptr, const_string_ptr,
