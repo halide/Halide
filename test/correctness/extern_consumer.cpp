@@ -83,7 +83,8 @@ int main(int argc, char **argv) {
     args.push_back(extent);
     sink.define_extern("dump_to_file", args, Int(32), 0);
 
-    source.compute_root();
+    // Extern stages still have an outermost var.
+    source.compute_at(sink, Var::outermost());
 
     sink.compile_jit();
 
