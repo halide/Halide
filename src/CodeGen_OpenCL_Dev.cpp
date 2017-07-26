@@ -111,6 +111,28 @@ string simt_intrinsic(const string &name) {
 }
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
+    int bits;
+    if (is_const_power_of_two_integer(op->b, &bits)) {
+        visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
+    } else if (op->type.is_int()) {
+        print_expr(lower_euclidean_div(op->a, op->b));
+    } else {
+        visit_binop(op->type, op->a, op->b, "/");
+    }
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
+    int bits;
+    if (is_const_power_of_two_integer(op->b, &bits)) {
+        visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits)-1), "&");
+    } else if (op->type.is_int()) {
+        print_expr(lower_euclidean_mod(op->a, op->b));
+    } else {
+        visit_binop(op->type, op->a, op->b, "%");
+    }
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         internal_assert((loop->for_type == ForType::GPUBlock) ||
