@@ -1758,9 +1758,7 @@ void CodeGen_C::visit(const Mul *op) {
 void CodeGen_C::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " >> " << bits;
-        print_assignment(op->type, oss.str());
+        visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_div(op->a, op->b));
     } else {
@@ -1771,9 +1769,7 @@ void CodeGen_C::visit(const Div *op) {
 void CodeGen_C::visit(const Mod *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
-        print_assignment(op->type, oss.str());
+        visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits)-1), "&");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
     } else {
