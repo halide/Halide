@@ -250,6 +250,10 @@ private:
     void initialize_from_buffer(const halide_buffer_t &b) {
         memcpy(&buf, &b, sizeof(halide_buffer_t));
         copy_shape_from(b);
+        if (b.device) {
+            dev_ref_count = new DeviceRefCount;
+            dev_ref_count->wrapping_native_device_handle = true;
+        }
     }
 
     /** Initialize the shape from a parameter pack of ints */
@@ -554,6 +558,7 @@ public:
                                    dev_ref_count(other.dev_ref_count) {
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
+        other.buf.device = 0;
         move_shape_from(std::forward<Buffer<T, D>>(other));
     }
 
@@ -566,6 +571,7 @@ public:
                                      dev_ref_count(other.dev_ref_count) {
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
+        other.buf.device = 0;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
     }
 
@@ -616,6 +622,7 @@ public:
         other.dev_ref_count = nullptr;
         free_shape_storage();
         buf = other.buf;
+        other.buf.device = 0;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
         return *this;
     }
@@ -629,6 +636,7 @@ public:
         other.dev_ref_count = nullptr;
         free_shape_storage();
         buf = other.buf;
+        other.buf.device = 0;
         move_shape_from(std::forward<Buffer<T, D>>(other));
         return *this;
     }
