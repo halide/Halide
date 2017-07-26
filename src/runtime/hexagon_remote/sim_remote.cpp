@@ -99,6 +99,25 @@ __attribute__((weak)) extern int munmap;
 
 }  // extern "C"
 
+// memalign() on the Simulator is unreliable and can apparently return
+// overlapping areas. Roll our own version that is based on malloc().
+static void *aligned_malloc(size_t alignment, size_t x) {
+    void *orig = malloc(x + alignment);
+    if (!orig) {
+        return NULL;
+    }
+    // We want to store the original pointer prior to the pointer we return.
+    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
+    ((void **)ptr)[-1] = orig;
+    return ptr;
+}
+
+static void aligned_free(void *ptr) {
+    if (ptr) {
+        free(((void**)ptr)[-1]);
+    }
+}
+
 void log_printf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -116,11 +135,11 @@ void halide_error(void *user_context, const char *str) {
 }
 
 void *halide_malloc(void *user_context, size_t x) {
-    return memalign(hvx_alignment, x);
+    return aligned_malloc(hvx_alignment, x);
 }
 
 void halide_free(void *user_context, void *ptr) {
-    free(ptr);
+    aligned_free(ptr);
 }
 
 int halide_do_task(void *user_context, halide_task_t f, int idx,
@@ -300,43 +319,6 @@ int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbu
         }
     }
 
-    // Initialize the runtime. The Hexagon runtime can't call any
-    // system functions (because we can't link them), so we put all
-    // the implementations that need to do so here, and pass poiners
-    // to them in here.
-    set_runtime_t set_runtime;
-    if (use_dlopenbuf) {
-        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
-    } else {
-        set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
-    }
-    if (!set_runtime) {
-        if (use_dlopenbuf) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        halide_print(NULL, "halide_noos_set_runtime not found in shared object\n");
-        return -1;
-    }
-    int result = set_runtime(halide_malloc,
-                             halide_free,
-                             halide_print,
-                             halide_error,
-                             halide_do_par_for,
-                             halide_do_task,
-                             halide_get_symbol,
-                             halide_load_library,
-                             halide_get_library_symbol);
-    if (result != 0) {
-        if (use_dlopenbuf) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        halide_print(NULL, "set_runtime failed\n");
-        return result;
-    }
     *module_ptr = reinterpret_cast<handle_t>(lib);
     return 0;
 }
@@ -442,10 +424,10 @@ int main(int argc, const char **argv) {
         case Message::None:
             break;
         case Message::Alloc:
-            set_rpc_return(reinterpret_cast<int>(memalign(hvx_alignment, RPC_ARG(0))));
+            set_rpc_return(reinterpret_cast<int>(aligned_malloc(hvx_alignment, RPC_ARG(0))));
             break;
         case Message::Free:
-            free(reinterpret_cast<void*>(RPC_ARG(0)));
+            aligned_free(reinterpret_cast<void*>(RPC_ARG(0)));
             set_rpc_return(0);
             break;
         case Message::InitKernels:

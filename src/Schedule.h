@@ -7,6 +7,7 @@
 
 #include "Expr.h"
 #include "Parameter.h"
+#include "FunctionPtr.h"
 
 #include <map>
 
@@ -258,7 +259,7 @@ public:
      * same FunctionContents multiple times.
      */
     EXPORT FuncSchedule deep_copy(
-        std::map<IntrusivePtr<FunctionContents>, IntrusivePtr<FunctionContents>> &copied_map) const;
+        std::map<FunctionPtr, FunctionPtr> &copied_map) const;
 
     /** This flag is set to true if the schedule is memoized. */
     // @{
@@ -288,10 +289,10 @@ public:
      * all calls to the function by all other functions (excluding itself) in
      * the pipeline with the wrapper. See \ref Func::in for more details. */
     // @{
-    const std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers() const;
-    std::map<std::string, IntrusivePtr<Internal::FunctionContents>> &wrappers();
+    const std::map<std::string, Internal::FunctionPtr> &wrappers() const;
+    std::map<std::string, Internal::FunctionPtr> &wrappers();
     EXPORT void add_wrapper(const std::string &f,
-                            const IntrusivePtr<Internal::FunctionContents> &wrapper);
+                            const Internal::FunctionPtr &wrapper);
     // @}
 
     /** At what sites should we inject the allocation and the

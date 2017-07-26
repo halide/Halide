@@ -182,6 +182,8 @@ struct Target {
     /** Does this target allow using a certain type. Generally all
      * types except 64-bit float and int/uint should be supported by
      * all backends.
+     *
+     * It is likely better to call the version below which takes a DeviceAPI.
      */
     bool supports_type(const Type &t) const {
         if (t.bits() == 64) {
@@ -195,9 +197,14 @@ struct Target {
         return true;
     }
 
+    /** Does this target allow using a certain type on a certain device.
+     * This is the prefered version of this routine.
+     */
+    EXPORT bool supports_type(const Type &t, DeviceAPI device) const;
+
     /** Returns whether a particular device API can be used with this
      * Target. */
-    bool supports_device_api(DeviceAPI api) const;
+    EXPORT bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
       return os == other.os &&

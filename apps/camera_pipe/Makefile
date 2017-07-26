@@ -6,7 +6,7 @@ TIMING_ITERATIONS ?= 5
 
 $(BIN)/camera_pipe_exec: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/camera_pipe.a: $(BIN)/camera_pipe_exec
 	@-mkdir -p $(BIN)

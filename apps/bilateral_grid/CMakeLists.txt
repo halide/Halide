@@ -9,4 +9,3 @@ halide_add_aot_library(bilateral_grid
 add_executable(filter filter.cpp)
 halide_add_aot_library_dependency(filter bilateral_grid)
 use_image_io(filter)
-target_compile_options(filter PRIVATE "-std=c++11")

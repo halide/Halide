@@ -365,8 +365,6 @@ class SubstituteSelfReference : public IRMutator {
         internal_assert(c);
 
         if ((c->call_type == Call::Halide) && (func == c->name)) {
-            internal_assert(!c->func.defined())
-                << "func should not have been defined for a self-reference\n";
             debug(4) << "...Replace call to Func \"" << c->name << "\" with "
                      << "\"" << substitute.name() << "\"\n";
             vector<Expr> args;
@@ -859,41 +857,29 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     // Update value of the new update definition. It loads values from
     // the intermediate Func.
     vector<Expr> f_values(values.size());
-    if (values.size() > 1) {
-        // There might be cross-dependencies between tuple elements, so we need
-        // to collect all substitutions first.
-        map<string, Expr> replacement;
-        for (size_t i = 0; i < f_values.size(); ++i) {
-            internal_assert(!prover_result.ys[i].var.empty());
-            replacement.emplace(prover_result.ys[i].var, intm(f_load_args)[i]);
 
-            if (!prover_result.xs[i].var.empty()) {
-                Expr prev_val = Call::make(intm.output_types()[i], func_name,
-                                           f_store_args, Call::CallType::Halide,
-                                           nullptr, i);
-                replacement.emplace(prover_result.xs[i].var, prev_val);
-            } else {
-                user_warning << "Update definition of " << stage_name << " at index " << i
-                             << " doesn't depend on the previous value. This isn't a"
-                             << " reduction operation\n";
-            }
+    // There might be cross-dependencies between tuple elements, so we need
+    // to collect all substitutions first.
+    map<string, Expr> replacements;
+    for (size_t i = 0; i < f_values.size(); ++i) {
+        if (!prover_result.ys[i].var.empty()) {
+            Expr r = (values.size() == 1) ? Expr(intm(f_load_args)) : Expr(intm(f_load_args)[i]);
+            replacements.emplace(prover_result.ys[i].var, r);
         }
-        for (size_t i = 0; i < f_values.size(); ++i) {
-            f_values[i] = substitute(replacement, prover_result.pattern.ops[i]);
-        }
-    } else {
-        Expr prev_val = Call::make(intm.output_types()[0], func_name,
-                                   f_store_args, Call::CallType::Halide);
-        internal_assert(!prover_result.ys[0].var.empty());
-        Expr val = substitute(prover_result.ys[0].var, intm(f_load_args), prover_result.pattern.ops[0]);
-        if (!prover_result.xs[0].var.empty()) {
-            val = substitute(prover_result.xs[0].var, prev_val, val);
+
+        if (!prover_result.xs[i].var.empty()) {
+            Expr prev_val = Call::make(intm.output_types()[i], func_name,
+                                       f_store_args, Call::CallType::Halide,
+                                       FunctionPtr(), i);
+            replacements.emplace(prover_result.xs[i].var, prev_val);
         } else {
-            user_warning << "Update definition of " << stage_name
+            user_warning << "Update definition of " << stage_name << " at index " << i
                          << " doesn't depend on the previous value. This isn't a"
                          << " reduction operation\n";
         }
-        f_values[0] = val;
+    }
+    for (size_t i = 0; i < f_values.size(); ++i) {
+        f_values[i] = substitute(replacements, prover_result.pattern.ops[i]);
     }
 
     // Update the definition
@@ -1754,16 +1740,16 @@ void Func::invalidate_cache() {
 Func Func::in(const Func &f) {
     invalidate_cache();
     user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
-    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+    const map<string, FunctionPtr> &wrappers = func.wrappers();
     const auto &iter = wrappers.find(f.name());
     if (iter == wrappers.end()) {
-        Func wrapper(name() + "_in_" + f.name());
+        Func wrapper(func.new_function_in_same_group(name() + "_in_" + f.name()));
         wrapper(args()) = (*this)(args());
         func.add_wrapper(f.name(), wrapper.func);
         return wrapper;
     }
 
-    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    FunctionPtr wrapper_contents = iter->second;
     internal_assert(wrapper_contents.defined());
 
     // Make sure that no other Func shares the same wrapper as 'f'
@@ -1788,7 +1774,7 @@ Func Func::in(const vector<Func>& fs) {
 
     // Either all Funcs have the same wrapper or they don't already have any wrappers.
     // Otherwise, throw an error.
-    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+    const map<string, FunctionPtr> &wrappers = func.wrappers();
 
     const auto &iter = wrappers.find(fs[0].name());
     if (iter == wrappers.end()) {
@@ -1798,7 +1784,7 @@ Func Func::in(const vector<Func>& fs) {
                 << "Cannot define the wrapper since " << fs[i].name()
                 << " already has a wrapper while " << fs[0].name() << " doesn't \n";
         }
-        Func wrapper(name() + "_wrapper");
+        Func wrapper(func.new_function_in_same_group(name() + "_wrapper"));
         wrapper(args()) = (*this)(args());
         for (const Func &f : fs) {
             user_assert(name() != f.name()) << "Cannot call 'in()' on itself\n";
@@ -1807,7 +1793,7 @@ Func Func::in(const vector<Func>& fs) {
         return wrapper;
     }
 
-    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    FunctionPtr wrapper_contents = iter->second;
     internal_assert(wrapper_contents.defined());
 
     // Make sure all the other Funcs in 'fs' share the same wrapper and no other
@@ -1837,16 +1823,16 @@ Func Func::in(const vector<Func>& fs) {
 
 Func Func::in() {
     invalidate_cache();
-    const map<string, IntrusivePtr<FunctionContents>> &wrappers = func.wrappers();
+    const map<string, FunctionPtr> &wrappers = func.wrappers();
     const auto &iter = wrappers.find("");
     if (iter == wrappers.end()) {
-        Func wrapper(name() + "_global_wrapper");
+        Func wrapper(func.new_function_in_same_group(name() + "_global_wrapper"));
         wrapper(args()) = (*this)(args());
         func.add_wrapper("", wrapper.func);
         return wrapper;
     }
 
-    IntrusivePtr<FunctionContents> wrapper_contents = iter->second;
+    FunctionPtr wrapper_contents = iter->second;
     internal_assert(wrapper_contents.defined());
     Function wrapper(wrapper_contents);
     internal_assert(wrapper.frozen());
