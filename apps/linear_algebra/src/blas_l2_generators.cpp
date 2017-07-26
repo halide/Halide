@@ -108,10 +108,10 @@ class GEMVGenerator :
                 sum_tail.update().specialize(size >= vec_size).vectorize(i, vec_size);//.unroll(i);
             }
 
-            A_.set_min(0, 0).set_min(1, 0);
-            x_.set_bounds(0, 0, A_.width());
-            y_.set_bounds(0, 0, A_.height());
-            result.output_buffer().set_bounds(0, 0, A_.height());
+            A_.dim(0).set_min(0).dim(1).set_min(0);
+            x_.dim(0).set_bounds(0, A_.width());
+            y_.dim(0).set_bounds(0, A_.height());
+            result.output_buffer().dim(0).set_bounds(0, A_.height());
         } else {
             const Expr size = A_.width();
             const Expr sum_size = A_.height();
@@ -151,10 +151,10 @@ class GEMVGenerator :
                     .specialize(size >= vec_size).vectorize(i, vec_size)
                     .specialize(sum_size >= unroll_size).unroll(i, unroll_size);
 
-            A_.set_min(0, 0).set_min(1, 0);
-            x_.set_bounds(0, 0, A_.height());
-            y_.set_bounds(0, 0, A_.width());
-            result.output_buffer().set_bounds(0, 0, A_.width());
+            A_.dim(0).set_min(0).dim(1).set_min(0);
+            x_.dim(0).set_bounds(0, A_.height());
+            y_.dim(0).set_bounds(0, A_.width());
+            result.output_buffer().dim(0).set_bounds(0, A_.width());
         }
 
         Func output("output");
@@ -224,13 +224,11 @@ class GERGenerator :
                 .specialize(num_rows >= 2 * block_size_ && num_cols >= 2 * block_size_)
                 .tile(i, j, ti, tj, i, j, 2, 2).fuse(ti, tj, t).parallel(t);
 
-        A_.set_min(0, 0).set_min(1, 0);
-        x_.set_bounds(0, 0, A_.width());
-        y_.set_bounds(0, 0, A_.height());
+        A_.dim(0).set_min(0).dim(1).set_min(0);
+        x_.dim(0).set_bounds(0, A_.width());
+        y_.dim(0).set_bounds(0, A_.height());
 
-        result.output_buffer()
-                .set_bounds(0, 0, A_.width())
-                .set_bounds(1, 0, A_.height());
+        result.output_buffer().dim(0).set_bounds(0, A_.width()).dim(1).set_bounds(0, A_.height());
 
         return result;
     }
