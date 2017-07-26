@@ -710,6 +710,13 @@ private:
         vector<pair<string, Expr>> lets;
         while (const LetStmt *l = body.as<LetStmt>()) {
             if (!is_pure(l->value)) {
+                // The consumer of the Func we're injecting may be an
+                // extern stage, which shows up in the IR as a let
+                // stmt with a side-effecty RHS. We need to take care
+                // not to blow past it and risk injecting the producer
+                // *after* the consumer. In general it seems unwise to
+                // reorder the computation of a Func past something
+                // side-effecty, so we stop here.
                 break;
             }
             lets.push_back({ l->name, l->value });
