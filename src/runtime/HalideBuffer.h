@@ -558,6 +558,7 @@ public:
                                    dev_ref_count(other.dev_ref_count) {
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
+        other.buf.device = 0;
         move_shape_from(std::forward<Buffer<T, D>>(other));
     }
 
@@ -570,6 +571,7 @@ public:
                                      dev_ref_count(other.dev_ref_count) {
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
+        other.buf.device = 0;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
     }
 
@@ -620,6 +622,7 @@ public:
         other.dev_ref_count = nullptr;
         free_shape_storage();
         buf = other.buf;
+        other.buf.device = 0;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
         return *this;
     }
@@ -633,6 +636,7 @@ public:
         other.dev_ref_count = nullptr;
         free_shape_storage();
         buf = other.buf;
+        other.buf.device = 0;
         move_shape_from(std::forward<Buffer<T, D>>(other));
         return *this;
     }
