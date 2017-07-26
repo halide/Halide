@@ -73,6 +73,10 @@ ifneq (, $(findstring opengl,$(HL_TARGET)))
   OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
 endif
 
+ifneq (, $(findstring metal,$(HL_TARGET)))
+  LDFLAGS += -framework Metal -framework Foundation
+endif
+
 $(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp 
 	@mkdir -p $(BIN)
 	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@ 
