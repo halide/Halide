@@ -1049,10 +1049,10 @@ bool box_contains(const Box &outer, const Box &inner) {
 
 class FindInnermostVar : public IRVisitor {
 public:
-    const map<string, int> &vars_depth;
+    const Scope<int> &vars_depth;
     string innermost_var;
 
-    FindInnermostVar(const map<string, int> &vars_depth)
+    FindInnermostVar(const Scope<int> &vars_depth)
         : vars_depth(vars_depth) {}
 
 private:
@@ -1060,55 +1060,45 @@ private:
     int innermost_depth = -1;
 
     void visit(const Variable *op) {
-        const auto &iter = vars_depth.find(op->name);
-        if ((iter != vars_depth.end()) && (iter->second > innermost_depth)) {
-            innermost_var = iter->first;
-            innermost_depth = iter->second;
+        if (vars_depth.contains(op->name)) {
+            int depth = vars_depth.get(op->name);
+            if (depth > innermost_depth) {
+                innermost_var = op->name;
+                innermost_depth = depth;
+            }
         }
     }
 };
 
 // Place innermost vars in an IfThenElse's condition as far to the left as possible.
 class SolveIfThenElse : public IRMutator {
-    // Map of variable names and their depths. Higher depth indicates
+    // Scope of variable names and their depths. Higher depth indicates
     // variable defined more innermost.
-    map<string, int> vars_depth;
+    Scope<int> vars_depth;
     int depth = -1;
 
     using IRMutator::visit;
 
-    int push_var(const string &var) {
+    void push_var(const string &var) {
         depth += 1;
-        int prev_depth = -1;
-        auto iter = vars_depth.find(var);
-        if (iter != vars_depth.end()) {
-            prev_depth = iter->second;
-            iter->second = depth;
-        } else {
-            vars_depth.emplace(var, depth);
-        }
-        return prev_depth;
+        vars_depth.push(var, depth);
     }
 
-    void pop_var(const string &var, int prev_depth) {
+    void pop_var(const string &var) {
         depth -= 1;
-        if (prev_depth == -1) {
-            vars_depth.erase(var);
-        } else {
-            vars_depth.emplace(var, prev_depth);
-        }
+        vars_depth.pop(var);
     }
 
     void visit(const LetStmt *op) {
-        int prev_depth = push_var(op->name);
+        push_var(op->name);
         IRMutator::visit(op);
-        pop_var(op->name, prev_depth);
+        pop_var(op->name);
     }
 
     void visit(const For *op) {
-        int prev_depth = push_var(op->name);
+        push_var(op->name);
         IRMutator::visit(op);
-        pop_var(op->name, prev_depth);
+        pop_var(op->name);
     }
 
     void visit(const IfThenElse *op) {
