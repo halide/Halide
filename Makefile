@@ -202,7 +202,7 @@ ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -framework OpenCL
 endif
 ifneq ($(TEST_METAL), )
-STATIC_TEST_LIBS ?= -framework Metal
+METAL_LD_FLAGS ?= -framework Metal -framework Foundation
 endif
 OPENGL_LD_FLAGS ?= -framework OpenGL
 HOST_OS=os_x
@@ -1180,6 +1180,11 @@ GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
 GEN_AOT_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
 GEN_AOT_LD_FLAGS=-lpthread $(LIBDL)
 
+ifneq ($(TEST_METAL), )
+# Unlike cuda and opencl, which dynamically go find the appropriate symbols, metal requires actual linking.
+GEN_AOT_LD_FLAGS+=$(METAL_LD_FLAGS)
+endif
+
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.a/.h (but not libHalide).
 $(BIN_DIR)/$(TARGET)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.a $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(BIN_DIR)/$(TARGET)
@@ -1258,7 +1263,7 @@ $(BUILD_DIR)/RunGen.o: $(ROOT_DIR)/tools/RunGen.cpp $(RUNTIME_EXPORTED_INCLUDES)
 	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
 
 $(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGen.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a
-	$(CXX) -std=c++11 -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) $^ $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+	$(CXX) -std=c++11 -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 RUNARGS ?=
 
@@ -1273,7 +1278,7 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
-		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a -lpthread $(LIBDL) $(IMAGE_IO_LIBS) -lz -o $@; \
+		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -lz -o $@; \
 	else \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
 		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@;\
