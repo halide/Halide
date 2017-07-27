@@ -14,7 +14,9 @@ public:
         f.compute_root();
 
         Target target = get_target();
-        if (target.has_gpu_feature()) {
+        if (target.has_gpu_feature() && !target.has_feature(Target::Metal)) {
+            // Skip Metal, because it uses zero-copy, which breaks the
+            // assumptions of the test.
             Var xo, xi;
             f.gpu_tile(x, xo, xi, 16);
         }
