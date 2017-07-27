@@ -19,6 +19,22 @@ void my_free(void *user_context, void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
+#ifdef _WIN32
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+// An extern stage that copies input -> output
+extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+    if (!in->host) {
+        memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
+    } else {
+        Halide::Runtime::Buffer<void>(*out).copy_from(Halide::Runtime::Buffer<void>(*in));
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     Var x, y, c;
 
@@ -322,6 +338,48 @@ int main(int argc, char **argv) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;
         }
+    }
+
+    {
+        // Fold the storage of the output of an extern stage
+        Func f, g, h;
+        Var x, y;
+        f(x, y) = x + y;
+        g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
+        h(x, y) = g(x, y);
+
+        f.compute_root();
+        g.store_root().compute_at(h, y).fold_storage(g.args()[1], 8);
+        h.compute_root();
+
+        Buffer<int> out = h.realize(64, 64);
+        out.for_each_element([&](int x, int y) {
+                if (out(x, y) != x + y) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
+                    abort();
+                }
+            });
+    }
+
+    {
+        // Fold the storage of an input to an extern stage
+        Func f, g, h;
+        Var x, y;
+        f(x, y) = x + y;
+        g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
+        h(x, y) = g(x, y);
+
+        f.store_root().compute_at(h, y).fold_storage(y, 8);
+        g.compute_at(h, y);
+        h.compute_root();
+
+        Buffer<int> out = h.realize(64, 64);
+        out.for_each_element([&](int x, int y) {
+                if (out(x, y) != x + y) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
+                    abort();
+                }
+            });
     }
 
     printf("Success!\n");
