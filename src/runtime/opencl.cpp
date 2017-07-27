@@ -1064,6 +1064,8 @@ WEAK int halide_opencl_device_crop(void *user_context,
     }
     offset *= src->type.bytes();
     cl_buffer_region region = {offset, dst->size_in_bytes()};
+    // The sub-buffer encompasses the linear range of addresses that
+    // span the crop.
     dst->device = (uint64_t)clCreateSubBuffer((cl_mem)(src->device),
                                               CL_MEM_READ_WRITE,
                                               CL_BUFFER_CREATE_TYPE_REGION,

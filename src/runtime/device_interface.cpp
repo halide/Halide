@@ -411,17 +411,23 @@ WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *
         // dev -> dev via dst host memory
         debug(user_context) << " dev -> src via src host memory\n";
         err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
-        err = err || copy_to_device_already_locked(user_context, dst, dst_device_interface);
+        if (!err) {
+            err = copy_to_device_already_locked(user_context, dst, dst_device_interface);
+        }
     } else if (from_device && to_host) {
         // dev -> host via src host memory
         debug(user_context) << " dev -> host via src host memory\n";
         err = copy_to_host_already_locked(user_context, src);
-        err = err || halide_default_buffer_copy(user_context, src, NULL, dst);
+        if (!err) {
+            err = halide_default_buffer_copy(user_context, src, NULL, dst);
+        }
     } else if (from_host && to_device) {
         // host -> dev via dst host memory
         debug(user_context) << " host -> dev via dst host memory\n";
         err = halide_default_buffer_copy(user_context, src, NULL, dst);
-        err = err || copy_to_device_already_locked(user_context, dst, dst_device_interface);
+        if (!err) {
+            err = copy_to_device_already_locked(user_context, dst, dst_device_interface);
+        }
     } else {
         // host -> host
         debug(user_context) << " host -> host\n";

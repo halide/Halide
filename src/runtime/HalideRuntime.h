@@ -561,13 +561,13 @@ extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
  * for the same coordinate range in the source buffer. Modifies the
  * device, device_interface, and the device_dirty flag only. Only
  * supported by some device APIs (others will return
- * halide_error_code_device_crop_unsupported). Do not call device_free
- * on the resulting buffer. Call halide_device_release_crop instead to
- * clean up any resources associated with the cropped view. Do not
- * call device_free on the source buffer while the destination buffer
- * still lives.  Note that the two buffers do not share dirty flags,
- * so care must be taken to update them together as needed. Note also
- * that device interfaces which support cropping may still not support
+ * halide_error_code_device_crop_unsupported). Call
+ * halide_device_release_crop instead of halide_device_free to clean
+ * up resources associated with the cropped view. Do not call
+ * device_free on the source buffer while the destination buffer still
+ * lives.  Note that the two buffers do not share dirty flags, so care
+ * must be taken to update them together as needed. Note also that
+ * device interfaces which support cropping may still not support
  * cropping a crop. */
 extern int halide_device_crop(void *user_context,
                               const struct halide_buffer_t *src,
