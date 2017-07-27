@@ -76,6 +76,12 @@ EXPORT bool is_two(const Expr &e);
  * undefined Stmt, or as an Evaluate node of a constant) */
 EXPORT bool is_no_op(const Stmt &s);
 
+/** Does the expression
+ * 1) Take on the same value no matter where it appears in a Stmt, and
+ * 2) Evaluating it has no side-effects
+ */
+bool is_pure(const Expr &e);
+
 /** Construct an immediate of the given type from any numeric C++ type. */
 // @{
 EXPORT Expr make_const(Type t, int64_t val);
