@@ -210,6 +210,13 @@ WEAK int halide_error_bad_fold(void *user_context, const char *func_name, const 
     return halide_error_code_bad_fold;
 }
 
+WEAK int halide_error_bad_extern_fold(void *user_context, const char *func_name, int dim) {
+    error(user_context)
+        << "Cannot fold dimension " << dim << " of " << func_name
+        << " because an extern stage uses a region of it which wraps around the boundary of the fold\n";
+    return halide_error_code_bad_extern_fold;
+}
+
 WEAK int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                             int fold_factor, const char *loop_name, int required_extent) {
     error(user_context)

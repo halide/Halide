@@ -68,6 +68,51 @@ class FoldStorageOfFunction : public IRMutator {
             args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
+        } else if (op->name == Call::buffer_crop) {
+            Expr source = op->args[2];
+            const Variable *buf_var = source.as<Variable>();
+            if (buf_var &&
+                starts_with(buf_var->name, func + ".") &&
+                ends_with(buf_var->name, ".buffer")) {
+                // We are taking a crop of a folded buffer. For now
+                // we'll just assert that the crop doesn't wrap
+                // around, so that the crop doesn't need to be treated
+                // as a folded buffer too. But to take the crop, we
+                // need to use folded coordinates, and then restore
+                // the non-folded min after the crop operation.
+
+                // Pull out the expressions we need
+                internal_assert(op->args.size() >= 5);
+                Expr mins_arg = op->args[3];
+                Expr extents_arg = op->args[4];
+                const Call *mins_call = mins_arg.as<Call>();
+                const Call *extents_call = extents_arg.as<Call>();
+                internal_assert(mins_call && extents_call);
+                vector<Expr> mins = mins_call->args;
+                const vector<Expr> &extents = extents_call->args;
+                internal_assert(dim < (int)mins.size() && dim < (int)extents.size());
+                Expr old_min = mins[dim];
+                Expr old_extent = extents[dim];
+
+                // Rewrite the crop args
+                mins[dim] = old_min % factor;
+                Expr new_mins = Call::make(type_of<int *>(), Call::make_struct, mins, Call::Intrinsic);
+                vector<Expr> new_args = op->args;
+                new_args[3] = new_mins;
+                expr = Call::make(op->type, op->name, new_args, op->call_type);
+
+                // Inject the assertion
+                Expr no_wraparound = mins[dim] + extents[dim] <= factor;
+                Expr error = Call::make(Int(32), "halide_error_bad_extern_fold",
+                                        {Expr(func), Expr(dim)},
+                                        Call::Extern);
+                expr = Call::make(op->type, Call::require,
+                                  {no_wraparound, expr, error}, Call::Intrinsic);
+
+                // Restore the correct min coordinate
+                expr = Call::make(op->type, Call::buffer_set_bounds,
+                                  {expr, dim, old_min, old_extent}, Call::Extern);
+            }
         }
     }
 
@@ -81,6 +126,7 @@ class FoldStorageOfFunction : public IRMutator {
             stmt = Provide::make(op->name, op->values, args);
         }
     }
+
 
 public:
     FoldStorageOfFunction(string f, int d, Expr e) :
@@ -116,6 +162,29 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
 
         Stmt body = op->body;
+
+        // If we're going to use an explicit fold factor, walk inside
+        // of bounds logic to simplify the assertion generated.
+        struct ContainingIR {
+            Stmt assertion;
+            string let_name;
+            Expr let_value;
+        };
+        vector<ContainingIR> containing_ir;
+
+        while (1) {
+            const Block *block = body.as<Block>();
+            const AssertStmt *assert = block ? block->first.as<AssertStmt>() : nullptr;
+            const LetStmt *let = body.as<LetStmt>();
+            if (assert) {
+
+            } else if (let) {
+
+            } else {
+                break;
+            }
+        }
+
         Box provided = box_provided(body, func.name());
         Box required = box_required(body, func.name());
         Box box = box_union(provided, required);
@@ -298,7 +367,7 @@ class StorageFolding : public IRMutator {
         auto func_it = env.find(op->name);
         Function func = func_it != env.end() ? func_it->second : Function();
 
-        if (special.special) {
+        if (special.special && false) {
             for (const StorageDim &i : func.schedule().storage_dims()) {
                 user_assert(!i.fold_factor.defined())
                     << "Dimension " << i.var << " of " << op->name
@@ -333,6 +402,29 @@ class StorageFolding : public IRMutator {
                                     d < (int)bounds.size());
 
                     bounds[d] = Range(0, f);
+
+                    // There are now two coordinate systems in play
+                    // for this realization. There's the algorithm
+                    // coordinate system, which is at is was before
+                    // folding, and there's the folded coordinate
+                    // system representing the actual valid address
+                    // range. Most things that consumer buffers
+                    // (e.g. device_malloc) want the folded coordinate
+                    // system, so rewrite the .buffer symbols to use
+                    // that.
+                    for (size_t j = 0; j < op->types.size(); j++) {
+                        string buf_name;
+                        if (op->types.size() > 1) {
+                            buf_name = op->name + "." + std::to_string(j) + ".buffer";
+                        } else {
+                            buf_name = op->name + ".buffer";
+                        }
+                        Expr buffer = Variable::make(type_of<halide_buffer_t *>(), buf_name);
+                        Expr fix_buffer_bounds =
+                            Call::make(type_of<halide_buffer_t *>(), Call::buffer_set_bounds,
+                                       {buffer, d, 0, f}, Call::Extern);
+                        body = Block::make(Evaluate::make(fix_buffer_bounds), body);
+                    }
                 }
 
                 stmt = Realize::make(op->name, op->types, bounds, op->condition, body);

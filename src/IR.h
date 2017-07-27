@@ -537,6 +537,7 @@ struct Call : public ExprNode<Call> {
         buffer_init,
         buffer_init_from_buffer,
         buffer_crop,
+        buffer_set_bounds,
         trace;
 
     // If it's a call to another halide function, this call node holds

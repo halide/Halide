@@ -833,6 +833,10 @@ enum halide_error_code_t {
      * to see more details. */
     halide_error_code_device_detach_native_failed = -33,
 
+    /** A folded buffer was passed to an extern stage, but the region
+     * touched wraps around the fold boundary. */
+    halide_error_code_bad_extern_fold = -34,
+
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -897,6 +901,7 @@ extern int halide_error_failed_to_downgrade_buffer_t(void *user_context,
                                                      const char *reason);
 extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                  const char *loop_name);
+extern int halide_error_bad_extern_fold(void *user_context, const char *func_name, int dim);
 
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);
