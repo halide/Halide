@@ -38,17 +38,17 @@ struct BufferOutputOpts {
     enum OutputType type;
 };
 
-int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
-    return 0;
-}
-
 struct Value {
     uint8_t payload[8];
-    uint8_t defined[8];
+    bool defined;
+    
+    /* To make sure to play nice with Halide Buffers, round the total size
+     * of the Value struct up to 16 by adding padding bytes. */
+    uint8_t padding[8-sizeof(bool)];
 
-    Value() { defined[0] = 0; }
+    Value() { defined = false; }
     Value(Packet *p, int lane_idx = 0) {
-        defined[0] = 1;
+        defined = true;
         int bytes = p->type.bytes();
         uintptr_t addr = (uintptr_t) p->value();
         addr += (bytes*lane_idx);
@@ -158,8 +158,7 @@ struct FuncInfo {
         return (values != NULL);
     }
 
-    template<typename T, int D>
-    Buffer<T, D> get_buffer() {
+    Buffer<void> get_buffer() {
         halide_buffer_t buf;
         buf.device = 0;
         buf.device_interface = nullptr;
@@ -179,7 +178,7 @@ struct FuncInfo {
         buf.dimensions = dimensions;
         buf.type = type;
 
-        Buffer<T, D> buffer(buf);
+        Buffer<void> buffer(buf);
         return buffer;
     }
 };
@@ -208,7 +207,7 @@ void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     printf("[INFO] Dumping func '%s' to file: %s\n", name.c_str(), filename.c_str());
 
     //Rely on save_image to do type-checking
-    auto buf = func.get_buffer<void, 2>();
+    auto buf = func.get_buffer();
     Halide::Tools::save_image(buf, filename);
 }
 
