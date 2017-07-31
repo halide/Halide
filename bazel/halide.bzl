@@ -794,6 +794,34 @@ def halide_library_from_generator(name,
       tags=tags,
       visibility=visibility)
 
+  # Although "#include SOME_MACRO" is legal C/C++, it doesn't work in all environments.
+  # So, instead, we'll make a local copy of the .cpp file and use sed to
+  # put the include path in directly.
+  native.genrule(
+      name = "%s_RunGenStubs" % name,
+      srcs = [ "@halide//:tools/RunGenStubs.cpp" ],
+      cmd = "cat $(location @halide//:tools/RunGenStubs.cpp) | " +
+            "sed -e 's|HL_RUNGEN_FILTER_HEADER|\"%s%s%s.h\"|g' > $@" % (PACKAGE_NAME, "/" if PACKAGE_NAME else "", name),
+      outs = [ "%s_RunGenStubs.cpp" % name, ],
+      tags=["manual", "notap"] + tags,
+      visibility=["//visibility:private"]
+  )
+
+  # Note that the .rungen targets are tagged as manual+notap, as some
+  # extant Generators don't (yet) have the proper generator_deps
+  # or filter_deps configured. (We have some explicit build-and-link tests
+  # elsewhere to verify that at least some expected-to-work Generators
+  # stay working.)
+  native.cc_binary(
+      name="%s.rungen" % name,
+      srcs=[":%s_RunGenStubs" % name],
+      deps=[
+          "@halide//:rungen",
+          ":%s" % name,
+      ],
+      tags=["manual", "notap"] + tags,
+      visibility=["//visibility:private"])
+
   # Return the fully-qualified built target name.
   return "//%s:%s" % (PACKAGE_NAME, name)
 
