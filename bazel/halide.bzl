@@ -191,7 +191,6 @@ def halide_config_settings():
             "cpu": cpu,
         },
         visibility=["//visibility:public"])
-
   for base_target, _, android_cpu, ios_cpu in _HALIDE_TARGET_CONFIG_INFO:
     if android_cpu == None:
       # "armeabi" is the default value for --android_cpu and isn't considered legal
@@ -299,7 +298,7 @@ _output_extensions = {
     "bitcode": ("bc", True),
     "stmt": ("stmt", True),
     "html": ("html", True),
-    "cpp": ("cpp", True),
+    "cpp": ("generated.cpp", True),
 }
 
 
@@ -332,7 +331,7 @@ def _gengen_impl(ctx):
   if not ctx.attr.generator_closure.generator_name:
     fail("generator_name must be specified")
 
-  remaps = [".s=.s.txt"]
+  remaps = [".s=.s.txt,.cpp=.generated.cpp"]
   halide_target = ctx.attr.halide_target
   if "windows" in halide_target[-1] and not "mingw" in halide_target[-1]:
     remaps += [".obj=.o", ".lib=.a"]
@@ -600,7 +599,9 @@ def halide_generator(name,
       srcs=srcs,
       alwayslink=1,
       copts=copts + halide_language_copts(),
-      deps=set(["@halide//:language"] + deps),
+      deps=set([
+          "@halide//:language"
+      ] + deps),
       tags=["manual"] + tags,
       visibility=["//visibility:private"])
 
@@ -610,7 +611,7 @@ def halide_generator(name,
       linkopts=halide_language_linkopts(),
       deps=[
           ":%s_library" % name,
-          "@halide//:internal_halide_generator_glue",
+          "@halide//:gengen",
       ],
       tags=["manual"] + tags,
       visibility=["//visibility:private"])
