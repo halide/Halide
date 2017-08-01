@@ -1291,11 +1291,11 @@ protected:
     friend class ::Halide::Stage;
 
     bool allow_synthetic_generator_params() const override {
-        return !T::has_static_halide_type();
+        return !T::has_static_halide_type;
     }
 
     std::string get_c_type() const override {
-        if (T::has_static_halide_type()) {
+        if (T::has_static_halide_type) {
             return "Halide::Internal::StubInputBuffer<" +
                 halide_type_to_c_type(T::static_halide_type()) +
                 ">";
@@ -1312,17 +1312,17 @@ protected:
 public:
     GeneratorInput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
+                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
                 -1) {
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
         : Super(name, IOKind::Buffer, {t}, d) {
-        static_assert(!T::has_static_halide_type(), "Cannot use pass a Type argument for a Buffer with a non-void static type");
+        static_assert(!T::has_static_halide_type, "Cannot use pass a Type argument for a Buffer with a non-void static type");
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, d) {
+        : Super(name, IOKind::Buffer, T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{}, d) {
     }
 
 
@@ -1648,6 +1648,7 @@ public:
     HALIDE_OUTPUT_FORWARD_CONST(outputs)
     HALIDE_OUTPUT_FORWARD(parallel)
     HALIDE_OUTPUT_FORWARD(prefetch)
+    HALIDE_OUTPUT_FORWARD(print_loop_nest)
     HALIDE_OUTPUT_FORWARD(rename)
     HALIDE_OUTPUT_FORWARD(reorder)
     HALIDE_OUTPUT_FORWARD(reorder_storage)
@@ -1806,15 +1807,15 @@ protected:
 protected:
     GeneratorOutput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
+                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : std::vector<Type>{},
                 -1) {
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d = -1)
         : Super(name, IOKind::Buffer,
-                T::has_static_halide_type() ? std::vector<Type>{ T::static_halide_type() } : t,
+                T::has_static_halide_type ? std::vector<Type>{ T::static_halide_type() } : t,
                 d) {
-        if (T::has_static_halide_type()) {
+        if (T::has_static_halide_type) {
             user_assert(t.empty()) << "Cannot use pass a Type argument for a Buffer with a non-void static type\n";
         } else {
             user_assert(t.size() <= 1) << "Output<Buffer<>>(" << name << ") requires at most one Type, but has " << t.size() << "\n";
@@ -1823,11 +1824,11 @@ protected:
 
     GeneratorOutput_Buffer(const std::string &name, int d)
         : Super(name, IOKind::Buffer, std::vector<Type>{ T::static_halide_type() }, d) {
-        static_assert(T::has_static_halide_type(), "Must pass a Type argument for a Buffer with a static type of void");
+        static_assert(T::has_static_halide_type, "Must pass a Type argument for a Buffer with a static type of void");
     }
 
     NO_INLINE std::string get_c_type() const override {
-        if (T::has_static_halide_type()) {
+        if (T::has_static_halide_type) {
             return "Halide::Internal::StubOutputBuffer<" +
                 halide_type_to_c_type(T::static_halide_type()) +
                 ">";
@@ -1951,6 +1952,7 @@ public:
         return get_assignable_func_ref(i);
     }
 
+    // Allow Func = Output<Func[]>
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     const Func &operator[](size_t i) const {
         return Super::operator[](i);
@@ -2153,12 +2155,12 @@ public:
     virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
 
     template <typename T>
-    std::unique_ptr<T> create() {
+    std::unique_ptr<T> create() const {
         return T::create(*this);
     }
 
     template <typename T, typename... Args>
-    std::unique_ptr<T> apply(const Args &...args) {
+    std::unique_ptr<T> apply(const Args &...args) const {
         auto t = this->create<T>();
         t->apply(args...);
         return t;

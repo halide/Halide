@@ -2,7 +2,9 @@
 #include <string>
 
 #include "Target.h"
+
 #include "Debug.h"
+#include "DeviceInterface.h"
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Util.h"
@@ -501,6 +503,30 @@ bool Target::supported() const {
     bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
 #endif
     return !bad;
+}
+
+bool Target::supports_type(const Type &t, DeviceAPI device) const {
+    if (device == DeviceAPI::Default_GPU) {
+        device = get_default_device_api_for_target(*this);
+    }
+
+    if (device == DeviceAPI::Hexagon) {
+        // HVX supports doubles and long long in the scalar unit only.
+        if (t.is_float() || t.bits() == 64) {
+            return t.lanes() == 1;
+        }
+    } else if (device == DeviceAPI::Metal) {
+        // Metal spec says no double or long long.
+        if (t.bits() == 64) {
+            return false;
+        }
+    } else if (device == DeviceAPI::OpenCL) {
+        if (t.is_float() && t.bits() == 64) {
+            return has_feature(Target::CLDoubles);
+        }
+    }
+
+    return true;
 }
 
 bool Target::supports_device_api(DeviceAPI api) const {

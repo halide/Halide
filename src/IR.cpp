@@ -535,7 +535,7 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
-                IntrusivePtr<FunctionContents> func, int value_index,
+                FunctionPtr func, int value_index,
                 Buffer<> image, Parameter param) {
     if (name == Call::prefetch && call_type == Call::Intrinsic) {
         internal_assert(args.size() % 2 == 0)
@@ -816,6 +816,7 @@ Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
 Call::ConstString Call::extract_mask_element = "extract_mask_element";
+Call::ConstString Call::require = "require";
 Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";

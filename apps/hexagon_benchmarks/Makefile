@@ -25,6 +25,8 @@ BIN ?= bin
 
 FILTERS ?= conv3x3a16 dilate3x3 median3x3 gaussian5x5 sobel conv3x3a32
 
+ITERATIONS ?= 10
+
 OBJS = $(patsubst %,$(BIN)/\%/%_hvx64.o, $(FILTERS))
 OBJS += $(patsubst %,$(BIN)/\%/%_hvx128.o, $(FILTERS))
 OBJS += $(patsubst %,$(BIN)/\%/%_cpu.o, $(FILTERS))
@@ -38,7 +40,7 @@ DASH_D_DEFINES = $(patsubst %, -D%=1, $(UPPERCASE_FILTERS))
 
 $(BIN)/%_generator : %_generator.cpp $(GENERATOR_DEPS)
 	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3_generator
 	@-mkdir -p $(BIN)/$*
@@ -121,10 +123,10 @@ $(BIN)/process-%: process.cpp $(BIN)/%/filters.a process.h
 run-%-android: $(BIN)/process-%-android
 	adb push $(BIN)/process-$*-android /data/
 	adb shell chmod +x /data/process-$*-android
-	adb shell /data/process-$*-android -n 10
+	adb shell /data/process-$*-android -n $(ITERATIONS)
 
 run-host: $(BIN)/process-host
-	$(BIN)/process-host -n 10
+	$(BIN)/process-host -n $(ITERATIONS)
 
 clean:
 	rm -rf $(BIN)

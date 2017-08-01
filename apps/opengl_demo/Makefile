@@ -89,7 +89,7 @@ $(BIN)/sample_filter_opengl.o $(BIN)/sample_filter_opengl.h: $(BIN)/generate_sam
 
 $(BIN)/generate_sample_filter: sample_filter.cpp
 	@mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -fno-rtti -o $@ $^ $(HALIDE_TOOLS_DIR)/GenGen.cpp $(HALIDE_LIB_PATH) $(GENERATOR_LIBS)
+	$(CXX) $(CXXFLAGS) -fno-rtti -o $@ $^ $(HALIDE_TOOLS_DIR)/GenGen.cpp $(HALIDE_LIB_PATH) $(GENERATOR_LIBS) $(HALIDE_SYSTEM_LDFLAGS)
 
 #
 # Build in subdir using auto-dependency mechanism
