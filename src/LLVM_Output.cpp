@@ -109,7 +109,7 @@ std::string get_current_directory() {
     std::string dir;
     char p[MAX_PATH];
     DWORD ret = GetCurrentDirectoryA(MAX_PATH, p);
-    internal_assert(ret == 0) << "GetCurrentDirectoryA() failed";
+    internal_assert(ret != 0) << "GetCurrentDirectoryA() failed";
     dir = p;
     return dir;
 #else
