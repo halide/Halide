@@ -80,7 +80,7 @@ cc_library(
 # Please don't depend on it directly; doing so will likely break your code at
 # some point in the future.
 cc_library(
-    name = "internal_halide_generator_glue",
+    name = "gengen",
     srcs = ["tools/GenGen.cpp"],
     includes = ["include"],
     deps = [":language"],
