@@ -212,8 +212,8 @@ WEAK module_state *state_list = NULL;
 
 // API Capabilities.  If more capabilities need to be checked,
 // this can be refactored to something more robust/general.
-bool halide_metal_api_supports_set_bytes;
-mtl_device *halide_metal_api_checked_device;
+WEAK bool metal_api_supports_set_bytes;
+WEAK mtl_device *metal_api_checked_device;
 
 }}}}
 
@@ -688,15 +688,15 @@ WEAK int halide_metal_run(void *user_context,
         uint8_t small_args_buffer[4096];    // used if the total arguments size is small
         char *args_ptr;
 
-        if (halide_metal_api_checked_device != metal_context.device) {
-            halide_metal_api_supports_set_bytes = buffer_supports_set_bytes(encoder);
-            halide_metal_api_checked_device = metal_context.device;
-            if (halide_metal_api_supports_set_bytes) {
+        if (metal_api_checked_device != metal_context.device) {
+            metal_api_supports_set_bytes = buffer_supports_set_bytes(encoder);
+            metal_api_checked_device = metal_context.device;
+            if (metal_api_supports_set_bytes) {
                 debug(user_context) << "Metal - supports setBytes\n";
             }
         }
 
-        if (total_args_size < 4096 && halide_metal_api_supports_set_bytes) {
+        if (total_args_size < 4096 && metal_api_supports_set_bytes) {
             args_ptr = (char *)small_args_buffer;
         } else {
             args_buffer = new_buffer(metal_context.device, total_args_size);
@@ -717,7 +717,7 @@ WEAK int halide_metal_run(void *user_context,
             }
         }
         halide_assert(user_context, offset == total_args_size);
-        if (total_args_size < 4096 && halide_metal_api_supports_set_bytes) {
+        if (total_args_size < 4096 && metal_api_supports_set_bytes) {
             set_input_buffer_from_bytes(encoder, small_args_buffer,
                                         total_args_size, buffer_index);
         } else {
