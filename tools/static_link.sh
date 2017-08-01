@@ -58,7 +58,9 @@ fi
 # compilation. Passing -t to the linker gets it to list which
 # object files in which archives it uses to resolve
 # symbols. We only care about the libLLVM ones.
-LIST=`$4 -o /dev/null -shared $TMP/*.o -Wl,-t ${LINKOPTS} $5 | egrep libLLVM`
+# (Send errors to /dev/null since it may otherwise list
+# various missing symbols which are irrelevant here.)
+LIST=`$4 -o /dev/null -shared $TMP/*.o -Wl,-t ${LINKOPTS} $5 2> /dev/null | egrep libLLVM`
 
 # Extract the necessary object files from the llvm archives.
 # Make each name unique as we go along, in case there are dupes.

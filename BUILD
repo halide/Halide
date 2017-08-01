@@ -370,7 +370,7 @@ _DISTRIB_PKG = [
 
 [pkg_tar(
     name = "distrib_%s" % path.replace("/", "_"),
-    files = targets,
+    srcs = targets,
     mode = "0644",
     package_dir = path,
 ) for path, targets in _DISTRIB_PKG]
