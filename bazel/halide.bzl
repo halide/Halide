@@ -809,7 +809,10 @@ def halide_library_from_generator(name,
 
   # Note that the .rungen targets are tagged as manual+notap, as some
   # extant Generators don't (yet) have the proper generator_deps
-  # or filter_deps configured. (We have some explicit build-and-link tests
+  # or filter_deps configured. ("notap" is used internally by
+  # certain Google test systems; it is ignored in public Bazel builds.)
+  #
+  # (Of course, this requires that we have some explicit build-and-link tests
   # elsewhere to verify that at least some expected-to-work Generators
   # stay working.)
   native.cc_binary(
