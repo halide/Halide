@@ -148,6 +148,22 @@ std::pair<std::string, std::string> dir_and_file(const std::string &path) {
     return { dir, file };
 }
 
+std::string make_absolute_path(const std::string &path) {
+    bool is_absolute = path.size() >= 1 && path[0] == '/';
+    char sep = '/';
+#ifdef _WIN32
+    // Allow for C:\whatever or c:/whatever on Windows
+    if (path.size() >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) {
+        is_absolute = true;
+        sep = path[2];
+    }
+#endif
+    if (!is_absolute) {
+        return get_current_directory() + sep + path;
+    }
+    return path;
+}
+
 struct SetCwd {
     const std::string original_directory;
     explicit SetCwd(const std::string &d) : original_directory(get_current_directory()) {
@@ -163,8 +179,12 @@ struct SetCwd {
 }
 
 void create_static_library(const std::vector<std::string> &src_files_in, const Target &target,
-                           const std::string &dst_file, bool deterministic) {
+                           const std::string &dst_file_in, bool deterministic) {
     internal_assert(!src_files_in.empty());
+
+    // Ensure that dst_file is an absolute path, since we're going to change the
+    // working directory temporarily.
+    std::string dst_file = make_absolute_path(dst_file_in);
 
     // If we give absolute paths to LLVM, it will dutifully embed them in the resulting
     // .a file; some versions of 'ar x' are unable to deal with the resulting files,
