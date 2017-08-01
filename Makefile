@@ -1579,6 +1579,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 	cp $(ROOT_DIR)/tools/GenGen.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGen.cpp $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/RunGenStubs.cpp $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_benchmark.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
@@ -1601,6 +1602,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_
 		halide/*.bzl \
 		halide/tools/mex_halide.m \
 		halide/tools/*.cpp \
+		halide/tools/halide_benchmark.h \
 		halide/tools/halide_image.h \
 		halide/tools/halide_image_io.h \
 		halide/tools/halide_image_info.h
