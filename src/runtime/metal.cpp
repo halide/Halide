@@ -360,7 +360,7 @@ WEAK int halide_metal_device_malloc(void *user_context, halide_buffer_t* buf) {
 
     buf->device = (uint64_t)metal_buf;
     buf->device_interface = &metal_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -384,7 +384,7 @@ WEAK int halide_metal_device_free(void *user_context, halide_buffer_t* buf) {
     mtl_buffer *metal_buf = (mtl_buffer *)buf->device;
     release_ns_object(metal_buf);
     buf->device = 0;
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
 
     #ifdef DEBUG_RUNTIME
@@ -747,30 +747,29 @@ WEAK int halide_metal_device_and_host_free(void *user_context, struct halide_buf
     return 0;
 }
 
-WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uintptr_t buffer) {
+WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t buffer) {
     halide_assert(user_context, buf->device == 0);
     if (buf->device != 0) {
         return -2;
     }
     buf->device = buffer;
     buf->device_interface = &metal_device_interface;
-    buf->device_interface->use_module();
+    buf->device_interface->impl->use_module();
     if (buf->device == 0) {
         return -1;
     }
     return 0;
 }
 
-WEAK uintptr_t halide_metal_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
+WEAK int halide_metal_detach_buffer(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == 0) {
         return 0;
     }
     halide_assert(user_context, buf->device_interface == &metal_device_interface);
-    uint64_t buffer = buf->device;
-    buf->device_interface->release_module();
+    buf->device_interface->impl->release_module();
     buf->device_interface = NULL;
     buf->device = 0;
-    return (uintptr_t)buffer;
+    return 0;
 }
 
 WEAK uintptr_t halide_metal_get_buffer(void *user_context, struct halide_buffer_t *buf) {
@@ -795,7 +794,8 @@ WEAK void halide_metal_cleanup() {
 } // extern "C" linkage
 
 namespace Halide { namespace Runtime { namespace Internal { namespace Metal {
-WEAK halide_device_interface_t metal_device_interface = {
+
+WEAK halide_device_interface_impl_t metal_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
     halide_metal_device_malloc,
@@ -806,6 +806,22 @@ WEAK halide_device_interface_t metal_device_interface = {
     halide_metal_copy_to_device,
     halide_metal_device_and_host_malloc,
     halide_metal_device_and_host_free,
+    halide_metal_wrap_buffer,
+    halide_metal_detach_buffer
+};
+
+WEAK halide_device_interface_t metal_device_interface = {
+    halide_device_malloc,
+    halide_device_free,
+    halide_device_sync,
+    halide_device_release,
+    halide_copy_to_host,
+    halide_copy_to_device,
+    halide_device_and_host_malloc,
+    halide_device_and_host_free,
+    halide_device_wrap_native,
+    halide_device_detach_native,
+    &metal_device_interface_impl
 };
 
 }}}} // namespace Halide::Runtime::Internal::Metal

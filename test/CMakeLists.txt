@@ -110,20 +110,17 @@ include(../HalideGenerator.cmake)
 #   halide_define_aot_test(NAME <basename>
 #                       [GENERATED_FUNCTION <function name, including namespace]
 #                       [GENERATOR_HALIDE_TARGET Halide target, if not "host"]
-#                       [GENERATOR_ARGS extra generator args])
+#                       [GENERATOR_ARGS extra generator args]
+#                       [FILTER_DEPS extra libraries to be linked with AOT output])
 function(halide_define_aot_test NAME)
   set(options OMIT_DEFAULT_GENERATOR)
   set(oneValueArgs GENERATED_FUNCTION GENERATOR_NAME GENERATOR_HALIDE_TARGET)
-  set(multiValueArgs GENERATOR_ARGS STUB_DEPS)
+  set(multiValueArgs GENERATOR_ARGS STUB_DEPS FILTER_DEPS)
   cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   set(TARGET "generator_aot_${NAME}")
 
   add_executable("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_aottest.cpp")
-  if (MSVC)
-  else()
-    target_compile_options("${TARGET}" PUBLIC "-std=c++11") # HalideBuffer.h needs C++11
-  endif()
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
   target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
@@ -153,9 +150,12 @@ function(halide_define_aot_test NAME)
                            GENERATOR_TARGET "${NAME}.generator"
                            GENERATOR_NAME "${args_GENERATOR_NAME}"
                            GENERATED_FUNCTION "${args_GENERATED_FUNCTION}"
-                           GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}")
+                           GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}"
+                           FILTER_DEPS "${args_FILTER_DEPS}")
     halide_add_aot_library_dependency("${TARGET}" "${AOT_LIBRARY_TARGET}")
   endif()
+
+  target_link_libraries("${TARGET}" PRIVATE ${args_FILTER_DEPS})
 
 endfunction(halide_define_aot_test)
 
@@ -246,7 +246,6 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(error_codes)
   halide_define_aot_test(example)
   halide_define_aot_test(float16_t)
-  halide_define_aot_test(gpu_object_lifetime)
   halide_define_aot_test(gpu_only)
   halide_define_aot_test(image_from_array)
   halide_define_aot_test(mandelbrot)
@@ -268,14 +267,22 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(user_context_insanity
                          GENERATOR_HALIDE_TARGET host-user_context)
 
+  add_library(cxx_mangling_externs 
+              "${CMAKE_CURRENT_SOURCE_DIR}/generator/cxx_mangling_externs.cpp")
+
   halide_define_aot_test(cxx_mangling
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
-                         GENERATED_FUNCTION HalideTest::cxx_mangling)
+                         GENERATED_FUNCTION HalideTest::AnotherNamespace::cxx_mangling
+                         FILTER_DEPS cxx_mangling_externs)
+
   if (TARGET_PTX)
     halide_add_aot_test_dependency(cxx_mangling
                                  AOT_LIBRARY_TARGET cxx_mangling_gpu
                                  GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
                                  GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
+
+    halide_define_aot_test(gpu_object_lifetime
+                           GENERATOR_HALIDE_TARGET host-cuda-debug)
   endif()
 
   halide_define_aot_test(pyramid
@@ -332,9 +339,15 @@ if (WITH_TEST_GENERATORS)
                                  GENERATOR_TARGET blur2x2
                                  AOT_LIBRARY_TARGET blur2x2)
 
+  add_library(cxx_mangling_define_extern_externs 
+              "${CMAKE_CURRENT_SOURCE_DIR}/generator/cxx_mangling_define_extern_externs.cpp")
+  target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_externs)
+  halide_add_aot_library_dependency(cxx_mangling_define_extern_externs cxx_mangling)
+
   halide_define_aot_test(cxx_mangling_define_extern
                          GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-user_context
-                         GENERATED_FUNCTION HalideTest::cxx_mangling_define_extern)
+                         GENERATED_FUNCTION HalideTest::cxx_mangling_define_extern
+                         FILTER_DEPS cxx_mangling_externs cxx_mangling_define_extern_externs)
   # The cxx_mangling library was already defined implicitly, above,
   # so just add a dependency on it
   halide_add_aot_library_dependency(generator_aot_cxx_mangling_define_extern cxx_mangling)

@@ -15,6 +15,7 @@
 #include "CSE.h"
 #include "Deinterleave.h"
 #include "Param.h"
+#include "Solve.h"
 
 namespace Halide {
 namespace Internal {
@@ -435,6 +436,7 @@ private:
 
         op->b.accept(this);
         if (!interval.is_bounded()) {
+            // Uses interval produced by op->b which might be half bound.
             return;
         }
         Interval b = interval;
@@ -503,12 +505,14 @@ private:
     void visit_compare(const Expr &a_expr, const Expr &b_expr) {
         a_expr.accept(this);
         if (!interval.is_bounded()) {
+            bounds_of_type(Bool());
             return;
         }
         Interval a = interval;
 
         b_expr.accept(this);
         if (!interval.is_bounded()) {
+            bounds_of_type(Bool());
             return;
         }
         Interval b = interval;
@@ -520,7 +524,7 @@ private:
         } else if (can_prove(always_false)) {
             interval = Interval::single_point(const_false());
         } else {
-            bounds_of_type(Bool(a_expr.type().lanes()));
+            bounds_of_type(Bool());
         }
     }
 
@@ -563,12 +567,14 @@ private:
     void visit(const Select *op) {
         op->true_value.accept(this);
         if (!interval.is_bounded()) {
+            // Uses interval produced by op->true_value which might be half bound.
             return;
         }
         Interval a = interval;
 
         op->false_value.accept(this);
         if (!interval.is_bounded()) {
+            // Uses interval produced by op->false_value which might be half bound.
             return;
         }
         Interval b = interval;
@@ -1041,6 +1047,76 @@ bool box_contains(const Box &outer, const Box &inner) {
     return is_one(simplify(condition));
 }
 
+class FindInnermostVar : public IRVisitor {
+public:
+    const Scope<int> &vars_depth;
+    string innermost_var;
+
+    FindInnermostVar(const Scope<int> &vars_depth)
+        : vars_depth(vars_depth) {}
+
+private:
+    using IRVisitor::visit;
+    int innermost_depth = -1;
+
+    void visit(const Variable *op) {
+        if (vars_depth.contains(op->name)) {
+            int depth = vars_depth.get(op->name);
+            if (depth > innermost_depth) {
+                innermost_var = op->name;
+                innermost_depth = depth;
+            }
+        }
+    }
+};
+
+// Place innermost vars in an IfThenElse's condition as far to the left as possible.
+class SolveIfThenElse : public IRMutator {
+    // Scope of variable names and their depths. Higher depth indicates
+    // variable defined more innermost.
+    Scope<int> vars_depth;
+    int depth = -1;
+
+    using IRMutator::visit;
+
+    void push_var(const string &var) {
+        depth += 1;
+        vars_depth.push(var, depth);
+    }
+
+    void pop_var(const string &var) {
+        depth -= 1;
+        vars_depth.pop(var);
+    }
+
+    void visit(const LetStmt *op) {
+        push_var(op->name);
+        IRMutator::visit(op);
+        pop_var(op->name);
+    }
+
+    void visit(const For *op) {
+        push_var(op->name);
+        IRMutator::visit(op);
+        pop_var(op->name);
+    }
+
+    void visit(const IfThenElse *op) {
+        IRMutator::visit(op);
+        op = stmt.as<IfThenElse>();
+        internal_assert(op);
+
+        FindInnermostVar find(vars_depth);
+        op->condition.accept(&find);
+        if (!find.innermost_var.empty()) {
+            Expr condition = solve_expression(op->condition, find.innermost_var).result;
+            if (!condition.same_as(op->condition)) {
+                stmt = IfThenElse::make(condition, op->then_case, op->else_case);
+            }
+        }
+    }
+};
+
 // Compute the box produced by a statement
 class BoxesTouched : public IRGraphVisitor {
 
@@ -1377,6 +1453,13 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    // Move the innermost vars in an IfThenElse's condition as far to the left
+    // as possible, so that BoxesTouched can prune the variable scope tighter
+    // when encountering the IfThenElse.
+    if (s.defined()) {
+        s = SolveIfThenElse().mutate(s);
+    }
+
     // Do calls and provides separately, for better simplification.
     BoxesTouched calls(consider_calls, false, fn, &scope, fb);
     BoxesTouched provides(false, consider_provides, fn, &scope, fb);
