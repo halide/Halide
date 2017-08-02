@@ -114,6 +114,8 @@ std::string get_current_directory() {
     return dir;
 #else
     std::string dir;
+    // Note that passing null for the first arg isn't strictly POSIX, but is
+    // supported everywhere we currently build.
     char *p = getcwd(nullptr, 0);
     internal_assert(p != NULL) << "getcwd() failed";
     dir = p;
@@ -156,6 +158,10 @@ std::string make_absolute_path(const std::string &path) {
     if (path.size() >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) {
         is_absolute = true;
         sep = path[2];
+    } else if (path.size() > 2 && path[0] == '\\' && path[1] == '\\') {
+        // Also allow for UNC-style paths beginning with double-backslash
+        is_absolute = true;
+        sep = path[0];
     }
 #endif
     if (!is_absolute) {
