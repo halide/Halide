@@ -1,16 +1,16 @@
 load("@halide//:halide.bzl", "halide_library")
 
 halide_library(
-  name="bazeldemo", 
-  includes=["."],
-  srcs=["bazeldemo_generator.cpp"]
+    name = "bazeldemo",
+    srcs = ["bazeldemo_generator.cpp"],
+    includes = ["."],
 )
 
 cc_binary(
     name = "main",
     srcs = ["main.cpp"],
     deps = [
-      ":bazeldemo",
-      "@halide//:halide_buffer"
+        ":bazeldemo",
+        "@halide//:halide_buffer",
     ],
 )

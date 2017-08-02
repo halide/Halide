@@ -50,9 +50,9 @@ _IGNORE_UNUSED = ["-Wno-unused-variable"]
     data = glob(["images/*.png"]),
     linkopts = halide_language_linkopts(),
     deps = [
+        ":clock",
         "@halide//:language",
         "@halide//tools:halide_image_io",
-        ":clock",
     ],
 ) for t in [
     "lesson_02_input_image",
@@ -95,8 +95,8 @@ cc_binary(
     ],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        "@halide//:language",
         ":lesson_10_aot_compilation_generate_lib",
+        "@halide//:language",
     ],
 )
 

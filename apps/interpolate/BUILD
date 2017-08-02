@@ -13,9 +13,9 @@ cc_binary(
     copts = halide_language_copts(),
     linkopts = halide_language_linkopts(),
     deps = [
+        "//tools:halide_benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
         "@halide//:language",
         "@halide//tools:halide_image_io",
-        "//tools:halide_benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
 )
 
@@ -26,7 +26,7 @@ exec_test(
         "test -f out.png || exit",
     ],
     data = [
-        "@halide//apps/images:rgba.png",
         ":interpolate",
+        "@halide//apps/images:rgba.png",
     ],
 )

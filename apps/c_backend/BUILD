@@ -28,8 +28,8 @@ cc_test(
     name = "run",
     srcs = [
         "run.cpp",
-        ":pipeline_c_h",
         ":pipeline_c_cc",
+        ":pipeline_c_h",
     ],
     linkopts = halide_runtime_linkopts(),
     deps = [
@@ -60,8 +60,8 @@ cc_test(
     name = "run_cpp",
     srcs = [
         "run_cpp.cpp",
-        ":pipeline_cpp_cpp_h",
         ":pipeline_cpp_cpp_cc",
+        ":pipeline_cpp_cpp_h",
     ],
     linkopts = halide_runtime_linkopts(),
     deps = [

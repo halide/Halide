@@ -214,7 +214,7 @@ halide_library_from_generator(
         "untyped_buffer_input.type=uint8",
         "untyped_buffer_input.dim=3",
         "simple_input.type=float32",
-        "array_input.type=float32", 
+        "array_input.type=float32",
         "array_input.size=2",
         "int_arg.size=2",
         "tuple_output.type=float32,float32",

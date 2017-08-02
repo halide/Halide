@@ -15,7 +15,10 @@ cc_library(
     hdrs = ["halide_image_io.h"],
     includes = ["."],
     visibility = ["//visibility:public"],
-    deps = ["@png_archive//:png", "@jpeg_archive//:jpeg"],
+    deps = [
+        "@jpeg_archive//:jpeg",
+        "@png_archive//:png",
+    ],
 )
 
 cc_library(

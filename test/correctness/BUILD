@@ -3,9 +3,9 @@ load("@halide//:halide.bzl", "halide_language_copts", "halide_language_linkopts"
 [cc_test(
     name = test[0:-4],
     srcs = [test],
-    copts = halide_language_copts() + 
-            ["-UNDEBUG"] +
-            (["-fexceptions"] if ("exception" in test) else []),
+    copts = halide_language_copts() + [
+        "-UNDEBUG",
+    ] + (["-fexceptions"] if ("exception" in test) else []),
     linkopts = halide_language_linkopts(),
     deps = ["@halide//:language"] + [
         # These are really only needed for a few tests, but easier (& harmless) to include in all of them
@@ -14,7 +14,10 @@ load("@halide//:halide.bzl", "halide_language_copts", "halide_language_linkopts"
         "//test/common:halide_test_dirs",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
         "//tools:halide_image_io",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
-) for test in glob(["*.cpp"], exclude=["halide_buffer.cpp"])]
+) for test in glob(
+    ["*.cpp"],
+    exclude = ["halide_buffer.cpp"],
+)]
 
 # Note that this test must *not* link in either libHalide, or a Halide runtime;
 # this test should be usable without either. (Note that this requires an extra
@@ -22,10 +25,11 @@ load("@halide//:halide.bzl", "halide_language_copts", "halide_language_linkopts"
 cc_test(
     name = "halide_buffer",
     srcs = ["halide_buffer.cpp"],
-    copts = halide_language_copts() + 
-            ["-UNDEBUG"],
+    copts = halide_language_copts() + [
+        "-UNDEBUG",
+    ],
     linkopts = halide_language_linkopts(),
-    deps = ["@halide//:runtime"]
+    deps = ["@halide//:runtime"],
 )
 
 [cc_test(

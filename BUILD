@@ -70,8 +70,8 @@ genrule(
 cc_library(
     name = "single_language_header_lib",
     srcs = [":build_single_language_header"],
-    includes = ["generated"],
     copts = halide_language_copts(),
+    includes = ["generated"],
     linkstatic = 1,
 )
 
@@ -186,11 +186,11 @@ _RUNTIME_INLINED_C_COMPONENTS = [
 
 gen_runtime(
     "halide_runtime_components",
-    _RUNTIME_CPP_COMPONENTS, 
-    _RUNTIME_LL_COMPONENTS, 
-    _RUNTIME_NVIDIA_BITCODE_COMPONENTS, 
-    _RUNTIME_HEADER_COMPONENTS, 
-    _RUNTIME_INLINED_C_COMPONENTS
+    _RUNTIME_CPP_COMPONENTS,
+    _RUNTIME_LL_COMPONENTS,
+    _RUNTIME_NVIDIA_BITCODE_COMPONENTS,
+    _RUNTIME_HEADER_COMPONENTS,
+    _RUNTIME_INLINED_C_COMPONENTS,
 )
 
 _ENABLED_COMPONENTS = get_llvm_enabled_components() + [
@@ -217,10 +217,14 @@ cc_library(
         "-DCOMPILING_HALIDE",
         "-DLLVM_VERSION=" + get_llvm_version(),
     ] + [
-        "-D%s" % component for component in _ENABLED_COMPONENTS
+        "-D%s" % component
+        for component in _ENABLED_COMPONENTS
     ] + halide_language_copts(),
     linkstatic = 1,
-    deps = [":halide_runtime_components", "@llvm//:llvm"],
+    deps = [
+        ":halide_runtime_components",
+        "@llvm//:llvm",
+    ],
 )
 
 genrule(
@@ -261,8 +265,8 @@ cc_binary(
 
 cc_library(
     name = "language",
-    visibility = ["//visibility:public"],
     copts = halide_language_copts(),
+    visibility = ["//visibility:public"],
     deps = [
         ":lib_halide_internal",
         ":runtime",
@@ -289,8 +293,8 @@ _DEFAULT_RUNTIME_LINKOPTS = [
 cc_library(
     name = "runtime",
     hdrs = [":runtime_headers"],
-    includes = ["src/runtime"],
     copts = halide_language_copts(),
+    includes = ["src/runtime"],
     linkopts = select({
         # There isn't (yet) a good way to make a config that is "Any Android",
         # so we're forced to specialize on all supported Android CPU configs.
@@ -385,8 +389,8 @@ pkg_tar(
 cc_library(
     name = "mini_opengl",
     testonly = 1,
-    copts = halide_language_copts(),
     hdrs = ["src/runtime/mini_opengl.h"],
+    copts = halide_language_copts(),
     includes = [
         "src",
         "src/runtime",
@@ -398,8 +402,8 @@ cc_library(
 cc_library(
     name = "device_interface",
     testonly = 1,
-    copts = halide_language_copts(),
     hdrs = ["src/runtime/device_interface.h"],
+    copts = halide_language_copts(),
     includes = ["src/runtime"],
     visibility = ["//test:__subpackages__"],  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
 )
@@ -407,11 +411,11 @@ cc_library(
 cc_library(
     name = "internal_test_includes",
     testonly = 1,
-    copts = halide_language_copts(),
     hdrs = [
         ":language_headers",
         ":runtime_headers",
     ],
+    copts = halide_language_copts(),
     includes = ["src"],
     visibility = ["//test:__subpackages__"],  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
 )

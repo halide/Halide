@@ -22,10 +22,10 @@ cc_binary(
     ],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        "@halide//tools:halide_image_io",
-        "@halide//tools:halide_malloc_trace",
         ":camera_pipe",
         "//tools:halide_benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
+        "@halide//tools:halide_image_io",
+        "@halide//tools:halide_malloc_trace",
     ],
 )
 
@@ -38,8 +38,8 @@ exec_test(
         "test -f out.png || exit",
     ],
     data = [
-        "@halide//apps/images:bayer_raw.png",
         ":process",
+        "@halide//apps/images:bayer_raw.png",
     ],
 )
 

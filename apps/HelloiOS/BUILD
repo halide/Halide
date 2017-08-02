@@ -39,7 +39,7 @@ load(
     generator = ":reaction_diffusion_2_%s_generator" % phase,
     halide_target_features = ["user_context"],
     includes = ["."],
-    tags=["manual"],
+    tags = ["manual"],
 ) for phase in [
     "init",
     "update",
@@ -49,9 +49,12 @@ load(
 [halide_library_from_generator(
     name = "reaction_diffusion_2_metal_%s" % phase,
     generator = ":reaction_diffusion_2_%s_generator" % phase,
-    halide_target_features = ["metal", "user_context"],
+    halide_target_features = [
+        "metal",
+        "user_context",
+    ],
     includes = ["."],
-    tags=["manual"],
+    tags = ["manual"],
 ) for phase in [
     "init",
     "update",
@@ -64,18 +67,18 @@ objc_library(
         ["HelloiOS/*.mm"],
         exclude = ["HelloiOS/main.mm"],
     ),
-    copts = ["-std=c++11"],
     hdrs = glob(["HelloiOS/*.h"]),
+    copts = ["-std=c++11"],
+    tags = ["manual"],
     deps = [
         ":reaction_diffusion_2_init",
-        ":reaction_diffusion_2_render",
-        ":reaction_diffusion_2_update",
         ":reaction_diffusion_2_metal_init",
         ":reaction_diffusion_2_metal_render",
         ":reaction_diffusion_2_metal_update",
+        ":reaction_diffusion_2_render",
+        ":reaction_diffusion_2_update",
         "//:runtime",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
     ],
-    tags=["manual"],
 )
 
 objc_binary(
@@ -89,15 +92,15 @@ objc_binary(
         "Metal",
         "QuartzCore",
     ],
+    tags = ["manual"],
     deps = [
         ":HelloiOS",
     ],
-    tags=["manual"],
 )
 
 ios_application(
     name = "ios-app",
     binary = ":ios-app-binary",
     infoplist = "HelloiOS/HelloiOS-Info.plist",
-    tags=["manual"],
+    tags = ["manual"],
 )

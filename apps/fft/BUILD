@@ -21,8 +21,8 @@ cc_binary(
     copts = halide_language_copts(),
     linkopts = halide_language_linkopts(),
     deps = [
-        "@halide//:language",
         "//tools:halide_benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
+        "@halide//:language",
     ],
 )
 
@@ -49,8 +49,8 @@ cc_library(
         "fft.h",
         "funct.h",
     ],
-    deps = ["@halide//:language"],
     copts = halide_language_copts(),
+    deps = ["@halide//:language"],
 )
 
 halide_generator(

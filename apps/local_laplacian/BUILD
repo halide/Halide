@@ -16,9 +16,9 @@ cc_binary(
     srcs = ["process.cpp"],
     linkopts = halide_runtime_linkopts(),
     deps = [
-        "@halide//tools:halide_image_io",
         ":local_laplacian",
         "//tools:halide_benchmark",  # TODO add @halide when https://github.com/bazelbuild/bazel/issues/1248 is fixed
+        "@halide//tools:halide_image_io",
     ],
 )
 
@@ -29,7 +29,7 @@ exec_test(
         "test -f out.png || exit",
     ],
     data = [
-        "@halide//apps/images:rgb.png",
         ":process",
+        "@halide//apps/images:rgb.png",
     ],
 )
