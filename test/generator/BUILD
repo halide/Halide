@@ -82,7 +82,7 @@ halide_library_from_generator(
     name = "cxx_mangling",
     generator = ":cxx_mangling_generator",
     includes = ["."],
-    namespace = "HalideTest",
+    namespace = "HalideTest::AnotherNamespace",
 )
 
 halide_library_from_generator(
