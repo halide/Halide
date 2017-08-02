@@ -59,7 +59,6 @@ set(RUNTIME_CPP
   module_jit_ref_count
   msan
   msan_stubs
-  noos
   old_buffer_t
   opencl
   opengl
@@ -286,7 +285,6 @@ set(HEADER_FILES
   Debug.h
   DebugArguments.h
   DebugToFile.h
-  DeepCopy.h
   Definition.h
   Deinterleave.h
   DeviceArgument.h
@@ -303,6 +301,7 @@ set(HEADER_FILES
   Float16.h
   Func.h
   Function.h
+  FunctionPtr.h
   FuseGPUThreadLoops.h
   FuzzFloatStores.h
   Generator.h
@@ -439,7 +438,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   DebugArguments.cpp
   DebugToFile.cpp
-  DeepCopy.cpp
   Definition.cpp
   Deinterleave.cpp
   DeviceArgument.cpp
@@ -632,7 +630,6 @@ if (MSVC)
     target_compile_options(Halide PRIVATE "/Zc:sizedDealloc-")
   endif()
 else()
-  target_compile_options(Halide PUBLIC "-std=c++11") # Halide and its clients need to use C++11
   target_compile_options(Halide PUBLIC "-fno-rtti")
 endif()
 

@@ -21,6 +21,7 @@ const int stack_size = 1024 * 1024;
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
+typedef halide_hexagon_remote_scalar_t scalar_t;
 
 extern "C" {
 
@@ -100,16 +101,6 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
-                             halide_free_t custom_free,
-                             halide_print_t print,
-                             halide_error_handler_t error_handler,
-                             halide_do_par_for_t do_par_for,
-                             halide_do_task_t do_task,
-                             void *(*)(const char *),
-                             void *(*)(const char *),
-                             void *(*)(void *, const char *));
-
 PipelineContext run_context(stack_alignment, stack_size);
 
 __attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
@@ -140,44 +131,6 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
             log_printf("mmap_dlopen failed\n");
             return -1;
         }
-    }
-    // Initialize the runtime. The Hexagon runtime can't call any
-    // system functions (because we can't link them), so we put all
-    // the implementations that need to do so here, and pass poiners
-    // to them in here.
-    set_runtime_t set_runtime;
-    if (use_dlopenbuf()) {
-        set_runtime = (set_runtime_t)dlsym(lib, "halide_noos_set_runtime");
-    } else {
-        set_runtime = (set_runtime_t)mmap_dlsym(lib, "halide_noos_set_runtime");
-    }
-    if (!set_runtime) {
-        if (use_dlopenbuf()) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        log_printf("halide_noos_set_runtime not found in shared object\n");
-        return -1;
-    }
-
-    int result = set_runtime(halide_malloc,
-                             halide_free,
-                             halide_print,
-                             halide_error,
-                             halide_do_par_for,
-                             halide_do_task,
-                             halide_get_symbol,
-                             halide_load_library,
-                             halide_get_library_symbol);
-    if (result != 0) {
-        if (use_dlopenbuf()) {
-            dlclose(lib);
-        } else {
-            mmap_dlclose(lib);
-        }
-        log_printf("set_runtime failed (%d)\n", result);
-        return result;
     }
 
     *module_ptr = reinterpret_cast<handle_t>(lib);
@@ -360,12 +313,10 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
     return *sym_ptr != 0 ? 0 : -1;
 }
 
-
-int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
-                              const buffer *input_buffersPtrs, int input_buffersLen,
-                              buffer *output_buffersPtrs, int output_buffersLen,
-                              const buffer *input_scalarsPtrs, int input_scalarsLen) {
-
+int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
+                                 const buffer *input_buffersPtrs, int input_buffersLen,
+                                 buffer *output_buffersPtrs, int output_buffersLen,
+                                 const scalar_t *scalars, int scalarsLen) {
     // Get a pointer to the argv version of the pipeline.
     pipeline_argv_t pipeline = reinterpret_cast<pipeline_argv_t>(function);
 
@@ -378,7 +329,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         uint64_t dev;
         uint8_t* host;
     };
-    void **args = (void **)__builtin_alloca((input_buffersLen + input_scalarsLen + output_buffersLen) * sizeof(void *));
+    void **args = (void **)__builtin_alloca((input_buffersLen + scalarsLen + output_buffersLen) * sizeof(void *));
     buffer_t *buffers = (buffer_t *)__builtin_alloca((input_buffersLen + output_buffersLen) * sizeof(buffer_t));
 
     void **next_arg = &args[0];
@@ -394,8 +345,8 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
         *next_arg = next_buffer_t;
     }
     // Input scalars are last.
-    for (int i = 0; i < input_scalarsLen; i++, next_arg++) {
-        *next_arg = input_scalarsPtrs[i].data;
+    for (int i = 0; i < scalarsLen; i++, next_arg++) {
+        *next_arg = const_cast<scalar_t *>(&scalars[i]);
     }
 
     // Prior to running the pipeline, power HVX on (if it was not already on).

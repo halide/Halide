@@ -135,38 +135,6 @@ bool propagate_indeterminate_expression(const Expr &e0, const Expr &e1, const Ex
            propagate_indeterminate_expression(e2, t, expr);
 }
 
-class ExprIsPure : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Call *op) {
-        if (!op->is_pure()) {
-            result = false;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Load *op) {
-        if (!op->image.defined() && !op->param.defined()) {
-            // It's a load from an internal buffer, which could
-            // mutate.
-            result = false;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-public:
-    bool result = true;
-};
-
-/** Test if an expression's value could be different at different
- * points in the code. */
-bool expr_is_pure(const Expr &e) {
-    ExprIsPure pure;
-    e.accept(&pure);
-    return pure.result;
-}
-
 #if LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS
 static int debug_indent = 0;
 #endif
@@ -406,7 +374,7 @@ private:
             if (const_int_bounds(mod->b, &min_b, &max_b) &&
                 (min_b > 0 || max_b < 0)) {
                 *min_val = 0;
-                *max_val = std::abs(max_b) - 1;
+                *max_val = std::max(std::abs(min_b), std::abs(max_b)) - 1;
                 return no_overflow_scalar_int(t.element_of()) ||
                        (t.can_represent(*min_val) && t.can_represent(*max_val));
             }
@@ -5262,7 +5230,7 @@ private:
         } else if (let_first &&
                    let_rest &&
                    equal(let_first->value, let_rest->value) &&
-                   expr_is_pure(let_first->value)) {
+                   is_pure(let_first->value)) {
 
             // Do both first and rest start with the same let statement (occurs when unrolling).
             Stmt new_block = mutate(Block::make(let_first->body, let_rest->body));
@@ -5278,7 +5246,7 @@ private:
         } else if (if_first &&
                    if_rest &&
                    equal(if_first->condition, if_rest->condition) &&
-                   expr_is_pure(if_first->condition)) {
+                   is_pure(if_first->condition)) {
             // Two ifs with matching conditions
             Stmt then_case = mutate(Block::make(if_first->then_case, if_rest->then_case));
             Stmt else_case;
@@ -5294,8 +5262,8 @@ private:
         } else if (if_first &&
                    if_rest &&
                    !if_rest->else_case.defined() &&
-                   expr_is_pure(if_first->condition) &&
-                   expr_is_pure(if_rest->condition) &&
+                   is_pure(if_first->condition) &&
+                   is_pure(if_rest->condition) &&
                    is_one(mutate((if_first->condition && if_rest->condition) == if_rest->condition))) {
             // Two ifs where the second condition is tighter than
             // the first condition.  The second if can be nested
@@ -5720,6 +5688,11 @@ void check_vectors() {
           broadcast(x % 2, 4));
     check(Expr(ramp(2*x+1, 4, 4)) % (broadcast(2, 4)),
           broadcast(1, 4));
+
+    check(max(broadcast(24, 2), broadcast(x, 2) % ramp(-8, -33, 2)),
+          max(broadcast(x, 2) % ramp(-8, -33, 2), broadcast(24, 2)));
+    check(max(broadcast(41, 2), broadcast(x, 2) % ramp(-8, -33, 2)),
+          broadcast(41, 2));
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
