@@ -427,3 +427,12 @@ cc_library(
         ":single_language_header_lib",
     ],
 )
+
+# Header-only library to let clients to use Halide::Buffer at runtime.
+# (Generators should never need to use this library.)
+cc_library(
+    name = "halide_buffer",
+    hdrs = glob(["include/HalideBuffer*.h"]),
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
