@@ -903,6 +903,14 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%)
 
+clean_generators:
+	rm -rf $(BIN_DIR)/*.generator
+	rm -rf $(FILTERS_DIR)
+	rm -rf $(BIN_DIR)/$(TARGET)/generator_*
+	rm -rf $(BUILD_DIR)/*_generator.o
+	rm -f $(BUILD_DIR)/GenGen.o
+	rm -f $(BUILD_DIR)/RunGen.o
+
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generators
 
 LIBHALIDE_DEPS ?= $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
