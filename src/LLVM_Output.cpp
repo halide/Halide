@@ -8,6 +8,17 @@
 #include <iostream>
 #include <fstream>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <stdio.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 namespace Halide {
 
 std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename) {
@@ -87,9 +98,119 @@ void compile_llvm_module_to_llvm_assembly(llvm::Module &module, Internal::LLVMOS
     module.print(out, nullptr);
 }
 
-void create_static_library(const std::vector<std::string> &src_files, const Target &target,
-                    const std::string &dst_file, bool deterministic) {
-    internal_assert(!src_files.empty());
+// Note that the utilities for get/set working directory are deliberately *not* in Util.h;
+// generally speaking, you shouldn't ever need or want to do this, and doing so is asking for
+// trouble. This exists solely to work around an issue with LLVM, hence its restricted
+// location. If we ever legitimately need this elsewhere, consider moving it to Util.h.
+namespace {
+
+std::string get_current_directory() {
+#ifdef _WIN32
+    std::string dir;
+    char p[MAX_PATH];
+    DWORD ret = GetCurrentDirectoryA(MAX_PATH, p);
+    internal_assert(ret != 0) << "GetCurrentDirectoryA() failed";
+    dir = p;
+    return dir;
+#else
+    std::string dir;
+    // Note that passing null for the first arg isn't strictly POSIX, but is
+    // supported everywhere we currently build.
+    char *p = getcwd(nullptr, 0);
+    internal_assert(p != NULL) << "getcwd() failed";
+    dir = p;
+    free(p);
+    return dir;
+#endif
+}
+
+void set_current_directory(const std::string &d) {
+#ifdef _WIN32
+    internal_assert(SetCurrentDirectoryA(d.c_str())) << "SetCurrentDirectoryA() failed";
+#else
+    internal_assert(chdir(d.c_str()) == 0) << "chdir() failed";
+#endif
+}
+
+std::pair<std::string, std::string> dir_and_file(const std::string &path) {
+    std::string dir, file;
+    size_t slash_pos = path.rfind('/');
+#ifdef _WIN32
+    if (slash_pos == std::string::npos) {
+        // Windows is a thing
+        slash_pos = path.rfind('\\');
+    }
+#endif
+    if (slash_pos != std::string::npos) {
+        dir = path.substr(0, slash_pos);
+        file = path.substr(slash_pos + 1);
+    } else {
+        file = path;
+    }
+    return { dir, file };
+}
+
+std::string make_absolute_path(const std::string &path) {
+    bool is_absolute = path.size() >= 1 && path[0] == '/';
+    char sep = '/';
+#ifdef _WIN32
+    // Allow for C:\whatever or c:/whatever on Windows
+    if (path.size() >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')) {
+        is_absolute = true;
+        sep = path[2];
+    } else if (path.size() > 2 && path[0] == '\\' && path[1] == '\\') {
+        // Also allow for UNC-style paths beginning with double-backslash
+        is_absolute = true;
+        sep = path[0];
+    }
+#endif
+    if (!is_absolute) {
+        return get_current_directory() + sep + path;
+    }
+    return path;
+}
+
+struct SetCwd {
+    const std::string original_directory;
+    explicit SetCwd(const std::string &d) : original_directory(get_current_directory()) {
+        if (!d.empty()) {
+            set_current_directory(d);
+        }
+    }
+    ~SetCwd() {
+        set_current_directory(original_directory);
+    }
+};
+
+}
+
+void create_static_library(const std::vector<std::string> &src_files_in, const Target &target,
+                           const std::string &dst_file_in, bool deterministic) {
+    internal_assert(!src_files_in.empty());
+
+    // Ensure that dst_file is an absolute path, since we're going to change the
+    // working directory temporarily.
+    std::string dst_file = make_absolute_path(dst_file_in);
+
+    // If we give absolute paths to LLVM, it will dutifully embed them in the resulting
+    // .a file; some versions of 'ar x' are unable to deal with the resulting files,
+    // which is inconvenient. So let's doctor the inputs to be simple filenames,
+    // and temporarily change the working directory. (Note that this requires all the
+    // input files be in the same directory; this is currently always the case for
+    // our existing usage.)
+    std::string src_dir = dir_and_file(src_files_in.front()).first;
+    std::vector<std::string> src_files;
+    for (auto &s_in : src_files_in) {
+        auto df = dir_and_file(s_in);
+        internal_assert(df.first == src_dir) << "All inputs to create_static_library() must be in the same directory";
+        for (auto &s_existing : src_files) {
+            internal_assert(s_existing != df.second) << "create_static_library() does not allow duplicate filenames.";
+        }
+        src_files.push_back(df.second);
+    }
+
+    SetCwd set_cwd(src_dir);
+
 #if LLVM_VERSION >= 39
     std::vector<llvm::NewArchiveMember> new_members;
     for (auto &src : src_files) {
