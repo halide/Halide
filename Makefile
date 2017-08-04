@@ -315,7 +315,6 @@ SOURCE_FILES = \
   ImageParam.cpp \
   InferArguments.cpp \
   InjectHostDevBufferCopies.cpp \
-  InjectImageIntrinsics.cpp \
   InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
@@ -450,7 +449,6 @@ HEADER_FILES = \
   ImageParam.h \
   InferArguments.h \
   InjectHostDevBufferCopies.h \
-  InjectImageIntrinsics.h \
   InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
