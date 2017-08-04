@@ -89,6 +89,36 @@ bool is_no_op(const Stmt &s) {
     return e && is_const(e->value);
 }
 
+class ExprIsPure : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        if (!op->image.defined() && !op->param.defined()) {
+            // It's a load from an internal buffer, which could
+            // mutate.
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+public:
+    bool result = true;
+};
+
+bool is_pure(const Expr &e) {
+    ExprIsPure pure;
+    e.accept(&pure);
+    return pure.result;
+}
+
 const int64_t *as_const_int(const Expr &e) {
     if (!e.defined()) {
         return nullptr;

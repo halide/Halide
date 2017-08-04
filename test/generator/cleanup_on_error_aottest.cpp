@@ -32,6 +32,7 @@ void *my_halide_malloc(void *user_context, size_t x) {
 }
 
 void my_halide_free(void *user_context, void *ptr) {
+    if (!ptr) return;
     frees++;
     free(((void**)ptr)[-1]);
 }
