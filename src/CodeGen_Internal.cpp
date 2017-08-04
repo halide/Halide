@@ -464,7 +464,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 mcpu, mattrs,
                                                 options,
                                                 llvm::Reloc::PIC_,
+#if LLVM_VERSION < 60
                                                 llvm::CodeModel::Default,
+#else
+                                                llvm::CodeModel::Small,
+#endif
                                                 llvm::CodeGenOpt::Aggressive));
 }
 
