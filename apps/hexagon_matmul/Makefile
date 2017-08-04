@@ -25,19 +25,19 @@ BIN ?= bin
 all: $(BIN)/process-host $(BIN)/process-arm-64-android $(BIN)/process-arm-32-android $(BIN)/process-arm-64-profile-android $(BIN)/process-arm-32-profile-android
 
 $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/pipeline_cpu.o: $(BIN)/pipeline
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f pipeline_cpu target=$*
 
 $(BIN)/%/pipeline_hvx64.o: $(BIN)/pipeline
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
 
 $(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
 
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
