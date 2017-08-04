@@ -76,10 +76,15 @@ struct AllocationHeader {
 
 /** A similar struct for managing device allocations. */
 struct DeviceRefCount {
+    enum struct Ownership : int {
+        Allocated,
+        WrappedNative,
+        Unmanaged,
+    };
     // This is only ever constructed when there's something to manage,
     // so start at one.
     std::atomic<int> count {1};
-    bool wrapping_native_device_handle {false};
+    Ownership ownership;
 };
 
 /** A templated Buffer class that wraps halide_buffer_t and adds
@@ -199,9 +204,9 @@ private:
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
                        "before the device allocation is freed.");
-                if (dev_ref_count && dev_ref_count->wrapping_native_device_handle) {
+                if (dev_ref_count && dev_ref_count->ownership == DeviceRefCount::Ownership::WrappedNative) {
                     buf.device_interface->detach_native(nullptr, &buf);
-                } else {
+                } else if (dev_ref_count && dev_ref_count->ownership == DeviceRefCount::Ownership::Allocated) {
                     buf.device_interface->device_free(nullptr, &buf);
                 }
             }
@@ -252,7 +257,7 @@ private:
         copy_shape_from(b);
         if (b.device) {
             dev_ref_count = new DeviceRefCount;
-            dev_ref_count->wrapping_native_device_handle = true;
+            dev_ref_count->ownership = DeviceRefCount::Ownership::Unmanaged;
         }
     }
 
@@ -1271,9 +1276,9 @@ public:
 
     int device_free(void *ctx = nullptr) {
         if (dev_ref_count) {
-            assert(!dev_ref_count->wrapping_native_device_handle &&
-                   "Can't call device_free on wrapped native device handle. "
-                   "Call device_detach_native instead.");
+            assert(dev_ref_count->ownership == DeviceRefCount::Ownership::Allocated &&
+                   "Can't call device_free on an unmanaged or wrapped native device handle. "
+                   "Free the source allocation or call device_detach_native instead.");
             // Multiple people may be holding onto this dev field
             assert(dev_ref_count->count == 1 &&
                    "Multiple Halide::Runtime::Buffer objects share this device "
@@ -1296,15 +1301,17 @@ public:
                            uint64_t handle, void *ctx = nullptr) {
         assert(device_interface);
         dev_ref_count = new DeviceRefCount;
-        dev_ref_count->wrapping_native_device_handle = true;
+        dev_ref_count->ownership = DeviceRefCount::Ownership::WrappedNative;
         return device_interface->wrap_native(ctx, &buf, handle, device_interface);
     }
 
     int device_detach_native(void *ctx = nullptr) {
-        assert(dev_ref_count && dev_ref_count->wrapping_native_device_handle &&
+        assert(dev_ref_count &&
+               dev_ref_count->ownership == DeviceRefCount::Ownership::WrappedNative &&
                "Only call device_detach_native on buffers wrapping a native "
                "device handle via device_wrap_native. This buffer was allocated "
-               "using device_malloc, so call device_free instead.");
+               "using device_malloc, or is unmanaged. "
+               "Call device_free or free the original allocation instead.");
         // Multiple people may be holding onto this dev field
         assert(dev_ref_count->count == 1 &&
                "Multiple Halide::Runtime::Buffer objects share this device "
