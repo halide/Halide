@@ -486,6 +486,16 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
                 f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
             }
         }
+        if (is_halide_extern_c_sym && t.arch == Target::Hexagon) {
+            // Hexagon standalone runtimes get compiled to shared
+            // objects, which need to export these symbols.
+            // TODO: It should work to do this after compiling the LLVM
+            // module in HexagonOffload.cpp (before linking to a shared
+            // object), but the functions have already been stripped at
+            // that point. I don't understand how this works for other
+            // targets/static libraries without this either.
+            f.setLinkage(llvm::GlobalValue::ExternalLinkage);
+        }
     }
 
     // Now remove the force-usage global that prevented clang from
@@ -726,7 +736,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
             modules.push_back(get_initmod_tracing(c, bits_64, debug));
             modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-            modules.push_back(get_initmod_cache(c, bits_64, debug));
+            if (!t.arch == Target::Hexagon) {
+                // TODO: Support this module in the Hexagon backend,
+                // currently generates assert at src/HexagonOffload.cpp:279
+                modules.push_back(get_initmod_cache(c, bits_64, debug));
+            }
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
 
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));

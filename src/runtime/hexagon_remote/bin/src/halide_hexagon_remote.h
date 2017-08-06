@@ -35,7 +35,7 @@ struct _halide_hexagon_remote_buffer__seq_octet {
 };
 typedef unsigned int halide_hexagon_remote_handle_t;
 typedef uint64 halide_hexagon_remote_scalar_t;
-__QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_initialize_kernels_v3)(const unsigned char* code, int codeLen, halide_hexagon_remote_handle_t* module_ptr) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_load_library)(const char* soname, int sonameLen, const unsigned char* code, int codeLen, halide_hexagon_remote_handle_t* module_ptr) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_get_symbol_v4)(halide_hexagon_remote_handle_t module_ptr, const char* name, int nameLen, halide_hexagon_remote_handle_t* sym_ptr) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_power_hvx_on)(void) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(halide_hexagon_remote_power_hvx_off)(void) __QAIC_HEADER_ATTRIBUTE;

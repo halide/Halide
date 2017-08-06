@@ -6,7 +6,7 @@ enum {
     None = 0,
     Alloc,
     Free,
-    InitKernels,
+    LoadLibrary,
     GetSymbol,
     Run,
     ReleaseKernels,
