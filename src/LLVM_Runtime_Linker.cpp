@@ -466,35 +466,29 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
 
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
-        bool can_strip = true;
-        for (const string &r : retain) {
-            if (f.getName() == r) {
-                can_strip = false;
-            }
-        }
-
         bool is_halide_extern_c_sym = Internal::starts_with(f.getName(), "halide_");
-        internal_assert(t.os == Target::NoOS || !is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
-            << " for function " << (std::string)f.getName() << "\n";
-        can_strip = can_strip && !is_halide_extern_c_sym;
-
-        llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
-        if (can_strip || t.os == Target::NoOS) {
-            if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
-                f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
-                f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-            }
-        }
-        if (is_halide_extern_c_sym && t.arch == Target::Hexagon) {
-            // Hexagon standalone runtimes get compiled to shared
-            // objects, which need to export these symbols.
-            // TODO: It should work to do this after compiling the LLVM
-            // module in HexagonOffload.cpp (before linking to a shared
-            // object), but the functions have already been stripped at
-            // that point. I don't understand how this works for other
-            // targets/static libraries without this either.
+        if (is_halide_extern_c_sym && t.has_feature(Target::SharedRuntime)) {
             f.setLinkage(llvm::GlobalValue::ExternalLinkage);
+        } else {
+            bool can_strip = true;
+            for (const string &r : retain) {
+                if (f.getName() == r) {
+                    can_strip = false;
+                }
+            }
+
+            internal_assert(t.os == Target::NoOS || !is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
+                << " for function " << (std::string)f.getName() << "\n";
+            can_strip = can_strip && !is_halide_extern_c_sym;
+
+            llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
+            if (can_strip || t.os == Target::NoOS) {
+                if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
+                    f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+                } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
+                    f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+                }
+            }
         }
     }
 
