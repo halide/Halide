@@ -862,7 +862,7 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         }
     }
 
-    Module shared_runtime("shared_runtime", target);
+    Module shared_runtime("shared_runtime", target.with_feature(Target::SharedRuntime));
     Module hexagon_module("hexagon_code", target.with_feature(Target::NoRuntime));
     InjectHexagonRpc injector(hexagon_module);
     s = injector.inject(s);
