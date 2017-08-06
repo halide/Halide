@@ -158,6 +158,8 @@ int halide_do_par_for(void *user_context, halide_task_t f,
     return 0;
 }
 
+void halide_mutex_lock(halide_mutex *) {}
+void halide_mutex_unlock(halide_mutex *) {}
 void halide_mutex_destroy(halide_mutex *) {}
 
 void *halide_get_symbol(const char *name) {
@@ -188,12 +190,19 @@ void *halide_get_symbol(const char *name) {
         {"munmap", (char *)(&munmap)},
         {"strcmp", (char *)(&strcmp)},
         {"strchr", (char *)(char *(*)(char *, int))(&strchr)},
+        {"strlen", (char *)(int (*)(const char *))(&strlen)},
         {"strstr", (char *)(char *(*)(char *, const char *))(&strstr)},
         {"strncmp", (char *)(&strncmp)},
         {"strncpy", (char *)(&strncpy)},
         {"write", (char *)(&write)},
 
+        {"halide_error", (char *)(&halide_error)},
+        {"halide_free", (char *)(&halide_free)},
+        {"halide_malloc", (char *)(&halide_malloc)},
+        {"halide_mutex_lock", (char *)(&halide_mutex_lock)},
+        {"halide_mutex_unlock", (char *)(&halide_mutex_unlock)},
         {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
+        {"halide_print", (char *)(&halide_print)},
         {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
         {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
         {"qurt_hvx_unlock", (char *)(&qurt_hvx_unlock)},
