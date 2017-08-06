@@ -815,11 +815,15 @@ public:
 
         if (!device_code.functions().empty()) {
             // Wrap the statement in calls to halide_initialize_kernels.
-            Expr buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "hexagon_code.buffer");
-            Expr code_size = Call::make(Int(32), Call::buffer_get_extent, { buf_var, 0 }, Call::Extern);
-            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { buf_var }, Call::Extern);
+            Expr runtime_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "shared_runtime.buffer");
+            Expr runtime_size = Call::make(Int(32), Call::buffer_get_extent, { runtime_buf_var, 0 }, Call::Extern);
+            Expr runtime_ptr = Call::make(Handle(), Call::buffer_get_host, { runtime_buf_var }, Call::Extern);
+
+            Expr code_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "hexagon_code.buffer");
+            Expr code_size = Call::make(Int(32), Call::buffer_get_extent, { code_buf_var, 0 }, Call::Extern);
+            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { code_buf_var }, Call::Extern);
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
-                                                       { module_state_ptr(), code_ptr, cast<uint64_t>(code_size) });
+                                                       { module_state_ptr(), code_ptr, cast<uint64_t>(code_size), runtime_ptr, cast<uint64_t>(runtime_size) });
             s = Block::make(init_kernels, s);
         }
 
@@ -858,12 +862,14 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         }
     }
 
-    Module hexagon_module("hexagon_code", target);
+    Module shared_runtime("shared_runtime", target);
+    Module hexagon_module("hexagon_code", target.with_feature(Target::NoRuntime));
     InjectHexagonRpc injector(hexagon_module);
     s = injector.inject(s);
 
     if (!hexagon_module.functions().empty()) {
         containing_module.append(hexagon_module);
+        containing_module.append(shared_runtime);
     }
 
     return s;
@@ -899,9 +905,15 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     }
 
     // Link into a shared object.
+    std::string soname = "lib" + device_code.name() + ".so";
     Elf::HexagonLinker linker(device_code.target());
-    std::vector<std::string> dependencies = { "libhalide_hexagon_remote_skel.so" };
-    std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies);
+    std::vector<std::string> dependencies = { "libshared_runtime.so", "libhalide_hexagon_remote_skel.so" };
+    std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies, soname);
+
+    if (soname == "libshared_runtime.so") {
+        std::ofstream temp("/tmp/libshared_runtime.so");
+        temp.write(shared_object.data(), shared_object.size());
+    }
 
     std::string signer = get_env_variable("HL_HEXAGON_CODE_SIGNER");
     if (!signer.empty()) {

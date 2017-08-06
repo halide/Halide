@@ -288,18 +288,13 @@ static void dllib_init() {
     dlinit(3, const_cast<char**>(builtin));
 }
 
-int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
+int load_library(const char *soname, const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
     void *lib = NULL;
     if (use_dlopenbuf) {
         if (!dlopenbuf) {
             log_printf("dlopenbuf not available.\n");
             return -1;
         }
-        // We need a unique soname, or dlopenbuf will return a
-        // previously opened library.
-        static int unique_id = 0;
-        char soname[256];
-        sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
 
         // Open the library
         dllib_init();
@@ -430,12 +425,13 @@ int main(int argc, const char **argv) {
             aligned_free(reinterpret_cast<void*>(RPC_ARG(0)));
             set_rpc_return(0);
             break;
-        case Message::InitKernels:
-            set_rpc_return(initialize_kernels(
-                reinterpret_cast<unsigned char*>(RPC_ARG(0)),
-                RPC_ARG(1),
-                RPC_ARG(2),
-                reinterpret_cast<handle_t*>(RPC_ARG(3))));
+        case Message::LoadLibrary:
+            set_rpc_return(load_library(
+                reinterpret_cast<char*>(RPC_ARG(0)),
+                reinterpret_cast<unsigned char*>(RPC_ARG(2)),
+                RPC_ARG(3),
+                RPC_ARG(4),
+                reinterpret_cast<handle_t*>(RPC_ARG(5))));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
