@@ -1343,6 +1343,10 @@ public:
     operator Func() const {
         return this->funcs().at(0);
     }
+
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(this->parameters_.at(0));
+    }
 };
 
 
@@ -1408,6 +1412,10 @@ public:
 
     operator Func() const {
         return this->funcs().at(0);
+    }
+
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(this->parameters_.at(0));
     }
 };
 
