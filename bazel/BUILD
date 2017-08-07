@@ -74,14 +74,65 @@ cc_library(
     visibility = ["//visibility:private"],
 )
 
+cc_library(
+    name = "halide_image_io",
+    hdrs = ["tools/halide_image_io.h"],
+    # TODO: include references to PNG and JPEG libraries;
+    # for now, just disable these two
+    defines = [
+        "HALIDE_NO_JPEG",
+        "HALIDE_NO_PNG",
+    ],
+    includes = [
+        "include",
+        "tools",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":runtime",
+    ],
+)
+
+cc_library(
+    name = "halide_benchmark",
+    hdrs = ["tools/halide_benchmark.h"],
+    includes = [
+        "include",
+        "tools",
+    ],
+)
+
 # This library is visibility:public, because any package that uses the
 # halide_library() rule will implicitly need access to it; that said, it is
 # intended only for the private, internal use of the halide_library() rule.
 # Please don't depend on it directly; doing so will likely break your code at
 # some point in the future.
 cc_library(
-    name = "internal_halide_generator_glue",
+    name = "gengen",
     srcs = ["tools/GenGen.cpp"],
     includes = ["include"],
     deps = [":language"],
 )
+
+# This library is visibility:public, because any package that uses the
+# halide_library() rule will implicitly need access to it; that said, it is
+# intended only for the private, internal use of the halide_library() rule.
+# Please don't depend on it directly; doing so will likely break your code at
+# some point in the future.
+cc_library(
+    name = "rungen",
+    srcs = [
+        "tools/RunGen.cpp",
+    ],
+    includes = ["include"],
+    deps = [
+        ":halide_benchmark",
+        ":halide_buffer",
+        ":halide_image_io",
+        ":runtime",
+    ],
+)
+
+exports_files([
+    "tools/RunGenStubs.cpp",
+])
