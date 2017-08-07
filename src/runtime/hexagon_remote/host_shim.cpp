@@ -45,4 +45,9 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
     return halide_hexagon_remote_load_library(soname, strlen(soname) + 1, code, codeLen, module_ptr);
 }
 
+// This is just a renaming.
+int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
+    return halide_hexagon_remote_release_library(module_ptr);
+}
+
 }  // extern "C"

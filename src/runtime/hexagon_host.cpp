@@ -29,7 +29,7 @@ typedef int (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char*, int, h
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
                              const remote_buffer*, int, const remote_buffer*, int,
                              remote_buffer*, int);
-typedef int (*remote_release_kernels_fn)(halide_hexagon_handle_t);
+typedef int (*remote_release_library_fn)(halide_hexagon_handle_t);
 typedef int (*remote_poll_log_fn)(char *, int, int *);
 typedef void (*remote_poll_profiler_state_fn)(int *, int *);
 typedef int (*remote_power_fn)();
@@ -43,7 +43,7 @@ typedef void (*host_free_fn)(void *);
 WEAK remote_load_library_fn remote_load_library = NULL;
 WEAK remote_get_symbol_fn remote_get_symbol = NULL;
 WEAK remote_run_fn remote_run = NULL;
-WEAK remote_release_kernels_fn remote_release_kernels = NULL;
+WEAK remote_release_library_fn remote_release_library = NULL;
 WEAK remote_poll_log_fn remote_poll_log = NULL;
 WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
 WEAK remote_power_fn remote_power_hvx_on = NULL;
@@ -101,7 +101,7 @@ __attribute__((always_inline)) void get_symbol(void *user_context, void *host_li
 
 // Load the hexagon remote runtime.
 WEAK int init_hexagon_runtime(void *user_context) {
-    if (remote_load_library && remote_run && remote_release_kernels) {
+    if (remote_load_library && remote_run && remote_release_library) {
         // Already loaded.
         return 0;
     }
@@ -127,8 +127,8 @@ WEAK int init_hexagon_runtime(void *user_context) {
     if (!remote_get_symbol) return -1;
     get_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
     if (!remote_run) return -1;
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_release_kernels_v2", remote_release_kernels);
-    if (!remote_release_kernels) return -1;
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_release_library", remote_release_library);
+    if (!remote_release_library) return -1;
 
     get_symbol(user_context, host_lib, "halide_hexagon_host_malloc_init", host_malloc_init);
     if (!host_malloc_init) return -1;
@@ -399,9 +399,9 @@ WEAK int halide_hexagon_device_release(void *user_context) {
     module_state *state = state_list;
     while (state) {
         if (state->module) {
-            debug(user_context) << "    halide_remote_release_kernels " << state
+            debug(user_context) << "    halide_remote_release_library " << state
                                 << " (" << state->module << ") -> ";
-            int result = remote_release_kernels(state->module);
+            int result = remote_release_library(state->module);
             poll_log(user_context);
             debug(user_context) << "        " << result << "\n";
             state->module = 0;
@@ -412,9 +412,9 @@ WEAK int halide_hexagon_device_release(void *user_context) {
 
     if (shared_runtime) {
         debug(user_context) << "    releasing shared runtime\n";
-        debug(user_context) << "    halide_remote_release_kernels " << state
+        debug(user_context) << "    halide_remote_release_library " << state
                             << " (" << state->module << ") -> ";
-        int result = remote_release_kernels(state->module);
+        int result = remote_release_library(state->module);
         poll_log(user_context);
         debug(user_context) << "        " << result << "\n";
         shared_runtime = 0;

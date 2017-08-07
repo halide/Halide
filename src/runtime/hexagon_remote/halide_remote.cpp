@@ -360,7 +360,7 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     return result;
 }
 
-int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
+int halide_hexagon_remote_release_library(handle_t module_ptr) {
     if (use_dlopenbuf()) {
         dlclose(reinterpret_cast<void*>(module_ptr));
     } else {

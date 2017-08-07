@@ -27,7 +27,7 @@ interface halide_hexagon_remote
                 in sequence<scalar_t> scalars);
 
     // Routine to clean up a module on the remote side.
-    long release_kernels_v2(in handle_t module_ptr);
+    long release_library(in handle_t module_ptr);
 
     // Retrive messages written by log_printf.
     long poll_log(rout sequence<char> log, rout long read_size);
