@@ -412,9 +412,8 @@ WEAK int halide_hexagon_device_release(void *user_context) {
 
     if (shared_runtime) {
         debug(user_context) << "    releasing shared runtime\n";
-        debug(user_context) << "    halide_remote_release_library " << state
-                            << " (" << state->module << ") -> ";
-        int result = remote_release_library(state->module);
+        debug(user_context) << "    halide_remote_release_library " << shared_runtime << " -> ";
+        int result = remote_release_library(shared_runtime);
         poll_log(user_context);
         debug(user_context) << "        " << result << "\n";
         shared_runtime = 0;
