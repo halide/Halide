@@ -20,7 +20,7 @@ public:
         assert(get_target().has_feature(Target::CPlusPlusMangling));
         Var x("x");
 
-        g(x) = input(x) + 42;
+        g(x) = input(x);
 
         std::vector<ExternFuncArgument> args;
         args.push_back(Halide::user_context_value());
@@ -35,7 +35,7 @@ public:
         args.push_back(cast<uint64_t>(8));
         args.push_back(cast<bool>(9 == 9));
         args.push_back(cast<float>(10.0f));
-        args.push_back(Expr(11.0));
+        args.push_back(cast<double>(10.0f));
         args.push_back(int_ptr);
         args.push_back(const_int_ptr);
         args.push_back(void_ptr);
