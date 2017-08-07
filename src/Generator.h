@@ -1630,6 +1630,7 @@ public:
     HALIDE_OUTPUT_FORWARD(compute_at)
     HALIDE_OUTPUT_FORWARD(compute_inline)
     HALIDE_OUTPUT_FORWARD(compute_root)
+    HALIDE_OUTPUT_FORWARD(define_extern)
     HALIDE_OUTPUT_FORWARD_CONST(defined)
     HALIDE_OUTPUT_FORWARD(fold_storage)
     HALIDE_OUTPUT_FORWARD(fuse)
