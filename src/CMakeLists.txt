@@ -318,7 +318,6 @@ set(HEADER_FILES
   InferArguments.h
   Interval.h
   InjectHostDevBufferCopies.h
-  InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
   Inline.h
   InlineReductions.h
@@ -467,7 +466,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   InferArguments.cpp
   Interval.cpp
   InjectHostDevBufferCopies.cpp
-  InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
   Inline.cpp
   InlineReductions.cpp
