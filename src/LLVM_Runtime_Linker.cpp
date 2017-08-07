@@ -732,7 +732,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
             modules.push_back(get_initmod_tracing(c, bits_64, debug));
             modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-            if (!t.arch == Target::Hexagon) {
+            if (t.arch != Target::Hexagon) {
                 // TODO: Support this module in the Hexagon backend,
                 // currently generates assert at src/HexagonOffload.cpp:279
                 modules.push_back(get_initmod_cache(c, bits_64, debug));

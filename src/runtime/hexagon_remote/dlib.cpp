@@ -172,8 +172,6 @@ struct dlib_t {
     // Pointer to virtual address 0.
     char *base_vaddr;
 
-    const char *soname;
-
     // Information about the symbols.
     const char *strtab;
     const Sym *symtab;
@@ -251,13 +249,11 @@ struct dlib_t {
         strtab = NULL;
         symtab = NULL;
         hash.table = NULL;
-        soname = NULL;
 
         const Rela *jmprel = NULL;
         int jmprel_count = 0;
         const Rela *rel = NULL;
         int rel_count = 0;
-        int soname_strtab = -1;
 
         for (int i = 0; dynamic[i].tag != DT_NULL; i++) {
             const Dyn &d = dynamic[i];
@@ -305,9 +301,6 @@ struct dlib_t {
                     return false;
                 }
                 break;
-            case DT_SONAME:
-              soname_strtab = (int)d.value;
-                break;
             }
         }
 
@@ -322,11 +315,6 @@ struct dlib_t {
         if (!hash.table) {
             log_printf("Hash table not found.\n");
             return false;
-        }
-
-        if (soname_strtab != -1) {
-            soname = &strtab[soname_strtab];
-            if (!assert_in_bounds(soname)) return false;
         }
 
         if (jmprel && jmprel_count > 0) {
