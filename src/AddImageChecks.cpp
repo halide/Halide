@@ -20,8 +20,8 @@ public:
         Buffer<> image;
         Parameter param;
         Type type;
-        int dimensions {0};
-        bool used_on_host {false};
+        int dimensions{0};
+        bool used_on_host{false};
     };
 
     map<string, Result> buffers;
