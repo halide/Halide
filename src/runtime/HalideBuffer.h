@@ -84,7 +84,7 @@ struct DeviceRefCount {
     // This is only ever constructed when there's something to manage,
     // so start at one.
     std::atomic<int> count {1};
-    Ownership ownership;
+    Ownership ownership{Ownership::Allocated};
 };
 
 /** A templated Buffer class that wraps halide_buffer_t and adds
