@@ -11,13 +11,13 @@
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> input(100);
+    Buffer<uint8_t> input(10);
 
-    for (int32_t i = 0; i < 100; i++) {
+    for (int32_t i = 0; i < 10; i++) {
         input(i) = i;
     }
 
-    Buffer<double> result_1(100), result_2(100), result_3(100);
+    Buffer<double> result_1(10), result_2(10), result_3(10);
 
     const void *user_context = nullptr;
     int ptr_arg = 42;
@@ -33,6 +33,13 @@ int main(int argc, char **argv) {
     if (r != 0) {
         fprintf(stderr, "Failure!\n");
         exit(1);
+    }
+
+    for (int i = 0; i < 10; ++i) {
+        if (result_1(i) != i + 12.0 || result_2(i) != i + 12.0 || result_3(i) != i + 12.0) {
+            fprintf(stderr, "Failure!\n");
+            exit(1);
+        }
     }
 
     printf("Success!\n");
