@@ -611,7 +611,7 @@ public:
 
     template <typename T2 = T, typename std::enable_if<!std::is_same<T2, Type>::value>::type * = nullptr>
     void set(const T &e) {
-        this->set_impl(e);        
+        this->set_impl(e);
     }
 
     void set_from_string(const std::string &new_value_string) override {
@@ -1347,6 +1347,10 @@ public:
         return this->funcs().at(0);
     }
 
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(this->parameters_.at(0));
+    }
+
     GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
         this->estimate_impl(var, min, extent);
         return *this;
@@ -1416,6 +1420,10 @@ public:
 
     operator Func() const {
         return this->funcs().at(0);
+    }
+
+    operator ExternFuncArgument() const {
+        return ExternFuncArgument(this->parameters_.at(0));
     }
 
     GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
@@ -2740,7 +2748,7 @@ public:
 
     template <typename... Args>
     void apply(const Args &...args) {
-        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value, 
+        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value,
             "apply() is not supported for old-style Generators.");
         set_inputs(args...);
         call_generate();
