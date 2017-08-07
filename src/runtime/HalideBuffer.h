@@ -11,6 +11,7 @@
 #include <cassert>
 #include <atomic>
 #include <algorithm>
+#include <limits>
 #include <stdint.h>
 #include <string.h>
 
@@ -275,7 +276,9 @@ private:
 
     /** Initialize the shape from a vector of extents */
     void initialize_shape(const std::vector<int> &sizes) {
-        int limit = std::min((int)sizes.size(), dimensions());
+        assert(sizes.size() <= std::numeric_limits<int>::max());
+        int limit = (int)sizes.size();
+        assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
             buf.dim[i].min = 0;
             buf.dim[i].extent = sizes[i];
@@ -1072,7 +1075,9 @@ public:
 
     /** Crop an image in-place along the first N dimensions. */
     void crop(const std::vector<std::pair<int, int>> &rect) {
-        int limit = std::min((int)rect.size(), dimensions());
+        assert(rect.size() <= std::numeric_limits<int>::max());
+        int limit = (int)rect.size();
+        assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
             crop(i, rect[i].first, rect[i].second);
         }
@@ -1105,7 +1110,9 @@ public:
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
         device_deallocate();
-        int limit = std::min((int)delta.size(), dimensions());
+        assert(delta.size() <= std::numeric_limits<int>::max());
+        int limit = (int)delta.size();
+        assert(limit <= dimensions());
         for (int i = 0; i < limit; i++) {
             translate(i, delta[i]);
         }
