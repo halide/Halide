@@ -571,6 +571,9 @@ public:
 
 namespace {
 
+const std::string runtime_module_name = "shared_runtime";
+const std::string pipeline_module_name = "hexagon_code";
+
 // Replace the parameter objects of loads/stores with a new parameter
 // object.
 class ReplaceParams : public IRMutator {
@@ -815,11 +818,11 @@ public:
 
         if (!device_code.functions().empty()) {
             // Wrap the statement in calls to halide_initialize_kernels.
-            Expr runtime_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "shared_runtime.buffer");
+            Expr runtime_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), runtime_module_name + ".buffer");
             Expr runtime_size = Call::make(Int(32), Call::buffer_get_extent, { runtime_buf_var, 0 }, Call::Extern);
             Expr runtime_ptr = Call::make(Handle(), Call::buffer_get_host, { runtime_buf_var }, Call::Extern);
 
-            Expr code_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), "hexagon_code.buffer");
+            Expr code_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), pipeline_module_name + ".buffer");
             Expr code_size = Call::make(Int(32), Call::buffer_get_extent, { code_buf_var, 0 }, Call::Extern);
             Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, { code_buf_var }, Call::Extern);
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
@@ -862,8 +865,8 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         }
     }
 
-    Module shared_runtime("shared_runtime", target.with_feature(Target::SharedRuntime));
-    Module hexagon_module("hexagon_code", target.with_feature(Target::NoRuntime));
+    Module shared_runtime(runtime_module_name, target.with_feature(Target::SharedRuntime));
+    Module hexagon_module(pipeline_module_name, target.with_feature(Target::NoRuntime));
     InjectHexagonRpc injector(hexagon_module);
     s = injector.inject(s);
 
@@ -883,7 +886,8 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     llvm::raw_svector_ostream object_stream(object);
     compile_llvm_module_to_object(*llvm_module, object_stream);
 
-    if (debug::debug_level() >= 2) {
+    int min_debug_level = device_code.name() == runtime_module_name ? 3 : 2;
+    if (debug::debug_level() >= min_debug_level) {
         debug(0) << "Hexagon device code assembly: " << "\n";
         llvm::SmallString<4096> assembly;
         llvm::raw_svector_ostream assembly_stream(assembly);
@@ -907,7 +911,10 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     // Link into a shared object.
     std::string soname = "lib" + device_code.name() + ".so";
     Elf::HexagonLinker linker(device_code.target());
-    std::vector<std::string> dependencies = { "libshared_runtime.so", "libhalide_hexagon_remote_skel.so" };
+    std::vector<std::string> dependencies = {
+        "lib" + runtime_module_name + ".so",
+        "libhalide_hexagon_remote_skel.so",
+    };
     std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies, soname);
 
     std::string signer = get_env_variable("HL_HEXAGON_CODE_SIGNER");
