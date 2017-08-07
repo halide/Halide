@@ -9,7 +9,7 @@ enum {
     LoadLibrary,
     GetSymbol,
     Run,
-    ReleaseKernels,
+    ReleaseLibrary,
     Break,
 };
 }

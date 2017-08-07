@@ -376,7 +376,7 @@ int run(handle_t module_ptr, handle_t function,
     return pipeline(args);
 }
 
-int release_kernels(handle_t module_ptr, bool use_dlopenbuf) {
+int release_library(handle_t module_ptr, bool use_dlopenbuf) {
     if (use_dlopenbuf) {
         dlclose(reinterpret_cast<void *>(module_ptr));
     } else {
@@ -460,8 +460,8 @@ int main(int argc, const char **argv) {
                 reinterpret_cast<const buffer*>(RPC_ARG(6)),
                 RPC_ARG(7)));
             break;
-        case Message::ReleaseKernels:
-            set_rpc_return(release_kernels(
+        case Message::ReleaseLibrary:
+            set_rpc_return(release_library(
                 static_cast<handle_t>(RPC_ARG(0)),
                 RPC_ARG(1)));
             break;

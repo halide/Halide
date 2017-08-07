@@ -436,7 +436,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 HALIDE_EXPORT
-int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
+int halide_hexagon_remote_release_library(handle_t module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
     if (!sim) {
@@ -455,7 +455,7 @@ int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
             printf("%s\n", Buf);
         }
     }
-    return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), use_dlopenbuf});
+    return send_message(Message::ReleaseLibrary, {static_cast<int>(module_ptr), use_dlopenbuf});
 }
 
 HALIDE_EXPORT

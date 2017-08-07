@@ -425,8 +425,8 @@ static const Parameter parameters[9] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr
 static const Parameter* const parameterArrays[23] = {(&(parameters[8])),(&(parameters[2])),(&(parameters[2])),(&(parameters[8])),(&(parameters[2])),(&(parameters[2])),(&(parameters[8])),(&(parameters[8])),(&(parameters[2])),(&(parameters[2])),(&(parameters[3])),(&(parameters[4])),(&(parameters[5])),(&(parameters[2])),(&(parameters[0])),(&(parameters[1])),(&(parameters[0])),(&(parameters[0])),(&(parameters[1])),(&(parameters[7])),(&(parameters[7])),(&(parameters[6])),(&(parameters[7]))};
 static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x3,0x1,0x0,0x0),0x8,0x4,5,3,(&(parameterArrays[16])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[13])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x0,0x0),0x0,0x0,0,0,0,0x0,0x0},{REMOTE_SCALARS_MAKEX(0,0,255,255,15,15),0x14,0x0,9,5,(&(parameterArrays[8])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[1])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x4,0x4,4,2,(&(parameterArrays[21])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0x8,2,2,(&(parameterArrays[19])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x4,0x0,1,1,(&(parameterArrays[0])),0x4,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x0,0x0,0x0),0x20,0x0,8,8,(&(parameterArrays[0])),0x4,0x0}};
 static const Method* const methodArrays[10] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8])};
-static const char strings[339] = "busbwUsagePercentage\0set_performance_mode\0poll_profiler_state\0release_kernels_v2\0bwMegabytesPerSec\0set_performance\0output_buffers\0mipsPerThread\0input_buffers\0power_hvx_off\0get_symbol_v4\0power_hvx_on\0load_library\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0scalars\0sym_ptr\0symbol\0run_v2\0soname\0func\0code\0";
-static const uint16_t methodStrings[35] = {99,266,130,246,224,81,0,212,216,315,235,308,144,115,292,172,235,324,300,199,322,334,235,42,329,284,275,280,256,21,37,62,235,158,186};
+static const char strings[336] = "busbwUsagePercentage\0set_performance_mode\0poll_profiler_state\0bwMegabytesPerSec\0set_performance\0release_library\0output_buffers\0mipsPerThread\0input_buffers\0power_hvx_off\0get_symbol_v4\0power_hvx_on\0load_library\0set_latency\0set_bus_bw\0module_ptr\0mipsTotal\0read_size\0set_mips\0poll_log\0threads\0scalars\0sym_ptr\0symbol\0run_v2\0soname\0func\0code\0";
+static const uint16_t methodStrings[35] = {80,263,127,243,221,62,0,209,213,312,232,305,141,112,289,169,232,321,297,196,319,331,232,42,326,281,272,277,253,21,37,96,232,155,183};
 static const uint16_t methodStringsArrays[10] = {19,15,34,33,9,31,26,23,29,0};
 __QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(halide_hexagon_remote_slim) = {10,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HALIDE_HEXAGON_REMOTE_SLIM_H
@@ -718,7 +718,7 @@ __QAIC_SKEL_EXPORT int __QAIC_SKEL(halide_hexagon_remote_skel_invoke)(uint32_t _
       case 4:
       return _skel_method_4((void*)__QAIC_IMPL(halide_hexagon_remote_run_v2), _sc, _pra);
       case 5:
-      return _skel_method_1((void*)__QAIC_IMPL(halide_hexagon_remote_release_kernels_v2), _sc, _pra);
+      return _skel_method_1((void*)__QAIC_IMPL(halide_hexagon_remote_release_library), _sc, _pra);
       case 6:
       return _skel_method_3((void*)__QAIC_IMPL(halide_hexagon_remote_poll_log), _sc, _pra);
       case 7:
