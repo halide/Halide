@@ -910,11 +910,6 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     std::vector<std::string> dependencies = { "libshared_runtime.so", "libhalide_hexagon_remote_skel.so" };
     std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies, soname);
 
-    if (soname == "libshared_runtime.so") {
-        std::ofstream temp("/tmp/libshared_runtime.so");
-        temp.write(shared_object.data(), shared_object.size());
-    }
-
     std::string signer = get_env_variable("HL_HEXAGON_CODE_SIGNER");
     if (!signer.empty()) {
         // If signer is specified, shell out to a tool/script that will

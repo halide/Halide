@@ -222,6 +222,10 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         debug(user_context) << "    re-using existing shared runtime " << shared_runtime << "\n";
     }
 
+    if (result != 0) {
+        return -1;
+    }
+
     module_state **state = (module_state**)state_ptr;
     if (!(*state)) {
         debug(user_context) << "    allocating module state -> \n";
