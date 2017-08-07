@@ -1,11 +1,13 @@
-#include <sstream>
-
 #include "StorageFlattening.h"
+
+#include "Bounds.h"
+#include "FuseGPUThreadLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Scope.h"
-#include "Bounds.h"
 #include "Parameter.h"
+#include "Scope.h"
+
+#include <sstream>
 
 namespace Halide {
 namespace Internal {
@@ -34,7 +36,18 @@ private:
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
     const Target &target;
-    Scope<int> realizations;
+    Scope<int> realizations, shader_scope_realizations;
+    bool in_shader = false;
+
+    Expr make_shape_var(string name, string field, size_t dim,
+                        const Buffer<> &buf, const Parameter &param) {
+        ReductionDomain rdom;
+        name = name + "." + field + "." + std::to_string(dim);
+        if (scope.contains(name + ".constrained")) {
+            name = name + ".constrained";
+        }
+        return Variable::make(Int(32), name, buf, param, rdom);
+    }
 
     Expr flatten_args(const string &name, const vector<Expr> &args,
                       const Buffer<> &buf, const Parameter &param) {
@@ -42,21 +55,9 @@ private:
         Expr idx = target.has_feature(Target::LargeBuffers) ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
-        ReductionDomain rdom;
         for (size_t i = 0; i < args.size(); i++) {
-            string dim = std::to_string(i);
-            string stride_name = name + ".stride." + dim;
-            string min_name = name + ".min." + dim;
-            string stride_name_constrained = stride_name + ".constrained";
-            string min_name_constrained = min_name + ".constrained";
-            if (scope.contains(stride_name_constrained)) {
-                stride_name = stride_name_constrained;
-            }
-            if (scope.contains(min_name_constrained)) {
-                min_name = min_name_constrained;
-            }
-            strides[i] = Variable::make(Int(32), stride_name, buf, param, rdom);
-            mins[i] = Variable::make(Int(32), min_name, buf, param, rdom);
+            strides[i] = make_shape_var(name, "stride", i, buf, param);
+            mins[i] = make_shape_var(name, "min", i, buf, param);
         }
 
         if (internal) {
@@ -97,6 +98,10 @@ private:
     void visit(const Realize *op) {
         realizations.push(op->name, 0);
 
+        if (in_shader) {
+            shader_scope_realizations.push(op->name, 0);
+        }
+
         Stmt body = mutate(op->body);
 
         // Compute the size
@@ -108,6 +113,10 @@ private:
         Expr condition = mutate(op->condition);
 
         realizations.pop(op->name);
+
+        if (in_shader) {
+            shader_scope_realizations.pop(op->name);
+        }
 
         vector<int> storage_permutation;
         {
@@ -206,18 +215,69 @@ private:
             }
         }
 
-        Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
         Expr value = mutate(op->values[0]);
-        stmt = Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
+        if (in_shader && !shader_scope_realizations.contains(op->name)) {
+            user_assert(op->args.size() == 3)
+                << "Image stores require three coordinates.\n";
+            Expr buffer_var =
+                Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
+            vector<Expr> args = {
+                op->name, buffer_var,
+                op->args[0], op->args[1], op->args[2],
+                value};
+            Expr store = Call::make(value.type(), Call::image_store,
+                                    args, Call::Intrinsic);
+            stmt = Evaluate::make(store);
+        } else {
+            Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
+            stmt = Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()));
+        }
     }
 
     void visit(const Call *op) {
         if (op->call_type == Call::Halide ||
             op->call_type == Call::Image) {
+
             internal_assert(op->value_index == 0);
-            Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
-            expr = Load::make(op->type, op->name, idx, op->image, op->param,
-                              const_true(op->type.lanes()));
+
+            if (in_shader && !shader_scope_realizations.contains(op->name)) {
+                ReductionDomain rdom;
+                Expr buffer_var =
+                    Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer",
+                                   op->image, op->param, rdom);
+
+                // Create image_load("name", name.buffer, x - x_min, x_extent,
+                // y - y_min, y_extent, ...).  Extents can be used by
+                // successive passes. OpenGL, for example, uses them
+                // for coordinate normalization.
+                vector<Expr> args(2);
+                args[0] = op->name;
+                args[1] = buffer_var;
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    Expr min = make_shape_var(op->name, "min", i, op->image, op->param);
+                    Expr extent = make_shape_var(op->name, "extent", i, op->image, op->param);
+                    args.push_back(mutate(op->args[i]) - min);
+                    args.push_back(extent);
+                }
+                for (size_t i = op->args.size(); i < 3; i++) {
+                    args.push_back(0);
+                    args.push_back(1);
+                }
+
+                expr = Call::make(op->type,
+                                  Call::image_load,
+                                  args,
+                                  Call::PureIntrinsic,
+                                  FunctionPtr(),
+                                  0,
+                                  op->image,
+                                  op->param);
+            } else {
+                Expr idx = mutate(flatten_args(op->name, op->args, op->image, op->param));
+                expr = Load::make(op->type, op->name, idx, op->image, op->param,
+                                  const_true(op->type.lanes()));
+            }
+
         } else {
             IRMutator::visit(op);
         }
@@ -288,6 +348,18 @@ private:
             scope.pop(let->name);
         }
     }
+
+    void visit(const For *loop) {
+        bool old_in_shader = in_shader;
+        if ((loop->for_type == ForType::GPUBlock ||
+             loop->for_type == ForType::GPUThread) &&
+            loop->device_api == DeviceAPI::GLSL) {
+            in_shader = true;
+        }
+        IRMutator::visit(loop);
+        in_shader = old_in_shader;
+    }
+
 };
 
 // Realizations, stores, and loads must all be on types that are
@@ -341,6 +413,9 @@ Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
                         const map<string, Function> &env,
                         const Target &target) {
+    // The OpenGL backend requires loop mins to be zero'd at this point.
+    s = zero_gpu_loop_mins(s);
+
     // Make an environment that makes it easier to figure out which
     // Function corresponds to a tuple component. foo.0, foo.1, foo.2,
     // all point to the function foo.

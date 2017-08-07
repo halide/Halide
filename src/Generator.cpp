@@ -159,15 +159,21 @@ std::pair<int64_t, int64_t> rational_approximation(double d) {
 
 Func make_param_func(const Parameter &p, const std::string &name) {
     internal_assert(p.is_buffer());
-    std::vector<Var> args;
-    std::vector<Expr> args_expr;
-    for (int i = 0; i < p.dimensions(); ++i) {
-        Var v = Var::implicit(i);
-        args.push_back(v);
-        args_expr.push_back(v);
+    Func f(name + "_im");
+    auto b =  p.get_buffer();
+    if (b.defined()) {
+        // If the Parameter has an explicit BufferPtr set, bind directly to it
+        f(_) = b(_);
+    } else {
+        std::vector<Var> args;
+        std::vector<Expr> args_expr;
+        for (int i = 0; i < p.dimensions(); ++i) {
+            Var v = Var::implicit(i);
+            args.push_back(v);
+            args_expr.push_back(v);
+        }
+        f(args) = Internal::Call::make(p, args_expr);
     }
-    Func f = Func(name + "_im");
-    f(args) = Internal::Call::make(p, args_expr);
     return f;
 }
 
@@ -1661,11 +1667,13 @@ void GeneratorInputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
+        auto name = array_name(i);
+        auto &p = parameters_[i];
         if (kind() != IOKind::Scalar) {
-            internal_assert(dimensions() == parameters_[i].dimensions());
-            funcs_.push_back(make_param_func(parameters_[i], array_name(i) + "_im"));
+            internal_assert(dimensions() == p.dimensions());
+            funcs_.push_back(make_param_func(p, name));
         } else {
-            Expr e = Internal::Variable::make(type(), array_name(i), parameters_[i]);
+            Expr e = Internal::Variable::make(type(), name, p);
             exprs_.push_back(e);
         }
     }
@@ -1690,17 +1698,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
             check_matching_type_and_dim({p.type()}, p.dimensions());
-            auto b = p.get_buffer();
-            if (b.defined()) {
-                // If the Parameter has an explicit BufferPtr set, bind directly to
-                // it (this happens in JIT mode and also with statically-compiled 
-                // Buffers)
-                Func f(name() + "_im");
-                f(_) = b(_);
-                funcs_.push_back(f);
-            } else {
-                funcs_.push_back(make_param_func(p, name()));
-            }
+            funcs_.push_back(make_param_func(p, name()));
             parameters_.push_back(p);
         } else {
             auto e = in.expr();
