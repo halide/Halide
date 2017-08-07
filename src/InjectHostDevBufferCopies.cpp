@@ -103,6 +103,7 @@ class FindBufferUsage : public IRVisitor {
             internal_assert(op->args.size() >= 1);
             if (is_buffer_var(op->args[1])) {
                 devices_touched.insert(current_device_api);
+                devices_writing.insert(current_device_api);
             }
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (i == 1) continue;
@@ -644,6 +645,7 @@ class InjectBufferCopiesForInputsAndOutputs : public IRMutator {
 
         void visit(const Variable *op) {
             include(op->param);
+            include(op->image);
         }
 
         void visit(const Load *op) {

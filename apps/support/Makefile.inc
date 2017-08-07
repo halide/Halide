@@ -8,7 +8,7 @@ UNAME ?= $(shell uname)
 
 ifeq ($(OS), Windows_NT)
 # Flags for mingw environment
-LDFLAGS += -lole32 -luuid -Wl,--stack,8388608
+LDFLAGS += -lole32 -lkernel32 -luuid -Wl,--stack,8388608
 else
 LDFLAGS += -ldl -lpthread -lz
 endif
@@ -73,9 +73,13 @@ ifneq (, $(findstring opengl,$(HL_TARGET)))
   OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
 endif
 
-$(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp 
-	@mkdir -p $(BIN)
-	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@ 
+ifneq (, $(findstring metal,$(HL_TARGET)))
+  LDFLAGS += -framework Metal -framework Foundation
+endif
+
+$(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp
+	@mkdir -p $(@D)
+	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards
 .PRECIOUS: $(BIN)/%.rungen
@@ -90,4 +94,3 @@ RUNARGS ?=
 #
 $(BIN)/%.run: $(BIN)/%.rungen
 	@$(CURDIR)/$< $(RUNARGS)
-
