@@ -13,18 +13,18 @@ clean:
 # By default, %_exec is produced by building %_generator.cpp
 $(BIN)/%_exec: %_generator.cpp $(GENERATOR_DEPS)
 	@echo Building Generator $(filter %_generator.cpp,$^)
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS) -o $@
 
 # By default, %.a/.h are produced by executing %_exec
 $(BIN)/%.a $(BIN)/%.h: $(BIN)/%_exec
 	@echo Running Generator $<
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	@$< -g $(notdir $*) -o $(BIN) target=$(HL_TARGET)-no_runtime
 
 $(BIN)/runtime_$(HL_TARGET).a: $(BIN)/haar_x_exec
 	@echo Compiling Halide runtime for target $(HL_TARGET)
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	@$< -r runtime_$(HL_TARGET) -o $(BIN) target=$(HL_TARGET)
 
 HL_MODULES = \

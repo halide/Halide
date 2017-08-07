@@ -81,7 +81,7 @@ KERNEL_HEADERS = $(KERNELS:%=$(BUILD)/halide_%.h)
 KERNEL_OBJECTS = $(KERNELS:%=$(BUILD)/halide_%.o) $(BUILD)/halide_runtime.o
 
 $(BUILD)/halide_blas.o: src/halide_blas.cpp src/halide_blas.h $(KERNEL_HEADERS)
-	@mkdir -p $(BUILD)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c -o $(@) -I ../../include/ -I ../support -I$(BUILD) $(<)
 
 $(LIBHALIDE_BLAS): $(KERNEL_OBJECTS) $(BUILD)/halide_blas.o
@@ -177,27 +177,27 @@ benchmarks.csv: $(BENCHMARKS)
 	awk '{printf("%s,%s,%s,%s,%s\n",$$1,$$2,$$3,$$4,$$5)}' benchmarks.dat > benchmarks.csv
 
 $(BIN)/cblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(CBLAS_FLAGS) $(<) $(CBLAS_LIBS)
 
 $(BIN)/atlas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(ATLAS_FLAGS) $(<) $(ATLAS_LIBS)
 
 $(BIN)/openblas_benchmarks: benchmarks/cblas_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(OPENBLAS_FLAGS) $(<) $(OPENBLAS_LIBS)
 
 $(BIN)/eigen_benchmarks: benchmarks/eigen_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -I$(BUILD) $(EIGEN_INCLUDES) $(<)
 
 $(BIN)/halide_benchmarks: benchmarks/halide_benchmarks.cpp benchmarks/clock.h benchmarks/macros.h $(LIBHALIDE_BLAS)
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -o $(@) -Isrc -I$(BUILD) $(HALIDEBLAS_FLAGS) $(<) $(LIBHALIDE_BLAS) $(LDFLAGS)
 
 $(BUILD)/%.generator: src/%_generators.cpp $(GENERATOR_DEPS)
-	@mkdir -p $(BUILD)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -fno-rtti $(filter-out %.h,$^) $(LDFLAGS) -o $@
 
 # This can use any of the generators; pick an arbitrary one
