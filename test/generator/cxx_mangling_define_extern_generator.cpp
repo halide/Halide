@@ -18,13 +18,9 @@ public:
 
     void generate() {
         assert(get_target().has_feature(Target::CPlusPlusMangling));
-        Var x("x");
-
-        g(x) = input(x);
-
         std::vector<ExternFuncArgument> args;
         args.push_back(Halide::user_context_value());
-        args.push_back(g);
+        args.push_back(input);
         args.push_back(cast<int8_t>(1));
         args.push_back(cast<uint8_t>(2));
         args.push_back(cast<int16_t>(3));
@@ -51,10 +47,8 @@ public:
     }
 
     void schedule() {
-        g.compute_root();        
+        // nothing      
     }
-
-    Func g{"g"};
 };
 
 HALIDE_REGISTER_GENERATOR(CPlusPlusNameManglingDefineExternGenerator, "cxx_mangling_define_extern")
