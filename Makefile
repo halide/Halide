@@ -858,23 +858,24 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbr
 # https://github.com/halide/Halide/issues/2082
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_matlab,$(GENERATOR_AOTCPP_TESTS))
 
-test_aotcpp_generators: $(GENERATOR_AOTCPP_TESTS)
+# This is just a test to ensure than RunGen builds and links for "normal" Generators;
+# not all will work directly (e.g. due to unusual runtime requirements), so blacklist them to
+# simplify the world.
+GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATORS:$(ROOT_DIR)/test/generator/%_generator.cpp=$(BIN_DIR)/%.rungen)
+# TODO: define_extern_opencl should be able to work with a little effort to move the define_extern
+# into a separate file.
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(BIN_DIR)/define_extern_opencl.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(BIN_DIR)/matlab.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(BIN_DIR)/msan.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(BIN_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(BIN_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 
-# This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
-# not all will work directly (e.g. due to missing define_externs at link time), so we blacklist
-# those known to be broken for plausible reasons.
-GENERATOR_BUILD_RUNGEN_TESTS = $(GENERATOR_EXTERNAL_TEST_GENERATORS:$(ROOT_DIR)/test/generator/%_generator.cpp=$(FILTERS_DIR)/%.rungen)
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/cxx_mangling_define_extern.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/define_extern_opencl.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/matlab.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/msan.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/old_buffer_t.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
-GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+test_generators_aot: $(GENERATOR_AOT_TESTS)
+test_generators_jit: $(GENERATOR_JIT_TESTS)
+test_generators_aotcpp: $(GENERATOR_AOTCPP_TESTS)
 test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 
-test_generators: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
+test_generators: test_generators_aot test_generators_jit test_rungen
 
 ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators
 
@@ -901,32 +902,7 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%)
 
-clean_generators:
-	rm -rf $(BIN_DIR)/*.generator
-	rm -rf $(BIN_DIR)/*/runtime.a
-	rm -rf $(FILTERS_DIR)
-	rm -rf $(BIN_DIR)/*/generator_*
-	rm -rf $(BUILD_DIR)/*_generator.o
-	rm -f $(BUILD_DIR)/GenGen.o
-	rm -f $(BUILD_DIR)/RunGen.o
-
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generators
-
-LIBHALIDE_DEPS ?= $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-
-$(BUILD_DIR)/GenGen.o: $(ROOT_DIR)/tools/GenGen.cpp $(INCLUDE_DIR)/Halide.h
-	@mkdir -p $(@D)
-	$(CXX) -c $< $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) -o $@
-
-# Make an empty generator for generating runtimes.
-$(BIN_DIR)/runtime.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
-	@mkdir -p $(@D)
-	$(CXX) $< $(TEST_LD_FLAGS) -o $@
-
-# Generate a standalone runtime for a given target string
-$(BIN_DIR)/%/runtime.a: $(BIN_DIR)/runtime.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -r runtime -o $(CURDIR)/$(BIN_DIR)/$* target=$*
 
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)
@@ -975,95 +951,53 @@ $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHAR
 $(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) $(OPENGL_LD_FLAGS) -o $@ -MMD -MF $(BUILD_DIR)/test_opengl_$*.d
 
+# ------------------------------------------------------------------------------
+# Use vpath to specify which directories we want to look in for Generator sources.
+vpath %_generator.cpp $(ROOT_DIR)/test/generator/
 
-# TODO(srj): this doesn't auto-delete, why not?
-.INTERMEDIATE: $(BIN_DIR)/%.generator
+GENERATOR_HALIDE_INCLUDES_DIR = $(INCLUDE_DIR)
+GENERATOR_HALIDE_TOOLS_DIR = $(ROOT_DIR)/tools
+GENERATOR_LIBHALIDE_PATH = $(BIN_DIR)/libHalide.$(SHARED_EXT)
 
-# By default, %.generator is produced by building %_generator.cpp
-# Note that the rule includes all _generator.cpp files, so that generators with define_extern
-# usage can just add deps later.
-$(BUILD_DIR)/%_generator.o: $(ROOT_DIR)/test/generator/%_generator.cpp $(INCLUDE_DIR)/Halide.h
+GENERATOR_BIN_DIR = $(BIN_DIR)
+GENERATOR_TARGET = $(TARGET)
+
+GENERATOR_CXX_FLAGS = $(TEST_CXX_FLAGS)
+
+GENERATOR_GENERATOR_LD_FLAGS = $(TEST_LD_FLAGS)
+
+GENERATOR_IMAGE_IO_LIBS      ?= $(IMAGE_IO_LIBS)
+GENERATOR_IMAGE_IO_CXX_FLAGS ?= $(IMAGE_IO_CXX_FLAGS)
+
+include HalideGenerator.mk
+
+# ------------------------------------------------------------------------------
+
+# Customizations for the actual Generators we have in test/generator:
+
+# Build _externs.cpp into _externs.o by default.
+$(GENERATOR_FILTERS_DIR)/%_externs.o: $(ROOT_DIR)/test/generator/%_externs.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) -I$(CURDIR)/$(FILTERS_DIR) -c $< -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -c $< -I$(INCLUDE_DIR) -I$(GENERATOR_FILTERS_DIR) -o $@
 
-$(BIN_DIR)/%.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/%_generator.o
-	@mkdir -p $(@D)
-	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
-
-# It is not always possible to cross compile between 32-bit and 64-bit via the clang build as part of llvm
-# These next two rules can fail the compilationa nd produce zero length bitcode blobs.
-# If the zero length blob is actually used, the test will fail anyway, but usually only the bitness
-# of the target is used.
-$(BUILD_DIR)/external_code_extern_bitcode_32.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
-	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -target $(RUNTIME_TRIPLE_32) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.bc || echo -n > $(BUILD_DIR)/external_code_extern_32.bc
-	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_32 < $(BUILD_DIR)/external_code_extern_32.bc > $@
-
-$(BUILD_DIR)/external_code_extern_bitcode_64.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
-	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -target $(RUNTIME_TRIPLE_64) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.bc || echo -n > $(BUILD_DIR)/external_code_extern_64.bc
-	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_64 < $(BUILD_DIR)/external_code_extern_64.bc > $@
-
-$(BUILD_DIR)/external_code_extern_cpp_source.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp
-	@mkdir -p $(@D)
-	./$(BIN_DIR)/binary2cpp external_code_extern_cpp_source < $(ROOT_DIR)/test/generator/external_code_extern.cpp > $@
-
-$(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/external_code_generator.o $(BUILD_DIR)/external_code_extern_bitcode_32.cpp $(BUILD_DIR)/external_code_extern_bitcode_64.cpp $(BUILD_DIR)/external_code_extern_cpp_source.cpp
-	@mkdir -p $(@D)
-	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
-
-NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
-
-GEN_AOT_OUTPUTS=-e static_library,h,cpp
-
-# By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.
-# (We explicitly also generate .cpp output here as well, as additional test surface for the C++ backend.)
-$(FILTERS_DIR)/%.a: $(BIN_DIR)/%.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g $* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
-
-$(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.a
-	@echo $@ produced implicitly by $^
-
-$(FILTERS_DIR)/%.cpp: $(FILTERS_DIR)/%.a
-	@echo $@ produced implicitly by $^
-
-$(FILTERS_DIR)/%.stub.h: $(BIN_DIR)/%.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -n $* -o $(CURDIR)/$(FILTERS_DIR) -e cpp_stub
-
-$(FILTERS_DIR)/cxx_mangling_externs.o: $(ROOT_DIR)/test/generator/cxx_mangling_externs.cpp
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) -c $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) -o $@
-
-# If we want to use a Generator with custom GeneratorParams, we need to write
-# custom rules: to pass the GeneratorParams, and to give a unique function and file name.
-$(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/cxx_mangling_externs.o
-	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
-	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
+$(FILTERS_DIR)/cxx_mangling.a: GENERATOR_EXTRA_FEATURES=c_plus_plus_name_mangling
+$(FILTERS_DIR)/cxx_mangling.a: GENERATOR_FUNCNAME=HalideTest::AnotherNamespace::cxx_mangling
+$(FILTERS_DIR)/cxx_mangling.a: GENERATOR_FILTER_DEPS=$(FILTERS_DIR)/cxx_mangling_externs.o
 
 # Also build with a gpu target to ensure that the GPU-Host generation
 # code handles name mangling properly. (Note that we don't need to
 # run this code, just check for link errors.)
-$(FILTERS_DIR)/cxx_mangling_gpu.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/cxx_mangling_externs.o
-	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-cuda -f "HalideTest::cxx_mangling_gpu"
-	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
+$(FILTERS_DIR)/cxx_mangling_gpu.a: GENERATOR_GENERATOR_EXECUTABLE=$(BIN_DIR)/cxx_mangling.generator
+$(FILTERS_DIR)/cxx_mangling_gpu.a: GENERATOR_FUNCNAME=HalideTest::cxx_mangling_gpu
+$(FILTERS_DIR)/cxx_mangling_gpu.a: GENERATOR_EXTRA_FEATURES=c_plus_plus_name_mangling-cuda
 
-$(FILTERS_DIR)/cxx_mangling_define_extern_externs.o: $(ROOT_DIR)/test/generator/cxx_mangling_define_extern_externs.cpp $(FILTERS_DIR)/cxx_mangling.h
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) -c $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) -o $@
+$(FILTERS_DIR)/cxx_mangling_define_extern.a: GENERATOR_EXTRA_FEATURES=c_plus_plus_name_mangling-user_context
+$(FILTERS_DIR)/cxx_mangling_define_extern.a: GENERATOR_FUNCNAME=HalideTest::cxx_mangling_define_extern
+$(FILTERS_DIR)/cxx_mangling_define_extern.a: GENERATOR_FILTER_DEPS=$(FILTERS_DIR)/cxx_mangling_define_extern_externs.o $(FILTERS_DIR)/cxx_mangling.a
 
-$(FILTERS_DIR)/cxx_mangling_define_extern.a: $(BIN_DIR)/cxx_mangling_define_extern.generator $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
-	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-user_context -f "HalideTest::cxx_mangling_define_extern"
-	$(ROOT_DIR)/tools/makelib.sh $@ $@  $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
+$(FILTERS_DIR)/cxx_mangling_define_extern_externs.o: $(FILTERS_DIR)/cxx_mangling.h
 
-# pyramid needs a custom arg
-$(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -f pyramid $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime levels=10
+$(FILTERS_DIR)/matlab.a: GENERATOR_EXTRA_FEATURES=matlab
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
@@ -1082,63 +1016,45 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	array_outputs.size=2
 
 # metadata_tester is built with and without user-context
-$(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
-	@mkdir -p $(@D)
-	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+$(FILTERS_DIR)/metadata_tester.a: GENERATOR_ARGS=$(METADATA_TESTER_GENERATOR_ARGS)
 
-$(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -f metadata_tester_ucon $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+# metadata_tester_ucon uses the same Generator as metadata_tester, with different target features
+$(FILTERS_DIR)/metadata_tester_ucon.a: GENERATOR_GENERATOR_EXECUTABLE=$(BIN_DIR)/metadata_tester.generator
+$(FILTERS_DIR)/metadata_tester_ucon.a: GENERATOR_EXTRA_FEATURES=user_context
+$(FILTERS_DIR)/metadata_tester_ucon.a: GENERATOR_ARGS=$(METADATA_TESTER_GENERATOR_ARGS)
 
-$(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
+$(FILTERS_DIR)/multitarget.a: GENERATOR_FUNCNAME=HalideTest::multitarget
+$(FILTERS_DIR)/multitarget.a: GENERATOR_EXTRA_FEATURES=debug-c_plus_plus_name_mangling,$(TARGET)-no_runtime-c_plus_plus_name_mangling
 
-$(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -f "HalideTest::multitarget" $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-debug-no_runtime-c_plus_plus_name_mangling,$(TARGET)-no_runtime-c_plus_plus_name_mangling  -e assembly,bitcode,cpp,h,html,static_library,stmt
+$(FILTERS_DIR)/nested_externs_%.a: GENERATOR_GENERATOR_EXECUTABLE=$(BIN_DIR)/nested_externs.generator
+$(FILTERS_DIR)/nested_externs_%.a: GENERATOR_GENERATOR_NAME=$*
 
-$(FILTERS_DIR)/msan.a: $(BIN_DIR)/msan.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -f msan $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-msan
+$(FILTERS_DIR)/pyramid.a: GENERATOR_ARGS=levels=10
 
-# user_context needs to be generated with user_context as the first argument to its calls
-$(FILTERS_DIR)/user_context.a: $(BIN_DIR)/user_context.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+$(FILTERS_DIR)/msan.a: GENERATOR_TARGET_WITH_FEATURES=$(TARGET)-msan
 
-# ditto for user_context_insanity
-$(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+$(FILTERS_DIR)/stubtest.a: GENERATOR_ARGS=$(STUBTEST_GENERATOR_ARGS)
 
-# matlab needs to be generated with matlab in TARGET
-$(FILTERS_DIR)/matlab.a: $(BIN_DIR)/matlab.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-matlab
-
-# Some .generators have additional dependencies (usually due to define_extern usage).
-# These typically require two extra dependencies:
-# (1) Ensuring the extra _generator.cpp is built into the .generator.
-# (2) Ensuring the extra .a is linked into the final output.
-
-# TODO(srj): we really want to say "anything that depends on tiled_blur.a also depends on blur2x2.a";
-# is there a way to specify that in Make?
-$(BIN_DIR)/$(TARGET)/generator_aot_tiled_blur: $(FILTERS_DIR)/blur2x2.a
-$(BIN_DIR)/$(TARGET)/generator_aot_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_gpu.a
-$(BIN_DIR)/$(TARGET)/generator_aot_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.a
-
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_tiled_blur: $(FILTERS_DIR)/blur2x2.cpp
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_gpu.cpp $(FILTERS_DIR)/cxx_mangling_externs.o
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.cpp $(FILTERS_DIR)/cxx_mangling_externs.o $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
-
+# TODO: this is an ugly way to force the dep for stub.h, we'd prefer to dep on .generator vs _generator.o
 $(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h
 $(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o
 
+$(FILTERS_DIR)/stubuser.a: GENERATOR_GENERATOR_NAME=stubuser
+
+$(FILTERS_DIR)/tiled_blur.a: GENERATOR_FILTER_DEPS=$(FILTERS_DIR)/blur2x2.a
+# When GENERATOR_FILTER_DEPS contains the output of another Generator,
+# we must add an explicit dependency here to ensure it is built in the 
+# correct order.
+$(FILTERS_DIR)/tiled_blur.a: $(FILTERS_DIR)/blur2x2.a
+
+$(FILTERS_DIR)/user_context.a: GENERATOR_EXTRA_FEATURES=user_context
+
+$(FILTERS_DIR)/user_context_insanity.a: GENERATOR_EXTRA_FEATURES=user_context
+
 # stubtest has input and output funcs with undefined types and array sizes; this is fine for stub
 # usage (the types can be inferred), but for AOT compilation, we must make the types
-# concrete via generator args.
-#
-# Also note that setting 'vectorize=true' is redundant (that's the default), but verifies
-# that setting ScheduleParam via generator_args works properly.
+# concrete via generator args. Also note that setting 'vectorize=true' is redundant (that's the default), 
+# but verifies that setting ScheduleParam via generator_args works properly.
 STUBTEST_GENERATOR_ARGS=\
     untyped_buffer_input.type=uint8 untyped_buffer_input.dim=3 \
 	simple_input.type=float32 \
@@ -1147,96 +1063,102 @@ STUBTEST_GENERATOR_ARGS=\
 	tuple_output.type=float32,float32 \
 	vectorize=true
 
-$(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -f stubtest $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(STUBTEST_GENERATOR_ARGS)
+# It is not always possible to cross compile between 32-bit and 64-bit via the clang build as part of llvm.
+# These next two rules can fail the compilation and produce zero length bitcode blobs.
+# If the zero length blob is actually used, the test will fail anyway, but usually only the bitness
+# of the target is used.
+$(BUILD_DIR)/external_code_extern_bitcode_32.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -target $(RUNTIME_TRIPLE_32) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.bc || echo -n > $(BUILD_DIR)/external_code_extern_32.bc
+	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_32 < $(BUILD_DIR)/external_code_extern_32.bc > $@
 
-$(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g external_code -e static_library,h -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
+$(BUILD_DIR)/external_code_extern_bitcode_64.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
+	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -target $(RUNTIME_TRIPLE_64) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.bc || echo -n > $(BUILD_DIR)/external_code_extern_64.bc
+	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_64 < $(BUILD_DIR)/external_code_extern_64.bc > $@
 
-$(FILTERS_DIR)/external_code.cpp: $(BIN_DIR)/external_code.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g external_code -e cpp -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
+$(BUILD_DIR)/external_code_extern_cpp_source.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
+	./$(BIN_DIR)/binary2cpp external_code_extern_cpp_source < $(ROOT_DIR)/test/generator/external_code_extern.cpp > $@
 
-# Usually, it's considered best practice to have one Generator per
-# .cpp file, with the generator-name and filename matching;
-# nested_externs_generators.cpp is a counterexample, and thus requires
-# some special casing to get right.  First, make a special rule to
-# build each of the Generators in nested_externs_generator.cpp (which
-# all have the form nested_externs_*).
-$(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
-	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+$(BIN_DIR)/external_code.generator: GENERATOR_GENERATOR_DEPS=\
+	$(BUILD_DIR)/external_code_extern_bitcode_32.cpp \
+	$(BUILD_DIR)/external_code_extern_bitcode_64.cpp \
+	$(BUILD_DIR)/external_code_extern_cpp_source.cpp
 
-GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
-GEN_AOT_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR) -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
-GEN_AOT_LD_FLAGS=-lpthread $(LIBDL)
+$(FILTERS_DIR)/external_code.a: GENERATOR_ARGS="external_code_is_bitcode=true"
+#$(FILTERS_DIR)/external_code.a: GENERATOR_FUNCNAME=external_code
 
+# TODO -- doesn't really work
+$(FILTERS_DIR)/external_code.cpp: GENERATOR_GENERATOR_EXECUTABLE=$(BIN_DIR)/external_code.generator
+$(FILTERS_DIR)/external_code.cpp: GENERATOR_ARGS="external_code_is_bitcode=false"
+$(FILTERS_DIR)/external_code.cpp: GENERATOR_FUNCNAME=external_code
+
+# ------------------------------------------------------------------------------
+
+# General rules for building Generator tests. These are targeted at the
+# Generators in test/generator, but could (and should) be generalized elsewhere.
+
+# Note that we need SECONDEXPANSION enabled several of these to work.
+.SECONDEXPANSION:
+
+GENERATOR_AOTTEST_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
+GENERATOR_AOTTEST_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
+
+# Runtime libraries to link in (if any)
+GENERATOR_AOTTEST_RUNTIME_LIBS=$(GENERATOR_RUNTIME_LIB)
+
+GENERATOR_AOTTEST_EXTRA_LD_FLAGS=
+
+GENERATOR_AOTTEST_EXTRA_DEPS=
+GENERATOR_AOTTEST_DEPS=$(FILTERS_DIR)/$*.a $(FILTERS_DIR)/$*.h $(GENERATOR_AOTTEST_EXTRA_DEPS)
+
+GENERATOR_JITTEST_DEPS=$(FILTERS_DIR)/$*.stub.h $(BUILD_DIR)/$*_generator.o
+
+GENERATOR_AOTTEST_LD_FLAGS=-lpthread $(LIBDL)
 ifneq ($(TEST_METAL), )
 # Unlike cuda and opencl, which dynamically go find the appropriate symbols, metal requires actual linking.
-GEN_AOT_LD_FLAGS+=$(METAL_LD_FLAGS)
+GENERATOR_AOTTEST_LD_FLAGS+=$(METAL_LD_FLAGS)
 endif
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.a/.h (but not libHalide).
-$(BIN_DIR)/$(TARGET)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.a $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+$(BIN_DIR)/$(TARGET)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(RUNTIME_EXPORTED_INCLUDES) $$(GENERATOR_AOTTEST_DEPS) $$(GENERATOR_AOTTEST_RUNTIME_LIBS)
+	@mkdir -p $(BIN_DIR)/$(TARGET)
+	$(CXX) $(GENERATOR_AOTTEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GENERATOR_AOTTEST_INCLUDES) $(GENERATOR_AOTTEST_LD_FLAGS) $(GENERATOR_AOTTEST_EXTRA_LD_FLAGS) -o $@
 
 # Also make AOT testing targets that depends on the .cpp output (rather than .a).
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.cpp $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
-
-# MSAN test doesn't use the standard runtime
-$(BIN_DIR)/$(TARGET)/generator_aot_msan: $(ROOT_DIR)/test/generator/msan_aottest.cpp $(FILTERS_DIR)/msan.a $(FILTERS_DIR)/msan.h $(RUNTIME_EXPORTED_INCLUDES)
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
-
-# nested_externs has additional deps to link in
-$(BIN_DIR)/$(TARGET)/generator_aot_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.a $(FILTERS_DIR)/nested_externs_inner.a $(FILTERS_DIR)/nested_externs_combine.a $(FILTERS_DIR)/nested_externs_leaf.a $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
-
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_nested_externs: $(ROOT_DIR)/test/generator/nested_externs_aottest.cpp $(FILTERS_DIR)/nested_externs_root.cpp $(FILTERS_DIR)/nested_externs_inner.cpp $(FILTERS_DIR)/nested_externs_combine.cpp $(FILTERS_DIR)/nested_externs_leaf.cpp $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
-
-# The matlab tests needs "-matlab" in the runtime
-$(BIN_DIR)/$(TARGET)/generator_aot_matlab: $(ROOT_DIR)/test/generator/matlab_aottest.cpp $(FILTERS_DIR)/matlab.a $(FILTERS_DIR)/matlab.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)-matlab/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(TEST_LD_FLAGS) -o $@
-
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_matlab: $(ROOT_DIR)/test/generator/matlab_aottest.cpp $(FILTERS_DIR)/matlab.cpp $(FILTERS_DIR)/matlab.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)-matlab/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(TEST_LD_FLAGS) -o $@
-
-# The gpu object lifetime test needs the debug runtime
-$(BIN_DIR)/$(TARGET)/generator_aot_gpu_object_lifetime: $(ROOT_DIR)/test/generator/gpu_object_lifetime_aottest.cpp $(FILTERS_DIR)/gpu_object_lifetime.a $(FILTERS_DIR)/gpu_object_lifetime.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)-debug/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(TEST_LD_FLAGS) -o $@
-
-# acquire_release explicitly uses CUDA/OpenCL APIs, so link those here.
-$(BIN_DIR)/$(TARGET)/generator_aot_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.a $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
-
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_acquire_release: $(ROOT_DIR)/test/generator/acquire_release_aottest.cpp $(FILTERS_DIR)/acquire_release.cpp $(FILTERS_DIR)/acquire_release.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
-
-# define_extern_opencl explicitly uses OpenCL APIs, so link those here.
-$(BIN_DIR)/$(TARGET)/generator_aot_define_extern_opencl: $(ROOT_DIR)/test/generator/define_extern_opencl_aottest.cpp $(FILTERS_DIR)/define_extern_opencl.a $(FILTERS_DIR)/define_extern_opencl.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) -o $@
-
-$(BIN_DIR)/$(TARGET)/generator_aotcpp_define_extern_opencl: $(ROOT_DIR)/test/generator/define_extern_opencl_aottest.cpp $(FILTERS_DIR)/define_extern_opencl.cpp $(FILTERS_DIR)/define_extern_opencl.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) -o $@
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.cpp $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $$(GENERATOR_AOTTEST_RUNTIME_LIBS)
+	@mkdir -p $(BIN_DIR)/$(TARGET)
+	$(CXX) $(GENERATOR_AOTTEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GENERATOR_AOTTEST_INCLUDES) $(GENERATOR_AOTTEST_LD_FLAGS) $(GENERATOR_AOTTEST_EXTRA_LD_FLAGS) -o $@
 
 # By default, %_jittest.cpp depends on libHalide, plus the stubs for the Generator. These are external tests that use the JIT.
-$(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(FILTERS_DIR)/%.stub.h $(BUILD_DIR)/%_generator.o
-	@mkdir -p $(@D)
+$(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $$(GENERATOR_JITTEST_DEPS)
 	$(CXX) -g $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support $(TEST_LD_FLAGS) -o $@
+
+# ------------------------------------------------------------------------------
+
+# also depends on cxx_mangling_gpu
+$(BIN_DIR)/$(TARGET)/generator_aot_cxx_mangling: GENERATOR_AOTTEST_EXTRA_DEPS=$(FILTERS_DIR)/cxx_mangling_gpu.a
+
+# also depends on metadata_tester_ucon
+$(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: GENERATOR_AOTTEST_EXTRA_DEPS=$(FILTERS_DIR)/metadata_tester_ucon.a
+
+# MSAN test doesn't use the standard runtime
+$(BIN_DIR)/$(TARGET)/generator_aot_msan: GENERATOR_AOTTEST_RUNTIME_LIBS=
+
+# depends on non-obvious set of deps
+$(BIN_DIR)/$(TARGET)/generator_aot_nested_externs: GENERATOR_AOTTEST_DEPS=\
+	$(FILTERS_DIR)/nested_externs_combine.a \
+	$(FILTERS_DIR)/nested_externs_inner.a \
+	$(FILTERS_DIR)/nested_externs_leaf.a \
+	$(FILTERS_DIR)/nested_externs_root.a
+
+# The matlab tests needs "-matlab" in the runtime
+$(BIN_DIR)/$(TARGET)/generator_aot_matlab: GENERATOR_AOTTEST_RUNTIME_LIBS=$(BIN_DIR)/$(TARGET)-matlab/build/runtime.a
+
+$(BIN_DIR)/$(TARGET)/generator_aot_acquire_release: GENERATOR_AOTTEST_EXTRA_LD_FLAGS=$(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS)
+
+$(BIN_DIR)/$(TARGET)/generator_aot_define_extern_opencl: GENERATOR_AOTTEST_EXTRA_LD_FLAGS=$(OPENCL_LD_FLAGS)
+
+# TODO -- yuck
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_external_code: GENERATOR_AOTTEST_DEPS=$(FILTERS_DIR)/external_code_cpp.a
 
 # generator_aot_multitarget is run multiple times, with different env vars.
 generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
@@ -1245,24 +1167,6 @@ generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
 	HL_MULTITARGET_TEST_USE_DEBUG_FEATURE=1 $(CURDIR)/$<
 	@-echo
 
-# nested externs doesn't actually contain a generator named
-# "nested_externs", and has no internal tests in any case.
-test_generator_nested_externs:
-	@echo "Skipping"
-
-$(BUILD_DIR)/RunGen.o: $(ROOT_DIR)/tools/RunGen.cpp $(RUNTIME_EXPORTED_INCLUDES)
-	@mkdir -p $(@D)
-	$(CXX) -c $< $(TEST_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(INCLUDE_DIR) -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools -o $@
-
-$(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGen.o $(BIN_DIR)/$(TARGET)/runtime.a $(ROOT_DIR)/tools/RunGenStubs.cpp $(FILTERS_DIR)/%.a
-	@mkdir -p $(@D)
-	$(CXX) -std=c++11 -DHL_RUNGEN_FILTER_HEADER=\"$*.h\" -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
-
-RUNARGS ?=
-
-$(FILTERS_DIR)/%.run: $(FILTERS_DIR)/%.rungen
-	$(CURDIR)/$< $(RUNARGS)
-	@-echo
 
 $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	@ if [[ $@ == *_run ]]; then \
@@ -1270,7 +1174,7 @@ $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make -f $(THIS_MAKEFILE) tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
-		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -lz -o $@; \
+		-I$(TMP_DIR) -I$(INCLUDE_DIR) $(TMP_DIR)/$${LESSON}_*.a $(GENERATOR_AOTTEST_LD_FLAGS) $(IMAGE_IO_LIBS) -lz -o $@; \
 	else \
 		$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
 		-I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@;\
