@@ -199,8 +199,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_downgrade_buffer_t",
         "halide_downgrade_buffer_t_device_fields",
         "_halide_buffer_crop",
-        "_halide_buffer_retire_crop",
-        "_halide_buffer_retire_crops",
+        "_halide_buffer_retire_crop_after_extern_stage",
+        "_halide_buffer_retire_crops_after_extern_stage",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);

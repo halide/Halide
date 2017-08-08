@@ -526,8 +526,8 @@ Stmt build_produce(Function f, const Target &target) {
             // call and triggering it afterwards using an Allocate node.
             string destructor_name = unique_name('d');
             const char *fn = (cropped_buffers.size() == 1 ?
-                              "_halide_buffer_retire_crop" :
-                              "_halide_buffer_retire_crops");
+                              "_halide_buffer_retire_crop_after_extern_stage" :
+                              "_halide_buffer_retire_crops_after_extern_stage");
             check = Allocate::make(destructor_name, Handle(), {},
                                    const_true(), check, cleanup_struct, fn);
         }
