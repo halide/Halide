@@ -203,7 +203,7 @@ void _halide_buffer_retire_crops_after_extern_stage(void *user_context,
                                                     void *obj) {
     halide_buffer_t **buffers = (halide_buffer_t **)obj;
     while (*buffers) {
-        _halide_buffer_retire_crop(user_context, buffers);
+        _halide_buffer_retire_crop_after_extern_stage(user_context, buffers);
         buffers += 2;
     }
 }
