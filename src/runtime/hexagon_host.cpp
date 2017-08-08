@@ -206,7 +206,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     // Initialize the runtime, if necessary.
     if (!shared_runtime) {
         debug(user_context) << "    Initializing shared runtime\n";
-        const char soname[] = "libshared_runtime.so";
+        const char soname[] = "libhalide_shared_runtime.so";
         debug(user_context) << "    halide_remote_load_library(" << soname << ") -> ";
         result = remote_load_library(soname, sizeof(soname), runtime, runtime_size, &shared_runtime);
         poll_log(user_context);
