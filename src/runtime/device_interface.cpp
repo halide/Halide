@@ -457,7 +457,9 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
     if (dst_device_interface &&
         dst_device_interface != dst->device_interface) {
         err = halide_device_free(user_context, dst);
-        err = err || halide_device_malloc(user_context, dst, dst_device_interface);
+        if (!err) {
+            err = halide_device_malloc(user_context, dst, dst_device_interface);
+        }
     }
 
     if (err) {
