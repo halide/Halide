@@ -969,7 +969,7 @@ GENERATOR_GENERATOR_LD_FLAGS = $(TEST_LD_FLAGS)
 GENERATOR_IMAGE_IO_LIBS      ?= $(IMAGE_IO_LIBS)
 GENERATOR_IMAGE_IO_CXX_FLAGS ?= $(IMAGE_IO_CXX_FLAGS)
 
-include HalideGenerator.mk
+include $(ROOT_DIR)/HalideGenerator.mk
 
 # ------------------------------------------------------------------------------
 
