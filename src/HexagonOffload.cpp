@@ -571,8 +571,8 @@ public:
 
 namespace {
 
-const std::string runtime_module_name = "shared_runtime";
-const std::string pipeline_module_name = "hexagon_code";
+const std::string runtime_module_name = "halide_shared_runtime";
+const std::string pipeline_module_name = "halide_hexagon_code";
 
 // Replace the parameter objects of loads/stores with a new parameter
 // object.
