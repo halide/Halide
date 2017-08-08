@@ -210,10 +210,21 @@ WEAK int halide_error_bad_fold(void *user_context, const char *func_name, const 
     return halide_error_code_bad_fold;
 }
 
-WEAK int halide_error_bad_extern_fold(void *user_context, const char *func_name, int dim) {
-    error(user_context)
-        << "Cannot fold dimension " << dim << " of " << func_name
-        << " because an extern stage uses a region of it which wraps around the boundary of the fold\n";
+WEAK int halide_error_bad_extern_fold(void *user_context, const char *func_name,
+                                      int dim, int min, int extent, int valid_min, int fold_factor) {
+    if (min < valid_min || min + extent > valid_min + fold_factor) {
+        error(user_context)
+            << "Cannot fold dimension " << dim << " of " << func_name
+            << " because an extern stage accesses [" << min << ", " << (min + extent - 1) << "],"
+            << " which is outside the range currently valid: ["
+            << valid_min << ", " << (valid_min + fold_factor - 1) << "].";
+    } else {
+        error(user_context)
+            << "Cannot fold dimension " << dim << " of " << func_name
+            << " because an extern stage accesses [" << min << ", " << (min + extent - 1) << "],"
+            << " which wraps around the boundary of the fold, "
+            << "which occurs at multiples of " << fold_factor << ".";
+    }
     return halide_error_code_bad_extern_fold;
 }
 
