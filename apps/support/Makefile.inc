@@ -17,15 +17,15 @@ CXX ?= g++
 GXX ?= g++
 
 CFLAGS += -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
-CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/
+CXXFLAGS += -std=c++11 -I $(HALIDE_BIN_PATH)/include/ -I $(HALIDE_SRC_PATH)/tools/ -I $(HALIDE_SRC_PATH)/apps/support/ -fno-rtti 
 
 ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
 endif
 
 LIB_HALIDE = $(HALIDE_BIN_PATH)/lib/libHalide.a
-
-GENERATOR_DEPS ?= $(HALIDE_BIN_PATH)/lib/libHalide.a $(HALIDE_BIN_PATH)/include/Halide.h $(HALIDE_SRC_PATH)/tools/GenGen.cpp
+LIBHALIDE_DEPS = $(LIB_HALIDE) $(HALIDE_BIN_PATH)/include/Halide.h
+GENERATOR_DEPS ?= $(LIBHALIDE_DEPS) $(HALIDE_SRC_PATH)/tools/GenGen.cpp
 
 LLVM_CONFIG ?= llvm-config
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
@@ -76,21 +76,3 @@ endif
 ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
-
-$(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp
-	@mkdir -p $(@D)
-	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
-
-# Really, .SECONDARY is what we want, but it won't accept wildcards
-.PRECIOUS: $(BIN)/%.rungen
-$(BIN)/%.rungen: $(BIN)/%.a $(BIN)/RunGen.o $(HALIDE_SRC_PATH)/tools/RunGenStubs.cpp
-	$(CXX) $(CXXFLAGS) -DHL_RUNGEN_FILTER=$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
-
-RUNARGS ?=
-
-# Pseudo target that allows us to build-and-run in one step, e.g.
-#
-#     make foo.run RUNARGS='input=a output=baz'
-#
-$(BIN)/%.run: $(BIN)/%.rungen
-	@$(CURDIR)/$< $(RUNARGS)
