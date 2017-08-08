@@ -331,10 +331,10 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     return CUDA_SUCCESS;
 }
 
-// This feature may be useful during CUDA backend or runtime development.
-// It does not seem useufl in general Halide use and it is causing false
-// positives in at least one context which prevents using debug mode with
-// cuda.
+// This feature may be useful during CUDA backend or runtime
+// development. It does not seem to find many errors in general Halide
+// use and causes false positives in at least one environment, where
+// it prevents using debug mode with cuda.
 #define ENABLE_POINTER_VALIDATION 0
 
 WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size_t size=0) {
