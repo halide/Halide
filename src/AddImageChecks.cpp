@@ -535,7 +535,7 @@ Stmt add_image_checks(Stmt s,
         }
 
         // For the buffers used on host, check the host field is non-null
-        Expr host_ptr = Variable::make(Handle(), name);
+        Expr host_ptr = Variable::make(Handle(), name, image, param, ReductionDomain());
         if (used_on_host) {
             Expr error = Call::make(Int(32), "halide_error_host_is_null",
                                     {error_name}, Call::Extern);
