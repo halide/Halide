@@ -150,7 +150,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         max_required = max_req;
                     }
                 } else if (!min_required.defined() &&
-                           i == func.dimensions() - 1) {
+                           i == func.dimensions() - 1 &&
+                           is_pure(min_req) &&
+                           is_pure(max_req)) {
                     // The footprint doesn't depend on the loop var. Just compute everything on the first loop iteration.
                     dim = func_args[i];
                     dim_idx = i;
