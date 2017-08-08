@@ -87,6 +87,70 @@ public:
         func(f), dim(d), factor(e) {}
 };
 
+// Inject dynamic folding checks against a tracked live range.
+class InjectFoldingCheck : public IRMutator {
+    string func, footprint, loop_var;
+    int dim;
+    const StorageDim &storage_dim;
+    using IRMutator::visit;
+
+    void visit(const ProducerConsumer *op) {
+        if (op->name == func) {
+            if (op->is_producer) {
+                // Update valid range based on bounds written
+                // to. (TODO: if extern use the .min/.max symbols
+                // instead.)
+                Box b = box_provided(op->body, func);
+                Expr old_min =
+                    Load::make(Int(32), footprint, 0, Buffer<>(), Parameter(), const_true());
+
+                // Track the logical address range the memory
+                // currently represents.
+                Expr new_valid_max, new_valid_min;
+                if (storage_dim.fold_forward) {
+                    new_valid_min = b[dim].max - (storage_dim.fold_factor - 1);
+                } else {
+                    new_valid_min = b[dim].min;
+                }
+
+                Stmt update_min =
+                    Store::make(footprint, new_valid_min, 0, Parameter(), const_true());
+                Expr extent = b[dim].max - b[dim].min + 1;
+                Expr fold_too_small_error = Call::make(Int(32), "halide_error_fold_factor_too_small",
+                                                       {func, storage_dim.var, storage_dim.fold_factor, loop_var, extent},
+                                                       Call::Extern);
+                Stmt check_extent =
+                    AssertStmt::make(extent <= storage_dim.fold_factor, fold_too_small_error);
+                stmt = Block::make({check_extent, update_min, op});
+            } else {
+                // Check the accessed range against the valid
+                // range. TODO: if consumed by extern stage use bounds
+                // query result.
+                Box b = box_required(op->body, func);
+
+                Expr valid_min =
+                    Load::make(Int(32), footprint, 0, Buffer<>(), Parameter(), const_true());
+
+                Expr check = (b[dim].min >= valid_min && b[dim].max < valid_min + storage_dim.fold_factor);
+                Expr bad_fold_error = Call::make(Int(32), "halide_error_bad_fold",
+                                                 {func, storage_dim.var, loop_var},
+                                                 Call::Extern);
+                stmt = Block::make(AssertStmt::make(check, bad_fold_error), op);
+            }
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+public:
+    InjectFoldingCheck(string func, string footprint, string loop_var,
+                       int dim, const StorageDim &storage_dim)
+        : func(func), footprint(footprint), loop_var(loop_var),
+          dim(dim), storage_dim(storage_dim) {}
+};
+
+
+
 // Attempt to fold the storage of a particular function in a statement
 class AttemptStorageFoldingOfFunction : public IRMutator {
     Function func;
@@ -120,12 +184,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Box required = box_required(body, func.name());
         Box box = box_union(provided, required);
 
+        string dynamic_footprint;
+
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
-            Expr min = simplify(box[i-1].min);
-            Expr max = simplify(box[i-1].max);
+            int dim = (int)(i-1);
+            Expr min = simplify(box[dim].min);
+            Expr max = simplify(box[dim].max);
 
-            const StorageDim &storage_dim = func.schedule().storage_dims()[i-1];
+            const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
             Expr explicit_factor;
             if (expr_uses_var(min, op->name) || expr_uses_var(max, op->name)) {
                 // We only use the explicit fold factor if the fold is
@@ -149,30 +216,25 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             if (!min_monotonic_increasing && !max_monotonic_decreasing &&
                 explicit_factor.defined()) {
-                // If we didn't find a monotonic dimension, and we have an explicit fold factor,
-                // assert that the min/max do in fact monotonically increase/decrease.
-                Expr condition;
-                Expr loop_var = Variable::make(Int(32), op->name);
-                if (storage_dim.fold_forward) {
-                    Expr min_next = substitute(op->name, loop_var + 1, min);
-                    condition = min_next >= min;
+                // If we didn't find a monotonic dimension, and we
+                // have an explicit fold factor, we need to
+                // dynamically check that the min/max do in fact
+                // monotonically increase/decrease. We'll allocate
+                // some stack space to store the valid footprint,
+                // update it outside produce nodes, and check it
+                // outside consume nodes.
+                dynamic_footprint = func.name() + "." + op->name + ".footprint";
 
-                    // After we assert that the min increased, assume
-                    // the min is monotonically increasing.
+                body = InjectFoldingCheck(func.name(),
+                                          dynamic_footprint,
+                                          op->name,
+                                          dim,
+                                          storage_dim).mutate(body);
+                if (storage_dim.fold_forward) {
                     min_monotonic_increasing = true;
                 } else {
-                    Expr max_next = substitute(op->name, loop_var + 1, max);
-                    condition = max_next <= max;
-
-                    // After we assert that the max decreased, assume
-                    // the max is monotonically decreasing.
                     max_monotonic_decreasing = true;
                 }
-                Expr error = Call::make(Int(32), "halide_error_bad_fold",
-                                        {func.name(), storage_dim.var, op->name},
-                                        Call::Extern);
-
-                body = Block::make(AssertStmt::make(condition, error), body);
             }
 
             // The min or max has to be monotonic with the loop
@@ -181,11 +243,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr extent = simplify(max - min + 1);
                 Expr factor;
                 if (explicit_factor.defined()) {
-                    Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                            {func.name(), storage_dim.var, explicit_factor, op->name, extent},
-                                            Call::Extern);
-                    body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
-
                     factor = explicit_factor;
                 } else {
                     // The max of the extent over all values of the loop variable must be a constant
@@ -222,6 +279,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         // recursively.
                     } else if (!body.same_as(op->body)) {
                         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                        if (!dynamic_footprint.empty()) {
+                            stmt = Allocate::make(dynamic_footprint, Int(32), {}, const_true(), stmt);
+                        }
                         return;
                     } else {
                         stmt = op;
