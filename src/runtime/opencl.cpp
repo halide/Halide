@@ -598,8 +598,8 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
                                       NULL) == CL_SUCCESS) {
                 error(user_context) << "CL: clBuildProgram failed: "
                                     << get_opencl_error_name(err)
-                                    << "\nBuild Log:\n "
-                                    << buffer;
+                                    << "\nBuild Log:\n"
+                                    << buffer << "\n";
             } else {
                 error(user_context) << "clGetProgramBuildInfo failed";
             }

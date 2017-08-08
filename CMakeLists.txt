@@ -2,6 +2,8 @@
 project(Halide)
 cmake_minimum_required(VERSION 3.1.3)
 
+find_package(Threads)
+
 find_package(LLVM REQUIRED CONFIG)
 
 # Notify the user what paths and LLVM version we are using
@@ -103,7 +105,7 @@ function(halide_project name folder)
   else()
     target_compile_options("${name}" PUBLIC "-fno-rtti")
   endif()
-  target_link_libraries("${name}" PRIVATE Halide)
+  target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
