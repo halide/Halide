@@ -348,7 +348,7 @@ Stmt build_produce(Function f, const Target &target) {
                 extern_call_args.push_back(arg.expr);
             } else if (arg.is_func()) {
                 Function input(arg.func);
-                if (input.schedule().store_level() == f.schedule().compute_level()) {
+                if (input.schedule().store_level() == input.schedule().compute_level()) {
                     for (int k = 0; k < input.outputs(); k++) {
                         string buf_name = input.name();
                         if (input.outputs() > 1) {
