@@ -384,7 +384,7 @@ Stmt build_produce(Function f, const Target &target) {
                         vector<Expr> args(5);
                         args[0] = cropped_input;
                         args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
-                                             {(int)sizeof(halide_dimension_t) * f.dimensions()}, Call::Intrinsic);
+                                             {(int)sizeof(halide_dimension_t) * input.dimensions()}, Call::Intrinsic);
                         args[2] = src_buffer;
 
                         vector<Expr> mins, extents;
@@ -404,7 +404,7 @@ Stmt build_produce(Function f, const Target &target) {
 
                         string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
                         extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
-                        buffers_to_annotate.push_back({extern_call_args.back(), f.dimensions()});
+                        buffers_to_annotate.push_back({extern_call_args.back(), input.dimensions()});
                         buffers_contents_to_annotate.push_back(cropped_input);
                         lets.push_back({ buf_name, cropped_input });
                     }
