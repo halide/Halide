@@ -468,28 +468,24 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
 
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
-        bool is_halide_extern_c_sym = Internal::starts_with(f.getName(), "halide_");
-        if (is_halide_extern_c_sym && t.has_feature(Target::SharedRuntime)) {
-            f.setLinkage(llvm::GlobalValue::ExternalLinkage);
-        } else {
-            bool can_strip = true;
-            for (const string &r : retain) {
-                if (f.getName() == r) {
-                    can_strip = false;
-                }
+        bool can_strip = true;
+        for (const string &r : retain) {
+            if (f.getName() == r) {
+                can_strip = false;
             }
+        }
 
-            internal_assert(t.os == Target::NoOS || !is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
-                << " for function " << (std::string)f.getName() << "\n";
-            can_strip = can_strip && !is_halide_extern_c_sym;
+        bool is_halide_extern_c_sym = Internal::starts_with(f.getName(), "halide_");
+        internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
+            << " for function " << (std::string)f.getName() << "\n";
+        can_strip = can_strip && !is_halide_extern_c_sym;
 
-            llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
-            if (can_strip || t.os == Target::NoOS) {
-                if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
-                    f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-                } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
-                    f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-                }
+        llvm::GlobalValue::LinkageTypes linkage = f.getLinkage();
+        if (can_strip) {
+            if (linkage == llvm::GlobalValue::WeakAnyLinkage) {
+                f.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+            } else if (linkage == llvm::GlobalValue::WeakODRLinkage) {
+                f.setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
             }
         }
     }
