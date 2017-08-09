@@ -479,23 +479,6 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Fold the storage of the output of an extern stage, with a
-        // too-small fold factor.
-        Func f, g, h;
-        Var x, y;
-        f(x, y) = x + y;
-        g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
-        h(x, y) = g(x, y);
-
-        f.compute_root();
-        g.store_root().compute_at(h, y).fold_storage(g.args()[1], 2);
-        Var yi;
-        h.compute_root().split(y, y, yi, 4);
-
-        realize_and_expect_error(h, 64, 64);
-    }
-
-    {
         // Fold the storage of the output of an extern stage, where
         // one of the regions written crosses a fold boundary.
         Func f, g, h;

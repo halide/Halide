@@ -165,52 +165,58 @@ class InjectFoldingCheck : public IRMutator {
                     // We'll update the valid min at the buffer_crop call.
                     body = mutate(op->body);
                 } else {
-
-                    // Update valid range based on bounds written
-                    // to.
+                    // Update valid range based on bounds written to.
                     Box b = box_provided(body, func.name());
-                    Expr old_min =
+                    Expr old_leading_edge =
                         Load::make(Int(32), footprint, 0, Buffer<>(), Parameter(), const_true());
 
                     internal_assert(!b.empty());
 
                     // Track the logical address range the memory
                     // currently represents.
-                    Expr new_valid_max, new_valid_min;
+                    Expr new_leading_edge;
                     if (storage_dim.fold_forward) {
-                        new_valid_min = b[dim].max - (storage_dim.fold_factor - 1);
+                        new_leading_edge = max(b[dim].max, old_leading_edge);
                     } else {
-                        new_valid_min = b[dim].min;
+                        new_leading_edge = min(b[dim].min, old_leading_edge);
                     }
 
-                    string new_min_var_name = unique_name('t');
-                    Expr new_min_var = Variable::make(Int(32), new_min_var_name);
+                    string new_leading_edge_var_name = unique_name('t');
+                    Expr new_leading_edge_var = Variable::make(Int(32), new_leading_edge_var_name);
 
-                    Stmt update_min =
-                        Store::make(footprint, new_min_var, 0, Parameter(), const_true());
-                    Expr extent = b[dim].max - b[dim].min + 1;
-                    Expr fold_too_small_error =
-                        Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                   {func.name(), storage_dim.var, storage_dim.fold_factor, loop_var, extent},
-                                   Call::Extern);
+                    Stmt update_leading_edge =
+                        Store::make(footprint, new_leading_edge_var, 0, Parameter(), const_true());
 
+                    // Check the region being written to in this
+                    // iteration lies within the range of coordinates
+                    // currently represented.
                     Expr fold_non_monotonic_error =
                         Call::make(Int(32), "halide_error_bad_fold",
                                    {func.name(), storage_dim.var, loop_var},
                                    Call::Extern);
 
+                    Expr in_valid_range;
+                    if (storage_dim.fold_forward) {
+                        in_valid_range = b[dim].min > new_leading_edge - storage_dim.fold_factor;
+                    } else {
+                        in_valid_range = b[dim].max < new_leading_edge + storage_dim.fold_factor;
+                    }
+                    Stmt check_in_valid_range =
+                        AssertStmt::make(in_valid_range, fold_non_monotonic_error);
+
+                    Expr extent = b[dim].max - b[dim].min + 1;
+
+                    // Separately check the extent for *this* loop iteration fits.
+                    Expr fold_too_small_error =
+                        Call::make(Int(32), "halide_error_fold_factor_too_small",
+                                   {func.name(), storage_dim.var, storage_dim.fold_factor, loop_var, extent},
+                                   Call::Extern);
+
                     Stmt check_extent =
                         AssertStmt::make(extent <= storage_dim.fold_factor, fold_too_small_error);
 
-                    Stmt check_monotonic;
-                    if (storage_dim.fold_forward) {
-                        check_monotonic = AssertStmt::make(new_min_var >= old_min, fold_non_monotonic_error);
-                    } else {
-                        check_monotonic = AssertStmt::make(new_min_var <= old_min, fold_non_monotonic_error);
-                    }
-
-                    Stmt checks = Block::make({check_extent, check_monotonic, update_min});
-                    checks = LetStmt::make(new_min_var_name, new_valid_min, checks);
+                    Stmt checks = Block::make({check_extent, check_in_valid_range, update_leading_edge});
+                    checks = LetStmt::make(new_leading_edge_var_name, new_leading_edge, checks);
                     body = Block::make(checks, body);
                 }
             } else {
@@ -219,10 +225,15 @@ class InjectFoldingCheck : public IRMutator {
                 Box b = box_required(body, func.name());
 
                 if (!b.empty()) {
-                    Expr valid_min =
+                    Expr leading_edge =
                         Load::make(Int(32), footprint, 0, Buffer<>(), Parameter(), const_true());
 
-                    Expr check = (b[dim].min >= valid_min && b[dim].max < valid_min + storage_dim.fold_factor);
+                    Expr check;
+                    if (storage_dim.fold_forward) {
+                        check = (b[dim].min > leading_edge - storage_dim.fold_factor && b[dim].max <= leading_edge);
+                    } else {
+                        check = (b[dim].max < leading_edge + storage_dim.fold_factor && b[dim].min >= leading_edge);
+                    }
                     Expr bad_fold_error = Call::make(Int(32), "halide_error_bad_fold",
                                                      {func.name(), storage_dim.var, loop_var},
                                                      Call::Extern);
@@ -242,15 +253,21 @@ class InjectFoldingCheck : public IRMutator {
 
             Stmt body = op->body;
             Expr buf = Variable::make(type_of<halide_buffer_t *>(), op->name);
-            Expr actual_min =
-                Call::make(Int(32), Call::buffer_get_min, {buf, dim}, Call::Extern);
+            Expr leading_edge;
+            if (storage_dim.fold_forward) {
+                leading_edge =
+                    Call::make(Int(32), Call::buffer_get_max, {buf, dim}, Call::Extern);
+            } else {
+                leading_edge =
+                    Call::make(Int(32), Call::buffer_get_min, {buf, dim}, Call::Extern);
+            }
 
-            // We're taking a crop of the buffer to act as an
-            // output to an extern stage. Update the valid min
+            // We're taking a crop of the buffer to act as an output
+            // to an extern stage. Update the valid min or max
             // coordinate accordingly.
-            Stmt update_min =
-                Store::make(footprint, actual_min, 0, Parameter(), const_true());
-            body = Block::make(update_min, body);
+            Stmt update_leading_edge =
+                Store::make(footprint, leading_edge, 0, Parameter(), const_true());
+            body = Block::make(update_leading_edge, body);
 
             // We don't need to make sure the min is moving
             // monotonically, because we can't do sliding window on
