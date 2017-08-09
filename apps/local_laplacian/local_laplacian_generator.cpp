@@ -19,7 +19,7 @@ public:
         const int J = pyramid_levels;
 
         // Make the remapping function as a lookup table.
-        Func remap("remap");
+        Func remap;
         Expr fx = cast<float>(x) / 256.0f;
         remap(x) = alpha*fx*exp(-fx*fx/2.0f);
 
@@ -27,11 +27,11 @@ public:
         Func clamped = Halide::BoundaryConditions::repeat_edge(input);
 
         // Convert to floating point
-        Func floating("floating");
+        Func floating;
         floating(x, y, c) = clamped(x, y, c) / 65535.0f;
 
         // Get the luminance channel
-        Func gray("gray");
+        Func gray;
         gray(x, y) = 0.299f * floating(x, y, 0) + 0.587f * floating(x, y, 1) + 0.114f * floating(x, y, 2);
 
         // Make the processed Gaussian pyramid.
@@ -78,7 +78,7 @@ public:
         }
 
         // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
-        Func color("color");
+        Func color;
         float eps = 0.01f;
         color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c)+eps) / (gray(x, y)+eps);
 
@@ -88,47 +88,7 @@ public:
 
         /* THE SCHEDULE */
 
-        if (!auto_schedule) {
-            remap.compute_root();
-            if (get_target().has_gpu_feature()) {
-                // gpu schedule
-                Var xi, yi;
-                output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
-                for (int j = 0; j < J; j++) {
-                    int blockw = 16, blockh = 8;
-                    if (j > 3) {
-                        blockw = 2;
-                        blockh = 2;
-                    }
-                    if (j > 0) {
-                        inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
-                        gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
-                    }
-                    outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
-                }
-            } else {
-                // cpu schedule
-                Var yo;
-                output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
-                gray.compute_root().parallel(y, 32).vectorize(x, 8);
-                for (int j = 1; j < 5; j++) {
-                    inGPyramid[j]
-                        .compute_root().parallel(y, 32).vectorize(x, 8);
-                    gPyramid[j]
-                        .compute_root().reorder_storage(x, k, y)
-                        .reorder(k, y).parallel(y, 8).vectorize(x, 8);
-                    outGPyramid[j]
-                        .store_at(output, yo).compute_at(outGPyramid[j-1], y).fold_storage(y, 8)
-                        .vectorize(x, 8);
-                }
-                outGPyramid[0].compute_at(output, y).vectorize(x, 8);
-                for (int j = 5; j < J; j++) {
-                    inGPyramid[j].compute_root();
-                    gPyramid[j].compute_root().parallel(k);
-                    outGPyramid[j].compute_root();
-                }
-            }
-        } else {
+        if (auto_schedule) {
             // Provide estimates on the input image
             input.dim(0).set_bounds_estimate(0, 1536);
             input.dim(1).set_bounds_estimate(0, 2560);
@@ -144,8 +104,46 @@ public:
             // Auto schedule the pipeline
             Pipeline p(output);
             p.auto_schedule(get_target());
+        } else if (get_target().has_gpu_feature()) {
+            // gpu schedule
+            remap.compute_root();
+            Var xi, yi;
+            output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
+            for (int j = 0; j < J; j++) {
+                int blockw = 16, blockh = 8;
+                if (j > 3) {
+                    blockw = 2;
+                    blockh = 2;
+                }
+                if (j > 0) {
+                    inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
+                    gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
+                }
+                outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
+            }
+        } else {
+            // cpu schedule
+            remap.compute_root();
+            Var yo;
+            output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
+            gray.compute_root().parallel(y, 32).vectorize(x, 8);
+            for (int j = 1; j < 5; j++) {
+                inGPyramid[j]
+                    .compute_root().parallel(y, 32).vectorize(x, 8);
+                gPyramid[j]
+                    .compute_root().reorder_storage(x, k, y)
+                    .reorder(k, y).parallel(y, 8).vectorize(x, 8);
+                outGPyramid[j]
+                    .store_at(output, yo).compute_at(outGPyramid[j-1], y).fold_storage(y, 8)
+                    .vectorize(x, 8);
+            }
+            outGPyramid[0].compute_at(output, y).vectorize(x, 8);
+            for (int j = 5; j < J; j++) {
+                inGPyramid[j].compute_root();
+                gPyramid[j].compute_root().parallel(k);
+                outGPyramid[j].compute_root();
+            }
         }
-
         return output;
     }
 private:
@@ -154,7 +152,7 @@ private:
     // Downsample with a 1 3 3 1 filter
     Func downsample(Func f) {
         using Halide::_;
-        Func downx("downx"), downy("downy");
+        Func downx, downy;
         downx(x, y, _) = (f(2*x-1, y, _) + 3.0f * (f(2*x, y, _) + f(2*x+1, y, _)) + f(2*x+2, y, _)) / 8.0f;
         downy(x, y, _) = (downx(x, 2*y-1, _) + 3.0f * (downx(x, 2*y, _) + downx(x, 2*y+1, _)) + downx(x, 2*y+2, _)) / 8.0f;
         return downy;
@@ -163,7 +161,7 @@ private:
     // Upsample using bilinear interpolation
     Func upsample(Func f) {
         using Halide::_;
-        Func upx("upx"), upy("upy");
+        Func upx, upy;
         upx(x, y, _) = 0.25f * f((x/2) - 1 + 2*(x % 2), y, _) + 0.75f * f(x/2, y, _);
         upy(x, y, _) = 0.25f * upx(x, (y/2) - 1 + 2*(y % 2), _) + 0.75f * upx(x, y/2, _);
         return upy;

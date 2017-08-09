@@ -56,33 +56,31 @@ double run_test(bool auto_schedule) {
     Target target = get_target_from_environment();
     Pipeline p(unsharp);
 
-    if (!auto_schedule) {
-        if (target.has_gpu_feature()) {
-            Var xi, yi;
-            unsharp.compute_root()
-                .reorder(c, x, y)
-                .gpu_tile(x, y, xi, yi, 16, 16);
-            ratio.compute_at(unsharp, xi);
-            gray.compute_at(unsharp, x)
-                .tile(x, y, xi, yi, 2, 2)
-                .unroll(xi)
-                .unroll(yi)
-                .gpu_threads(x, y);
-            blur_y.compute_at(unsharp, x)
-                .unroll(x, 2)
-                .gpu_threads(x, y);
-        } else {
-            blur_y.compute_at(unsharp, y).vectorize(x, 8);
-            ratio.compute_at(unsharp, y).vectorize(x, 8);
-            unsharp.vectorize(x, 8).parallel(y).reorder(x, c, y);
-        }
-    } else {
+    if (auto_schedule) {
         // Provide estimates on the pipeline output
         unsharp.estimate(x, 0, in.width())
             .estimate(y, 0, in.height())
             .estimate(c, 0, in.channels());
         // Auto-schedule the pipeline
         p.auto_schedule(target);
+    } else if (target.has_gpu_feature()) {
+        Var xi, yi;
+        unsharp.compute_root()
+            .reorder(c, x, y)
+            .gpu_tile(x, y, xi, yi, 16, 16);
+        ratio.compute_at(unsharp, xi);
+        gray.compute_at(unsharp, x)
+            .tile(x, y, xi, yi, 2, 2)
+            .unroll(xi)
+            .unroll(yi)
+            .gpu_threads(x, y);
+        blur_y.compute_at(unsharp, x)
+            .unroll(x, 2)
+            .gpu_threads(x, y);
+    } else {
+        blur_y.compute_at(unsharp, y).vectorize(x, 8);
+        ratio.compute_at(unsharp, y).vectorize(x, 8);
+        unsharp.vectorize(x, 8).parallel(y).reorder(x, c, y);
     }
 
     // Inspect the schedule

@@ -60,51 +60,49 @@ double run_test(bool auto_schedule) {
     Target target = get_target_from_environment();
     Pipeline p(color);
 
-    if (!auto_schedule) {
-        if (target.has_gpu_feature()) {
-            Var xi("xi"), yi("yi");
-            Y.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
-            hist_rows.compute_root().gpu_tile(y, yi, 16).update().gpu_tile(y, yi, 16);
-            hist.compute_root().gpu_tile(x, xi, 16).update().gpu_tile(x, xi, 16);
-            cdf.compute_root().gpu_single_thread();
-            Cr.compute_at(color, xi);
-            Cb.compute_at(color, xi);
-            eq.compute_at(color, xi);
-            color.compute_root()
-                 .reorder(c, x, y).bound(c, 0, 3).unroll(c)
-                 .gpu_tile(x, y, xi, yi, 16, 16);
-        } else {
-            Y.compute_root().parallel(y, 8).vectorize(x, 8);
-
-            hist_rows.compute_root()
-                .vectorize(x, 8)
-                .parallel(y, 8)
-                .update()
-                .parallel(y, 8);
-            hist.compute_root()
-                .vectorize(x, 8)
-                .update()
-                .reorder(x, ry)
-                .vectorize(x, 8)
-                .unroll(x, 4)
-                .parallel(x)
-                .reorder(ry, x);
-
-            cdf.compute_root();
-            eq.compute_at(color, x).unroll(x);
-            Cb.compute_at(color, x).vectorize(x);
-            Cr.compute_at(color, x).vectorize(x);
-            color.reorder(c, x, y)
-                 .bound(c, 0, 3)
-                 .unroll(c)
-                 .parallel(y, 8)
-                 .vectorize(x, 8);
-        }
-    } else {
+    if (auto_schedule) {
         // Provide estimates on the pipeline output
         color.estimate(x, 0, 1920).estimate(y, 0, 1024).estimate(c, 0, 3);
         // Auto-schedule the pipeline
         p.auto_schedule(target);
+    } else if (target.has_gpu_feature()) {
+        Var xi("xi"), yi("yi");
+        Y.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
+        hist_rows.compute_root().gpu_tile(y, yi, 16).update().gpu_tile(y, yi, 16);
+        hist.compute_root().gpu_tile(x, xi, 16).update().gpu_tile(x, xi, 16);
+        cdf.compute_root().gpu_single_thread();
+        Cr.compute_at(color, xi);
+        Cb.compute_at(color, xi);
+        eq.compute_at(color, xi);
+        color.compute_root()
+             .reorder(c, x, y).bound(c, 0, 3).unroll(c)
+             .gpu_tile(x, y, xi, yi, 16, 16);
+    } else {
+        Y.compute_root().parallel(y, 8).vectorize(x, 8);
+
+        hist_rows.compute_root()
+            .vectorize(x, 8)
+            .parallel(y, 8)
+            .update()
+            .parallel(y, 8);
+        hist.compute_root()
+            .vectorize(x, 8)
+            .update()
+            .reorder(x, ry)
+            .vectorize(x, 8)
+            .unroll(x, 4)
+            .parallel(x)
+            .reorder(ry, x);
+
+        cdf.compute_root();
+        eq.compute_at(color, x).unroll(x);
+        Cb.compute_at(color, x).vectorize(x);
+        Cr.compute_at(color, x).vectorize(x);
+        color.reorder(c, x, y)
+             .bound(c, 0, 3)
+             .unroll(c)
+             .parallel(y, 8)
+             .vectorize(x, 8);
     }
 
     p.compile_to_lowered_stmt("histogram.html", {in}, HTML, target);
