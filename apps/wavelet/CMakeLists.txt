@@ -27,6 +27,7 @@ include(../../HalideGenerator.cmake)
 
 # HalideGenerator.cmake makes this assumptions
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_SOURCE_DIR "${HALIDE_SRC_DIR}")
 
 SET(HALIDE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../" CACHE PATH "Root of Halide source Tree")
 include_directories ("${HALIDE_SRC_DIR}/apps/support")
