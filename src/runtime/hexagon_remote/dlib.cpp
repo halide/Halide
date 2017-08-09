@@ -162,6 +162,9 @@ struct hash_table {
     }
 };
 
+// TODO: This should be made thread safe. Not easy because we can't
+// statically initialize a mutex. This should be made thread safe from
+// outside the runtime for now...
 struct dlib_t;
 dlib_t *loaded_libs = NULL;
 
