@@ -11,6 +11,7 @@
 #include <cassert>
 #include <atomic>
 #include <algorithm>
+#include <limits>
 #include <stdint.h>
 #include <string.h>
 
@@ -210,6 +211,7 @@ private:
             }
         }
         buf.device = 0;
+        buf.device_interface = nullptr;
         dev_ref_count = nullptr;
     }
 
@@ -275,7 +277,10 @@ private:
 
     /** Initialize the shape from a vector of extents */
     void initialize_shape(const std::vector<int> &sizes) {
-        for (size_t i = 0; i < sizes.size(); i++) {
+        assert(sizes.size() <= std::numeric_limits<int>::max());
+        int limit = (int)sizes.size();
+        assert(limit <= dimensions());
+        for (int i = 0; i < limit; i++) {
             buf.dim[i].min = 0;
             buf.dim[i].extent = sizes[i];
             if (i == 0) {
@@ -559,6 +564,7 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T, D>>(other));
     }
 
@@ -572,6 +578,7 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
     }
 
@@ -623,6 +630,7 @@ public:
         free_shape_storage();
         buf = other.buf;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
         return *this;
     }
@@ -637,6 +645,7 @@ public:
         free_shape_storage();
         buf = other.buf;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T, D>>(other));
         return *this;
     }
@@ -1051,7 +1060,9 @@ public:
         if (shift) {
             device_deallocate();
         }
-        buf.host += shift * dim(d).stride() * type().bytes();
+        if (buf.host != nullptr) {
+            buf.host += shift * dim(d).stride() * type().bytes();
+        }
         buf.dim[d].min = min;
         buf.dim[d].extent = extent;
     }
@@ -1069,7 +1080,10 @@ public:
 
     /** Crop an image in-place along the first N dimensions. */
     void crop(const std::vector<std::pair<int, int>> &rect) {
-        for (int i = 0; i < rect.size(); i++) {
+        assert(rect.size() <= std::numeric_limits<int>::max());
+        int limit = (int)rect.size();
+        assert(limit <= dimensions());
+        for (int i = 0; i < limit; i++) {
             crop(i, rect[i].first, rect[i].second);
         }
     }
@@ -1101,7 +1115,10 @@ public:
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
         device_deallocate();
-        for (size_t i = 0; i < delta.size(); i++) {
+        assert(delta.size() <= std::numeric_limits<int>::max());
+        int limit = (int)delta.size();
+        assert(limit <= dimensions());
+        for (int i = 0; i < limit; i++) {
             translate(i, delta[i]);
         }
     }
@@ -1158,7 +1175,9 @@ public:
         buf.dimensions--;
         int shift = pos - dim(d).min();
         assert(buf.device == 0 || shift == 0);
-        buf.host += shift * dim(d).stride() * type().bytes();
+        if (buf.host != nullptr) {
+            buf.host += shift * dim(d).stride() * type().bytes();
+        }
         for (int i = d; i < dimensions(); i++) {
             buf.dim[i] = buf.dim[i+1];
         }

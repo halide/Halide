@@ -331,6 +331,11 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     return CUDA_SUCCESS;
 }
 
+// This feature may be useful during CUDA backend or runtime
+// development. It does not seem to find many errors in general Halide
+// use and causes false positives in at least one environment, where
+// it prevents using debug mode with cuda.
+#define ENABLE_POINTER_VALIDATION 0
 
 WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size_t size=0) {
 // The technique using cuPointerGetAttribute and CU_POINTER_ATTRIBUTE_CONTEXT
@@ -340,7 +345,7 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size
 // support 32-bit addressing in 64-bit processes, but I expect those cards do not
 // support unified addressing at all.
 // TODO: figure out a way to validate pointers in all cases if strictly necessary.
-#ifdef BITS_32
+#if defined(BITS_32) || !ENABLE_POINTER_VALIDATION
     return true;
 #else
     if (buf->device == 0)
