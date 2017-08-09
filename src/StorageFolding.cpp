@@ -372,6 +372,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr extent = simplify(max - min + 1);
                 Expr factor;
                 if (explicit_factor.defined()) {
+                    if (dynamic_footprint.empty()) {
+                        // We didn't inject dynamic tracking. Inject a
+                        // static check. Maybe it will simplify away.
+                        Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
+                                                {func.name(), storage_dim.var, explicit_factor, op->name, extent},
+                                                Call::Extern);
+                        body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
+                    }
                     factor = explicit_factor;
                 } else {
                     // The max of the extent over all values of the loop variable must be a constant
