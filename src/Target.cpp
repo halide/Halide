@@ -246,7 +246,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"matlab", Target::Matlab},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
-    {"shared_runtime", Target::SharedRuntime},
     {"metal", Target::Metal},
     {"mingw", Target::MinGW},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},

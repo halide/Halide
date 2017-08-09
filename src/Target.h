@@ -65,7 +65,6 @@ struct Target {
         Matlab = halide_target_feature_matlab,
         Profile = halide_target_feature_profile,
         NoRuntime = halide_target_feature_no_runtime,
-        SharedRuntime = halide_target_feature_shared_runtime,
         Metal = halide_target_feature_metal,
         MinGW = halide_target_feature_mingw,
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
