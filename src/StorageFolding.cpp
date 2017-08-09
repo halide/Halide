@@ -530,29 +530,6 @@ class StorageFolding : public IRMutator {
                                     d < (int)bounds.size());
 
                     bounds[d] = Range(0, f);
-
-                    // There are now two coordinate systems in play
-                    // for this realization. There's the algorithm
-                    // coordinate system, which is at is was before
-                    // folding, and there's the folded coordinate
-                    // system representing the actual valid address
-                    // range. Most things that consumer buffers
-                    // (e.g. device_malloc) want the folded coordinate
-                    // system, so rewrite the .buffer symbols to use
-                    // that.
-                    for (size_t j = 0; j < op->types.size(); j++) {
-                        string buf_name;
-                        if (op->types.size() > 1) {
-                            buf_name = op->name + "." + std::to_string(j) + ".buffer";
-                        } else {
-                            buf_name = op->name + ".buffer";
-                        }
-                        Expr buffer = Variable::make(type_of<halide_buffer_t *>(), buf_name);
-                        Expr fix_buffer_bounds =
-                            Call::make(type_of<halide_buffer_t *>(), Call::buffer_set_bounds,
-                                       {buffer, d, 0, f}, Call::Extern);
-                        body = Block::make(Evaluate::make(fix_buffer_bounds), body);
-                    }
                 }
 
                 stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
