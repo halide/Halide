@@ -467,27 +467,6 @@ public:
         : func(f), explicit_only(explicit_only) {}
 };
 
-/** Check if a buffer's allocated is referred to directly via an
- * intrinsic. If so we should leave it alone. (e.g. it may be used
- * extern). */
-class IsBufferSpecial : public IRVisitor {
-public:
-    string func;
-    bool special = false;
-
-    IsBufferSpecial(string f) : func(f) {}
-private:
-
-    using IRVisitor::visit;
-
-    void visit(const Variable *var) {
-        if (var->type.is_handle() &&
-            var->name == func + ".buffer") {
-            special = true;
-        }
-    }
-};
-
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
     const map<string, Function> &env;
@@ -497,53 +476,35 @@ class StorageFolding : public IRMutator {
     void visit(const Realize *op) {
         Stmt body = mutate(op->body);
 
-        IsBufferSpecial special(op->name);
-        op->accept(&special);
-
         // Get the function associated with this realization, which
         // contains the explicit fold directives from the schedule.
         auto func_it = env.find(op->name);
         Function func = func_it != env.end() ? func_it->second : Function();
 
-        if (special.special && false) {
-            for (const StorageDim &i : func.schedule().storage_dims()) {
-                user_assert(!i.fold_factor.defined())
-                    << "Dimension " << i.var << " of " << op->name
-                    << " cannot be folded because it is accessed by extern or device stages.\n";
-            }
+        // Don't attempt automatic storage folding if there is
+        // more than one produce node for this func.
+        bool explicit_only = count_producers(body, op->name) != 1;
+        AttemptStorageFoldingOfFunction folder(func, explicit_only);
+        debug(3) << "Attempting to fold " << op->name << "\n";
+        body = folder.mutate(body);
 
-            debug(3) << "Not attempting to fold " << op->name << " because its buffer is used\n";
-            if (body.same_as(op->body)) {
-                stmt = op;
-            } else {
-                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
-            }
+        if (body.same_as(op->body)) {
+            stmt = op;
+        } else if (folder.dims_folded.empty()) {
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
         } else {
-            // Don't attempt automatic storage folding if there is
-            // more than one produce node for this func.
-            bool explicit_only = count_producers(body, op->name) != 1;
-            AttemptStorageFoldingOfFunction folder(func, explicit_only);
-            debug(3) << "Attempting to fold " << op->name << "\n";
-            body = folder.mutate(body);
+            Region bounds = op->bounds;
 
-            if (body.same_as(op->body)) {
-                stmt = op;
-            } else if (folder.dims_folded.empty()) {
-                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
-            } else {
-                Region bounds = op->bounds;
+            for (size_t i = 0; i < folder.dims_folded.size(); i++) {
+                int d = folder.dims_folded[i].dim;
+                Expr f = folder.dims_folded[i].factor;
+                internal_assert(d >= 0 &&
+                                d < (int)bounds.size());
 
-                for (size_t i = 0; i < folder.dims_folded.size(); i++) {
-                    int d = folder.dims_folded[i].dim;
-                    Expr f = folder.dims_folded[i].factor;
-                    internal_assert(d >= 0 &&
-                                    d < (int)bounds.size());
-
-                    bounds[d] = Range(0, f);
-                }
-
-                stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
+                bounds[d] = Range(0, f);
             }
+
+            stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
         }
     }
 
