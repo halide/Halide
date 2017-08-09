@@ -551,8 +551,8 @@ Stmt build_produce(Function f, const Target &target) {
         }
 
         // Add the dummy outermost loop.
-        LoopLevel outermost(f, Var::outermost());
-        check = For::make(outermost.to_string(), 0, 1, ForType::Serial, DeviceAPI::None, check);
+        string outermost = f.name() + ".s0." + Var::outermost().name();
+        check = For::make(outermost, 0, 1, ForType::Serial, DeviceAPI::None, check);
 
         return check;
     } else {

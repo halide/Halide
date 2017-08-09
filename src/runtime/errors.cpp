@@ -202,6 +202,13 @@ WEAK int halide_error_unaligned_host_ptr(void *user_context, const char *func,
     return halide_error_code_unaligned_host_ptr;
 }
 
+WEAK int halide_error_host_is_null(void *user_context, const char *func) {
+    error(user_context)
+        << "The host pointer of " << func
+        << " is null, but the pipeline will access it on the host.";
+    return halide_error_code_host_is_null;
+}
+
 WEAK int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                const char *loop_name) {
     error(user_context)
