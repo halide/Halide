@@ -303,7 +303,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         target_machine(target->createTargetMachine(triple.str(),
                                                    mcpu(), mattrs(), options,
                                                    llvm::Reloc::PIC_,
+#if LLVM_VERSION < 60
                                                    llvm::CodeModel::Default,
+#else
+                                                   llvm::CodeModel::Small,
+#endif
                                                    CodeGenOpt::Aggressive));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
