@@ -133,7 +133,7 @@ function(halide_add_aot_library AOT_LIBRARY_TARGET)
   # ------ Code to build the RunGen target
 
   set(RUNGEN "${AOT_LIBRARY_TARGET}.rungen")
-  add_executable("${RUNGEN}" "${HALIDE_SRC_DIR}/tools/RunGenStubs.cpp")
+  add_executable("${RUNGEN}" "${CMAKE_SOURCE_DIR}/tools/RunGenStubs.cpp")
   target_compile_definitions("${RUNGEN}" PRIVATE "-DHL_RUNGEN_FILTER_HEADER=\"${AOT_LIBRARY_TARGET}.h\"")
   target_link_libraries("${RUNGEN}" PRIVATE HalideToolsRunGen)
   halide_add_aot_library_dependency("${RUNGEN}" "${AOT_LIBRARY_TARGET}")
