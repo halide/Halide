@@ -373,8 +373,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr factor;
                 if (explicit_factor.defined()) {
                     if (dynamic_footprint.empty()) {
-                        // We didn't inject dynamic tracking. Inject a
-                        // static check. Maybe it will simplify away.
+                        // We were able to prove monotonicity
+                        // statically, but we may need a runtime
+                        // assertion for maximum extent. In many cases
+                        // it will simplify away.
                         Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
                                                 {func.name(), storage_dim.var, explicit_factor, op->name, extent},
                                                 Call::Extern);
