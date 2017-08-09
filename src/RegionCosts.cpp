@@ -113,6 +113,30 @@ class ExprCost : public IRVisitor {
     }
 
     void visit(const Call *call) {
+        if (call->is_intrinsic(Call::if_then_else)) {
+            // For if_then_else intrinsic, the cost is the max of true and
+            // false branch costs plus the predicate cost.
+            assert(call->args.size() == 3);
+            Expr arith = cost.arith;
+            Expr memory = cost.memory;
+
+            cost = Cost(0, 0);
+            call->args[0].accept(this);
+            Cost pred_cost = cost;
+
+            cost = Cost(0, 0);
+            call->args[1].accept(this);
+            Cost true_cost = cost;
+
+            cost = Cost(0, 0);
+            call->args[2].accept(this);
+            Cost false_cost = cost;
+
+            cost = Cost(pred_cost.arith + max(true_cost.arith, false_cost.arith),
+                        pred_cost.memory + max(true_cost.memory, false_cost.memory));
+            return;
+        }
+
         if (call->call_type == Call::Halide || call->call_type == Call::Image) {
             // Each call also counts as an op since it results in a load instruction.
             cost.arith += 1;
@@ -264,6 +288,7 @@ Expr get_func_value_size(const Function &f) {
 Cost compute_expr_cost(Expr expr) {
     // TODO: Handle likely
     //expr = LikelyExpression().mutate(expr);
+    expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
     cost_visitor.cost.simplify();
@@ -273,6 +298,7 @@ Cost compute_expr_cost(Expr expr) {
 map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
     // TODO: Handle likely
     //expr = LikelyExpression().mutate(expr);
+    expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
     return cost_visitor.detailed_byte_loads;
