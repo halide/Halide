@@ -211,6 +211,7 @@ private:
             }
         }
         buf.device = 0;
+        buf.device_interface = nullptr;
         dev_ref_count = nullptr;
     }
 
@@ -563,6 +564,7 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T, D>>(other));
     }
 
@@ -576,6 +578,7 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
     }
 
@@ -627,6 +630,7 @@ public:
         free_shape_storage();
         buf = other.buf;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
         return *this;
     }
@@ -641,6 +645,7 @@ public:
         free_shape_storage();
         buf = other.buf;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T, D>>(other));
         return *this;
     }
