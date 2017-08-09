@@ -29,18 +29,18 @@ public:
         Func left = BoundaryConditions::repeat_edge(left_im);
         Func right = BoundaryConditions::repeat_edge(right_im);
 
-        Func diff("diff");
+        Func diff;
         diff(x, y, z, c) = min(absd(left(x, y, c), right(x + 2*z, y, c)),
                                absd(left(x, y, c), right(x + 2*z + 1, y, c)));
 
-        Func cost("cost");
+        Func cost;
         cost(x, y, z) = (pow(cast<float>(diff(x, y, z, 0)), 2) +
                          pow(cast<float>(diff(x, y, z, 1)), 2) +
                          pow(cast<float>(diff(x, y, z, 2)), 2));
 
         // Compute confidence of cost estimate at each pixel by taking the
         // variance across the stack.
-        Func cost_confidence("cost_confidence");
+        Func cost_confidence;
         {
             RDom r(0, slices);
             Expr a = sum(pow(cost(x, y, r), 2)) / slices;
@@ -71,42 +71,42 @@ public:
                                                     0.5f);
         }
 
-        Func filtered_cost("filtered_cost");
+        Func filtered_cost;
         filtered_cost(x, y, z) = (cost_pyramid_pull[0](x, y, z, 0) /
                                   cost_pyramid_pull[0](x, y, z, 1));
 
         // Assume the minimum cost slice is the correct depth.
-        Func depth("depth");
+        Func depth;
         {
             RDom r(0, slices);
             depth(x, y) = argmin(filtered_cost(x, y, r))[0];
         }
 
-        Func bokeh_radius("bokeh_radius");
+        Func bokeh_radius;
         bokeh_radius(x, y) = abs(depth(x, y) - focus_depth) * blur_radius_scale;
 
-        Func bokeh_radius_squared("bokeh_radius_squared");
+        Func bokeh_radius_squared;
         bokeh_radius_squared(x, y) = pow(bokeh_radius(x, y), 2);
 
         // Take a max filter of the bokeh radius to determine the
         // worst-case bokeh radius to consider at each pixel. Makes the
         // sampling more efficient below.
-        Func worst_case_bokeh_radius_y("worst_case_bokeh_radius_y");
-        Func worst_case_bokeh_radius("worst_case_bokeh_radius");
+        Func worst_case_bokeh_radius_y;
+        Func worst_case_bokeh_radius;
         {
             RDom r(-maximum_blur_radius, 2*maximum_blur_radius+1);
             worst_case_bokeh_radius_y(x, y) = maximum(bokeh_radius(x, y + r));
             worst_case_bokeh_radius(x, y) = maximum(worst_case_bokeh_radius_y(x + r, y));
         }
 
-        Func input_with_alpha("input_with_alpha");
+        Func input_with_alpha;
         input_with_alpha(x, y, c) = select(c == 0, cast<float>(left(x, y, 0)),
                                            c == 1, cast<float>(left(x, y, 1)),
                                            c == 2, cast<float>(left(x, y, 2)),
                                            255.0f);
 
         // Render a blurred image
-        Func output("output");
+        Func output;
         output(x, y, c) = input_with_alpha(x, y, c);
 
         // The sample locations are a random function of x, y, and sample
@@ -116,7 +116,7 @@ public:
         Expr sample_v = (random_float() - 0.5f) * 2 * worst_radius;
         sample_u = clamp(cast<int>(sample_u), -maximum_blur_radius, maximum_blur_radius);
         sample_v = clamp(cast<int>(sample_v), -maximum_blur_radius, maximum_blur_radius);
-        Func sample_locations("sample_locations");
+        Func sample_locations;
         sample_locations(x, y, z) = {sample_u, sample_v};
 
         RDom s(0, aperture_samples);
@@ -137,7 +137,7 @@ public:
         Expr sample_is_in_front_of_this_pixel =
             depth(sample_x, sample_y) < depth(x, y);
 
-        Func sample_weight("sample_weight");
+        Func sample_weight;
         sample_weight(x, y, z) =
             select((sample_is_within_bokeh_of_this_pixel ||
                     sample_is_in_front_of_this_pixel) &&
@@ -149,7 +149,7 @@ public:
         output(x, y, c) += sample_weight(x, y, s) * input_with_alpha(sample_x, sample_y, c);
 
         // Normalize
-        Func final("final");
+        Func final;
         final(x, y, c) = output(x, y, c) / output(x, y, 3);
 
         /* THE SCHEDULE */
@@ -174,6 +174,7 @@ public:
             Pipeline p(final);
             p.auto_schedule(get_target());
         } else if (get_target().has_gpu_feature()) {
+            // Manual GPU schedule
             Var xi("xi"), yi("yi"), zi("zi");
             cost_pyramid_push[0].compute_root()
                 .reorder(c, z, x, y)
@@ -211,9 +212,7 @@ public:
             sample_weight.compute_at(output, x);
             sample_locations.compute_at(output, x);
         } else {
-            // Andrew
-            // bokeh_radius is a pretty simple function of depth. Maybe I should inline it.
-
+            // Manual CPU schedule
             cost_pyramid_push[0].compute_root()
                 .reorder(c, z, x, y)
                 .bound(c, 0, 2)
@@ -266,10 +265,6 @@ public:
                 .vectorize(x).unroll(c);
             sample_weight.compute_at(output, x).unroll(x);
             sample_locations.compute_at(output, x).vectorize(x);
-
-            // Ran at 4:01: 111ms
-
-            // At this point, I think I've converged.
         }
 
         return final;
@@ -280,7 +275,7 @@ private:
     // Downsample with a 1 3 3 1 filter
     Func downsample(Func f) {
         using Halide::_;
-        Func downx("downx"), downy("downy");
+        Func downx, downy;
         downx(x, y, _) = (f(2*x-1, y, _) + 3.0f * (f(2*x, y, _) + f(2*x+1, y, _)) + f(2*x+2, y, _)) / 8.0f;
         downy(x, y, _) = (downx(x, 2*y-1, _) + 3.0f * (downx(x, 2*y, _) + downx(x, 2*y+1, _)) + downx(x, 2*y+2, _)) / 8.0f;
         return downy;
@@ -289,7 +284,7 @@ private:
     // Upsample using bilinear interpolation
     Func upsample(Func f) {
         using Halide::_;
-        Func upx("upx"), upy("upy");
+        Func upx, upy;
         upx(x, y, _) = 0.25f * f((x/2) - 1 + 2*(x % 2), y, _) + 0.75f * f(x/2, y, _);
         upy(x, y, _) = 0.25f * upx(x, (y/2) - 1 + 2*(y % 2), _) + 0.75f * upx(x, y/2, _);
         return upy;

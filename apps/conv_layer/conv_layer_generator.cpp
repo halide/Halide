@@ -77,14 +77,16 @@ public:
             int y_block = 32;
             f_conv.compute_root();
             f_conv.fuse(z, n, par).parallel(par);
-            f_conv.update().reorder(x, y, r.z);
-            f_conv.update().split(y, y, y_t, y_block);
-            f_conv.update().split(z, z, z_t, o_block_size);
-            f_conv.update().reorder(y_t, z_t, y, r.z, z);
-            f_conv.update().vectorize(x, vec_len);
-            f_conv.update().unroll(r.x);
-            f_conv.update().unroll(r.y);
-            f_conv.update().fuse(z, n, par).parallel(par);
+            f_conv.update()
+                .reorder(x, y, r.z)
+                .split(y, y, y_t, y_block)
+                .split(z, z, z_t, o_block_size)
+                .reorder(y_t, z_t, y, r.z, z)
+                .vectorize(x, vec_len)
+                .unroll(r.x)
+                .unroll(r.y)
+                .fuse(z, n, par)
+                .parallel(par);
             f_ReLU.reorder(n, z).parallel(z).vectorize(x, 8);
         }
 

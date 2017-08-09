@@ -66,48 +66,44 @@ double run_test(bool auto_schedule) {
     Pipeline p(final);
 
     Var tx, xi;
-    if (!auto_schedule) {
-        if (target.has_gpu_feature()) {
-            slice_for_radius.compute_root();
-            filter_height.compute_root();
-            Var xo, yi;
-
-            final
-                .split(x, xo, xi, 128)
-                .reorder(xi, xo, y, c)
-                .gpu_blocks(xo, y, c).gpu_threads(xi);
-
-            vert_log.compute_root()
-                .reorder(c, t, x, y)
-                .gpu_tile(x, y, xi, yi, 16, 16)
-                .update()
-                .split(x, xo, xi, 128)
-                .reorder(r.x, r.y, xi, xo, c)
-                .gpu_blocks(xo, c).gpu_threads(xi);
-
-        } else {
-            // These don't matter, just LUTs
-            slice_for_radius.compute_root();
-            filter_height.compute_root();
-
-            // vert_log.update(1) doesn't have enough parallelism, but I
-            // can't figure out how to give it more... Split whole image
-            // into slices.
-
-            final.compute_root().split(x, tx, x, 256).reorder(x, y, c, tx).fuse(c, tx, t).parallel(t).vectorize(x, 8);
-            vert_log.compute_at(final, t);
-            vert_log.vectorize(x, 8);
-            vert_log.update().reorder(x, r.x, r.y, c).vectorize(x, 8);
-            vert.compute_at(final, y).vectorize(x, 8);
-            // 7:42pm. 110ms !!!
-        }
-    } else {
+    if (auto_schedule) {
         // Provide estimates on the pipeline output
         final.estimate(x, 0, in.width())
             .estimate(y, 0, in.height())
             .estimate(c, 0, in.channels());
         // Auto-schedule the pipeline
         p.auto_schedule(target);
+    } else if (target.has_gpu_feature()) {
+        slice_for_radius.compute_root();
+        filter_height.compute_root();
+        Var xo, yi;
+
+        final
+            .split(x, xo, xi, 128)
+            .reorder(xi, xo, y, c)
+            .gpu_blocks(xo, y, c).gpu_threads(xi);
+
+        vert_log.compute_root()
+            .reorder(c, t, x, y)
+            .gpu_tile(x, y, xi, yi, 16, 16)
+            .update()
+            .split(x, xo, xi, 128)
+            .reorder(r.x, r.y, xi, xo, c)
+            .gpu_blocks(xo, c).gpu_threads(xi);
+    } else {
+        // These don't matter, just LUTs
+        slice_for_radius.compute_root();
+        filter_height.compute_root();
+
+        // vert_log.update(1) doesn't have enough parallelism, but I
+        // can't figure out how to give it more... Split whole image
+        // into slices.
+
+        final.compute_root().split(x, tx, x, 256).reorder(x, y, c, tx).fuse(c, tx, t).parallel(t).vectorize(x, 8);
+        vert_log.compute_at(final, t);
+        vert_log.vectorize(x, 8);
+        vert_log.update().reorder(x, r.x, r.y, c).vectorize(x, 8);
+        vert.compute_at(final, y).vectorize(x, 8);
     }
 
     p.compile_to_lowered_stmt("max_filter.html", {in}, HTML, target);

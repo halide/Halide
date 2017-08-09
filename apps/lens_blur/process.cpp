@@ -48,15 +48,5 @@ int main(int argc, char **argv) {
 
     convert_and_save_image(output, argv[7]);
 
-    const halide_filter_metadata_t *md = lens_blur_metadata();
-    // Only compare the performance if target has non-gpu features.
-    if (!strstr(md->target, "cuda") &&
-        !strstr(md->target, "opencl") &&
-        !strstr(md->target, "metal") &&
-        (min_t_auto > min_t_manual * 4.5)) {
-        printf("Auto-scheduler is much much slower than it should be.\n");
-        return -1;
-    }
-
     return 0;
 }
