@@ -211,11 +211,9 @@ DECLARE_NO_INITMOD(powerpc_cpu_features)
 #ifdef WITH_HEXAGON
 DECLARE_LL_INITMOD(hvx_64)
 DECLARE_LL_INITMOD(hvx_128)
-DECLARE_CPP_INITMOD(hexagon_cpu_features)
 #else
 DECLARE_NO_INITMOD(hvx_64)
 DECLARE_NO_INITMOD(hvx_128)
-DECLARE_NO_INITMOD(hexagon_cpu_features)
 #endif  // WITH_HEXAGON
 
 namespace {
@@ -814,9 +812,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
-            }
-            if (t.arch == Target::Hexagon) {
-                modules.push_back(get_initmod_hexagon_cpu_features(c, bits_64, debug));
             }
         }
 
