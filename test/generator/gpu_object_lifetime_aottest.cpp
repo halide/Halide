@@ -85,6 +85,7 @@ int main(int argc, char **argv) {
               // Verifies this does not deallocate or otherwise disable the device handle.
               Buffer<int> temp(*output.raw_buffer());
             }
+            output.copy_to_host();
         }
 
         // Do this test twice to test explicit unwrapping and letting the destructor do it.
@@ -128,6 +129,31 @@ int main(int argc, char **argv) {
                 }
             }
         }       
+
+        // Test coverage for Halide::Runtime::Buffer construction from halide_buffer_t, unmanaged
+        {
+            Buffer<int> output(80);
+            halide_buffer_t raw_buf = *output.raw_buffer();
+
+            // Call Halide filter to get a device allocation.
+            gpu_object_lifetime(&raw_buf);
+
+            {
+                Buffer<int> copy(raw_buf);
+            }
+            halide_device_free(nullptr, &raw_buf);
+        }
+
+        // Test coverage for Halide::Runtime::Buffer construction from halide_buffer_t, taking ownership
+        {
+            Buffer<int> output(80);
+            halide_buffer_t raw_buf = *output.raw_buffer();
+
+            // Call Halide filter to get a device allocation.
+            gpu_object_lifetime(&raw_buf);
+
+            Buffer<int> copy(raw_buf, Halide::Runtime::BufferDeviceOwnership::Allocated);
+        }
 
 #if defined(TEST_CUDA)
         halide_device_release(nullptr, halide_cuda_device_interface());
