@@ -75,8 +75,7 @@ struct AllocationHeader {
     std::atomic<int> ref_count {0};
 };
 
-/** An enumeartion indicating how to deallocate the device state for a
- * Halide::Runtime::Buffer. */
+/** This indicates how to deallocate the device for a Halide::Runtime::Buffer. */
 enum struct BufferDeviceOwnership : int {
     Allocated,     ///> halide_device_free will be called when device ref count goes to zero
     WrappedNative, ///> halide_device_detach_native will be called when device ref count goes to zero
