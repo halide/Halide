@@ -18,7 +18,9 @@ public:
         Var x("x"), y("y"), z("z"), n("n");
 
         Func f_conv("conv");
-        RDom r(0, 3, 0, 3, 0, 64);
+        RDom r(filter.dim(0).min(), filter.dim(0).extent(),
+               filter.dim(1).min(), filter.dim(1).extent(),
+               filter.dim(2).min(), filter.dim(2).extent());
 
         f_conv(x, y, z, n) = bias(z);
 
@@ -56,8 +58,8 @@ public:
         } else if (get_target().has_gpu_feature()) {
             Var ni, no, xi, xo, yi, yo, zi, zo;
             f_ReLU.compute_root()
-                .split(x, xo, xi, 8)
-                .split(y, yo, yi, 8)
+                .split(x, xo, xi, 4)
+                .split(y, yo, yi, 4)
                 .split(z, zo, zi, 4)
                 .reorder(xi, yi, zi, n, xo, yo, zo)
                 .gpu_threads(xi, yi, zi)
@@ -66,8 +68,8 @@ public:
             f_conv.compute_at(f_ReLU, n)
                 .gpu_threads(x, y, z)
                 .update()
-                .unroll(r.x)
-                .unroll(r.y)
+                .unroll(r.x, 3)
+                .unroll(r.y, 3)
                 .gpu_threads(x, y, z);
         } else {
             // Blocking spatially with vectorization
@@ -83,8 +85,8 @@ public:
                 .split(z, z, z_t, o_block_size)
                 .reorder(y_t, z_t, y, r.z, z)
                 .vectorize(x, vec_len)
-                .unroll(r.x)
-                .unroll(r.y)
+                .unroll(r.x, 3)
+                .unroll(r.y, 3)
                 .fuse(z, n, par)
                 .parallel(par);
             f_ReLU.reorder(n, z).parallel(z).vectorize(x, 8);
