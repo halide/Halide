@@ -2545,19 +2545,21 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
             const auto &iter = strides.find(var_name);
             if ((iter != strides.end()) && !dims[d].is_pure()) {
                 const Expr &dim_stride = iter->second;
-                internal_assert(dim_stride.defined() && can_prove(dim_stride < min_impure_stride));
-                min_impure_stride = dim_stride;
-                min_impure_var = var_name;
-                min_impure_index = d;
-                // Impure dimensions cannot be reordered relative to
-                // each other. Stop after encountering the first impure
-                // dimension.
-                break;
+                internal_assert(dim_stride.defined());
+                if (can_prove(dim_stride < min_impure_stride)) {
+                    min_impure_stride = dim_stride;
+                    min_impure_var = var_name;
+                    min_impure_index = d;
+                    // Impure dimensions cannot be reordered relative to
+                    // each other. Stop after encountering the first impure
+                    // dimension.
+                    break;
+                }
             }
         }
 
         pair<string, int> curr_min_var;
-        if (can_prove(min_impure_stride < min_pure_stride)) {
+        if (!min_impure_var.empty() && can_prove(min_impure_stride < min_pure_stride)) {
             curr_min_var.first = min_impure_var;
             curr_min_var.second = min_impure_index;
             internal_assert(dims[min_impure_index].is_rvar());
