@@ -708,9 +708,9 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
     CUresult err;
     if (cuStreamSynchronize != NULL) {
         CUstream stream;
-        int got_stream = halide_cuda_get_stream(user_context, ctx.context, &stream);
-        if (!got_stream) {
-            error(user_context) << "CUDA: In halide_cuda_device_sync, halide_cuda_get_stream returned " << got_stream << "\n";
+        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+        if (result != 0) {
+            error(user_context) << "CUDA: In halide_cuda_device_sync, halide_cuda_get_stream returned " << result << "\n";
         }
         err = cuStreamSynchronize(stream);
     } else {
@@ -805,9 +805,9 @@ WEAK int halide_cuda_run(void *user_context,
     // We use whether this routine was defined in the cuda driver library
     // as a test for streams support in the cuda implementation.
     if (cuStreamSynchronize != NULL) {
-        int got_stream = halide_cuda_get_stream(user_context, ctx.context, &stream);
-        if (!got_stream) {
-            error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << got_stream << "\n";
+        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+        if (result != 0) {
+            error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << result << "\n";
         }
     }
 
