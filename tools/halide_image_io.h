@@ -861,7 +861,7 @@ struct ImageTypeConversion {
     //     Buffer<uint8_t> src = ...;
     //     Buffer<float> dst = convert_image<float>(src);
     template<typename DstElemType, typename ImageType,
-             typename std::enable_if<ImageType::has_static_halide_type>::type * = nullptr>
+             typename std::enable_if<ImageType::has_static_halide_type && !std::is_void<DstElemType>::value>::type * = nullptr>
     static auto convert_image(const ImageType &src) -> 
             typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -892,7 +892,7 @@ struct ImageTypeConversion {
     //     Buffer<uint8_t> src = ...;
     //     Buffer<float> dst = convert_image<float>(src);
     template<typename DstElemType, typename ImageType,
-             typename std::enable_if<!ImageType::has_static_halide_type>::type * = nullptr>
+             typename std::enable_if<!ImageType::has_static_halide_type && !std::is_void<DstElemType>::value>::type * = nullptr>
     static auto convert_image(const ImageType &src) -> 
             typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -936,7 +936,7 @@ struct ImageTypeConversion {
     // (e.g. Buffer<uint8_t> -> Buffer<>(halide_type_t)). 
     template <typename DstElemType = void,
               typename ImageType, 
-              typename std::enable_if<ImageType::has_static_halide_type>::type * = nullptr>
+              typename std::enable_if<ImageType::has_static_halide_type && std::is_void<DstElemType>::value>::type * = nullptr>
     static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> 
             typename Internal::ImageTypeWithElemType<ImageType, void>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -980,7 +980,7 @@ struct ImageTypeConversion {
     // (e.g. Buffer<>(halide_type_t) -> Buffer<>(halide_type_t)). 
     template <typename DstElemType = void,
               typename ImageType, 
-              typename std::enable_if<!ImageType::has_static_halide_type>::type * = nullptr>
+              typename std::enable_if<!ImageType::has_static_halide_type && std::is_void<DstElemType>::value>::type * = nullptr>
     static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> 
             typename Internal::ImageTypeWithElemType<ImageType, void>::type {
         // The enable_if ensures this will never fire; this is here primarily
