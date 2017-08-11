@@ -19,6 +19,65 @@ void my_free(void *user_context, void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
+#ifdef _WIN32
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+// An extern stage that copies input -> output
+extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+    if (!in->host) {
+        memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
+    } else {
+        Halide::Runtime::Buffer<void>(*out).copy_from(Halide::Runtime::Buffer<void>(*in));
+    }
+    return 0;
+}
+
+// An extern stage accesses the input in a non-monotonic way in the y dimension.
+extern "C" DLLEXPORT int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+    if (!in->host) {
+        memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
+        int y_min = in->dim[1].min;
+        int y_max = y_min + in->dim[1].extent - 1;
+        y_min &= 63;
+        if (y_min >= 32) {
+            y_min = 63 - y_min;
+        }
+        y_max &= 63;
+        if (y_max >= 32) {
+            y_max = 63 - y_max;
+        }
+        if (y_min > y_max) {
+            std::swap(y_min, y_max);
+        }
+        in->dim[1].min = y_min;
+        in->dim[1].extent = y_max - y_min + 1;
+    } else {
+        // This extern stage is only used to see if it produces an
+        // expected bounds error, so just fill it with a sentinel value.
+        Halide::Runtime::Buffer<int>(*out).fill(99);
+    }
+    return 0;
+}
+
+bool error_occurred;
+void expected_error(void *, const char *msg) {
+    printf("Expected error: %s\n", msg);
+    error_occurred = true;
+}
+
+void realize_and_expect_error(Func f, int w, int h) {
+    error_occurred = false;
+    f.set_error_handler(expected_error);
+    f.realize(w, h);
+    if (!error_occurred) {
+        printf("Expected an error!\n");
+        abort();
+    }
+}
+
 int main(int argc, char **argv) {
     Var x, y, c;
 
@@ -322,6 +381,118 @@ int main(int argc, char **argv) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;
         }
+    }
+
+    {
+        // Fold the storage of the output of an extern stage
+        Func f, g, h;
+        Var x, y;
+        f(x, y) = x + y;
+        g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
+        h(x, y) = g(x, y);
+
+        f.compute_root();
+        g.store_root().compute_at(h, y).fold_storage(g.args()[1], 8);
+        h.compute_root();
+
+        Buffer<int> out = h.realize(64, 64);
+        out.for_each_element([&](int x, int y) {
+                if (out(x, y) != x + y) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
+                    abort();
+                }
+            });
+    }
+
+    {
+        // Fold the storage of an input to an extern stage
+        Func f, g, h;
+        Var x, y;
+        f(x, y) = x + y;
+        g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
+        h(x, y) = g(x, y);
+
+        f.store_root().compute_at(h, y).fold_storage(y, 8);
+        g.compute_at(h, y);
+        h.compute_root();
+
+        Buffer<int> out = h.realize(64, 64);
+        out.for_each_element([&](int x, int y) {
+                if (out(x, y) != x + y) {
+                    printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);
+                    abort();
+                }
+            });
+    }
+
+    // Now we check some error cases.
+
+    {
+        // Fold the storage of an input to an extern stage, with a too-small fold factor.
+        Func f, g, h;
+        Var x, y;
+        f(x, y) = x + y;
+        g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
+        h(x, y) = g(x, y);
+
+        f.store_root().compute_at(h, y).fold_storage(y, 4);
+        g.compute_at(h, y);
+        Var yi;
+        h.compute_root().split(y, y, yi, 8);
+
+        realize_and_expect_error(h, 64, 64);
+    }
+
+    {
+        // Fold the storage of an input to an extern stage, where one
+        // of the regions required by the extern stage will overlap a
+        // fold boundary (thanks to ShiftInwards).
+        Func f, g, h;
+        Var x, y;
+        f(x, y) = x + y;
+        g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
+        h(x, y) = g(x, y);
+
+        f.store_root().compute_at(h, y).fold_storage(y, 4);
+        g.compute_at(h, y);
+        Var yi;
+        h.compute_root().split(y, y, yi, 4);
+
+        realize_and_expect_error(h, 64, 7);
+    }
+
+    {
+        // Fold the storage of an input to an extern stage, where the
+        // extern stage moves non-monotonically on the input.
+        Func f, g, h;
+        Var x, y;
+        f(x, y) = x + y;
+        g.define_extern("zigzag_buffer_copy", {f}, Int(32), 2);
+        h(x, y) = g(x, y);
+
+        f.store_root().compute_at(h, y).fold_storage(y, 4);
+        g.compute_at(h, y);
+        Var yi;
+        h.compute_root().split(y, y, yi, 2);
+
+        realize_and_expect_error(h, 64, 64);
+    }
+
+    {
+        // Fold the storage of the output of an extern stage, where
+        // one of the regions written crosses a fold boundary.
+        Func f, g, h;
+        Var x, y;
+        f(x, y) = x + y;
+        g.define_extern("simple_buffer_copy", {f}, Int(32), 2);
+        h(x, y) = g(x, y);
+
+        f.compute_root();
+        g.store_root().compute_at(h, y).fold_storage(g.args()[1], 4);
+        Var yi;
+        h.compute_root().split(y, y, yi, 4);
+
+        realize_and_expect_error(h, 64, 7);
     }
 
     printf("Success!\n");
