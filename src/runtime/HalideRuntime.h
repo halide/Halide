@@ -839,7 +839,7 @@ enum halide_error_code_t {
      * which is scheduled to use it on the CPU. */
     halide_error_code_host_is_null = -34,
 
-    /** Buffer has a non-null devie_interface but device is 0, which
+    /** Buffer has a non-null device_interface but device is 0, which
      * violates a Halide invariant. */
     halide_error_code_device_interface_no_device= -35,
 
