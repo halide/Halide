@@ -756,21 +756,17 @@ Value *CodeGen_Hexagon::interleave_vectors(const vector<llvm::Value *> &v) {
         }
     } else if (v.size() == 3) {
         // Interleaving 3 vectors - this generates awful code if we let LLVM do it,
-        // so we use vlut if we can. This is actually pretty general, it might be
-        // useful for other interleavings, though the LUT grows impractically
-        // large quite quickly.
-        if (element_bits == 8 || element_bits == 16) {
-            Value *lut = concat_vectors(v);
+        // so we use vdelta.
+        Value *lut = concat_vectors(v);
 
-            std::vector<int> indices;
-            for (unsigned i = 0; i < v_ty->getVectorNumElements(); i++) {
-                for (size_t j = 0; j < v.size(); j++) {
-                    indices.push_back(j * v_ty->getVectorNumElements() + i);
-                }
+        std::vector<int> indices;
+        for (unsigned i = 0; i < v_ty->getVectorNumElements(); i++) {
+            for (size_t j = 0; j < v.size(); j++) {
+                indices.push_back(j * v_ty->getVectorNumElements() + i);
             }
-
-            return vdelta(lut, indices);
         }
+
+        return vdelta(lut, indices);
     }
     return CodeGen_Posix::interleave_vectors(v);
 }
@@ -1002,7 +998,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
     }
 
     // TODO: There are more HVX permute instructions that could be
-    // implemented here.
+    // implemented here, such as vdelta/vrdelta.
 
     if (element_bits <= 16 && max < 256) {
         return vlut(concat_vectors({a, b}), indices);
@@ -1123,35 +1119,112 @@ Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_inde
     return slice_vector(concat_vectors(result), 0, idx_elements);
 }
 
-#if 0
-    Vd=vdelta(Vu,Vv)
-    for (offset = VWIDTH; (offset >>= 1) > 0; ) {
-        for (k = 0; k < VWIDTH; k++) {
-            Vd.ub[k] = (Vv.ub[k] & offset) ? Vu.ub[k ^ offset] : Vu.ub[k];
-        }
-        for (k = 0; k < VWIDTH; k++) {
-            Vu.ub[k] = Vd.ub[k];
-        }
-    }
+bool is_power_of_two(int x) { return (x & (x - 1)) == 0; }
 
-    Vd=vrdelta(Vu,Vv)
-    for (offset = 1; offset < VWIDTH; offset <<= 1) {
-        for (k = 0; k < VWIDTH; k++) {
-            Vd.ub[k] = (Vv.ub[k] & offset) ? Vu.ub[k ^ offset] : Vu.ub[k];
+// vdelta and vrdelta are instructions that take an input vector and
+// pass it through a network made up of levels. Each element x at each
+// level i can either take the element from the previous level at the
+// same position x, or take the element from the previous level at y,
+// where y is x with the bit at position i flipped. This forms a
+// butterfly network. vdelta and vrdelta have the same structure,
+// except the ordering of the levels is flipped.
+
+// Find a descriptor of the path between x1 and x2. To find the path
+// between element x1 and element x2, the algorithm is the same for
+// both vdelta and vrdelta. To get from x1 to x2, we need to take the
+// switch path at level i if bit i of x1 and x2 are not the same. The
+// path is an integer where the bit at position i indicates the switch
+// that jumps by i elements should be on.
+int generate_delta_path(int x1, int x2) {
+    int result = 0;
+    for (int delta = 1; x1 != x2; delta *= 2) {
+        if ((x1 & delta) != (x2 & delta)) {
+            result |= delta;
         }
-        for (k = 0; k < VWIDTH; k++) {
-            Vu.ub[k] = Vd.ub[k];
+        x1 &= ~delta;
+        x2 &= ~delta;
+    }
+    return result;
+}
+
+// Generate the switch descriptors for a vdelta or vrdelta
+// instruction. To do this, we need to generate the switch descriptors
+// of each output to input path, and then make sure that none of the
+// switches need conflicting settings.
+bool generate_vdelta(const std::vector<int> &indices, bool reverse, std::vector<int> &switches) {
+    int width = (int)indices.size();
+    internal_assert(is_power_of_two(width));
+    switches.resize(width);
+
+    // For each switch bit, we have a bit indicating whether we
+    // already care about the switch position.
+    std::vector<int> switches_used(switches.size());
+    std::fill(switches.begin(), switches.end(), 0);
+    std::fill(switches_used.begin(), switches_used.end(), 0);
+
+
+    for (int out = 0; out < width; out++) {
+        int in = indices[out];
+        if (in == -1) {
+            // We don't care what the output is at this index.
+            continue;
+        }
+        int path = generate_delta_path(out, in);
+        int x = out;
+        // Follow the path backwards, setting the switches we need as
+        // we go. This is the only place where vdelta and vrdelta
+        // differ. For vdelta, we start with the small jumps, vrdelta
+        // starts with the large jumps.
+        int start = reverse ? (1 << 31) : 1;
+        for (int delta = start; path != 0; delta = reverse ? delta / 2 : delta * 2) {
+            int on = path & delta;
+            if ((switches_used[x] & delta) != 0) {
+                // This switch is already set...
+                if ((switches[x] & delta) != on) {
+                    // ... and it is set to the wrong thing. We can't represent this shuffle.
+                    return false;
+                }
+            } else {
+                // This siwtch is not already set, set it to the value we want, and mark it used.
+                switches_used[x] |= delta;
+                switches[x] |= on;
+            }
+            // Update our position in the network.
+            if (on) {
+                x ^= delta;
+            }
+            path &= ~delta;
         }
     }
-#endif
+    return true;
+}
 
 Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
+    bool is_128B = target.has_feature(Halide::Target::HVX_128);
     llvm::Type *lut_ty = lut->getType();
     int lut_elements = lut_ty->getVectorNumElements();
     llvm::Type *element_ty = lut_ty->getVectorElementType();
     int element_bits = element_ty->getScalarSizeInBits();
     int native_elements = native_vector_bits()/element_ty->getScalarSizeInBits();
     int result_elements = indices.size();
+
+    // If the input is not a vector of 8 bit elements, replicate the
+    // indices and cast the LUT.
+    if (element_bits != 8) {
+        int replicate = element_bits / 8;
+        assert(replicate != 0);
+        llvm::Type *new_lut_ty = llvm::VectorType::get(i8_t, lut_elements * replicate);
+        Value *i8_lut = builder->CreateBitCast(lut, new_lut_ty);
+        vector<int> i8_indices(indices.size() * replicate);
+        for (size_t i = 0; i < indices.size(); i++) {
+            for (int j = 0; j < replicate; j++) {
+                i8_indices[i * replicate + j] = indices[i] * replicate + j;
+            }
+        }
+        Value *result = vdelta(i8_lut, i8_indices);
+        result = builder->CreateBitCast(result, lut_ty);
+        return result;
+    }
 
     // We can only use vdelta to produce a single native vector at a
     // time. Break the input into native vector length shuffles.
@@ -1176,22 +1249,6 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         return concat_vectors(ret);
     }
 
-    // If the input is not a vector of 8 bit elements, replicate the
-    // indices and cast the LUT.
-    if (element_bits != 8) {
-        int replicate = element_bits / 8;
-        assert(replicate != 0);
-        llvm::Type *new_lut_ty = llvm::VectorType::get(i8_t, lut_elements * replicate);
-        Value *i8_lut = builder->CreateBitCast(lut, new_lut_ty);
-        vector<int> i8_indices(indices.size() * replicate);
-        for (size_t i = 0; i < indices.size(); i++) {
-            for (int j = 0; j < replicate; j++) {
-                i8_indices[i * replicate + j] = indices[i] * replicate + j;
-            }
-        }
-        return vdelta(i8_lut, i8_indices);
-    }
-
     assert(result_elements == native_elements);
 
     // We can only use vdelta to shuffle a single native vector of
@@ -1203,28 +1260,36 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
             Value *lut_i = slice_vector(lut, i, native_elements);
             vector<int> indices_i(native_elements);
             vector<Constant *> mask(native_elements);
+            bool all_used = true;
+            bool none_used = true;
             for (int j = 0; j < native_elements; j++) {
                 int idx = indices[j] - i;
                 if (0 <= idx && idx < native_elements) {
                     indices_i[j] = idx;
                     mask[j] = ConstantInt::get(i8_t, 255);
+                    none_used = false;
                 } else {
                     indices_i[j] = -1;
                     mask[j] = ConstantInt::get(i8_t, 0);
+                    all_used = false;
                 }
             }
             Value *ret_i = vdelta(lut_i, indices_i);
             if (ret != nullptr) {
-                // Create a condition value for which elements of the range are valid for this index.
-                // We can't make a constant vector of <1024 x i1>, it crashes the Hexagon LLVM backend.
-                Value *minus_one = codegen(make_const(UInt(8, mask.size()), 255));
-                Value *hack_mask = call_intrin(lut_i->getType(), "halide.hexagon.eq.vb.vb", {ConstantVector::get(mask), minus_one});
+                if (all_used) {
+                    ret = ret_i;
+                } else if (!none_used) {
+                    // Create a condition value for which elements of the range are valid for this index.
+                    // We can't make a constant vector of <1024 x i1>, it crashes the Hexagon LLVM backend before LLVM version 6.0.
+                    Value *minus_one = codegen(make_const(UInt(8, mask.size()), 255));
+                    Value *hack_mask = call_intrin(lut_i->getType(), "halide.hexagon.eq.vb.vb", {ConstantVector::get(mask), minus_one});
 
-                // If this isn't the first result, use the mask to add
-                // the new elements to the result.
-                ret = call_intrin(lut_i->getType(),
-                                  "halide.hexagon.mux.vb.vb",
-                                  {hack_mask, ret_i, ret});
+                    // If this isn't the first result, use the mask to add
+                    // the new elements to the result.
+                    ret = call_intrin(lut_i->getType(),
+                                      "halide.hexagon.mux.vb.vb",
+                                      {hack_mask, ret_i, ret});
+                }
             } else {
                 ret = ret_i;
             }
@@ -1232,14 +1297,27 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         return ret;
     }
 
-    lut->dump();
-    for (int i : indices) {
-        debug(0) << " " << i;
+    // We now have a single native vector to native vector shuffle. Try
+    // Generating a vdelta or vrdelta.
+    for (bool reverse : {false, true}) {
+        std::vector<int> switches;
+        if (generate_vdelta(indices, false, switches)) {
+            vector<Constant *> control_elements(switches.size());
+            for (int i = 0; i < (int)switches.size(); i++) {
+                control_elements[i] = ConstantInt::get(i8_t, switches[i]);
+            }
+            Value *control = ConstantVector::get(control_elements);
+            Intrinsic::ID vdelta_id = IPICK(is_128B, reverse ? Intrinsic::hexagon_V6_vrdelta : Intrinsic::hexagon_V6_vdelta);
+            return call_intrin_cast(lut_ty, vdelta_id, {lut, control});
+        }
     }
-    debug(0) << "\n";
 
-    // At this point, we have an 8 bit element, native vector to
-    // native vector vdelta to handle.
+    // TODO: If the above fails, we might be able to use a vdelta and
+    // vrdelta instruction together to implement the shuffle.
+    internal_error << "Unsupported vdelta operation.\n";
+
+    // TODO: If the vdelta results are sparsely used, it might be
+    // better to use vlut.
     return vlut(lut, indices);
 }
 
