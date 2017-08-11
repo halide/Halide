@@ -181,7 +181,7 @@ void do_test() {
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2, 0);
 
-    std::vector<std::string> formats = {"ppm","pgm"};
+    std::vector<std::string> formats = {"ppm","pgm","tmp"};
 #ifndef HALIDE_NO_JPEG
     formats.push_back("jpg");
 #endif
@@ -190,6 +190,14 @@ void do_test() {
 #endif
     for (std::string format : formats) {
         if (format == "jpg" && halide_type_of<T>() != halide_type_t(halide_type_uint, 8)) {
+            continue;
+        }
+        if (format == "tmp") {
+            // .tmp only supports exactly-4-dimensions, so handle it separately.
+            // (Add a dimension to make it 4-dimensional)
+            Buffer<T> cb4 = color_buf.embedded(color_buf.dimensions(), 0);
+            std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
+            test_round_trip(cb4, format);
             continue;
         }
         if (format != "pgm") {
