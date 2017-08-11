@@ -772,8 +772,8 @@ enum halide_error_code_t {
      * more details. */
     halide_error_code_device_free_failed = -18,
 
-    /** A device operation was attempted on a buffer with no device
-     * interface. */
+    /** Buffer has a non-zero device but no device interface, which
+     * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
     /** An error occurred when attempting to initialize the Matlab
@@ -839,6 +839,13 @@ enum halide_error_code_t {
      * which is scheduled to use it on the CPU. */
     halide_error_code_host_is_null = -34,
 
+    /** Buffer has a non-null devie_interface but device is 0, which
+     * violates a Halide invariant. */
+    halide_error_code_device_interface_no_device= -35,
+
+    /** Buffer has both host and device dirty bits set, which violates
+     * a Halide invariant. */
+    halide_error_code_host_and_device_dirty = -36,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -909,6 +916,9 @@ extern int halide_error_fold_factor_too_small(void *user_context, const char *fu
                                               int fold_factor, const char *loop_name, int required_extent);
 extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
 extern int halide_error_specialize_fail(void *user_context, const char *message);
+extern int halide_error_no_device_interface(void *user_context);
+extern int halide_error_device_interface_no_device(void *user_context);
+extern int halide_error_host_and_device_dirty(void *user_context);
 
 // @}
 
