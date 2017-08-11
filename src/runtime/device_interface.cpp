@@ -63,7 +63,21 @@ void debug_log_and_validate_buf(void * user_context, const halide_buffer_t &buf,
 
     bool device_interface_set = (buf.device_interface != NULL);
     bool device_set = (buf.device != 0);
-    halide_assert(user_context, device_interface_set == device_set);
+    bool host_dirty = buf.host_dirty();
+    bool device_dirty = buf.device_dirty();
+    /* TODO: we could add:
+     *     (device_set || !device_dirty) &&
+     *     (buf.host != NULL || !host_dirty)
+     * to dirties_ok, but these conditions can occur when freeing a buffer.
+     * It is perhaps prudent to mandate reseting the dirty bit when freeing
+     * the host field and setting it to nullptr, I am not convinced all code
+     * does that at present. The same could occur on the device side, though
+     * it is much more unlikely as halide_device_free does clear device_dirty.
+     * At present we're taking the side of caution and not adding these to the
+     * assertion.
+     */
+    bool dirties_ok = !(host_dirty && device_dirty);
+    halide_assert(user_context, (device_interface_set == device_set) && dirties_ok);
 }
 
 }
@@ -206,7 +220,7 @@ WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
 
 /** Free any device memory associated with a halide_buffer_t. */
 WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
-    debug_log_and_validate_buf(user_context, *buf, "halide_device_malloc");
+    debug_log_and_validate_buf(user_context, *buf, "halide_device_free");
 
     const halide_device_interface_t *device_interface = buf->device_interface;
     if (device_interface != NULL) {
