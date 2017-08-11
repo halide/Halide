@@ -1185,7 +1185,7 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse, std::vector<
                     return false;
                 }
             } else {
-                // This siwtch is not already set, set it to the value we want, and mark it used.
+                // This switch is not already set, set it to the value we want, and mark it used.
                 switches_used[x] |= delta;
                 switches[x] |= on;
             }
@@ -1275,23 +1275,18 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
                 }
             }
             Value *ret_i = vdelta(lut_i, indices_i);
-            if (ret != nullptr) {
-                if (all_used) {
-                    ret = ret_i;
-                } else if (!none_used) {
-                    // Create a condition value for which elements of the range are valid for this index.
-                    // We can't make a constant vector of <1024 x i1>, it crashes the Hexagon LLVM backend before LLVM version 6.0.
-                    Value *minus_one = codegen(make_const(UInt(8, mask.size()), 255));
-                    Value *hack_mask = call_intrin(lut_i->getType(), "halide.hexagon.eq.vb.vb", {ConstantVector::get(mask), minus_one});
-
-                    // If this isn't the first result, use the mask to add
-                    // the new elements to the result.
-                    ret = call_intrin(lut_i->getType(),
-                                      "halide.hexagon.mux.vb.vb",
-                                      {hack_mask, ret_i, ret});
-                }
-            } else {
+            if (all_used || ret == nullptr) {
+                // If the mask is all ones, or this is the first result, we don't need to preserve past results.
                 ret = ret_i;
+            } else if (!none_used) {
+                // Create a condition value for which elements of the range are valid for this index.
+                // We can't make a constant vector of <1024 x i1>, it crashes the Hexagon LLVM backend before LLVM version 6.0.
+                Value *minus_one = codegen(make_const(UInt(8, mask.size()), 255));
+                Value *hack_mask = call_intrin(lut_i->getType(), "halide.hexagon.eq.vb.vb", {ConstantVector::get(mask), minus_one});
+
+                ret = call_intrin(lut_i->getType(),
+                                  "halide.hexagon.mux.vb.vb",
+                                  {hack_mask, ret_i, ret});
             }
         }
         return ret;
