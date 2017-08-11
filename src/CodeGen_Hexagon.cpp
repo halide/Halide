@@ -1301,7 +1301,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     // Generating a vdelta or vrdelta.
     for (bool reverse : {false, true}) {
         std::vector<int> switches;
-        if (generate_vdelta(indices, false, switches)) {
+        if (generate_vdelta(indices, reverse, switches)) {
             vector<Constant *> control_elements(switches.size());
             for (int i = 0; i < (int)switches.size(); i++) {
                 control_elements[i] = ConstantInt::get(i8_t, switches[i]);
