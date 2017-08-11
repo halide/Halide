@@ -1162,7 +1162,6 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse, std::vector<
     std::fill(switches.begin(), switches.end(), 0);
     std::fill(switches_used.begin(), switches_used.end(), 0);
 
-
     for (int out = 0; out < width; out++) {
         int in = indices[out];
         if (in == -1) {
@@ -1177,20 +1176,20 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse, std::vector<
         // starts with the large jumps.
         int start = reverse ? (1 << 31) : 1;
         for (int delta = start; path != 0; delta = reverse ? delta / 2 : delta * 2) {
-            int on = path & delta;
+            int switch_state = path & delta;
             if ((switches_used[x] & delta) != 0) {
                 // This switch is already set...
-                if ((switches[x] & delta) != on) {
+                if ((switches[x] & delta) != switch_state) {
                     // ... and it is set to the wrong thing. We can't represent this shuffle.
                     return false;
                 }
             } else {
                 // This switch is not already set, set it to the value we want, and mark it used.
                 switches_used[x] |= delta;
-                switches[x] |= on;
+                switches[x] |= switch_state;
             }
             // Update our position in the network.
-            if (on) {
+            if (switch_state) {
                 x ^= delta;
             }
             path &= ~delta;
