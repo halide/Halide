@@ -15,8 +15,8 @@ bool neq(T a, T b, T tol) {
 }
 
 // Check 3-dimension buffer
-template <typename T>
-bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, int y, int c)> f) {
+template <typename T, typename F>
+auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::declval<F>()(0, 0, 0), bool()) {
     class err : std::exception {
     public:
         static void vector(const std::vector<T> &v) {
@@ -54,8 +54,8 @@ bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, in
 }
 
 // Check 2-dimension buffer
-template <typename T>
-bool check_result(const Halide::Buffer<T> &buf, T tol, std::function<T(int x, int y)> f) {
+template <typename T, typename F>
+auto check_result(const Halide::Buffer<T> &buf, T tol, F f) -> decltype(std::declval<F>()(0, 0), bool()) {
     class err : std::exception {};
     try {
         buf.for_each_element([&](int x, int y) {
