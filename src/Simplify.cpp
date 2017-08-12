@@ -1573,26 +1573,6 @@ private:
             }
         } else if (no_overflow(op->type) &&
                    min_a &&
-                   min_b &&
-                   is_simple_const(mutate(min_a->a - min_b->b)) &&
-                   is_simple_const(mutate(min_a->b - min_b->a))) {
-            // Canonicalize min(a + c1, b + c2) - min(b + c4, a + c3)
-            //     where c1, c2, c3, and c4 are constants
-            // into min(a + c1, b + c2) - min(a + c3, b + c4)
-            // so that a later rule can pick it up
-            expr = mutate(a - Min::make(min_b->b, min_b->a));
-        } else if (no_overflow(op->type) &&
-                   max_a &&
-                   max_b &&
-                   is_simple_const(mutate(max_a->a - max_b->b)) &&
-                   is_simple_const(mutate(max_a->b - max_b->a))) {
-            // Canonicalize max(a + c1, b + c2) - max(b + c4, a + c3)
-            //     where c1, c2, c3, and c4 are constants
-            // into max(a + c1, b + c2) - max(a + c3, b + c4)
-            // so that a later rule can pick it up
-            expr = mutate(a - Max::make(max_b->b, max_b->a));
-        } else if (no_overflow(op->type) &&
-                   min_a &&
                    min_b) {
             // min(a + c1, b + c2) - min(a + c3, b + c4)
             //     where delta_a = c1 - c3 and delta_b = c2 - c4 are constants
@@ -1608,6 +1588,13 @@ private:
                 } else {
                     expr = mutate(delta_b - clamp(min_a->b - min_a->a, make_zero(op->type), diff));
                 }
+            } else if (is_simple_const(mutate(min_a->a - min_b->b)) &&
+                       is_simple_const(mutate(min_a->b - min_b->a))) {
+                // Canonicalize min(a + c1, b + c2) - min(b + c4, a + c3)
+                //     where c1, c2, c3, and c4 are constants
+                // into min(a + c1, b + c2) - min(a + c3, b + c4)
+                // so that the previous rule can pick it up
+                expr = mutate(a - Min::make(min_b->b, min_b->a));
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -1630,6 +1617,13 @@ private:
                 } else {
                     expr = mutate(clamp(max_a->b - max_a->a, make_zero(op->type), diff) + delta_a);
                 }
+            } else if (is_simple_const(mutate(max_a->a - max_b->b)) &&
+                       is_simple_const(mutate(max_a->b - max_b->a))) {
+                // Canonicalize max(a + c1, b + c2) - max(b + c4, a + c3)
+                //     where c1, c2, c3, and c4 are constants
+                // into max(a + c1, b + c2) - max(a + c3, b + c4)
+                // so that the previous rule can pick it up
+                expr = mutate(a - Max::make(max_b->b, max_b->a));
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -6819,6 +6813,10 @@ void simplify_test() {
     check(min(x, 3) - min(x, 63), 3 - clamp(x, 3, 63));
     check(min(63, x) - min(x, 3), clamp(x, 3, 63) + (-3));
     check(min(x, 3) - min(63, x), 3 - clamp(x, 3, 63));
+
+    // This used to throw the simplifier into a loop
+    simplify((min((min(((x*64) + y), (z + -63)) + 31), min((((x*64) + y) + 63), z)) -
+              min((min((((x*64) + y) + 63), z) + -31), (min(((x*64) + y), (z + -63)) + 32))));
 
     check(min(x * 4 + 63, y) - min(x * 4, y - 3), clamp(y - x * 4 + (-63), -60, 0) + 63);
     check(min(x * 4, y - 3) - min(x * 4 + 63, y), -3 - clamp(y - x * 4 + (-3), 0, 60));
