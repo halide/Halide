@@ -55,6 +55,7 @@ class FoldStorageOfFunction : public IRMutator {
     string func;
     int dim;
     Expr factor;
+    string dynamic_footprint;
 
     using IRMutator::visit;
 
@@ -68,7 +69,67 @@ class FoldStorageOfFunction : public IRMutator {
             args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
+        } else if (op->name == Call::buffer_crop) {
+            Expr source = op->args[2];
+            const Variable *buf_var = source.as<Variable>();
+            if (buf_var &&
+                starts_with(buf_var->name, func + ".") &&
+                ends_with(buf_var->name, ".buffer")) {
+                // We are taking a crop of a folded buffer. For now
+                // we'll just assert that the crop doesn't wrap
+                // around, so that the crop doesn't need to be treated
+                // as a folded buffer too. But to take the crop, we
+                // need to use folded coordinates, and then restore
+                // the non-folded min after the crop operation.
+
+                // Pull out the expressions we need
+                internal_assert(op->args.size() >= 5);
+                Expr mins_arg = op->args[3];
+                Expr extents_arg = op->args[4];
+                const Call *mins_call = mins_arg.as<Call>();
+                const Call *extents_call = extents_arg.as<Call>();
+                internal_assert(mins_call && extents_call);
+                vector<Expr> mins = mins_call->args;
+                const vector<Expr> &extents = extents_call->args;
+                internal_assert(dim < (int)mins.size() && dim < (int)extents.size());
+                Expr old_min = mins[dim];
+                Expr old_extent = extents[dim];
+
+                // Rewrite the crop args
+                mins[dim] = old_min % factor;
+                Expr new_mins = Call::make(type_of<int *>(), Call::make_struct, mins, Call::Intrinsic);
+                vector<Expr> new_args = op->args;
+                new_args[3] = new_mins;
+                expr = Call::make(op->type, op->name, new_args, op->call_type);
+
+                // Inject the assertion
+                Expr no_wraparound = mins[dim] + extents[dim] <= factor;
+
+                Expr valid_min = old_min;
+                if (!dynamic_footprint.empty()) {
+                    // If the footprint is being tracked dynamically, it's
+                    // not enough to just check we don't overlap a
+                    // fold. We also need to check the min against the
+                    // valid min.
+                    valid_min =
+                        Load::make(Int(32), dynamic_footprint, 0, Buffer<>(), Parameter(), const_true());
+                    Expr check = (old_min >= valid_min &&
+                                  (old_min + old_extent - 1) < valid_min + factor);
+                    no_wraparound = no_wraparound && check;
+                }
+
+                Expr error = Call::make(Int(32), "halide_error_bad_extern_fold",
+                                        {Expr(func), Expr(dim), old_min, old_extent, valid_min, factor},
+                                        Call::Extern);
+                expr = Call::make(op->type, Call::require,
+                                  {no_wraparound, expr, error}, Call::Intrinsic);
+
+                // Restore the correct min coordinate
+                expr = Call::make(op->type, Call::buffer_set_bounds,
+                                  {expr, dim, old_min, old_extent}, Call::Extern);
+            }
         }
+
     }
 
     void visit(const Provide *op) {
@@ -82,70 +143,151 @@ class FoldStorageOfFunction : public IRMutator {
         }
     }
 
+
 public:
-    FoldStorageOfFunction(string f, int d, Expr e) :
-        func(f), dim(d), factor(e) {}
+    FoldStorageOfFunction(string f, int d, Expr e, string p) :
+        func(f), dim(d), factor(e), dynamic_footprint(p) {}
 };
 
 // Inject dynamic folding checks against a tracked live range.
 class InjectFoldingCheck : public IRMutator {
-    string func, footprint, loop_var;
+    Function func;
+    string footprint, loop_var;
     int dim;
     const StorageDim &storage_dim;
     using IRMutator::visit;
 
     void visit(const ProducerConsumer *op) {
-        if (op->name == func) {
+        if (op->name == func.name()) {
+            Stmt body = op->body;
             if (op->is_producer) {
-                // Update valid range based on bounds written
-                // to. (TODO: if extern use the .min/.max symbols
-                // instead.)
-                Box b = box_provided(op->body, func);
-                Expr old_min =
-                    Load::make(Int(32), footprint, 0, Buffer<>(), Parameter(), const_true());
-
-                // Track the logical address range the memory
-                // currently represents.
-                Expr new_valid_max, new_valid_min;
-                if (storage_dim.fold_forward) {
-                    new_valid_min = b[dim].max - (storage_dim.fold_factor - 1);
+                if (func.has_extern_definition()) {
+                    // We'll update the valid min at the buffer_crop call.
+                    body = mutate(op->body);
                 } else {
-                    new_valid_min = b[dim].min;
+                    // Update valid range based on bounds written to.
+                    Box b = box_provided(body, func.name());
+                    Expr old_leading_edge =
+                        Load::make(Int(32), footprint, 0, Buffer<>(), Parameter(), const_true());
+
+                    internal_assert(!b.empty());
+
+                    // Track the logical address range the memory
+                    // currently represents.
+                    Expr new_leading_edge;
+                    if (storage_dim.fold_forward) {
+                        new_leading_edge = max(b[dim].max, old_leading_edge);
+                    } else {
+                        new_leading_edge = min(b[dim].min, old_leading_edge);
+                    }
+
+                    string new_leading_edge_var_name = unique_name('t');
+                    Expr new_leading_edge_var = Variable::make(Int(32), new_leading_edge_var_name);
+
+                    Stmt update_leading_edge =
+                        Store::make(footprint, new_leading_edge_var, 0, Parameter(), const_true());
+
+                    // Check the region being written to in this
+                    // iteration lies within the range of coordinates
+                    // currently represented.
+                    Expr fold_non_monotonic_error =
+                        Call::make(Int(32), "halide_error_bad_fold",
+                                   {func.name(), storage_dim.var, loop_var},
+                                   Call::Extern);
+
+                    Expr in_valid_range;
+                    if (storage_dim.fold_forward) {
+                        in_valid_range = b[dim].min > new_leading_edge - storage_dim.fold_factor;
+                    } else {
+                        in_valid_range = b[dim].max < new_leading_edge + storage_dim.fold_factor;
+                    }
+                    Stmt check_in_valid_range =
+                        AssertStmt::make(in_valid_range, fold_non_monotonic_error);
+
+                    Expr extent = b[dim].max - b[dim].min + 1;
+
+                    // Separately check the extent for *this* loop iteration fits.
+                    Expr fold_too_small_error =
+                        Call::make(Int(32), "halide_error_fold_factor_too_small",
+                                   {func.name(), storage_dim.var, storage_dim.fold_factor, loop_var, extent},
+                                   Call::Extern);
+
+                    Stmt check_extent =
+                        AssertStmt::make(extent <= storage_dim.fold_factor, fold_too_small_error);
+
+                    Stmt checks = Block::make({check_extent, check_in_valid_range, update_leading_edge});
+                    checks = LetStmt::make(new_leading_edge_var_name, new_leading_edge, checks);
+                    body = Block::make(checks, body);
                 }
-
-                Stmt update_min =
-                    Store::make(footprint, new_valid_min, 0, Parameter(), const_true());
-                Expr extent = b[dim].max - b[dim].min + 1;
-                Expr fold_too_small_error = Call::make(Int(32), "halide_error_fold_factor_too_small",
-                                                       {func, storage_dim.var, storage_dim.fold_factor, loop_var, extent},
-                                                       Call::Extern);
-                Stmt check_extent =
-                    AssertStmt::make(extent <= storage_dim.fold_factor, fold_too_small_error);
-                stmt = Block::make({check_extent, update_min, op});
             } else {
-                // Check the accessed range against the valid
-                // range. TODO: if consumed by extern stage use bounds
-                // query result.
-                Box b = box_required(op->body, func);
 
-                Expr valid_min =
-                    Load::make(Int(32), footprint, 0, Buffer<>(), Parameter(), const_true());
+                // Check the accessed range against the valid range.
+                Box b = box_required(body, func.name());
 
-                Expr check = (b[dim].min >= valid_min && b[dim].max < valid_min + storage_dim.fold_factor);
-                Expr bad_fold_error = Call::make(Int(32), "halide_error_bad_fold",
-                                                 {func, storage_dim.var, loop_var},
-                                                 Call::Extern);
-                stmt = Block::make(AssertStmt::make(check, bad_fold_error), op);
+                if (!b.empty()) {
+                    Expr leading_edge =
+                        Load::make(Int(32), footprint, 0, Buffer<>(), Parameter(), const_true());
+
+                    Expr check;
+                    if (storage_dim.fold_forward) {
+                        check = (b[dim].min > leading_edge - storage_dim.fold_factor && b[dim].max <= leading_edge);
+                    } else {
+                        check = (b[dim].max < leading_edge + storage_dim.fold_factor && b[dim].min >= leading_edge);
+                    }
+                    Expr bad_fold_error = Call::make(Int(32), "halide_error_bad_fold",
+                                                     {func.name(), storage_dim.var, loop_var},
+                                                     Call::Extern);
+                    body = Block::make(AssertStmt::make(check, bad_fold_error), body);
+                }
             }
+            stmt = ProducerConsumer::make(op->name, op->is_producer, body);
         } else {
             IRMutator::visit(op);
         }
     }
 
+    void visit(const LetStmt *op) {
+        if (func.has_extern_definition() &&
+            starts_with(op->name, func.name() + ".") &&
+            ends_with(op->name, ".tmp_buffer")) {
+
+            Stmt body = op->body;
+            Expr buf = Variable::make(type_of<halide_buffer_t *>(), op->name);
+            Expr leading_edge;
+            if (storage_dim.fold_forward) {
+                leading_edge =
+                    Call::make(Int(32), Call::buffer_get_max, {buf, dim}, Call::Extern);
+            } else {
+                leading_edge =
+                    Call::make(Int(32), Call::buffer_get_min, {buf, dim}, Call::Extern);
+            }
+
+            // We're taking a crop of the buffer to act as an output
+            // to an extern stage. Update the valid min or max
+            // coordinate accordingly.
+            Stmt update_leading_edge =
+                Store::make(footprint, leading_edge, 0, Parameter(), const_true());
+            body = Block::make(update_leading_edge, body);
+
+            // We don't need to make sure the min is moving
+            // monotonically, because we can't do sliding window on
+            // extern stages, so we don't have to worry about whether
+            // we're preserving valid values from previous loop
+            // iterations.
+
+            stmt = LetStmt::make(op->name, op->value, body);
+        } else {
+            IRMutator::visit(op);
+        }
+
+    }
+
 public:
-    InjectFoldingCheck(string func, string footprint, string loop_var,
+    InjectFoldingCheck(Function func,
+                       string footprint, string loop_var,
                        int dim, const StorageDim &storage_dim)
-        : func(func), footprint(footprint), loop_var(loop_var),
+        : func(func),
+          footprint(footprint), loop_var(loop_var),
           dim(dim), storage_dim(storage_dim) {}
 };
 
@@ -180,6 +322,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
 
         Stmt body = op->body;
+
         Box provided = box_provided(body, func.name());
         Box required = box_required(body, func.name());
         Box box = box_union(provided, required);
@@ -194,7 +337,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             const StorageDim &storage_dim = func.schedule().storage_dims()[dim];
             Expr explicit_factor;
-            if (expr_uses_var(min, op->name) || expr_uses_var(max, op->name)) {
+            if (!is_pure(min) ||
+                !is_pure(max) ||
+                expr_uses_var(min, op->name) ||
+                expr_uses_var(max, op->name)) {
                 // We only use the explicit fold factor if the fold is
                 // relevant for this loop. If the fold isn't relevant
                 // for this loop, the added asserts will be too
@@ -225,7 +371,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // outside consume nodes.
                 dynamic_footprint = func.name() + "." + op->name + ".footprint";
 
-                body = InjectFoldingCheck(func.name(),
+                body = InjectFoldingCheck(func,
                                           dynamic_footprint,
                                           op->name,
                                           dim,
@@ -243,6 +389,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 Expr extent = simplify(max - min + 1);
                 Expr factor;
                 if (explicit_factor.defined()) {
+                    if (dynamic_footprint.empty()) {
+                        // We were able to prove monotonicity
+                        // statically, but we may need a runtime
+                        // assertion for maximum extent. In many cases
+                        // it will simplify away.
+                        Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
+                                                {func.name(), storage_dim.var, explicit_factor, op->name, extent},
+                                                Call::Extern);
+                        body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
+                    }
                     factor = explicit_factor;
                 } else {
                     // The max of the extent over all values of the loop variable must be a constant
@@ -268,7 +424,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                     Fold fold = {(int)i - 1, factor};
                     dims_folded.push_back(fold);
-                    body = FoldStorageOfFunction(func.name(), (int)i - 1, factor).mutate(body);
+                    body = FoldStorageOfFunction(func.name(), (int)i - 1, factor, dynamic_footprint).mutate(body);
 
                     Expr next_var = Variable::make(Int(32), op->name) + 1;
                     Expr next_min = substitute(op->name, next_var, min);
@@ -280,6 +436,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     } else if (!body.same_as(op->body)) {
                         stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
                         if (!dynamic_footprint.empty()) {
+                            Expr init_val;
+                            if (min_monotonic_increasing) {
+                                init_val = Int(32).min();
+                            } else {
+                                init_val = Int(32).max();
+                            }
+                            Stmt init_min = Store::make(dynamic_footprint, init_val, 0, Parameter(), const_true());
+                            stmt = Block::make(init_min, stmt);
                             stmt = Allocate::make(dynamic_footprint, Int(32), {}, const_true(), stmt);
                         }
                         return;
@@ -320,27 +484,6 @@ public:
         : func(f), explicit_only(explicit_only) {}
 };
 
-/** Check if a buffer's allocated is referred to directly via an
- * intrinsic. If so we should leave it alone. (e.g. it may be used
- * extern). */
-class IsBufferSpecial : public IRVisitor {
-public:
-    string func;
-    bool special = false;
-
-    IsBufferSpecial(string f) : func(f) {}
-private:
-
-    using IRVisitor::visit;
-
-    void visit(const Variable *var) {
-        if (var->type.is_handle() &&
-            var->name == func + ".buffer") {
-            special = true;
-        }
-    }
-};
-
 // Look for opportunities for storage folding in a statement
 class StorageFolding : public IRMutator {
     const map<string, Function> &env;
@@ -350,53 +493,35 @@ class StorageFolding : public IRMutator {
     void visit(const Realize *op) {
         Stmt body = mutate(op->body);
 
-        IsBufferSpecial special(op->name);
-        op->accept(&special);
-
         // Get the function associated with this realization, which
         // contains the explicit fold directives from the schedule.
         auto func_it = env.find(op->name);
         Function func = func_it != env.end() ? func_it->second : Function();
 
-        if (special.special) {
-            for (const StorageDim &i : func.schedule().storage_dims()) {
-                user_assert(!i.fold_factor.defined())
-                    << "Dimension " << i.var << " of " << op->name
-                    << " cannot be folded because it is accessed by extern or device stages.\n";
-            }
+        // Don't attempt automatic storage folding if there is
+        // more than one produce node for this func.
+        bool explicit_only = count_producers(body, op->name) != 1;
+        AttemptStorageFoldingOfFunction folder(func, explicit_only);
+        debug(3) << "Attempting to fold " << op->name << "\n";
+        body = folder.mutate(body);
 
-            debug(3) << "Not attempting to fold " << op->name << " because its buffer is used\n";
-            if (body.same_as(op->body)) {
-                stmt = op;
-            } else {
-                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
-            }
+        if (body.same_as(op->body)) {
+            stmt = op;
+        } else if (folder.dims_folded.empty()) {
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
         } else {
-            // Don't attempt automatic storage folding if there is
-            // more than one produce node for this func.
-            bool explicit_only = count_producers(body, op->name) != 1;
-            AttemptStorageFoldingOfFunction folder(func, explicit_only);
-            debug(3) << "Attempting to fold " << op->name << "\n";
-            body = folder.mutate(body);
+            Region bounds = op->bounds;
 
-            if (body.same_as(op->body)) {
-                stmt = op;
-            } else if (folder.dims_folded.empty()) {
-                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
-            } else {
-                Region bounds = op->bounds;
+            for (size_t i = 0; i < folder.dims_folded.size(); i++) {
+                int d = folder.dims_folded[i].dim;
+                Expr f = folder.dims_folded[i].factor;
+                internal_assert(d >= 0 &&
+                                d < (int)bounds.size());
 
-                for (size_t i = 0; i < folder.dims_folded.size(); i++) {
-                    int d = folder.dims_folded[i].dim;
-                    Expr f = folder.dims_folded[i].factor;
-                    internal_assert(d >= 0 &&
-                                    d < (int)bounds.size());
-
-                    bounds[d] = Range(0, f);
-                }
-
-                stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
+                bounds[d] = Range(0, f);
             }
+
+            stmt = Realize::make(op->name, op->types, bounds, op->condition, body);
         }
     }
 
