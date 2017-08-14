@@ -91,6 +91,8 @@ struct FunctionContents {
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument i : extern_arguments) {
                 if (i.is_func()) {
+                    user_assert(i.func.get() != this)
+                        << "Extern Func has itself as an argument";
                     i.func->accept(visitor);
                 } else if (i.is_expr()) {
                     i.expr.accept(visitor);
