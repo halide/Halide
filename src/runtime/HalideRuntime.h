@@ -833,6 +833,15 @@ enum halide_error_code_t {
      * to see more details. */
     halide_error_code_device_detach_native_failed = -33,
 
+    /** The host field on an input or output was null, the device
+     * field was not zero, and the pipeline tries to use the buffer on
+     * the host. You may be passing a GPU-only buffer to a pipeline
+     * which is scheduled to use it on the CPU. */
+    halide_error_code_host_is_null = -34,
+
+    /** A folded buffer was passed to an extern stage, but the region
+     * touched wraps around the fold boundary. */
+    halide_error_code_bad_extern_fold = -35,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -889,6 +898,7 @@ extern int halide_error_buffer_argument_is_null(void *user_context, const char *
 extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
                                              const char *filename, int error_code);
 extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
+extern int halide_error_host_is_null(void *user_context, const char *func_name);
 extern int halide_error_failed_to_upgrade_buffer_t(void *user_context,
                                                    const char *input_name,
                                                    const char *reason);
@@ -897,6 +907,8 @@ extern int halide_error_failed_to_downgrade_buffer_t(void *user_context,
                                                      const char *reason);
 extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                  const char *loop_name);
+extern int halide_error_bad_extern_fold(void *user_context, const char *func_name,
+                                        int dim, int min, int extent, int valid_min, int fold_factor);
 
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);
