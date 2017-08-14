@@ -10,6 +10,7 @@ namespace Halide { namespace Runtime { namespace Internal { namespace Cuda {
 
 // Define the function pointers for the CUDA API.
 #define CUDA_FN(ret, fn, args) WEAK ret (CUDAAPI *fn)args;
+#define CUDA_FN_OPTIONAL(ret, fn, args) WEAK ret (CUDAAPI *fn)args;
 #define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret (CUDAAPI *fn)args;
 #define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret (CUDAAPI *fn)args;
 #include "cuda_functions.h"
@@ -48,9 +49,9 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
 }
 
 template <typename T>
-INLINE T get_cuda_symbol(void *user_context, const char *name) {
+INLINE T get_cuda_symbol(void *user_context, const char *name, bool optional = false) {
     T s = (T)halide_cuda_get_symbol(user_context, name);
-    if (!s) {
+    if (!optional && !s) {
         error(user_context) << "CUDA API not found: " << name << "\n";
     }
     return s;
@@ -62,6 +63,7 @@ WEAK void load_libcuda(void *user_context) {
     halide_assert(user_context, cuInit == NULL);
 
     #define CUDA_FN(ret, fn, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn);
+    #define CUDA_FN_OPTIONAL(ret, fn, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn, true);
     #define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn_3020);
     #define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret (CUDAAPI *)args>(user_context, #fn_4000);
     #include "cuda_functions.h"
@@ -116,6 +118,16 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
 
 WEAK int halide_cuda_release_context(void *user_context) {
     __sync_lock_release(&thread_lock);
+    return 0;
+}
+
+// Return the stream to use for executing kernels and synchronization. Only called
+// for versions of cuda which support streams. Default is to use the main stream
+// for the context (NULL stream). The context is passed in for convenience, but
+// any sort of scoping must be handled by that of the
+// halide_cuda_acquire_context/halide_cuda_release_context pair, not this call.
+WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
+    *stream = 0;
     return 0;
 }
 
@@ -331,6 +343,11 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     return CUDA_SUCCESS;
 }
 
+// This feature may be useful during CUDA backend or runtime
+// development. It does not seem to find many errors in general Halide
+// use and causes false positives in at least one environment, where
+// it prevents using debug mode with cuda.
+#define ENABLE_POINTER_VALIDATION 0
 
 WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size_t size=0) {
 // The technique using cuPointerGetAttribute and CU_POINTER_ATTRIBUTE_CONTEXT
@@ -340,7 +357,7 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t* buf, size
 // support 32-bit addressing in 64-bit processes, but I expect those cards do not
 // support unified addressing at all.
 // TODO: figure out a way to validate pointers in all cases if strictly necessary.
-#ifdef BITS_32
+#if defined(BITS_32) || !ENABLE_POINTER_VALIDATION
     return true;
 #else
     if (buf->device == 0)
@@ -688,7 +705,17 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    CUresult err = cuCtxSynchronize();
+    CUresult err;
+    if (cuStreamSynchronize != NULL) {
+        CUstream stream;
+        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+        if (result != 0) {
+            error(user_context) << "CUDA: In halide_cuda_device_sync, halide_cuda_get_stream returned " << result << "\n";
+        }
+        err = cuStreamSynchronize(stream);
+    } else {
+       err = cuCtxSynchronize();
+    }
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuCtxSynchronize failed: "
                             << get_error_name(err);
@@ -774,11 +801,21 @@ WEAK int halide_cuda_run(void *user_context,
         }
     }
 
+    CUstream stream = NULL;
+    // We use whether this routine was defined in the cuda driver library
+    // as a test for streams support in the cuda implementation.
+    if (cuStreamSynchronize != NULL) {
+        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+        if (result != 0) {
+            error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << result << "\n";
+        }
+    }
+
     err = cuLaunchKernel(f,
                          blocksX,  blocksY,  blocksZ,
                          threadsX, threadsY, threadsZ,
                          shared_mem_bytes,
-                         NULL, // stream
+                         stream,
                          translated_args,
                          NULL);
     free(dev_handles);

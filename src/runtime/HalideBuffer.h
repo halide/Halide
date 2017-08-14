@@ -11,6 +11,7 @@
 #include <cassert>
 #include <atomic>
 #include <algorithm>
+#include <limits>
 #include <stdint.h>
 #include <string.h>
 
@@ -74,12 +75,19 @@ struct AllocationHeader {
     std::atomic<int> ref_count {0};
 };
 
+/** This indicates how to deallocate the device for a Halide::Runtime::Buffer. */
+enum struct BufferDeviceOwnership : int {
+    Allocated,     ///> halide_device_free will be called when device ref count goes to zero
+    WrappedNative, ///> halide_device_detach_native will be called when device ref count goes to zero
+    Unmanaged,     ///> No free routine will be called when device ref count goes to zero
+};
+
 /** A similar struct for managing device allocations. */
 struct DeviceRefCount {
     // This is only ever constructed when there's something to manage,
     // so start at one.
     std::atomic<int> count {1};
-    bool wrapping_native_device_handle {false};
+    BufferDeviceOwnership ownership{BufferDeviceOwnership::Allocated};
 };
 
 /** A templated Buffer class that wraps halide_buffer_t and adds
@@ -199,9 +207,9 @@ private:
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
                        "before the device allocation is freed.");
-                if (dev_ref_count && dev_ref_count->wrapping_native_device_handle) {
+                if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
                     buf.device_interface->detach_native(nullptr, &buf);
-                } else {
+                } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
                     buf.device_interface->device_free(nullptr, &buf);
                 }
             }
@@ -210,6 +218,7 @@ private:
             }
         }
         buf.device = 0;
+        buf.device_interface = nullptr;
         dev_ref_count = nullptr;
     }
 
@@ -247,12 +256,13 @@ private:
     }
 
     /** Initialize the shape from a halide_buffer_t. */
-    void initialize_from_buffer(const halide_buffer_t &b) {
+    void initialize_from_buffer(const halide_buffer_t &b,
+                                BufferDeviceOwnership ownership) {
         memcpy(&buf, &b, sizeof(halide_buffer_t));
         copy_shape_from(b);
         if (b.device) {
             dev_ref_count = new DeviceRefCount;
-            dev_ref_count->wrapping_native_device_handle = true;
+            dev_ref_count->ownership = ownership;
         }
     }
 
@@ -275,7 +285,10 @@ private:
 
     /** Initialize the shape from a vector of extents */
     void initialize_shape(const std::vector<int> &sizes) {
-        for (size_t i = 0; i < sizes.size(); i++) {
+        assert(sizes.size() <= std::numeric_limits<int>::max());
+        int limit = (int)sizes.size();
+        assert(limit <= dimensions());
+        for (int i = 0; i < limit; i++) {
             buf.dim[i].min = 0;
             buf.dim[i].extent = sizes[i];
             if (i == 0) {
@@ -463,9 +476,10 @@ public:
     }
 
     /** Make a Buffer from a halide_buffer_t */
-    Buffer(const halide_buffer_t &buf) {
+    Buffer(const halide_buffer_t &buf,
+           BufferDeviceOwnership ownership = BufferDeviceOwnership::Unmanaged) {
         assert(T_is_void || buf.type == static_halide_type());
-        initialize_from_buffer(buf);
+        initialize_from_buffer(buf, ownership);
     }
 
     /** Make a Buffer from a legacy buffer_t. */
@@ -559,6 +573,7 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T, D>>(other));
     }
 
@@ -572,6 +587,7 @@ public:
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
     }
 
@@ -623,6 +639,7 @@ public:
         free_shape_storage();
         buf = other.buf;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T2, D2>>(other));
         return *this;
     }
@@ -637,6 +654,7 @@ public:
         free_shape_storage();
         buf = other.buf;
         other.buf.device = 0;
+        other.buf.device_interface = nullptr;
         move_shape_from(std::forward<Buffer<T, D>>(other));
         return *this;
     }
@@ -1051,7 +1069,9 @@ public:
         if (shift) {
             device_deallocate();
         }
-        buf.host += shift * dim(d).stride() * type().bytes();
+        if (buf.host != nullptr) {
+            buf.host += shift * dim(d).stride() * type().bytes();
+        }
         buf.dim[d].min = min;
         buf.dim[d].extent = extent;
     }
@@ -1069,7 +1089,10 @@ public:
 
     /** Crop an image in-place along the first N dimensions. */
     void crop(const std::vector<std::pair<int, int>> &rect) {
-        for (int i = 0; i < rect.size(); i++) {
+        assert(rect.size() <= std::numeric_limits<int>::max());
+        int limit = (int)rect.size();
+        assert(limit <= dimensions());
+        for (int i = 0; i < limit; i++) {
             crop(i, rect[i].first, rect[i].second);
         }
     }
@@ -1101,7 +1124,10 @@ public:
     /** Translate an image along the first N dimensions */
     void translate(const std::vector<int> &delta) {
         device_deallocate();
-        for (size_t i = 0; i < delta.size(); i++) {
+        assert(delta.size() <= std::numeric_limits<int>::max());
+        int limit = (int)delta.size();
+        assert(limit <= dimensions());
+        for (int i = 0; i < limit; i++) {
             translate(i, delta[i]);
         }
     }
@@ -1158,7 +1184,9 @@ public:
         buf.dimensions--;
         int shift = pos - dim(d).min();
         assert(buf.device == 0 || shift == 0);
-        buf.host += shift * dim(d).stride() * type().bytes();
+        if (buf.host != nullptr) {
+            buf.host += shift * dim(d).stride() * type().bytes();
+        }
         for (int i = d; i < dimensions(); i++) {
             buf.dim[i] = buf.dim[i+1];
         }
@@ -1271,9 +1299,9 @@ public:
 
     int device_free(void *ctx = nullptr) {
         if (dev_ref_count) {
-            assert(!dev_ref_count->wrapping_native_device_handle &&
-                   "Can't call device_free on wrapped native device handle. "
-                   "Call device_detach_native instead.");
+            assert(dev_ref_count->ownership == BufferDeviceOwnership::Allocated &&
+                   "Can't call device_free on an unmanaged or wrapped native device handle. "
+                   "Free the source allocation or call device_detach_native instead.");
             // Multiple people may be holding onto this dev field
             assert(dev_ref_count->count == 1 &&
                    "Multiple Halide::Runtime::Buffer objects share this device "
@@ -1296,15 +1324,17 @@ public:
                            uint64_t handle, void *ctx = nullptr) {
         assert(device_interface);
         dev_ref_count = new DeviceRefCount;
-        dev_ref_count->wrapping_native_device_handle = true;
+        dev_ref_count->ownership = BufferDeviceOwnership::WrappedNative;
         return device_interface->wrap_native(ctx, &buf, handle, device_interface);
     }
 
     int device_detach_native(void *ctx = nullptr) {
-        assert(dev_ref_count && dev_ref_count->wrapping_native_device_handle &&
+        assert(dev_ref_count &&
+               dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative &&
                "Only call device_detach_native on buffers wrapping a native "
                "device handle via device_wrap_native. This buffer was allocated "
-               "using device_malloc, so call device_free instead.");
+               "using device_malloc, or is unmanaged. "
+               "Call device_free or free the original allocation instead.");
         // Multiple people may be holding onto this dev field
         assert(dev_ref_count->count == 1 &&
                "Multiple Halide::Runtime::Buffer objects share this device "

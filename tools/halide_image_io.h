@@ -774,6 +774,161 @@ bool save_jpg(ImageType &im, const std::string &filename) {
 
 #endif  // not HALIDE_NO_JPEG
 
+constexpr int kNumTmpCodes = 10;
+
+inline const halide_type_t *tmp_code_to_halide_type() {
+    static const halide_type_t tmp_code_to_halide_type_[kNumTmpCodes] = {
+      { halide_type_float, 32 },
+      { halide_type_float, 64 },
+      { halide_type_uint, 8 },
+      { halide_type_int, 8 },
+      { halide_type_uint, 16 },
+      { halide_type_int, 16 },
+      { halide_type_uint, 32 },
+      { halide_type_int, 32 },
+      { halide_type_uint, 64 },
+      { halide_type_int, 64 }
+    };
+    return tmp_code_to_halide_type_;
+}
+
+// return true iff the buffer storage has no padding between
+// any elements, and is in strictly planar order.
+template<typename ImageType>
+bool buffer_is_compact_planar(ImageType &im) {
+    const halide_type_t im_type = im.type();
+    const size_t elem_size = (im_type.bits / 8);
+    if (((uint8_t*)im.begin() + (im.number_of_elements() * elem_size)) != (uint8_t*) im.end()) {
+        return false;
+    }
+    for (int d = 1; d < im.dimensions(); ++d) {
+        if (im.dim(d-1).stride() >= im.dim(d).stride()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// ".tmp" is a file format used by the ImageStack tool (see https://github.com/abadams/ImageStack)
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool load_tmp(const std::string &filename, ImageType *im) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    FileOpener f(filename, "rb");
+    if (!check(f.f != nullptr, "File could not be opened for reading")) {
+        return false;
+    }
+
+    int32_t header[5];
+    if (!check(f.read_bytes((uint8_t*) &header[0], sizeof(header)), "Count not read .tmp header")) {
+        return false;
+    }
+
+    if (!check(header[0] > 0 && header[1] > 0 && header[2] > 0 && header[3] > 0 &&
+               header[4] >= 0 && header[4] < kNumTmpCodes, "Bad header on .tmp file")) {
+        return false;
+    }
+
+    const halide_type_t im_type = tmp_code_to_halide_type()[header[4]];
+    std::vector<int> im_dimensions = { header[0], header[1], header[2], header[3] };
+    *im = ImageType(im_type, im_dimensions);
+
+    // This should never fail unless the default Buffer<> constructor behavior changes.
+    if (!check(buffer_is_compact_planar(*im), "load_tmp() requires compact planar images")) {
+        return false;
+    }
+
+    const size_t elem_size = (im_type.bits / 8);
+    size_t count = elem_size * im->number_of_elements();
+    if (!check(f.read_bytes(im->raw_buffer()->host, count), "Count not read .tmp payload")) {
+        return false;
+    }
+
+    im->set_host_dirty();
+    return true;
+}
+
+inline const std::set<FormatInfo> &query_tmp() {
+    // TMP files require exactly 4 dimensions.
+    static std::set<FormatInfo> info = {
+      { halide_type_t(halide_type_float, 32), 4 },
+      { halide_type_t(halide_type_float, 64), 4 },
+      { halide_type_t(halide_type_uint, 8), 4 },
+      { halide_type_t(halide_type_int, 8), 4 },
+      { halide_type_t(halide_type_uint, 16), 4 },
+      { halide_type_t(halide_type_int, 16), 4 },
+      { halide_type_t(halide_type_uint, 32), 4 },
+      { halide_type_t(halide_type_int, 32), 4 },
+      { halide_type_t(halide_type_uint, 64), 4 },
+      { halide_type_t(halide_type_int, 64), 4 },
+    };
+    return info;
+}
+
+// ".tmp" is a file format used by the ImageStack tool (see https://github.com/abadams/ImageStack)
+template<typename ImageType, CheckFunc check = CheckReturn>
+bool save_tmp(ImageType &im, const std::string &filename) {
+    static_assert(!ImageType::has_static_halide_type, "");
+
+    im.copy_to_host();
+
+    int32_t header[5] = { 1, 1, 1, 1, -1 };
+    for (int i = 0; i < im.dimensions(); ++i) {
+        header[i] = im.dim(i).extent();
+    }
+    auto *table = tmp_code_to_halide_type();
+    for (int i = 0; i < kNumTmpCodes; i++) {
+        if (im.type() == table[i]) {
+            header[4] = i;
+            break;
+        }
+    }
+    if (!check(header[4] >= 0, "Unsupported type for .tmp file")) {
+        return false;
+    }
+
+    FileOpener f(filename, "wb");
+    if (!check(f.f != nullptr, "File could not be opened for writing")) {
+        return false;
+    }
+    if (!check(f.write_bytes((uint8_t*) &header[0], sizeof(header)), "Could not write .tmp header")) {
+        return false;
+    }
+
+    const halide_type_t im_type = im.type();
+    const size_t elem_size = (im_type.bits / 8);
+    if (buffer_is_compact_planar(im)) {
+        // Contiguous buffer! Write it all in one swell foop.
+        size_t count = elem_size * im.number_of_elements();
+        if (!check(f.write_bytes(im.raw_buffer()->host, count), "Count not write .tmp payload")) {
+            return false;
+        }
+    } else {
+        // We have to do this the hard way.
+        const uint8_t *base = im.raw_buffer()->host;
+        for (int i3 = im.dim(3).min(); i3 <= im.dim(3).max(); i3++) {
+            for (int i2 = im.dim(2).min(); i2 <= im.dim(2).max(); i2++) {
+                for (int i1 = im.dim(1).min(); i1 <= im.dim(1).max(); i1++) {
+                    for (int i0 = im.dim(0).min(); i0 <= im.dim(0).max(); i0++) {
+                        const size_t offset = 
+                            (i0 - im.dim(0).min()) * im.dim(0).stride() +
+                            (i1 - im.dim(1).min()) * im.dim(1).stride() +
+                            (i2 - im.dim(2).min()) * im.dim(2).stride() +
+                            (i3 - im.dim(3).min()) * im.dim(3).stride();
+                        const uint8_t *elem = base + offset * elem_size;
+                        if (!check(f.write_bytes(elem, elem_size), "Count not write .tmp payload")) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    return true;
+}
+
 template<typename ImageType, Internal::CheckFunc check>
 struct ImageIO {
     std::function<bool(const std::string &, ImageType *)> load;
@@ -794,7 +949,8 @@ bool find_imageio(const std::string &filename, ImageIO<ImageType, check> *result
 #ifndef HALIDE_NO_PNG
         {"png", {load_png<ImageType, check>, save_png<ImageType, check>, query_png}},
 #endif
-        {"ppm", {load_ppm<ImageType, check>, save_ppm<ImageType, check>, query_ppm}}
+        {"ppm", {load_ppm<ImageType, check>, save_ppm<ImageType, check>, query_ppm}},
+        {"tmp", {load_tmp<ImageType, check>, save_tmp<ImageType, check>, query_tmp}}
     };
     std::string ext = Internal::get_lowercase_extension(filename);
     auto it = m.find(ext);
@@ -861,7 +1017,7 @@ struct ImageTypeConversion {
     //     Buffer<uint8_t> src = ...;
     //     Buffer<float> dst = convert_image<float>(src);
     template<typename DstElemType, typename ImageType,
-             typename std::enable_if<ImageType::has_static_halide_type>::type * = nullptr>
+             typename std::enable_if<ImageType::has_static_halide_type && !std::is_void<DstElemType>::value>::type * = nullptr>
     static auto convert_image(const ImageType &src) -> 
             typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -892,7 +1048,7 @@ struct ImageTypeConversion {
     //     Buffer<uint8_t> src = ...;
     //     Buffer<float> dst = convert_image<float>(src);
     template<typename DstElemType, typename ImageType,
-             typename std::enable_if<!ImageType::has_static_halide_type>::type * = nullptr>
+             typename std::enable_if<!ImageType::has_static_halide_type && !std::is_void<DstElemType>::value>::type * = nullptr>
     static auto convert_image(const ImageType &src) -> 
             typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -936,7 +1092,7 @@ struct ImageTypeConversion {
     // (e.g. Buffer<uint8_t> -> Buffer<>(halide_type_t)). 
     template <typename DstElemType = void,
               typename ImageType, 
-              typename std::enable_if<ImageType::has_static_halide_type>::type * = nullptr>
+              typename std::enable_if<ImageType::has_static_halide_type && std::is_void<DstElemType>::value>::type * = nullptr>
     static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> 
             typename Internal::ImageTypeWithElemType<ImageType, void>::type {
         // The enable_if ensures this will never fire; this is here primarily
@@ -980,7 +1136,7 @@ struct ImageTypeConversion {
     // (e.g. Buffer<>(halide_type_t) -> Buffer<>(halide_type_t)). 
     template <typename DstElemType = void,
               typename ImageType, 
-              typename std::enable_if<!ImageType::has_static_halide_type>::type * = nullptr>
+              typename std::enable_if<!ImageType::has_static_halide_type && std::is_void<DstElemType>::value>::type * = nullptr>
     static auto convert_image(const ImageType &src, const halide_type_t &dst_type) -> 
             typename Internal::ImageTypeWithElemType<ImageType, void>::type {
         // The enable_if ensures this will never fire; this is here primarily
