@@ -6,9 +6,20 @@
 #include <unistd.h>
 #include <memory.h>
 
+#include "known_symbols.h"
+
+void *lookup_symbol(const char *name, const known_symbol *map) {
+    for (int i = 0; map[i].name; i++) {
+        if (strncmp(name, map[i].name, strlen(map[i].name)+1) == 0) {
+            return map[i].addr;
+        }
+    }
+    return NULL;
+}
+
 extern "C" {
 
-// More symbols we need to support from halide_get_symbol.
+// More symbols we need to support.
 extern int qurt_hvx_lock;
 extern int qurt_hvx_unlock;
 extern int __hexagon_muldf3;
@@ -65,23 +76,10 @@ extern int ceilf;
 extern int ceil;
 extern int write;
 
-// These might not always be available.
-__attribute__((weak)) extern int mmap;
-__attribute__((weak)) extern int mprotect;
-__attribute__((weak)) extern int munmap;
+}  // extern "C"
 
-void *halide_get_symbol(const char *name) {
-    // On the simulator, dlsym does not work at all, it appears to just
-    // be a stub.
-    // On device, dlsym has some very unpredictable behavior that makes
-    // it randomly unable to find symbols. Rather than fight this
-    // problem, we're just going to explicitly enumerate all of the
-    // symbols we want.
-    struct known_sym {
-        const char *name;
-        char *addr;
-    };
-    static known_sym known_syms[] = {
+void *get_known_symbol(const char *name) {
+    static known_symbol known_syms[] = {
         {"abort", (char *)(&abort)},
         {"atoi", (char *)(&atoi)},
         {"close", (char *)(&close)},
@@ -96,9 +94,6 @@ void *halide_get_symbol(const char *name) {
         {"memcpy", (char *)(&memcpy)},
         {"memmove", (char *)(&memmove)},
         {"memset", (char *)(&memset)},
-        {"mmap", (char *)(&mmap)},
-        {"mprotect", (char *)(&mprotect)},
-        {"munmap", (char *)(&munmap)},
         {"strcmp", (char *)(&strcmp)},
         {"strchr", (char *)(char *(*)(char *, int))(&strchr)},
         {"strlen", (char *)(int (*)(const char *))(&strlen)},
@@ -176,31 +171,5 @@ void *halide_get_symbol(const char *name) {
         {NULL, NULL} // Null terminator.
     };
 
-    for (int i = 0; known_syms[i].name; i++) {
-        if (strncmp(name, known_syms[i].name, strlen(known_syms[i].name)+1) == 0) {
-            return known_syms[i].addr;
-        }
-    }
-
-    // We might as well try dlsym if we can't find the symbol we're
-    // looking for.  We need to try both RTLD_SELF and
-    // RTLD_DEFAULT. Sometimes, RTLD_SELF finds a symbol when
-    // RTLD_DEFAULT does not. This is surprising, I *think* RLTD_SELF
-    // should search a subset of the symbols searched by
-    // RTLD_DEFAULT...
-    void *def = dlsym(RTLD_SELF, name);
-    if (def) {
-        return def;
-    }
-    return dlsym(RTLD_DEFAULT, name);
+    return lookup_symbol(name, known_syms);
 }
-
-void *halide_load_library(const char *name) {
-    return dlopen(name, RTLD_LAZY);
-}
-
-void *halide_get_library_symbol(void *lib, const char *name) {
-    return dlsym(lib, name);
-}
-
-}  // extern "C"

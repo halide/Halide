@@ -15,6 +15,7 @@ extern "C" {
 #include "dlib.h"
 #include "pipeline_context.h"
 #include "log.h"
+#include "known_symbols.h"
 
 const int stack_alignment = 128;
 const int stack_size = 1024 * 1024;
@@ -58,6 +59,34 @@ int buf_is_used[num_buffers];
 char mem_buf[num_buffers][buffer_size]
     __attribute__((aligned(128))); /* Hexagon requires 128-byte alignment. */
 
+}
+
+void *halide_get_symbol(const char *name) {
+    // Try dlsym first. We need to try both RTLD_SELF and
+    // RTLD_DEFAULT. Sometimes, RTLD_SELF finds a symbol when
+    // RTLD_DEFAULT does not. This is surprising, I *think* RLTD_SELF
+    // should search a subset of the symbols searched by
+    // RTLD_DEFAULT...
+    void *def = dlsym(RTLD_SELF, name);
+    if (def) {
+        return def;
+    }
+    def = dlsym(RTLD_DEFAULT, name);
+    if (def) {
+        return def;
+    }
+
+    // dlsym has some very unpredictable behavior that makes
+    // it randomly unable to find symbols. To mitigate this, check our known symbols mapping.
+    return get_known_symbol(name);
+}
+
+void *halide_load_library(const char *name) {
+    return dlopen(name, RTLD_LAZY);
+}
+
+void *halide_get_library_symbol(void *lib, const char *name) {
+    return dlsym(lib, name);
 }
 
 void *halide_malloc(void *user_context, size_t x) {
