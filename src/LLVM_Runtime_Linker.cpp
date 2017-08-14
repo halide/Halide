@@ -211,9 +211,11 @@ DECLARE_NO_INITMOD(powerpc_cpu_features)
 #ifdef WITH_HEXAGON
 DECLARE_LL_INITMOD(hvx_64)
 DECLARE_LL_INITMOD(hvx_128)
+DECLARE_CPP_INITMOD(hexagon_cpu_features)
 #else
 DECLARE_NO_INITMOD(hvx_64)
 DECLARE_NO_INITMOD(hvx_128)
+DECLARE_NO_INITMOD(hexagon_cpu_features)
 #endif  // WITH_HEXAGON
 
 namespace {
@@ -724,9 +726,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // These modules are always used and shared
             modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
-            modules.push_back(get_initmod_tracing(c, bits_64, debug));
-            modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
             if (t.arch != Target::Hexagon) {
+                // These modules don't behave correctly on a real
+                // Hexagon device (they do work in the simulator
+                // though...).
+                modules.push_back(get_initmod_tracing(c, bits_64, debug));
+                modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+
                 // TODO: Support this module in the Hexagon backend,
                 // currently generates assert at src/HexagonOffload.cpp:279
                 modules.push_back(get_initmod_cache(c, bits_64, debug));
@@ -812,6 +818,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));
+            }
+            if (t.arch == Target::Hexagon) {
+                modules.push_back(get_initmod_hexagon_cpu_features(c, bits_64, debug));
             }
         }
 
