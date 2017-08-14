@@ -455,6 +455,10 @@ void do_relocation(uint32_t fixup_offset, char *fixup_addr, uint32_t type,
         do_reloc(fixup_addr, Word32_X26, intptr_t(G) >> 6, _signed, truncate);
         needs_got_entry = true;
         break;
+    case R_HEX_GOT_16_X:
+        do_reloc(fixup_addr, Word32_U6, intptr_t(G), _signed, truncate);
+        needs_got_entry = true;
+        break;
     case R_HEX_GOT_11_X:
         do_reloc(fixup_addr, Word32_U6, uintptr_t(G), _unsigned, truncate);
         needs_got_entry = true;
