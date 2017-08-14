@@ -243,7 +243,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
         soname << "libhalide_kernels" << unique_id++ << ".so";
         debug(user_context) << "    halide_remote_load_library(" << soname.str() << ") -> ";
         halide_hexagon_handle_t module = 0;
-        result = remote_load_library(soname.str(), soname.size(), code, code_size, &module);
+        result = remote_load_library(soname.str(), soname.size() + 1, code, code_size, &module);
         poll_log(user_context);
         if (result == 0) {
             debug(user_context) << "        " << module << "\n";
