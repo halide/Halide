@@ -81,26 +81,6 @@ void halide_free(void *user_context, void *ptr) {
     free(ptr);
 }
 
-void *halide_get_symbol(const char *name) {
-    // We need to try both RTLD_SELF and RTLD_DEFAULT. Sometimes,
-    // RTLD_SELF finds a symbol when RTLD_DEFAULT does not. This is
-    // surprising, I *think* RLTD_SELF should search a subset of the
-    // symbols searched by RTLD_DEFAULT...
-    void *def = dlsym(RTLD_SELF, name);
-    if (def) {
-        return def;
-    }
-    return dlsym(RTLD_DEFAULT, name);
-}
-
-void *halide_load_library(const char *name) {
-    return dlopen(name, RTLD_LAZY);
-}
-
-void *halide_get_library_symbol(void *lib, const char *name) {
-    return dlsym(lib, name);
-}
-
 PipelineContext run_context(stack_alignment, stack_size);
 
 __attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
