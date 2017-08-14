@@ -11,6 +11,7 @@
 #include "sim_protocol.h"
 #include "log.h"
 #include "dlib.h"
+#include "known_symbols.h"
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
@@ -69,6 +70,35 @@ void halide_print(void *user_context, const char *str) {
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_error(void *user_context, const char *str) {
     halide_print(user_context, str);
+}
+
+// These might not always be available.
+__attribute__((weak)) extern int mmap;
+__attribute__((weak)) extern int mprotect;
+__attribute__((weak)) extern int munmap;
+
+void *halide_get_symbol(const char *name) {
+    // dlsym doesn't do anything on the simulator, and we need to
+    // support mmap/mprotect/mnmap if needed.
+    static known_symbol known_syms[] = {
+        {"mmap", (char *)(&mmap)},
+        {"mprotect", (char *)(&mprotect)},
+        {"munmap", (char *)(&munmap)},
+    };
+    void *mmap_sym = lookup_symbol(name, known_syms);
+    if (mmap_sym) {
+        return mmap_sym;
+    }
+
+    return get_known_symbol(name);
+}
+
+void *halide_load_library(const char *name) {
+    return dlopen(name, RTLD_LAZY);
+}
+
+void *halide_get_library_symbol(void *lib, const char *name) {
+    return dlsym(lib, name);
 }
 
 void *halide_malloc(void *user_context, size_t x) {
