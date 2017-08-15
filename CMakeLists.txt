@@ -139,11 +139,9 @@ if (NOT MSVC)
   endif()
 else()
   add_compile_options(/W3)
-  message(WARNING "WARNINGS_AS_ERROR is currently ignored for MSVC")
-  # TODO: Uncomment below and remove above warning once we can build without warnings
-  #if (WARNINGS_AS_ERRORS)
-  #  add_compile_options(/WX)
-  #endif()
+  if (WARNINGS_AS_ERRORS)
+    add_compile_options(/WX)
+  endif()
 endif()
 
 # Look for OpenMP
