@@ -157,6 +157,14 @@ halide_buffer_t *_halide_buffer_crop(halide_buffer_t *dst,
     return dst;
 }
 
+HALIDE_BUFFER_HELPER_ATTRS
+halide_buffer_t *_halide_buffer_set_bounds(halide_buffer_t *buf,
+                                           int dim, int min, int extent) {
+    buf->dim[dim].min = min;
+    buf->dim[dim].extent = extent;
+    return buf;
+}
+
 }
 
 #undef HALIDE_BUFFER_HELPER_ATTRS

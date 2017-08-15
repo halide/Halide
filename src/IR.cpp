@@ -838,6 +838,7 @@ Call::ConstString Call::buffer_is_bounds_query = "_halide_buffer_is_bounds_query
 Call::ConstString Call::buffer_init = "_halide_buffer_init";
 Call::ConstString Call::buffer_init_from_buffer = "_halide_buffer_init_from_buffer";
 Call::ConstString Call::buffer_crop = "_halide_buffer_crop";
+Call::ConstString Call::buffer_set_bounds = "_halide_buffer_set_bounds";
 Call::ConstString Call::trace = "halide_trace_helper";
 
 }
