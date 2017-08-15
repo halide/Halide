@@ -2,7 +2,7 @@
 project(Halide)
 cmake_minimum_required(VERSION 3.1.3)
 
-find_package(Threads)
+find_package(Threads QUIET)
 
 find_package(LLVM REQUIRED CONFIG)
 
