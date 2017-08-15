@@ -125,7 +125,7 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
     if (use_dlopenbuf()) {
         // We need to use RTLD_NOW, the libraries we build for Hexagon
         // offloading do not support lazy binding.
-        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
+        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_GLOBAL | RTLD_NOW);
         if (!lib) {
             log_printf("dlopenbuf failed: %s\n", dlerror());
             return -1;

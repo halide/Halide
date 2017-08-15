@@ -916,7 +916,6 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     std::string soname = "lib" + device_code.name() + ".so";
     Elf::HexagonLinker linker(device_code.target());
     std::vector<std::string> dependencies = {
-        "lib" + runtime_module_name + ".so",
         "libhalide_hexagon_remote_skel.so",
     };
     std::vector<char> shared_object = obj->write_shared_object(&linker, dependencies, soname);
