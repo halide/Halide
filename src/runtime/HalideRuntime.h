@@ -839,13 +839,17 @@ enum halide_error_code_t {
      * which is scheduled to use it on the CPU. */
     halide_error_code_host_is_null = -34,
 
+    /** A folded buffer was passed to an extern stage, but the region
+     * touched wraps around the fold boundary. */
+    halide_error_code_bad_extern_fold = -35,
+
     /** Buffer has a non-null device_interface but device is 0, which
      * violates a Halide invariant. */
-    halide_error_code_device_interface_no_device= -35,
+    halide_error_code_device_interface_no_device= -36,
 
     /** Buffer has both host and device dirty bits set, which violates
      * a Halide invariant. */
-    halide_error_code_host_and_device_dirty = -36,
+    halide_error_code_host_and_device_dirty = -37,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -911,6 +915,8 @@ extern int halide_error_failed_to_downgrade_buffer_t(void *user_context,
                                                      const char *reason);
 extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
                                  const char *loop_name);
+extern int halide_error_bad_extern_fold(void *user_context, const char *func_name,
+                                        int dim, int min, int extent, int valid_min, int fold_factor);
 
 extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
                                               int fold_factor, const char *loop_name, int required_extent);

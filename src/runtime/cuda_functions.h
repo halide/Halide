@@ -6,6 +6,9 @@
 #ifndef CUDA_FN
 #define CUDA_FN(ret, fn, args)
 #endif
+#ifndef CUDA_FN_OPTIONAL
+#define CUDA_FN_OPTIONAL(ret, fn, args)
+#endif
 #ifndef CUDA_FN_3020
 #define CUDA_FN_3020(ret, fn, fn_3020, args) CUDA_FN(ret, fn, args)
 #endif
@@ -50,6 +53,9 @@ CUDA_FN_4000(CUresult, cuCtxPopCurrent, cuCtxPopCurrent_v2, (CUcontext *pctx));
 
 CUDA_FN(CUresult, cuPointerGetAttribute, (void *result, int query, CUdeviceptr ptr));
 
+CUDA_FN_OPTIONAL(CUresult, cuStreamSynchronize, (CUstream hStream));
+
 #undef CUDA_FN
+#undef CUDA_FN_OPTIONAL
 #undef CUDA_FN_3020
 #undef CUDA_FN_4000

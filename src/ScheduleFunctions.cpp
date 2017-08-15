@@ -348,16 +348,66 @@ Stmt build_produce(Function f, const Target &target) {
                 extern_call_args.push_back(arg.expr);
             } else if (arg.is_func()) {
                 Function input(arg.func);
-                for (int k = 0; k < input.outputs(); k++) {
-                    string buf_name = input.name();
-                    if (input.outputs() > 1) {
-                        buf_name += "." + std::to_string(k);
+                if (input.schedule().store_level() == input.schedule().compute_level()) {
+                    for (int k = 0; k < input.outputs(); k++) {
+                        string buf_name = input.name();
+                        if (input.outputs() > 1) {
+                            buf_name += "." + std::to_string(k);
+                        }
+                        buf_name += ".buffer";
+                        Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
+                        extern_call_args.push_back(buffer);
+                        buffers_to_annotate.push_back({buffer, input.dimensions()});
+                        buffers_contents_to_annotate.push_back(buffer);
                     }
-                    buf_name += ".buffer";
-                    Expr buffer = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
-                    extern_call_args.push_back(buffer);
-                    buffers_to_annotate.push_back({buffer, input.dimensions()});
-                    buffers_contents_to_annotate.push_back(buffer);
+                } else {
+                    // Make a local crop of just the region required,
+                    // in case the input was folded. We have no
+                    // protocol for passing folded buffers to extern
+                    // stages, so if the fold does indeed occur, we'll
+                    // assert later that the crop doesn't cross over a
+                    // fold.
+                    string stage_name = input.name() + ".s" + std::to_string(input.updates().size()) + ".";
+                    const vector<string> input_args = input.args();
+                    for (int k = 0; k < input.outputs(); k++) {
+                        string src_buf_name = input.name();
+                        if (input.outputs() > 1) {
+                            src_buf_name += "." + std::to_string(k);
+                        }
+                        src_buf_name += ".buffer";
+                        Expr src_buffer = Variable::make(type_of<struct halide_buffer_t *>(), src_buf_name);
+
+                        Expr alloca_size = Call::make(Int(32), Call::size_of_halide_buffer_t, {}, Call::Intrinsic);
+                        Expr cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::alloca,
+                                                          {alloca_size}, Call::Intrinsic);
+
+                        vector<Expr> args(5);
+                        args[0] = cropped_input;
+                        args[1] = Call::make(type_of<struct halide_dimension_t *>(), Call::alloca,
+                                             {(int)sizeof(halide_dimension_t) * input.dimensions()}, Call::Intrinsic);
+                        args[2] = src_buffer;
+
+                        vector<Expr> mins, extents;
+                        internal_assert(input.dimensions() == (int)input.args().size());
+                        for (const string arg : input.args()) {
+                            string var = stage_name + arg;
+                            Expr min = Variable::make(Int(32), var + ".min");
+                            Expr max = Variable::make(Int(32), var + ".max");
+                            mins.push_back(min);
+                            extents.push_back(max - min + 1);
+                        }
+                        args[3] = Call::make(Handle(), Call::make_struct, mins, Call::Intrinsic);
+                        args[4] = Call::make(Handle(), Call::make_struct, extents, Call::Intrinsic);
+
+                        cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop,
+                                                   args, Call::Extern);
+
+                        string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
+                        extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
+                        buffers_to_annotate.push_back({extern_call_args.back(), input.dimensions()});
+                        buffers_contents_to_annotate.push_back(cropped_input);
+                        lets.push_back({ buf_name, cropped_input });
+                    }
                 }
             } else if (arg.is_buffer()) {
                 Buffer<> b = arg.buffer;
@@ -402,10 +452,6 @@ Stmt build_produce(Function f, const Target &target) {
         } else {
             // Store level doesn't match compute level. Make an output
             // buffer just for this subregion.
-            string stride_name = f.name();
-            if (f.outputs() > 1) {
-                stride_name += ".0";
-            }
             string stage_name = f.name() + ".s0.";
             const vector<string> f_args = f.args();
             for (int j = 0; j < f.outputs(); j++) {
