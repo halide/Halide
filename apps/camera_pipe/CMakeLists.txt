@@ -17,7 +17,7 @@ endif()
 add_executable(process process.cpp)
 halide_add_aot_library_dependency(process camera_pipe)
 target_link_libraries(process PRIVATE ${curved_lib} fcam)
-use_image_io(process)
+halide_use_image_io(process)
 
 if (NOT MSVC)
   target_compile_options(process PRIVATE "-O2" "-msse2")

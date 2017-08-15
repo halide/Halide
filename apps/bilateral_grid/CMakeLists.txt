@@ -8,4 +8,4 @@ halide_add_aot_library(bilateral_grid
 # Final executable
 add_executable(filter filter.cpp)
 halide_add_aot_library_dependency(filter bilateral_grid)
-use_image_io(filter)
+halide_use_image_io(filter)
