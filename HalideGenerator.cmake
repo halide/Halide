@@ -3,7 +3,7 @@ include(CMakeParseArguments)
 function(halide_use_image_io TARGET)
   foreach(PKG PNG JPEG)
     # It's OK to call find_package() for the same package multiple times.
-    # find_package(${PKG} QUIET)
+    find_package(${PKG} QUIET)
     if(${PKG}_FOUND)
       target_compile_definitions(${TARGET} PRIVATE ${${PKG}_DEFINITIONS})
       target_include_directories(${TARGET} PRIVATE ${${PKG}_INCLUDE_DIRS})
