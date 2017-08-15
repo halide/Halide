@@ -174,6 +174,21 @@ function(use_image_io TARGET)
   target_link_libraries(${TARGET} PRIVATE ${JPEG_LIBRARIES})
 endfunction()
 
+# Look for libhdf5. Needed for HDF5 file format I/O.
+find_package(HDF5 COMPONENTS CXX)
+if(NOT HDF5_FOUND)
+  message("HDF5 was not found, defining HALIDE_NO_HDF5")
+  add_definitions(-DHALIDE_NO_HDF5)
+endif()
+
+function(use_hdf5_io TARGET)
+  if(HDF5_FOUND)
+    target_compile_definitions(${TARGET} PRIVATE ${HDF5_DEFINITIONS})
+    target_include_directories(${TARGET} PRIVATE ${HDF5_INCLUDE_DIRS})
+    target_link_libraries(${TARGET} PRIVATE ${HDF5_LIBRARIES})
+  endif()
+endfunction()
+
 # -----------------------------------------------------------------------------
 # Option to enable/disable assertions
 # -----------------------------------------------------------------------------
