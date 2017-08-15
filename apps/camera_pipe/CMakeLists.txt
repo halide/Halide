@@ -8,7 +8,7 @@ halide_add_aot_library(camera_pipe
 # fcam
 # FIXME: Set -O3 here
 add_library(fcam fcam/Demosaic.cpp fcam/Demosaic_ARM.cpp)
-FIND_PACKAGE(OpenMP)
+FIND_PACKAGE(OpenMP QUIET)
 if (OPENMP_FOUND)
   target_compile_options(fcam PUBLIC "-fopenmp")
 endif()
