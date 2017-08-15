@@ -60,7 +60,7 @@ int one_d_max() {
         maxf.realize(output);
     });
 
-    float gbits = 32.0 * size / 1e9; // bits per seconds
+    float gbits = 32.0f * size / 1e9f; // bits per seconds
 
     printf("Max ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Max with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));
@@ -325,7 +325,7 @@ int dot_product() {
 
     // Note that LLVM autovectorizes the reference!
 
-    float gbits = 32 * size * (2 / 1e9); // bits per seconds
+    float gbits = 32 * size * (2 / 1e9f); // bits per seconds
 
     printf("Dot-product ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Dot-product with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));
@@ -400,7 +400,7 @@ int kitchen_sink() {
         sink.realize();
     });
 
-    float gbits = 8 * size * (2 / 1e9); // bits per seconds
+    float gbits = 8 * size * (2 / 1e9f); // bits per seconds
 
     printf("Kitchen sink ref: %fms, %f Gbps\n", t_ref * 1e3, (gbits / t_ref));
     printf("Kitchen sink with rfactor: %fms, %f Gbps\n", t * 1e3, (gbits / t));
