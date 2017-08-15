@@ -152,27 +152,8 @@ if (OPENMP_FOUND)
   message(STATUS "Found OpenMP")
 endif()
 
-# Look for libpng and libjpeg. Some apps and tutorials depend on it
-find_package(PNG)
-find_package(JPEG)
-
-if (NOT PNG_FOUND)
-  message("PNG was not found, defining HALIDE_NO_PNG")
-  add_definitions(-DHALIDE_NO_PNG)
-endif()
-if (NOT JPEG_FOUND)
-  message("JPEG was not found, defining HALIDE_NO_JPEG")
-  add_definitions(-DHALIDE_NO_JPEG)
-endif()
-
-function(use_image_io TARGET)
-  target_compile_definitions(${TARGET} PRIVATE ${PNG_DEFINITIONS})
-  target_include_directories(${TARGET} PRIVATE ${PNG_INCLUDE_DIRS})
-  target_link_libraries(${TARGET} PRIVATE ${PNG_LIBRARIES})
-  target_compile_definitions(${TARGET} PRIVATE ${JPEG_DEFINITIONS})
-  target_include_directories(${TARGET} PRIVATE ${JPEG_INCLUDE_DIRS})
-  target_link_libraries(${TARGET} PRIVATE ${JPEG_LIBRARIES})
-endfunction()
+# Include the rules for Generator, ImageIO, etc
+include(HalideGenerator.cmake)
 
 # -----------------------------------------------------------------------------
 # Option to enable/disable assertions

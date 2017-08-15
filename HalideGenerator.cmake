@@ -1,5 +1,20 @@
 include(CMakeParseArguments)
 
+function(halide_use_image_io TARGET)
+  foreach(PKG PNG JPEG)
+    # It's OK to call find_package() for the same package multiple times.
+    # find_package(${PKG} QUIET)
+    if(${PKG}_FOUND)
+      target_compile_definitions(${TARGET} PRIVATE ${${PKG}_DEFINITIONS})
+      target_include_directories(${TARGET} PRIVATE ${${PKG}_INCLUDE_DIRS})
+      target_link_libraries(${TARGET} PRIVATE ${${PKG}_LIBRARIES})
+    else()
+      message(STATUS "${PKG} not found for ${TARGET}; compiling with -DHALIDE_NO_${PKG}")
+      target_compile_definitions(${TARGET} PRIVATE -DHALIDE_NO_${PKG})
+    endif()
+  endforeach()
+endfunction()
+
 function(halide_generator_genfiles_dir NAME OUTVAR)
   set(GENFILES_DIR "${CMAKE_BINARY_DIR}/generator_genfiles/${NAME}")
   file(MAKE_DIRECTORY "${GENFILES_DIR}")

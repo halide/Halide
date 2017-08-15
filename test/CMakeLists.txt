@@ -43,7 +43,7 @@ endfunction(tests)
 
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
-  use_image_io(correctness_image_io)
+  halide_use_image_io(correctness_image_io)
   test_plain_c_includes()
 endif()
 if (WITH_TEST_ERROR)
@@ -103,8 +103,6 @@ function(halide_define_jit_test NAME)
                                          STUB_GENERATOR_TARGET ${STUB_DEP})
   endforeach()
 endfunction(halide_define_jit_test)
-
-include(../HalideGenerator.cmake)
 
 # Usage:
 #   halide_define_aot_test(NAME <basename>
