@@ -162,6 +162,12 @@ struct hash_table {
     }
 };
 
+// TODO: This should be made thread safe. Not easy because we can't
+// statically initialize a mutex. This should be made thread safe from
+// outside the runtime for now...
+struct dlib_t;
+dlib_t *loaded_libs = NULL;
+
 struct dlib_t {
     char *program;
     size_t program_size;
@@ -174,6 +180,9 @@ struct dlib_t {
     const Sym *symtab;
 
     hash_table hash;
+
+    // We keep a linked list of these, to implement dlsym's ability to find symbols loaded in other libraries.
+    dlib_t *next;
 
     bool assert_in_bounds(const void *begin, const void *end) {
         if (program <= (char *)begin && (char *)end <= program + program_size) {
@@ -210,6 +219,12 @@ struct dlib_t {
                         return false;
                     }
                     S = (const char *)halide_get_symbol(sym_name);
+                    for (dlib_t *i = loaded_libs; i && !S; i = i->next) {
+                        // TODO: We really should only look in
+                        // libraries with an soname that is marked
+                        // DT_NEEDED in this library.
+                        S = (const char *)mmap_dlsym(i, sym_name);
+                    }
                     if (!S) {
                         log_printf("Unresolved external symbol %s\n", sym_name);
                         return false;
@@ -457,6 +472,10 @@ void *mmap_dlopen(const void *code, size_t size) {
         return NULL;
     }
 
+    // Add this library to the list of loaded libs.
+    dlib->next = loaded_libs;
+    loaded_libs = dlib;
+
     // TODO: Should we run .ctors?
 
     return dlib;
@@ -473,6 +492,20 @@ void *mmap_dlsym(void *from, const char *name) {
 }
 
 int mmap_dlclose(void *dlib) {
+    // Remove this library from the list of loaded libs.
+    if (loaded_libs == dlib) {
+        loaded_libs = loaded_libs->next;
+    } else {
+        dlib_t *prev = loaded_libs;
+        while (prev && prev->next != dlib) {
+            prev = prev->next;
+        }
+        if (prev) {
+            dlib_t *new_next = prev->next ? prev->next->next : NULL;
+            prev->next = new_next;
+        }
+    }
+
     // TODO: Should we run .dtors?
 
     ((dlib_t*)dlib)->deinit();
