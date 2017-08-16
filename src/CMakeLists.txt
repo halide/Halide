@@ -43,6 +43,7 @@ set(RUNTIME_CPP
   float16_t
   gcd_thread_pool
   gpu_device_selection
+  hexagon_cpu_features
   hexagon_host
   ios_io
   linux_clock
@@ -318,7 +319,6 @@ set(HEADER_FILES
   InferArguments.h
   Interval.h
   InjectHostDevBufferCopies.h
-  InjectImageIntrinsics.h
   InjectOpenGLIntrinsics.h
   Inline.h
   InlineReductions.h
@@ -467,7 +467,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   InferArguments.cpp
   Interval.cpp
   InjectHostDevBufferCopies.cpp
-  InjectImageIntrinsics.cpp
   InjectOpenGLIntrinsics.cpp
   Inline.cpp
   InlineReductions.cpp

@@ -27,7 +27,7 @@ all: \
 	$(BIN)/driver-hexagon-32-qurt-hvx_128 \
 
 $(BIN)/%/filters.h:
-	mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	make -C ../../ bin/correctness_simd_op_check
 	cd $(BIN)/$* && HL_TARGET=$* LD_LIBRARY_PATH=../../../../bin ../../../../bin/correctness_simd_op_check
 	cat $(BIN)/$*/test_*.h > $(BIN)/$*/filter_headers.h
@@ -36,7 +36,7 @@ $(BIN)/%/filters.h:
 	echo '{NULL, NULL}};' >> $(BIN)/$*/filters.h
 
 $(BIN)/driver-%: driver.cpp $(BIN)/%/filters.h
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) -I ../../include -O3 -I $(BIN)/$* driver.cpp $(BIN)/$*/test_*.o $(BIN)/$*/simd_op_check_runtime.o -o $@ $(LDFLAGS-$*) $(HALIDE_SYSTEM_LDFLAGS)
 
 clean:

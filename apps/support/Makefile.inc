@@ -78,7 +78,7 @@ ifneq (, $(findstring metal,$(HL_TARGET)))
 endif
 
 $(BIN)/RunGen.o: $(HALIDE_SRC_PATH)/tools/RunGen.cpp
-	@mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	@$(CXX) -c $< $(CXXFLAGS) $(IMAGE_IO_CXX_FLAGS) -I$(BIN) -o $@
 
 # Really, .SECONDARY is what we want, but it won't accept wildcards

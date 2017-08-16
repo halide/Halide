@@ -150,7 +150,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         max_required = max_req;
                     }
                 } else if (!min_required.defined() &&
-                           i == func.dimensions() - 1) {
+                           i == func.dimensions() - 1 &&
+                           is_pure(min_req) &&
+                           is_pure(max_req)) {
                     // The footprint doesn't depend on the loop var. Just compute everything on the first loop iteration.
                     dim = func_args[i];
                     dim_idx = i;
@@ -233,11 +235,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             Expr new_min, new_max;
             if (can_slide_up) {
-                new_min = select(loop_var_expr <= loop_min, min_required, likely(prev_max_plus_one));
+                new_min = select(loop_var_expr <= loop_min, min_required, likely_if_innermost(prev_max_plus_one));
                 new_max = max_required;
             } else {
                 new_min = min_required;
-                new_max = select(loop_var_expr <= loop_min, max_required, likely(prev_min_minus_one));
+                new_max = select(loop_var_expr <= loop_min, max_required, likely_if_innermost(prev_min_minus_one));
             }
 
             Expr early_stages_min_required = new_min;

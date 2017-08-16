@@ -39,79 +39,79 @@ UPPERCASE_FILTERS = $(shell echo $(FILTERS) | tr '[:lower:]' '[:upper:]')
 DASH_D_DEFINES = $(patsubst %, -D%=1, $(UPPERCASE_FILTERS))
 
 $(BIN)/%_generator : %_generator.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -O3 -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/conv3x3a16_cpu.o: $(BIN)/conv3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_cpu target=$* accumulator_type=int16
 
 $(BIN)/%/conv3x3a16_hvx64.o: $(BIN)/conv3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx64 target=$*-hvx_64 accumulator_type=int16
 
 $(BIN)/%/conv3x3a16_hvx128.o: $(BIN)/conv3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a16_hvx128 target=$*-hvx_128 accumulator_type=int16
 
 $(BIN)/%/dilate3x3_cpu.o: $(BIN)/dilate3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f dilate3x3_cpu target=$*
 
 $(BIN)/%/dilate3x3_hvx64.o: $(BIN)/dilate3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f dilate3x3_hvx64 target=$*-hvx_64
 
 $(BIN)/%/dilate3x3_hvx128.o: $(BIN)/dilate3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f dilate3x3_hvx128 target=$*-hvx_128
 
 $(BIN)/%/median3x3_cpu.o: $(BIN)/median3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f median3x3_cpu target=$*
 
 $(BIN)/%/median3x3_hvx64.o: $(BIN)/median3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f median3x3_hvx64 target=$*-hvx_64
 
 $(BIN)/%/median3x3_hvx128.o: $(BIN)/median3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f median3x3_hvx128 target=$*-hvx_128
 
 $(BIN)/%/gaussian5x5_cpu.o: $(BIN)/gaussian5x5_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f gaussian5x5_cpu target=$*
 
 $(BIN)/%/gaussian5x5_hvx64.o: $(BIN)/gaussian5x5_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f gaussian5x5_hvx64 target=$*-hvx_64
 
 $(BIN)/%/gaussian5x5_hvx128.o: $(BIN)/gaussian5x5_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f gaussian5x5_hvx128 target=$*-hvx_128
 
 $(BIN)/%/sobel_cpu.o: $(BIN)/sobel_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f sobel_cpu target=$*
 
 $(BIN)/%/sobel_hvx64.o: $(BIN)/sobel_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f sobel_hvx64 target=$*-hvx_64
 
 $(BIN)/%/sobel_hvx128.o: $(BIN)/sobel_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f sobel_hvx128 target=$*-hvx_128
 
 $(BIN)/%/conv3x3a32_cpu.o: $(BIN)/conv3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_cpu target=$* accumulator_type=int32
 
 $(BIN)/%/conv3x3a32_hvx64.o: $(BIN)/conv3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx64 target=$*-hvx_64 accumulator_type=int32
 
 $(BIN)/%/conv3x3a32_hvx128.o: $(BIN)/conv3x3_generator
-	@-mkdir -p $(BIN)/$*
+	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f conv3x3a32_hvx128 target=$*-hvx_128 accumulator_type=int32
 
 $(BIN)/%/filters.a : $(OBJS)
