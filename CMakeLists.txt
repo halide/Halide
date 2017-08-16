@@ -139,6 +139,7 @@ if (NOT MSVC)
   endif()
 else()
   add_compile_options(/W3)
+  add_compile_options(/wd4018)  # diable "signed/unsigned mismatch"
   if (WARNINGS_AS_ERRORS)
     add_compile_options(/WX)
   endif()
