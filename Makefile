@@ -604,6 +604,9 @@ RUNTIME_CPP_COMPONENTS = \
   windows_tempfile \
   windows_threads \
   write_debug_image \
+  hexagon_dma_rt \
+  dma_device_shim \
+  dma_device_interface \
   x86_cpu_features
 
 RUNTIME_LL_COMPONENTS = \
@@ -627,6 +630,7 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
+			    $(INCLUDE_DIR)/HalideRuntimeHexagonDma.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
                             $(INCLUDE_DIR)/HalideBuffer.h
