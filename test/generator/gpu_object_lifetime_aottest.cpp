@@ -159,18 +159,20 @@ int main(int argc, char **argv) {
         {
             Buffer<int> output(80);
             gpu_object_lifetime(output);
-            Buffer<int> output2(nullptr, 80);
-            output2.device_and_host_malloc(output.raw_buffer()->device_interface);
-            gpu_object_lifetime(output2);
+            if (output.raw_buffer()->device_interface != nullptr) {
+                Buffer<int> output2(nullptr, 80);
+                output2.device_and_host_malloc(output.raw_buffer()->device_interface);
+                gpu_object_lifetime(output2);
 
-            output.copy_to_host();
-            output2.copy_to_host();
+                output.copy_to_host();
+                output2.copy_to_host();
 
-            for (int x = 0; x < output.width(); x++) {
-                 if (output(x) != output2(x)) {
-                      printf("Error! (device and host allocation test): %d != %d\n", output(x), output2(x));
-                      return -1;
-                 }
+                for (int x = 0; x < output.width(); x++) {
+                     if (output(x) != output2(x)) {
+                          printf("Error! (device and host allocation test): %d != %d\n", output(x), output2(x));
+                          return -1;
+                     }
+                }
             }
         }
 
