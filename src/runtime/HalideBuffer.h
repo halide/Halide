@@ -191,6 +191,7 @@ private:
             }
             buf.host = nullptr;
             alloc = nullptr;
+            set_host_dirty(false);
         }
         decref_dev();
     }

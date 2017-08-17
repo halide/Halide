@@ -257,5 +257,19 @@ WEAK int halide_error_specialize_fail(void *user_context, const char *message) {
     return halide_error_code_specialize_fail;
 }
 
+WEAK int halide_error_no_device_interface(void *user_context) {
+    error(user_context) << "Buffer has a non-zero device but no device interface.\n";
+    return halide_error_code_no_device_interface;
+}
+
+WEAK int halide_error_device_interface_no_device(void *user_context) {
+    error(user_context) << "Buffer has a non-null devie_interface but device is 0.\n";
+    return halide_error_code_device_interface_no_device;
+}
+
+WEAK int halide_error_host_and_device_dirty(void *user_context) {
+    error(user_context) << "Buffer has both host and device dirty bits set.\n";
+    return halide_error_code_host_and_device_dirty;
+}
 
 }  // extern "C"
