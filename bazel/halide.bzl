@@ -1,4 +1,4 @@
-load("@halide//:halide_config.bzl", "halide_config_linkopts")
+load("@halide//:halide_config.bzl", "halide_system_libs")
 
 def halide_language_copts():
   _common_opts = [
@@ -56,7 +56,7 @@ def halide_language_linkopts():
           _osx_opts,
       "//conditions:default":
           _linux_opts,
-  }) + halide_config_linkopts().split(" ")
+  }) + halide_system_libs().split(" ")
 
 
 def halide_runtime_linkopts():
