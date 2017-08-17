@@ -8,4 +8,4 @@ halide_add_aot_library(local_laplacian
 # Final executable
 add_executable(ll_process process.cpp)
 halide_add_aot_library_dependency(ll_process local_laplacian)
-use_image_io(ll_process)
+halide_use_image_io(ll_process)
