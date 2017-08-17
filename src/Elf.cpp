@@ -559,7 +559,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     // Define a helper function to write a section to the shared
     // object, making a section header for it.
-    auto write_section = [&](const Section &s, uint64_t entsize = 0) {
+    auto write_section = [&](const Section &s, uint64_t entsize) {
         uint64_t alignment = s.get_alignment();
 
         append_padding(output, alignment);
@@ -695,10 +695,10 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
 
     // We need to perform the relocations. To do that, we need to position the sections
     // where they will go in the final shared object.
-    write_section(plt);
+    write_section(plt, 0);
     for (const Section &s : obj.sections()) {
         if (s.is_alloc() && !s.is_writable()) {
-            write_section(s);
+            write_section(s, 0);
         }
     }
     append_padding(output, 4096);
@@ -710,12 +710,12 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     data_phdr.p_align = 4096;
     for (const Section &s : obj.sections()) {
         if (s.is_alloc() && s.is_writable()) {
-            write_section(s);
+            write_section(s, 0);
         }
     }
 
     // The got will be written again later, after we add entries to it.
-    write_section(got);
+    write_section(got, 0);
 
     /// Now that we've written the sections that define symbols, we
     // can generate the symbol table.
@@ -875,10 +875,10 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     strings.get(strtab.get_name());
     strtab.set_flag(Section::SHF_ALLOC);
     strtab.set_contents(strings.table);
-    uint16_t strtab_idx = write_section(strtab);
+    uint16_t strtab_idx = write_section(strtab, 0);
 
     std::vector<Dyn<T>> dyn;
-    auto make_dyn = [](int32_t tag, addr_t val = 0) {
+    auto make_dyn = [](int32_t tag, addr_t val) {
         Dyn<T> d;
         d.d_tag = tag;
         d.d_val = val;
@@ -891,7 +891,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     if (!soname.empty()) {
         dyn.push_back(make_dyn(DT_SONAME, strings.get(soname)));
     }
-    dyn.push_back(make_dyn(DT_SYMBOLIC));
+    dyn.push_back(make_dyn(DT_SYMBOLIC, 0));
 
     // This is really required...
     dyn.push_back(make_dyn(DT_HASH, get_section_offset(hash)));

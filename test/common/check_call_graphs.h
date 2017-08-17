@@ -82,7 +82,7 @@ inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
     return 0;
 }
 
-inline int check_image(const Halide::Buffer<int> &im, const std::function<int(int,int)> &func) {
+inline int check_image2(const Halide::Buffer<int> &im, const std::function<int(int,int)> &func) {
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = func(x, y);
@@ -96,7 +96,7 @@ inline int check_image(const Halide::Buffer<int> &im, const std::function<int(in
     return 0;
 }
 
-inline int check_image(const Halide::Buffer<int> &im, const std::function<int(int,int,int)> &func) {
+inline int check_image3(const Halide::Buffer<int> &im, const std::function<int(int,int,int)> &func) {
     for (int z = 0; z < im.channels(); z++) {
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
@@ -110,6 +110,20 @@ inline int check_image(const Halide::Buffer<int> &im, const std::function<int(in
         }
     }
     return 0;
+}
+
+template <typename F>
+inline auto // SFINAE: returns int if F has arity of 2
+check_image(const Halide::Buffer<int> &im, F func) -> decltype(std::declval<F>()(0, 0), int())
+{
+    return check_image2(im, func);
+}
+
+template <typename F>
+inline auto // SFINAE: returns int if F has arity of 3
+check_image(const Halide::Buffer<int> &im, F func) -> decltype(std::declval<F>()(0, 0, 0), int())
+{
+    return check_image3(im, func);
 }
 
 #endif
