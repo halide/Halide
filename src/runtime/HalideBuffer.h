@@ -474,7 +474,6 @@ public:
     }
 
     Buffer() {
-        memset(&buf, 0, sizeof(halide_buffer_t));
         buf.type = static_halide_type();
         make_shape_storage();
     }
@@ -1007,6 +1006,8 @@ public:
     */
     template<typename T2, int D2>
     void copy_from(const Buffer<T2, D2> &other) {
+        copy_to_host();
+
         Buffer<const T, D> src(other);
         Buffer<T, D> dst(*this);
 
@@ -1583,6 +1584,7 @@ public:
     operator()(const int *pos) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        assert(!device_dirty());
         return *((const not_void_T *)(address_of(pos)));
     }
 
@@ -1592,6 +1594,7 @@ public:
     not_void_T &operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        copy_to_host();
         set_host_dirty();
         return *((not_void_T *)(address_of(first, rest...)));
     }
@@ -1601,6 +1604,7 @@ public:
     operator()() {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        copy_to_host();
         set_host_dirty();
         return *((not_void_T *)(data()));
     }
@@ -1610,12 +1614,14 @@ public:
     operator()(const int *pos) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        copy_to_host();
         set_host_dirty();
         return *((not_void_T *)(address_of(pos)));
     }
     // @}
 
     void fill(not_void_T val) {
+        copy_to_host();
         for_each_value([=](T &v) {v = val;});
         set_host_dirty();
     }
