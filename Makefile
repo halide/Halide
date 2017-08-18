@@ -237,7 +237,7 @@ endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 
 # Workaround brew Cellar path for libpng-config output.
-LIBJPEG_LINKER_PATH ?= $(shell echo $(LIBPNG_LIBS_DEFAULT) | sed -e'/-L.*[/]Cellar[/]libpng/!d;s=\(.*\)/Cellar/libpng/.*=\1/lib=')
+LIBJPEG_LINKER_PATH ?= $(shell echo $(LIBPNG_LIBS_DEFAULT) | sed -e'/-L.*[/][Cc]ellar[/]libpng/!d;s=\(.*\)/[Cc]ellar/libpng/.*=\1/lib=')
 LIBJPEG_LIBS ?= $(LIBJPEG_LINKER_PATH) -ljpeg
 
 # There's no libjpeg-config, unfortunately. We should look for
@@ -245,7 +245,7 @@ LIBJPEG_LIBS ?= $(LIBJPEG_LINKER_PATH) -ljpeg
 # Mac OS brew installs where libpng-config returns paths
 # into the PNG cellar.
 LIBPNG_INCLUDE_DIRS = $(filter -I%,$(LIBPNG_CXX_FLAGS))
-LIBJPEG_CXX_FLAGS ?= $(shell echo $(LIBPNG_INCLUDE_DIRS) | sed -e'/Cellar[/]libpng/!s=\(.*\)=\1/..=;s=\(.*\)/Cellar/libpng/.*=\1/include=')
+LIBJPEG_CXX_FLAGS ?= $(shell echo $(LIBPNG_INCLUDE_DIRS) | sed -e'/[Cc]ellar[/]libpng/!s=\(.*\)=\1/..=;s=\(.*\)/[Cc]ellar/libpng/.*=\1/include=')
 
 IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
