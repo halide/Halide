@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 
             for (int x = 0; x < output.width(); x++) {
                 if (output(x) != x) {
-                    printf("Error! %d != %d\n", output(x), x);
+                    printf("Error! (explicit copy back %d): %d != %d\n", wrap_memory, output(x), x);
                     return -1;
                 }
             }
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
             for (int x = 0; x < output.width(); x++) {
                 if (output(x) != x) {
-                    printf("Error! %d != %d\n", output(x), x);
+                    printf("Error! (explicit copy back, no device free %d): %d != %d\n", wrap_memory, output(x), x);
                     return -1;
                 }
             }
@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
 
                 for (int x = 0; x < output.width(); x++) {
                   if (output(x) != wrap_test(x)) {
-                        printf("Error! %d != %d\n", output(x), wrap_test(x));
+                        printf("Error! (wrap native test %d): %d != %d\n", i, output(x), wrap_test(x));
                         return -1;
                     }
                 }
@@ -153,6 +153,27 @@ int main(int argc, char **argv) {
             gpu_object_lifetime(&raw_buf);
 
             Buffer<int> copy(raw_buf, Halide::Runtime::BufferDeviceOwnership::Allocated);
+        }
+
+        // Test combined device and host allocation support.
+        {
+            Buffer<int> output(80);
+            gpu_object_lifetime(output);
+            if (output.raw_buffer()->device_interface != nullptr) {
+                Buffer<int> output2(nullptr, 80);
+                output2.device_and_host_malloc(output.raw_buffer()->device_interface);
+                gpu_object_lifetime(output2);
+
+                output.copy_to_host();
+                output2.copy_to_host();
+
+                for (int x = 0; x < output.width(); x++) {
+                     if (output(x) != output2(x)) {
+                          printf("Error! (device and host allocation test): %d != %d\n", output(x), output2(x));
+                          return -1;
+                     }
+                }
+            }
         }
 
 #if defined(TEST_CUDA)
