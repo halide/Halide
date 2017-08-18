@@ -1,9 +1,9 @@
 #ifndef _DMA_DEVICE_SHIM_C_
 #define _DMA_DEVICE_SHIM_C_
 
-#include "mini_dma.h"
+#include "hexagon_mini_dma.h"
 #include "mini_qurt.h"
-#include "dma_device_shim.h"
+#include "hexagon_dma_device_shim.h"
 
 using namespace Halide::Runtime::Internal::Qurt;
 

@@ -19,6 +19,12 @@ template<typename T> struct halide_handle_traits;
 extern "C" {
 #endif
 
+#ifdef __LP64__                           /* DMA Specific Type For Address */
+typedef unsigned long long addr_t;
+#else
+typedef unsigned long addr_t;
+#endif
+
 // Note that you should not use "inline" along with HALIDE_ALWAYS_INLINE;
 // it is not necessary, and may produce warnings for some build configurations.
 #ifdef _MSC_VER

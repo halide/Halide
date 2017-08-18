@@ -1,7 +1,7 @@
 #ifndef _HALIDE_HEXAGON_DMA_CONTEXT_H_
 #define _HALIDE_HEXAGON_DMA_CONTEXT_H_
 
-#include "dma_device_shim.h"
+#include "hexagon_dma_device_shim.h"
 
 using namespace Halide::Runtime::Internal::Qurt;
 

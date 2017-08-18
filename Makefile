@@ -605,8 +605,8 @@ RUNTIME_CPP_COMPONENTS = \
   windows_threads \
   write_debug_image \
   hexagon_dma_rt \
-  dma_device_shim \
-  dma_device_interface \
+  hexagon_dma_device_shim \
+  hexagon_dma_device_interface \
   x86_cpu_features
 
 RUNTIME_LL_COMPONENTS = \
