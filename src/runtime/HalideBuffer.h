@@ -80,6 +80,7 @@ enum struct BufferDeviceOwnership : int {
     Allocated,     ///> halide_device_free will be called when device ref count goes to zero
     WrappedNative, ///> halide_device_detach_native will be called when device ref count goes to zero
     Unmanaged,     ///> No free routine will be called when device ref count goes to zero
+    AllocatedDeviceAndHost, ///> Call device_and_host_free when DeveRefCount goes to zero.
 };
 
 /** A similar struct for managing device allocations. */
@@ -210,6 +211,8 @@ private:
                        "before the device allocation is freed.");
                 if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
                     buf.device_interface->detach_native(nullptr, &buf);
+                } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
+                    buf.device_interface->device_and_host_free(nullptr, &buf);
                 } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
                     buf.device_interface->device_free(nullptr, &buf);
                 }
@@ -1351,6 +1354,33 @@ public:
         return ret;
     }
 
+    int device_and_host_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
+        return device_interface->device_and_host_malloc(ctx, &buf, device_interface);
+    }
+
+    int device_and_host_free(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
+        if (dev_ref_count) {
+            assert(dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost &&
+                   "Can't call device_and_host_free on a device handle not allocated with device_and_host_malloc. "
+                   "Free the source allocation or call device_detach_native instead.");
+            // Multiple people may be holding onto this dev field
+            assert(dev_ref_count->count == 1 &&
+                   "Multiple Halide::Runtime::Buffer objects share this device "
+                   "allocation. Freeing it would create dangling references. "
+                   "Don't call device_and_host_free on Halide buffers that you have copied or "
+                   "passed by value.");
+        }
+        int ret = 0;
+        if (buf.device_interface) {
+            ret = buf.device_interface->device_and_host_free(ctx, &buf);
+        }
+        if (dev_ref_count) {
+            delete dev_ref_count;
+            dev_ref_count = nullptr;
+        }
+        return ret;
+    }
+
     int device_sync(void *ctx = nullptr) {
         if (buf.device_interface) {
             return buf.device_interface->device_sync(ctx, &buf);
@@ -1361,6 +1391,14 @@ public:
 
     bool has_device_allocation() const {
         return buf.device != 0;
+    }
+
+    /** Return the method by which the device field is managed. */
+    BufferDeviceOwnership device_ownership() const {
+        if (dev_ref_count == nullptr) {
+            return BufferDeviceOwnership::Allocated;
+        }
+        return dev_ref_count->ownership;
     }
     // @}
 
