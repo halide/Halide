@@ -275,6 +275,12 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // 0111 0011 -11sssss PP1iiiii iiiddddd
             mask = 0x00001fe0;
 
+        } else if ((inst >> 24) == 126) {
+            // 0111 1110 0uu0 iiii PP0i iiii iiid dddd
+            // 0111 1110 0uu0 iiii PP1i iiii iiid dddd
+            // 0111 1110 0uu1 iiii PP0i iiii iiid dddd
+            // 0111 1110 0uu1 iiii PP1i iiii iiid dddd
+            mask = 0x000f1fe0;
         } else {
             internal_error << "Unhandled instruction type!\n";
         }
@@ -847,6 +853,9 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
                         Module &containing_module) {
     // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
+    if (host_target.arch == Target::ARM) {
+        target.os = Target::QuRT;
+    }
 
     // These feature flags are propagated from the host target to the
     // device module.
@@ -965,6 +974,13 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());
     memcpy(result_buf.data(), shared_object.data(), shared_object.size());
+    debug(4) << "Finished with "  << soname << ". Writing to disk\n";
+
+    std::ofstream pdb_output("/tmp/" + soname);
+    pdb_output.write(shared_object.data(), shared_object.size());
+    pdb_output.flush();
+    internal_assert(pdb_output.good());
+    pdb_output.close();
 
     return result_buf;
 }
