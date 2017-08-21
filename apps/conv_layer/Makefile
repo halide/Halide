@@ -10,11 +10,11 @@ $(BIN)/conv_layer_exec: conv_layer_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/conv_layer.a: $(BIN)/conv_layer_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) -f conv_layer target=$(HL_TARGET)-debug auto_schedule=false
+	$^ -o $(BIN) -f conv_layer target=$(HL_TARGET) auto_schedule=false
 
 $(BIN)/conv_layer_auto_schedule.a: $(BIN)/conv_layer_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) -f conv_layer_auto_schedule target=$(HL_TARGET)-no_runtime-debug auto_schedule=true
+	$^ -o $(BIN) -f conv_layer_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/process: process.cpp $(BIN)/conv_layer.a $(BIN)/conv_layer_auto_schedule.a
 	@-mkdir -p $(BIN)
