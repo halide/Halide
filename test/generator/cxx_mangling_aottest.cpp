@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "cxx_mangling.h"
-#ifdef WITH_PTX
+#ifdef TEST_CUDA
 #include "cxx_mangling_gpu.h"
 #endif
 
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     std::string *string_ptr = nullptr;
     const std::string *const_string_ptr = nullptr;
 
-#ifdef WITH_PTX
+#ifdef TEST_CUDA
     // Don't bother calling this (we haven't linked in the CUDA support it needs),
     // just force a reference to ensure it is linked in.
     int (*f)(halide_buffer_t *,
@@ -64,6 +64,8 @@ int main(int argc, char **argv) {
              halide_buffer_t *) = HalideTest::cxx_mangling_gpu;
 
     printf("HalideTest::cxx_mangling is at: %p\n", (void*) f);
+#else
+    printf("TEST_CUDA is disabled, skipping cxx_mangling_gpu test.\n");
 #endif
 
     my_namespace::my_class mc;
