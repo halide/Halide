@@ -14,4 +14,4 @@ halide_add_aot_library(local_laplacian_auto_schedule
 add_executable(ll_process process.cpp)
 halide_add_aot_library_dependency(ll_process local_laplacian)
 halide_add_aot_library_dependency(ll_process local_laplacian_auto_schedule)
-use_image_io(ll_process)
+halide_use_image_io(ll_process)
