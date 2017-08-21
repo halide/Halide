@@ -284,10 +284,10 @@ if (WITH_TEST_GENERATORS)
   if(TARGET_PTX)
     halide_define_aot_test(gpu_object_lifetime
                            GENERATOR_HALIDE_TARGET host-cuda-debug)
-  elif(TARGET_OPENCL)
+  elseif(TARGET_OPENCL)
     halide_define_aot_test(gpu_object_lifetime
                            GENERATOR_HALIDE_TARGET host-opencl-debug)
-  elif(TARGET_METAL)
+  elseif(TARGET_METAL)
     halide_define_aot_test(gpu_object_lifetime
                            GENERATOR_HALIDE_TARGET host-metal-debug)
   else()
