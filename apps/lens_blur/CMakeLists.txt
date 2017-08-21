@@ -14,5 +14,5 @@ halide_add_aot_library(lens_blur_auto_schedule
 add_executable(ll_process process.cpp)
 halide_add_aot_library_dependency(ll_process lens_blur)
 halide_add_aot_library_dependency(ll_process lens_blur_auto_schedule)
-use_image_io(ll_process)
+halide_use_image_io(ll_process)
 target_compile_options(ll_process PRIVATE "-std=c++11")

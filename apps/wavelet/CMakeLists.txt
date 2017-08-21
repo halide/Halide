@@ -14,15 +14,6 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-function(use_image_io TARGET)
-  target_compile_definitions(${TARGET} PRIVATE ${PNG_DEFINITIONS})
-  target_include_directories(${TARGET} PRIVATE ${PNG_INCLUDE_DIRS})
-  target_link_libraries(${TARGET} PRIVATE ${PNG_LIBRARIES})
-  target_compile_definitions(${TARGET} PRIVATE ${JPEG_DEFINITIONS})
-  target_include_directories(${TARGET} PRIVATE ${JPEG_INCLUDE_DIRS})
-  target_link_libraries(${TARGET} PRIVATE ${JPEG_LIBRARIES})
-endfunction()
-
 include(../../HalideGenerator.cmake)
 
 # HalideGenerator.cmake makes this assumptions
@@ -41,12 +32,10 @@ else()
   target_compile_options(wavelet PRIVATE "-fno-rtti")
 endif()
 
-find_package(PNG)
-find_package(JPEG)
-use_image_io(wavelet)
+halide_use_image_io(wavelet)
 
 add_library(HalideToolsRunGen "${HALIDE_SRC_DIR}/tools/RunGen.cpp")
-use_image_io(HalideToolsRunGen)
+halide_use_image_io(HalideToolsRunGen)
 if (MSVC)
   target_compile_options("${GEN_EXECUTABLE}" PRIVATE "/GR-")
 else()

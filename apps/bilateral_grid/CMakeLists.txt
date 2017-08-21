@@ -14,4 +14,4 @@ halide_add_aot_library(bilateral_grid_auto_schedule
 add_executable(filter filter.cpp)
 halide_add_aot_library_dependency(filter bilateral_grid)
 halide_add_aot_library_dependency(filter bilateral_grid_auto_schedule)
-use_image_io(filter)
+halide_use_image_io(filter)
