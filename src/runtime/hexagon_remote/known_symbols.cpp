@@ -75,6 +75,7 @@ extern int floor;
 extern int ceilf;
 extern int ceil;
 extern int write;
+    //extern void log_printf(const char *fmt, ...);
 
 }  // extern "C"
 
@@ -94,6 +95,7 @@ void *get_known_symbol(const char *name) {
         {"memcpy", (char *)(&memcpy)},
         {"memmove", (char *)(&memmove)},
         {"memset", (char *)(&memset)},
+        {"memalign", (char*)(*memalign)},
         {"strcmp", (char *)(&strcmp)},
         {"strchr", (char *)(char *(*)(char *, int))(&strchr)},
         {"strlen", (char *)(int (*)(const char *))(&strlen)},
@@ -102,14 +104,14 @@ void *get_known_symbol(const char *name) {
         {"strncpy", (char *)(&strncpy)},
         {"write", (char *)(&write)},
 
-        {"halide_do_par_for", (char *)(&halide_do_par_for)},
-        {"halide_do_task", (char *)(&halide_do_task)},
+        // {"halide_do_par_for", (char *)(&halide_do_par_for)},
+        // {"halide_do_task", (char *)(&halide_do_task)},
         {"halide_error", (char *)(&halide_error)},
         {"halide_free", (char *)(&halide_free)},
         {"halide_malloc", (char *)(&halide_malloc)},
-        {"halide_mutex_lock", (char *)(&halide_mutex_lock)},
-        {"halide_mutex_unlock", (char *)(&halide_mutex_unlock)},
-        {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
+        // {"halide_mutex_lock", (char *)(&halide_mutex_lock)},
+        // {"halide_mutex_unlock", (char *)(&halide_mutex_unlock)},
+        // {"halide_mutex_destroy", (char *)(&halide_mutex_destroy)},
         {"halide_print", (char *)(&halide_print)},
         {"halide_profiler_get_state", (char *)(&halide_profiler_get_state)},
         {"qurt_hvx_lock", (char *)(&qurt_hvx_lock)},
@@ -168,6 +170,7 @@ void *get_known_symbol(const char *name) {
         {"floor", (char *)(&floor)},
         {"ceilf", (char *)(&ceilf)},
         {"ceil", (char *)(&ceil)},
+        //        {"log_printf", (char *)(&log_printf)},
         {NULL, NULL} // Null terminator.
     };
 
