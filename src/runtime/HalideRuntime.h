@@ -850,6 +850,10 @@ enum halide_error_code_t {
     /** Buffer has both host and device dirty bits set, which violates
      * a Halide invariant. */
     halide_error_code_host_and_device_dirty = -37,
+
+    /** The halide_buffer_t * passed to a halide runtime routine is
+     * nullptr and this is not allowed. */
+    halide_error_code_buffer_is_null = -38,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -925,6 +929,7 @@ extern int halide_error_specialize_fail(void *user_context, const char *message)
 extern int halide_error_no_device_interface(void *user_context);
 extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
+extern int halide_error_buffer_is_null(void *user_context, const char *routine);
 
 // @}
 
@@ -1178,6 +1183,15 @@ typedef struct halide_buffer_t {
         return host + index * type.bytes();
     }
 
+    /** Attempt to call device_sync for the buffer. If the buffer 
+     * has no device_interface (or no device_sync), this is a quiet no-op. 
+     * Calling this explicitly should rarely be necessary, except for profiling. */
+    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = NULL) {
+        if (device_interface && device_interface->device_sync) {
+            return device_interface->device_sync(ctx, this);
+        }
+        return 0;
+    }
 #endif
 } halide_buffer_t;
 
