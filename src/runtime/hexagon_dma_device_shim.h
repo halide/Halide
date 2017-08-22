@@ -14,11 +14,11 @@ using namespace Halide::Runtime::Internal::Qurt;
 extern "C" {
 #endif
 
-inline static int CEILING(int num, int div){
+__inline static int CEILING(int num, int div){
 
 	return ((num + div -1)/(div));
 }
-inline static int ALIGN(int x,int a){
+__inline static int ALIGN(int x,int a){
 	return (CEILING(x, a) * a);
 }
 
