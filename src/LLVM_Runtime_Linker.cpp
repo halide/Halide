@@ -690,11 +690,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_tempfile(c, bits_64, debug));
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::QuRT) {
-                modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                // modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
+                // modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                // modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                // modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
+                // modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
@@ -745,7 +745,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
-            if (t.arch != Target::MIPS && t.os != Target::NoOS) {
+            if (t.arch != Target::MIPS && t.os != Target::NoOS &&
+                t.os != Target::QuRT) {
                 // MIPS doesn't support the atomics the profiler requires.
                 modules.push_back(get_initmod_profiler(c, bits_64, debug));
             }
