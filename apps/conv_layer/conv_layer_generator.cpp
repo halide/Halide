@@ -55,7 +55,10 @@ public:
             Pipeline p(f_ReLU);
             p.auto_schedule(target);
 
-        } else if (get_target().has_gpu_feature()) {
+        } /*else if (get_target().has_gpu_feature()) {
+            // TODO: Turn off the manual GPU schedule for now.
+            // For some reasons, it sometimes triggers the (err == CL_SUCCESS)
+            // assertion on mingw.
             Var ni, no, xi, xo, yi, yo, zi, zo;
             f_ReLU.compute_root()
                 .split(x, xo, xi, 4)
@@ -71,7 +74,7 @@ public:
                 .unroll(r.x, 3)
                 .unroll(r.y, 3)
                 .gpu_threads(x, y, z);
-        } else {
+        }*/ else {
             // Blocking spatially with vectorization
             Var z_t("z_t"), y_t("y_t"), par("par");
             int vec_len = 8;
