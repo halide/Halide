@@ -253,23 +253,30 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     return job.exit_status;
 }
 
-WEAK int halide_set_num_threads(int n) {
-    if (n < 0) {
-        halide_error(NULL, "halide_set_num_threads: must be >= 0.");
-    }
-    // Don't make this an atomic swap - we don't want to be changing
-    // the desired number of threads while another thread is in the
-    // middle of a sequence of non-atomic operations.
-    halide_mutex_lock(&work_queue.mutex);
-    if (n == 0) {
-        n = default_desired_num_threads();
-    }
-    int old = work_queue.desired_num_threads;
-    work_queue.desired_num_threads = clamp_num_threads(n);
-    halide_mutex_unlock(&work_queue.mutex);
-    return old;
-}
+/* WEAK int halide_set_num_threads(int n) { */
+/*     if (n < 0) { */
+/*         halide_error(NULL, "halide_set_num_threads: must be >= 0."); */
+/*     } */
+/*     // Don't make this an atomic swap - we don't want to be changing */
+/*     // the desired number of threads while another thread is in the */
+/*     // middle of a sequence of non-atomic operations. */
+/*     halide_mutex_lock(&work_queue.mutex); */
+/*     if (n == 0) { */
+/*         n = default_desired_num_threads(); */
+/*     } */
+/*     int old = work_queue.desired_num_threads; */
+/*     work_queue.desired_num_threads = clamp_num_threads(n); */
+/*     halide_mutex_unlock(&work_queue.mutex); */
+/*     return old; */
+/* } */
+    WEAK int halide_set_num_threads(int n) {
+        halide_mutex_lock(&work_queue.mutex);
+        halide_mutex_unlock(&work_queue.mutex);
+        int  old = work_queue.desired_num_threads;
+        work_queue.desired_num_threads = 4;
 
+        return old;
+    }
 WEAK void halide_shutdown_thread_pool() {
     if (!work_queue.initialized) return;
 
