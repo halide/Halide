@@ -170,6 +170,6 @@ private:
 
 };
 
-Halide::RegisterGenerator<LocalLaplacian> register_me{"local_laplacian"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(LocalLaplacian, local_laplacian)

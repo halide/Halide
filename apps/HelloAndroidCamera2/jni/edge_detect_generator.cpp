@@ -46,6 +46,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<EdgeDetect> register_edge_detect{ "edge_detect" };
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(EdgeDetect, edge_detect)

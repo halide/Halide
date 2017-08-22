@@ -138,6 +138,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<NonLocalMeans> register_me{"nl_means"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(NonLocalMeans, nl_means)

@@ -23,6 +23,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<Pipeline> register_me{"pipeline"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Pipeline, pipeline)

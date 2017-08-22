@@ -181,11 +181,19 @@
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
  *
  * \code
- *      HALIDE_REGISTER_GENERATOR(ExampleGen, "jit_example")
+ *      HALIDE_REGISTER_GENERATOR(ExampleGen, jit_example)
  * \endcode
  *
  * The registered name of the Generator is provided must match the same rules as
  * Input names, above.
+ *
+ * Note that the class name of the generated Stub class will match the registered
+ * name by default; if you want to vary it (typically, to include namespaces),
+ * you can add it as an optional third argument:
+ *
+ * \code
+ *      HALIDE_REGISTER_GENERATOR(ExampleGen, jit_example, SomeNamespace::JitExampleStub)
+ * \endcode
  *
  * Note that a Generator is always executed with a specific Target assigned to it,
  * that you can access via the get_target() method. (You should *not* use the
@@ -2497,7 +2505,7 @@ private:
     mutable std::shared_ptr<ExternsMap> externs_map;
 
     bool inputs_set{false};
-    std::string generator_name;
+    std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
 
     // Return our ParamInfo (lazy-initing as needed).
@@ -2521,10 +2529,7 @@ private:
     EXPORT Func get_output(const std::string &n);
     EXPORT std::vector<Func> get_output_vector(const std::string &n);
 
-    void set_generator_name(const std::string &n) {
-        internal_assert(generator_name.empty());
-        generator_name = n;
-    }
+    EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     EXPORT void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -2684,8 +2689,8 @@ using GeneratorCreateFunc = std::function<std::unique_ptr<Internal::GeneratorBas
 
 class SimpleGeneratorFactory : public GeneratorFactory {
 public:
-    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &generator_name)
-        : create_func(create_func), generator_name(generator_name) {
+    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &registered_name, const std::string &stub_name)
+        : create_func(create_func), generator_registered_name(registered_name), generator_stub_name(stub_name) {
         internal_assert(create_func != nullptr);
     }
 
@@ -2693,13 +2698,13 @@ public:
                                                     const std::map<std::string, std::string> &params) const override {
         auto g = create_func(context);
         internal_assert(g.get() != nullptr);
-        g->set_generator_name(generator_name);
+        g->set_generator_names(generator_registered_name, generator_stub_name);
         g->set_generator_and_schedule_param_values(params);
         return g;
     }
 private:
     const GeneratorCreateFunc create_func;
-    const std::string generator_name;
+    const std::string generator_registered_name, generator_stub_name;
 };
 
 class GeneratorRegistry {
@@ -2858,16 +2863,21 @@ private:
     void operator=(Generator&& that) = delete;
 };
 
+namespace Internal {
+
 template <class GeneratorClass>
 class RegisterGenerator {
 public:
-    RegisterGenerator(const char* generator_name) {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, generator_name));
-        Internal::GeneratorRegistry::register_factory(generator_name, std::move(f));
+    RegisterGenerator(const char* registered_name) {
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, registered_name, registered_name));
+        Internal::GeneratorRegistry::register_factory(registered_name, std::move(f));
+    }
+
+    RegisterGenerator(const char* registered_name, const char* stub_name) {
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, registered_name, stub_name));
+        Internal::GeneratorRegistry::register_factory(registered_name, std::move(f));
     }
 };
-
-namespace Internal {
 
 class GeneratorStub : public NamesInterface {
 public:
@@ -3009,8 +3019,31 @@ private:
 
 }  // namespace Halide
 
-#define HALIDE_REGISTER_GENERATOR(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
-    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); }
+// Define this namespace at global scope so that anonymous namespaces won't
+// defeat our static_assert check; define a dummy type inside so we can
+// check for type aliasing injected by anonymous namespace usage
+namespace halide_register_generator { 
+    struct halide_global_ns;
+};
+
+#define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
+    namespace halide_register_generator { \
+        struct halide_global_ns; \
+        static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator<GEN_CLASS_NAME>(#GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); \
+    } \
+    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value, \
+                 "HALIDE_REGISTER_GENERATOR must be used at global scope");
+
+#define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
+    _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, GEN_REGISTRY_NAME)
+
+#define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
+    _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)
+
+#define _HALIDE_REGISTER_GENERATOR_CHOOSER(_1, _2, _3, NAME, ...) NAME
+
+#define HALIDE_REGISTER_GENERATOR(...) \
+    _HALIDE_REGISTER_GENERATOR_CHOOSER(__VA_ARGS__, _HALIDE_REGISTER_GENERATOR3, _HALIDE_REGISTER_GENERATOR2)(__VA_ARGS__)          
 
 
 #endif  // HALIDE_GENERATOR_H_

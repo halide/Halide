@@ -13,6 +13,7 @@ public:
     }
 };
 
-Halide::RegisterGenerator<ImageFromArray> register_my_gen{"image_from_array"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(ImageFromArray, image_from_array)
+

@@ -66,4 +66,4 @@ private:
     Func bounded_input{"bounded_input"};
 };
 
-HALIDE_REGISTER_GENERATOR(Median3x3, "median3x3");
+HALIDE_REGISTER_GENERATOR(Median3x3, median3x3)
