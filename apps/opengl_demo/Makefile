@@ -16,6 +16,7 @@
 HALIDE_TOOLS_DIR = ../../tools
 HALIDE_LIB_PATH  = -L ../../bin
 HALIDE_INC_PATH  = -I ../../include
+HL_TARGET ?= host
 
 # Platform-specific settings.
 #
@@ -82,10 +83,10 @@ $(BIN)/main.o: \
 # depends on the halide filter source in sample_filter.cpp
 #
 $(BIN)/sample_filter_cpu.o $(BIN)/sample_filter_cpu.h: $(BIN)/generate_sample_filter
-	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_cpu target=$(HL_TARGET)
+	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -g sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_cpu target=$(HL_TARGET)
 
 $(BIN)/sample_filter_opengl.o $(BIN)/sample_filter_opengl.h: $(BIN)/generate_sample_filter
-	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_opengl target=host-opengl-debug
+	LD_LIBRARY_PATH=../../bin $(BIN)/generate_sample_filter -g sample_filter -e o,h,stmt -o $(BIN) -f sample_filter_opengl target=host-opengl-debug
 
 $(BIN)/generate_sample_filter: sample_filter.cpp
 	@mkdir -p $(@D)

@@ -8,7 +8,7 @@ $(BIN)/bilateral_grid_exec: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 	@mkdir -p $(@D)
-	$^ -o $(BIN)  target=$(HL_TARGET)
+	$^ -g bilateral_grid -o $(BIN)  target=$(HL_TARGET)
 
 $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 	@mkdir -p $(@D)
