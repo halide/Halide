@@ -34,14 +34,14 @@ $(BIN)/%/pipeline_cpu.o: $(BIN)/pipeline
 
 $(BIN)/%/pipeline_hvx64.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
+	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64-debug
 
 $(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
 	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
 
-$(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
-	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
+$(BIN)/process-%: process.cpp   $(BIN)/%/pipeline_hvx64.o  #$(BIN)/%/pipeline_hvx128.o $(BIN)/%/pipeline_cpu.o
+	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp  $(BIN)/$*/pipeline_hvx64.o  -o $(BIN)/process-$* $(LDFLAGS-$*) #$(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx128.o
 
 DEVICE_PATH ?= /data/local/tmp/HelloHexagon
 DEVICE_ENV = "LD_LIBRARY_PATH=$(DEVICE_PATH):/vendor/lib64 ADSP_LIBRARY_PATH=\"$(DEVICE_PATH);/dsp\""
