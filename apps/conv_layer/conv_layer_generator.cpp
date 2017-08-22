@@ -99,6 +99,7 @@ public:
     }
 };
 
-Halide::RegisterGenerator<ConvolutionLayer> register_me{"conv_layer"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(ConvolutionLayer, conv_layer)
+

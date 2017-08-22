@@ -212,8 +212,7 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(multitarget)
   add_test_generator(nested_externs)
   add_test_generator(pyramid)
-  add_test_generator(stubtest WITH_STUB
-                     GENERATOR_NAME StubNS1::StubNS2::StubTest)
+  add_test_generator(stubtest WITH_STUB)
   # the stubuser generator needs the stub from stubtest
   add_test_generator(stubuser
                      GENERATOR_NAME stubuser
@@ -320,7 +319,6 @@ if (WITH_TEST_GENERATORS)
       vectorize=true
   )
   halide_define_aot_test(stubtest
-                         GENERATOR_NAME StubNS1::StubNS2::StubTest
                          GENERATOR_ARGS "${STUBTEST_GENERATOR_ARGS}")
 
   # Tests that require additional dependencies, args, etc

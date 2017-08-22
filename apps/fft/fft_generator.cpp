@@ -164,6 +164,6 @@ private:
     ComplexFunc complex_result;
 };
 
-Halide::RegisterGenerator<FFTGenerator> register_fft{"fft"};
+}  // namespace
 
-}
+HALIDE_REGISTER_GENERATOR(FFTGenerator, fft)
