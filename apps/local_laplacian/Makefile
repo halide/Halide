@@ -10,9 +10,13 @@ $(BIN)/local_laplacian_exec: local_laplacian_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/local_laplacian.a: $(BIN)/local_laplacian_exec
 	@mkdir -p $(@D)
-	$^ -o $(BIN)  target=$(HL_TARGET)
+	$^ -o $(BIN) -f local_laplacian target=$(HL_TARGET) auto_schedule=false
 
-$(BIN)/process: process.cpp $(BIN)/local_laplacian.a
+$(BIN)/local_laplacian_auto_schedule.a: $(BIN)/local_laplacian_exec
+	@mkdir -p $(@D)
+	$^ -o $(BIN) -f local_laplacian_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+
+$(BIN)/process: process.cpp $(BIN)/local_laplacian.a $(BIN)/local_laplacian_auto_schedule.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN) -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
