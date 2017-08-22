@@ -1,3 +1,10 @@
+/*!
+ *  This file is a mini version of dma_defs.h
+ * This file has only the mandatory definitions
+ * needed for hexagon DMA transfer
+ */
+
+
 #ifndef _MINIDMA_H
 #define _MINIDMA_H
 
