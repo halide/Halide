@@ -217,6 +217,8 @@ struct dlib_t {
                     if (!sym_name) {
                         log_printf("Symbol name not defined");
                         return false;
+                    } else {
+                        log_printf("Looking for symbol : %s\n", sym_name);
                     }
                     S = (const char *)halide_get_symbol(sym_name);
                     for (dlib_t *i = loaded_libs; i && !S; i = i->next) {
@@ -228,6 +230,8 @@ struct dlib_t {
                     if (!S) {
                         log_printf("Unresolved external symbol %s\n", sym_name);
                         return false;
+                    } else {
+                        log_printf("Found symbol %s\n", sym_name);
                     }
                 } else {
                     S = base_vaddr + sym->st_value;
