@@ -611,7 +611,7 @@ public:
 
     template <typename T2 = T, typename std::enable_if<!std::is_same<T2, Type>::value>::type * = nullptr>
     void set(const T &e) {
-        this->set_impl(e);        
+        this->set_impl(e);
     }
 
     void set_from_string(const std::string &new_value_string) override {
@@ -1214,6 +1214,9 @@ protected:
     virtual std::string get_c_type() const = 0;
 
     EXPORT void check_value_writable() const override;
+
+    EXPORT void estimate_impl(Var var, Expr min, Expr extent);
+
 private:
     EXPORT void init_parameters();
 };
@@ -1347,6 +1350,11 @@ public:
     operator ExternFuncArgument() const {
         return ExternFuncArgument(this->parameters_.at(0));
     }
+
+    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+        this->estimate_impl(var, min, extent);
+        return *this;
+    }
 };
 
 
@@ -1417,6 +1425,11 @@ public:
     operator ExternFuncArgument() const {
         return ExternFuncArgument(this->parameters_.at(0));
     }
+
+    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+        this->estimate_impl(var, min, extent);
+        return *this;
+    }
 };
 
 
@@ -1464,7 +1477,11 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-
+    void set_estimate(Expr value) {
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(value);
+        }
+    }
 };
 
 template<typename T>
@@ -1917,6 +1934,12 @@ public:
 
         return *this;
     }
+
+    GeneratorOutput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        this->funcs_.at(0).estimate(var, min, extent);
+        return *this;
+    }
 };
 
 
@@ -1965,6 +1988,14 @@ public:
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     const Func &operator[](size_t i) const {
         return Super::operator[](i);
+    }
+
+    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
+        for (Func &f : this->funcs_) {
+            f.estimate(var, min, extent);
+        }
+        return *this;
     }
 };
 
@@ -2717,7 +2748,7 @@ public:
 
     template <typename... Args>
     void apply(const Args &...args) {
-        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value, 
+        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value,
             "apply() is not supported for old-style Generators.");
         set_inputs(args...);
         call_generate();

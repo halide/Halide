@@ -79,6 +79,9 @@ struct Interval {
     /** An eagerly-simplifying min of two Exprs that respects infinities. */
     EXPORT static Expr make_min(Expr a, Expr b);
 
+    bool operator==(const Interval &other) const {
+        return (min.same_as(other.min)) && (max.same_as(other.max));
+    }
 };
 
 EXPORT void interval_test();

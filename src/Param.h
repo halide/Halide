@@ -142,6 +142,10 @@ public:
     }
     // @}
 
+    void set_estimate(const T &value) {
+        param.set_estimate(Expr(value));
+    }
+
     /** You can use this parameter as an expression in a halide
      * function definition */
     operator Expr() const {
