@@ -21,6 +21,7 @@ std::unique_ptr<HexagonWrapper> sim;
 
 bool debug_mode = false;
 bool use_dlopenbuf = true;
+bool trace_lib_base = false;
 
 int init_sim() {
     if (sim) return 0;
@@ -111,6 +112,7 @@ int init_sim() {
             printf("HexagonWrapper::ConfigurePacketAnalysis failed: %d\n", status);
             return -1;
         }
+        trace_lib_base = true;
     }
 
     // Control use of dlopenbuf. This is to enable testing of the
@@ -353,7 +355,7 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_dlopenbuf, remote_module_ptr.data});
+    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_dlopenbuf, remote_module_ptr.data, trace_lib_base});
     if (ret != 0) return ret;
 
     // Get the module ptr.

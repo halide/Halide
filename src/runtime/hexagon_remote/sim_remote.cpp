@@ -288,7 +288,7 @@ static void dllib_init() {
     dlinit(3, const_cast<char**>(builtin));
 }
 
-int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr) {
+int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbuf, handle_t *module_ptr, bool trace_lib_base) {
     void *lib = NULL;
     if (use_dlopenbuf) {
         if (!dlopenbuf) {
@@ -310,6 +310,18 @@ int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbu
             halide_print(NULL, "dlopenbuf failed\n");
             halide_print(NULL, dlerror());
             return -1;
+        }
+
+        if (trace_lib_base) {
+            void *fun_ptr = dlsym(lib, "plt_halide_malloc");
+            Dl_info dli;
+            int rc = dladdr((void *)fun_ptr, &dli);
+            if (rc == 0) {
+                printf("rc = %d\n", rc);
+                fprintf(stderr, "dladdr failed\n");
+            } else {
+                printf("shared library %s loaded at 0x%p\n", dli.dli_fname, dli.dli_fbase);
+           }
         }
     } else {
         lib = mmap_dlopen(code, codeLen);
@@ -435,7 +447,8 @@ int main(int argc, const char **argv) {
                 reinterpret_cast<unsigned char*>(RPC_ARG(0)),
                 RPC_ARG(1),
                 RPC_ARG(2),
-                reinterpret_cast<handle_t*>(RPC_ARG(3))));
+                reinterpret_cast<handle_t*>(RPC_ARG(3)),
+                RPC_ARG(4)));
             break;
         case Message::GetSymbol:
             set_rpc_return(get_symbol(
