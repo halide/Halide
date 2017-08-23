@@ -12,6 +12,9 @@ add_subdirectory(glsl)
 add_subdirectory(interpolate)
 add_subdirectory(local_laplacian)
 add_subdirectory(linear_algebra)
+add_subdirectory(lens_blur)
+add_subdirectory(nl_means)
+add_subdirectory(conv_layer)
 
 # Don't add this one; it's deliberately standalone
 # add_subdirectory(wavelet)
