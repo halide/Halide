@@ -1714,6 +1714,28 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     verify_internals();
 }
 
+void GeneratorInputBase::estimate_impl(Var var, Expr min, Expr extent) {
+    internal_assert(exprs_.empty() && funcs_.size() > 0 && parameters_.size() == funcs_.size());
+    for (size_t i = 0; i < funcs_.size(); ++i) {
+        Func &f = funcs_[i];
+        f.estimate(var, min, extent);
+        // Propagate the estimate into the Parameter as well, just in case
+        // we end up compiling this for toplevel.
+        std::vector<Var> args = f.args();
+        int dim = -1;
+        for (size_t a = 0; a < args.size(); ++a) {
+            if (args[a].same_as(var)) {
+                dim = a;
+                break;
+            }
+        }
+        internal_assert(dim >= 0);
+        Parameter &p = parameters_[i];
+        p.set_min_constraint_estimate(dim, min);
+        p.set_extent_constraint_estimate(dim, extent);
+    }
+}
+
 GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, IOKind kind, const std::vector<Type> &t, int d) 
     : GIOBase(array_size, name, kind, t, d) {
     internal_assert(kind != IOKind::Scalar);

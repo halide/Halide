@@ -282,9 +282,21 @@ if (WITH_TEST_GENERATORS)
                                  AOT_LIBRARY_TARGET cxx_mangling_gpu
                                  GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
                                  GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
+  endif()
 
+  # gpu_object_lifetime can build with a variety of GPU targets (or none).
+  if(TARGET_PTX)
     halide_define_aot_test(gpu_object_lifetime
                            GENERATOR_HALIDE_TARGET host-cuda-debug)
+  elseif(TARGET_OPENCL)
+    halide_define_aot_test(gpu_object_lifetime
+                           GENERATOR_HALIDE_TARGET host-opencl-debug)
+  elseif(TARGET_METAL)
+    halide_define_aot_test(gpu_object_lifetime
+                           GENERATOR_HALIDE_TARGET host-metal-debug)
+  else()
+    halide_define_aot_test(gpu_object_lifetime
+                           GENERATOR_HALIDE_TARGET host-debug)
   endif()
 
   halide_define_aot_test(pyramid
