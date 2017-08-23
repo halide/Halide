@@ -65,7 +65,7 @@ WEAK qurt_size_t dma_get_descriptor_size(t_eDmaFmt* fmt_type, int ncomponents,in
 {
 	qurt_size_t region_tcm_desc_size = 0;
 	if(fmt_type != NULL)
-	region_tcm_desc_size = ALIGN(64, 0x1000);
+	region_tcm_desc_size = align(64, 0x1000);
 	return region_tcm_desc_size;
 }
 
@@ -84,28 +84,27 @@ WEAK int dma_get_mem_pool_id(qurt_mem_pool_t *mem_pool)
 	return nRet;
 }
 
-WEAK qurt_addr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t region_tcm_size, qurt_mem_region_t* region_tcm)
+WEAK addr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t region_tcm_size, addr_t* region_tcm)
 {
 	unsigned char* buf_vaddr;
-	
 	buf_vaddr = (unsigned char*) malloc(region_tcm_size*sizeof(unsigned char*));
 	
 	if(region_tcm != 0)
-	 *region_tcm = *reinterpret_cast<unsigned int*>(&buf_vaddr);
+	 *region_tcm = (addr_t)buf_vaddr;
 	
 	memset(buf_vaddr, 0, region_tcm_size*sizeof(unsigned char*));
-	qurt_addr_t buf_addr = *reinterpret_cast<unsigned int *>(&buf_vaddr);
+	addr_t buf_addr = (addr_t)buf_vaddr;
 	return buf_addr;
 }
 
-WEAK int dma_lock_cache(qurt_addr_t tcm_buf_vaddr, qurt_size_t region_tcm_size)
+WEAK int dma_lock_cache(addr_t tcm_buf_vaddr, qurt_size_t region_tcm_size)
 {
 	int nRet  = QURT_EOK;
 	//do nothing
 	return nRet;
 }
 
-WEAK int dma_unlock_cache(qurt_addr_t tcm_buf_vaddr, qurt_size_t region_tcm_size)
+WEAK int dma_unlock_cache(addr_t tcm_buf_vaddr, qurt_size_t region_tcm_size)
 {
 	int nRet  = QURT_EOK;
 	//do nothing
@@ -189,9 +188,9 @@ WEAK unsigned int dma_get_thread_id()
 }
 
 
-WEAK void dma_delete_mem_region(qurt_mem_region_t cache_mem)
+WEAK void dma_delete_mem_region(addr_t cache_mem)
 {
-    unsigned char* temp = reinterpret_cast<unsigned char*>(cache_mem);
+    unsigned char* temp =(unsigned char*)(cache_mem);
 	free(temp);
 }
 #endif

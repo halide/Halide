@@ -14,12 +14,12 @@ using namespace Halide::Runtime::Internal::Qurt;
 extern "C" {
 #endif
 
-__inline static int CEILING(int num, int div){
+__inline static int ceiling(int num, int div){
 
 	return ((num + div -1)/(div));
 }
-__inline static int ALIGN(int x,int a){
-	return (CEILING(x, a) * a);
+__inline static int align(int x,int a){
+	return (ceiling(x, a) * a);
 }
 
 
@@ -43,7 +43,7 @@ typedef struct
 	int ncomponents;
 	bool padding;
 	bool is_ubwc;
-	qurt_addr_t desc_address;
+	addr_t desc_address;
 	int desc_size;
 } t_dma_prepare_params;
 
@@ -135,7 +135,7 @@ int dma_get_mem_pool_id(qurt_mem_pool_t* pool_tcm);
  * in:qurt_size_t cache_size
  * out:qurt_addr_t
  */
-qurt_addr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t cache_size, qurt_mem_region_t* region_tcm);
+addr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t cache_size, addr_t* region_tcm);
 
 /*!
  * Lock Cache for DMA
@@ -143,7 +143,7 @@ qurt_addr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t cache_size,
  * in:qurt_size_t
  * out: ERR if not available
  */
-int dma_lock_cache(qurt_addr_t cache_addr, qurt_size_t cache_size);
+int dma_lock_cache(addr_t cache_addr, qurt_size_t cache_size);
 
 /*!
  *  dma Prepare for Transfer
@@ -171,7 +171,7 @@ int dma_move_data(t_dma_move_params params);
  * in:qurt_size_t
  * out: ERR if not available
  */
-int dma_unlock_cache(qurt_addr_t cache_addr, qurt_size_t cache_size);
+int dma_unlock_cache(addr_t cache_addr, qurt_size_t cache_size);
 
 /*!
  *  dma_free_dma_engine
@@ -192,7 +192,7 @@ int dma_finish_frame(void* handle);
  *  dma_delete_mem_region
  * in: qurt_mem_region_t
  */
-void dma_delete_mem_region(qurt_mem_region_t tcm_reg);
+void dma_delete_mem_region(addr_t tcm_reg);
 
 /*!
  * dma_get_thread_id

@@ -1286,8 +1286,8 @@ void* halide_hexagon_dmart_get_write_handle(void* user_context, addr_t frame)
  * halide_hexagon_dmart_set_fold_storage
  * Link the fold with the frame
  */
-int halide_hexagon_dmart_set_fold_storage(void* user_context, addr_t addr,qurt_mem_region_t tcm_region, qurt_size_t size,
-		addr_t desc_va, qurt_mem_region_t desc_region, qurt_size_t desc_size, int *fold_id)
+int halide_hexagon_dmart_set_fold_storage(void* user_context, addr_t addr,addr_t tcm_region, qurt_size_t size,
+		addr_t desc_va, addr_t desc_region, qurt_size_t desc_size, int *fold_id)
 {
 	t_hexagon_context *hexagon_user_context = (t_hexagon_context *) user_context;
 	t_dma_context *pdma_context = hexagon_user_context->pdma_context;
@@ -1349,8 +1349,8 @@ int halide_hexagon_dmart_get_update_params(void* user_context, addr_t buf_addr, 
  * The Descriptors need to be saved for
  * unlocking cache and free afterwards
  */
-int  halide_hexagon_dmart_get_tcm_desc_params(void* user_context, addr_t dev_buf, qurt_mem_region_t *tcm_region,
-	               qurt_size_t *size_tcm,addr_t *desc_va, qurt_mem_region_t *desc_region, qurt_size_t *desc_size)
+int  halide_hexagon_dmart_get_tcm_desc_params(void* user_context, addr_t dev_buf, addr_t *tcm_region,
+	               qurt_size_t *size_tcm,addr_t *desc_va, addr_t *desc_region, qurt_size_t *desc_size)
 {
 	t_hexagon_context *hexagon_user_context = (t_hexagon_context *) user_context;
 	t_dma_context *pdma_context = hexagon_user_context->pdma_context;

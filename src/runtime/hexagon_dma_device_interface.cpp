@@ -37,9 +37,9 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
 	t_eDmaFmt chroma_type,luma_type;
 	int frame_idx;
 	t_dma_context* dma_context;
-	qurt_mem_region_t region_tcm;
-	qurt_mem_region_t region_tcm_desc;
-	qurt_addr_t  tcm_buf_vaddr, tcm_desc_vaddr;
+	addr_t region_tcm;
+	addr_t region_tcm_desc;
+	addr_t  tcm_buf_vaddr, tcm_desc_vaddr;
 	qurt_size_t region_tcm_desc_size;
 	qurt_mem_pool_t pool_tcm;
 
@@ -172,7 +172,7 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
 			return E_ERR;
 		}
 		/* Allocating in multiples of 4K */
-		qurt_size_t region_tcm_size = ALIGN(tcm_buf_size, 0x1000);
+		qurt_size_t region_tcm_size = align(tcm_buf_size, 0x1000);
 
 		// It is a good idea to check that this size is not too large, as while we are still in DDR, when locked to the TCM
 		// large sizes will become problematic.
@@ -309,8 +309,8 @@ int halide_dma_device_free(void *user_context, halide_buffer_t *buf)
         {			
 			dma_free_dma_engine(handle);
     		/* Free the Allocated Qurt Memory Regions*/
-			qurt_mem_region_t tcm_region,desc_region;
-			qurt_addr_t desc_va;
+			addr_t tcm_region,desc_region;
+			addr_t desc_va;
 			qurt_size_t desc_size, tcm_size;
 
 			if(halide_hexagon_dmart_get_tcm_desc_params(user_context, (addr_t) buf->device,&tcm_region,

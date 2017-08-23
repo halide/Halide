@@ -38,16 +38,16 @@ extern int halide_hexagon_dmart_set_luma_stride(void* user_context,addr_t frame,
 
 /*!
  * halide_hexagon_dmart_set_fold_storage
- * in: qurt_mem_region_t Cache region
+ * in: addr_t Cache region
  * in: qurt_size_t Size of the fold
  * in: addr_t Descriptor virtual address of the fold
- * in: qurt_mem_region_t: Descriptor memory region
+ * in: addr_t: Descriptor memory region
  * in: qurt_size_t Descriptor size
  * out: fold_id fold id
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_set_fold_storage(void* user_context, addr_t addr, qurt_mem_region_t tcm_region,
-		     qurt_size_t size, addr_t desc_va, qurt_mem_region_t desc_region, qurt_size_t desc_size, int *fold_id);
+extern int halide_hexagon_dmart_set_fold_storage(void* user_context, addr_t addr, addr_t tcm_region,
+		     qurt_size_t size, addr_t desc_va, addr_t desc_region, qurt_size_t desc_size, int *fold_id);
 
 /*!
  * halide_hexagon_dmart_get_update_params
@@ -60,16 +60,16 @@ extern int halide_hexagon_dmart_get_update_params(void* user_context, addr_t dev
 /*!
  * halide_hexagon_dmart_get_tcmDesc_params
  * in: addr_t dev_buf
- * out: qurt_mem_region_t cache address
+ * out: addr_t cache address
  * out: qurt_size_t cache size
  * out: addr_t descriptor virtual address
- * out: qurt_mem_region_t
+ * out: addr_t
  * out: qurt_size_t descriptor size
- * out: qurt_mem_region_t descriptor
+ * out: addr_t descriptor
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_get_tcm_desc_params(void* user_context, addr_t dev_buf, qurt_mem_region_t *tcm_region,
-		                 qurt_size_t *tcm_size, addr_t *desc_va, qurt_mem_region_t *desc_region, qurt_size_t *desc_size);
+extern int halide_hexagon_dmart_get_tcm_desc_params(void* user_context, addr_t dev_buf, addr_t *tcm_region,
+		                 qurt_size_t *tcm_size, addr_t *desc_va, addr_t *desc_region, qurt_size_t *desc_size);
 
 /*halide_hexagon_dmart_get_last_frame
 * in: addr_t frame

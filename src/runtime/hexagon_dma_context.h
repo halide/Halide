@@ -65,9 +65,9 @@ typedef struct {
 	int size_tcm;                               /* L2 cache Size Allocated for each DMA Transfer(Ping or Pong Buffer Size)*/
 	addr_t fold_virtual_addr;                   /* Virtual Address of Locked L2 cache for Ping, pong Buffers*/
 	addr_t ping_phys_addr;                      /* physical address ping buffer*/
-	qurt_mem_region_t tcm_region;               /* TCM Region used for allocating the L2 cache*/
+	addr_t tcm_region;               /* TCM Region used for allocating the L2 cache*/
 	addr_t desc_virtual_addr;                   /* DMA Descriptor virtual address */
-	qurt_mem_region_t desc_region;              /* DMA Descritor Region used for Allocating descriptors */
+	addr_t desc_region;              /* DMA Descritor Region used for Allocating descriptors */
 } t_work_buffer;
 
 /*!
