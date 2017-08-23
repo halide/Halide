@@ -8,7 +8,7 @@ $(BIN)/bilateral_grid_exec: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 	@mkdir -p $(@D)
-	$^ -o $(BIN) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
+	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
 
 $(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid_exec
 	@mkdir -p $(@D)

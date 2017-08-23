@@ -839,16 +839,17 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     std::string generator_name = flags_info["-g"];
     if (generator_name.empty() && runtime_name.empty()) {
-        // If -g isn't specified, but there's only one generator registered, just use that one.
-        if (generator_names.size() > 1) {
-            cerr << "-g must be specified if multiple generators are registered:\n";
+        // Require either -g or -r to be specified: 
+        // no longer infer the name when only one Generator is registered
+        cerr << "Either -g <name> or -r must be specified; available Generators are:\n";
+        if (!generator_names.empty()) {
             for (auto name : generator_names) {
                 cerr << "    " << name << "\n";
             }
-            cerr << kUsage;
-            return 1;
+        } else {
+            cerr << "    <none>\n";
         }
-        generator_name = generator_names[0];
+        return 1;
     }
     std::string function_name = flags_info["-f"];
     if (function_name.empty()) {
