@@ -6,6 +6,7 @@ halide_add_aot_library(bilateral_grid
                        GENERATOR_ARGS target=host auto_schedule=false
                        GENERATED_FUNCTION bilateral_grid)
 halide_add_aot_library(bilateral_grid_auto_schedule
+                       GENERATOR_NAME bilateral_grid
                        GENERATOR_TARGET bilateral_grid.generator
                        GENERATOR_ARGS target=host auto_schedule=true
                        GENERATED_FUNCTION bilateral_grid_auto_schedule)

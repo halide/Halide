@@ -6,6 +6,7 @@ halide_add_aot_library(lens_blur
                        GGENERATOR_ARGS target=host auto_schedule=false
                        GENERATED_FUNCTION lens_blur)
 halide_add_aot_library(lens_blur_auto_schedule
+                       GENERATOR_NAME lens_blur
                        GENERATOR_TARGET lens_blur.generator
                        GENERATOR_ARGS target=host auto_schedule=true
                        GENERATED_FUNCTION lens_blur_auto_schedule)

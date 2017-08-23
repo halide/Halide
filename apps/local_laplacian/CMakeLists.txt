@@ -6,6 +6,7 @@ halide_add_aot_library(local_laplacian
                        GENERATOR_ARGS target=host auto_schedule=false
                        GENERATED_FUNCTION local_laplacian)
 halide_add_aot_library(local_laplacian_auto_schedule
+                       GENERATOR_NAME local_laplacian
                        GENERATOR_TARGET local_laplacian.generator
                        GENERATOR_ARGS target=host auto_schedule=true
                        GENERATED_FUNCTION local_laplacian_auto_schedule)
