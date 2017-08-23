@@ -1051,7 +1051,7 @@ $(FILTERS_DIR)/%.cpp: $(FILTERS_DIR)/%.a
 
 $(FILTERS_DIR)/%.stub.h: $(BIN_DIR)/%.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -n $* -o $(CURDIR)/$(FILTERS_DIR) -e cpp_stub
+	$(CURDIR)/$< -g $* -n $* -o $(CURDIR)/$(FILTERS_DIR) -e cpp_stub
 
 $(FILTERS_DIR)/cxx_mangling_externs.o: $(ROOT_DIR)/test/generator/cxx_mangling_externs.cpp
 	@mkdir -p $(@D)
@@ -1061,7 +1061,7 @@ $(FILTERS_DIR)/cxx_mangling_externs.o: $(ROOT_DIR)/test/generator/cxx_mangling_e
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
 $(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/cxx_mangling_externs.o
 	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
+	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
 
 ifneq ($(TEST_CUDA), )
@@ -1070,7 +1070,7 @@ ifneq ($(TEST_CUDA), )
 # run this code, just check for link errors.)
 $(FILTERS_DIR)/cxx_mangling_gpu.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/cxx_mangling_externs.o
 	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-cuda -f "HalideTest::cxx_mangling_gpu"
+	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-cuda -f "HalideTest::cxx_mangling_gpu"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
 endif
 
@@ -1080,13 +1080,13 @@ $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o: $(ROOT_DIR)/test/generator/
 
 $(FILTERS_DIR)/cxx_mangling_define_extern.a: $(BIN_DIR)/cxx_mangling_define_extern.generator $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-user_context -f "HalideTest::cxx_mangling_define_extern"
+	$(CURDIR)/$< -g cxx_mangling_define_extern $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling-user_context -f "HalideTest::cxx_mangling_define_extern"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@  $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 
 # pyramid needs a custom arg
 $(FILTERS_DIR)/pyramid.a: $(BIN_DIR)/pyramid.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -f pyramid $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime levels=10
+	$(CURDIR)/$< -g pyramid -f pyramid $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime levels=10
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
@@ -1107,36 +1107,36 @@ METADATA_TESTER_GENERATOR_ARGS=\
 # metadata_tester is built with and without user-context
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)
-	cd $(TMP_DIR); $(CURDIR)/$< -f metadata_tester $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -f metadata_tester_ucon $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester_ucon $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
 $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -f "HalideTest::multitarget" $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-debug-no_runtime-c_plus_plus_name_mangling,$(TARGET)-no_runtime-c_plus_plus_name_mangling  -e assembly,bitcode,cpp,h,html,static_library,stmt
+	$(CURDIR)/$< -g multitarget -f "HalideTest::multitarget" $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-debug-no_runtime-c_plus_plus_name_mangling,$(TARGET)-no_runtime-c_plus_plus_name_mangling  -e assembly,bitcode,cpp,h,html,static_library,stmt
 
 $(FILTERS_DIR)/msan.a: $(BIN_DIR)/msan.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -f msan $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-msan
+	$(CURDIR)/$< -g msan -f msan $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-msan
 
 # user_context needs to be generated with user_context as the first argument to its calls
 $(FILTERS_DIR)/user_context.a: $(BIN_DIR)/user_context.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+	$(CURDIR)/$< -g user_context $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
 
 # ditto for user_context_insanity
 $(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+	$(CURDIR)/$< -g user_context_insanity $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
 
 # matlab needs to be generated with matlab in TARGET
 $(FILTERS_DIR)/matlab.a: $(BIN_DIR)/matlab.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-matlab
+	$(CURDIR)/$< -g matlab $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-matlab
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
@@ -1158,6 +1158,11 @@ endif
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling: $(FILTERS_DIR)/cxx_mangling_externs.o
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_cxx_mangling_define_extern: $(FILTERS_DIR)/cxx_mangling.cpp $(FILTERS_DIR)/cxx_mangling_externs.o $(FILTERS_DIR)/cxx_mangling_define_extern_externs.o
 
+# Overridden because registered name is unpredictable
+$(FILTERS_DIR)/stubtest.stub.h: $(BIN_DIR)/stubtest.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g StubNS1::StubNS2::StubTest -n stubtest -o $(CURDIR)/$(FILTERS_DIR) -e cpp_stub
+
 $(BUILD_DIR)/stubuser_generator.o: $(FILTERS_DIR)/stubtest.stub.h
 $(BIN_DIR)/stubuser.generator: $(BUILD_DIR)/stubtest_generator.o
 
@@ -1177,7 +1182,7 @@ STUBTEST_GENERATOR_ARGS=\
 
 $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -f stubtest $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(STUBTEST_GENERATOR_ARGS)
+	$(CURDIR)/$< -g StubNS1::StubNS2::StubTest -f stubtest $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(STUBTEST_GENERATOR_ARGS)
 
 $(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
@@ -1322,10 +1327,10 @@ $(BIN_DIR)/tutorial_lesson_16_rgb_generate: $(ROOT_DIR)/tutorial/lesson_16_rgb_g
 $(BIN_DIR)/tutorial_lesson_16_rgb_run: $(ROOT_DIR)/tutorial/lesson_16_rgb_run.cpp $(BIN_DIR)/tutorial_lesson_16_rgb_generate
 	@-mkdir -p $(TMP_DIR)
 	# Run the generator
-	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_planar      target=host layout=planar
-	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_interleaved target=host-no_runtime layout=interleaved
-	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_either      target=host-no_runtime layout=either
-	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -o $(TMP_DIR) -f brighten_specialized target=host-no_runtime layout=specialized
+	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -g brighten -o $(TMP_DIR) -f brighten_planar      target=host layout=planar
+	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -g brighten -o $(TMP_DIR) -f brighten_interleaved target=host-no_runtime layout=interleaved
+	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -g brighten -o $(TMP_DIR) -f brighten_either      target=host-no_runtime layout=either
+	$(BIN_DIR)/tutorial_lesson_16_rgb_generate -g brighten -o $(TMP_DIR) -f brighten_specialized target=host-no_runtime layout=specialized
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/brighten_*.a \

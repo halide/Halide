@@ -76,6 +76,9 @@ function(add_test_generator NAME)
   else()
     set(args_WITH_STUB )
   endif()
+  if (NOT args_GENERATOR_NAME)
+    set(args_GENERATOR_NAME ${NAME})
+  endif()
   halide_add_generator("${NAME}.generator"
                        STUB_GENERATOR_NAME "${args_GENERATOR_NAME}"
                        SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp"
@@ -275,6 +278,7 @@ if (WITH_TEST_GENERATORS)
 
   if (TARGET_PTX)
     halide_add_aot_test_dependency(cxx_mangling
+                                 GENERATOR_NAME cxx_mangling
                                  AOT_LIBRARY_TARGET cxx_mangling_gpu
                                  GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
                                  GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
@@ -339,6 +343,7 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(metadata_tester
                          GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
   halide_add_aot_test_dependency(metadata_tester
+                                 GENERATOR_NAME metadata_tester
                                  AOT_LIBRARY_TARGET metadata_tester_ucon
                                  GENERATED_FUNCTION metadata_tester_ucon
                                  GENERATOR_HALIDE_TARGET host-user_context
@@ -346,6 +351,7 @@ if (WITH_TEST_GENERATORS)
 
   halide_define_aot_test(tiled_blur)
   halide_add_aot_test_dependency(tiled_blur
+                                 GENERATOR_NAME blur2x2
                                  GENERATOR_TARGET blur2x2
                                  AOT_LIBRARY_TARGET blur2x2)
 
