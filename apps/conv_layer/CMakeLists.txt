@@ -12,8 +12,8 @@ halide_add_aot_library(conv_layer_auto_schedule
                        GENERATED_FUNCTION conv_layer_auto_schedule)
 
 # Final executable
-add_executable(ll_process process.cpp)
-halide_add_aot_library_dependency(ll_process conv_layer)
-halide_add_aot_library_dependency(ll_process conv_layer_auto_schedule)
-halide_use_image_io(ll_process)
-target_compile_options(ll_process PRIVATE "-std=c++11")
+add_executable(conv_layer_process process.cpp)
+halide_add_aot_library_dependency(conv_layer_process conv_layer)
+halide_add_aot_library_dependency(conv_layer_process conv_layer_auto_schedule)
+halide_use_image_io(conv_layer_process)
+target_compile_options(conv_layer_process PRIVATE "-std=c++11")

@@ -10,11 +10,11 @@ $(BIN)/nl_means_exec: nl_means_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/nl_means.a: $(BIN)/nl_means_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) -f nl_means target=$(HL_TARGET) auto_schedule=false
+	$^ -g nl_means -o $(BIN) -f nl_means target=$(HL_TARGET) auto_schedule=false
 
 $(BIN)/nl_means_auto_schedule.a: $(BIN)/nl_means_exec
 	@-mkdir -p $(BIN)
-	$^ -o $(BIN) -f nl_means_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
+	$^ -g nl_means -o $(BIN) -f nl_means_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/process: process.cpp $(BIN)/nl_means.a $(BIN)/nl_means_auto_schedule.a
 	@-mkdir -p $(BIN)
