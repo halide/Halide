@@ -38,6 +38,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<RgbToYcc> register_me{"halide_ycc_glsl"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(RgbToYcc, halide_ycc_glsl)

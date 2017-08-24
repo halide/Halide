@@ -36,6 +36,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<CleanupOnError> register_my_gen{"cleanup_on_error"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(CleanupOnError, cleanup_on_error)

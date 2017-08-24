@@ -60,4 +60,4 @@ private:
     Var x{"x"}, y{"y"};
 };
 
-HALIDE_REGISTER_GENERATOR(Gaussian5x5, "gaussian5x5");
+HALIDE_REGISTER_GENERATOR(Gaussian5x5, gaussian5x5)
