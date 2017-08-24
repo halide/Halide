@@ -104,4 +104,4 @@ private:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(Example, "example")
+HALIDE_REGISTER_GENERATOR(Example, example)

@@ -291,6 +291,7 @@ private:
     }
 };
 
-Halide::RegisterGenerator<LensBlur> register_me{"lens_blur"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(LensBlur, lens_blur)
+

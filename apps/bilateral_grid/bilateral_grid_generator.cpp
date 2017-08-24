@@ -119,6 +119,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<BilateralGrid> register_me{"bilateral_grid"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(BilateralGrid, bilateral_grid)
