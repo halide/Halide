@@ -140,6 +140,7 @@ if (NOT MSVC)
 else()
   add_compile_options(/W3)
   add_compile_options(/wd4018)  # diable "signed/unsigned mismatch"
+  add_compile_options(/wd4503)  # diable "decorated name length exceeded, name was truncated"
   if (WARNINGS_AS_ERRORS)
     add_compile_options(/WX)
   endif()
