@@ -391,13 +391,6 @@ WEAK int halide_do_par_for(void *user_context,
         }
     }
     int ret = halide_default_do_par_for(user_context, task, min, size, (uint8_t *)&c);
-    // for (int x = min; x < min + size; x++) {
-    //     int result = halide_do_task(user_context, task, x, (uint8_t *) &c);
-    //     if (result) {
-    //         return result;
-    //     }
-    // }
-
     if (c.hvx_mode != -1) {
         qurt_hvx_lock((qurt_hvx_mode_t)c.hvx_mode);
     }
@@ -425,4 +418,10 @@ WEAK int halide_do_task(void *user_context, halide_task_t f,
     }
 }
 
+namespace {
+__attribute__((destructor))
+WEAK void halide_thread_pool_cleanup() {
+    halide_shutdown_thread_pool();
+}
+}
 }
