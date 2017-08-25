@@ -210,7 +210,6 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(metadata_tester)
   add_test_generator(msan)
   add_test_generator(multitarget)
-  add_test_generator(nested_externs)
   add_test_generator(pyramid)
   add_test_generator(stubtest WITH_STUB)
   # the stubuser generator needs the stub from stubtest
@@ -367,17 +366,14 @@ if (WITH_TEST_GENERATORS)
   halide_add_aot_library_dependency(generator_aot_cxx_mangling_define_extern cxx_mangling)
 
   halide_define_aot_test(nested_externs OMIT_DEFAULT_GENERATOR)
-  halide_add_aot_test_dependency(nested_externs
-                                 AOT_LIBRARY_TARGET nested_externs_root
-                                 GENERATOR_NAME nested_externs_root)
-  halide_add_aot_test_dependency(nested_externs
-                                 AOT_LIBRARY_TARGET nested_externs_inner
-                                 GENERATOR_NAME nested_externs_inner)
-  halide_add_aot_test_dependency(nested_externs
-                                 AOT_LIBRARY_TARGET nested_externs_combine
-                                 GENERATOR_NAME nested_externs_combine)
-  halide_add_aot_test_dependency(nested_externs
-                                 AOT_LIBRARY_TARGET nested_externs_leaf
-                                 GENERATOR_NAME nested_externs_leaf)
+  foreach(GEN root inner combine leaf)
+    halide_add_generator("nested_externs_${GEN}.generator"
+                         STUB_GENERATOR_NAME "nested_externs_${GEN}"
+                         SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/nested_externs_generator.cpp")
+    halide_add_aot_test_dependency(nested_externs
+                                   GENERATOR_TARGET nested_externs_${GEN}
+                                   AOT_LIBRARY_TARGET nested_externs_${GEN}
+                                   GENERATOR_NAME nested_externs_${GEN})
+  endforeach()
 
 endif()
