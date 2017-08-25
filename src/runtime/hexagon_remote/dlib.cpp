@@ -35,6 +35,19 @@ struct Ehdr {
     uint16_t e_shstrndx;
 };
 
+// Section header.
+struct Shdr {
+  uint32_t sh_name;      // Section name (index into string table)
+  uint32_t sh_type;      // Section type (SHT_*)
+  uint32_t sh_flags;     // Section flags (SHF_*)
+  elfaddr_t sh_addr;      // Address where section is to be loaded
+  uint32_t sh_offset;     // File offset of section data, in bytes
+  uint32_t sh_size;      // Size of section, in bytes
+  uint32_t sh_link;      // Section type-specific header table index link
+  uint32_t sh_info;      // Section type-specific extra information
+  uint32_t sh_addralign; // Section address alignment
+  uint32_t sh_entsize;   // Size of records contained within the section
+};
 enum {
     PT_NULL = 0,
     PT_LOAD = 1,
@@ -426,6 +439,37 @@ struct dlib_t {
         return true;
     }
 
+    const Shdr *get_dtors_sh(const Ehdr *ehdr, const Shdr *shdrs) {
+        for (int i = 0; i < ehdr->e_shnum; ++i) {
+            const Shdr *sh = &shdrs[i];
+            const char *sh_name = &strtab[sh->sh_name];
+            if (strncmp(sh_name, ".dtors", 6) == 0) {
+                return sh;
+            }
+        }
+        return NULL;
+    }
+
+    void run_dtors() {
+        typedef void(*dtor_func)();
+        const Ehdr *ehdr = (const Ehdr *)program;
+        if (!ehdr->e_shoff) {
+            return;
+        }
+        const Shdr *shdrs = (const Shdr *)(program + ehdr->e_shoff);
+        if (!assert_in_bounds(shdrs, ehdr->e_shnum)) return;
+        const Shdr *dtors_sh = get_dtors_sh(ehdr, shdrs);
+        if (!dtors_sh) {
+            return;
+        }
+        uint32_t dtors_size = dtors_sh->sh_size;
+        const char *const dtors_start = program + dtors_sh->sh_offset;
+        for (int i = 0; i < dtors_size/sizeof(elfaddr_t *); ++i) {
+            uint32_t offset = ((elfaddr_t *)dtors_start)[i];
+            dtor_func dtor = (dtor_func) (program + offset);
+            dtor();
+        }
+    }
     void deinit() {
         typedef int (*munmap_fn)(void *, size_t);
         munmap_fn munmap = (munmap_fn)halide_get_symbol("munmap");
@@ -510,9 +554,9 @@ int mmap_dlclose(void *dlib) {
         }
     }
 
-    // TODO: Should we run .dtors?
-
-    ((dlib_t*)dlib)->deinit();
-    free(dlib);
+    dlib_t *d = (dlib_t *)dlib;
+    d->run_dtors();
+    d->deinit();
+    free(d);
     return 0;
 }
