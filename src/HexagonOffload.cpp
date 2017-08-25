@@ -899,6 +899,12 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     llvm::raw_svector_ostream object_stream(object);
     compile_llvm_module_to_object(*llvm_module, object_stream);
 
+    std::ofstream pdb_output1("/tmp/our.o");
+    pdb_output1.write(object.data(), object.size());
+    pdb_output1.flush();
+    internal_assert(pdb_output1.good());
+    pdb_output1.close();
+
     int min_debug_level = device_code.name() == runtime_module_name ? 3 : 2;
     if (debug::debug_level() >= min_debug_level) {
         debug(0) << "Hexagon device code assembly: " << "\n";
@@ -919,6 +925,10 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     if (bss != obj->sections_end()) {
         bss->set_alignment(128);
         bss->set_type(Elf::Section::SHT_PROGBITS);
+        debug(4) << "bss size = " << bss->get_size() << "\n";
+        Elf::Section::contents_iterator s = bss->contents_begin();
+        Elf::Section::contents_iterator e = bss->contents_end();
+        std::fill(s, e, 0);
     }
 
     // Link into a shared object.
