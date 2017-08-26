@@ -35,6 +35,8 @@ HEXAGON_ELFSIGNER ?= ${HEXAGON_SDK_ROOT}/tools/elfsigner/elfsigner.py
 # Some SDK versions use "inc/", some use "incs/"
 HEXAGON_SDK_INCLUDES ?= "${HEXAGON_SDK_ROOT}/incs"
 
+HEXAGON_QDEBUG_INCLUDES ?= "${HEXAGON_SDK_ROOT}/libs/qdebug/inc"
+
 # Some SDK versions use "lib/", some use "libs/"
 HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 
@@ -96,7 +98,11 @@ bin/%/thread_pool.o: thread_pool.cpp
 
 bin/%/halide_remote.o: halide_remote.cpp dlib.h
 	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -o $@
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c halide_remote.cpp -I ${HEXAGON_QDEBUG_INCLUDES} -o $@
+
+bin/%/qdebug_dump_reg_asm.o: qdebug_asm.h qdebug_dump_reg_asm.S
+	mkdir -p $(@D)
+	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c qdebug_dump_reg_asm.S -I ${HEXAGON_QDEBUG_INCLUDES} -o $@
 
 bin/%/dlib.o: dlib.cpp dlib.h
 	mkdir -p $(@D)
@@ -123,11 +129,11 @@ bin/%/log.o: log.cpp
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c log.cpp -o $@
 
 # Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o bin/%/c11_stubs.o bin/%/log.o bin/%/dlib.o
+bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/qdebug_dump_reg_asm.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o bin/%/c11_stubs.o bin/%/log.o bin/%/dlib.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -Wl,--no-threads -o $@ \
 	-Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
-	-Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail
+	-Wl,--wrap=realloc -Wl,--wrap=memalign -Wl,--wrap=__stack_chk_fail -Wl,--whole-archive libqdebug.a
 
 bin/%/signed_by_debug/libhalide_hexagon_remote_skel.so: bin/%/libhalide_hexagon_remote_skel.so
 	mkdir -p $(@D)
