@@ -368,6 +368,7 @@ SOURCE_FILES = \
   RemoveDeadAllocations.cpp \
   RemoveTrivialForLoops.cpp \
   RemoveUndef.cpp \
+  ReplacePrints.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   ScheduleParam.cpp \
@@ -509,6 +510,7 @@ HEADER_FILES = \
   RemoveDeadAllocations.h \
   RemoveTrivialForLoops.h \
   RemoveUndef.h \
+  ReplacePrints.h \
   Schedule.h \
   ScheduleFunctions.h \
   ScheduleParam.h \

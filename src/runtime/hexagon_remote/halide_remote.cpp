@@ -25,6 +25,12 @@ typedef halide_hexagon_remote_scalar_t scalar_t;
 
 extern "C" {
 
+void qdebug_dump_reg_asm();
+
+void halide_vprint(void *user_context, const char *str) {
+    qdebug_dump_reg_asm();
+}
+
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_print(void *user_context, const char *str) {
     if (str) {

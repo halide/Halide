@@ -68,6 +68,7 @@ struct buffer_t;
  */
 // @{
 extern void halide_print(void *user_context, const char *);
+extern void halide_vprint(void *user_context, const char *);
 extern void halide_default_print(void *user_context, const char *);
 typedef void (*halide_print_t)(void *, const char *);
 extern halide_print_t halide_set_custom_print(halide_print_t print);

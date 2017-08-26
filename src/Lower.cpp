@@ -40,6 +40,7 @@
 #include "RemoveDeadAllocations.h"
 #include "RemoveTrivialForLoops.h"
 #include "RemoveUndef.h"
+#include "ReplacePrints.h"
 #include "ScheduleFunctions.h"
 #include "SelectGPUAPI.h"
 #include "SkipStages.h"
@@ -251,6 +252,9 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = unroll_loops(s);
     s = simplify(s);
     debug(2) << "Lowering after unrolling:\n" << s << "\n\n";
+
+    debug(1) << "Replacing Prints...\n";
+    s = replace_prints(s, t);
 
     debug(1) << "Vectorizing...\n";
     s = vectorize_loops(s, t);
