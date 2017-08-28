@@ -14,57 +14,55 @@ using namespace Halide::Runtime::Internal::Qurt;
 extern "C" {
 #endif
 
-__inline static int ceiling(int num, int div){
-
-	return ((num + div -1)/(div));
-}
-__inline static int align(int x,int a){
-	return (ceiling(x, a) * a);
+__inline static int ceiling(int num, int div) {
+    return ((num + div -1)/(div));
 }
 
+__inline static int align(int x,int a) {
+    return (ceiling(x, a) * a);
+}
 
 /*!
  * Params needed for Prepare for transfer
  */
-typedef struct
-{
-	void* handle;
-	addr_t host_address;
-	int frame_width;
-	int frame_height;
-	int frame_stride;
-	int roi_width;
-	int roi_height;
-	int luma_stride;
-	int chroma_stride;
-	bool read;
-	t_eDmaFmt chroma_type;
-	t_eDmaFmt luma_type;
-	int ncomponents;
-	bool padding;
-	bool is_ubwc;
-	addr_t desc_address;
-	int desc_size;
+typedef struct {
+    void* handle;
+    addr_t host_address;
+    int frame_width;
+    int frame_height;
+    int frame_stride;
+    int roi_width;
+    int roi_height;
+    int luma_stride;
+    int chroma_stride;
+    bool read;
+    t_eDmaFmt chroma_type;
+    t_eDmaFmt luma_type;
+    int ncomponents;
+    bool padding;
+    bool is_ubwc;
+    addr_t desc_address;
+    int desc_size;
 } t_dma_prepare_params;
 
 /*!
  * Params needed to move data
  */
-typedef struct{
-	void* handle;
-	int xoffset;
-	int yoffset;
-	int roi_width;
-	int roi_height;
-	int offset;
-	int l2_chroma_offset;
-	int ncomponents;
-	addr_t ping_buffer;
+typedef struct {
+    void* handle;
+    int xoffset;
+    int yoffset;
+    int roi_width;
+    int roi_height;
+    int offset;
+    int l2_chroma_offset;
+    int ncomponents;
+    addr_t ping_buffer;
 } t_dma_move_params;
 
-typedef struct{
-	int u16W;
-	int u16H;
+typedef struct {
+    int u16W;
+    int u16H;
 } t_dma_pix_align_info;
 
 /*!

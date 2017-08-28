@@ -3,8 +3,6 @@
  * This file has only the mandatory definitions
  * needed for hexagon DMA transfer
  */
-
-
 #ifndef _MINIDMA_H
 #define _MINIDMA_H
 
@@ -22,12 +20,11 @@ typedef enum {
     eDmaFmt_TP10,
     eDmaFmt_TP10_Y,
     eDmaFmt_TP10_UV,
-	eDmaFmt_NV124R,
-	eDmaFmt_NV124R_Y,
-	eDmaFmt_NV124R_UV,
+    eDmaFmt_NV124R,
+    eDmaFmt_NV124R_Y,
+    eDmaFmt_NV124R_UV,
     eDmaFmt_Invalid,
     eDmaFmt_MAX,
 } t_eDmaFmt;
-
 
 #endif

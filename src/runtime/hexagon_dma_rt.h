@@ -14,7 +14,6 @@ using namespace Halide::Runtime::Internal::Qurt;
 extern "C" {
 #endif
 
-
 /*!
  * halide_hexagon_dmart_set_dma_handle
  *in: handle DMA Handle allocated for the frame
@@ -47,7 +46,7 @@ extern int halide_hexagon_dmart_set_luma_stride(void* user_context,addr_t frame,
  * out: Error/Success
  */
 extern int halide_hexagon_dmart_set_fold_storage(void* user_context, addr_t addr, addr_t tcm_region,
-		     qurt_size_t size, addr_t desc_va, addr_t desc_region, qurt_size_t desc_size, int *fold_id);
+             qurt_size_t size, addr_t desc_va, addr_t desc_region, qurt_size_t desc_size, int *fold_id);
 
 /*!
  * halide_hexagon_dmart_get_update_params
@@ -69,7 +68,7 @@ extern int halide_hexagon_dmart_get_update_params(void* user_context, addr_t dev
  * out: Error/Success
  */
 extern int halide_hexagon_dmart_get_tcm_desc_params(void* user_context, addr_t dev_buf, addr_t *tcm_region,
-		                 qurt_size_t *tcm_size, addr_t *desc_va, addr_t *desc_region, qurt_size_t *desc_size);
+                         qurt_size_t *tcm_size, addr_t *desc_va, addr_t *desc_region, qurt_size_t *desc_size);
 
 /*halide_hexagon_dmart_get_last_frame
 * in: addr_t frame
@@ -145,7 +144,7 @@ extern int halide_hexagon_dmart_get_frame_index(void *user_context, addr_t frame
  * inform dma it is last frame of the session
  */
 extern int halide_hexagon_dmart_set_host_frame (void* user_context, addr_t  frame,int type, int d,
-		                                       int w, int h, int s, int last);
+                                               int w, int h, int s, int last);
 
 
 
