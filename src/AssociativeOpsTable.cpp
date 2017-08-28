@@ -296,17 +296,17 @@ const vector<AssociativePattern> &get_ops_table_helper(const vector<Type> &types
     return table_it->second;
 }
 
-template <typename T>
-std::ostream &operator<<(std::ostream &stream, const vector<T> &v) {
+std::string print_types(const vector<Type> &types) {
+    std::ostringstream stream;
     stream << "{";
-    for (size_t i = 0; i < v.size(); ++i) {
+    for (size_t i = 0; i < types.size(); ++i) {
         if (i > 0) {
             stream << ", ";
         }
-        stream << v[i];
+        stream << types[i];
     }
     stream << "}";
-    return stream;
+    return stream.str();
 }
 
 } // anonymous namespace
@@ -328,31 +328,31 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
 
     RootExpr root = RootExpr::Unknown;
     if (exprs[0].as<Halide::Internal::Add>()) {
-        debug(5) << "Returning Add root table for type " << types << "\n";
+        debug(5) << "Returning Add root table for type " << print_types(types) << "\n";
         root = RootExpr::Add;
     } else if (exprs[0].as<Halide::Internal::Sub>()) {
-        debug(5) << "Returning Sub root table for type " << types << "\n";
+        debug(5) << "Returning Sub root table for type " << print_types(types) << "\n";
         root = RootExpr::Sub;
     } else if (exprs[0].as<Halide::Internal::Mul>()) {
-        debug(5) << "Returning Mul root table for type " << types << "\n";
+        debug(5) << "Returning Mul root table for type " << print_types(types) << "\n";
         root = RootExpr::Mul;
     } else if (exprs[0].as<Halide::Internal::Min>()) {
-        debug(5) << "Returning Min root table for type " << types << "\n";
+        debug(5) << "Returning Min root table for type " << print_types(types) << "\n";
         root = RootExpr::Min;
     } else if (exprs[0].as<Halide::Internal::Max>()) {
-        debug(5) << "Returning Max root table for type " << types << "\n";
+        debug(5) << "Returning Max root table for type " << print_types(types) << "\n";
         root = RootExpr::Max;
     } else if (exprs[0].as<Halide::Internal::Select>()) {
-        debug(5) << "Returning Select root table for type " << types << "\n";
+        debug(5) << "Returning Select root table for type " << print_types(types) << "\n";
         root = RootExpr::Select;
     } else if (exprs[0].as<Halide::Internal::And>()) {
-        debug(5) << "Returning And root table for type " << types << "\n";
+        debug(5) << "Returning And root table for type " << print_types(types) << "\n";
         root = RootExpr::And;
     } else if (exprs[0].as<Halide::Internal::Or>()) {
-        debug(5) << "Returning Or root table for type " << types << "\n";
+        debug(5) << "Returning Or root table for type " << print_types(types) << "\n";
         root = RootExpr::Or;
     } else if (exprs[0].as<Halide::Internal::Cast>()) {
-        debug(5) << "Returning Cast root table for type " << types << "\n";
+        debug(5) << "Returning Cast root table for type " << print_types(types) << "\n";
         root = RootExpr::Cast;
     }
 
