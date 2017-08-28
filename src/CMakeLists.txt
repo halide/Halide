@@ -1,8 +1,5 @@
 include(CheckCXXCompilerFlag)
 
-add_executable(build_halide_h ../tools/build_halide_h.cpp)
-add_executable(binary2cpp ../tools/binary2cpp.cpp)
-
 if (MSVC)
   # disable irrelevant warnings
   target_compile_options(build_halide_h PUBLIC /wd4996)
