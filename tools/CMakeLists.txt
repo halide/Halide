@@ -13,3 +13,6 @@ if (MSVC)
 else()
   target_compile_options(HalideToolsRunGen PUBLIC "-fno-rtti")
 endif()
+
+add_executable(build_halide_h build_halide_h.cpp)
+add_executable(binary2cpp binary2cpp.cpp)
