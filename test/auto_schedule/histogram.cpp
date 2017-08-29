@@ -57,7 +57,7 @@ double run_test(bool auto_schedule) {
     Expr blue = cast<uint8_t> (clamp(eq(x, y) + 1.765f * (Cb(x, y) - 128), 0, 255));
     color(x, y, c) = select(c == 0, red, select(c == 1, green , blue));
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(color);
 
     if (auto_schedule) {

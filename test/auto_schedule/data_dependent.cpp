@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     g.estimate(x, 0, input.width() - 1).estimate(y, 0, input.height());
 
     // Auto-schedule the pipeline
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
     p.auto_schedule(target);
