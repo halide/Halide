@@ -181,11 +181,19 @@
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
  *
  * \code
- *      HALIDE_REGISTER_GENERATOR(ExampleGen, "jit_example")
+ *      HALIDE_REGISTER_GENERATOR(ExampleGen, jit_example)
  * \endcode
  *
  * The registered name of the Generator is provided must match the same rules as
  * Input names, above.
+ *
+ * Note that the class name of the generated Stub class will match the registered
+ * name by default; if you want to vary it (typically, to include namespaces),
+ * you can add it as an optional third argument:
+ *
+ * \code
+ *      HALIDE_REGISTER_GENERATOR(ExampleGen, jit_example, SomeNamespace::JitExampleStub)
+ * \endcode
  *
  * Note that a Generator is always executed with a specific Target assigned to it,
  * that you can access via the get_target() method. (You should *not* use the
@@ -611,7 +619,7 @@ public:
 
     template <typename T2 = T, typename std::enable_if<!std::is_same<T2, Type>::value>::type * = nullptr>
     void set(const T &e) {
-        this->set_impl(e);        
+        this->set_impl(e);
     }
 
     void set_from_string(const std::string &new_value_string) override {
@@ -1214,6 +1222,9 @@ protected:
     virtual std::string get_c_type() const = 0;
 
     EXPORT void check_value_writable() const override;
+
+    EXPORT void estimate_impl(Var var, Expr min, Expr extent);
+
 private:
     EXPORT void init_parameters();
 };
@@ -1347,6 +1358,11 @@ public:
     operator ExternFuncArgument() const {
         return ExternFuncArgument(this->parameters_.at(0));
     }
+
+    GeneratorInput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+        this->estimate_impl(var, min, extent);
+        return *this;
+    }
 };
 
 
@@ -1417,6 +1433,11 @@ public:
     operator ExternFuncArgument() const {
         return ExternFuncArgument(this->parameters_.at(0));
     }
+
+    GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+        this->estimate_impl(var, min, extent);
+        return *this;
+    }
 };
 
 
@@ -1464,7 +1485,11 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-
+    void set_estimate(Expr value) {
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(value);
+        }
+    }
 };
 
 template<typename T>
@@ -1917,6 +1942,12 @@ public:
 
         return *this;
     }
+
+    GeneratorOutput_Buffer<T> &estimate(Var var, Expr min, Expr extent) {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        this->funcs_.at(0).estimate(var, min, extent);
+        return *this;
+    }
 };
 
 
@@ -1965,6 +1996,14 @@ public:
     template <typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     const Func &operator[](size_t i) const {
         return Super::operator[](i);
+    }
+
+    GeneratorOutput_Func<T> &estimate(Var var, Expr min, Expr extent) {
+        internal_assert(this->exprs_.empty() && this->funcs_.size() > 0);
+        for (Func &f : this->funcs_) {
+            f.estimate(var, min, extent);
+        }
+        return *this;
     }
 };
 
@@ -2466,7 +2505,7 @@ private:
     mutable std::shared_ptr<ExternsMap> externs_map;
 
     bool inputs_set{false};
-    std::string generator_name;
+    std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
 
     // Return our ParamInfo (lazy-initing as needed).
@@ -2490,10 +2529,7 @@ private:
     EXPORT Func get_output(const std::string &n);
     EXPORT std::vector<Func> get_output_vector(const std::string &n);
 
-    void set_generator_name(const std::string &n) {
-        internal_assert(generator_name.empty());
-        generator_name = n;
-    }
+    EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     EXPORT void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -2653,8 +2689,8 @@ using GeneratorCreateFunc = std::function<std::unique_ptr<Internal::GeneratorBas
 
 class SimpleGeneratorFactory : public GeneratorFactory {
 public:
-    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &generator_name)
-        : create_func(create_func), generator_name(generator_name) {
+    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &registered_name, const std::string &stub_name)
+        : create_func(create_func), generator_registered_name(registered_name), generator_stub_name(stub_name) {
         internal_assert(create_func != nullptr);
     }
 
@@ -2662,13 +2698,13 @@ public:
                                                     const std::map<std::string, std::string> &params) const override {
         auto g = create_func(context);
         internal_assert(g.get() != nullptr);
-        g->set_generator_name(generator_name);
+        g->set_generator_names(generator_registered_name, generator_stub_name);
         g->set_generator_and_schedule_param_values(params);
         return g;
     }
 private:
     const GeneratorCreateFunc create_func;
-    const std::string generator_name;
+    const std::string generator_registered_name, generator_stub_name;
 };
 
 class GeneratorRegistry {
@@ -2717,7 +2753,7 @@ public:
 
     template <typename... Args>
     void apply(const Args &...args) {
-        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value, 
+        static_assert(has_generate_method<T>::value && has_schedule_method<T>::value,
             "apply() is not supported for old-style Generators.");
         set_inputs(args...);
         call_generate();
@@ -2827,16 +2863,21 @@ private:
     void operator=(Generator&& that) = delete;
 };
 
+namespace Internal {
+
 template <class GeneratorClass>
 class RegisterGenerator {
 public:
-    RegisterGenerator(const char* generator_name) {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, generator_name));
-        Internal::GeneratorRegistry::register_factory(generator_name, std::move(f));
+    RegisterGenerator(const char* registered_name) {
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, registered_name, registered_name));
+        Internal::GeneratorRegistry::register_factory(registered_name, std::move(f));
+    }
+
+    RegisterGenerator(const char* registered_name, const char* stub_name) {
+        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, registered_name, stub_name));
+        Internal::GeneratorRegistry::register_factory(registered_name, std::move(f));
     }
 };
-
-namespace Internal {
 
 class GeneratorStub : public NamesInterface {
 public:
@@ -2978,8 +3019,52 @@ private:
 
 }  // namespace Halide
 
-#define HALIDE_REGISTER_GENERATOR(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
-    namespace ns_reg_gen { static auto reg_##GEN_CLASS_NAME = Halide::RegisterGenerator<GEN_CLASS_NAME>(GEN_REGISTRY_NAME); }
+// Define this namespace at global scope so that anonymous namespaces won't
+// defeat our static_assert check; define a dummy type inside so we can
+// check for type aliasing injected by anonymous namespace usage
+namespace halide_register_generator { 
+    struct halide_global_ns;
+};
 
+#define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
+    namespace halide_register_generator { \
+        struct halide_global_ns; \
+        static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator<GEN_CLASS_NAME>(#GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); \
+    } \
+    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value, \
+                 "HALIDE_REGISTER_GENERATOR must be used at global scope");
+
+#define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
+    _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, GEN_REGISTRY_NAME)
+
+#define _HALIDE_REGISTER_GENERATOR3(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
+    _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)
+
+// MSVC has a broken implementation of variadic macros: it expands __VA_ARGS__
+// as a single token in argument lists (rather than multiple tokens). 
+// Jump through some hoops to work around this.
+#define __HALIDE_REGISTER_ARGCOUNT_IMPL(_1, _2, _3, COUNT, ...) \
+   COUNT
+
+#define _HALIDE_REGISTER_ARGCOUNT_IMPL(ARGS) \
+   __HALIDE_REGISTER_ARGCOUNT_IMPL ARGS
+
+#define _HALIDE_REGISTER_ARGCOUNT(...) \
+   _HALIDE_REGISTER_ARGCOUNT_IMPL((__VA_ARGS__, 3, 2, 1, 0))
+
+#define ___HALIDE_REGISTER_CHOOSER(COUNT) \
+    _HALIDE_REGISTER_GENERATOR##COUNT
+
+#define __HALIDE_REGISTER_CHOOSER(COUNT) \
+    ___HALIDE_REGISTER_CHOOSER(COUNT)
+
+#define _HALIDE_REGISTER_CHOOSER(COUNT) \
+    __HALIDE_REGISTER_CHOOSER(COUNT)
+
+#define _HALIDE_REGISTER_GENERATOR_PASTE(A, B) \
+    A B
+
+#define HALIDE_REGISTER_GENERATOR(...) \
+    _HALIDE_REGISTER_GENERATOR_PASTE(_HALIDE_REGISTER_CHOOSER(_HALIDE_REGISTER_ARGCOUNT(__VA_ARGS__)), (__VA_ARGS__)) 
 
 #endif  // HALIDE_GENERATOR_H_

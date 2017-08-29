@@ -16,6 +16,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<Multitarget> register_my_gen{"multitarget"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Multitarget, multitarget)

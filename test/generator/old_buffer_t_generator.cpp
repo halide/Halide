@@ -27,4 +27,4 @@ public:
     }
 };
 
-Halide::RegisterGenerator<OldBufferT> reg{"old_buffer_t"};
+HALIDE_REGISTER_GENERATOR(OldBufferT, old_buffer_t)

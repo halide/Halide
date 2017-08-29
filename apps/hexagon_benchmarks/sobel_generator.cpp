@@ -60,4 +60,4 @@ private:
     Func bounded_input{"bounded_input"};
 };
 
-HALIDE_REGISTER_GENERATOR(Sobel, "sobel");
+HALIDE_REGISTER_GENERATOR(Sobel, sobel)

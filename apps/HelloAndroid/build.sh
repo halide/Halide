@@ -18,7 +18,7 @@ for archs in arm-32-android,armeabi arm-32-android-armv7s,armeabi-v7a arm-64-and
     HL_TARGET=$1
     ANDROID_ABI=$2
     mkdir -p bin/$ANDROID_ABI
-    ./bin/hello_generator -o bin/$ANDROID_ABI target=$HL_TARGET
+    ./bin/hello_generator -g hello -o bin/$ANDROID_ABI target=$HL_TARGET
     unset IFS
 done
 

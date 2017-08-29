@@ -3,6 +3,11 @@
 #include <iostream>
 #include <limits>
 
+// Disable a warning in MSVC that we know will be triggered here.
+#ifdef _MSC_VER
+#pragma warning(disable:4756)  // "overflow in constant arithmetic"
+#endif
+
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 

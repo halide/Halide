@@ -43,7 +43,7 @@ endfunction(tests)
 
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
-  use_image_io(correctness_image_io)
+  halide_use_image_io(correctness_image_io)
   test_plain_c_includes()
 endif()
 if (WITH_TEST_ERROR)
@@ -76,6 +76,9 @@ function(add_test_generator NAME)
   else()
     set(args_WITH_STUB )
   endif()
+  if (NOT args_GENERATOR_NAME)
+    set(args_GENERATOR_NAME ${NAME})
+  endif()
   halide_add_generator("${NAME}.generator"
                        STUB_GENERATOR_NAME "${args_GENERATOR_NAME}"
                        SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp"
@@ -103,8 +106,6 @@ function(halide_define_jit_test NAME)
                                          STUB_GENERATOR_TARGET ${STUB_DEP})
   endforeach()
 endfunction(halide_define_jit_test)
-
-include(../HalideGenerator.cmake)
 
 # Usage:
 #   halide_define_aot_test(NAME <basename>
@@ -209,10 +210,8 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(metadata_tester)
   add_test_generator(msan)
   add_test_generator(multitarget)
-  add_test_generator(nested_externs)
   add_test_generator(pyramid)
-  add_test_generator(stubtest WITH_STUB
-                     GENERATOR_NAME StubNS1::StubNS2::StubTest)
+  add_test_generator(stubtest WITH_STUB)
   # the stubuser generator needs the stub from stubtest
   add_test_generator(stubuser
                      GENERATOR_NAME stubuser
@@ -277,12 +276,25 @@ if (WITH_TEST_GENERATORS)
 
   if (TARGET_PTX)
     halide_add_aot_test_dependency(cxx_mangling
+                                 GENERATOR_NAME cxx_mangling
                                  AOT_LIBRARY_TARGET cxx_mangling_gpu
                                  GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
                                  GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
+  endif()
 
+  # gpu_object_lifetime can build with a variety of GPU targets (or none).
+  if(TARGET_PTX)
     halide_define_aot_test(gpu_object_lifetime
                            GENERATOR_HALIDE_TARGET host-cuda-debug)
+  elseif(TARGET_OPENCL)
+    halide_define_aot_test(gpu_object_lifetime
+                           GENERATOR_HALIDE_TARGET host-opencl-debug)
+  elseif(TARGET_METAL)
+    halide_define_aot_test(gpu_object_lifetime
+                           GENERATOR_HALIDE_TARGET host-metal-debug)
+  else()
+    halide_define_aot_test(gpu_object_lifetime
+                           GENERATOR_HALIDE_TARGET host-debug)
   endif()
 
   halide_define_aot_test(pyramid
@@ -306,7 +318,6 @@ if (WITH_TEST_GENERATORS)
       vectorize=true
   )
   halide_define_aot_test(stubtest
-                         GENERATOR_NAME StubNS1::StubNS2::StubTest
                          GENERATOR_ARGS "${STUBTEST_GENERATOR_ARGS}")
 
   # Tests that require additional dependencies, args, etc
@@ -329,6 +340,7 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(metadata_tester
                          GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
   halide_add_aot_test_dependency(metadata_tester
+                                 GENERATOR_NAME metadata_tester
                                  AOT_LIBRARY_TARGET metadata_tester_ucon
                                  GENERATED_FUNCTION metadata_tester_ucon
                                  GENERATOR_HALIDE_TARGET host-user_context
@@ -336,6 +348,7 @@ if (WITH_TEST_GENERATORS)
 
   halide_define_aot_test(tiled_blur)
   halide_add_aot_test_dependency(tiled_blur
+                                 GENERATOR_NAME blur2x2
                                  GENERATOR_TARGET blur2x2
                                  AOT_LIBRARY_TARGET blur2x2)
 
@@ -353,17 +366,14 @@ if (WITH_TEST_GENERATORS)
   halide_add_aot_library_dependency(generator_aot_cxx_mangling_define_extern cxx_mangling)
 
   halide_define_aot_test(nested_externs OMIT_DEFAULT_GENERATOR)
-  halide_add_aot_test_dependency(nested_externs
-                                 AOT_LIBRARY_TARGET nested_externs_root
-                                 GENERATOR_NAME nested_externs_root)
-  halide_add_aot_test_dependency(nested_externs
-                                 AOT_LIBRARY_TARGET nested_externs_inner
-                                 GENERATOR_NAME nested_externs_inner)
-  halide_add_aot_test_dependency(nested_externs
-                                 AOT_LIBRARY_TARGET nested_externs_combine
-                                 GENERATOR_NAME nested_externs_combine)
-  halide_add_aot_test_dependency(nested_externs
-                                 AOT_LIBRARY_TARGET nested_externs_leaf
-                                 GENERATOR_NAME nested_externs_leaf)
+  foreach(GEN root inner combine leaf)
+    halide_add_generator("nested_externs_${GEN}.generator"
+                         STUB_GENERATOR_NAME "nested_externs_${GEN}"
+                         SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/nested_externs_generator.cpp")
+    halide_add_aot_test_dependency(nested_externs
+                                   GENERATOR_TARGET nested_externs_${GEN}
+                                   AOT_LIBRARY_TARGET nested_externs_${GEN}
+                                   GENERATOR_NAME nested_externs_${GEN})
+  endforeach()
 
 endif()

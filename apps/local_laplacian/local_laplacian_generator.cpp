@@ -6,7 +6,7 @@ constexpr int maxJ = 20;
 
 class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 public:
-
+    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<int>   pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
     ImageParam            input{UInt(16), 3, "input"};
@@ -86,13 +86,27 @@ public:
         // Convert back to 16-bit
         output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
 
-
-
         /* THE SCHEDULE */
-        remap.compute_root();
 
-        if (get_target().has_gpu_feature()) {
+        if (auto_schedule) {
+            // Provide estimates on the input image
+            input.dim(0).set_bounds_estimate(0, 1536);
+            input.dim(1).set_bounds_estimate(0, 2560);
+            input.dim(2).set_bounds_estimate(0, 3);
+            // Provide estimates on the parameters
+            levels.set_estimate(8);
+            alpha.set_estimate(1);
+            beta.set_estimate(1);
+            // Provide estimates on the pipeline output
+            output.estimate(x, 0, 1536)
+                .estimate(y, 0, 2560)
+                .estimate(c, 0, 3);
+            // Auto schedule the pipeline
+            Pipeline p(output);
+            p.auto_schedule(get_target());
+        } else if (get_target().has_gpu_feature()) {
             // gpu schedule
+            remap.compute_root();
             Var xi, yi;
             output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
             for (int j = 0; j < J; j++) {
@@ -109,6 +123,7 @@ public:
             }
         } else {
             // cpu schedule
+            remap.compute_root();
             Var yo;
             output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
             gray.compute_root().parallel(y, 32).vectorize(x, 8);
@@ -129,7 +144,6 @@ public:
                 outGPyramid[j].compute_root();
             }
         }
-
         return output;
     }
 private:
@@ -156,6 +170,6 @@ private:
 
 };
 
-Halide::RegisterGenerator<LocalLaplacian> register_me{"local_laplacian"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(LocalLaplacian, local_laplacian)

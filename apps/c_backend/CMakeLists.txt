@@ -11,12 +11,14 @@ endfunction(halide_add_aot_cpp_dependency)
 halide_add_generator(pipeline.generator
                      SRCS pipeline_generator.cpp)
 halide_add_aot_library(pipeline_c
+                       GENERATOR_NAME pipeline
                        GENERATOR_TARGET pipeline.generator
                        GENERATED_FUNCTION pipeline_c
                        GENERATOR_OUTPUTS cpp h
                        GENERATOR_ARGS target=host)
 
 halide_add_aot_library(pipeline_native
+                       GENERATOR_NAME pipeline
                        GENERATOR_TARGET pipeline.generator
                        GENERATED_FUNCTION pipeline_native
                        GENERATOR_OUTPUTS static_library h
@@ -25,11 +27,13 @@ halide_add_aot_library(pipeline_native
 halide_add_generator(pipeline_cpp.generator
                      SRCS pipeline_cpp_generator.cpp)
 halide_add_aot_library(pipeline_cpp_cpp
+                       GENERATOR_NAME pipeline_cpp
                        GENERATOR_TARGET pipeline_cpp.generator
                        GENERATED_FUNCTION pipeline_cpp_cpp
                        GENERATOR_OUTPUTS cpp h
                        GENERATOR_ARGS target=host-c_plus_plus_name_mangling)
 halide_add_aot_library(pipeline_cpp_native
+                       GENERATOR_NAME pipeline_cpp
                        GENERATOR_TARGET pipeline_cpp.generator
                        GENERATED_FUNCTION pipeline_cpp_native
                        GENERATOR_OUTPUTS static_library h
