@@ -49,11 +49,8 @@ public:
             // host_1 is computed per 32x32 tile of dev_2
             host_1.compute_at(dev_2, tx);
 
-            // TODO: Calling in() on Input<Func> doesn't really work.
-            Func(input).in().compute_root();
-
             // pulls a 64x64 subset of the input into a region of a GPU buffer to be consumed by dev_1
-            Func(input).in().in(dev_1).copy_to_device().compute_at(output, tx).store_root();
+            input.in(dev_1).copy_to_device().compute_at(output, tx).store_root();
 
             // pulls a 32x32 subset from dev to host to be consumed by host_1
             dev_1.in(host_1).copy_to_host().compute_at(dev_2, tx);

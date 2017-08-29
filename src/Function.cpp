@@ -10,6 +10,7 @@
 #include "CSE.h"
 #include "Random.h"
 #include "Introspection.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ParallelRVar.h"
@@ -834,6 +835,10 @@ const std::vector<ExternFuncArgument> &Function::extern_arguments() const {
     return contents->extern_arguments;
 }
 
+std::vector<ExternFuncArgument> &Function::extern_arguments() {
+    return contents->extern_arguments;
+}
+
 const std::string &Function::extern_function_name() const {
     return contents->extern_function_name;
 }
@@ -902,6 +907,29 @@ void Function::add_wrapper(const std::string &f, Function &wrapper) {
     // Weaken the pointer from the wrapper back to the function.
     WeakenFunctionPtrs weakener(contents.get());
     wrapper.mutate(&weakener);
+}
+
+const Call *Function::is_wrapper() const {
+    const vector<Expr> &rhs = values();
+    if (rhs.size() != 1) {
+        return nullptr;
+    }
+    const Call *call = rhs[0].as<Call>();
+    if (!call) {
+        return nullptr;
+    }
+    vector<Expr> expected_args;
+    for (const string &v : args()) {
+        expected_args.push_back(Variable::make(Int(32), v));
+    }
+    Expr expected_rhs =
+        Call::make(call->type, call->name, expected_args, call->call_type,
+                   call->func, call->value_index, call->image, call->param);
+    if (equal(rhs[0], expected_rhs)) {
+        return call;
+    } else {
+        return nullptr;
+    }
 }
 
 namespace {

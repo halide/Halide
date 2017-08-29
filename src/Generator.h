@@ -1363,6 +1363,18 @@ public:
         this->estimate_impl(var, min, extent);
         return *this;
     }
+
+    Func in() {
+        return Func(*this).in();
+    }
+
+    Func in(Func other) {
+        return Func(*this).in(other);
+    }
+
+    Func in(const std::vector<Func> &others) {
+        return Func(*this).in(others);
+    }
 };
 
 
@@ -1437,6 +1449,18 @@ public:
     GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
         this->estimate_impl(var, min, extent);
         return *this;
+    }
+
+    Func in() {
+        return Func(*this).in();
+    }
+
+    Func in(Func other) {
+        return Func(*this).in(other);
+    }
+
+    Func in(const std::vector<Func> &others) {
+        return Func(*this).in(others);
     }
 };
 
@@ -3022,7 +3046,7 @@ private:
 // Define this namespace at global scope so that anonymous namespaces won't
 // defeat our static_assert check; define a dummy type inside so we can
 // check for type aliasing injected by anonymous namespace usage
-namespace halide_register_generator { 
+namespace halide_register_generator {
     struct halide_global_ns;
 };
 
@@ -3041,7 +3065,7 @@ namespace halide_register_generator {
     _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)
 
 // MSVC has a broken implementation of variadic macros: it expands __VA_ARGS__
-// as a single token in argument lists (rather than multiple tokens). 
+// as a single token in argument lists (rather than multiple tokens).
 // Jump through some hoops to work around this.
 #define __HALIDE_REGISTER_ARGCOUNT_IMPL(_1, _2, _3, COUNT, ...) \
    COUNT
@@ -3065,6 +3089,6 @@ namespace halide_register_generator {
     A B
 
 #define HALIDE_REGISTER_GENERATOR(...) \
-    _HALIDE_REGISTER_GENERATOR_PASTE(_HALIDE_REGISTER_CHOOSER(_HALIDE_REGISTER_ARGCOUNT(__VA_ARGS__)), (__VA_ARGS__)) 
+    _HALIDE_REGISTER_GENERATOR_PASTE(_HALIDE_REGISTER_CHOOSER(_HALIDE_REGISTER_ARGCOUNT(__VA_ARGS__)), (__VA_ARGS__))
 
 #endif  // HALIDE_GENERATOR_H_

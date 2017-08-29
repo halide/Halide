@@ -1848,39 +1848,19 @@ Func Func::copy_to_device(DeviceAPI d) {
         << "copy_to_device on Func " << name() << " with update definition\n";
     user_assert(!is_extern())
         << "copy_to_device on Func " << name() << " with extern definition\n";
-    Expr rhs = value();
-    const Call *call = rhs.as<Call>();
+
+    const Call *call = func.is_wrapper();
     user_assert(call)
         << "Func " << name() << " is scheduled as copy_to_host/device, "
-        << "but has value: " << rhs << "\n"
-        << "Expected a single call to another Func.\n";
-    user_assert(call->args.size() == args().size())
-        << "Func " << name() << " has a different dimensionality to the "
-        << "Func it calls, so cannot be scheduled as copy_to_host/device.\n";
-    // TODO: it would be good to support translations, transpositions, slices, embeds, etc.
-    vector<Expr> expected_args;
-    for (Var v : args()) {
-        expected_args.push_back(v);
-    }
-    // TODO: allow reinterpret casts
-    Expr expected_rhs =
-        Call::make(call->type, call->name, expected_args, call->call_type,
-                   call->func, call->value_index, call->image, call->param);
-    user_assert(equal(rhs, expected_rhs))
-        << "Func " << name() << " cannot be scheduled as copy_to_host/device. "
-        << "Its value is not of the required form.\n"
-        << "value: " << rhs << "\n"
-        << "expected value: " << expected_rhs << "\n";
+        << "but has value: " << value() << "\n"
+        << "Expected a single call to another Func with matching "
+        << "dimensionality and argument order.\n";
 
     // We'll preserve the pure vars
+    Expr rhs = value();
     func.definition().values().clear();
     func.extern_definition_proxy_expr() = rhs;
-    string buffer_name = call->name;
-    if (Function(call->func).outputs() > 1) {
-        buffer_name += "." + std::to_string(call->value_index);
-    }
-    buffer_name += ".buffer";
-    ReductionDomain rdom;
+
     ExternFuncArgument buffer;
     if (call->call_type == Call::Halide) {
         buffer = call->func;
