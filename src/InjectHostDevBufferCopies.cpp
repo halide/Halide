@@ -31,15 +31,6 @@ namespace {
 class FindBufferUsage : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Variable *op) {
-        if (is_buffer_var(op)) {
-            // Passing the buffer variable out of Halide counts
-            // as a read/write.
-            devices_touched.insert(current_device_api);
-            devices_writing.insert(current_device_api);
-        }
-    }
-
     void visit(const Load *op) {
         IRVisitor::visit(op);
         if (op->name == buffer) {
@@ -224,7 +215,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         }
 
         // Then figure out what to do
-        bool needs_device_malloc = (written_on_device &&
+        bool needs_device_malloc = (touched_on_device &&
                                     (state.device_allocation_exists != True));
 
         // TODO: If only written on device, and entirely clobbered on
