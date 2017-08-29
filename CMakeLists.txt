@@ -177,6 +177,73 @@ foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
   endforeach()
 endforeach()
 
+# Make a target that aggregates a number of other targets;
+# this can be used to group builds (e.g. "build_tests")
+# or to execute targets (by adding executable custom-commands);
+# the latter is used to execute test targets.
+#
+# Note that the target will be excluded from the "all" target, so it won't
+# be built by "make all" by default.
+#
+# TODO: this is intended to eventually replicate all of the interesting test targets
+# from our Make build, but not all are implemented yet:
+# TODO(srj): add test_aotcpp_generators support
+# TODO(srj): add test_valgrind variant
+# TODO(srj): add test_avx512 variant
+# TODO(srj): add test_bazel variant
+# TODO(srj): add test_python variant
+# TODO(srj): add test_apps variant
+# TODO(srj): add run_tests variant
+function(add_to_group GROUP TARGET)
+  set(options BUILD EXECUTE)
+  set(oneValueArgs WORKING_DIRECTORY)
+  set(multiValueArgs )
+  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+  if(NOT TARGET "${GROUP}")
+    add_custom_target("${GROUP}")
+    set_target_properties("${GROUP}" PROPERTIES EXCLUDE_FROM_ALL FALSE)
+  endif()
+  if (${args_EXECUTE})
+    # Execute the target (e.g. for a test_foo target)
+    set(NAME "execute_${TARGET}")
+    get_target_property(TARGET_TYPE "${TARGET}" TYPE)
+    if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
+      add_custom_target("${NAME}" 
+                         COMMAND "${TARGET}"
+                         WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
+                         COMMENT "Executing ${TARGET}"
+                         DEPENDS "${TARGET}")
+    elseif("${TARGET_TYPE}" STREQUAL "UTILITY")
+      # It's probably a custom target or a group: just depend on it.
+      add_custom_target("${NAME}" 
+                         DEPENDS "${TARGET}")
+    else()
+      message(FATAL_ERROR "add_to_group(): unsupported type ${TARGET_TYPE} for ${TARGET}")
+    endif()
+  elseif(${args_BUILD})
+    # Just depend on the target (e.g. for a build_foo target)
+    set(NAME "build_${TARGET}")
+    add_custom_target("${NAME}" 
+                       DEPENDS "${TARGET}")
+  else()
+    message(FATAL_ERROR "add_to_group() requires BUILD or EXECUTE")
+  endif()
+  set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL FALSE)
+  add_dependencies("${GROUP}" "${NAME}")
+endfunction()
+
+add_to_group(run_tests test_internal BUILD)
+add_to_group(run_tests test_correctness BUILD)
+add_to_group(run_tests test_error BUILD)
+add_to_group(run_tests test_tutorials BUILD)
+add_to_group(run_tests test_warning BUILD)
+add_to_group(run_tests test_generators BUILD)
+
+# TODO(srj): these need to be run one-at-a-time, without any -j option,
+# otherwise we can get false slowdown failures.
+# add_to_group(run_tests test_performance BUILD)
+# add_to_group(run_tests test_auto_schedule BUILD)
+
 add_subdirectory(tools)
 add_subdirectory(src)
 option(WITH_TESTS "Build tests" ON)
