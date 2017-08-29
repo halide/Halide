@@ -20,7 +20,7 @@ double run_test_1(bool auto_schedule) {
     Func r("r");
     r(x, y, c) += f(x, y+1, dom.x, dom.y) * f(x, y-1, dom.x, dom.y) * c;
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(r);
 
     if (auto_schedule) {
@@ -72,7 +72,7 @@ double run_test_2(bool auto_schedule) {
     diff(x, y, z, c) = min(absd(left(x, y, c), right(x + 2*z, y, c)),
                            absd(left(x, y, c), right(x + 2*z + 1, y, c)));
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(diff);
 
     if (auto_schedule) {
@@ -114,7 +114,7 @@ double run_test_3(bool auto_schedule) {
     r(x, y, c) += f(x, y+1, search_area/2 + dom.x, search_area/2 + dom.y) *
                   f(x, y+2, search_area/2 + dom.x, search_area/2 + dom.y) * c;
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(r);
 
     if (auto_schedule) {

@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     stencils[num_stencils - 1].estimate(x, 0, 6200).estimate(y, 0, 4600);
 
     // Auto-schedule the pipeline
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(stencils[num_stencils - 1]);
 
     std::cout << "\n\n******************************************\nSCHEDULE:\n"

@@ -82,7 +82,7 @@ double run_test(bool auto_schedule) {
     // Blur the columns again (the rows of the original).
     Func blur = blur_cols_transpose(blury_T, width, alpha, auto_schedule);
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(blur);
 
     if (auto_schedule) {

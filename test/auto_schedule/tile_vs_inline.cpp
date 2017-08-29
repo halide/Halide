@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         .estimate(c, 0, 3);
 
     // Auto-schedule the pipeline
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
     p.auto_schedule(target);
