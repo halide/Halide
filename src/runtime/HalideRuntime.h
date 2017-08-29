@@ -809,8 +809,8 @@ enum halide_error_code_t {
      * more details. */
     halide_error_code_device_free_failed = -18,
 
-    /** A device operation was attempted on a buffer with no device
-     * interface. */
+    /** Buffer has a non-zero device but no device interface, which
+     * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
     /** An error occurred when attempting to initialize the Matlab
@@ -880,19 +880,30 @@ enum halide_error_code_t {
      * touched wraps around the fold boundary. */
     halide_error_code_bad_extern_fold = -35,
 
+    /** Buffer has a non-null device_interface but device is 0, which
+     * violates a Halide invariant. */
+    halide_error_code_device_interface_no_device= -36,
+
+    /** Buffer has both host and device dirty bits set, which violates
+     * a Halide invariant. */
+    halide_error_code_host_and_device_dirty = -37,
+
+    /** The halide_buffer_t * passed to a halide runtime routine is
+     * nullptr and this is not allowed. */
+    halide_error_code_buffer_is_null = -38,
+
     /** The Halide runtime encountered an error while trying to copy
      * from one buffer to another. Turn on -debug in your target
      * string to see more details. */
-    halide_error_code_device_buffer_copy_failed = -36,
+    halide_error_code_device_buffer_copy_failed = -39,
 
     /** Attempted to make cropped alias of a buffer with a device
      * field, but the device_interface does not support cropping. */
-    halide_error_code_device_crop_unsupported = -37,
+    halide_error_code_device_crop_unsupported = -40,
 
     /** Cropping a buffer failed for some other reason. Turn on -debug
      * in your target string. */
-    halide_error_code_device_crop_failed = -38,
-
+    halide_error_code_device_crop_failed = -41,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -965,6 +976,10 @@ extern int halide_error_fold_factor_too_small(void *user_context, const char *fu
                                               int fold_factor, const char *loop_name, int required_extent);
 extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
 extern int halide_error_specialize_fail(void *user_context, const char *message);
+extern int halide_error_no_device_interface(void *user_context);
+extern int halide_error_device_interface_no_device(void *user_context);
+extern int halide_error_host_and_device_dirty(void *user_context);
+extern int halide_error_buffer_is_null(void *user_context, const char *routine);
 
 // @}
 
@@ -1218,6 +1233,15 @@ typedef struct halide_buffer_t {
         return host + index * type.bytes();
     }
 
+    /** Attempt to call device_sync for the buffer. If the buffer
+     * has no device_interface (or no device_sync), this is a quiet no-op.
+     * Calling this explicitly should rarely be necessary, except for profiling. */
+    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = NULL) {
+        if (device_interface && device_interface->device_sync) {
+            return device_interface->device_sync(ctx, this);
+        }
+        return 0;
+    }
 #endif
 } halide_buffer_t;
 

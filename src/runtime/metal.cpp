@@ -117,6 +117,13 @@ WEAK void end_encoding(mtl_blit_command_encoder *encoder) {
     objc_msgSend(encoder, sel_getUid("endEncoding"));
 }
 
+WEAK bool buffer_supports_set_bytes(mtl_compute_command_encoder *encoder) {
+    typedef bool (*responds_to_selector_method)(objc_id obj, objc_sel sel_1, objc_sel sel_2);
+    responds_to_selector_method method1 = (responds_to_selector_method)&objc_msgSend;
+    objc_sel set_bytes_sel = sel_getUid("setBytes:length:atIndex:");
+    return (*method1)(encoder, sel_getUid("respondsToSelector:"), set_bytes_sel);
+}
+
 WEAK mtl_library *new_library_with_source(mtl_device *device, const char *source, size_t source_len) {
     objc_id error_return;
     objc_id source_str = wrap_string_as_ns_string(source, source_len);
@@ -159,6 +166,14 @@ WEAK void set_input_buffer(mtl_compute_command_encoder *encoder, mtl_buffer *inp
               input_buffer, 0, index);
 }
 
+WEAK void set_input_buffer_from_bytes(mtl_compute_command_encoder *encoder, uint8_t *input_buffer, uint32_t length, uint32_t index) {
+    typedef void (*set_bytes_method)(objc_id encoder, objc_sel sel,
+                                      void *input_buffer, size_t length, size_t index);
+    set_bytes_method method = (set_bytes_method)&objc_msgSend;
+    (*method)(encoder, sel_getUid("setBytes:length:atIndex:"),
+              input_buffer, length, index);
+}
+
 WEAK void set_threadgroup_memory_length(mtl_compute_command_encoder *encoder, uint32_t length, uint32_t index) {
     typedef void (*set_threadgroup_memory_length_method)(objc_id encoder, objc_sel sel,
                                                          size_t length, size_t index);
@@ -194,6 +209,11 @@ struct module_state {
     module_state *next;
 };
 WEAK module_state *state_list = NULL;
+
+// API Capabilities.  If more capabilities need to be checked,
+// this can be refactored to something more robust/general.
+WEAK bool metal_api_supports_set_bytes;
+WEAK mtl_device *metal_api_checked_device;
 
 }}}}
 
@@ -664,14 +684,30 @@ WEAK int halide_metal_run(void *user_context,
 
     int32_t buffer_index = 0;
     if (total_args_size > 0) {
-        mtl_buffer *args_buffer = new_buffer(metal_context.device, total_args_size);
-        if (args_buffer == 0) {
-            error(user_context) << "Metal: Could not allocate arguments buffer.\n";
-            release_ns_object(pipeline_state);
-            release_ns_object(function);
-            return -1;
+        mtl_buffer *args_buffer = 0;        // used if the total arguments size large
+        uint8_t small_args_buffer[4096];    // used if the total arguments size is small
+        char *args_ptr;
+
+        if (metal_api_checked_device != metal_context.device) {
+            metal_api_supports_set_bytes = buffer_supports_set_bytes(encoder);
+            metal_api_checked_device = metal_context.device;
+            if (metal_api_supports_set_bytes) {
+                debug(user_context) << "Metal - supports setBytes\n";
+            }
         }
-        char *args_ptr = (char *)buffer_contents(args_buffer);
+
+        if (total_args_size < 4096 && metal_api_supports_set_bytes) {
+            args_ptr = (char *)small_args_buffer;
+        } else {
+            args_buffer = new_buffer(metal_context.device, total_args_size);
+            if (args_buffer == 0) {
+                error(user_context) << "Metal: Could not allocate arguments buffer.\n";
+                release_ns_object(pipeline_state);
+                release_ns_object(function);
+                return -1;
+            }
+            args_ptr = (char *)buffer_contents(args_buffer);
+        }
         size_t offset = 0;
         for (size_t i = 0; arg_sizes[i] != 0; i++) {
             if (!arg_is_buffer[i]) {
@@ -681,8 +717,13 @@ WEAK int halide_metal_run(void *user_context,
             }
         }
         halide_assert(user_context, offset == total_args_size);
-        set_input_buffer(encoder, args_buffer, buffer_index);
-        release_ns_object(args_buffer);
+        if (total_args_size < 4096 && metal_api_supports_set_bytes) {
+            set_input_buffer_from_bytes(encoder, small_args_buffer,
+                                        total_args_size, buffer_index);
+        } else {
+            set_input_buffer(encoder, args_buffer, buffer_index);
+            release_ns_object(args_buffer);
+        }
         buffer_index++;
     }
 

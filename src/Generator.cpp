@@ -255,18 +255,20 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
 class StubEmitter {
 public:
     StubEmitter(std::ostream &dest, 
-                const std::string &generator_name,
+                const std::string &generator_registered_name,
+                const std::string &generator_stub_name,
                 const std::vector<Internal::GeneratorParamBase *>& generator_params,
                 const std::vector<Internal::ScheduleParamBase *>& schedule_params,
                 const std::vector<Internal::GeneratorInputBase *>& inputs,
                 const std::vector<Internal::GeneratorOutputBase *>& outputs) 
         : stream(dest), 
-          generator_name(generator_name), 
+          generator_registered_name(generator_registered_name), 
+          generator_stub_name(generator_stub_name), 
           generator_params(filter_params(generator_params)), 
           schedule_params(schedule_params), 
           inputs(inputs), 
           outputs(outputs) {
-       namespaces = split_string(generator_name, "::");
+       namespaces = split_string(generator_stub_name, "::");
        internal_assert(namespaces.size() >= 1);
        if (namespaces[0].empty()) {
            // We have a name like ::foo::bar::baz; omit the first empty ns.
@@ -280,7 +282,8 @@ public:
     void emit();
 private:
     std::ostream &stream;
-    const std::string generator_name;
+    const std::string generator_registered_name;
+    const std::string generator_stub_name;
     std::string class_name;
     std::vector<std::string> namespaces;
     const std::vector<Internal::GeneratorParamBase *> generator_params;
@@ -452,7 +455,7 @@ void StubEmitter::emit() {
         // on the other hand, since this file is just a couple of comments, it's
         // really not an issue if it's included multiple times.
         stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
-        stream << "/* The Generator named " << generator_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
+        stream << "/* The Generator named " << generator_registered_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
         return;
     }
 
@@ -693,7 +696,7 @@ void StubEmitter::emit() {
     indent_level++;
     stream << indent() << "static std::unique_ptr<Halide::Internal::GeneratorBase> factory(const GeneratorContext& context, const std::map<std::string, std::string>& params) {\n";
     indent_level++;
-    stream << indent() << "return Halide::Internal::GeneratorRegistry::create(\"" << generator_name << "\", context, params);\n";
+    stream << indent() << "return Halide::Internal::GeneratorRegistry::create(\"" << generator_registered_name << "\", context, params);\n";
     indent_level--;
     stream << indent() << "};\n";
     stream << "\n";
@@ -839,16 +842,17 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     std::string generator_name = flags_info["-g"];
     if (generator_name.empty() && runtime_name.empty()) {
-        // If -g isn't specified, but there's only one generator registered, just use that one.
-        if (generator_names.size() > 1) {
-            cerr << "-g must be specified if multiple generators are registered:\n";
+        // Require either -g or -r to be specified: 
+        // no longer infer the name when only one Generator is registered
+        cerr << "Either -g <name> or -r must be specified; available Generators are:\n";
+        if (!generator_names.empty()) {
             for (auto name : generator_names) {
                 cerr << "    " << name << "\n";
             }
-            cerr << kUsage;
-            return 1;
+        } else {
+            cerr << "    <none>\n";
         }
-        generator_name = generator_names[0];
+        return 1;
     }
     std::string function_name = flags_info["-f"];
     if (function_name.empty()) {
@@ -1011,9 +1015,7 @@ GeneratorRegistry &GeneratorRegistry::get_registry() {
 /* static */
 void GeneratorRegistry::register_factory(const std::string &name,
                                          std::unique_ptr<GeneratorFactory> factory) {
-    for (auto n : split_string(name, "::")) {
-        user_assert(is_valid_name(n)) << "Invalid Generator name part: " << n;
-    }
+    user_assert(is_valid_name(name)) << "Invalid Generator name: " << name;
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
@@ -1270,6 +1272,12 @@ Internal::ScheduleParamBase &GeneratorBase::find_schedule_param_by_name(const st
     return *it->second;
 }
 
+void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
+    user_assert(is_valid_name(registered_name)) << "Invalid Generator name: " << registered_name;
+    internal_assert(generator_registered_name.empty() && generator_stub_name.empty());
+    generator_registered_name = registered_name;
+    generator_stub_name = stub_name;
+}
 
 void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
     advance_phase(InputsSet);
@@ -1448,13 +1456,13 @@ Module GeneratorBase::build_module(const std::string &function_name,
 }
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
-    user_assert(!generator_name.empty()) << "Generator has no name.\n";
+    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
     // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_name, pi.generator_params, pi.schedule_params, pi.filter_inputs, pi.filter_outputs);
+    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params, pi.schedule_params, pi.filter_inputs, pi.filter_outputs);
     emit.emit();
 }
 
@@ -1711,6 +1719,28 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     set_def_min_max();
 
     verify_internals();
+}
+
+void GeneratorInputBase::estimate_impl(Var var, Expr min, Expr extent) {
+    internal_assert(exprs_.empty() && funcs_.size() > 0 && parameters_.size() == funcs_.size());
+    for (size_t i = 0; i < funcs_.size(); ++i) {
+        Func &f = funcs_[i];
+        f.estimate(var, min, extent);
+        // Propagate the estimate into the Parameter as well, just in case
+        // we end up compiling this for toplevel.
+        std::vector<Var> args = f.args();
+        int dim = -1;
+        for (size_t a = 0; a < args.size(); ++a) {
+            if (args[a].same_as(var)) {
+                dim = a;
+                break;
+            }
+        }
+        internal_assert(dim >= 0);
+        Parameter &p = parameters_[i];
+        p.set_min_constraint_estimate(dim, min);
+        p.set_extent_constraint_estimate(dim, extent);
+    }
 }
 
 GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, IOKind kind, const std::vector<Type> &t, int d) 

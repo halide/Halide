@@ -28,6 +28,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<HalideBlurGLSL> register_me{"halide_blur_glsl"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(HalideBlurGLSL, halide_blur_glsl)

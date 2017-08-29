@@ -50,6 +50,7 @@ public:
     }
 };
 
-Halide::RegisterGenerator<ExternalCode> register_my_gen{"external_code"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(ExternalCode, external_code)
+

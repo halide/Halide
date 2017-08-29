@@ -27,8 +27,6 @@ private:
     Var x, y, xi, yi, c;
 };
 
-HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Init, "reaction_diffusion_2_init")
-
 class ReactionDiffusion2Update : public Halide::Generator<ReactionDiffusion2Update> {
 public:
     Input<Buffer<float>> state{"state", 3};
@@ -168,8 +166,6 @@ private:
     RDom clobber;
 };
 
-HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Update, "reaction_diffusion_2_update")
-
 class ReactionDiffusion2Render : public Halide::Generator<ReactionDiffusion2Render> {
 public:
     Input<Buffer<float>> state{"state", 3};
@@ -236,6 +232,10 @@ private:
     Var x, y, c, xi, yi;
 };
 
-HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Render, "reaction_diffusion_2_render")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Init, reaction_diffusion_2_init)
+HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Update, reaction_diffusion_2_update)
+HALIDE_REGISTER_GENERATOR(ReactionDiffusion2Render, reaction_diffusion_2_render)
+
+

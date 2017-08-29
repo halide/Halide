@@ -18,6 +18,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<Matlab> register_matlab{"matlab"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Matlab, matlab)

@@ -51,4 +51,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(CPlusPlusNameManglingDefineExternGenerator, "cxx_mangling_define_extern")
+HALIDE_REGISTER_GENERATOR(CPlusPlusNameManglingDefineExternGenerator, cxx_mangling_define_extern)
