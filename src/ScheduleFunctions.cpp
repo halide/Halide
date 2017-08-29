@@ -1081,7 +1081,8 @@ bool validate_schedule(Function f, Stmt s, const Target &target, bool is_output,
         for (const ExternFuncArgument &arg : f.extern_arguments()) {
             if (arg.is_func()) {
                 Function g(arg.func);
-                if (g.schedule().compute_level().is_inline()) {
+                if (!g.is_wrapper() &&
+                    g.schedule().compute_level().is_inline()) {
                     user_error
                         << "Func " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";

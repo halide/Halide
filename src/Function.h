@@ -59,6 +59,8 @@ enum class NameMangling {
 
 namespace Internal {
 
+struct Call;
+
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
@@ -230,7 +232,10 @@ public:
                               bool uses_old_buffer_t);
 
     /** Retrive the arguments of the extern definition. */
+    // @{
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;
+    EXPORT std::vector<ExternFuncArgument> &extern_arguments();
+    // @}
 
     /** Get the name of the extern function called for an extern
      * definition. */
@@ -290,6 +295,12 @@ public:
     EXPORT void add_wrapper(const std::string &f, Function &wrapper);
     EXPORT const std::map<std::string, FunctionPtr> &wrappers() const;
     // @}
+
+    /** Check if a Function is a trivial wrapper around another
+     * Function, Buffer, or Parameter. Returns the Call node if it
+     * is. Otherwise returns null.
+     */
+    EXPORT const Call *is_wrapper() const;
 
     /** Replace every call to Functions in 'substitutions' keys by all Exprs
      * referenced in this Function to call to their substitute Functions (i.e.
