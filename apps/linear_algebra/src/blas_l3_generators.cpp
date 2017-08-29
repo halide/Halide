@@ -157,7 +157,7 @@ class GEMMGenerator :
     }
 };
 
-RegisterGenerator<GEMMGenerator<float>>    register_sgemm("sgemm");
-RegisterGenerator<GEMMGenerator<double>>   register_dgemm("dgemm");
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(GEMMGenerator<float>, sgemm)
+HALIDE_REGISTER_GENERATOR(GEMMGenerator<double>, dgemm)

@@ -45,6 +45,6 @@ public:
     std::function<void()> schedule;
 };
 
-Halide::RegisterGenerator<Pyramid> register_my_gen{"pyramid"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Pyramid, pyramid)

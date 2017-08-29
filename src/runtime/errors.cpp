@@ -272,4 +272,9 @@ WEAK int halide_error_host_and_device_dirty(void *user_context) {
     return halide_error_code_host_and_device_dirty;
 }
 
+WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
+    error(user_context) << "Buffer pointer passed to " << routine << " is null.\n";
+    return halide_error_code_buffer_is_null;
+}
+
 }  // extern "C"

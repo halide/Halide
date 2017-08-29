@@ -8,16 +8,19 @@ $(BIN)/bilateral_grid_exec: bilateral_grid_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 	@mkdir -p $(@D)
-	$^ -o $(BIN)  target=$(HL_TARGET)
+	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid target=$(HL_TARGET) auto_schedule=false
+
+$(BIN)/bilateral_grid_auto_schedule.a: $(BIN)/bilateral_grid_exec
+	@mkdir -p $(@D)
+	$^ -g bilateral_grid -o $(BIN) -f bilateral_grid_auto_schedule target=$(HL_TARGET)-no_runtime auto_schedule=true
 
 $(BIN)/viz/bilateral_grid.a: $(BIN)/bilateral_grid_exec
 	@mkdir -p $(@D)
-	@mkdir -p $(@D)
 	$^ -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
 
-$(BIN)/filter: $(BIN)/bilateral_grid.a filter.cpp
+$(BIN)/filter: $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_auto_schedule.a filter.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN) filter.cpp $(BIN)/bilateral_grid.a -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN) filter.cpp $(BIN)/bilateral_grid.a $(BIN)/bilateral_grid_auto_schedule.a -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 $(BIN)/filter_viz: $(BIN)/viz/bilateral_grid.a filter.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -O3 -ffast-math -Wall -Werror -I$(BIN)/viz filter.cpp $(BIN)/viz/bilateral_grid.a -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)

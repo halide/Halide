@@ -1948,6 +1948,25 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     return *this;
 }
 
+Func &Func::estimate(Var var, Expr min, Expr extent) {
+    invalidate_cache();
+    bool found = false;
+    for (size_t i = 0; i < func.args().size(); i++) {
+        if (var.name() == func.args()[i]) {
+            found = true;
+        }
+    }
+    user_assert(found)
+        << "Can't provide an estimate on variable " << var.name()
+        << " of function " << name()
+        << " because " << var.name()
+        << " is not one of the pure variables of " << name() << ".\n";
+
+    Bound b = {var.name(), min, extent, Expr(), Expr()};
+    func.schedule().estimates().push_back(b);
+    return *this;
+}
+
 Func &Func::bound_extent(Var var, Expr extent) {
     return bound(var, Expr(), extent);
 }

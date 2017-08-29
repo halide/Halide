@@ -60,4 +60,4 @@ private:
     Func bounded_input{"input_bounded"};
 };
 
-HALIDE_REGISTER_GENERATOR(Conv3x3, "conv3x3");
+HALIDE_REGISTER_GENERATOR(Conv3x3, conv3x3)

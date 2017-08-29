@@ -30,15 +30,15 @@ $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/pipeline_cpu.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -o $(BIN)/$* -e o,h -f pipeline_cpu target=$*
+	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_cpu target=$*
 
 $(BIN)/%/pipeline_hvx64.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
+	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
 
 $(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
 	@mkdir -p $(@D)
-	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
+	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
 
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)

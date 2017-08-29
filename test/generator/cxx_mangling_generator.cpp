@@ -80,4 +80,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(CPlusPlusNameManglingGenerator, "cxx_mangling")
+HALIDE_REGISTER_GENERATOR(CPlusPlusNameManglingGenerator, cxx_mangling)
