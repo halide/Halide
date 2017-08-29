@@ -1378,7 +1378,7 @@ private:
             string max_name = unique_name('t');
             string min_name = unique_name('t');
 
-            let_bounds.push_back(LetBound(v.var, min_name, max_name));
+            let_bounds.insert(let_bounds.begin(), LetBound(v.var, min_name, max_name));
 
             internal_assert(let_stmts.contains(v.var));
             Type t = let_stmts.get(v.var).type();
@@ -1888,6 +1888,46 @@ void constant_bound_test() {
                          Interval::neg_inf, Interval::pos_inf);
 }
 
+void boxes_touched_test() {
+    Type t = Int(32);
+    Expr x = Variable::make(t, "x");
+    Expr y = Variable::make(t, "y");
+    Expr z = Variable::make(t, "z");
+    Expr w = Variable::make(t, "w");
+
+    Scope<Interval> scope;
+    scope.push("y", Interval(Expr(0), Expr(10)));
+
+    Stmt stmt = Provide::make("f", {10}, {x, y, z, w});
+    stmt = IfThenElse::make(y > 4, stmt, Stmt());
+    stmt = IfThenElse::make(z > 18, stmt, Stmt());
+    stmt = LetStmt::make("w", z + 3, stmt);
+    stmt = LetStmt::make("z", x + 2, stmt);
+    stmt = LetStmt::make("x", y + 10, stmt);
+
+    Box expected({Interval(15, 20), Interval(5, 10), Interval(19, 22), Interval(22, 25)});
+    Box result = box_provided(stmt, "f", scope);
+    internal_assert(expected.size() == result.size())
+        << "Expect dim size of " << expected.size()
+        << ", got " << result.size() << " instead\n";
+    for (size_t i = 0; i < result.size(); ++i) {
+        const Interval &correct = expected[i];
+        Interval b = result[i];
+        b.min = simplify(b.min);
+        b.max = simplify(b.max);
+        if (!equal(correct.min, b.min)) {
+            internal_error << "In bounds of dim " << i << ":\n"
+                           << "Incorrect min: " << b.min << '\n'
+                           << "Should have been: " << correct.min << '\n';
+        }
+        if (!equal(correct.max, b.max)) {
+            internal_error << "In bounds of dim " << i << ":\n"
+                           << "Incorrect max: " << b.max << '\n'
+                           << "Should have been: " << correct.max << '\n';
+        }
+    }
+}
+
 } // anonymous namespace
 
 void bounds_test() {
@@ -2011,6 +2051,8 @@ void bounds_test() {
     merge_boxes(r2, r["output"]);
     internal_assert(equal(simplify(r2[0].min), 4));
     internal_assert(equal(simplify(r2[0].max), 19));
+
+    boxes_touched_test();
 
     std::cout << "Bounds test passed" << std::endl;
 }
