@@ -67,4 +67,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(BufferCopy, "buffer_copy");
+HALIDE_REGISTER_GENERATOR(BufferCopy, buffer_copy);
