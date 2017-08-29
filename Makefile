@@ -893,7 +893,7 @@ test_rungen: $(GENERATOR_BUILD_RUNGEN_TESTS)
 
 test_generators: $(GENERATOR_AOT_TESTS) $(GENERATOR_AOTCPP_TESTS) $(GENERATOR_JIT_TESTS) $(GENERATOR_BUILD_RUNGEN_TESTS)
 
-ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators test_auto_schedule
+ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings test_generators
 
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For generator tests they time the compile time only. The times are recorded in CSV files.
@@ -908,7 +908,7 @@ init_time_compilation_%:
 TIME_COMPILATION ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
 
 run_tests: $(ALL_TESTS)
-	make -f $(THIS_MAKEFILE) test_performance
+	make -f $(THIS_MAKEFILE) test_performance test_auto_schedule
 
 build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/correctness_%) \
 	$(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=$(BIN_DIR)/performance_%) \
