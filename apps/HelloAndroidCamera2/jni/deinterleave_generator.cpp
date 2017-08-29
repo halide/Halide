@@ -28,6 +28,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<Deinterleave> register_deinterleave{ "deinterleave" };
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Deinterleave, deinterleave)

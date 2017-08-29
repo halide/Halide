@@ -151,7 +151,7 @@ std::pair<std::string, std::string> dir_and_file(const std::string &path) {
 }
 
 std::string make_absolute_path(const std::string &path) {
-    bool is_absolute = path.size() >= 1 && path[0] == '/';
+    bool is_absolute = !path.empty() && path[0] == '/';
     char sep = '/';
 #ifdef _WIN32
     // Allow for C:\whatever or c:/whatever on Windows

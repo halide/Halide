@@ -14,6 +14,7 @@ public:
     }
 };
 
-Halide::RegisterGenerator<CanUseTarget> register_my_gen{"can_use_target"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(CanUseTarget, can_use_target)
+

@@ -10,11 +10,11 @@ $(BIN)/camera_pipe_exec: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/camera_pipe.a: $(BIN)/camera_pipe_exec
 	@mkdir -p $(@D)
-	$^ -o $(BIN) target=$(HL_TARGET)
+	$^ -g camera_pipe -o $(BIN) target=$(HL_TARGET)
 
 $(BIN)/viz/camera_pipe.a: $(BIN)/camera_pipe_exec
 	@mkdir -p $(@D)
-	$^ -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
+	$^ -g camera_pipe -o $(BIN)/viz target=$(HL_TARGET)-trace_loads-trace_stores-trace_realizations
 
 $(BIN)/Demosaic.o: fcam/Demosaic.cpp fcam/Demosaic.h
 	$(CXX) $(CXXFLAGS) -c -Wall -O3 $< -o $@

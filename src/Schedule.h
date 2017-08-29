@@ -284,6 +284,13 @@ public:
     std::vector<Bound> &bounds();
     // @}
 
+    /** You may explicitly specify an estimate of some of the function
+     * dimensions. See \ref Func::estimate */
+    // @{
+    const std::vector<Bound> &estimates() const;
+    std::vector<Bound> &estimates();
+    // @}
+
     /** Mark calls of a function by 'f' to be replaced with its wrapper
      * during the lowering stage. If the string 'f' is empty, it means replace
      * all calls to the function by all other functions (excluding itself) in

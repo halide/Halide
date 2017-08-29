@@ -1,8 +1,5 @@
 include(CheckCXXCompilerFlag)
 
-add_executable(build_halide_h ../tools/build_halide_h.cpp)
-add_executable(binary2cpp ../tools/binary2cpp.cpp)
-
 if (MSVC)
   # disable irrelevant warnings
   target_compile_options(build_halide_h PUBLIC /wd4996)
@@ -258,6 +255,8 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AutoSchedule.h
+  AutoScheduleUtils.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
@@ -353,6 +352,7 @@ set(HEADER_FILES
   Random.h
   RealizationOrder.h
   Reduction.h
+  RegionCosts.h
   RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
@@ -410,6 +410,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ApplySplit.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AutoSchedule.cpp
+  AutoScheduleUtils.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
@@ -496,6 +498,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Random.cpp
   RealizationOrder.cpp
   Reduction.cpp
+  RegionCosts.cpp
   RemoveDeadAllocations.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp

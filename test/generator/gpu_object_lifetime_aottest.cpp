@@ -27,6 +27,17 @@ void my_halide_print(void *user_context, const char *str) {
 }
 
 int main(int argc, char **argv) {
+
+#if defined(TEST_CUDA)
+    printf("TEST_CUDA enabled for gpu_object_lifetime testing...\n");
+#elif defined(TEST_OPENCL)
+    printf("TEST_OPENCL enabled for gpu_object_lifetime testing...\n");
+#elif defined(TEST_METAL)
+    printf("TEST_METAL enabled for gpu_object_lifetime testing...\n");
+#else
+    printf("No GPU features enabled for gpu_object_lifetime testing!\n");
+#endif
+
     halide_set_custom_print(&my_halide_print);
 
     // Run the whole program several times.
