@@ -424,10 +424,12 @@ struct Type {
     EXPORT bool is_min(int64_t) const;
     // @}
 
-    /** Return an expression which is the maximum value of this type */
+    /** Return an expression which is the maximum value of this type.
+     * Returns infinity for types which can represent it. */
     EXPORT Expr max() const;
 
-    /** Return an expression which is the minimum value of this type */
+    /** Return an expression which is the minimum value of this type.
+     * Returns -infinity for types which can represent it. */
     EXPORT Expr min() const;
 };
 
