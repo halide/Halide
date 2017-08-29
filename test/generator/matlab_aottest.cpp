@@ -8,9 +8,9 @@
 // Provide a simple mock implementation of matlab's API so we can test the mexFunction.
 
 #ifdef _WIN32
-#define EXPORT __declspec(dllexport)
+#define DLLEXPORT __declspec(dllexport)
 #else
-#define EXPORT
+#define DLLEXPORT
 #endif
 
 enum mxClassID {
