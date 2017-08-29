@@ -7,6 +7,12 @@ include_directories("${CMAKE_BINARY_DIR}/tools")
 # when showing a demonstration of a computation in C code.
 check_cxx_compiler_flag("-Wno-unused-but-set-variable" SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
 
+file(GLOB IMAGES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/images" "${CMAKE_CURRENT_SOURCE_DIR}/images/*.png")
+foreach(FILE ${IMAGES})
+  message("Copying ${FILE} -> ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/images")
+  file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/images/${FILE}" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/images")
+endforeach()
+
 function(add_tutorial source_file)
   set(options WITH_IMAGE_IO WITH_OPENMP)
   set(oneValueArgs )
@@ -15,6 +21,8 @@ function(add_tutorial source_file)
 
   string(REPLACE ".cpp" "" name ${source_file})
   halide_project(${name} "tutorials" ${source_file})
+  add_to_group(test_tutorials "${name}" EXECUTE
+               WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
   target_include_directories(${name} PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   if (SUPPORT_NO_UNUSED_BUT_SET_VARIABLE)
     target_compile_options(${name} PRIVATE "-Wno-unused-but-set-variable")
