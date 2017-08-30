@@ -503,7 +503,7 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << "namespace halide_register_generator {\n";
-    stream << "namespace " << generator_registered_name << " {\n";
+    stream << "namespace " << generator_registered_name << "_ns {\n";
     stream << "extern std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context);\n";
     stream << "}  // namespace halide_register_generator\n";
     stream << "}  // namespace " << generator_registered_name << "\n";
@@ -550,7 +550,7 @@ void StubEmitter::emit() {
     indent_level--;
     stream << indent() << ")\n";
     indent_level++;
-    stream << indent() << ": GeneratorStub(context, halide_register_generator::" << generator_registered_name << "::factory, params.to_string_map(), {\n";
+    stream << indent() << ": GeneratorStub(context, halide_register_generator::" << generator_registered_name << "_ns::factory, params.to_string_map(), {\n";
     indent_level++;
     for (size_t i = 0; i < inputs.size(); ++i) {
         stream << indent() << "to_stub_input_vector(inputs." << inputs[i]->name() << ")";
