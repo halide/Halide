@@ -1006,7 +1006,8 @@ public:
     */
     template<typename T2, int D2>
     void copy_from(const Buffer<T2, D2> &other) {
-        copy_to_host();
+        assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
+        assert(!other.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
 
         Buffer<const T, D> src(other);
         Buffer<T, D> dst(*this);
