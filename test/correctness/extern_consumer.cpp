@@ -16,7 +16,7 @@ int dump_to_file(halide_buffer_t *input, const char *filename,
                  int desired_min, int desired_extent,
                  halide_buffer_t *) {
     // Note the final output buffer argument is unused.
-    if (input->host == nullptr) {
+    if (input->is_bounds_query()) {
         // Request some range of the input buffer
         input->dim[0].min = desired_min;
         input->dim[0].extent = desired_extent;
