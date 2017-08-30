@@ -2278,7 +2278,11 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-            builder->CreateCondBr(codegen(cond), true_bb, false_bb);
+            Value *c = codegen(cond);
+            if (c->getType() != i1_t) {
+                c = builder->CreateIsNotNull(c);
+            }
+            builder->CreateCondBr(c, true_bb, false_bb);
             builder->SetInsertPoint(true_bb);
             Value *true_value = codegen(op->args[1]);
             builder->CreateBr(after_bb);
