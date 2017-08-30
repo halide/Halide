@@ -336,19 +336,21 @@ if (WITH_TEST_GENERATORS)
   endif()
 
   # gpu_object_lifetime can build with a variety of GPU targets (or none).
-  if(TARGET_PTX)
-    halide_define_aot_test(gpu_object_lifetime
-                           GENERATOR_HALIDE_TARGET host-cuda-debug)
-  elseif(TARGET_OPENCL)
-    halide_define_aot_test(gpu_object_lifetime
-                           GENERATOR_HALIDE_TARGET host-opencl-debug)
-  elseif(TARGET_METAL)
-    halide_define_aot_test(gpu_object_lifetime
-                           GENERATOR_HALIDE_TARGET host-metal-debug)
-  else()
+  # TODO: disable for now, as we currently run buildbot/Travis tests on machines
+  # that don't have these available.
+  # if(TARGET_PTX)
+  #   halide_define_aot_test(gpu_object_lifetime
+  #                          GENERATOR_HALIDE_TARGET host-cuda-debug)
+  # elseif(TARGET_OPENCL)
+  #   halide_define_aot_test(gpu_object_lifetime
+  #                          GENERATOR_HALIDE_TARGET host-opencl-debug)
+  # elseif(TARGET_METAL)
+  #   halide_define_aot_test(gpu_object_lifetime
+  #                          GENERATOR_HALIDE_TARGET host-metal-debug)
+  # else()
     halide_define_aot_test(gpu_object_lifetime
                            GENERATOR_HALIDE_TARGET host-debug)
-  endif()
+  # endif()
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
