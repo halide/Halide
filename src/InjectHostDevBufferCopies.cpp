@@ -71,6 +71,12 @@ class FindBufferUsage : public IRVisitor {
                 if (i == 1) continue;
                 op->args[i].accept(this);
             }
+        } else if (op->is_intrinsic(Call::debug_to_file)) {
+            internal_assert(op->args.size() == 3);
+            if (is_buffer_var(op->args[2])) {
+                devices_touched.insert(current_device_api);
+                devices_writing.insert(current_device_api);
+            }
         } else if (op->call_type == Call::Extern && op->func.defined()) {
             // This is a call to an extern stage
             Function f(op->func);
