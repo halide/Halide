@@ -1270,7 +1270,7 @@ public:
     /** Methods for managing any GPU allocation. */
     // @{
     void set_host_dirty(bool v = true) {
-        assert(!v || !device_dirty() && "Cannot set host dirty when device is already dirty.");
+        assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty.");
         buf.set_host_dirty(v);
     }
 
@@ -1283,7 +1283,7 @@ public:
     }
 
     void set_device_dirty(bool v = true) {
-        assert(!v || !host_dirty() && "Cannot set device dirty when host is already dirty.");
+        assert((!v || !host_dirty()) && "Cannot set device dirty when host is already dirty.");
         buf.set_device_dirty(v);
     }
 
