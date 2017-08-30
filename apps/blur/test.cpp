@@ -190,6 +190,8 @@ Buffer<uint16_t> blur_halide(Buffer<uint16_t> in) {
         out.device_sync();
     });
 
+    out.copy_to_host();
+
     return out;
 }
 
