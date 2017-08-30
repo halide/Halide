@@ -1192,6 +1192,15 @@ typedef struct halide_buffer_t {
         }
         return 0;
     }
+
+    /** Check if an input buffer passed extern stage is a querying
+     * bounds. Compared to doing the host pointer check directly,
+     * this both adds clarity to code and will facilitate moving to
+     * another representation for bounds query arguments. */
+    HALIDE_ALWAYS_INLINE bool is_bounds_query() {
+        return host == NULL;
+    }
+
 #endif
 } halide_buffer_t;
 

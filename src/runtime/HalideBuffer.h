@@ -1972,6 +1972,14 @@ public:
         for_each_element(wrapper);
     }
 
+    /** Check if an input buffer passed extern stage is a querying
+     * bounds. Compared to doing the host pointer check directly,
+     * this both adds clarity to code and will facilitate moving to
+     * another representation for bounds query arguments. */
+    bool is_bounds_query() {
+        return buf.is_bounds_query();
+    }
+
 };
 
 }  // namespace Runtime
