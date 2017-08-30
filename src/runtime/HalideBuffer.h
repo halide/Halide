@@ -1269,6 +1269,7 @@ public:
     /** Methods for managing any GPU allocation. */
     // @{
     void set_host_dirty(bool v = true) {
+        assert(!v || !device_dirty() && "Cannot set host dirty when device is already dirty.");
         buf.set_host_dirty(v);
     }
 
@@ -1281,6 +1282,7 @@ public:
     }
 
     void set_device_dirty(bool v = true) {
+        assert(!v || !host_dirty() && "Cannot set device dirty when host is already dirty.");
         buf.set_device_dirty(v);
     }
 
@@ -1594,7 +1596,6 @@ public:
     not_void_T &operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
-        copy_to_host();
         set_host_dirty();
         return *((not_void_T *)(address_of(first, rest...)));
     }
@@ -1604,7 +1605,6 @@ public:
     operator()() {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
-        copy_to_host();
         set_host_dirty();
         return *((not_void_T *)(data()));
     }
@@ -1614,16 +1614,14 @@ public:
     operator()(const int *pos) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
-        copy_to_host();
         set_host_dirty();
         return *((not_void_T *)(address_of(pos)));
     }
     // @}
 
     void fill(not_void_T val) {
-        copy_to_host();
-        for_each_value([=](T &v) {v = val;});
         set_host_dirty();
+        for_each_value([=](T &v) {v = val;});
     }
 
 private:
