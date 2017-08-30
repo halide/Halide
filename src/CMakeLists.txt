@@ -17,13 +17,6 @@ else()
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
-if (HALIDE_SHARED_LIBRARY)
-  add_definitions("-DHalide_SHARED")
-  set(HALIDE_LIBRARY_TYPE SHARED)
-else()
-  set(HALIDE_LIBRARY_TYPE STATIC)
-endif()
-
 set(RUNTIME_CPP
   aarch64_cpu_features
   android_clock
@@ -538,6 +531,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES}
   ${INITIAL_MODULES}
 )
+# Define Halide_SHARED or Halide_STATIC depending on library type
+target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
 
 if (WIN32 AND NOT MSVC)
   set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
