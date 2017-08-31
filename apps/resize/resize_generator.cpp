@@ -28,7 +28,8 @@ Expr kernel_cubic(Expr x) {
 }
 
 Expr sinc(Expr x) {
-    return sin(float(M_PI) * x) / x;
+    x *= 3.14159265359f;
+    return sin(x) / x;
 }
 
 Expr kernel_lanczos(Expr x) {
@@ -65,15 +66,15 @@ public:
     // resample in x and in y).
     GeneratorParam<bool> upsample{"upsample", false};
 
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<>> input{"input", 3};
     Input<float> scale_factor{"scale_factor"};
-    Output<Buffer<float>> output{"output", 3};
+    Output<Buffer<>> output{"output", 3};
 
     // Common Vars
     Var x, y, c, k;
 
     // Intermediate Funcs
-    Func clamped, resized_x, resized_y,
+    Func as_float, clamped, resized_x, resized_y,
         unnormalized_kernel_x, unnormalized_kernel_y,
         kernel_x, kernel_y,
         kernel_sum_x, kernel_sum_y;
@@ -83,6 +84,9 @@ public:
         clamped = BoundaryConditions::repeat_edge(input,
                  {{input.dim(0).min(), input.dim(0).extent()},
                   {input.dim(1).min(), input.dim(1).extent()}});
+
+        // Handle different types by just casting to float
+        as_float(x, y, c) = cast<float>(clamped(x, y, c));
 
         // For downscaling, widen the interpolation kernel to perform lowpass
         // filtering.
@@ -118,14 +122,21 @@ public:
         // Perform separable resizing. The resize in x vectorizes
         // poorly compared to the resize in y, so do it first if we're
         // upsampling, and do it second if we're downsampling.
+        Func resized;
         if (upsample) {
-            resized_x(x, y, c) = sum(kernel_x(x, r) * clamped(r + beginx, y, c));
+            resized_x(x, y, c) = sum(kernel_x(x, r) * as_float(r + beginx, y, c));
             resized_y(x, y, c) = sum(kernel_y(y, r) * resized_x(x, r + beginy, c));
-            output(x, y, c) = clamp(resized_y(x, y, c), 0.0f, 1.0f);
+            resized = resized_y;
         } else {
-            resized_y(x, y, c) = sum(kernel_y(y, r) * clamped(x, r + beginy, c));
+            resized_y(x, y, c) = sum(kernel_y(y, r) * as_float(x, r + beginy, c));
             resized_x(x, y, c) = sum(kernel_x(x, r) * resized_y(r + beginx, y, c));
-            output(x, y, c) = clamp(resized_x(x, y, c), 0.0f, 1.0f);
+            resized = resized_x;
+        }
+
+        if (input.type().is_float()) {
+            output(x, y, c) = clamp(resized(x, y, c), 0.0f, 1.0f);
+        } else {
+            output(x, y, c) = saturating_cast(input.type(), resized(x, y, c));
         }
     }
 
@@ -160,9 +171,9 @@ public:
             resized_x
                 .compute_at(output, x)
                 .vectorize(x, 8);
-            clamped
+            as_float
                 .compute_at(output, y)
-                .vectorize(_0, 8);
+                .vectorize(x, 8);
         } else {
             output
                 .tile(x, y, xi, yi, 32, 8)
@@ -171,7 +182,46 @@ public:
             resized_y
                 .compute_at(output, y)
                 .vectorize(x, 8);
+            resized_x
+                .compute_at(output, xi);
         }
+
+        // Allow the input and output to have arbitrary memory layout,
+        // and add some specializations for a few common cases. If
+        // your case is not covered (e.g. planar input, packed rgb
+        // output), you could add a new specialization here.
+        output.dim(0).set_stride(Expr());
+        input.dim(0).set_stride(Expr());
+
+        Expr planar = (output.dim(0).stride() == 1 &&
+                       input.dim(0).stride() == 1);
+        Expr packed_rgb = (output.dim(0).stride() == 3 &&
+                           output.dim(2).stride() == 1 &&
+                           output.dim(2).min() == 0 &&
+                           output.dim(2).extent() == 3 &&
+                           input.dim(0).stride() == 3 &&
+                           input.dim(2).stride() == 1 &&
+                           input.dim(2).min() == 0 &&
+                           input.dim(2).extent() == 3);
+        Expr packed_rgba = (output.dim(0).stride() == 4 &&
+                            output.dim(2).stride() == 1 &&
+                            output.dim(2).min() == 0 &&
+                            output.dim(2).extent() == 4 &&
+                            input.dim(0).stride() == 4 &&
+                            input.dim(2).stride() == 1 &&
+                            input.dim(2).min() == 0 &&
+                            input.dim(2).extent() == 4);
+
+
+        output.specialize(planar);
+
+        output.specialize(packed_rgb)
+            .reorder(c, xi, yi, x, y)
+            .unroll(c);
+
+        output.specialize(packed_rgba)
+            .reorder(c, xi, yi, x, y)
+            .unroll(c);
     }
 };
 
