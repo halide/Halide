@@ -5,6 +5,7 @@ option(WITH_TEST_WARNING "Build warning tests" ON)
 option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 option(WITH_TEST_OPENGL "Build OpenGL tests" ON)
 option(WITH_TEST_GENERATORS "Build Generator tests" ON)
+option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
 
 if (WITH_TEST_INTERNAL)
   message(STATUS "Internal tests enabled")
@@ -41,6 +42,9 @@ function(tests folder)
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
 
+if (WITH_TEST_AUTO_SCHEDULE)
+  tests(auto_schedule)
+endif()
 if (WITH_TEST_CORRECTNESS)
   tests(correctness)
   halide_use_image_io(correctness_image_io)
@@ -221,34 +225,6 @@ if (WITH_TEST_GENERATORS)
   add_test_generator(user_context)
   add_test_generator(user_context_insanity)
   add_test_generator(variable_num_threads)
-  add_test_generator(old_buffer_t)
-  add_test_generator(output_assign)
-  add_test_generator(external_code)
-
-  # Define a nontrivial depedency for external_code.generator
-  set(EC32 "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/external_code_extern_bitcode_32")
-  add_custom_command(OUTPUT "${EC32}.bc"
-                     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp"
-                     COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp" -o "${EC32}.bc")
-  add_custom_command(OUTPUT "${EC32}.cpp"
-                     DEPENDS "${EC32}.bc"
-                     COMMAND binary2cpp external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp")
-
-  set(EC64 "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/external_code_extern_bitcode_64")
-  add_custom_command(OUTPUT "${EC64}.bc"
-                     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp"
-                     COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp" -o "${EC64}.bc")
-  add_custom_command(OUTPUT "${EC64}.cpp"
-                     DEPENDS "${EC64}.bc"
-                     COMMAND binary2cpp external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp")
-
-  set(ECCPP "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/external_code_extern_cpp_source")
-  add_custom_command(OUTPUT "${ECCPP}.cpp"
-                     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp"
-                     COMMAND binary2cpp external_code_extern_cpp_source < "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp" > "${ECCPP}.cpp")
-
-  add_library(external_code_generator_deps "${EC32}.cpp" "${EC64}.cpp" "${ECCPP}.cpp")
-  target_link_libraries(external_code.generator PRIVATE external_code_generator_deps)
 
   # ------ Generator tests for just-in-time mode: ------
   halide_define_jit_test(example
@@ -279,9 +255,6 @@ if (WITH_TEST_GENERATORS)
   halide_define_aot_test(memory_profiler_mandelbrot)
   halide_define_aot_test(stubuser)
   halide_define_aot_test(variable_num_threads)
-  halide_define_aot_test(old_buffer_t)
-  halide_define_aot_test(output_assign)
-  halide_define_aot_test(external_code)
 
   # Tests that require nonstandard targets, namespaces, args, etc.
   halide_define_aot_test(matlab
@@ -406,4 +379,5 @@ if (WITH_TEST_GENERATORS)
                                    AOT_LIBRARY_TARGET nested_externs_${GEN}
                                    GENERATOR_NAME nested_externs_${GEN})
   endforeach()
+
 endif()
