@@ -2299,6 +2299,10 @@ struct NoRealizations<T, Args...> {
 class GeneratorStub;
 class SimpleGeneratorFactory;
 
+// Note that these functions must never return null:
+// if they cannot return a valid Generator, they must assert-fail.
+using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext&)>;
+
 class GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
     GeneratorParam<Target> target{ "target", Target() };
@@ -2408,6 +2412,7 @@ public:
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
     EXPORT void init_from_context(const Halide::GeneratorContext &context);
+    EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     EXPORT virtual Pipeline build_pipeline() = 0;
     EXPORT virtual void call_generate() = 0;
@@ -2528,8 +2533,6 @@ private:
     EXPORT Func get_first_output();
     EXPORT Func get_output(const std::string &n);
     EXPORT std::vector<Func> get_output_vector(const std::string &n);
-
-    EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     EXPORT void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -2676,50 +2679,18 @@ private:
     void operator=(GeneratorBase&& that) = delete;
 };
 
-class GeneratorFactory {
-public:
-    virtual ~GeneratorFactory() {}
-    // Note that this method must never return null:
-    // if it cannot return a valid Generator, it should assert-fail.
-    virtual std::unique_ptr<GeneratorBase> create(const GeneratorContext &context,
-                                                  const std::map<std::string, std::string> &params) const = 0;
-};
-
-using GeneratorCreateFunc = std::function<std::unique_ptr<Internal::GeneratorBase>(const GeneratorContext &context)>;
-
-class SimpleGeneratorFactory : public GeneratorFactory {
-public:
-    SimpleGeneratorFactory(GeneratorCreateFunc create_func, const std::string &registered_name, const std::string &stub_name)
-        : create_func(create_func), generator_registered_name(registered_name), generator_stub_name(stub_name) {
-        internal_assert(create_func != nullptr);
-    }
-
-    std::unique_ptr<Internal::GeneratorBase> create(const GeneratorContext &context,
-                                                    const std::map<std::string, std::string> &params) const override {
-        auto g = create_func(context);
-        internal_assert(g.get() != nullptr);
-        g->set_generator_names(generator_registered_name, generator_stub_name);
-        g->set_generator_and_schedule_param_values(params);
-        return g;
-    }
-private:
-    const GeneratorCreateFunc create_func;
-    const std::string generator_registered_name, generator_stub_name;
-};
-
 class GeneratorRegistry {
 public:
-    EXPORT static void register_factory(const std::string &name, std::unique_ptr<GeneratorFactory> factory);
+    EXPORT static void register_factory(const std::string &name, GeneratorFactory generator_factory);
     EXPORT static void unregister_factory(const std::string &name);
     EXPORT static std::vector<std::string> enumerate();
     // Note that this method will never return null:
     // if it cannot return a valid Generator, it should assert-fail.
     EXPORT static std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                        const GeneratorContext &context,
-                                                        const std::map<std::string, std::string> &params);
+                                                        const GeneratorContext &context);
 
 private:
-    using GeneratorFactoryMap = std::map<const std::string, std::unique_ptr<GeneratorFactory>>;
+    using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;
 
     GeneratorFactoryMap factories;
     std::mutex mutex;
@@ -2744,9 +2715,18 @@ public:
     static std::unique_ptr<T> create(const Halide::GeneratorContext &context) {
         // We must have an object of type T (not merely GeneratorBase) to call a protected method,
         // because CRTP is a weird beast.
-        T *t = new T;
-        t->init_from_context(context);
-        return std::unique_ptr<T>(t);
+        auto g = std::unique_ptr<T>(new T());
+        g->init_from_context(context);
+        return g;
+    }
+
+    // This is public but intended only for use by the HALIDE_REGISTER_GENERATOR() macro.
+    static std::unique_ptr<T> create(const Halide::GeneratorContext &context,
+                                     const std::string &registered_name, 
+                                     const std::string &stub_name) {
+        auto g = create(context);
+        g->set_generator_names(registered_name, stub_name);
+        return g;
     }
 
     using Internal::GeneratorBase::apply;
@@ -2865,17 +2845,10 @@ private:
 
 namespace Internal {
 
-template <class GeneratorClass>
 class RegisterGenerator {
 public:
-    RegisterGenerator(const char* registered_name) {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, registered_name, registered_name));
-        Internal::GeneratorRegistry::register_factory(registered_name, std::move(f));
-    }
-
-    RegisterGenerator(const char* registered_name, const char* stub_name) {
-        std::unique_ptr<Internal::SimpleGeneratorFactory> f(new Internal::SimpleGeneratorFactory(GeneratorClass::create, registered_name, stub_name));
-        Internal::GeneratorRegistry::register_factory(registered_name, std::move(f));
+    RegisterGenerator(const char* registered_name, GeneratorFactory generator_factory) {
+        Internal::GeneratorRegistry::register_factory(registered_name, generator_factory);
     }
 };
 
@@ -2939,8 +2912,6 @@ public:
     virtual ~GeneratorStub() {}
 
 protected:
-    typedef std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext&, const std::map<std::string, std::string>&)> GeneratorFactory;
-
     EXPORT GeneratorStub(const GeneratorContext &context,
                   GeneratorFactory generator_factory,
                   const std::map<std::string, std::string> &generator_params,
@@ -3029,7 +3000,12 @@ namespace halide_register_generator {
 #define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME) \
     namespace halide_register_generator { \
         struct halide_global_ns; \
-        static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator<GEN_CLASS_NAME>(#GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); \
+        namespace GEN_REGISTRY_NAME##_ns { \
+            std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context) { \
+                return GEN_CLASS_NAME::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME); \
+            } \
+        } \
+        static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \
     } \
     static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value, \
                  "HALIDE_REGISTER_GENERATOR must be used at global scope");
