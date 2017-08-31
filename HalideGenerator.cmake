@@ -214,6 +214,7 @@ function(halide_add_generator NAME)
   set(OBJLIB "${NAME}.objlib")
   add_library("${OBJLIB}" OBJECT ${args_SRCS})
   add_dependencies("${OBJLIB}" Halide)
+  target_compile_definitions("${OBJLIB}" PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
   target_include_directories("${OBJLIB}" PRIVATE "${CMAKE_BINARY_DIR}/include")
   if (NOT MSVC)
     target_compile_options("${OBJLIB}" PRIVATE "-std=c++11") # Halide clients need C++11
