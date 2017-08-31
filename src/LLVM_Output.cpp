@@ -255,8 +255,13 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
                        write_symtab, kind,
                        deterministic, thin, nullptr);
 #endif
+#if LLVM_VERSION >= 60
+    internal_assert(!result) << "Failed to write archive: " << dst_file
+        << ", reason: " << result << "\n";
+#else
     internal_assert(!result.second) << "Failed to write archive: " << dst_file
         << ", reason: " << result.second << "\n";
+#endif
 }
 
 }  // namespace Halide
