@@ -24,6 +24,7 @@ using std::map;
 using std::vector;
 using std::string;
 using std::pair;
+using std::set;
 
 namespace {
 int static_sign(Expr x) {
@@ -1117,6 +1118,25 @@ class SolveIfThenElse : public IRMutator {
     }
 };
 
+// Collect all variables referenced in an expr or statement
+// (excluding 'skipped_var')
+class CollectVars : public IRGraphVisitor {
+public:
+    string skipped_var;
+    set<string> vars;
+
+    CollectVars(const string &v) : skipped_var(v) {}
+
+private:
+    using IRGraphVisitor::visit;
+
+    void visit(const Variable *op) {
+        if (op->name != skipped_var) {
+            vars.insert(op->name);
+        }
+    }
+};
+
 // Compute the box produced by a statement
 class BoxesTouched : public IRGraphVisitor {
 
@@ -1130,10 +1150,33 @@ public:
 
 private:
 
+    struct VarInstance {
+        string var;
+        int instance;
+        VarInstance(const string &v, int i) : var(v), instance(i) {}
+
+        bool operator==(const VarInstance &other) const {
+            return (var == other.var) && (instance == other.instance);
+        }
+        bool operator<(const VarInstance &other) const {
+            if (var == other.var) {
+                return (instance < other.instance);
+            }
+            return (var < other.var);
+        }
+    };
+
     string func;
     bool consider_calls, consider_provides;
     Scope<Interval> scope;
     const FuncValueBounds &func_bounds;
+    // Scope containing the current value definition of let stmts.
+    Scope<Expr> let_stmts;
+    // Keep track of variable renaming. Map variable name to instantiation number
+    // (0 for the first variable to be defined, 1 for the 1st redefinition, etc.).
+    map<string, int> vars_renaming;
+    // Map variable name to all other vars which values depend on that variable.
+    map<VarInstance, set<VarInstance>> children;
 
     using IRGraphVisitor::visit;
 
@@ -1191,6 +1234,31 @@ private:
         return c.count < 10;
     }
 
+    void push_var(const string &name) {
+        auto iter = vars_renaming.find(name);
+        if (iter == vars_renaming.end()) {
+            vars_renaming.emplace(name, 0);
+        } else {
+            iter->second += 1;
+        }
+    }
+
+    void pop_var(const string &name) {
+        auto iter = vars_renaming.find(name);
+        internal_assert(iter != vars_renaming.end());
+        iter->second -= 1;
+        if (iter->second < 0) {
+            vars_renaming.erase(iter);
+        }
+    }
+
+    VarInstance get_var_instance(const string &name) {
+        // It is possible for the variable to be not in 'vars_renaming', e.g.
+        // the output buffer min/max. In this case, we just add the variable
+        // to the renaming map and assign it to instance 0.
+        return VarInstance(name, vars_renaming[name]);
+    }
+
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
         if (consider_calls) {
@@ -1241,11 +1309,132 @@ private:
     }
 
     void visit(const Let *op) {
+        push_var(op->name);
         visit_let(op);
+        pop_var(op->name);
     }
 
     void visit(const LetStmt *op) {
+        push_var(op->name);
+        VarInstance vi = get_var_instance(op->name);
+
+        // Update the 'children' map.
+        CollectVars collect(op->name);
+        op->value.accept(&collect);
+        for (const auto &v : collect.vars) {
+            children[get_var_instance(v)].insert(vi);
+        }
+
+        // If this let stmt is a redefinition of a previous one, we should
+        // remove the old let stmt from the 'children' map since it is
+        // no longer valid at this point.
+        set<string> old_let_vars;
+        if ((vi.instance > 0) && let_stmts.contains(op->name)) {
+            const Expr &val = let_stmts.get(op->name);
+            CollectVars collect(op->name);
+            val.accept(&collect);
+            old_let_vars = collect.vars;
+
+            VarInstance old_vi = VarInstance(vi.var, vi.instance-1);
+            for (const auto &v : old_let_vars) {
+                internal_assert(vars_renaming.count(v));
+                children[get_var_instance(v)].erase(old_vi);
+            }
+        }
+
+        let_stmts.push(op->name, op->value);
         visit_let(op);
+        let_stmts.pop(op->name);
+
+        // Re-insert the children from the previous let stmt into the map.
+        if (!old_let_vars.empty()) {
+            internal_assert(vi.instance > 0);
+            VarInstance old_vi = VarInstance(vi.var, vi.instance-1);
+            for (const auto &v : old_let_vars) {
+                internal_assert(vars_renaming.count(v));
+                children[get_var_instance(v)].insert(old_vi);
+            }
+        }
+
+        // Remove the children from the current let stmt.
+        for (const auto &v : collect.vars) {
+            internal_assert(vars_renaming.count(v));
+            children[get_var_instance(v)].erase(vi);
+        }
+
+        pop_var(op->name);
+    }
+
+    struct LetBound {
+        string var, min_name, max_name;
+        LetBound(const string &v, const string &min, const string &max)
+            : var(v), min_name(min), max_name(max) {}
+    };
+
+    void trim_scope_push(const string &name, const Interval &bound, vector<LetBound> &let_bounds) {
+        scope.push(name, bound);
+
+        for (const auto &v : children[get_var_instance(name)]) {
+            string max_name = unique_name('t');
+            string min_name = unique_name('t');
+
+            let_bounds.insert(let_bounds.begin(), LetBound(v.var, min_name, max_name));
+
+            internal_assert(let_stmts.contains(v.var));
+            Type t = let_stmts.get(v.var).type();
+            Interval b = Interval(Variable::make(t, min_name), Variable::make(t, max_name));
+            trim_scope_push(v.var, b, let_bounds);
+        }
+    }
+
+    void trim_scope_pop(const string &name, vector<LetBound> &let_bounds) {
+        while (!let_bounds.empty()) {
+            LetBound l = let_bounds.back();
+            let_bounds.pop_back();
+
+            trim_scope_pop(l.var, let_bounds);
+
+            for (pair<const string, Box> &i : boxes) {
+                Box &box = i.second;
+                for (size_t i = 0; i < box.size(); i++) {
+                    Interval v_bound;
+                    if ((box[i].has_lower_bound() && (expr_uses_var(box[i].min, l.max_name) ||
+                                                      expr_uses_var(box[i].min, l.min_name))) ||
+                        (box[i].has_upper_bound() && (expr_uses_var(box[i].max, l.max_name) ||
+                                                      expr_uses_var(box[i].max, l.min_name)))) {
+                        internal_assert(let_stmts.contains(l.var));
+                        const Expr &val = let_stmts.get(l.var);
+                        v_bound = bounds_of_expr_in_scope(val, scope, func_bounds);
+                        bool fixed = v_bound.min.same_as(v_bound.max);
+                        v_bound.min = simplify(v_bound.min);
+                        v_bound.max = fixed ? v_bound.min : simplify(v_bound.max);
+
+                        internal_assert(scope.contains(l.var));
+                        const Interval &old_bound = scope.get(l.var);
+                        v_bound.max = simplify(min(v_bound.max, old_bound.max));
+                        v_bound.min = simplify(max(v_bound.min, old_bound.min));
+                    }
+
+                    if (box[i].has_lower_bound()) {
+                        if (expr_uses_var(box[i].min, l.max_name)) {
+                            box[i].min = Let::make(l.max_name, v_bound.max, box[i].min);
+                        }
+                        if (expr_uses_var(box[i].min, l.min_name)) {
+                            box[i].min = Let::make(l.min_name, v_bound.min, box[i].min);
+                        }
+                    }
+                    if (box[i].has_upper_bound()) {
+                        if (expr_uses_var(box[i].max, l.max_name)) {
+                            box[i].max = Let::make(l.max_name, v_bound.max, box[i].max);
+                        }
+                        if (expr_uses_var(box[i].max, l.min_name)) {
+                            box[i].max = Let::make(l.min_name, v_bound.min, box[i].max);
+                        }
+                    }
+                }
+            }
+        }
+        scope.pop(name);
     }
 
     void visit(const IfThenElse *op) {
@@ -1276,6 +1465,7 @@ private:
                 const Variable *var_b = b.as<Variable>();
 
                 string var_to_pop;
+                vector<LetBound> let_bounds;
                 if (a.defined() && b.defined() && a.type() == Int(32)) {
                     Expr inner_min, inner_max;
                     if (var_a && scope.contains(var_a->name)) {
@@ -1312,7 +1502,7 @@ private:
                                 i.min = max(likely_i.min, bi.min);
                             }
                         }
-                        scope.push(var_a->name, i);
+                        trim_scope_push(var_a->name, i, let_bounds);
                         var_to_pop = var_a->name;
                     } else if (var_b && scope.contains(var_b->name)) {
                         Interval i = scope.get(var_b->name);
@@ -1343,13 +1533,13 @@ private:
                                 i.min = max(likely_i.min, ai.min);
                             }
                         }
-                        scope.push(var_b->name, i);
+                        trim_scope_push(var_b->name, i, let_bounds);
                         var_to_pop = var_b->name;
                     }
                 }
                 op->then_case.accept(this);
                 if (!var_to_pop.empty()) {
-                    scope.pop(var_to_pop);
+                    trim_scope_pop(var_to_pop, let_bounds);
                 }
             } else {
                 // Just take the union over the branches
@@ -1424,9 +1614,11 @@ private:
             max_val -= 1;
         }
 
+        push_var(op->name);
         scope.push(op->name, Interval(min_val, max_val));
         op->body.accept(this);
         scope.pop(op->name);
+        pop_var(op->name);
     }
 
     void visit(const Provide *op) {
@@ -1696,6 +1888,46 @@ void constant_bound_test() {
                          Interval::neg_inf, Interval::pos_inf);
 }
 
+void boxes_touched_test() {
+    Type t = Int(32);
+    Expr x = Variable::make(t, "x");
+    Expr y = Variable::make(t, "y");
+    Expr z = Variable::make(t, "z");
+    Expr w = Variable::make(t, "w");
+
+    Scope<Interval> scope;
+    scope.push("y", Interval(Expr(0), Expr(10)));
+
+    Stmt stmt = Provide::make("f", {10}, {x, y, z, w});
+    stmt = IfThenElse::make(y > 4, stmt, Stmt());
+    stmt = IfThenElse::make(z > 18, stmt, Stmt());
+    stmt = LetStmt::make("w", z + 3, stmt);
+    stmt = LetStmt::make("z", x + 2, stmt);
+    stmt = LetStmt::make("x", y + 10, stmt);
+
+    Box expected({Interval(15, 20), Interval(5, 10), Interval(19, 22), Interval(22, 25)});
+    Box result = box_provided(stmt, "f", scope);
+    internal_assert(expected.size() == result.size())
+        << "Expect dim size of " << expected.size()
+        << ", got " << result.size() << " instead\n";
+    for (size_t i = 0; i < result.size(); ++i) {
+        const Interval &correct = expected[i];
+        Interval b = result[i];
+        b.min = simplify(b.min);
+        b.max = simplify(b.max);
+        if (!equal(correct.min, b.min)) {
+            internal_error << "In bounds of dim " << i << ":\n"
+                           << "Incorrect min: " << b.min << '\n'
+                           << "Should have been: " << correct.min << '\n';
+        }
+        if (!equal(correct.max, b.max)) {
+            internal_error << "In bounds of dim " << i << ":\n"
+                           << "Incorrect max: " << b.max << '\n'
+                           << "Should have been: " << correct.max << '\n';
+        }
+    }
+}
+
 } // anonymous namespace
 
 void bounds_test() {
@@ -1819,6 +2051,8 @@ void bounds_test() {
     merge_boxes(r2, r["output"]);
     internal_assert(equal(simplify(r2[0].min), 4));
     internal_assert(equal(simplify(r2[0].max), 19));
+
+    boxes_touched_test();
 
     std::cout << "Bounds test passed" << std::endl;
 }
