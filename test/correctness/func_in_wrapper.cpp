@@ -10,7 +10,7 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
-int calling_wrap_no_op_test() {
+int calling_in_wrapper_no_op_test() {
     Var x("x"), y("y");
 
     {
@@ -63,7 +63,7 @@ int calling_wrap_no_op_test() {
     return 0;
 }
 
-int func_wrap_test() {
+int func_in_wrapper_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
@@ -96,7 +96,7 @@ int func_wrap_test() {
     return 0;
 }
 
-int multiple_funcs_sharing_wrapper_test() {
+int multiple_funcs_sharing_in_wrapper_test() {
     Func f("f"), g1("g1"), g2("g2"), g3("g3");
     Var x("x"), y("y");
 
@@ -106,80 +106,45 @@ int multiple_funcs_sharing_wrapper_test() {
     g3(x, y) = f(x);
 
     f.compute_root();
-    Func f_wrapper = f.in({g1, g2, g3}).compute_root();
+    Func f_wrapper = f.in({g1, g2}).compute_root();
 
-    {
-        // Check the call graphs.
-        // Expect 'g1' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
-        Module m = g1.compile_to_module({});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
+    // Check the call graphs.
+    // Expect 'g1' and 'g2' to call 'f_wrapper', 'g3' to call 'f',
+    // f_wrapper' to call 'f', 'f' to call nothing
+    Pipeline p({g1, g2, g3});
+    Module m = p.compile_to_module({}, "");
+    CheckCalls c;
+    m.functions().front().body.accept(&c);
 
-        CallGraphs expected = {
-            {g1.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g1.realize(200, 200);
-        auto func = [](int x, int y) { return x; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    CallGraphs expected = {
+        {g1.name(), {f_wrapper.name()}},
+        {g2.name(), {f_wrapper.name()}},
+        {g3.name(), {f.name()}},
+        {f_wrapper.name(), {f.name()}},
+        {f.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
     }
 
-    {
-        // Check the call graphs.
-        // Expect 'g2' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
-        Module m = g2.compile_to_module({});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g2.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g2.realize(200, 200);
-        auto func = [](int x, int y) { return x; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    Realization r = p.realize(200, 200);
+    Buffer<int> img1 = r[0];
+    Buffer<int> img2 = r[1];
+    Buffer<int> img3 = r[2];
+    auto func = [](int x, int y) { return x; };
+    if (check_image(img1, func)) {
+        return -1;
     }
-
-    {
-        // Check the call graphs.
-        // Expect 'g3' to call 'f_wrapper', 'f_wrapper' to call 'f', 'f' to call nothing
-        Module m = g3.compile_to_module({});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g3.name(), {f_wrapper.name()}},
-            {f_wrapper.name(), {f.name()}},
-            {f.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g3.realize(200, 200);
-        auto func = [](int x, int y) { return x; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    if (check_image(img2, func)) {
+        return -1;
+    }
+    if (check_image(img3, func)) {
+        return -1;
     }
     return 0;
 }
 
-int global_wrap_test() {
+int global_in_wrapper_test() {
     Func f("f"), g("g"), h("h"), i("i");
     Var x("x"), y("y");
 
@@ -219,7 +184,7 @@ int global_wrap_test() {
     return 0;
 }
 
-int update_defined_after_wrap_test() {
+int update_defined_after_in_wrapper_test() {
     Func f("f"), g("g");
     Var x("x"), y("y");
 
@@ -302,14 +267,15 @@ int update_defined_after_wrap_test() {
     return 0;
 }
 
-int rdom_wrapper_test() {
+int rdom_in_wrapper_test() {
     Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
     f(x, y) = x + y;
     g(x, y) = 10;
     g(x, y) += 2 * f(x, x);
-    g(x, y) += 3 * f(y, y);
+    RDom r(0, 200, 0, 200);
+    g(r.x, r.y) += 3 * f(r.y, r.y);
 
     // Make a global wrapper on 'g', so that we can schedule initialization
     // and the update on the same compute level at the global wrapper
@@ -341,7 +307,7 @@ int rdom_wrapper_test() {
     return 0;
 }
 
-int global_and_custom_wrap_test() {
+int global_and_custom_in_wrapper_test() {
     Func f("f"), g("g"), result("result");
     Var x("x"), y("y");
 
@@ -381,7 +347,7 @@ int global_and_custom_wrap_test() {
 }
 
 
-int wrapper_depend_on_mutated_func_test() {
+int in_wrapper_depend_on_mutated_func_test() {
     Func e("e"), f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -426,7 +392,7 @@ int wrapper_depend_on_mutated_func_test() {
     return 0;
 }
 
-int wrapper_on_wrapper_test() {
+int in_wrapper_on_in_wrapper_test() {
     Func e("e"), f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -470,7 +436,7 @@ int wrapper_on_wrapper_test() {
     return 0;
 }
 
-int wrapper_on_rdom_predicate_test() {
+int in_wrapper_on_rdom_predicate_test() {
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y");
 
@@ -515,7 +481,7 @@ int wrapper_on_rdom_predicate_test() {
     return 0;
 }
 
-int two_fold_wrapper_test() {
+int two_fold_in_wrapper_test() {
     Func input("input"), input_in_output_in_output, input_in_output, output("output");
     Var x("x"), y("y");
 
@@ -553,7 +519,7 @@ int two_fold_wrapper_test() {
     return 0;
 }
 
-int multi_folds_wrapper_test() {
+int multi_folds_in_wrapper_test() {
     Func f("f"), f_in_g_in_g, f_in_g, f_in_g_in_g_in_h, f_in_g_in_g_in_h_in_h, g("g"), h("h");
     Var x("x"), y("y");
 
@@ -573,115 +539,95 @@ int multi_folds_wrapper_test() {
     f_in_g_in_g_in_h_in_h = f_in_g_in_g_in_h.in(h).compute_at(h, x).unroll(x).unroll(y);
     h.compute_root().tile(x, y, xi, yi, 8, 8);
 
-    {
-        // Check the call graphs.
-        Module m = g.compile_to_module({});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
+    Pipeline p({g, h});
+    Module m = p.compile_to_module({}, "");
+    CheckCalls c;
+    m.functions().front().body.accept(&c);
 
-        CallGraphs expected = {
-            {g.name(), {f_in_g_in_g.name()}},
-            {f_in_g_in_g.name(), {f_in_g.name()}},
-            {f_in_g.name(), {f.name()}},
-            {f.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g.realize(1024, 1024);
-        auto func = [](int x, int y) { return 3*x + 2*y; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    CallGraphs expected = {
+        {g.name(), {f_in_g_in_g.name()}},
+        {f_in_g_in_g.name(), {f_in_g.name()}},
+        {f_in_g.name(), {f.name()}},
+        {f.name(), {}},
+        {h.name(), {f_in_g_in_g_in_h_in_h.name()}},
+        {f_in_g_in_g_in_h_in_h.name(), {f_in_g_in_g_in_h.name()}},
+        {f_in_g_in_g_in_h.name(), {f_in_g_in_g.name()}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
     }
 
-    {
-        // Check the call graphs.
-        Module m = h.compile_to_module({});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {h.name(), {f_in_g_in_g_in_h_in_h.name()}},
-            {f_in_g_in_g_in_h_in_h.name(), {f_in_g_in_g_in_h.name()}},
-            {f_in_g_in_g_in_h.name(), {f_in_g_in_g.name()}},
-            {f_in_g_in_g.name(), {f_in_g.name()}},
-            {f_in_g.name(), {f.name()}},
-            {f.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = h.realize(1024, 1024);
-        auto func = [](int x, int y) { return 3*x + 2*y; };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    Realization r = p.realize(1024, 1024);
+    Buffer<int> img_g = r[0];
+    Buffer<int> img_h = r[1];
+    auto func = [](int x, int y) { return 3*x + 2*y; };
+    if (check_image(img_g, func)) {
+        return -1;
     }
-
+    if (check_image(img_h, func)) {
+        return -1;
+    }
     return 0;
 }
 
 int main(int argc, char **argv) {
     printf("Running calling wrap no op test\n");
-    if (calling_wrap_no_op_test() != 0) {
+    if (calling_in_wrapper_no_op_test() != 0) {
         return -1;
     }
 
     printf("Running func wrap test\n");
-    if (func_wrap_test() != 0) {
+    if (func_in_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running multiple funcs sharing wrapper test\n");
-    if (multiple_funcs_sharing_wrapper_test() != 0) {
+    if (multiple_funcs_sharing_in_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running global wrap test\n");
-    if (global_wrap_test() != 0) {
+    if (global_in_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running update is defined after wrap test\n");
-    if (update_defined_after_wrap_test() != 0) {
+    if (update_defined_after_in_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running rdom wrapper test\n");
-    if (rdom_wrapper_test() != 0) {
+    if (rdom_in_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running global + custom wrapper test\n");
-    if (global_and_custom_wrap_test() != 0) {
+    if (global_and_custom_in_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running wrapper depend on mutated func test\n");
-    if (wrapper_depend_on_mutated_func_test() != 0) {
+    if (in_wrapper_depend_on_mutated_func_test() != 0) {
         return -1;
     }
 
     printf("Running wrapper on wrapper test\n");
-    if (wrapper_on_wrapper_test() != 0) {
+    if (in_wrapper_on_in_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running wrapper on rdom predicate test\n");
-    if (wrapper_on_rdom_predicate_test() != 0) {
+    if (in_wrapper_on_rdom_predicate_test() != 0) {
         return -1;
     }
 
     printf("Running two fold wrapper test\n");
-    if (two_fold_wrapper_test() != 0) {
+    if (two_fold_in_wrapper_test() != 0) {
         return -1;
     }
 
     printf("Running multi folds wrapper test\n");
-    if (multi_folds_wrapper_test() != 0) {
+    if (multi_folds_in_wrapper_test() != 0) {
         return -1;
     }
 
