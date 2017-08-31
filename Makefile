@@ -13,7 +13,7 @@ UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
     # assume we are building for the MinGW environment
-    LIBDL =
+    LIBDL=-luuid -lole32
     SHARED_EXT=dll
     FPIC=
 else
