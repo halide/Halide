@@ -17,18 +17,6 @@
 
 #include "HalideRuntime.h"
 
-#ifndef EXPORT
-#if defined(_WIN32) && defined(Halide_SHARED)
-#ifdef Halide_EXPORTS
-#define EXPORT __declspec(dllexport)
-#else
-#define EXPORT __declspec(dllimport)
-#endif
-#else
-#define EXPORT
-#endif
-#endif
-
 #ifdef _MSC_VER
 #define HALIDE_ALLOCA _alloca
 #else

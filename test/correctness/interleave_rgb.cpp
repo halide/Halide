@@ -23,7 +23,10 @@ bool test_interleave() {
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         interleaved.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (target.has_feature(Target::HVX_64)) {
+        const int vector_width = 64 / sizeof(T);
+        interleaved.hexagon().vectorize(x, vector_width).unroll(c);
+    } else if (target.has_feature(Target::HVX_128)) {
         const int vector_width = 128 / sizeof(T);
         interleaved.hexagon().vectorize(x, vector_width).unroll(c);
     } else {
@@ -49,6 +52,7 @@ bool test_interleave() {
 int main(int argc, char **argv) {
     if (!test_interleave<uint8_t>()) return -1;
     if (!test_interleave<uint16_t>()) return -1;
+    if (!test_interleave<uint32_t>()) return -1;
 
     printf("Success!\n");
     return 0;
