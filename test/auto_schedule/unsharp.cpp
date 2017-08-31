@@ -4,7 +4,7 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-const double PI= 3.14159265358979323846;
+const float PI = 3.14159265358979323846f;
 
 double run_test(bool auto_schedule) {
     int W = 1920;
