@@ -8,7 +8,6 @@
 #ifndef _DMA_HALIDE_RT_H_
 #define _DMA_HALIDE_RT_H_
 
-using namespace Halide::Runtime::Internal::Qurt;
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,21 +18,21 @@ extern "C" {
  *in: handle DMA Handle allocated for the frame
  *out: Error/Success
  */
-extern int halide_hexagon_dmart_set_dma_handle(void* user_context, void *handle, addr_t frame);
+extern int halide_hexagon_dmart_set_dma_handle(void* user_context, void *handle, uintptr_t frame);
 
 /*!
  * halide_hexagon_dmart_set_chroma_stride
  * in: stride set the chroma stride for the frame
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_set_chroma_stride(void* user_context,addr_t frame, int stride);
+extern int halide_hexagon_dmart_set_chroma_stride(void* user_context, uintptr_t frame, int stride);
 
 /*!
  * halide_hexagon_dmart_set_luma_stride
  * in: stride Set the luma stride for the frame
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_set_luma_stride(void* user_context,addr_t frame, int stride);
+extern int halide_hexagon_dmart_set_luma_stride(void* user_context, uintptr_t frame, int stride);
 
 /*!
  * halide_hexagon_dmart_set_fold_storage
@@ -45,8 +44,8 @@ extern int halide_hexagon_dmart_set_luma_stride(void* user_context,addr_t frame,
  * out: fold_id fold id
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_set_fold_storage(void* user_context, addr_t addr, addr_t tcm_region,
-             qurt_size_t size, addr_t desc_va, addr_t desc_region, qurt_size_t desc_size, int *fold_id);
+extern int halide_hexagon_dmart_set_fold_storage(void* user_context, uintptr_t addr, uintptr_t tcm_region,
+             qurt_size_t size, uintptr_t desc_va, uintptr_t desc_region, qurt_size_t desc_size, int *fold_id);
 
 /*!
  * halide_hexagon_dmart_get_update_params
@@ -54,7 +53,7 @@ extern int halide_hexagon_dmart_set_fold_storage(void* user_context, addr_t addr
  * out: dma_tMoveParams Parameters to update for DMA Transfer
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_get_update_params(void* user_context, addr_t dev_buf , t_dma_move_params* update_param);
+extern int halide_hexagon_dmart_get_update_params(void* user_context, uintptr_t dev_buf , t_dma_move_params* update_param);
 
 /*!
  * halide_hexagon_dmart_get_tcmDesc_params
@@ -67,15 +66,15 @@ extern int halide_hexagon_dmart_get_update_params(void* user_context, addr_t dev
  * out: addr_t descriptor
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_get_tcm_desc_params(void* user_context, addr_t dev_buf, addr_t *tcm_region,
-                         qurt_size_t *tcm_size, addr_t *desc_va, addr_t *desc_region, qurt_size_t *desc_size);
+extern int halide_hexagon_dmart_get_tcm_desc_params(void* user_context, uintptr_t dev_buf, uintptr_t *tcm_region,
+                         qurt_size_t *tcm_size, uintptr_t *desc_va, uintptr_t *desc_region, qurt_size_t *desc_size);
 
 /*halide_hexagon_dmart_get_last_frame
 * in: addr_t frame
 * out: bool lastFrame
 * out: Error/Success
 */
-extern int halide_hexagon_dmart_get_last_frame(void* user_context, addr_t  frame, bool *last_frame);
+extern int halide_hexagon_dmart_get_last_frame(void* user_context, uintptr_t frame, bool *last_frame);
 /*getter Functions*/
 
 /*!
@@ -84,14 +83,14 @@ extern int halide_hexagon_dmart_get_last_frame(void* user_context, addr_t  frame
  * out: bool read_flag
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_is_buffer_read(void* user_context,addr_t frame, bool *read_flag);
+extern int halide_hexagon_dmart_is_buffer_read(void* user_context, uintptr_t frame, bool *read_flag);
 
 /*halide_hexagon_dmart_get_fold_size
 * in: addr_t frame
 * out: unsigned int * size
 * out: Error/Success
 */
-extern int halide_hexagon_dmart_get_fold_size(void* user_context,addr_t frame, unsigned int *size);
+extern int halide_hexagon_dmart_get_fold_size(void* user_context, uintptr_t frame, unsigned int *size);
 
 /*!
  * halide_hexagon_dmart_allocate_dma
@@ -99,21 +98,21 @@ extern int halide_hexagon_dmart_get_fold_size(void* user_context,addr_t frame, u
  * out: bool dma_allocate
  * out: Error/Success
  */
-extern int halide_hexagon_dmart_allocate_dma(void* user_context,addr_t frame, bool *dma_allocate);
+extern int halide_hexagon_dmart_allocate_dma(void* user_context, uintptr_t frame, bool *dma_allocate);
 
 /*!
  * halide_hexagon_dmart_get_read_handle
  * in: addr_t frame
  * out: void* handle
  */
-extern void* halide_hexagon_dmart_get_read_handle(void* user_context,addr_t frame);
+extern void* halide_hexagon_dmart_get_read_handle(void* user_context, uintptr_t frame);
 
 /*!
  * halide_hexagon_dmart_get_write_handle
  * in: addr_t frame
  * out: void* handle
  */
-extern void* halide_hexagon_dmart_get_write_handle(void* user_context,addr_t frame);
+extern void* halide_hexagon_dmart_get_write_handle(void* user_context, uintptr_t frame);
 
 /*!
  * halide_hexagon_dmart_get_free_fold
@@ -128,7 +127,7 @@ extern int halide_hexagon_dmart_get_free_fold (void* user_context, bool *free_fo
  * in: addr_t frame
  * out: frameIDx
  */
-extern int halide_hexagon_dmart_get_frame_index(void *user_context, addr_t frame, int *frame_idx);
+extern int halide_hexagon_dmart_get_frame_index(void *user_context, uintptr_t frame, int *frame_idx);
 
 /*!
  *  halide_hexagon_dmart_set_host_frame
@@ -143,7 +142,7 @@ extern int halide_hexagon_dmart_get_frame_index(void *user_context, addr_t frame
  * last = last frame 0:no 1:yes *optional*
  * inform dma it is last frame of the session
  */
-extern int halide_hexagon_dmart_set_host_frame (void* user_context, addr_t  frame,int type, int d,
+extern int halide_hexagon_dmart_set_host_frame (void* user_context, uintptr_t  frame,int type, int d,
                                                int w, int h, int s, int last);
 
 
@@ -154,7 +153,7 @@ extern int halide_hexagon_dmart_set_host_frame (void* user_context, addr_t  fram
  * will retun 1 - for UV plane
  * will retun 2 - for both Y and UV planes
  */
-extern int halide_hexagon_dmart_get_num_components (void* user_context, addr_t  frame, int *ncomponents);
+extern int halide_hexagon_dmart_get_num_components (void* user_context, uintptr_t  frame, int *ncomponents);
 
 
 /*!

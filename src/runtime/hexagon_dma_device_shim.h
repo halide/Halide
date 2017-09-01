@@ -8,6 +8,8 @@
 #ifndef _DMA_DEVICE_SHIM_H_
 #define _DMA_DEVICE_SHIM_H_
 
+#include "mini_qurt.h"
+#include "hexagon_mini_dma.h"
 using namespace Halide::Runtime::Internal::Qurt;
 
 #ifdef __cplusplus
@@ -27,7 +29,7 @@ __inline static int align(int x,int a) {
  */
 typedef struct {
     void* handle;
-    addr_t host_address;
+    uintptr_t host_address;
     int frame_width;
     int frame_height;
     int frame_stride;
@@ -41,7 +43,7 @@ typedef struct {
     int ncomponents;
     bool padding;
     bool is_ubwc;
-    addr_t desc_address;
+    uintptr_t desc_address;
     int desc_size;
 } t_dma_prepare_params;
 
@@ -57,7 +59,7 @@ typedef struct {
     int offset;
     int l2_chroma_offset;
     int ncomponents;
-    addr_t ping_buffer;
+    uintptr_t ping_buffer;
 } t_dma_move_params;
 
 typedef struct {
@@ -83,10 +85,10 @@ int dma_get_format_alignment(t_eDmaFmt fmt, bool is_ubwc, t_dma_pix_align_info &
 
 /*!
  *  dma_lookup_physical_address
- * in: addr_t virtual adrress
- * out: addr_t physical address
+ * in: uintptr_t virtual adrress
+ * out: uintptr_t physical address
  */
-addr_t dma_lookup_physical_address(addr_t vaddr);
+uintptr_t dma_lookup_physical_address(uintptr_t vaddr);
 
 /*!
  *  Get Minimum ROI Size
@@ -131,9 +133,9 @@ int dma_get_mem_pool_id(qurt_mem_pool_t* pool_tcm);
  * Allocate Cache for DMA
  * in:qurt_mem_pool_t pool_tcm
  * in:qurt_size_t cache_size
- * out:qurt_addr_t
+ * out:uintptr_t
  */
-addr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t cache_size, addr_t* region_tcm);
+uintptr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t cache_size, uintptr_t* region_tcm);
 
 /*!
  * Lock Cache for DMA
@@ -141,7 +143,7 @@ addr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t cache_size, addr
  * in:qurt_size_t
  * out: ERR if not available
  */
-int dma_lock_cache(addr_t cache_addr, qurt_size_t cache_size);
+int dma_lock_cache(uintptr_t cache_addr, qurt_size_t cache_size);
 
 /*!
  *  dma Prepare for Transfer
@@ -169,7 +171,7 @@ int dma_move_data(t_dma_move_params params);
  * in:qurt_size_t
  * out: ERR if not available
  */
-int dma_unlock_cache(addr_t cache_addr, qurt_size_t cache_size);
+int dma_unlock_cache(uintptr_t cache_addr, qurt_size_t cache_size);
 
 /*!
  *  dma_free_dma_engine
@@ -190,7 +192,7 @@ int dma_finish_frame(void* handle);
  *  dma_delete_mem_region
  * in: qurt_mem_region_t
  */
-void dma_delete_mem_region(addr_t tcm_reg);
+void dma_delete_mem_region(uintptr_t tcm_reg);
 
 /*!
  * dma_get_thread_id

@@ -12,37 +12,32 @@
 #include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "printer.h"
-#include "mini_qurt.h"
-#include "hexagon_mini_dma.h"
 #include "hexagon_dma_device_shim.h"
 #include "HalideRuntimeHexagonDma.h"
 #include "hexagon_dma_rt.h"
 #include "hexagon_dma_context.h"
 
-using namespace Halide::Runtime::Internal;
-using namespace Halide::Runtime::Internal::Qurt;
-
 extern "C" {
 
 extern WEAK halide_device_interface_t hexagon_dma_device_interface;
 
-int halide_dma_device_release(void *user_context) {
+WEAK int halide_hexagon_dma_device_release(void *user_context) {
     return 0;
 }
 
-int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
+WEAK int halide_hexagon_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
     int nRet = E_OK;
     t_eDmaFmt chroma_type,luma_type;
     int frame_idx;
     t_dma_context* dma_context;
-    addr_t region_tcm;
-    addr_t region_tcm_desc;
-    addr_t tcm_buf_vaddr, tcm_desc_vaddr;
+    uintptr_t region_tcm;
+    uintptr_t region_tcm_desc;
+    uintptr_t tcm_buf_vaddr, tcm_desc_vaddr;
     qurt_size_t region_tcm_desc_size;
     qurt_mem_pool_t pool_tcm;
 
     /*Get the Frame Index*/
-    if(halide_hexagon_dmart_get_frame_index(user_context, (addr_t)buf->host, &frame_idx)) {
+    if(halide_hexagon_dmart_get_frame_index(user_context, (uintptr_t)buf->host, &frame_idx)) {
         error(NULL) << "Function failed to get Frame Index  \n";
         return E_ERR;
     }
@@ -96,7 +91,7 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
     //Allocate DMA if required
     //######################################################
     bool dma_allocate;
-    if(halide_hexagon_dmart_allocate_dma(user_context,(addr_t )buf->host, &dma_allocate)) {
+    if(halide_hexagon_dmart_allocate_dma(user_context,(uintptr_t)buf->host, &dma_allocate)) {
         error(NULL) << "Function failed to check if DMA Alloc is needed \n";
         return E_ERR;
     }
@@ -108,7 +103,7 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
             error(NULL) << "halide_hexagon_dma_device_malloc:Failed to allocate the read DMA engine.\n";
             return E_ERR;
         }
-        if(halide_hexagon_dmart_set_dma_handle(user_context, dma_handle,(addr_t)buf->host)) {
+        if(halide_hexagon_dmart_set_dma_handle(user_context, dma_handle,(uintptr_t)buf->host)) {
             error(NULL) << "Function failed to set DMA Handle to DMA context \n";
             return E_ERR;
         }
@@ -116,9 +111,9 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
         /*An Allocated DMA Already Exists Re-use it */
         bool read = dma_context->pframe_table[frame_idx].read;
         if (read) {
-            dma_handle = halide_hexagon_dmart_get_read_handle(user_context,(addr_t )buf->host);
+            dma_handle = halide_hexagon_dmart_get_read_handle(user_context,(uintptr_t )buf->host);
         } else {
-            dma_handle = halide_hexagon_dmart_get_write_handle(user_context,(addr_t )buf->host);
+            dma_handle = halide_hexagon_dmart_get_write_handle(user_context,(uintptr_t )buf->host);
         }
     }
 
@@ -149,7 +144,7 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
         //########################################################
         //The maximum TCM Buf Size
         qurt_size_t tcm_buf_size;
-        if(halide_hexagon_dmart_get_fold_size(user_context,(addr_t )buf->host,&tcm_buf_size)) {
+        if(halide_hexagon_dmart_get_fold_size(user_context,(uintptr_t)buf->host,&tcm_buf_size)) {
             error(NULL) << "Function failed to get Fold Buffer Size \n";
             return E_ERR;
         }
@@ -203,7 +198,7 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
         buf->device = tcm_buf_vaddr;
     }
     /*Now We have Allocated the Fold and will link it to the Frame*/
-    if(halide_hexagon_dmart_set_storage_linkage (user_context,(addr_t)buf->host, (addr_t) buf->device , fold_idx)) {
+    if(halide_hexagon_dmart_set_storage_linkage (user_context,(uintptr_t)buf->host, (uintptr_t) buf->device , fold_idx)) {
         error(NULL) << "Function failed to Link Frame and Fold Storage \n";
         return E_ERR;
     }
@@ -212,7 +207,7 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
     //#################################################################
     t_dma_prepare_params params;
     params.handle = dma_handle;
-    params.host_address =  (addr_t )buf->host;
+    params.host_address =  (uintptr_t )buf->host;
     params.frame_width = frame_width;
     params.frame_height = frame_height;
     params.frame_stride = frame_stride;
@@ -236,23 +231,23 @@ int halide_dma_device_malloc(void *user_context,  halide_buffer_t *buf) {
     return nRet;
 }
 
-int halide_dma_device_free(void *user_context, halide_buffer_t *buf) {
+WEAK int halide_hexagon_dma_device_free(void *user_context, halide_buffer_t *buf) {
     void* handle = NULL;
     halide_assert(NULL, user_context!=NULL);
     halide_assert(NULL, buf!=NULL);
     bool read_flag = false;
-    if(halide_hexagon_dmart_is_buffer_read(user_context, (addr_t)buf->host, &read_flag)) {
+    if(halide_hexagon_dmart_is_buffer_read(user_context, (uintptr_t)buf->host, &read_flag)) {
         error(NULL) << "Function failed to get Operation type: (Read | Write) Flag \n";
         return E_ERR;
     }
     if(read_flag) {
-        handle = halide_hexagon_dmart_get_read_handle(user_context,(addr_t)buf->host);
+        handle = halide_hexagon_dmart_get_read_handle(user_context,(uintptr_t)buf->host);
         if(handle == 0) {
             error(NULL) << "Function failed to get DMA Read Handle  \n";
             return E_ERR;
         }
     } else {
-        handle = halide_hexagon_dmart_get_write_handle(user_context,(addr_t)buf->host);
+        handle = halide_hexagon_dmart_get_write_handle(user_context,(uintptr_t)buf->host);
         if(handle == 0) {
             error(NULL) << "Function failed to get DMA Write Handle  \n";
             return E_ERR;
@@ -260,7 +255,7 @@ int halide_dma_device_free(void *user_context, halide_buffer_t *buf) {
     }
     if(handle != 0) {
         bool last_frame;
-        if(halide_hexagon_dmart_get_last_frame(user_context,(addr_t)buf->host,&last_frame)) {
+        if(halide_hexagon_dmart_get_last_frame(user_context,(uintptr_t)buf->host,&last_frame)) {
             error(NULL) << "Function failed to get if the Frame is last frame or not \n";
             return E_ERR;
         }
@@ -268,11 +263,11 @@ int halide_dma_device_free(void *user_context, halide_buffer_t *buf) {
         if (last_frame) {
             dma_free_dma_engine(handle);
             /* Free the Allocated Qurt Memory Regions*/
-            addr_t tcm_region,desc_region;
-            addr_t desc_va;
+            uintptr_t tcm_region,desc_region;
+            uintptr_t desc_va;
             qurt_size_t desc_size, tcm_size;
-            if(halide_hexagon_dmart_get_tcm_desc_params(user_context, (addr_t) buf->device,&tcm_region,
-                                                        &tcm_size,(addr_t *)&desc_va,&desc_region, &desc_size)) {
+            if(halide_hexagon_dmart_get_tcm_desc_params(user_context, (uintptr_t) buf->device,&tcm_region,
+                                                        &tcm_size,(uintptr_t *)&desc_va,&desc_region, &desc_size)) {
                 error(NULL) << "Function failed to get TCM Desc Params  \n";
                 return E_ERR;
             }
@@ -301,18 +296,18 @@ int halide_dma_device_free(void *user_context, halide_buffer_t *buf) {
     return 0;
 }
 
-int halide_dma_copy_to_device(void *user_context,  halide_buffer_t *buf) {
+WEAK int halide_hexagon_dma_copy_to_device(void *user_context,  halide_buffer_t *buf) {
     void* handle = NULL;
     int nRet;
     halide_assert(NULL, user_context!=NULL);
     halide_assert(NULL, buf!=NULL);
     bool read_flag;
-    if(halide_hexagon_dmart_is_buffer_read(user_context,(addr_t )buf->host,&read_flag)) {
+    if(halide_hexagon_dmart_is_buffer_read(user_context,(uintptr_t)buf->host,&read_flag)) {
         error(NULL) << "Function failed to get Operation type: (Read | Write) Flag \n";
         return E_ERR;
     }
     if(read_flag) {
-        handle = halide_hexagon_dmart_get_read_handle(user_context,(addr_t )buf->host);
+        handle = halide_hexagon_dmart_get_read_handle(user_context,(uintptr_t)buf->host);
         if(handle == NULL) {
             error(NULL) << "Function failed to get DMA Read Handle  \n";
             return E_ERR;
@@ -321,12 +316,12 @@ int halide_dma_copy_to_device(void *user_context,  halide_buffer_t *buf) {
         return E_ERR;
     }
     int ncomponents;
-    if(halide_hexagon_dmart_get_num_components(user_context,(addr_t )buf->host,&ncomponents)) {
+    if(halide_hexagon_dmart_get_num_components(user_context,(uintptr_t)buf->host,&ncomponents)) {
         error(NULL) << "Function failed to get number of Components from DMA Context \n";
         return E_ERR;
     }
     t_dma_move_params move_param;
-    halide_hexagon_dmart_get_update_params(user_context, (addr_t)buf->device, &move_param);
+    halide_hexagon_dmart_get_update_params(user_context, (uintptr_t)buf->device, &move_param);
     move_param.handle = handle;
     move_param.ncomponents = ncomponents;
     nRet = dma_move_data(move_param);
@@ -336,15 +331,15 @@ int halide_dma_copy_to_device(void *user_context,  halide_buffer_t *buf) {
     return nRet;
 }
 
-int halide_dma_copy_to_host(void *user_context, halide_buffer_t *buf) {
+WEAK int halide_hexagon_dma_copy_to_host(void *user_context, halide_buffer_t *buf) {
     void* handle;
     bool read_flag;
-    if(halide_hexagon_dmart_is_buffer_read(user_context,(addr_t )buf->host,&read_flag)) {
+    if(halide_hexagon_dmart_is_buffer_read(user_context,(uintptr_t)buf->host,&read_flag)) {
         error(NULL) << "Function failed to get Operation type: (Read | Write) Flag \n";
         return E_ERR;
     }
     if(!read_flag) {
-        handle = halide_hexagon_dmart_get_write_handle(user_context,(addr_t )buf->host);
+        handle = halide_hexagon_dmart_get_write_handle(user_context,(uintptr_t)buf->host);
         if(handle == 0) {
             error(NULL) << "Function failed to get DMA Read Handle  \n";
             return E_ERR;
@@ -353,12 +348,12 @@ int halide_dma_copy_to_host(void *user_context, halide_buffer_t *buf) {
         return E_ERR;
     }
     int ncomponents;
-    if(halide_hexagon_dmart_get_num_components(user_context,(addr_t )buf->host,&ncomponents)) {
+    if(halide_hexagon_dmart_get_num_components(user_context,(uintptr_t)buf->host,&ncomponents)) {
         error(NULL) << "Function failed to get number of Components from DMA Context \n";
         return E_ERR;
     }
     t_dma_move_params move_param;
-    halide_hexagon_dmart_get_update_params(user_context, (addr_t)buf->device, &move_param);
+    halide_hexagon_dmart_get_update_params(user_context, (uintptr_t)buf->device, &move_param);
     move_param.handle = handle;
     move_param.ncomponents = ncomponents;
     int nRet;
@@ -370,23 +365,23 @@ int halide_dma_copy_to_host(void *user_context, halide_buffer_t *buf) {
 }
 
 
-int halide_dma_device_sync(void* user_context,  halide_buffer_t *buf) {
+WEAK int halide_hexagon_dma_device_sync(void* user_context,  halide_buffer_t *buf) {
     int nRet;
     void* handle=NULL;
     bool read_flag;
-    if(halide_hexagon_dmart_is_buffer_read(user_context,(addr_t )buf->host,&read_flag)) {
+    if(halide_hexagon_dmart_is_buffer_read(user_context,(uintptr_t)buf->host,&read_flag)) {
         error(NULL) << "Function failed to get Operation type: (Read | Write) Flag \n";
         return E_ERR;
     }
     if (read_flag){
-        handle = halide_hexagon_dmart_get_read_handle(user_context,(addr_t )buf->host);
+        handle = halide_hexagon_dmart_get_read_handle(user_context,(uintptr_t)buf->host);
         if(handle == 0) {
             error(NULL) << "Function failed to get DMA Read Handle  \n";
             return E_ERR;
         }
         nRet = dma_wait(handle);
     } else {
-        handle = halide_hexagon_dmart_get_write_handle(user_context,(addr_t )buf->host);
+        handle = halide_hexagon_dmart_get_write_handle(user_context,(uintptr_t)buf->host);
         if(handle == 0) {
             error(NULL) << "Function failed to get DMA Write  Handle  \n";
             return E_ERR;
@@ -397,13 +392,13 @@ int halide_dma_device_sync(void* user_context,  halide_buffer_t *buf) {
 }
 
 
-int halide_dma_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
-                                      int result = halide_dma_device_malloc(user_context, buf);
+WEAK int halide_hexagon_dma_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
+    int result = halide_hexagon_dma_device_malloc(user_context, buf);
     return result;
 }
 
-int halide_dma_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
-    halide_dma_device_free(user_context, buf);
+WEAK int halide_hexagon_dma_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
+    halide_hexagon_dma_device_free(user_context, buf);
     buf->host = NULL;
     return 0;
 }
@@ -418,19 +413,19 @@ WEAK const halide_device_interface_t *halide_hexagon_dma_device_interface() {
 WEAK halide_device_interface_impl_t hexagon_dma_device_interface_impl = {
     halide_use_jit_module,
     halide_release_jit_module,
-    halide_dma_device_malloc,
-    halide_dma_device_free,
-    halide_dma_device_sync,
-    halide_dma_device_release,
-    halide_dma_copy_to_host,
-    halide_dma_copy_to_device,
-    halide_dma_device_and_host_malloc,
-    halide_dma_device_and_host_free,
+    halide_hexagon_dma_device_malloc,
+    halide_hexagon_dma_device_free,
+    halide_hexagon_dma_device_sync,
+    halide_hexagon_dma_device_release,
+    halide_hexagon_dma_copy_to_host,
+    halide_hexagon_dma_copy_to_device,
+    halide_hexagon_dma_device_and_host_malloc,
+    halide_hexagon_dma_device_and_host_free,
     halide_default_device_wrap_native,
     halide_default_device_detach_native,
 };
 
-struct halide_device_interface_t hexagon_dma_device_interface = {
+WEAK struct halide_device_interface_t hexagon_dma_device_interface = {
     halide_device_malloc,
     halide_device_free,
     halide_device_sync,

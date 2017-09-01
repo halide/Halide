@@ -10,7 +10,7 @@
 #ifndef _HALIDE_HEXAGON_DMA_CONTEXT_H_
 #define _HALIDE_HEXAGON_DMA_CONTEXT_H_
 #include "hexagon_dma_device_shim.h"
-using namespace Halide::Runtime::Internal::Qurt;
+
 /*!
  *  Currently hardcoding the number of DMA engines available
  * Should find a way to get this
@@ -55,11 +55,11 @@ typedef struct {
     int l2_chroma_offset;                       /* L2 Chroma Offset */
     int size_desc;                              /* DMA Descriptor Size*/
     int size_tcm;                               /* L2 cache Size Allocated for each DMA Transfer(Ping or Pong Buffer Size)*/
-    addr_t fold_virtual_addr;                   /* Virtual Address of Locked L2 cache for Ping, pong Buffers*/
-    addr_t ping_phys_addr;                      /* physical address ping buffer*/
-    addr_t tcm_region;                          /* TCM Region used for allocating the L2 cache*/
-    addr_t desc_virtual_addr;                   /* DMA Descriptor virtual address */
-    addr_t desc_region;                         /* DMA Descritor Region used for Allocating descriptors */
+    uintptr_t fold_virtual_addr;                /* Virtual Address of Locked L2 cache for Ping, pong Buffers*/
+    uintptr_t ping_phys_addr;                   /* physical address ping buffer*/
+    uintptr_t tcm_region;                       /* TCM Region used for allocating the L2 cache*/
+    uintptr_t desc_virtual_addr;                /* DMA Descriptor virtual address */
+    uintptr_t desc_region;                      /* DMA Descritor Region used for Allocating descriptors */
 } t_work_buffer;
 /*!
  *  This Below Structure is at Frame Granularity
@@ -82,7 +82,7 @@ typedef struct {
     bool end_frame;                             /* Default False*/
     bool is_ubwc;                               /* Flag to to Indicate of the Frame is UBWC or not*/
     bool padding;                               /* Flag To indicate if padding to 16-bit in L2 $ is needed or not */
-    addr_t frame_virtual_addr;                  /* Virtual Adress of the Frame(DMA Read/Write)*/
+    uintptr_t frame_virtual_addr;               /* Virtual Adress of the Frame(DMA Read/Write)*/
     t_work_buffer *pwork_buffer;                /* We dont allocate this but just link the Free WorkBuffer for Frame*/
 } t_resource_per_frame;
 /*!
@@ -112,7 +112,7 @@ typedef struct {
  * For Fast Seraching of the Frame in the DMA structures
  */
 typedef struct {
-    addr_t frame_addr;                          /* Virtual Address of the Frame*/
+    uintptr_t frame_addr;                       /* Virtual Address of the Frame*/
     int dma_set_id;                             /* ID for the DMA Set used for this Frame */
     int dma_engine_id;                          /* ID of DMA engine used for this Frame*/
     int frame_index;                            /* The Frame ID used to disntinguish various Frames*/

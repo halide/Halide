@@ -8,10 +8,10 @@
 
 #ifndef _DMA_DEVICE_SHIM_C_
 #define _DMA_DEVICE_SHIM_C_
-#include "hexagon_mini_dma.h"
-#include "mini_qurt.h"
+
+#include "HalideRuntime.h"
 #include "hexagon_dma_device_shim.h"
-using namespace Halide::Runtime::Internal::Qurt;
+
 typedef struct dma_dummy_lib {
     int width;
     void* host_address;
@@ -25,7 +25,7 @@ WEAK int dma_get_format_alignment(t_eDmaFmt eFmt, bool is_ubwc, t_dma_pix_align_
     pix_align.u16W = 128;
     return nRet;
 }
-WEAK addr_t dma_lookup_physical_address(addr_t addr) {
+WEAK uintptr_t dma_lookup_physical_address(uintptr_t addr) {
     return addr;
 }
 WEAK int dma_get_min_roi_size(t_eDmaFmt eFmt, bool isUbwc, t_dma_pix_align_info& pix_align) {
@@ -55,22 +55,22 @@ WEAK int dma_get_mem_pool_id(qurt_mem_pool_t *mem_pool) {
     *mem_pool = 1;
     return nRet;
 }
-WEAK addr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t region_tcm_size, addr_t* region_tcm) {
+WEAK uintptr_t dma_allocate_cache(qurt_mem_pool_t pool_tcm, qurt_size_t region_tcm_size, uintptr_t* region_tcm) {
     unsigned char* buf_vaddr;
     buf_vaddr = (unsigned char*) malloc(region_tcm_size*sizeof(unsigned char*));
     if(region_tcm != 0){
-        *region_tcm = (addr_t)buf_vaddr;
+        *region_tcm = (uintptr_t)buf_vaddr;
     }
     memset(buf_vaddr, 0, region_tcm_size*sizeof(unsigned char*));
-    addr_t buf_addr = (addr_t)buf_vaddr;
+    uintptr_t buf_addr = (uintptr_t)buf_vaddr;
     return buf_addr;
 }
-WEAK int dma_lock_cache(addr_t tcm_buf_vaddr, qurt_size_t region_tcm_size) {
+WEAK int dma_lock_cache(uintptr_t tcm_buf_vaddr, qurt_size_t region_tcm_size) {
     int nRet  = QURT_EOK;
     //do nothing
     return nRet;
 }
-WEAK int dma_unlock_cache(addr_t tcm_buf_vaddr, qurt_size_t region_tcm_size) {
+WEAK int dma_unlock_cache(uintptr_t tcm_buf_vaddr, qurt_size_t region_tcm_size) {
     int nRet  = QURT_EOK;
     //do nothing
     return nRet;
@@ -133,7 +133,7 @@ WEAK unsigned int dma_get_thread_id() {
     i++;
     return i;
 }
-WEAK void dma_delete_mem_region(addr_t cache_mem) {
+WEAK void dma_delete_mem_region(uintptr_t cache_mem) {
     unsigned char* temp =(unsigned char*)(cache_mem);
     free(temp);
 }

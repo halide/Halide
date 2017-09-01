@@ -55,7 +55,7 @@ extern int halide_hexagon_dmaapp_create_context(void** user_context, int nFrames
  * Returns Error if the frame is not aligned.
  * AttachContext needs to be called for each frame
  */
-extern int halide_hexagon_dmaapp_attach_context(void* user_context, addr_t frame, int type,
+extern int halide_hexagon_dmaapp_attach_context(void* user_context, uintptr_t frame, int type,
 	                                        int d, int w, int h, int s, int last);
 /**
 * halide_hexagon_dmaapp_detach_context
@@ -64,7 +64,7 @@ extern int halide_hexagon_dmaapp_attach_context(void* user_context, addr_t frame
 * and does not want to free the DMA Engines
 * Return an Error if there is an error in DMA Transfer
 */
-extern int halide_hexagon_dmaapp_detach_context(void* user_context, addr_t frame);
+extern int halide_hexagon_dmaapp_detach_context(void* user_context, uintptr_t frame);
 /**
  * halide_hexagon_dmaapp_delete_context
  * Delete Context frees up the dma handle if not yet freed
@@ -81,14 +81,14 @@ extern int halide_hexagon_dmaapp_delete_context(void* user_context);
  * frame = VA of frame buffer
  * plane = Y/UV
  */
-extern int halide_hexagon_dmart_set_component(void* user_context, addr_t frame, int plane);
+extern int halide_hexagon_dmart_set_component(void* user_context, uintptr_t frame, int plane);
 /**
  *  halide_hexagon_dmart_set_padding
  * set for dma padding in L2$ (8bit in DDR, 16bit in L2$) - padding '0' to LSb
  * frame = VA of frame buffer
  * flag = 0:no padding, 1:padding
  */
-extern int halide_hexagon_dmart_set_padding(void* user_context, addr_t frame, int flag);
+extern int halide_hexagon_dmart_set_padding(void* user_context, uintptr_t frame, int flag);
 /**
  *  halide_hexagon_dmart_set_parallel
  * is parallel processing (parallization of inner most loop only; must avoid nested parallelism)
@@ -106,7 +106,7 @@ extern int halide_hexagon_dmart_set_parallel(void* user_context, int threads);
  * s = fold stride in pixels
  * n = number of folds (circular buffers)
  */
-extern int halide_hexagon_dmart_set_max_fold_storage(void* user_context, addr_t frame,
+extern int halide_hexagon_dmart_set_max_fold_storage(void* user_context, uintptr_t frame,
                                                      int h, int w, int s, int n);
 /**
  *  halide_hexagon_dmart_set_storage_linkage
@@ -115,8 +115,8 @@ extern int halide_hexagon_dmart_set_max_fold_storage(void* user_context, addr_t 
  * fold = VA of device storage
  * store_id = Fold storage id
  */
-extern int halide_hexagon_dmart_set_storage_linkage(void* user_context, addr_t  frame,
-                                                    addr_t fold, int store_id);
+extern int halide_hexagon_dmart_set_storage_linkage(void* user_context, uintptr_t frame,
+                                                    uintptr_t fold, int store_id);
 /**
  *  halide_hexagon_dmart_set_resource
  * lock dma resource set to thread, max number of resource set is based on available HW threads
@@ -132,7 +132,7 @@ extern int halide_hexagon_dmart_set_resource(void* user_context, int lock, int* 
  * offset = offset from start of L2$ (local folding storage) to dma - to id the fold (circular buffer)
  * rcs_id = locked resource ID **optional**
  */
-extern int halide_hexagon_dmart_set_device_storage_offset(void* user_context, addr_t dev_buf,
+extern int halide_hexagon_dmart_set_device_storage_offset(void* user_context, uintptr_t dev_buf,
                                                           int offset, int rsc_id);
 /**
  *  halide_hexagon_dmart_set_host_roi
@@ -144,14 +144,14 @@ extern int halide_hexagon_dmart_set_device_storage_offset(void* user_context, ad
  * h = ROI height in pixels
  * rsc_id = locked resource ID **optional
  */
-extern int halide_hexagon_dmart_set_host_roi(void* user_context, addr_t dev_buf, int x, int y,
+extern int halide_hexagon_dmart_set_host_roi(void* user_context, uintptr_t dev_buf, int x, int y,
                                              int w, int h, int rsc_id);
 /**
  *  halide_hexagon_dmart_clr_host_frame
  * clear frame
  * frame = VA of frame buffer
  */
-extern int halide_hexagon_dmart_clr_host_frame(void* user_context, addr_t  frame);
+extern int halide_hexagon_dmart_clr_host_frame(void* user_context, uintptr_t  frame);
 #ifdef __cplusplus
 } // End extern "C"
 #endif
