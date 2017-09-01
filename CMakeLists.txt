@@ -200,7 +200,6 @@ endforeach()
 # TODO(srj): add test_bazel variant
 # TODO(srj): add test_python variant
 # TODO(srj): add test_apps variant
-# TODO(srj): add run_tests variant
 function(add_to_group GROUP TARGET)
   set(options BUILD EXECUTE)
   set(oneValueArgs WORKING_DIRECTORY)
