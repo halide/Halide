@@ -6,12 +6,12 @@
 
 echo Running $1
 
-$1
+"$1"
 if [[ "$?" -ne "0" ]]
 then
   echo "Success"
   exit 0
 fi
 
-echo "Expected Failure from $1, but got Success"
+echo "Expected Failure from '$1', but got Success"
 exit -1
