@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
     std::cout << "======================" << std::endl;
 
     if (!get_jit_target_from_environment().has_gpu_feature() &&
-        (2.5 * auto_time > manual_time)) {
+        (2 * auto_time > manual_time)) {
         printf("Auto-scheduler is much much slower than it should be.\n");
         return -1;
     }
