@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < (int)(halide_target_feature_end); i++) {
         if (host_features & (1ULL << i)) {
             host_features &= ~(1ULL << i);
-	    printf("host_features are: %x %x\n", (unsigned)host_features, (unsigned)(host_features >> 32));
+            printf("host_features are: %x %x\n", (unsigned)host_features, (unsigned)(host_features >> 32));
             if (!halide_can_use_target_features(host_features)) {
               printf("Failure!\n");
               return -1;

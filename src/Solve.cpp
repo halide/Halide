@@ -33,7 +33,7 @@ public:
 
     using IRMutator::mutate;
 
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         map<Expr, CacheEntry, ExprCompare>::iterator iter = cache.find(e);
         if (iter == cache.end()) {
             // Not in the cache, call the base class version.

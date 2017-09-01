@@ -447,7 +447,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!target) {
         std::cout << error_string << std::endl;
+#if LLVM_VERSION < 50
         llvm::TargetRegistry::printRegisteredTargetsForVersion();
+#else
+        llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
+#endif
     }
     internal_assert(target) << "Could not create target for " << module.getTargetTriple() << "\n";
 
@@ -460,7 +464,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
                                                 mcpu, mattrs,
                                                 options,
                                                 llvm::Reloc::PIC_,
+#if LLVM_VERSION < 60
                                                 llvm::CodeModel::Default,
+#else
+                                                llvm::CodeModel::Small,
+#endif
                                                 llvm::CodeGenOpt::Aggressive));
 }
 

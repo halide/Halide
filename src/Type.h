@@ -392,6 +392,14 @@ struct Type {
             (code() == Handle && !same_handle_type(other));
     }
 
+    /** Compare ordering of two types so they can be used in certain containers and algorithms */
+    bool operator<(const Type &other) const {
+        return code() < other.code() || (code() == other.code() &&
+              (bits() < other.bits() || (bits() == other.bits() &&
+              (lanes() < other.lanes() || (lanes() == other.lanes() &&
+              (code() == Handle && handle_type < other.handle_type))))));
+    }
+
     /** Produce the scalar type (that of a single element) of this vector type */
     Type element_of() const {
         return with_lanes(1);
@@ -416,10 +424,12 @@ struct Type {
     EXPORT bool is_min(int64_t) const;
     // @}
 
-    /** Return an expression which is the maximum value of this type */
+    /** Return an expression which is the maximum value of this type.
+     * Returns infinity for types which can represent it. */
     EXPORT Expr max() const;
 
-    /** Return an expression which is the minimum value of this type */
+    /** Return an expression which is the minimum value of this type.
+     * Returns -infinity for types which can represent it. */
     EXPORT Expr min() const;
 };
 

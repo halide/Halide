@@ -230,11 +230,16 @@ EXPORT FileStat file_stat(const std::string &name);
 class TemporaryFile final {
 public:
     TemporaryFile(const std::string &prefix, const std::string &suffix)
-        : temp_path(file_make_temp(prefix, suffix)) {}
+        : temp_path(file_make_temp(prefix, suffix)), do_unlink(true) {}
     const std::string &pathname() const { return temp_path; }
-    ~TemporaryFile() { file_unlink(temp_path); }
+    ~TemporaryFile() { if (do_unlink) { file_unlink(temp_path); } }
+    // You can call this if you want to defeat the automatic deletion;
+    // this is rarely what you want to do (since it defeats the purpose
+    // of this class), but can be quite handy for debugging purposes.
+    void detach() { do_unlink = false; }
 private:
     const std::string temp_path;
+    bool do_unlink;
     TemporaryFile(const TemporaryFile &) = delete;
     void operator=(const TemporaryFile &) = delete;
 };
@@ -262,30 +267,30 @@ using std::make_index_sequence;
 #else
 
 // C++11: std::integer_sequence (etc) is standard in C++14 but not C++11, but
-// is easily written in C++11. This is a simple version that could 
+// is easily written in C++11. This is a simple version that could
 // probably be improved.
 
-template<typename T, T... Ints> 
+template<typename T, T... Ints>
 struct integer_sequence {
     static constexpr size_t size() { return sizeof...(Ints); }
 };
 
-template<typename T> 
+template<typename T>
 struct next_integer_sequence;
 
-template<typename T, T... Ints> 
+template<typename T, T... Ints>
 struct next_integer_sequence<integer_sequence<T, Ints...>> {
     using type = integer_sequence<T, Ints..., sizeof...(Ints)>;
 };
 
-template<typename T, T I, T N> 
+template<typename T, T I, T N>
 struct make_integer_sequence_helper {
     using type = typename next_integer_sequence<
         typename make_integer_sequence_helper<T, I+1, N>::type
     >::type;
 };
 
-template<typename T, T N> 
+template<typename T, T N>
 struct make_integer_sequence_helper<T, N, N> {
     using type = integer_sequence<T>;
 };

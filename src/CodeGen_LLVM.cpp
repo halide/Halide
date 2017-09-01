@@ -603,7 +603,11 @@ void CodeGen_LLVM::begin_func(LoweredFunc::LinkageType linkage, const std::strin
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
+            #if LLVM_VERSION < 50
             function->setDoesNotAlias(i+1);
+            #else
+            function->addParamAttr(i, Attribute::NoAlias);
+            #endif
         }
     }
 
@@ -672,7 +676,11 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
             module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
         internal_assert(annotate_buffer_fn)
             << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
-        annotate_buffer_fn->setDoesNotAlias(0);
+        #if LLVM_VERSION < 50
+        annotate_buffer_fn->setDoesNotAlias(1);
+        #else
+        annotate_buffer_fn->addParamAttr(0, Attribute::NoAlias);
+        #endif
         for (const auto &arg : f.args) {
             if (arg.kind == Argument::OutputBuffer) {
                 register_destructor(annotate_buffer_fn, sym_get(arg.name + ".buffer"), OnSuccess);
@@ -1030,6 +1038,13 @@ void CodeGen_LLVM::optimize_module() {
 #endif
     b.LoopVectorize = true;
     b.SLPVectorize = true;
+
+#if LLVM_VERSION >= 50
+    if (TM) {
+        TM->adjustPassManager(b);
+    }
+#endif
+
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
@@ -1486,6 +1501,12 @@ Expr promote_64(Expr e) {
 }
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
+    // Find the base address from the symbol table
+    Value *base_address = symbol_table.get(buffer);
+    return codegen_buffer_pointer(base_address, type, index);
+}
+
+Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Expr index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (promote_indices() && d.getPointerSize() == 8) {
@@ -1494,16 +1515,19 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Ex
 
     // Handles are always indexed as 64-bit.
     if (type.is_handle()) {
-        return codegen_buffer_pointer(buffer, UInt(64, type.lanes()), index);
+        return codegen_buffer_pointer(base_address, UInt(64, type.lanes()), index);
     } else {
-        return codegen_buffer_pointer(buffer, type, codegen(index));
+        return codegen_buffer_pointer(base_address, type, codegen(index));
     }
 }
-
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(string buffer, Halide::Type type, Value *index) {
     // Find the base address from the symbol table
     Value *base_address = symbol_table.get(buffer);
+    return codegen_buffer_pointer(base_address, type, index);
+}
+
+Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Value *index) {
     llvm::Type *base_address_type = base_address->getType();
     unsigned address_space = base_address_type->getPointerAddressSpace();
 
@@ -1779,17 +1803,6 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
 
 void CodeGen_LLVM::visit(const Broadcast *op) {
     value = create_broadcast(codegen(op->value), op->lanes);
-}
-
-// Pass through scalars, and unpack broadcasts. Assert if it's a non-vector broadcast.
-Expr unbroadcast(Expr e) {
-    if (e.type().is_vector()) {
-        const Broadcast *broadcast = e.as<Broadcast>();
-        internal_assert(broadcast);
-        return broadcast->value;
-    } else {
-        return e;
-    }
 }
 
 Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
@@ -2224,14 +2237,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
-    } else if (op->is_intrinsic(Call::address_of)) {
-        internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
-        internal_assert(op->type.is_handle()) << "address_of must return a Handle type\n";
-        const Load *load = op->args[0].as<Load>();
-        internal_assert(load) << "The sole argument to address_of must be a Load node\n";
-        internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
-
-        value = codegen_buffer_pointer(load->name, load->type, load->index);
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
         value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
@@ -2290,6 +2295,15 @@ void CodeGen_LLVM::visit(const Call *op) {
             phi->addIncoming(false_value, false_pred);
 
             value = phi;
+        }
+    } else if (op->is_intrinsic(Call::require)) {
+        internal_assert(op->args.size() == 3);
+        Expr cond = op->args[0];
+        if (cond.type().is_vector()) {
+            scalarize(op);
+        } else {
+            create_assertion(codegen(cond), op->args[2]);
+            value = codegen(op->args[1]);
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->type.is_vector()) {
@@ -2433,29 +2447,27 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() > 0);
         value = codegen(op->args[0]);
     } else if (op->is_intrinsic(Call::alloca)) {
-        // The argument is the number of bytes. It must be const for now.
+        // The argument is the number of bytes. For now it must be
+        // const, or a call to size_of_halide_buffer_t.
         internal_assert(op->args.size() == 1);
-        const int64_t *sz = as_const_int(op->args[0]);
-        internal_assert(sz);
 
         // We can generate slightly cleaner IR with fewer alignment
         // restrictions if we recognize the most common types we
         // expect to get alloca'd.
-        if (op->type == type_of<struct halide_buffer_t *>()) {
-            value = create_alloca_at_entry(buffer_t_type, *sz / sizeof(halide_buffer_t));
-        } else if (op->type == type_of<struct halide_dimension_t *>()) {
-            value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
+        const Call *call = op->args[0].as<Call>();
+        if (op->type == type_of<struct halide_buffer_t *>() &&
+            call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
+            value = create_alloca_at_entry(buffer_t_type, 1);
         } else {
-            // Just use an i8* and make the users bitcast it.
-            value = create_alloca_at_entry(i8_t, *sz);
+            const int64_t *sz = as_const_int(op->args[0]);
+            internal_assert(sz);
+            if (op->type == type_of<struct halide_dimension_t *>()) {
+                value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
+            } else {
+                // Just use an i8* and make the users bitcast it.
+                value = create_alloca_at_entry(i8_t, *sz);
+            }
         }
-    } else if (op->is_intrinsic(Call::copy_memory)) {
-        // Just like memcpy, copy_memory returns the destination address.
-        Value *dst = codegen(op->args[0]);
-        builder->CreateMemCpy(dst,
-                              codegen(op->args[1]),
-                              codegen(op->args[2]), 0);
-        value = dst;
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
@@ -2613,14 +2625,14 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
         value = call;
     } else if (op->is_intrinsic(Call::prefetch)) {
-        user_assert((op->args.size() == 3) && is_one(op->args[1]))
+        user_assert((op->args.size() == 4) && is_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported.\n";
 
         llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch");
         internal_assert(prefetch_fn);
 
         vector<llvm::Value *> args;
-        args.push_back(codegen(op->args[0]));
+        args.push_back(codegen_buffer_pointer(codegen(op->args[0]), op->type, op->args[1]));
         // The first argument is a pointer, which has type i8*. We
         // need to cast the argument, which might be a pointer to a
         // different type.
@@ -2635,6 +2647,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             " Halide.\n";
     } else if (op->is_intrinsic(Call::indeterminate_expression)) {
         user_error << "Indeterminate expression occurred during constant-folding.\n";
+    } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
+        llvm::DataLayout d(module.get());
+        value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
     } else if (op->call_type == Call::Intrinsic ||
                op->call_type == Call::PureIntrinsic) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
@@ -2995,7 +3010,11 @@ void CodeGen_LLVM::visit(const For *op) {
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
                                           "par_for_" + function->getName() + "_" + op->name, module.get());
+        #if LLVM_VERSION < 50
         function->setDoesNotAlias(3);
+        #else
+        function->addParamAttr(2, Attribute::NoAlias);
+        #endif
         set_function_attributes_for_target(function, target);
 
         // Make the initial basic block and jump the builder into the new function
@@ -3045,7 +3064,11 @@ void CodeGen_LLVM::visit(const For *op) {
         builder->restoreIP(call_site);
         llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
         internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
+        #if LLVM_VERSION < 50
         do_par_for->setDoesNotAlias(5);
+        #else
+        do_par_for->addParamAttr(4, Attribute::NoAlias);
+        #endif
         //do_par_for->setDoesNotCapture(5);
         ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
         Value *args[] = {user_context, function, min, extent, ptr};

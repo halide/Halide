@@ -149,13 +149,22 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         min_required = min_req;
                         max_required = max_req;
                     }
+                } else if (!min_required.defined() &&
+                           i == func.dimensions() - 1 &&
+                           is_pure(min_req) &&
+                           is_pure(max_req)) {
+                    // The footprint doesn't depend on the loop var. Just compute everything on the first loop iteration.
+                    dim = func_args[i];
+                    dim_idx = i;
+                    min_required = min_req;
+                    max_required = max_req;
                 }
             }
 
             if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
-                         << func.name() << " over " << loop_var << " because either zero "
-                         << "or many dimensions of the function dependended on the loop var\n";
+                         << func.name() << " over " << loop_var << " because multiple "
+                         << "dimensions of the function dependended on the loop var\n";
                 return;
             }
 
@@ -226,11 +235,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             Expr new_min, new_max;
             if (can_slide_up) {
-                new_min = select(loop_var_expr <= loop_min, min_required, likely(prev_max_plus_one));
+                new_min = select(loop_var_expr <= loop_min, min_required, likely_if_innermost(prev_max_plus_one));
                 new_max = max_required;
             } else {
                 new_min = min_required;
-                new_max = select(loop_var_expr <= loop_min, max_required, likely(prev_min_minus_one));
+                new_max = select(loop_var_expr <= loop_min, max_required, likely_if_innermost(prev_min_minus_one));
             }
 
             Expr early_stages_min_required = new_min;
@@ -372,7 +381,7 @@ class SlidingWindow : public IRMutator {
 
         // If the Function in question has the same compute_at level
         // as its store_at level, skip it.
-        const Schedule &sched = iter->second.schedule();
+        const FuncSchedule &sched = iter->second.schedule();
         if (sched.compute_level() == sched.store_level()) {
             IRMutator::visit(op);
             return;

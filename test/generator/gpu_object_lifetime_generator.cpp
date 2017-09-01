@@ -15,12 +15,11 @@ public:
             Var xo, xi;
             f.gpu_tile(x, xo, xi, 16);
         }
-        // The test requires gpu_debug to examine the output.
-        target.set_feature(Target::Debug);
+
         return f;
     }
 };
 
-Halide::RegisterGenerator<GpuObjectLifetime> register_my_gen{"gpu_object_lifetime"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(GpuObjectLifetime, gpu_object_lifetime)

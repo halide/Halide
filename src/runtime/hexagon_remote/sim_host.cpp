@@ -9,6 +9,12 @@
 
 #include "sim_protocol.h"
 
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 typedef unsigned int handle_t;
 
 std::unique_ptr<HexagonWrapper> sim;
@@ -62,18 +68,20 @@ int init_sim() {
         }
     }
 
-    // Configue tracing.
-    const char *T = getenv("HL_HEXAGON_SIM_MIN_TRACE");
-    if (T && T[0] != 0) {
-        status = sim->SetTracing(HEX_TRACE_PC_MIN, T);
-        if (status != HEX_STAT_SUCCESS) {
-            printf("HexagonWrapper::SetTracing MIN failed: %d\n", status);
-            return -1;
-        }
-    } else {
-        const char *T = getenv("HL_HEXAGON_SIM_TRACE");
-        if (T && T[0] != 0) {
-            status = sim->SetTracing(HEX_TRACE_PC, T);
+    // Configue various tracing capabilites.
+    struct Trace {
+        const char *env_var;
+        HEXAPI_TracingType hex_trace;
+    };
+    Trace traces[] = {
+        { "HL_HEXAGON_SIM_MIN_TRACE", HEX_TRACE_PC_MIN },
+        { "HL_HEXAGON_SIM_TRACE", HEX_TRACE_PC },
+        { "HL_HEXAGON_SIM_MEM_TRACE", HEX_TRACE_MEM },
+    };
+    for (auto i : traces) {
+        const char *trace = getenv(i.env_var);
+        if (trace && trace[0] != 0) {
+            status = sim->SetTracing(i.hex_trace, trace);
             if (status != HEX_STAT_SUCCESS) {
                 printf("HexagonWrapper::SetTracing failed: %d\n", status);
                 return -1;
@@ -92,6 +100,16 @@ int init_sim() {
             return -1;
         } else {
             debug_mode = true;
+        }
+    }
+
+    // Configure packet analysis for hexagon-prof.
+    const char *packet_analyze = getenv("HL_HEXAGON_PACKET_ANALYZE");
+    if (packet_analyze && packet_analyze[0]) {
+        status = sim->ConfigurePacketAnalysis(packet_analyze);
+        if (status != HEX_STAT_SUCCESS) {
+            printf("HexagonWrapper::ConfigurePacketAnalysis failed: %d\n", status);
+            return -1;
         }
     }
 
@@ -323,6 +341,7 @@ std::mutex mutex;
 
 extern "C" {
 
+DLLEXPORT
 int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int codeLen, handle_t *module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
@@ -342,6 +361,8 @@ int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int c
 
     return ret;
 }
+
+DLLEXPORT
 int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t* sym) {
     std::lock_guard<std::mutex> guard(mutex);
 
@@ -356,6 +377,7 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
     return *sym != 0 ? 0 : -1;
 }
 
+DLLEXPORT
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const host_buffer *input_buffersPtrs, int input_buffersLen,
                               host_buffer *output_buffersPtrs, int output_buffersLen,
@@ -412,6 +434,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     return ret;
 }
 
+DLLEXPORT
 int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
@@ -434,12 +457,15 @@ int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
     return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), use_dlopenbuf});
 }
 
+DLLEXPORT
 void halide_hexagon_host_malloc_init() {
 }
 
+DLLEXPORT
 void halide_hexagon_host_malloc_deinit() {
 }
 
+DLLEXPORT
 void *halide_hexagon_host_malloc(size_t x) {
     // Allocate enough space for aligning the pointer we return.
     const size_t alignment = 4096;
@@ -454,10 +480,12 @@ void *halide_hexagon_host_malloc(size_t x) {
     return ptr;
 }
 
+DLLEXPORT
 void halide_hexagon_host_free(void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
+DLLEXPORT
 int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     // The stepping code periodically grabs the remote value of
     // current_func for us.

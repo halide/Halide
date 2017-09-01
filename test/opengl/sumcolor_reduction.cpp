@@ -31,7 +31,7 @@ int main() {
     result.copy_to_host();
 
     // Check the result.
-    if (!Testing::check_result<float>(result, 1e-6, [](int x, int y, int c) { return 3.0f * (x + y); })) {
+    if (!Testing::check_result<float>(result, 1e-6f, [](int x, int y, int c) { return 3.0f * (x + y); })) {
         return 1;
     }
 

@@ -56,6 +56,7 @@ struct Target {
         CUDACapability32 = halide_target_feature_cuda_capability32,
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
+        CUDACapability61 = halide_target_feature_cuda_capability61,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         OpenGL = halide_target_feature_opengl,
@@ -71,6 +72,8 @@ struct Target {
         HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
         HVX_v62 = halide_target_feature_hvx_v62,
+        HVX_v65 = halide_target_feature_hvx_v65,
+        HVX_v66 = halide_target_feature_hvx_v66,
         HVX_shared_object = halide_target_feature_hvx_use_shared_object,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
@@ -179,6 +182,8 @@ struct Target {
     /** Does this target allow using a certain type. Generally all
      * types except 64-bit float and int/uint should be supported by
      * all backends.
+     *
+     * It is likely better to call the version below which takes a DeviceAPI.
      */
     bool supports_type(const Type &t) const {
         if (t.bits() == 64) {
@@ -192,9 +197,14 @@ struct Target {
         return true;
     }
 
+    /** Does this target allow using a certain type on a certain device.
+     * This is the prefered version of this routine.
+     */
+    EXPORT bool supports_type(const Type &t, DeviceAPI device) const;
+
     /** Returns whether a particular device API can be used with this
      * Target. */
-    bool supports_device_api(DeviceAPI api) const;
+    EXPORT bool supports_device_api(DeviceAPI api) const;
 
     bool operator==(const Target &other) const {
       return os == other.os &&

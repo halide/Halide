@@ -52,8 +52,11 @@ struct StorageDim;
 class Stage {
     Internal::Definition definition;
     std::string stage_name;
-    std::vector<Var> dim_vars; // Pure Vars of the Function (from the init definition)
-    std::vector<Internal::StorageDim> storage_dims;
+    /** Pure Vars of the Function (from the init definition). */
+    std::vector<Var> dim_vars;
+    /** This is just a reference to the FuncSchedule owned by the Function
+     * associated with this Stage. */
+    Internal::FuncSchedule func_schedule;
 
     void set_dim_type(VarOrRVar var, Internal::ForType t);
     void set_dim_device_api(VarOrRVar var, DeviceAPI device_api);
@@ -64,15 +67,15 @@ class Stage {
 
 public:
     Stage(Internal::Definition d, const std::string &n, const std::vector<Var> &args,
-          const std::vector<Internal::StorageDim> &sdims)
-            : definition(d), stage_name(n), dim_vars(args), storage_dims(sdims) {
+          const Internal::FuncSchedule &func_s)
+            : definition(d), stage_name(n), dim_vars(args), func_schedule(func_s) {
         internal_assert(definition.args().size() == dim_vars.size());
         definition.schedule().touched() = true;
     }
 
     Stage(Internal::Definition d, const std::string &n, const std::vector<std::string> &args,
-          const std::vector<Internal::StorageDim> &sdims)
-            : definition(d), stage_name(n), storage_dims(sdims) {
+          const Internal::FuncSchedule &func_s)
+            : definition(d), stage_name(n), func_schedule(func_s) {
         definition.schedule().touched() = true;
 
         std::vector<Var> dim_vars(args.size());
@@ -82,10 +85,9 @@ public:
         internal_assert(definition.args().size() == dim_vars.size());
     }
 
-    /** Return the current Schedule associated with this Stage.  For
-     * introspection only: to modify Schedule, use the Func
-     * interface. */
-    const Internal::Schedule &get_schedule() const { return definition.schedule(); }
+    /** Return the current StageSchedule associated with this Stage. For
+     * introspection only: to modify schedule, use the Func interface. */
+    const Internal::StageSchedule &get_schedule() const { return definition.schedule(); }
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
@@ -201,6 +203,7 @@ public:
 
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
+    EXPORT void specialize_fail(const std::string &message);
 
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, DeviceAPI device_api = DeviceAPI::Default_GPU);
     EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, DeviceAPI device_api = DeviceAPI::Default_GPU);
@@ -266,16 +269,16 @@ public:
     // If we mark these as deprecated, some build environments will complain
     // about the internal-only calls. Since these are rarely used outside
     // Func itself, we'll just comment them as deprecated for now.
-    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y,
                            Expr x_size, Expr y_size,
                            TailStrategy tail = TailStrategy::Auto,
                            DeviceAPI device_api = DeviceAPI::Default_GPU);
-    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
+    // HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            Expr x_size, Expr y_size, Expr z_size,
                            TailStrategy tail = TailStrategy::Auto,
@@ -406,6 +409,14 @@ public:
     /** What function is this calling? */
     EXPORT Internal::Function function() const {return func;}
 };
+
+/** Explicit overloads of min and max for FuncRef. These exist to
+ * disambiguate calls to min on FuncRefs when a user has pulled both
+ * Halide::min and std::min into their namespace. */
+// @{
+inline Expr min(FuncRef a, FuncRef b) {return min(Expr(std::move(a)), Expr(std::move(b)));}
+inline Expr max(FuncRef a, FuncRef b) {return max(Expr(std::move(a)), Expr(std::move(b)));}
+// @}
 
 /** A fragment of front-end syntax of the form f(x, y, z)[index], where x, y,
  * z are Vars or Exprs. If could be the left hand side of an update
@@ -934,10 +945,31 @@ public:
                               const std::vector<ExternFuncArgument> &params,
                               Type t,
                               int dimensionality,
+                              NameMangling mangling,
+                              bool uses_old_buffer_t) {
+        define_extern(function_name, params, std::vector<Type>{t},
+                      dimensionality, mangling, DeviceAPI::Host, uses_old_buffer_t);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              Type t,
+                              int dimensionality,
                               NameMangling mangling = NameMangling::Default,
+                              DeviceAPI device_api = DeviceAPI::Host,
                               bool uses_old_buffer_t = false) {
         define_extern(function_name, params, std::vector<Type>{t},
-                      dimensionality, mangling, uses_old_buffer_t);
+                      dimensionality, mangling, device_api, uses_old_buffer_t);
+    }
+
+    EXPORT void define_extern(const std::string &function_name,
+                              const std::vector<ExternFuncArgument> &params,
+                              const std::vector<Type> &types,
+                              int dimensionality,
+                              NameMangling mangling,
+                              bool uses_old_buffer_t) {
+      define_extern(function_name, params, types,
+                    dimensionality, mangling, DeviceAPI::Host, uses_old_buffer_t);
     }
 
     EXPORT void define_extern(const std::string &function_name,
@@ -945,6 +977,7 @@ public:
                               const std::vector<Type> &types,
                               int dimensionality,
                               NameMangling mangling = NameMangling::Default,
+                              DeviceAPI device_api = DeviceAPI::Host,
                               bool uses_old_buffer_t = false);
     // @}
 
@@ -1095,7 +1128,7 @@ public:
      * this Func by any other Func. If a global wrapper already
      * exists, returns it. The global wrapper is only used by callers
      * for which no custom wrapper has been specified.
-    */
+     */
     EXPORT Func in();
 
     /** Split a dimension into inner and outer subdimensions with the
@@ -1162,6 +1195,14 @@ public:
      * more of this function than the bounds you have stated, a
      * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Statically declare the range over which the function will be
+     * evaluated in the general case. This provides a basis for the auto
+     * scheduler to make trade-offs and scheduling decisions. The auto
+     * generated schedules might break when the sizes of the dimensions are
+     * very different from the estimates specified. These estimates are used
+     * only by the auto scheduler if the function is a pipeline output. */
+    EXPORT Func &estimate(Var var, Expr min, Expr extent);
 
     /** Expand the region computed so that the min coordinates is
      * congruent to 'remainder' modulo 'modulus', and the extent is a
@@ -1386,6 +1427,48 @@ public:
      */
     EXPORT Stage specialize(Expr condition);
 
+    /** Add a specialization to a Func that always terminates execution
+     * with a call to halide_error(). By itself, this is of limited use,
+     * but can be useful to terminate chains of specialize() calls where
+     * no "default" case is expected (thus avoiding unnecessary code generation).
+     *
+     * For instance, say we want to optimize a pipeline to process images
+     * in planar and interleaved format; we might typically do something like:
+     \code
+     ImageParam im(UInt(8), 3);
+     Func f = do_something_with(im);
+     f.specialize(im.dim(0).stride() == 1).vectorize(x, 8);  // planar
+     f.specialize(im.dim(2).stride() == 1).reorder(c, x, y).vectorize(c);  // interleaved
+     \endcode
+     * This code will vectorize along rows for the planar case, and across pixel
+     * components for the interleaved case... but there is an implicit "else"
+     * for the unhandled cases, which generates unoptimized code. If we never
+     * anticipate passing any other sort of images to this, we code streamline
+     * our code by adding specialize_fail():
+     \code
+     ImageParam im(UInt(8), 3);
+     Func f = do_something(im);
+     f.specialize(im.dim(0).stride() == 1).vectorize(x, 8);  // planar
+     f.specialize(im.dim(2).stride() == 1).reorder(c, x, y).vectorize(c);  // interleaved
+     f.specialize_fail("Unhandled image format");
+     \endcode
+     * Conceptually, this produces codes like:
+     \code
+     if (im.dim(0).stride() == 1) {
+        do_something_planar();
+     } else if (im.dim(2).stride() == 1) {
+        do_something_interleaved();
+     } else {
+        halide_error("Unhandled image format");
+     }
+     \endcode
+     *
+     * Note that calling specialize_fail() terminates the specialization chain
+     * for a given Func; you cannot create new specializations for the Func
+     * afterwards (though you can retrieve handles to previous specializations).
+     */
+    EXPORT void specialize_fail(const std::string &message);
+
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer
      * function within the block indices of a consumer function, and
@@ -1472,15 +1555,15 @@ public:
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
 
-    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Func &gpu_tile(VarOrRVar x, Expr x_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
                           TailStrategy tail = TailStrategy::Auto,
                           DeviceAPI device_api = DeviceAPI::Default_GPU);
-    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("This form of gpu_tile() is deprecated.")
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           Expr x_size, Expr y_size, Expr z_size,
                           TailStrategy tail = TailStrategy::Auto,
@@ -1900,7 +1983,7 @@ public:
 
     /** You can cast a Func to its pure stage for the purposes of
      * scheduling it. */
-    operator Stage() const;
+    EXPORT operator Stage() const;
 
     /** Get a handle on the output buffer for this Func. Only relevant
      * if this is the output Func in a pipeline. Useful for making

@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
         RDom r(1, 99);
         Expr old_index = arg_max()[0];
         Expr old_max   = arg_max()[1];
-        Expr new_index = select(old_max > input(r), r, old_index);
+        Expr new_index = select(old_max < input(r), r, old_index);
         Expr new_max   = max(input(r), old_max);
         arg_max() = {new_index, new_max};
 
@@ -165,7 +165,7 @@ int main(int argc, char **argv) {
         for (int r = 1; r < 100; r++) {
             int old_index = arg_max_0;
             float old_max = arg_max_1;
-            int new_index = old_max > input(r) ? r : old_index;
+            int new_index = old_max < input(r) ? r : old_index;
             float new_max = std::max(input(r), old_max);
             // In a tuple update definition, all loads and computation
             // are done before any stores, so that all Tuple elements
@@ -227,8 +227,8 @@ int main(int argc, char **argv) {
                         real * other.imag + imag * other.real};
             }
 
-            // Complex magnitude
-            Expr magnitude() const {
+            // Complex magnitude, squared for efficiency
+            Expr magnitude_squared() const {
                 return real * real + imag * imag;
             }
 
@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
         // would return the index of the first time the expression is
         // true.
 
-        Expr escape_condition = Complex(mandelbrot(x, y, r)).magnitude() < 16.0f;
+        Expr escape_condition = Complex(mandelbrot(x, y, r)).magnitude_squared() < 16.0f;
         Tuple first_escape = argmin(escape_condition);
 
         // We only want the index, not the value, but argmin returns

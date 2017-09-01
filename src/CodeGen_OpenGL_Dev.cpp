@@ -762,7 +762,7 @@ public:
 }
 
 void CodeGen_GLSL::visit(const Allocate *op) {
-    int32_t size = op->constant_allocation_size();
+    int32_t size = CodeGen_GPU_Dev::get_constant_bound_allocation_size(op);
     user_assert(size) << "Allocations inside GLSL kernels must be constant-sized\n";
 
     // Check if all access to the allocation uses a constant index

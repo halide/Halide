@@ -32,7 +32,10 @@ public:
 
             Expr output_stride = output.dim(1).stride();
             output.dim(1).set_stride((output_stride/vector_size) * vector_size);
-            bounded_input.compute_root();
+            bounded_input
+                .compute_at(Func(output), y)
+                .align_storage(x, 128)
+                .vectorize(x, vector_size, TailStrategy::RoundUp);
             output
                 .hexagon()
                 .tile(x, y, xi, yi, vector_size, 4)
@@ -51,4 +54,4 @@ private:
     Func bounded_input{"bounded_input"};
 };
 
-HALIDE_REGISTER_GENERATOR(Dilate3x3, "dilate3x3");
+HALIDE_REGISTER_GENERATOR(Dilate3x3, dilate3x3)

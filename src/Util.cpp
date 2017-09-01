@@ -25,6 +25,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <Objbase.h>  // needed for CoCreateGuid
+#include <Shlobj.h>  // needed for SHGetFolderPath
 #endif
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
@@ -285,6 +286,37 @@ FileStat file_stat(const std::string &name) {
             static_cast<uint32_t>(a.st_mode)};
 }
 
+#ifdef _WIN32
+namespace {
+
+// GetTempPath() will fail rudely if env vars aren't set properly,
+// which is the case when we run under a tool in Bazel. Instead,
+// look for the current user's AppData/Local/Temp path, which
+// should be valid and writable in all versions of Windows that
+// we support for compilation purposes.
+std::string get_windows_tmp_dir() {
+    // Allow overriding of the tmpdir on Windows via an env var;
+    // some Windows configs can (apparently) lock down AppData/Local/Temp
+    // via policy, making various things break. (Note that this is intended
+    // to be a short-lived workaround; we would prefer to be able to avoid
+    // requiring this sort of band-aid if possible.)
+    std::string tmp_dir = get_env_variable("HL_WINDOWS_TMP_DIR");
+    if (!tmp_dir.empty()) {
+        return tmp_dir;
+    }
+    char local_app_data_path[MAX_PATH];
+    DWORD ret = SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, local_app_data_path);
+    internal_assert(ret == 0) << "Unable to get Local AppData folder.";
+    std::string tmp = local_app_data_path;
+    tmp = replace_all(tmp, "\\", "/");
+    if (tmp.back() != '/') tmp += '/';
+    tmp += "Temp/";
+    return tmp;
+}
+
+}  //  namespace
+#endif
+
 std::string file_make_temp(const std::string &prefix, const std::string &suffix) {
     internal_assert(prefix.find("/") == string::npos &&
                     prefix.find("\\") == string::npos &&
@@ -293,11 +325,10 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
     #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory, which is... problematic.
-    char tmp_path[MAX_PATH], tmp_file[MAX_PATH];
-    DWORD ret = GetTempPathA(MAX_PATH, tmp_path);
-    internal_assert(ret != 0);
+    std::string tmp_dir = get_windows_tmp_dir();
+    char tmp_file[MAX_PATH];
     // Note that GetTempFileNameA() actually creates the file.
-    ret = GetTempFileNameA(tmp_path, prefix.c_str(), 0, tmp_file);
+    DWORD ret = GetTempFileNameA(tmp_dir.c_str(), prefix.c_str(), 0, tmp_file);
     internal_assert(ret != 0);
     return std::string(tmp_file);
     #else
@@ -314,9 +345,7 @@ std::string file_make_temp(const std::string &prefix, const std::string &suffix)
 
 std::string dir_make_temp() {
     #ifdef _WIN32
-    char tmp_path[MAX_PATH];
-    DWORD ret = GetTempPathA(MAX_PATH, tmp_path);
-    internal_assert(ret != 0);
+    std::string tmp_dir = get_windows_tmp_dir();
     // There's no direct API to do this in Windows;
     // our clunky-but-adequate approach here is to use 
     // CoCreateGuid() to create a probably-unique name.
@@ -337,7 +366,7 @@ std::string dir_make_temp() {
         for (int i = 0; i < 8; i++) {
             name << (int)guid.Data4[i];
         }       
-        std::string dir = std::string(tmp_path) + std::string(name.str());
+        std::string dir = tmp_dir + name.str();
         BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
         if (result) {
             debug(1) << "temp dir is: " << dir << "\n";
@@ -349,7 +378,7 @@ std::string dir_make_temp() {
             break;
         }
     }
-    internal_assert(false) << "Unable to create temp directory.\n";
+    internal_assert(false) << "Unable to create temp directory in " << tmp_dir << "\n";
     return "";
     #else
     std::string templ = "/tmp/XXXXXX";

@@ -34,7 +34,7 @@ public:
         Func input_clamped = Halide::BoundaryConditions::repeat_edge(
             input, 0, width, 0, height);
 
-        blur(x, y, c) =
+        blur(x, y, c) = 
             (input_clamped(x - 1, y, c) + input_clamped(x + 1, y, c) +
              input_clamped(x, y - 1, c) + input_clamped(x, y + 1, c)) /
             4.0f;
@@ -46,10 +46,13 @@ public:
         blur.dim(0).set_stride(Expr());
 
         // Add specialization for input and output buffers that are both planar.
-        blur.specialize(is_planar(input) && is_planar(blur));
+        blur.specialize(is_planar(input) && is_planar(blur))
+            .vectorize(x, natural_vector_size<float>());
 
         // Add specialization for input and output buffers that are both interleaved.
-        blur.specialize(is_interleaved(input) && is_interleaved(blur));
+        blur.specialize(is_interleaved(input) && is_interleaved(blur))
+            .reorder(c, x, y)
+            .vectorize(c);
 
         // Note that other combinations (e.g. interleaved -> planar) will work
         // but be relatively unoptimized.
@@ -60,6 +63,6 @@ private:
     Var x{"x"}, y{"y"}, c{"c"};
 };
 
-HALIDE_REGISTER_GENERATOR(Blur2x2, "blur2x2")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Blur2x2, blur2x2)

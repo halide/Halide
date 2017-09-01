@@ -104,12 +104,6 @@ public:
     bool result = false;
 };
 
-bool has_likely_tag(Expr e) {
-    HasLikelyTag h;
-    e.accept(&h);
-    return h.result;
-}
-
 // The goal of loop partitioning is to split loops up into a prologue,
 // a clean steady state, and an epilogue. The next visitor
 // (FindSimplifications) finds a list of simplifications that can be
@@ -398,7 +392,7 @@ public:
     MakeSimplifications(const vector<Simplification> &s) : simplifications(s) {}
 
     using IRMutator::mutate;
-    Expr mutate(Expr e) {
+    Expr mutate(const Expr &e) {
         for (auto const &s : simplifications) {
             if (e.same_as(s.old_expr)) {
                 return mutate(s.likely_value);
@@ -979,6 +973,12 @@ class LowerLikelyIfInnermost : public IRMutator {
     }
 };
 
+}
+
+bool has_likely_tag(Expr e) {
+    HasLikelyTag h;
+    e.accept(&h);
+    return h.result;
 }
 
 Stmt partition_loops(Stmt s) {

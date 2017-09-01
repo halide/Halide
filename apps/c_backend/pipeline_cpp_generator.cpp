@@ -83,6 +83,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<PipelineCpp> register_me{"pipeline_cpp"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(PipelineCpp, pipeline_cpp)

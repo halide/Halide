@@ -60,8 +60,8 @@ public:
     }
 
     void schedule() {
-        const bool vectorize = true;
-        stub.schedule({ vectorize, LoopLevel(calculated_output, Var("y")) });
+        stub.vectorize.set(true);
+        stub.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
     }
 
 private:
@@ -69,10 +69,6 @@ private:
     StubTest stub;
 };
 
-// Note that HALIDE_REGISTER_GENERATOR() with just two args is functionally
-// identical to the old Halide::RegisterGenerator<> syntax: no stub being defined,
-// just AOT usage. (If you try to generate a stub for this class you'll
-// fail with an error at generation time.)
-HALIDE_REGISTER_GENERATOR(StubUser, "stubuser")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(StubUser, stubuser)

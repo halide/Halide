@@ -166,7 +166,7 @@ class KeyInfo {
         return size_t(1) << i;
     }
 
-// Using the full names in the key results in a (hopefully incredibly
+// TODO: Using the full names in the key results in a (hopefully incredibly
 // slight) performance difference based on how one names filters and
 // functions. It is arguably a little easier to debug if something
 // goes wrong as one doesn't need to destructure the cache key by hand
@@ -177,20 +177,8 @@ class KeyInfo {
 //
 // There is a plan to change the hash function used in the cache and
 // after that happens, we'll measure performance again and maybe decide
-// to choose one path or the other here and remove the #ifdef.
-#define USE_FULL_NAMES_IN_KEY 0
-#if USE_FULL_NAMES_IN_KEY
-    Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
-        Expr dest = Call::make(Handle(), Call::address_of,
-                               {Load::make(UInt(8), key_name, index, Buffer<>(), Parameter(), const_true())},
-                               Call::PureIntrinsic);
-        Expr src = StringImm::make(value);
-        Expr copy_size = (int32_t)value.size();
-
-        return Evaluate::make(Call::make(UInt(8), Call::copy_memory,
-                                         {dest, src, copy_size}, Call::Intrinsic));
-    }
-#endif
+// to choose one path or the other (see Git history for the implementation.
+// It was deleted as part of the address_of intrinsic cleanup).
 
 public:
   KeyInfo(const Function &function, const std::string &name)
@@ -198,13 +186,7 @@ public:
     {
         dependencies.visit_function(function);
         size_t size_so_far = 0;
-
-#if USE_FULL_NAMES_IN_KEY
-        size_so_far = 4 + (int32_t)((top_level_name.size() + 3) & ~3);
-        size_so_far += 4 + function_name.size();
-#else
         size_so_far += Handle().bytes() + 4;
-#endif
 
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
@@ -228,36 +210,6 @@ public:
         std::vector<Stmt> writes;
         Expr index = Expr(0);
 
-#if USE_FULL_NAMES_IN_KEY
-        // In code below, casts to vec type is done because stores to
-        // the buffer can be unaligned.
-
-        Expr top_level_name_size = (int32_t)top_level_name.size();
-        writes.push_back(Store::make(key_name,
-                                     Cast::make(Int(32), top_level_name_size),
-                                     (index / Int(32).bytes()), Parameter(),
-                                     const_true()));
-        index += 4;
-        writes.push_back(call_copy_memory(key_name, top_level_name, index));
-        // Align to four byte boundary again.
-        index += top_level_name_size;
-        size_t alignment = 4 + top_level_name.size();
-        while (alignment % 4) {
-            writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index,
-                                         Parameter(), const_true()));
-            index = index + 1;
-            alignment++;
-        }
-
-        Expr name_size = (int32_t)function_name.size();
-        writes.push_back(Store::make(key_name,
-                                     Cast::make(Int(32), name_size),
-                                     (index / Int(32).bytes())));
-        index += 4;
-        writes.push_back(call_copy_memory(key_name, function_name, index));
-        index += name_size;
-        alignment += 4 + function_name.size();
-#else
         // Store a pointer to a string identifying the filter and
         // function. Assume this will be unique due to CSE. This can
         // break with loading and unloading of code, though the name
@@ -280,7 +232,6 @@ public:
                                      Parameter(), const_true()));
         alignment += 4;
         index += 4;
-#endif
 
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {

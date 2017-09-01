@@ -75,6 +75,6 @@ private:
     Func mandelbrot{"mandelbrot"};
 };
 
-RegisterGenerator<Mandelbrot> register_my_gen{"mandelbrot"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Mandelbrot, mandelbrot)

@@ -15,7 +15,6 @@
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
-#include "DeepCopy.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
@@ -26,7 +25,6 @@
 #include "HexagonOffload.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
-#include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "Inline.h"
 #include "IRMutator.h"
@@ -73,7 +71,7 @@ using std::vector;
 using std::map;
 
 Module lower(const vector<Function> &output_funcs, const string &pipeline_name, const Target &t,
-             vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
+             const vector<Argument> &args, const Internal::LoweredFunc::LinkageType linkage_type,
              const vector<IRMutator *> &custom_passes) {
     std::vector<std::string> namespaces;
     std::string simple_pipeline_name = extract_namespaces(pipeline_name, namespaces);
@@ -83,8 +81,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Compute an environment
     map<string, Function> env;
     for (Function f : output_funcs) {
-        map<string, Function> more_funcs = find_transitive_calls(f);
-        env.insert(more_funcs.begin(), more_funcs.end());
+        populate_environment(f, env);
     }
 
     // Create a deep-copy of the entire graph of Funcs.
@@ -94,6 +91,11 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Output functions should all be computed and stored at root.
     for (Function f: outputs) {
         Func(f).compute_root().store_root();
+    }
+
+    // Ensure that all ScheduleParams become well-defined constant Exprs.
+    for (auto &f : env) {
+        f.second.substitute_schedule_param_exprs();
     }
 
     // Substitute in wrapper Funcs
@@ -123,10 +125,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     } else {
         debug(1) << "Skipping injecting memoization...\n";
     }
-
-    debug(1) << "Injecting prefetches...\n";
-    s = inject_prefetch(s, env);
-    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, env, outputs, t);
@@ -185,6 +183,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = simplify(s, false);
     debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
 
+    debug(1) << "Injecting prefetches...\n";
+    s = inject_prefetch(s, env);
+    debug(2) << "Lowering after injecting prefetches:\n" << s << "\n\n";
+
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
@@ -192,12 +194,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
-
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s, env);
-        debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
-    }
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
@@ -332,7 +328,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
     for (const InferredArgument &arg : inferred_args) {
-      if (arg.param.defined() && arg.param.name() == "__user_context") {
+        if (arg.param.defined() && arg.param.name() == "__user_context") {
             // The user context is always in the inferred args, but is
             // not required to be in the args list.
             continue;
@@ -373,6 +369,26 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
             user_error << err.str();
         }
     }
+
+    // We're about to drop the environment and outputs vector, which
+    // contain the only strong refs to Functions that may still be
+    // pointed to by the IR. So make those refs strong.
+    class StrengthenRefs : public IRMutator {
+        using IRMutator::visit;
+        void visit(const Call *c) {
+            IRMutator::visit(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+            if (c->func.defined()) {
+                FunctionPtr ptr = c->func;
+                ptr.strengthen();
+                expr = Call::make(c->type, c->name, c->args, c->call_type,
+                                  ptr, c->value_index,
+                                  c->image, c->param);
+            }
+        }
+    };
+    s = StrengthenRefs().mutate(s);
 
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
 

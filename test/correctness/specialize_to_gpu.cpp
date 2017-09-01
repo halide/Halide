@@ -35,9 +35,9 @@ int main(int argc, char **argv) {
     h.realize(reference);
 
     for (int i = 1; i < 8; i++) {
-        gpu_f.set((bool)(i & 1));
-        gpu_g.set((bool)(i & 2));
-        gpu_h.set((bool)(i & 4));
+        gpu_f.set((i & 1) != 0);
+        gpu_g.set((i & 2) != 0);
+        gpu_h.set((i & 4) != 0);
 
         h.realize(out);
 

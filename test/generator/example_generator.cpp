@@ -45,6 +45,7 @@ public:
                                        { "bar", Bar } } };
     // ...or bools: {default}
     ScheduleParam<bool> vectorize{ "vectorize", true };
+    ScheduleParam<bool> parallelize{ "parallelize", true };
 
     // These are bad names that will produce errors at build time:
     // GeneratorParam<bool> badname{ " flag", true };
@@ -81,13 +82,20 @@ public:
             .bound(c, 0, channels)
             .reorder(c, x, y)
             .unroll(c);
-        if (vectorize) {
-            // Note that we can use the Generator method natural_vector_size()
-            // here; this produces the width of the SIMD vector being targeted
-            // divided by the width of the data type.
-            output
-                .vectorize(x, natural_vector_size(output.type()));
-        }
+        // Note that we can use the Generator method natural_vector_size()
+        // here; this produces the width of the SIMD vector being targeted
+        // divided by the width of the data type.
+        const int v = natural_vector_size(output.type());
+        output
+            .specialize(parallelize && vectorize)
+            .parallel(y)
+            .vectorize(x, v);
+        output
+            .specialize(parallelize)
+            .parallel(y);
+        output
+            .specialize(vectorize)
+            .vectorize(x, v);
     }
 
 private:
@@ -96,4 +104,4 @@ private:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(Example, "example")
+HALIDE_REGISTER_GENERATOR(Example, example)
