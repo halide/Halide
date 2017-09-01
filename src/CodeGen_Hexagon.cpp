@@ -1174,7 +1174,7 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse, std::vector<
         // we go. This is the only place where vdelta and vrdelta
         // differ. For vdelta, we start with the small jumps, vrdelta
         // starts with the large jumps.
-        int start = reverse ? (1 << 31) : 1;
+        int start = reverse ? (1 << 30) : 1;
         for (int delta = start; path != 0; delta = reverse ? delta / 2 : delta * 2) {
             int switch_state = path & delta;
             if ((switches_used[x] & delta) != 0) {

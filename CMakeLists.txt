@@ -99,12 +99,19 @@ option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 
+if (HALIDE_SHARED_LIBRARY)
+  set(HALIDE_LIBRARY_TYPE SHARED)
+else()
+  set(HALIDE_LIBRARY_TYPE STATIC)
+endif()
+
 function(halide_project name folder)
   add_executable("${name}" ${ARGN})
   if (MSVC)
   else()
     target_compile_options("${name}" PUBLIC "-fno-rtti")
   endif()
+  target_compile_definitions("${name}" PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
   target_link_libraries("${name}" PRIVATE Halide ${CMAKE_DL_LIBS} ${CMAKE_THREAD_LIBS_INIT})
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/src")
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
@@ -146,6 +153,16 @@ else()
     add_compile_options(/WX)
   endif()
 endif()
+
+# These tools are needed by several subdirectories
+add_executable(build_halide_h tools/build_halide_h.cpp)
+add_executable(binary2cpp tools/binary2cpp.cpp)
+if (MSVC)
+  # disable irrelevant "POSIX name" warnings
+  target_compile_options(build_halide_h PUBLIC /wd4996)
+  target_compile_options(binary2cpp PUBLIC /wd4996)
+endif()
+
 
 # Look for OpenMP
 find_package(OpenMP QUIET)
