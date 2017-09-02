@@ -34,67 +34,67 @@ halide_add_ios_app(TARGET test_ios
 # Create a generator executable and use it to generate a halide function for the
 # host target.
 halide_add_ios_generator_to_app(TARGET test_ios
-  GENERATOR_TARGET example
+  GENERATOR example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example4
+  FUNCTION_NAME example4
   GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS target=ios-arm-32 channels=4
   )
 
-# Pass the same generator target name with a different GENERATED_FUNCTION and
+# Pass the same generator target name with a different FUNCTION_NAME and
 # Halide target string. This will cause the generator to be run a second time
 # with a different target enabled. The test code referenced above uses both of
 # these halide generated functions.
 halide_add_ios_generator_to_app(TARGET test_ios
-  GENERATOR_TARGET example
+  GENERATOR example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example4_glsl
+  FUNCTION_NAME example4_glsl
   GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS target=ios-arm-32-opengl channels=4
   )
 
 # Stamp out a few more with different GeneratorParams.
 halide_add_ios_generator_to_app(TARGET test_ios
-  GENERATOR_TARGET example
+  GENERATOR example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example3
+  FUNCTION_NAME example3
   GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS target=ios-arm-32 channels=3
   )
 halide_add_ios_generator_to_app(TARGET test_ios
-  GENERATOR_TARGET example
+  GENERATOR example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example3_glsl
+  FUNCTION_NAME example3_glsl
   GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS target=ios-arm-32-opengl channels=3
   )
 
 halide_add_ios_generator_to_app(TARGET test_ios
-  GENERATOR_TARGET example
+  GENERATOR example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example2
+  FUNCTION_NAME example2
   GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS target=ios-arm-32 channels=2
   )
 halide_add_ios_generator_to_app(TARGET test_ios
-  GENERATOR_TARGET example
+  GENERATOR example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example2_glsl
+  FUNCTION_NAME example2_glsl
   GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS target=ios-arm-32-opengl channels=2
   )
 
 halide_add_ios_generator_to_app(TARGET test_ios
-  GENERATOR_TARGET example
+  GENERATOR example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example1
+  FUNCTION_NAME example1
   GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS target=ios-arm-32 channels=1
   )
 halide_add_ios_generator_to_app(TARGET test_ios
-  GENERATOR_TARGET example
+  GENERATOR example
   GENERATOR_NAME example
-  GENERATED_FUNCTION example1_glsl
+  FUNCTION_NAME example1_glsl
   GENERATOR_SOURCES ../tests/example_generator.cpp
   GENERATOR_ARGS target=ios-arm-32-opengl channels=1
   )

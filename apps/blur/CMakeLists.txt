@@ -1,13 +1,9 @@
 # Generator
-halide_add_generator(halide_blur.generator
-                     SRCS halide_blur_generator.cpp)
-halide_add_aot_library(halide_blur
-                       GENERATOR_TARGET halide_blur.generator
-                       GENERATOR_ARGS target=host)
+halide_library(halide_blur SRCS halide_blur_generator.cpp)
 
 # Final executable
 add_executable(blur_test test.cpp)
-halide_add_aot_library_dependency(blur_test halide_blur)
+target_link_libraries(blur_test PUBLIC halide_blur)
 
 if (NOT MSVC)
   target_compile_options(blur_test PRIVATE "-O2" "-msse2")
