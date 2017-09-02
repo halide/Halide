@@ -15,10 +15,7 @@ if (OpenGL_FOUND)
     add_executable(opengl_test opengl_test.cpp)
     target_link_libraries(opengl_test PUBLIC halide_blur_glsl)
     target_link_libraries(opengl_test PUBLIC halide_ycc_glsl)
-
-    if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        target_link_libraries(opengl_test PRIVATE pthread dl X11 GL)
-    endif()
+    target_link_libraries(opengl_test PRIVATE "${OPENGL_LIBRARIES}")
 
 endif()
 
