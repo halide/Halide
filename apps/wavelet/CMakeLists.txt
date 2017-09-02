@@ -10,11 +10,11 @@
 project(wavelet)
 cmake_minimum_required(VERSION 3.1.3)
 
-# HalideGenerator.cmake requires that HALIDE_DISTRIB_DIR be set to point to the Halide distribution folder we use.
+# halide.cmake requires that HALIDE_DISTRIB_DIR be set to point to the Halide distribution folder we use.
 # This assumes it's built at the toplevel via 'make distrib' (ironically, the CMake build isn't
 # yet capable of producing a distrib folder).
 set(HALIDE_DISTRIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../../distrib")
-include("${HALIDE_DISTRIB_DIR}/HalideGenerator.cmake")
+include("${HALIDE_DISTRIB_DIR}/halide.cmake")
 
 # Define the wavelet app
 add_executable(wavelet "${CMAKE_CURRENT_SOURCE_DIR}/wavelet.cpp")

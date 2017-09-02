@@ -1609,7 +1609,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(ROOT_DIR)/bazel/* \
 						   $(BUILD_DIR)/halide_config.bzl \
 						   $(BUILD_DIR)/halide_config.cmake \
-						   $(ROOT_DIR)/HalideGenerator.cmake
+						   $(ROOT_DIR)/halide.cmake
 	mkdir -p $(DISTRIB_DIR)/include \
 	         $(DISTRIB_DIR)/bin \
 	         $(DISTRIB_DIR)/lib \
@@ -1643,7 +1643,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/bazel/README_bazel.md $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/WORKSPACE $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
-	cp $(ROOT_DIR)/HalideGenerator.cmake $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/halide.cmake $(DISTRIB_DIR)
 	ln -sf $(DISTRIB_DIR) halide
 	tar -czf $(DISTRIB_DIR)/halide.tgz \
 		halide/bin \

@@ -37,10 +37,10 @@ dependencies involved:
 The easiest way to use CMake rules for Halide is via a prebuilt Halide 
 distribution that includes them. In your CMakeLists.txt file, just set
 `HALIDE_DISTRIB_DIR` to point to the distribution directory, then include
-`HalideGenerator.cmake`:
+`halide.cmake`:
 
     set(HALIDE_DISTRIB_DIR "/path/to/halide/distrib")
-    include("${HALIDE_DISTRIB_DIR}/HalideGenerator.cmake")
+    include("${HALIDE_DISTRIB_DIR}/halide.cmake")
 
 Then, using a Generator can be as simple as
 
