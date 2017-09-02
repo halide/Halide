@@ -16,6 +16,13 @@ def halide_system_libs():
   return "${LLVM_SYSTEM_LIBS}"
 multiline_literal_EOF
 
+elif [[ $1 == "cmake" ]]; then
+
+cat <<multiline_literal_EOF
+# Machine-Generated: Do Not Edit
+set(HALIDE_SYSTEM_LIBS "${LLVM_SYSTEM_LIBS}")
+multiline_literal_EOF
+
 else
 
 echo "create_halide_config does not understand \"$1\"" > /dev/stderr
