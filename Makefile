@@ -1606,6 +1606,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 						   $(BIN_DIR)/libHalide.$(SHARED_EXT) \
 						   $(INCLUDE_DIR)/Halide.h \
 						   $(RUNTIME_EXPORTED_INCLUDES) \
+						   $(ROOT_DIR)/README*.md \
 						   $(ROOT_DIR)/bazel/* \
 						   $(BUILD_DIR)/halide_config.bzl \
 						   $(BUILD_DIR)/halide_config.cmake \
@@ -1637,7 +1638,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 	cp $(ROOT_DIR)/tools/halide_image.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
-	cp $(ROOT_DIR)/README.md $(DISTRIB_DIR)
+	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/BUILD $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/halide.bzl $(DISTRIB_DIR)
 	cp $(ROOT_DIR)/bazel/README_bazel.md $(DISTRIB_DIR)
@@ -1651,7 +1652,7 @@ $(DISTRIB_DIR)/halide.tgz: $(LIB_DIR)/libHalide.a \
 		halide/include \
 		halide/tutorial \
 		halide/BUILD \
-		halide/README.md \
+		halide/README*.md \
 		halide/README_bazel.md \
 		halide/WORKSPACE \
 		halide/*.bzl \
