@@ -178,13 +178,13 @@ if (OPENMP_FOUND)
   message(STATUS "Found OpenMP")
 endif()
 
-# For in-tree builds, we need to set the input variables for HalideGenerator.cmake
+# For in-tree builds, we need to set the input variables for halide.cmake
 # to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
 set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
 set(HALIDE_TOOLS_DIR "${CMAKE_SOURCE_DIR}/tools")
 set(HALIDE_COMPILER_LIB Halide)
 set(HALIDE_DISTRIB_DIR "/bad-path")
-include(HalideGenerator.cmake)
+include(halide.cmake)
 
 # -----------------------------------------------------------------------------
 # Option to enable/disable assertions

@@ -39,7 +39,7 @@
 
 include(CMakeParseArguments)
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/../../../HalideGenerator.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../../halide.cmake")
 
 # TODO: Need a more automatic way to refer to the halide library and header
 set(HALIDE_LIB_PATH "" CACHE PATH "Full path of the file libHalide.a")
