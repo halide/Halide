@@ -74,7 +74,7 @@ double run_test(bool auto_schedule) {
 
     shifted.estimate(x, 0, W).estimate(y, 0, H);
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(shifted);
 
     if (!auto_schedule) {
@@ -115,8 +115,8 @@ int main(int argc, char **argv) {
     std::cout << "Auto time: " << auto_time << "ms" << std::endl;
     std::cout << "======================" << std::endl;
 
-    if (!get_target_from_environment().has_gpu_feature() &&
-        (2.5 * auto_time > manual_time)) {
+    if (!get_jit_target_from_environment().has_gpu_feature() &&
+        (2 * auto_time > manual_time)) {
         printf("Auto-scheduler is much much slower than it should be.\n");
         return -1;
     }

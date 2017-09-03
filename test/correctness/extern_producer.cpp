@@ -24,7 +24,7 @@ int round_down(int x, int m) {
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
-    if (!out->host) {
+    if (out->is_bounds_query()) {
         // Bounds query mode. To make life interesting, let's add some
         // arbitrary constraints on what we can produce.
 

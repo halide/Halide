@@ -12,4 +12,4 @@ public:
     }
 };
 
-Halide::RegisterGenerator<Float16T> register_float16_t{"float16_t"};
+HALIDE_REGISTER_GENERATOR(Float16T, float16_t)

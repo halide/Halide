@@ -255,18 +255,20 @@ std::vector<Expr> parameter_constraints(const Parameter &p) {
 class StubEmitter {
 public:
     StubEmitter(std::ostream &dest, 
-                const std::string &generator_name,
+                const std::string &generator_registered_name,
+                const std::string &generator_stub_name,
                 const std::vector<Internal::GeneratorParamBase *>& generator_params,
                 const std::vector<Internal::ScheduleParamBase *>& schedule_params,
                 const std::vector<Internal::GeneratorInputBase *>& inputs,
                 const std::vector<Internal::GeneratorOutputBase *>& outputs) 
         : stream(dest), 
-          generator_name(generator_name), 
+          generator_registered_name(generator_registered_name), 
+          generator_stub_name(generator_stub_name), 
           generator_params(filter_params(generator_params)), 
           schedule_params(schedule_params), 
           inputs(inputs), 
           outputs(outputs) {
-       namespaces = split_string(generator_name, "::");
+       namespaces = split_string(generator_stub_name, "::");
        internal_assert(namespaces.size() >= 1);
        if (namespaces[0].empty()) {
            // We have a name like ::foo::bar::baz; omit the first empty ns.
@@ -280,7 +282,8 @@ public:
     void emit();
 private:
     std::ostream &stream;
-    const std::string generator_name;
+    const std::string generator_registered_name;
+    const std::string generator_stub_name;
     std::string class_name;
     std::vector<std::string> namespaces;
     const std::vector<Internal::GeneratorParamBase *> generator_params;
@@ -452,7 +455,7 @@ void StubEmitter::emit() {
         // on the other hand, since this file is just a couple of comments, it's
         // really not an issue if it's included multiple times.
         stream << "/* MACHINE-GENERATED - DO NOT EDIT */\n";
-        stream << "/* The Generator named " << generator_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
+        stream << "/* The Generator named " << generator_registered_name << " uses ImageParam or Param, thus cannot have a Stub generated. */\n";
         return;
     }
 
@@ -499,6 +502,13 @@ void StubEmitter::emit() {
     stream << indent() << "#include \"Halide.h\"\n";
     stream << "\n";
 
+    stream << "namespace halide_register_generator {\n";
+    stream << "namespace " << generator_registered_name << "_ns {\n";
+    stream << "extern std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context);\n";
+    stream << "}  // namespace halide_register_generator\n";
+    stream << "}  // namespace " << generator_registered_name << "\n";
+    stream << "\n";
+
     for (const auto &ns : namespaces) {
         stream << indent() << "namespace " << ns << " {\n";
     }
@@ -540,7 +550,7 @@ void StubEmitter::emit() {
     indent_level--;
     stream << indent() << ")\n";
     indent_level++;
-    stream << indent() << ": GeneratorStub(context, &factory, params.to_string_map(), {\n";
+    stream << indent() << ": GeneratorStub(context, halide_register_generator::" << generator_registered_name << "_ns::factory, params.to_string_map(), {\n";
     indent_level++;
     for (size_t i = 0; i < inputs.size(); ++i) {
         stream << indent() << "to_stub_input_vector(inputs." << inputs[i]->name() << ")";
@@ -689,16 +699,6 @@ void StubEmitter::emit() {
     stream << "\n";
 
     indent_level--;
-    stream << indent() << "private:\n";
-    indent_level++;
-    stream << indent() << "static std::unique_ptr<Halide::Internal::GeneratorBase> factory(const GeneratorContext& context, const std::map<std::string, std::string>& params) {\n";
-    indent_level++;
-    stream << indent() << "return Halide::Internal::GeneratorRegistry::create(\"" << generator_name << "\", context, params);\n";
-    indent_level--;
-    stream << indent() << "};\n";
-    stream << "\n";
-
-    indent_level--;
     stream << indent() << "};\n";
     stream << "\n";
 
@@ -714,7 +714,8 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              GeneratorFactory generator_factory,
                              const std::map<std::string, std::string> &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
-    : generator(generator_factory(context, generator_params)) {
+    : generator(generator_factory(context)) {
+    generator->set_generator_and_schedule_param_values(generator_params);
     generator->set_inputs_vector(inputs);
     generator->call_generate();
 }
@@ -949,7 +950,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         if (emit_options.emit_cpp_stub) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             // (Note that "JITGeneratorContext" is misleading, since we're actually doing AOT here, but it does exactly what we need)
-            auto gen = GeneratorRegistry::create(generator_name, JITGeneratorContext(Target()), {});
+            auto gen = GeneratorRegistry::create(generator_name, JITGeneratorContext(Target()));
             auto stub_file_path = base_path + get_extension(".stub.h", emit_options);
             gen->emit_cpp_stub(stub_file_path);
         }
@@ -963,7 +964,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.
                     // (Note that "JITGeneratorContext" is misleading, since we're actually doing AOT here, but it does exactly what we need)
-                    auto gen = GeneratorRegistry::create(generator_name, JITGeneratorContext(target), sub_generator_args);
+                    auto gen = GeneratorRegistry::create(generator_name, JITGeneratorContext(target));
+                    gen->set_generator_and_schedule_param_values(sub_generator_args);
                     return gen->build_module(name);
                 };
             if (targets.size() > 1 || !emit_options.substitutions.empty()) {
@@ -1011,15 +1013,13 @@ GeneratorRegistry &GeneratorRegistry::get_registry() {
 
 /* static */
 void GeneratorRegistry::register_factory(const std::string &name,
-                                         std::unique_ptr<GeneratorFactory> factory) {
-    for (auto n : split_string(name, "::")) {
-        user_assert(is_valid_name(n)) << "Invalid Generator name part: " << n;
-    }
+                                         GeneratorFactory generator_factory) {
+    user_assert(is_valid_name(name)) << "Invalid Generator name: " << name;
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) == registry.factories.end())
         << "Duplicate Generator name: " << name;
-    registry.factories[name] = std::move(factory);
+    registry.factories[name] = generator_factory;
 }
 
 /* static */
@@ -1033,8 +1033,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 
 /* static */
 std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name,
-                                                         const GeneratorContext &context,
-                                                         const std::map<std::string, std::string> &params) {
+                                                         const GeneratorContext &context) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
@@ -1047,7 +1046,7 @@ std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name
         }
         user_error << o.str();
     }
-    std::unique_ptr<GeneratorBase> g = it->second->create(context, params);
+    std::unique_ptr<GeneratorBase> g = it->second(context);
     internal_assert(g != nullptr);
     return g;
 }
@@ -1271,6 +1270,13 @@ Internal::ScheduleParamBase &GeneratorBase::find_schedule_param_by_name(const st
     return *it->second;
 }
 
+void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
+    user_assert(is_valid_name(registered_name)) << "Invalid Generator name: " << registered_name;
+    internal_assert(!registered_name.empty() && !stub_name.empty());
+    internal_assert(generator_registered_name.empty() && generator_stub_name.empty());
+    generator_registered_name = registered_name;
+    generator_stub_name = stub_name;
+}
 
 void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
     advance_phase(InputsSet);
@@ -1449,13 +1455,13 @@ Module GeneratorBase::build_module(const std::string &function_name,
 }
 
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
-    user_assert(!generator_name.empty()) << "Generator has no name.\n";
+    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
     // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
     std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_name, pi.generator_params, pi.schedule_params, pi.filter_inputs, pi.filter_outputs);
+    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params, pi.schedule_params, pi.filter_inputs, pi.filter_outputs);
     emit.emit();
 }
 

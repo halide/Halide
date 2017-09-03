@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     g.estimate(x, 0, input.width()).estimate(y, 0, input.height());
 
     // Pick a schedule
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
     p.auto_schedule(target);

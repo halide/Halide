@@ -62,7 +62,7 @@ double run_test(bool auto_schedule) {
     RDom dx(-radius, 2*radius+1);
     final(x, y, c) = maximum(vert(x + dx, y, c, clamp(filter_height(dx), 0, radius+1)));
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(final);
 
     Var tx, xi;
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
     std::cout << "Auto time: " << auto_time << "ms" << std::endl;
     std::cout << "======================" << std::endl;
 
-    if (auto_time > manual_time * 1.5) {
+    if (auto_time > manual_time * 2) {
         printf("Auto-scheduler is much much slower than it should be.\n");
         return -1;
     }

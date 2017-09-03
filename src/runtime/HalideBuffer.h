@@ -17,18 +17,6 @@
 
 #include "HalideRuntime.h"
 
-#ifndef EXPORT
-#if defined(_WIN32) && defined(Halide_SHARED)
-#ifdef Halide_EXPORTS
-#define EXPORT __declspec(dllexport)
-#else
-#define EXPORT __declspec(dllimport)
-#endif
-#else
-#define EXPORT
-#endif
-#endif
-
 #ifdef _MSC_VER
 #define HALIDE_ALLOCA _alloca
 #else
@@ -1982,6 +1970,14 @@ public:
         // We'll go via for_each_element. We need a variadic wrapper lambda.
         FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
         for_each_element(wrapper);
+    }
+
+    /** Check if an input buffer passed extern stage is a querying
+     * bounds. Compared to doing the host pointer check directly,
+     * this both adds clarity to code and will facilitate moving to
+     * another representation for bounds query arguments. */
+    bool is_bounds_query() {
+        return buf.is_bounds_query();
     }
 
 };
