@@ -313,6 +313,9 @@ int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbu
         }
 
         if (trace_lib_base) {
+            // Look up some existing symbol in the library,
+            // then use the dli_fbase to get the base address of the loaded
+            // pipeline library.
             void *fun_ptr = dlsym(lib, "plt_halide_malloc");
             Dl_info dli;
             int rc = dladdr((void *)fun_ptr, &dli);
@@ -320,7 +323,9 @@ int initialize_kernels(const unsigned char *code, int codeLen, bool use_dlopenbu
                 printf("rc = %d\n", rc);
                 fprintf(stderr, "dladdr failed\n");
             } else {
-                printf("shared library %s loaded at 0x%p\n", dli.dli_fname, dli.dli_fbase);
+                // Display the hexagon_profile invocation to help the
+                // user know what the command parameters are.
+                printf("To generate profile: hexagon-profiler --packet_analyze --json=process.json --elf=bin/process-host,/tmp/hex_prof_shlib.so:0x%p -o process.html\n", dli.dli_fbase);
            }
         }
     } else {

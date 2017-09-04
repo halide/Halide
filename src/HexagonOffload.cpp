@@ -930,7 +930,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         debug(1) << "Signing tool: (" << signer << ")\n";
         std::string cmd = signer + " " + input.pathname() + " " + output.pathname();
         int result = system(cmd.c_str());
-        internal_assert(result == 0) 
+        internal_assert(result == 0)
             << "HL_HEXAGON_CODE_SIGNER failed: result = " << result
             << " for cmd (" << cmd << ")";
 
@@ -944,6 +944,30 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
             internal_assert(f.good());
             f.close();
         }
+    }
+
+    // If packet analysis is requested, make a copy of the hexagon
+    // shared library so it can be referenced later in the post processing
+    // tool hexagon-profile.
+    std::string profiler = get_env_variable("HL_HEXAGON_PACKET_ANALYZE");
+    if (!profiler.empty()) {
+        TemporaryFile input("hvx_copy_shlib", ".so");
+
+        debug(1) << "Copying lib for prof ref: " << input.pathname() << " -> " << "/tmp/hex_prof_shlib.so\n";
+
+        {
+            std::ofstream f(input.pathname());
+            f.write(shared_object.data(), shared_object.size());
+            f.flush();
+            internal_assert(f.good());
+            f.close();
+        }
+
+        std::string cmd = "cp " + input.pathname() + " /tmp/hex_prof_shlib.so";
+        int result = system(cmd.c_str());
+        internal_assert(result == 0)
+            << "Copy lib failed " << result
+            << " for cmd (" << cmd << ")";
     }
 
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());
