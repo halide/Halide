@@ -28,6 +28,6 @@ public:
      }
 };
 
-HALIDE_REGISTER_GENERATOR(OutputAssign, "output_assign")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(OutputAssign, output_assign)

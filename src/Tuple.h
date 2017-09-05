@@ -107,6 +107,22 @@ public:
         user_assert(e.size() > 0) << "Realizations must have at least one element\n";
     }
 
+    /** Call device_sync() for all Buffers in the Realization. 
+     * If one of the calls returns an error, subsequent Buffers won't have
+     * device_sync called; thus callers should consider a nonzero return
+     * code to mean that potentially all of the Buffers are in an indeterminate
+     * state of sync.
+     * Calling this explicitly should rarely be necessary, except for profiling. */
+    int device_sync(void *ctx = nullptr) {
+        for (auto &b : images) {
+            int result = b.device_sync(ctx);
+            if (result != 0) {
+                return result;
+            }
+        }
+        return 0; 
+    }
+
 };
 
 /** Equivalents of some standard operators for tuples. */

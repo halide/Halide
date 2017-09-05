@@ -60,7 +60,7 @@ public:
 // an "int main(...)" that provides the command-line interface to use
 // your generator class. We need to tell that code about our
 // generator. We do this like so:
-RegisterGenerator<MyFirstGenerator> my_first_generator{"my_first_generator"};
+HALIDE_REGISTER_GENERATOR(MyFirstGenerator, my_first_generator)
 
 // If you like, you can put multiple Generators in the one file. This
 // could be a good idea if they share some common code. Let's define
@@ -165,7 +165,7 @@ public:
 };
 
 // Register our second generator:
-RegisterGenerator<MySecondGenerator> my_second_generator{"my_second_generator"};
+HALIDE_REGISTER_GENERATOR(MySecondGenerator, my_second_generator)
 
 // After compiling this file, see how to use it in
 // lesson_15_generators_build.sh

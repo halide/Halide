@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "AutoSchedule.h"
 #include "ExternalCode.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
@@ -77,6 +78,17 @@ public:
 
     /** Get the Funcs this pipeline outputs. */
     EXPORT std::vector<Func> outputs() const;
+
+    /** Generate a schedule for the pipeline. */
+    //@{
+    EXPORT std::string auto_schedule(const Target &target,
+                                     const MachineParams &arch_params);
+    EXPORT std::string auto_schedule(const Target &target);
+    //@}
+
+    /** Return handle to the index-th Func within the pipeline based on the
+     * realization order. */
+    EXPORT Func get_func(size_t index);
 
     /** Compile and generate multiple target files with single call.
      * Deduces target files based on filenames specified in

@@ -97,7 +97,7 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
 
 ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
-        << (loop_level.defined() ? loop_level.to_string() : "undefined") 
+        << (loop_level.defined() ? loop_level.to_string() : "undefined")
         << ")";
 }
 
@@ -155,7 +155,7 @@ void IRPrinter::test() {
 ostream& operator<<(ostream &stream, const AssociativePattern &p) {
     stream << "{\n";
     for (size_t i = 0; i < p.ops.size(); ++i) {
-        stream << "  op_" << i << " ->" << p.ops[i] << ", id_" << i << " -> " << p.identities[i] << "\n";
+        stream << "  op_" << i << " -> " << p.ops[i] << ", id_" << i << " -> " << p.identities[i] << "\n";
     }
     stream << "  is commutative? " << p.is_commutative << "\n";
     stream << "}\n";

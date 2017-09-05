@@ -22,6 +22,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<inverse_haar_x> register_my_gen{"inverse_haar_x"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(inverse_haar_x, inverse_haar_x)

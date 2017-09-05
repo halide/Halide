@@ -85,6 +85,10 @@ int main(int argc, char **argv) {
     halide_hexagon_power_hvx_off(nullptr);
     halide_hexagon_set_performance_mode(nullptr, halide_hexagon_power_default);
 
+    // Copy the output back to the host. If the buffer is zero-copy (as
+    // it should be on a real device), this will be a no-op.
+    mat_ab.copy_to_host();
+
     // Validate that the algorithm did what we expect.
     mat_ab.for_each_element([&](int x, int y) {
         // This reference implementation is very slow, so only check a subset of the result.
