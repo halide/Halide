@@ -22,6 +22,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<UserContextInsanity> register_my_gen{"user_context_insanity"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(UserContextInsanity, user_context_insanity)

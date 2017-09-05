@@ -28,6 +28,7 @@ class BazelDemo : public Halide::Generator<BazelDemo> {
   Var x, y;
 };
 
-HALIDE_REGISTER_GENERATOR(BazelDemo, "bazeldemo")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(BazelDemo, bazeldemo)
+

@@ -74,6 +74,6 @@ public:
     }
 };
 
-RegisterGenerator<Mandelbrot> register_my_gen{"memory_profiler_mandelbrot"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Mandelbrot, memory_profiler_mandelbrot)

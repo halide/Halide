@@ -83,7 +83,6 @@ private:
     Func intermediate{"intermediate"};
 };
 
-HALIDE_REGISTER_GENERATOR(StubTest, "StubNS1::StubNS2::StubTest")
-
 }  // namespace
 
+HALIDE_REGISTER_GENERATOR(StubTest, stubtest, StubNS1::StubNS2::StubTest)

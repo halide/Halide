@@ -54,19 +54,19 @@ public:
     /** Get or constrain the shape of the dimensions. Soon to be
      * deprecated. Do not use. */
     // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("set_min() is deprecated. use dim(n).set_min() instead.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("set_min() is deprecated. use dim(n).set_min() instead.")
     OutputImageParam set_min(int i, Expr e) {dim(i).set_min(e); return *this;}
-    HALIDE_ATTRIBUTE_DEPRECATED("set_extent() is deprecated. use dim(n).set_extent() instead.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("set_extent() is deprecated. use dim(n).set_extent() instead.")
     OutputImageParam set_extent(int i, Expr e) {dim(i).set_extent(e); return *this;}
-    HALIDE_ATTRIBUTE_DEPRECATED("set_bounds() is deprecated. use dim(n).set_bounds() instead.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("set_bounds() is deprecated. use dim(n).set_bounds() instead.")
     OutputImageParam set_bounds(int i, Expr a, Expr b) {dim(i).set_bounds(a, b); return *this;}
-    HALIDE_ATTRIBUTE_DEPRECATED("set_stride() is deprecated. use dim(n).set_stride() instead.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("set_stride() is deprecated. use dim(n).set_stride() instead.")
     OutputImageParam set_stride(int i, Expr e) {dim(i).set_stride(e); return *this;}
-    HALIDE_ATTRIBUTE_DEPRECATED("min() is deprecated. use dim(n).min() instead.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("min() is deprecated. use dim(n).min() instead.")
     Expr min(int i) const {return dim(i).min();}
-    HALIDE_ATTRIBUTE_DEPRECATED("extent() is deprecated. use dim(n).extent() instead.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("extent() is deprecated. use dim(n).extent() instead.")
     Expr extent(int i) const {return dim(i).extent();}
-    HALIDE_ATTRIBUTE_DEPRECATED("stride() is deprecated. use dim(n).stride() instead.") 
+    HALIDE_ATTRIBUTE_DEPRECATED("stride() is deprecated. use dim(n).stride() instead.")
     Expr stride(int i) const {return dim(i).stride();}
     // @}
 

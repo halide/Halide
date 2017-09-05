@@ -52,6 +52,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<Example> register_example{"example"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Example, example)

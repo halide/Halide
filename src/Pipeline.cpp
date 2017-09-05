@@ -2,6 +2,7 @@
 
 #include "Pipeline.h"
 #include "Argument.h"
+#include "FindCalls.h"
 #include "Func.h"
 #include "InferArguments.h"
 #include "IRVisitor.h"
@@ -10,6 +11,7 @@
 #include "Lower.h"
 #include "Outputs.h"
 #include "PrintLoopNest.h"
+#include "RealizationOrder.h"
 
 using namespace Halide::Internal;
 
@@ -146,6 +148,38 @@ vector<Func> Pipeline::outputs() const {
         funcs.push_back(Func(f));
     }
     return funcs;
+}
+
+string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS)
+        << "Automatic scheduling is currently supported only on these architectures.";
+    return generate_schedules(contents->outputs, target, arch_params);
+}
+
+string Pipeline::auto_schedule(const Target &target) {
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS)
+        << "Automatic scheduling is currently supported only on these architectures.";
+    // Default machine parameters for generic CPU architecture.
+    MachineParams arch_params(16, 16 * 1024 * 1024, 40);
+    return generate_schedules(contents->outputs, target, arch_params);
+}
+
+Func Pipeline::get_func(size_t index) {
+    // Compute an environment
+    std::map<string, Function> env;
+    for (Function f : contents->outputs) {
+        std::map<string, Function> more_funcs = find_transitive_calls(f);
+        env.insert(more_funcs.begin(), more_funcs.end());
+    }
+    // Compute a realization order
+    vector<string> order = realization_order(contents->outputs, env);
+
+    user_assert(index < order.size())
+        << "Index value passed is " << index << "; however, there are only "
+        << order.size() << " functions in the pipeline.\n";
+    return Func(env.find(order[index])->second);
 }
 
 void Pipeline::compile_to(const Outputs &output_files,

@@ -394,7 +394,6 @@ Func CameraPipe::build() {
     return processed;
 };
 
-
-Halide::RegisterGenerator<CameraPipe> register_me{"camera_pipe"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(CameraPipe, camera_pipe)

@@ -85,4 +85,4 @@ public:
     }
 };
 
-auto iirblur = RegisterGenerator<IirBlur>("IirBlur");
+HALIDE_REGISTER_GENERATOR(IirBlur, IirBlur)

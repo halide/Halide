@@ -62,6 +62,18 @@ struct Box {
 
     /** Check if the used condition is defined and not trivially true. */
     bool maybe_unused() const {return used.defined() && !is_one(used);}
+
+    friend std::ostream& operator<<(std::ostream& stream, const Box& b) {
+        stream << "{";
+        for (size_t dim = 0; dim < b.size(); dim++) {
+            if (dim > 0) {
+                stream << ", ";
+            }
+            stream << "[" << b[dim].min << ", " << b[dim].max << "]";
+        }
+        stream << "}";
+        return stream;
+    }
 };
 
 /** Expand box a to encompass box b */

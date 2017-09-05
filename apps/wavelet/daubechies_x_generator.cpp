@@ -22,6 +22,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<daubechies_x> register_my_gen{"daubechies_x"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(daubechies_x, daubechies_x)

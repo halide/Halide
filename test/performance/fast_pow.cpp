@@ -6,17 +6,16 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-// 32-bit windows defines powf as a macro, which won't work for us.
 #ifdef _WIN32
-extern "C" __declspec(dllexport) float pow_ref(float x, float y) {
-    return pow(x, y);
-}
+#define DLLEXPORT __declspec(dllexport)
 #else
-extern "C" float pow_ref(float x, float y) {
-    return powf(x, y);
-}
+#define DLLEXPORT
 #endif
 
+// powf() is a macro in some environments, so always wrap it
+extern "C" DLLEXPORT float pow_ref(float x, float y) {
+    return powf(x, y);
+}
 HalideExtern_2(float, pow_ref, float, float);
 
 int main(int argc, char **argv) {

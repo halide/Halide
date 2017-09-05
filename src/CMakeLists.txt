@@ -1,27 +1,11 @@
 include(CheckCXXCompilerFlag)
 
-add_executable(build_halide_h ../tools/build_halide_h.cpp)
-add_executable(binary2cpp ../tools/binary2cpp.cpp)
-
-if (MSVC)
-  # disable irrelevant warnings
-  target_compile_options(build_halide_h PUBLIC /wd4996)
-  target_compile_options(binary2cpp PUBLIC /wd4996)
-endif()
-
 if (MSVC)
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
   set(RUNTIME_DEBUG_FLAG "")
 else()
   set(RUNTIME_DEBUG_FLAG "-g")
-endif()
-
-if (HALIDE_SHARED_LIBRARY)
-  add_definitions("-DHalide_SHARED")
-  set(HALIDE_LIBRARY_TYPE SHARED)
-else()
-  set(HALIDE_LIBRARY_TYPE STATIC)
 endif()
 
 set(RUNTIME_CPP
@@ -259,6 +243,8 @@ set(HEADER_FILES
   Argument.h
   AssociativeOpsTable.h
   Associativity.h
+  AutoSchedule.h
+  AutoScheduleUtils.h
   BoundaryConditions.h
   Bounds.h
   BoundsInference.h
@@ -354,6 +340,7 @@ set(HEADER_FILES
   Random.h
   RealizationOrder.h
   Reduction.h
+  RegionCosts.h
   RemoveDeadAllocations.h
   RemoveTrivialForLoops.h
   RemoveUndef.h
@@ -411,6 +398,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ApplySplit.cpp
   AssociativeOpsTable.cpp
   Associativity.cpp
+  AutoSchedule.cpp
+  AutoScheduleUtils.cpp
   BoundaryConditions.cpp
   Bounds.cpp
   BoundsInference.cpp
@@ -497,6 +486,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Random.cpp
   RealizationOrder.cpp
   Reduction.cpp
+  RegionCosts.cpp
   RemoveDeadAllocations.cpp
   RemoveTrivialForLoops.cpp
   RemoveUndef.cpp
@@ -532,6 +522,13 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES}
   ${INITIAL_MODULES}
+)
+# Define Halide_SHARED or Halide_STATIC depending on library type
+target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
+# Ensure that these tools are build first
+add_dependencies(Halide
+  binary2cpp
+  build_halide_h
 )
 
 if (WIN32 AND NOT MSVC)
@@ -651,8 +648,3 @@ if (NOT MSVC)
   string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
 endif()
-
-add_dependencies(Halide
-  binary2cpp
-  build_halide_h
-)

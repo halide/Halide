@@ -11,7 +11,7 @@ $(BIN)/mat_mul_exec: mat_mul_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/mat_mul.a: $(BIN)/mat_mul_exec
 	@mkdir -p $(@D)
-	$^ -o $(BIN) target=host-cuda-cuda_capability_50 size=$(MATRIX_SIZE)
+	$^ -g mat_mul -o $(BIN) target=host-cuda-cuda_capability_50 size=$(MATRIX_SIZE)
 
 $(BIN)/runner: runner.cpp $(BIN)/mat_mul.a
 	@mkdir -p $(@D)

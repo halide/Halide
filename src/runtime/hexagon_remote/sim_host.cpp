@@ -10,9 +10,9 @@
 #include "sim_protocol.h"
 
 #ifdef _MSC_VER
-#define HALIDE_EXPORT __declspec(dllexport)
+#define DLLEXPORT __declspec(dllexport)
 #else
-#define HALIDE_EXPORT
+#define DLLEXPORT
 #endif
 
 typedef unsigned int handle_t;
@@ -341,7 +341,7 @@ std::mutex mutex;
 
 extern "C" {
 
-HALIDE_EXPORT
+DLLEXPORT
 int halide_hexagon_remote_load_library(const char *soname, int sonameLen, const unsigned char *code, int codeLen, handle_t *module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
@@ -363,7 +363,7 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen, const 
     return ret;
 }
 
-HALIDE_EXPORT
+DLLEXPORT
 int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, int nameLen, handle_t* sym) {
     std::lock_guard<std::mutex> guard(mutex);
 
@@ -378,7 +378,7 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char* name, i
     return *sym != 0 ? 0 : -1;
 }
 
-HALIDE_EXPORT
+DLLEXPORT
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                               const host_buffer *input_buffersPtrs, int input_buffersLen,
                               host_buffer *output_buffersPtrs, int output_buffersLen,
@@ -435,7 +435,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     return ret;
 }
 
-HALIDE_EXPORT
+DLLEXPORT
 int halide_hexagon_remote_release_library(handle_t module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
@@ -458,15 +458,15 @@ int halide_hexagon_remote_release_library(handle_t module_ptr) {
     return send_message(Message::ReleaseLibrary, {static_cast<int>(module_ptr), use_dlopenbuf});
 }
 
-HALIDE_EXPORT
+DLLEXPORT
 void halide_hexagon_host_malloc_init() {
 }
 
-HALIDE_EXPORT
+DLLEXPORT
 void halide_hexagon_host_malloc_deinit() {
 }
 
-HALIDE_EXPORT
+DLLEXPORT
 void *halide_hexagon_host_malloc(size_t x) {
     // Allocate enough space for aligning the pointer we return.
     const size_t alignment = 4096;
@@ -481,12 +481,12 @@ void *halide_hexagon_host_malloc(size_t x) {
     return ptr;
 }
 
-HALIDE_EXPORT
+DLLEXPORT
 void halide_hexagon_host_free(void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
-HALIDE_EXPORT
+DLLEXPORT
 int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
     // The stepping code periodically grabs the remote value of
     // current_func for us.
