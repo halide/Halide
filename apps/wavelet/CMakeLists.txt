@@ -14,6 +14,11 @@ cmake_minimum_required(VERSION 3.1.3)
 # This assumes it's built at the toplevel via 'make distrib' (ironically, the CMake build isn't
 # yet capable of producing a distrib folder).
 set(HALIDE_DISTRIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../../distrib")
+
+# halide.cmake defaults to using the shared-library version of libHalide;
+# we can make it prefer the static-library version by setting this:
+# set(HALIDE_DISTRIB_USE_STATIC_LIBRARY TRUE)
+
 include("${HALIDE_DISTRIB_DIR}/halide.cmake")
 
 # Define the wavelet app
