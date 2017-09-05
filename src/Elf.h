@@ -320,6 +320,7 @@ public:
     const_relocation_iterator relocations_end() const { return relocs.end(); }
     iterator_range<const_relocation_iterator> relocations() const { return {relocs.begin(), relocs.end()}; }
     size_t relocations_size() const { return relocs.size(); }
+    std::string section_type_string() const;
 };
 
 /** Base class for a target architecture to implement the target
@@ -440,6 +441,7 @@ public:
     section_iterator add_section(const std::string &name, Section::Type type);
     section_iterator add_relocation_section(const Section &for_section);
     section_iterator erase_section(section_iterator i) { return secs.erase(i); }
+    std::string print_sections() const;
 
     section_iterator merge_sections(const std::vector<section_iterator> &sections);
     section_iterator merge_text_sections();
