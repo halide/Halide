@@ -1197,7 +1197,7 @@ typedef struct halide_buffer_t {
      * bounds. Compared to doing the host pointer check directly,
      * this both adds clarity to code and will facilitate moving to
      * another representation for bounds query arguments. */
-    HALIDE_ALWAYS_INLINE bool is_bounds_query() {
+    HALIDE_ALWAYS_INLINE bool is_bounds_query() const {
         return host == NULL;
     }
 
