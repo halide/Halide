@@ -603,17 +603,14 @@ WEAK int halide_default_device_release_crop(void *user_context,
 
 WEAK int halide_device_release_crop(void *user_context,
                                     struct halide_buffer_t *buf) {
-    if (!buf->device) {
-        return 0;
-    }
-
-    {
+    if (buf->device) {
         ScopedMutexLock lock(&device_copy_mutex);
         const struct halide_device_interface_t *interface = buf->device_interface;
         int result = interface->impl->device_release_crop(user_context, buf);
         interface->impl->release_module();
         return result;
     }
+    return 0;
 }
 
 } // extern "C" linkage
