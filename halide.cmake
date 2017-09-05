@@ -72,17 +72,15 @@ function(halide_generator NAME)
     # Ensure that Halide.h is built prior to any Generator
     add_dependencies("${GENLIB}" ${HALIDE_COMPILER_LIB})
 
+    _halide_get_static_library_actual_path(${GENLIB} GENLIB_ACTUAL_PATH)
+
     # We need to ensure that the libraries are linked in with --whole-archive
     # (or the equivalent), to ensure that the Generator-registration code
     # isn't omitted. Sadly, there's no portable way to do this, so we do some
     # special-casing here:
     if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
       target_link_libraries("${NAME}_binary" PRIVATE "${GENLIB}")
-      get_property(GENLIB_DIR TARGET ${GENLIB} PROPERTY LIBRARY_OUTPUT_DIRECTORY)
-      if (NOT "${GENLIB_DIR}" STREQUAL "")
-        set(GENLIB_DIR "${GENLIB_DIR}/")
-      endif()
-      set_target_properties("${NAME}_binary" PROPERTIES LINK_FLAGS -Wl,-force_load,${GENLIB_DIR}lib${GENLIB}.a)
+      set_target_properties("${NAME}_binary" PROPERTIES LINK_FLAGS -Wl,-force_load,${GENLIB_ACTUAL_PATH})
     elseif(MSVC)
       # Note that this requires VS2015 R2+
       target_link_libraries("${NAME}_binary" PRIVATE "${GENLIB}")
@@ -105,13 +103,16 @@ function(halide_generator NAME)
   )
   set_property(TARGET "${NAME}_stub_gen" PROPERTY _HALIDE_GENERATOR_NAME "${args_GENERATOR_NAME}")
 
-  # Make a header-only library that exports the include path
-  add_library("${NAME}" INTERFACE)
-  add_dependencies("${NAME}" "${NAME}_stub_gen")
-  set_target_properties("${NAME}" PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}")
   if("${SRCSLEN}" GREATER 0)
-    set_target_properties("${NAME}" PROPERTIES INTERFACE_LINK_LIBRARIES "${GENLIB}")
+    add_library("${NAME}" STATIC IMPORTED)
+    set_target_properties("${NAME}" PROPERTIES 
+      IMPORTED_LOCATION "${GENLIB_ACTUAL_PATH}")
+  else()
+    add_library("${NAME}" INTERFACE)
   endif()
+  add_dependencies("${NAME}" "${NAME}_stub_gen")
+  set_target_properties("${NAME}" PROPERTIES 
+    INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}")
 endfunction()
 
 # Use a Generator target to emit a code library.
@@ -204,6 +205,7 @@ function(halide_library_from_generator BASENAME)
     if ("${OUTPUT}" STREQUAL "static_library")
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}${CMAKE_STATIC_LIBRARY_SUFFIX}")
     elseif ("${OUTPUT}" STREQUAL "o")
+      # Apparently CMake has no predefined variable for this suffix.
       if(MSVC)
         list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.obj")
       else()
@@ -219,8 +221,6 @@ function(halide_library_from_generator BASENAME)
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.stmt")
     elseif ("${OUTPUT}" STREQUAL "html")
       list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.html")
-    # elseif ("${OUTPUT}" STREQUAL "cpp")
-    #   list(APPEND OUTPUT_FILES "${GENFILES_DIR}/${BASENAME}.generated.cpp")
     endif()
   endforeach()
 
@@ -234,11 +234,12 @@ function(halide_library_from_generator BASENAME)
     OUTPUTS          ${OUTPUT_FILES}
   )
 
-  add_library("${BASENAME}" INTERFACE)
+  add_library("${BASENAME}" STATIC IMPORTED)
   add_dependencies("${BASENAME}" "${BASENAME}_lib_gen" "${RUNTIME_NAME}")
   set_target_properties("${BASENAME}" PROPERTIES 
-      INTERFACE_INCLUDE_DIRECTORIES ${GENFILES_DIR} ${args_INCLUDES}
-      INTERFACE_LINK_LIBRARIES "${GENFILES_DIR}/${BASENAME}${CMAKE_STATIC_LIBRARY_SUFFIX};${RUNTIME_NAME};${args_FILTER_DEPS};${CMAKE_DL_LIBS};${CMAKE_THREAD_LIBS_INIT}")
+    IMPORTED_LOCATION "${GENFILES_DIR}/${BASENAME}${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    INTERFACE_INCLUDE_DIRECTORIES "${GENFILES_DIR}" ${args_INCLUDES}
+    INTERFACE_LINK_LIBRARIES "${RUNTIME_NAME};${args_FILTER_DEPS};${CMAKE_DL_LIBS};${CMAKE_THREAD_LIBS_INIT}")
 
   # A separate invocation for the generated .cpp file, 
   # since it's rarely used, and some code will fail at Generation
@@ -251,18 +252,14 @@ function(halide_library_from_generator BASENAME)
     OUTPUTS          "${GENFILES_DIR}/${BASENAME}.generated.cpp"
   )
 
-  add_library("${BASENAME}_cc_lib" STATIC "${GENFILES_DIR}/${BASENAME}.generated.cpp")
-  target_include_directories("${BASENAME}_cc_lib" PRIVATE "${HALIDE_INCLUDE_DIR}")
+  add_library("${BASENAME}_cc" STATIC "${GENFILES_DIR}/${BASENAME}.generated.cpp")
   # Needs _lib_gen as well, to get the .h file
-  add_dependencies("${BASENAME}_cc_lib" "${BASENAME}_lib_gen" "${BASENAME}_cc_gen")
+  add_dependencies("${BASENAME}_cc" "${BASENAME}_lib_gen" "${BASENAME}_cc_gen")
+  target_link_libraries("${BASENAME}_cc" PRIVATE ${args_FILTER_DEPS})
+  target_include_directories("${BASENAME}_cc" PRIVATE "${HALIDE_INCLUDE_DIR}")
+  target_include_directories("${BASENAME}_cc" PUBLIC "${GENFILES_DIR}" ${args_INCLUDES})
   # Very few of the cc_libs are needed, so exclude from "all".
-  set_target_properties("${BASENAME}_cc_lib" PROPERTIES EXCLUDE_FROM_ALL TRUE)
-
-  add_library("${BASENAME}_cc" INTERFACE)
-  add_dependencies("${BASENAME}_cc" "${BASENAME}_cc_lib")
-  set_target_properties("${BASENAME}_cc" PROPERTIES 
-      INTERFACE_INCLUDE_DIRECTORIES ${GENFILES_DIR} ${args_INCLUDES}
-      INTERFACE_LINK_LIBRARIES "${BASENAME}_cc_lib;${args_FILTER_DEPS}")
+  set_target_properties("${BASENAME}_cc" PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
   # Code to build the BASENAME.rungen target
   set(RUNGEN "${BASENAME}.rungen")
@@ -331,6 +328,15 @@ function(_halide_genfiles_dir NAME OUTVAR)
   set(${OUTVAR} "${GENFILES_DIR}" PARENT_SCOPE)
 endfunction()
 
+# Given the target of a static library, return the path to the actual .a file
+function(_halide_get_static_library_actual_path TARGET OUTVAR)
+  get_target_property(DIR ${TARGET} LIBRARY_OUTPUT_DIRECTORY)
+  if (NOT "${DIR}" STREQUAL "")
+    set(DIR "${DIR}/")
+  endif()
+  set(${OUTVAR} "${DIR}lib${TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}" PARENT_SCOPE)
+endfunction()
+
 # Adds features to a target string, canonicalizing the result.
 # If multitarget, features are added to all.
 function(_halide_add_target_features HALIDE_TARGET HALIDE_FEATURES OUTVAR)
@@ -346,6 +352,19 @@ function(_halide_add_target_features HALIDE_TARGET HALIDE_FEATURES OUTVAR)
   endforeach()
   string(REPLACE ";" "," NEW_MULTITARGETS "${NEW_MULTITARGETS}")
   set(${OUTVAR} "${NEW_MULTITARGETS}" PARENT_SCOPE)
+endfunction()
+
+# If any of the (multi) targets have the feature specified, set outvar to true.
+# Otherwise set outvar to false.
+function(_halide_has_target_feature HALIDE_TARGET HALIDE_FEATURE OUTVAR)
+  set(${OUTVAR} FALSE PARENT_SCOPE)
+  string(REPLACE "," ";" FEATURES "${HALIDE_TARGET}")
+  string(REPLACE "-" ";" FEATURES "${HALIDE_TARGET}")
+  foreach(F ${FEATURES})
+    if("${F}" STREQUAL "${HALIDE_FEATURE}")
+      set(${OUTVAR} TRUE PARENT_SCOPE)
+    endif()
+  endforeach()
 endfunction()
 
 # Split the target into base and feature lists.
@@ -430,7 +449,7 @@ function(_halide_library_runtime HALIDE_TARGET OUTVAR)
   string(REPLACE "," ";" MULTITARGETS "${HALIDE_TARGET}")
   list(GET MULTITARGETS -1 HALIDE_TARGET)
   _halide_runtime_target_name("${HALIDE_TARGET}" RUNTIME_NAME)
-  if(NOT TARGET "${RUNTIME_NAME}")
+  if(NOT TARGET "${RUNTIME_NAME}_runtime_gen")
     set(RUNTIME_LIB "${RUNTIME_NAME}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
     _halide_genfiles_dir(${RUNTIME_NAME} GENFILES_DIR)
@@ -445,9 +464,40 @@ function(_halide_library_runtime HALIDE_TARGET OUTVAR)
       OUTPUTS          "${GENFILES_DIR}/${RUNTIME_LIB}"
     )
 
-    add_library("${RUNTIME_NAME}" INTERFACE)
+    # By default, IMPORTED libraries are only visible to the declaration
+    # directories (and subdirectories); since runtime libraries are declared 
+    # lazily, we need to ensure they are globally visible to avoid ordering issues.
+    add_library("${RUNTIME_NAME}" STATIC IMPORTED GLOBAL)
     add_dependencies("${RUNTIME_NAME}" "${RUNTIME_NAME}_runtime_gen")
-    set_target_properties("${RUNTIME_NAME}" PROPERTIES INTERFACE_LINK_LIBRARIES "${GENFILES_DIR}/${RUNTIME_LIB}")
+    set_target_properties("${RUNTIME_NAME}" PROPERTIES 
+      IMPORTED_LOCATION "${GENFILES_DIR}/${RUNTIME_LIB}")
+
+    # It's hard to force specific system libraries to the end of link order
+    # in CMake, because of course it is; to mitigate this, we do snooping
+    # here for common targets with extra dependencies and add them to
+    # the dependencies for runtime, to ensure that they get sorted into
+    # an appropriate spot in link order.
+    set(RT_LIBS )
+
+    # opengl
+    _halide_has_target_feature("${HALIDE_TARGET}" opengl HAS_OPENGL)
+    if("${HAS_OPENGL}")
+      find_package(OpenGL QUIET)
+      if (OpenGL_FOUND)
+        list(APPEND RT_LIBS ${OPENGL_LIBRARIES})
+      endif()
+      if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        # Linux systems need X11 for OpenGL as well
+        find_package(X11 QUIET)
+        if (X11_FOUND)
+          list(APPEND RT_LIBS ${X11_LIBRARIES})
+        endif()
+      endif()
+    endif()
+
+    set_target_properties("${RUNTIME_NAME}" PROPERTIES 
+      INTERFACE_LINK_LIBRARIES "${RT_LIBS}")
+
   endif()
   set(${OUTVAR} "${RUNTIME_NAME}" PARENT_SCOPE)  
 endfunction()
@@ -484,10 +534,21 @@ if("${HALIDE_TOOLS_DIR}" STREQUAL "" OR
   endif()
   set(HALIDE_INCLUDE_DIR "${HALIDE_DISTRIB_DIR}/include")
   set(HALIDE_TOOLS_DIR "${HALIDE_DISTRIB_DIR}/tools")
-  add_library(_halide_compiler_lib INTERFACE)
-  set_target_properties(_halide_compiler_lib PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${HALIDE_INCLUDE_DIR})
-  set_target_properties(_halide_compiler_lib PROPERTIES INTERFACE_LINK_LIBRARIES "${HALIDE_DISTRIB_DIR}/lib/libHalide${CMAKE_STATIC_LIBRARY_SUFFIX}")
-  set(HALIDE_COMPILER_LIB _halide_compiler_lib)
+  if(${HALIDE_DISTRIB_USE_STATIC_LIBRARY})
+    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/lib/libHalide${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    add_library(_halide_compiler_lib STATIC IMPORTED)
+    set_target_properties(_halide_compiler_lib PROPERTIES 
+      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/lib/libHalide${CMAKE_STATIC_LIBRARY_SUFFIX}"
+      INTERFACE_INCLUDE_DIRECTORIES ${HALIDE_INCLUDE_DIR})
+    set(HALIDE_COMPILER_LIB _halide_compiler_lib)
+  else()
+    message(STATUS "Using ${HALIDE_DISTRIB_DIR}/bin/libHalide${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    add_library(_halide_compiler_lib SHARED IMPORTED)
+    set_target_properties(_halide_compiler_lib PROPERTIES 
+      IMPORTED_LOCATION "${HALIDE_DISTRIB_DIR}/bin/libHalide${CMAKE_SHARED_LIBRARY_SUFFIX}"
+      INTERFACE_INCLUDE_DIRECTORIES ${HALIDE_INCLUDE_DIR})
+    set(HALIDE_COMPILER_LIB _halide_compiler_lib)
+  endif()
 endif()
 
 if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
