@@ -323,7 +323,7 @@ endfunction()
 
 # Get (and lazily create) the generated-files directory for Generators.
 function(_halide_genfiles_dir NAME OUTVAR)
-  set(GENFILES_DIR "${CMAKE_BINARY_DIR}/genfiles/${NAME}")
+  set(GENFILES_DIR "${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/genfiles/${NAME}")
   file(MAKE_DIRECTORY "${GENFILES_DIR}")
   set(${OUTVAR} "${GENFILES_DIR}" PARENT_SCOPE)
 endfunction()
@@ -334,7 +334,7 @@ function(_halide_get_static_library_actual_path TARGET OUTVAR)
   if (NOT "${DIR}" STREQUAL "")
     set(DIR "${DIR}/")
   endif()
-  set(${OUTVAR} "${DIR}lib${TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}" PARENT_SCOPE)
+  set(${OUTVAR} "${DIR}${CMAKE_CFG_INTDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}" PARENT_SCOPE)
 endfunction()
 
 # Adds features to a target string, canonicalizing the result.
