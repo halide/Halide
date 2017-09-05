@@ -961,6 +961,13 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     dyn.push_back(make_dyn(DT_RELASZ, shdrs[rela_got_idx].sh_size - pltrelsz));
     dyn.push_back(make_dyn(DT_RELAENT, sizeof(Rela<T>)));
 
+    // DT_FINI
+    Object::section_iterator iter_fini = obj.find_section(".fini");
+    if (iter_fini != obj.sections_end()) {
+        Section &fini = *iter_fini;
+        dyn.push_back(make_dyn(DT_FINI, get_section_offset(fini)));
+    }
+
     dynamic.set_contents(dyn);
 
     // Add any target specific stuff.
