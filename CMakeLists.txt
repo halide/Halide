@@ -40,7 +40,7 @@ if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
   # It's theoretically possible that this could be legitimately empty,
   # but in practice that doesn't really happen, so we'll assume it means we
   # aren't configured correctly.
-  message(FATAL_ERROR "llvm-config --system-libs is empty; this is probably wrong.")
+  message(FATAL_ERROR "'llvm-config --system-libs' is empty; this is probably wrong.")
 endif()
 
 # Check LLVM
