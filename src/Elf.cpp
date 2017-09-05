@@ -664,13 +664,16 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             symbols[&i] = &i;
         }
     }
+    Object::section_iterator iter_dtors = obj.find_section(".dtors");
     Symbol dtor_list_sym("__DTOR_LIST__");
-    Section *dtors = &(*obj.find_section(".dtors"));
-    dtor_list_sym.define(dtors, 0, 0);
-    dtor_list_sym.set_type(Symbol::STT_NOTYPE);
-    dtor_list_sym.set_visibility(Symbol::STV_DEFAULT);
-    dtor_list_sym.set_binding(Symbol::STB_GLOBAL);
-    symbols[&dtor_list_sym] = &dtor_list_sym;
+    if (iter_dtors != obj.sections_end()) {
+        Section *dtors = &(*iter_dtors);
+        dtor_list_sym.define(dtors, 0, 0);
+        dtor_list_sym.set_type(Symbol::STT_NOTYPE);
+        dtor_list_sym.set_visibility(Symbol::STV_DEFAULT);
+        dtor_list_sym.set_binding(Symbol::STB_GLOBAL);
+        symbols[&dtor_list_sym] = &dtor_list_sym;
+    }
     // Get a symbol from a relocation, accounting for the symbol map
     // above.
     auto get_symbol = [&](const Relocation &r) {
