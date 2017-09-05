@@ -140,21 +140,8 @@ WEAK int copy_to_device_already_locked(void *user_context,
     }
 
     if (buf->device && buf->device_interface != device_interface) {
-        debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer to new device\n";
-        if (buf->device_interface != NULL && buf->device_dirty()) {
-            halide_assert(user_context, !buf->host_dirty());
-            result = copy_to_host_already_locked(user_context, buf);
-            if (result != 0) {
-                debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer halide_copy_to_host failed\n";
-                return result;
-            }
-        }
-        result = halide_device_free(user_context, buf);
-        if (result != 0) {
-            debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer halide_device_free failed\n";
-            return result;
-        }
-        buf->set_host_dirty(true); // force copy back to new device below.
+        halide_error(user_context, "halide_copy_to_device does not support switching interfaces\n");
+        return halide_error_code_incompatible_device_interface;
     }
 
     if (buf->device == 0) {
@@ -226,8 +213,8 @@ WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
 
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != device_interface) {
-        error(user_context) << "halide_device_malloc doesn't support switching interfaces\n";
-        return halide_error_code_device_malloc_failed;
+        halide_error(user_context, "halide_device_malloc doesn't support switching interfaces\n");
+        return halide_error_code_incompatible_device_interface;
     }
 
     // Ensure code is not freed prematurely.
@@ -296,7 +283,7 @@ WEAK int halide_device_and_host_malloc(void *user_context, struct halide_buffer_
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != device_interface) {
         halide_error(user_context, "halide_device_and_host_malloc doesn't support switching interfaces\n");
-        return halide_error_code_device_malloc_failed;
+        return halide_error_code_incompatible_device_interface;
     }
 
     // Ensure code is not freed prematurely.
@@ -388,8 +375,8 @@ WEAK int halide_device_wrap_native(void *user_context, struct halide_buffer_t *b
     const halide_device_interface_t *current_interface = buf->device_interface;
 
     if (current_interface != NULL && current_interface != device_interface) {
-        error(user_context) << "halide_device_wrap_native doesn't support switching interfaces\n";
-        return halide_error_code_device_wrap_native_failed;
+        halide_error(user_context, "halide_device_wrap_native doesn't support switching interfaces\n");
+        return halide_error_code_incompatible_device_interface;
     }
 
     device_interface->impl->use_module();
@@ -519,17 +506,10 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
 
     int err = 0;
 
-    // Fix up the dst device interface
     if (dst_device_interface &&
         dst_device_interface != dst->device_interface) {
-        err = halide_device_free(user_context, dst);
-        if (!err) {
-            err = halide_device_malloc(user_context, dst, dst_device_interface);
-        }
-    }
-
-    if (err) {
-        return err;
+        halide_error(user_context, "halide_buffer_copy does not support switching device interfaces");
+        return halide_error_code_incompatible_device_interface;
     }
 
     if (dst_device_interface) {
@@ -583,7 +563,7 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
 WEAK int halide_default_device_crop(void *user_context,
                                     const struct halide_buffer_t *src,
                                     struct halide_buffer_t *dst) {
-    error(user_context) << "device_interface does not support cropping\n";
+    halide_error(user_context, "device_interface does not support cropping\n");
     return halide_error_code_device_crop_unsupported;
 }
 
@@ -597,7 +577,7 @@ WEAK int halide_device_crop(void *user_context,
     }
 
     if (dst->device) {
-        error(user_context) << "destination buffer already has a device allocation\n";
+        halide_error(user_context, "destination buffer already has a device allocation\n");
         return halide_error_code_device_crop_failed;
     }
 
@@ -616,7 +596,7 @@ WEAK int halide_default_device_release_crop(void *user_context,
     if (!buf->device) {
         return 0;
     }
-    error(user_context) << "device_interface does not support cropping\n";
+    halide_error(user_context, "device_interface does not support cropping\n");
     return halide_error_code_device_crop_unsupported;
 }
 

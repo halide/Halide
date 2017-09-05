@@ -215,8 +215,10 @@ public:
 
     /** Get the proxy Expr for the extern stage. This is an expression
      * known to have the same data access pattern as the extern
-     * stage. For most Functions, including those with extern
-     * definitions, this will be an undefined Expr. */
+     * stage. It must touch at least all of the memory that the extern
+     * stage does, though it is permissible for it to be conservative
+     * and touch a superset. For most Functions, including those with
+     * extern definitions, this will be an undefined Expr. */
     // @{
     EXPORT Expr extern_definition_proxy_expr() const;
     EXPORT Expr &extern_definition_proxy_expr();

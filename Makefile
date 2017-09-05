@@ -714,7 +714,7 @@ $(INCLUDE_DIR)/HalideBuffer.h: $(SRC_DIR)/runtime/HalideBuffer.h
 	cp $< $(INCLUDE_DIR)/
 
 $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
-	@-mkdir -p $(BIN_DIR)
+	@-mkdir -p $(@D)
 	$(CXX) $< -o $@
 
 -include $(OBJECTS:.o=.d)

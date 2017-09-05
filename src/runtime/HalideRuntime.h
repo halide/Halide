@@ -548,11 +548,14 @@ extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf
 
 /** Copy data from one buffer to another. The buffers may have
  * different shapes and sizes, but the destination buffer's shape must
- * be contained within the source buffer's shape. The source data is
- * pulled from either device or host memory on the source, depending
- * on the dirty flags. host is preferred if both are valid. The
- * dst_device_interface parameter controls the destination memory
- * space. NULL means host memory. */
+ * be contained within the source buffer's shape. That is, for each
+ * dimension, the min on the destination buffer must be greater than
+ * or equal to the min on the source buffer, and min+extent on the
+ * destination buffer must be less that or equal to min+extent on the
+ * source buffer. The source data is pulled from either device or
+ * host memory on the source, depending on the dirty flags. host is
+ * preferred if both are valid. The dst_device_interface parameter
+ * controls the destination memory space. NULL means host memory. */
 extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
                               const struct halide_device_interface_t *dst_device_interface,
                               struct halide_buffer_t *dst);
@@ -563,12 +566,13 @@ extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
  * supported by some device APIs (others will return
  * halide_error_code_device_crop_unsupported). Call
  * halide_device_release_crop instead of halide_device_free to clean
- * up resources associated with the cropped view. Do not call
- * device_free on the source buffer while the destination buffer still
- * lives.  Note that the two buffers do not share dirty flags, so care
- * must be taken to update them together as needed. Note also that
- * device interfaces which support cropping may still not support
- * cropping a crop. */
+ * up resources associated with the cropped view. Do not free the
+ * device allocation on the source buffer while the destination buffer
+ * still lives. Note that the two buffers do not share dirty flags, so
+ * care must be taken to update them together as needed. Note also
+ * that device interfaces which support cropping may still not support
+ * cropping a crop. Instead, create a new crop of the parent
+ * buffer. */
 extern int halide_device_crop(void *user_context,
                               const struct halide_buffer_t *src,
                               struct halide_buffer_t *dst);
@@ -904,6 +908,12 @@ enum halide_error_code_t {
     /** Cropping a buffer failed for some other reason. Turn on -debug
      * in your target string. */
     halide_error_code_device_crop_failed = -41,
+
+    /** An operation on a buffer required an allocation on a
+     * particular device interface, but a device allocation already
+     * existed on a different device interface. Free the old one
+     * first. */
+    halide_error_code_incompatible_device_interface = -42,
 };
 
 /** Halide calls the functions below on various error conditions. The
