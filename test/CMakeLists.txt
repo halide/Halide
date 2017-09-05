@@ -38,16 +38,7 @@ function(tests folder)
     target_compile_definitions("${TARGET}"  PRIVATE "-DLLVM_VERSION=${LLVM_VERSION}")
 
     add_to_group(build_tests "${TARGET}" BUILD)
-    if("${folder}" STREQUAL "error")
-      set(EXPECT_FAILURE "${CMAKE_CURRENT_SOURCE_DIR}/common/expect_failure.sh")
-      add_custom_target("${folder}_${name}"
-                        COMMAND "${EXPECT_FAILURE}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}"
-                        DEPENDS "${TARGET}")
-      add_dependencies("${folder}_${name}" "${TARGET}")
-    else()
-      add_to_group(${folder}_${name} "${TARGET}" EXECUTE)
-    endif()
-    add_to_group(test_${folder} "${folder}_${name}" EXECUTE)
+    add_to_group(test_${folder} "${TARGET}" EXECUTE)
   endforeach()
   set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)

@@ -1,9 +1,12 @@
 #include "Halide.h"
 #include <stdio.h>
+#include "test/common/expect_death.h"
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    HALIDE_EXPECT_DEATH(argc, argv);
+
     Func f("f"), g1("g1"), g2("g2"), g3("g3"), g4("g4");
     Var x("x"), y("y");
 

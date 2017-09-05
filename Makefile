@@ -1397,7 +1397,7 @@ performance_%: $(BIN_DIR)/performance_%
 
 error_%: $(BIN_DIR)/error_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error|Assertion.*failed"
+	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
 warning_%: $(BIN_DIR)/warning_%

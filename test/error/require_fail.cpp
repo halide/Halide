@@ -1,10 +1,13 @@
 #include "Halide.h"
 #include <stdio.h>
+#include "test/common/expect_death.h"
 #include <memory>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    HALIDE_EXPECT_DEATH(argc, argv);
+
     const int kPrime1 = 7829;
     const int kPrime2 = 7919;
 

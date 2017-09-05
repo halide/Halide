@@ -1,9 +1,11 @@
 #include "Halide.h"
 #include <stdio.h>
+#include "test/common/expect_death.h"
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    HALIDE_EXPECT_DEATH(argc, argv);
 
     // Move this test to correctness once we can support >4d buffer_ts on the gpu
 

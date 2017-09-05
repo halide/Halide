@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include "test/common/expect_death.h"
 #include "Halide.h"
 
 int error_occurred = false;
@@ -11,6 +12,8 @@ void halide_error(void *ctx, const char *msg) {
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    HALIDE_EXPECT_DEATH(argc, argv);
+
     Func f("f"), g("g"), h("h");
     Var x("x"), y("y"), c("c");
 

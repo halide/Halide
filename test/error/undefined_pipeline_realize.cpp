@@ -1,10 +1,13 @@
 #include <assert.h>
 #include <stdio.h>
+#include "test/common/expect_death.h"
 #include "Halide.h"
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    HALIDE_EXPECT_DEATH(argc, argv);
+
     Func f("f");
 
     Pipeline p(f);
