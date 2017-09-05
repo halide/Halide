@@ -144,6 +144,10 @@ int main(int argc, char **argv) {
             out3.device_sync();
         });
 
+    out1.copy_to_host();
+    out2.copy_to_host();
+    out3.copy_to_host();
+
     // Check correctness of the wrapper version
     for (int y = 0; y < out3.height(); y++) {
         for (int x = 0; x < out3.width(); x++) {
