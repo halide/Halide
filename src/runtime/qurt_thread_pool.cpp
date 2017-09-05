@@ -1,9 +1,9 @@
 #include "HalideRuntime.h"
 //#include <stdlib.h>
-
+extern void log_printf(const char *fmt, ...);
 extern "C" {
 extern void *memalign(size_t, size_t);
-
+extern void hap_printf(const char *fmt, ...);
 
 typedef unsigned int qurt_thread_t;
 /*
@@ -248,6 +248,9 @@ extern int qurt_hvx_lock(qurt_hvx_mode_t lock_mode);
 extern int qurt_hvx_unlock(void);
 extern int qurt_hvx_get_mode(void);
 #define QURT_EOK                             0  /**< Operation successfully performed. */
+
+
+extern qurt_thread_t qurt_thread_get_id (void);
 } // extern C
 struct halide_thread {
     qurt_thread_t val;
@@ -331,6 +334,8 @@ WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex)
 
 //#undef WEAK
 //#define WEAK
+#define QURT_print 1
+
 #include "thread_pool_common.h"
 
 namespace {
@@ -344,16 +349,23 @@ struct wrapped_closure {
 
 extern "C" {
 
+
 // There are two locks at play: the thread pool lock and the hvx
 // context lock. To ensure there's no way anything could ever
 // deadlock, we never attempt to acquire one while holding the
 // other.
-
+    // void (*dtor_pdb)() = &halide_thread_pool_cleanup;
 WEAK int halide_do_par_for(void *user_context,
                       halide_task_t task,
                       int min, int size, uint8_t *closure) {
     // Get the work queue mutex. We need to do a handful of hexagon-specific things.
+    static int cnt = 0;
     qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
+    if (work_queue.initialized) {
+        cnt++;
+        hap_printf ("thread %d: Work queue already initialized, WTF, cnt = %d!\n", qurt_thread_get_id(), cnt);
+        log_printf ("thread %d: Work queue already initialized, WTF, cnt = %d!\n", qurt_thread_get_id(), cnt);
+    }
     if (!work_queue.initialized) {
         // The thread pool asssumes that a zero-initialized mutex can
         // be locked. Not true on hexagon, and there doesn't seem to
@@ -361,6 +373,7 @@ WEAK int halide_do_par_for(void *user_context,
         // safe to assume that the first call to halide_do_par_for is
         // done by the main thread, so there's no race condition on
         // initializing this mutex.
+        log_printf("initializing mutex\n");
         qurt_mutex_init(mutex);
     }
 
@@ -370,7 +383,7 @@ WEAK int halide_do_par_for(void *user_context,
     // Set the desired number of threads based on the current HVX
     // mode.
     int old_num_threads =
-        halide_set_num_threads((c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 4);
+        halide_set_num_threads((c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 2);
     // We're about to acquire the thread-pool lock, so we must drop
     // the hvx context lock, even though we'll likely reacquire it
     // immediately to do some work on this thread.
@@ -391,6 +404,13 @@ WEAK int halide_do_par_for(void *user_context,
         }
     }
     int ret = halide_default_do_par_for(user_context, task, min, size, (uint8_t *)&c);
+    // for (int x = min; x < min + size; x++) {
+    //     int result = halide_do_task(user_context, task, x, (uint8_t *) &c);
+    //     if (result) {
+    //         return result;
+    //     }
+    // }
+
     if (c.hvx_mode != -1) {
         qurt_hvx_lock((qurt_hvx_mode_t)c.hvx_mode);
     }
@@ -398,6 +418,9 @@ WEAK int halide_do_par_for(void *user_context,
     // Set the desired number of threads back to what it was, in case
     // we're a 128 job and we were sharing the machine with a 64 job.
     halide_set_num_threads(old_num_threads);
+    // if (cnt == 2) {
+    //     (*dtor_pdb)();
+    // }
     return ret;
 }
 
@@ -417,11 +440,33 @@ WEAK int halide_do_task(void *user_context, halide_task_t f,
         return f(user_context, idx, c->closure);
     }
 }
-
 namespace {
 __attribute__((destructor))
 WEAK void halide_thread_pool_cleanup() {
+    hap_printf("In halide_thread_pool_cleanup\n");
     halide_shutdown_thread_pool();
 }
+}
+#ifdef BITS_64
+typedef uint64_t addr_t;
+#else
+typedef uint32_t addr_t;
+#endif
+
+extern addr_t __DTOR_LIST__;
+
+__attribute__((section(".fini")))
+void finish_it_off() {
+    typedef void(*dtor_func)();
+    addr_t *dtor_p = &__DTOR_LIST__;
+    while (1) {
+        dtor_func dtor = (dtor_func) *dtor_p;
+        if (!dtor) {
+            break;
+        } else {
+            dtor();
+        }
+        dtor_p++;
+    }
 }
 }

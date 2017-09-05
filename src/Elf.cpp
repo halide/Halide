@@ -419,6 +419,11 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
 
     return obj;
 }
+std::string hex(uint32_t x) {
+    char buffer[100];
+    snprintf(buffer, sizeof(buffer), "0x%08x", x);
+    return buffer;
+}
 
 }  // namespace
 
@@ -444,7 +449,39 @@ Object::section_iterator Object::find_section(const std::string &name) {
     }
     return sections_end();
 }
-
+std::string Section::section_type_string() const {
+    switch(type) {
+    case SHT_NULL: return "SHT_NULL";
+    case SHT_PROGBITS: return "SHT_PROGBITS";
+    case SHT_SYMTAB: return "SHT_SYMTAB";
+    case SHT_STRTAB: return "SHT_STRTAB";
+    case SHT_RELA: return "SHT_RELA";
+    case SHT_HASH: return "SHT_HASH";
+    case SHT_DYNAMIC: return "SHT_DYNAMIC";
+    case SHT_NOTE: return "SHT_NOTE";
+    case SHT_NOBITS: return "SHT_NOBITS";
+    case SHT_REL: return "SHT_REL";
+    case SHT_SHLIB: return "SHT_SHLIB";
+    case SHT_DYNSYM: return "SHT_DYNSYM";
+    case SHT_LOPROC: return "SHT_LOPROC";
+    case SHT_HIPROC: return "SHT_HIPROC";
+    case SHT_LOUSER: return "SHT_LOUSER";
+    case SHT_HIUSER: return "SHT_HIUSER";
+    default:
+        return "UNKNOWN TYPE";
+    }
+}
+std::string Object::print_sections() const {
+    std::ostringstream oss;
+    if (secs.size() == 0) {
+        oss << "No sections in object\n";
+        return oss.str();
+    }
+    for (const_section_iterator i = sections_begin(); i != sections_end(); ++i) {
+        oss << i->get_name() << ", Type = " << i->section_type_string() << ", Size = " << hex(i->get_size()) << ", Alignment = " << i->get_alignment() << "\n";
+    }
+    return oss.str();
+}
 Object::symbol_iterator Object::find_symbol(const std::string &name) {
     for (symbol_iterator i = symbols_begin(); i != symbols_end(); ++i) {
         if (i->get_name() == name) {
@@ -627,7 +664,13 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             symbols[&i] = &i;
         }
     }
-
+    Symbol dtor_list_sym("__DTOR_LIST__");
+    Section *dtors = &(*obj.find_section(".dtors"));
+    dtor_list_sym.define(dtors, 0, 0);
+    dtor_list_sym.set_type(Symbol::STT_NOTYPE);
+    dtor_list_sym.set_visibility(Symbol::STV_DEFAULT);
+    dtor_list_sym.set_binding(Symbol::STB_GLOBAL);
+    symbols[&dtor_list_sym] = &dtor_list_sym;
     // Get a symbol from a relocation, accounting for the symbol map
     // above.
     auto get_symbol = [&](const Relocation &r) {

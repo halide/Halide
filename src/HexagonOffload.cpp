@@ -931,6 +931,13 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         std::fill(s, e, 0);
     }
 
+    auto dtors = obj->find_section(".dtors");
+    if (dtors != obj->sections_end()) {
+        dtors->append_contents((uint32_t) 0);
+    }
+
+    debug(2) << obj->print_sections();
+
     // Link into a shared object.
     std::string soname = "lib" + device_code.name() + ".so";
     Elf::HexagonLinker linker(device_code.target());
