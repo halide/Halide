@@ -12,7 +12,7 @@ using namespace Halide;
 int bounds_query_count[4];
 int call_count[4];
 extern "C" DLLEXPORT int call_counter(halide_buffer_t *input, int x, int idx, halide_buffer_t *output) {
-    if (input->host == nullptr) {
+    if (input->is_bounds_query()) {
         bounds_query_count[idx]++;
         input->dim[0] = output->dim[0];
         return 0;

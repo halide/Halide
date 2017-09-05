@@ -21,7 +21,7 @@ void run_test_1() {
     input.dim(1).set_bounds_estimate(0, 1000);
 
     // Auto-schedule the pipeline
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
     p.auto_schedule(target);
@@ -49,7 +49,7 @@ void run_test_2() {
     input.dim(1).set_bounds_estimate(0, 1000);
 
     // Auto-schedule the pipeline
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
     p.auto_schedule(target);

@@ -23,7 +23,7 @@ struct MachineParams {
     Expr balance;
 
     explicit MachineParams(int32_t parallelism, int32_t llc, int32_t balance)
-    	: parallelism(parallelism), last_level_cache_size(llc), balance(balance) {}
+        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {}
 };
 
 namespace Internal {

@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     outs.push_back(g);
     Pipeline test(outs);
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     test.auto_schedule(target);
 
     // Inspect the schedule

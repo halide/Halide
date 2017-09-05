@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     input.dim(1).set_bounds_estimate(0, 1000);
 
     // Auto-schedule the pipeline
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     Pipeline p(g);
 
     p.auto_schedule(target);
