@@ -114,6 +114,7 @@ class ExprCost : public IRVisitor {
 
     void visit(const Call *call) {
         if (call->is_intrinsic(Call::if_then_else)) {
+            internal_assert(call->args.size() == 3);
             cost = Cost(0, 0);
             call->args[2].accept(this);
 
@@ -121,12 +122,11 @@ class ExprCost : public IRVisitor {
             // If it is, we should only take into account the cost of computing
             // the false expr since the true expr is debugging/tracing code.
             const Call *true_value_call = call->args[1].as<Call>();
-            if (!true_value_call && !true_value_call->is_intrinsic(Call::return_second)) {
+            if (!true_value_call || !true_value_call->is_intrinsic(Call::return_second)) {
                 Cost false_cost = cost;
 
                 // For if_then_else intrinsic, the cost is the max of true and
                 // false branch costs plus the predicate cost.
-                assert(call->args.size() == 3);
                 Expr arith = cost.arith;
                 Expr memory = cost.memory;
 
