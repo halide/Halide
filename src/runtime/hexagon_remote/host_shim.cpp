@@ -1,4 +1,5 @@
 #include <memory.h>
+#include <stdio.h>
 #include <android/log.h>
 
 #include "bin/src/halide_hexagon_remote.h"
@@ -31,6 +32,22 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
                                         input_buffersPtrs, input_buffersLen,
                                         output_buffersPtrs, output_buffersLen,
                                         scalars, input_scalarsLen);
+}
+
+// Before load_library, initialize_kernels did not take an soname parameter.
+int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int codeLen, handle_t *module_ptr) {
+    // We need a unique soname, or dlopenbuf will return a
+    // previously opened library.
+    static int unique_id = 0;
+    char soname[256];
+    sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
+
+    return halide_hexagon_remote_load_library(soname, strlen(soname) + 1, code, codeLen, module_ptr);
+}
+
+// This is just a renaming.
+int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
+    return halide_hexagon_remote_release_library(module_ptr);
 }
 
 }  // extern "C"
