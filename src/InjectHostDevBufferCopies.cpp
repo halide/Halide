@@ -232,6 +232,7 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
 
         bool needs_device_flip = (state.device_allocation_exists != False &&
                                   state.current_device != touching_device &&
+                                  state.current_device != DeviceAPI::None &&
                                   touching_device != DeviceAPI::None &&
                                   !is_external);
 
