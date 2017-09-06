@@ -425,16 +425,62 @@ function(_halide_runtime_target_name HALIDE_TARGET OUTVAR)
   _halide_split_target("${HALIDE_TARGET}" BASE FEATURES)
   # Discard target features which do not affect the contents of the runtime.
   list(REMOVE_DUPLICATES FEATURES)
-  list(REMOVE_ITEM FEATURES "user_context" "no_asserts" "no_bounds_query" "profile")
+  list(REMOVE_ITEM FEATURES "user_context" "no_asserts" "no_bounds_query" "no_runtime" "profile")
   list(SORT FEATURES)
   # Now build up the name
-  set(RESULT "halide_library_runtime")
+  set(RESULT "halide_rt")
   foreach(B ${BASE})
     list(APPEND RESULT ${B})
   endforeach()
+  if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+    set(HALIDE_ABBREVIATE_TARGETS TRUE)
+  endif()
+  if(HALIDE_ABBREVIATE_TARGETS)
+    # Windows systems still have limits of 260-character pathnames in
+    # lots of situations, and CMake can replicate project names multiple times
+    # in the same path, so long target strings can cause us to overflow
+    # this limit, even if CMAKE_OBJECT_PATH_MAX is set. So here we make 
+    # algorithmically-generated abbreviations for all the feature strings
+    # and use those for external cmaketarget/filenames.
+
+    # Halide Target Features we know about. (This need not be exact, but should
+    # be close for best compression.)
+    list(APPEND KNOWN_FEATURES armv7s avx avx2 avx512 avx512_cannonlake avx512_knl 
+         avx512_skylake c_plus_plus_name_mangling cl_doubles cuda cuda_capability_30 
+         cuda_capability_32 cuda_capability_35 cuda_capability_50 cuda_capability_61 
+         debug f16c fma fma4 fuzz_float_stores hvx_128 hvx_64 hvx_shared_object 
+         hvx_v62 hvx_v65 hvx_v66 jit large_buffers matlab metal mingw msan no_asserts 
+         no_bounds_query no_neon no_runtime opencl opengl openglcompute 
+         power_arch_2_07 profile soft_float_abi sse41 trace_loads trace_realizations 
+         trace_stores user_context vsx)
+    # Synthesize a one-or-two-char abbreviation based on the feature's position
+    # in the KNOWN_FEATURES list.
+    set(I 0)
+    foreach(F ${KNOWN_FEATURES})
+      math(EXPR II "97 + (${I} / 26)")
+      if("${II}" GREATER 97)
+        string(ASCII ${II} C1)
+      else()
+        set(C1 "")
+      endif()
+      math(EXPR II "97 + (${I} % 26)")
+      string(ASCII ${II} C2)
+      # CMake has no map-like structure; we'll fake it using synthesized variable names.
+      set(HALIDE_TARGET_FEATURE_ABBREVIATION_${F} ${C1}${C2})
+      math(EXPR I "${I} + 1")
+    endforeach()
+  endif()
+
   foreach(F ${FEATURES})
-    list(APPEND RESULT ${F})
+    if(DEFINED HALIDE_TARGET_FEATURE_ABBREVIATION_${F})
+      list(APPEND RESULT ${HALIDE_TARGET_FEATURE_ABBREVIATION_${F}})
+    else()
+      # Unknown features get appended to the end
+      list(APPEND RESULT ${F})
+    endif()
   endforeach()
+
+  # Finally, convert from a list into a _ separated name
   string(REPLACE ";" "_" RESULT "${RESULT}")
   set(${OUTVAR} "${RESULT}" PARENT_SCOPE)
 endfunction()
