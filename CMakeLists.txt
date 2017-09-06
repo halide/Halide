@@ -12,6 +12,11 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+  set(CMAKE_OBJECT_PATH_MAX 260)
+  message("Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
+endif()
+
 # Require C++11 for everything.
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
