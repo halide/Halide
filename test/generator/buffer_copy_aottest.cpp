@@ -45,10 +45,11 @@ int main(int argc, char **argv) {
         Buffer<int> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
 
         // Move the crop to the device, and damage the host data.
+        in_crop.set_host_dirty();
         in_crop.copy_to_device(dev);
-        in_crop.set_device_dirty();
         in_crop.fill(0);
         in_crop.set_host_dirty(false);
+        in_crop.set_device_dirty();
 
         halide_buffer_copy(nullptr, in_crop, nullptr, out);
 
