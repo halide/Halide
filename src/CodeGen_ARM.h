@@ -28,7 +28,6 @@ protected:
     void visit(const Add *);
     void visit(const Sub *);
     void visit(const Div *);
-    void visit(const Mod *);
     void visit(const Mul *);
     void visit(const Min *);
     void visit(const Max *);
