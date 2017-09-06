@@ -191,6 +191,8 @@ struct dlib_t {
     // Information about the symbols.
     const char *strtab;
     const Sym *symtab;
+    typedef void (*init_fini_t)(void);
+    init_fini_t fini;
 
     hash_table hash;
 
@@ -228,10 +230,7 @@ struct dlib_t {
 
                 if (sym->st_value == 0) {
                     if (!sym_name) {
-                        log_printf("Symbol name not defined");
                         return false;
-                    } else {
-                        log_printf("Looking for symbol : %s\n", sym_name);
                     }
                     S = (const char *)halide_get_symbol(sym_name);
                     for (dlib_t *i = loaded_libs; i && !S; i = i->next) {
@@ -243,8 +242,6 @@ struct dlib_t {
                     if (!S) {
                         log_printf("Unresolved external symbol %s\n", sym_name);
                         return false;
-                    } else {
-                        log_printf("Found symbol %s\n", sym_name);
                     }
                 } else {
                     S = base_vaddr + sym->st_value;
@@ -269,6 +266,7 @@ struct dlib_t {
         strtab = NULL;
         symtab = NULL;
         hash.table = NULL;
+        fini = NULL;
 
         const Rela *jmprel = NULL;
         int jmprel_count = 0;
@@ -315,6 +313,10 @@ struct dlib_t {
             case DT_RELASZ:
                 rel_count = d.value / sizeof(Rela);
                 break;
+            case DT_FINI:
+                fini = (init_fini_t) (base_vaddr + d.value);
+                log_printf("DT_FINI is defined at 0x%x\n", fini);
+                break;
             case DT_RELAENT:
                 if (d.value != sizeof(Rela)) {
                     log_printf("DT_RELAENT was not 12 bytes.\n");
@@ -347,7 +349,10 @@ struct dlib_t {
                 return false;
             }
         }
-
+        if (!fini) {
+            // This is not an error.
+            log_printf("DT_FINI not defined\n");
+        }
         return true;
     }
 
@@ -438,36 +443,15 @@ struct dlib_t {
 
         return true;
     }
-
-    const Shdr *get_dtors_sh(const Ehdr *ehdr, const Shdr *shdrs) {
-        for (int i = 0; i < ehdr->e_shnum; ++i) {
-            const Shdr *sh = &shdrs[i];
-            const char *sh_name = &strtab[sh->sh_name];
-            if (strncmp(sh_name, ".dtors", 6) == 0) {
-                return sh;
-            }
-        }
-        return NULL;
-    }
-
-    void run_dtors() {
-        typedef void(*dtor_func)();
-        const Ehdr *ehdr = (const Ehdr *)program;
-        if (!ehdr->e_shoff) {
-            return;
-        }
-        const Shdr *shdrs = (const Shdr *)(program + ehdr->e_shoff);
-        if (!assert_in_bounds(shdrs, ehdr->e_shnum)) return;
-        const Shdr *dtors_sh = get_dtors_sh(ehdr, shdrs);
-        if (!dtors_sh) {
-            return;
-        }
-        uint32_t dtors_size = dtors_sh->sh_size;
-        const char *const dtors_start = program + dtors_sh->sh_offset;
-        for (int i = 0; i < dtors_size/sizeof(elfaddr_t *); ++i) {
-            uint32_t offset = ((elfaddr_t *)dtors_start)[i];
-            dtor_func dtor = (dtor_func) (program + offset);
-            dtor();
+    // this shouldn't need to return an int.
+    // The return value is there right now only for the purposes of
+    // debugging.
+    int run_dtors() {
+        if (fini) {
+            fini();
+            return 1;
+        } else {
+            return 0;
         }
     }
     void deinit() {
@@ -553,9 +537,11 @@ int mmap_dlclose(void *dlib) {
             prev->next = new_next;
         }
     }
-
+    log_printf("in mmap_dlclose: About to close lib\n");
     dlib_t *d = (dlib_t *)dlib;
-    d->run_dtors();
+    if (d->run_dtors()) {
+        log_printf("ran dtors\n");
+    }
     d->deinit();
     free(d);
     return 0;
