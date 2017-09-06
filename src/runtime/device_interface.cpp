@@ -498,18 +498,25 @@ WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
     ScopedMutexLock lock(&device_copy_mutex);
 
     debug(user_context) << "halide_buffer_copy:\n"
-                        << " src " << src << "\n"
+                        << " src " << *src << "\n"
                         << " interface " << dst_device_interface << "\n"
-                        << " dst " << dst << "\n";
+                        << " dst " << *dst << "\n";
 
     const struct halide_device_interface_t *src_device_interface = src->device_interface;
 
     int err = 0;
 
-    if (dst_device_interface &&
+    if (dst->device_interface &&
         dst_device_interface != dst->device_interface) {
         halide_error(user_context, "halide_buffer_copy does not support switching device interfaces");
         return halide_error_code_incompatible_device_interface;
+    }
+
+    if (dst_device_interface && !dst->device) {
+        err = halide_device_malloc(user_context, dst, dst_device_interface);
+        if (err) {
+            return err;
+        }
     }
 
     if (dst_device_interface) {
