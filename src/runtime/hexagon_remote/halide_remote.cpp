@@ -8,6 +8,7 @@
 #include <qurt.h>
 
 extern "C" {
+#define FARF_LOW 1
 #include "HAP_farf.h"
 #include "HAP_power.h"
 }
@@ -31,6 +32,14 @@ void halide_print(void *user_context, const char *str) {
     if (str) {
         log_printf("%s", str);
     }
+}
+void hap_printf(const char *fmt, ...) {
+    char message[1024] = { 0, };
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(message, sizeof(message) - 1, fmt, ap);
+    va_end(ap);
+    FARF(LOW, "%s", message);
 }
 
 void halide_error(void *user_context, const char *str) {
@@ -125,6 +134,7 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
     if (use_dlopenbuf()) {
         // We need to use RTLD_NOW, the libraries we build for Hexagon
         // offloading do not support lazy binding.
+        hap_printf("using dlopenbuf\n");
         lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_GLOBAL | RTLD_NOW);
         if (!lib) {
             log_printf("dlopenbuf failed: %s\n", dlerror());
@@ -269,18 +279,21 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     set_latency = TRUE;
     switch (mode) {
     case halide_hexagon_power_low:
+        log_printf("Setting perf mode low\n");
         mipsPerThread          = max_mips / 4;
         bwBytePerSec           = max_bus_bw / 2;
         busbwUsagePercentage   = 25;
         latency                = 1000;
         break;
     case halide_hexagon_power_nominal:
+        log_printf("Setting perf mode nominal\n");
         mipsPerThread          = (3 * max_mips) / 8;
         bwBytePerSec           = max_bus_bw;
         busbwUsagePercentage   = 50;
         latency                = 100;
         break;
     case halide_hexagon_power_turbo:
+        log_printf("Setting perf mode nominal\n");
         mipsPerThread          = max_mips;
         bwBytePerSec           = max_bus_bw * 4;
         busbwUsagePercentage   = 100;
@@ -290,6 +303,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     default:
         // These settings should reset the performance requested to
         // default.
+        log_printf("Setting perf mode default\n");
         mipsPerThread = 0;
         bwBytePerSec = 0;
         busbwUsagePercentage = 0;
@@ -359,7 +373,7 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     if (result != 0) {
         return result;
     }
-
+    log_printf("Pipeline is at %x\n", function);
     // Call the pipeline and return the result.
     result = run_context.run(pipeline, args);
 
@@ -373,6 +387,7 @@ int halide_hexagon_remote_release_library(handle_t module_ptr) {
     if (use_dlopenbuf()) {
         dlclose(reinterpret_cast<void*>(module_ptr));
     } else {
+        hap_printf("Calling dlclose on 8996\n");
         mmap_dlclose(reinterpret_cast<void*>(module_ptr));
     }
     return 0;
