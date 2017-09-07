@@ -447,26 +447,4 @@ WEAK void halide_thread_pool_cleanup() {
     halide_shutdown_thread_pool();
 }
 }
-#ifdef BITS_64
-typedef uint64_t addr_t;
-#else
-typedef uint32_t addr_t;
-#endif
-
-extern addr_t __DTOR_LIST__;
-
-__attribute__((section(".fini")))
-void finish_it_off() {
-    typedef void(*dtor_func)();
-    addr_t *dtor_p = &__DTOR_LIST__;
-    while (1) {
-        dtor_func dtor = (dtor_func) *dtor_p;
-        if (!dtor) {
-            break;
-        } else {
-            dtor();
-        }
-        dtor_p++;
-    }
-}
 }
