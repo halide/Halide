@@ -1,9 +1,6 @@
 #include "HalideRuntime.h"
-//#include <stdlib.h>
-extern void log_printf(const char *fmt, ...);
 extern "C" {
 extern void *memalign(size_t, size_t);
-extern void hap_printf(const char *fmt, ...);
 
 typedef unsigned int qurt_thread_t;
 /*
@@ -15,8 +12,8 @@ typedef unsigned int qurt_thread_t;
 #define QURT_HTHREAD_L2I_PREFETCH      0x4     /**< Enables hardware L2 instruction cache prefetching. */
 #define QURT_HTHREAD_L2D_PREFETCH      0x8     /**< Enables hardware L2 data cache prefetching. */
 #define QURT_HTHREAD_DCFETCH           0x10    /**< Enables DC fetch to the provided virtual address. 
-                                     DC fetch instructs the hardware that a data memory access is likely. 
-                                     Instructions are dropped in the case of high bus utilization. */
+                                                   DC fetch instructs the hardware that a data memory access is likely.
+                                                   Instructions are dropped in the case of high bus utilization. */
 
 
 
@@ -332,10 +329,6 @@ WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex)
     qurt_cond_wait((qurt_cond_t *)cond, (qurt_mutex_t *)mutex);
 }
 
-//#undef WEAK
-//#define WEAK
-#define QURT_print 1
-
 #include "thread_pool_common.h"
 
 namespace {
@@ -359,13 +352,7 @@ WEAK int halide_do_par_for(void *user_context,
                       halide_task_t task,
                       int min, int size, uint8_t *closure) {
     // Get the work queue mutex. We need to do a handful of hexagon-specific things.
-    static int cnt = 0;
     qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
-    if (work_queue.initialized) {
-        cnt++;
-        hap_printf ("thread %d: Work queue already initialized, WTF, cnt = %d!\n", qurt_thread_get_id(), cnt);
-        log_printf ("thread %d: Work queue already initialized, WTF, cnt = %d!\n", qurt_thread_get_id(), cnt);
-    }
     if (!work_queue.initialized) {
         // The thread pool asssumes that a zero-initialized mutex can
         // be locked. Not true on hexagon, and there doesn't seem to
@@ -373,12 +360,10 @@ WEAK int halide_do_par_for(void *user_context,
         // safe to assume that the first call to halide_do_par_for is
         // done by the main thread, so there's no race condition on
         // initializing this mutex.
-        log_printf("initializing mutex\n");
         qurt_mutex_init(mutex);
     }
 
     wrapped_closure c = {closure, qurt_hvx_get_mode()};
-
 
     // Set the desired number of threads based on the current HVX
     // mode.
@@ -404,12 +389,6 @@ WEAK int halide_do_par_for(void *user_context,
         }
     }
     int ret = halide_default_do_par_for(user_context, task, min, size, (uint8_t *)&c);
-    // for (int x = min; x < min + size; x++) {
-    //     int result = halide_do_task(user_context, task, x, (uint8_t *) &c);
-    //     if (result) {
-    //         return result;
-    //     }
-    // }
 
     if (c.hvx_mode != -1) {
         qurt_hvx_lock((qurt_hvx_mode_t)c.hvx_mode);
@@ -418,9 +397,6 @@ WEAK int halide_do_par_for(void *user_context,
     // Set the desired number of threads back to what it was, in case
     // we're a 128 job and we were sharing the machine with a 64 job.
     halide_set_num_threads(old_num_threads);
-    // if (cnt == 2) {
-    //     (*dtor_pdb)();
-    // }
     return ret;
 }
 
@@ -443,7 +419,6 @@ WEAK int halide_do_task(void *user_context, halide_task_t f,
 namespace {
 __attribute__((destructor))
 WEAK void halide_thread_pool_cleanup() {
-    hap_printf("In halide_thread_pool_cleanup\n");
     halide_shutdown_thread_pool();
 }
 }
