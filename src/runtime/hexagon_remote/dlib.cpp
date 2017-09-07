@@ -315,7 +315,6 @@ struct dlib_t {
                 break;
             case DT_FINI:
                 fini = (init_fini_t) (base_vaddr + d.value);
-                log_printf("DT_FINI is defined at 0x%x\n", fini);
                 break;
             case DT_RELAENT:
                 if (d.value != sizeof(Rela)) {
@@ -440,18 +439,11 @@ struct dlib_t {
         if (!parse_dynamic(dynamic)) {
             return false;
         }
-
         return true;
     }
-    // this shouldn't need to return an int.
-    // The return value is there right now only for the purposes of
-    // debugging.
-    int run_dtors() {
+    void run_dtors() {
         if (fini) {
             fini();
-            return 1;
-        } else {
-            return 0;
         }
     }
     void deinit() {
@@ -537,11 +529,8 @@ int mmap_dlclose(void *dlib) {
             prev->next = new_next;
         }
     }
-    log_printf("in mmap_dlclose: About to close lib\n");
     dlib_t *d = (dlib_t *)dlib;
-    if (d->run_dtors()) {
-        log_printf("ran dtors\n");
-    }
+    d->run_dtors();
     d->deinit();
     free(d);
     return 0;

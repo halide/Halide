@@ -8,7 +8,6 @@ typedef uint32_t addr_t;
 
 extern addr_t __DTOR_LIST__;
 extern "C" {
-
 __attribute__((section(".fini")))
 void run_dtors() {
     typedef void(*dtor_func)();
@@ -23,5 +22,4 @@ void run_dtors() {
         dtor_p++;
     }
 }
-
-}
+} // extern "C"

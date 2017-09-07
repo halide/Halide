@@ -657,13 +657,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     // key in this map, we use the mapped value instead.
     std::map<const Symbol *, const Symbol *> symbols;
     symbols[&dynamic_sym] = &dynamic_sym;
-    for (const Symbol &i : obj.symbols()) {
-        if (i.get_name() == "_GLOBAL_OFFSET_TABLE_") {
-            symbols[&i] = &got_sym;
-        } else {
-            symbols[&i] = &i;
-        }
-    }
+
     Object::section_iterator iter_dtors = obj.find_section(".dtors");
     Symbol dtor_list_sym("__DTOR_LIST__");
     if (iter_dtors != obj.sections_end()) {
@@ -672,7 +666,19 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         dtor_list_sym.set_type(Symbol::STT_NOTYPE);
         dtor_list_sym.set_visibility(Symbol::STV_DEFAULT);
         dtor_list_sym.set_binding(Symbol::STB_GLOBAL);
-        symbols[&dtor_list_sym] = &dtor_list_sym;
+    }
+
+    for (const Symbol &i : obj.symbols()) {
+        if (i.get_name() == "_GLOBAL_OFFSET_TABLE_") {
+            symbols[&i] = &got_sym;
+        } else if (i.get_name() == "__DTOR_LIST__") {
+            // It is our job to create this symbol. So, a defined __DTOR_LIST__
+            // symbol shouldn't be present already.
+            internal_assert(!i.is_defined()) << "__DTOR_LIST__ already defined\n";
+            symbols[&i] = &dtor_list_sym;
+        }else {
+            symbols[&i] = &i;
+        }
     }
     // Get a symbol from a relocation, accounting for the symbol map
     // above.
