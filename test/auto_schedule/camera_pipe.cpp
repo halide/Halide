@@ -167,7 +167,8 @@ Func deinterleave(Func raw) {
 }
 
 
-Func color_correct(Func input, Image<float> matrix_3200, Image<float> matrix_7000, float kelvin) {
+Func color_correct(Func input, Image<float> matrix_3200, Image<float> matrix_7000, 
+        float kelvin, bool auto_sched) {
     // Get a color matrix by linearly interpolating between two
     // calibrated matrices using inverse kelvin.
 
@@ -175,7 +176,10 @@ Func color_correct(Func input, Image<float> matrix_3200, Image<float> matrix_700
     Expr alpha = (1.0f/kelvin - 1.0f/3200) / (1.0f/7000 - 1.0f/3200);
     Expr val =  (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int16_t>(val * 256.0f); // Q8.8 fixed point
-    // matrix.compute_root();
+
+    if (!auto_sched) {
+        matrix.compute_root();
+    }
 
     Func corrected;
     Expr ir = cast<int32_t>(input(x, y, 0));
@@ -196,7 +200,8 @@ Func color_correct(Func input, Image<float> matrix_3200, Image<float> matrix_700
     return corrected;
 }
 
-Func apply_curve(Func input, float gamma, float contrast, int blackLevel, int whiteLevel) {
+Func apply_curve(Func input, float gamma, float contrast, int blackLevel, 
+        int whiteLevel, bool auto_sched) {
     // copied from FCam
     Func curve("curve");
 
@@ -236,7 +241,10 @@ Func apply_curve(Func input, float gamma, float contrast, int blackLevel, int wh
     // makeLUT add guard band outside of (minRaw, maxRaw]:
     curve(x) = select(x <= minRaw, 0, select(x > maxRaw, 255, val));
 
-    // curve.compute_root(); // It's a LUT, compute it once ahead of time.
+    if (!auto_sched) {
+        // It's a LUT, compute it once ahead of time.
+        curve.compute_root(); 
+    }
 
     Func curved;
 
@@ -319,8 +327,8 @@ double run_test(bool auto_sched) {
     Func denoised = hot_pixel_suppression(shifted);
     Func deinterleaved = deinterleave(denoised);
     Func demosaiced = demosaic(deinterleaved);
-    Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp);
-    Func processed = apply_curve(corrected, gamma, contrast, blackLevel, whiteLevel);
+    Func corrected = color_correct(demosaiced, matrix_3200, matrix_7000, color_temp, auto_sched);
+    Func processed = apply_curve(corrected, gamma, contrast, blackLevel, whiteLevel, auto_sched);
 
     processed
         .estimate(c, 0, 3)
@@ -405,7 +413,7 @@ double run_test(bool auto_sched) {
     processed.compile_jit(target);
 
     // Benchmark the schedule
-    double t = benchmark(5, 10, [&]() {
+    double t = benchmark(5, 5, [&]() {
         p.realize(output);
     });
 
