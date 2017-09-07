@@ -1,8 +1,6 @@
 #include "HalideRuntime.h"
-extern void log_printf(const char *fmt, ...);
 extern "C" {
 extern void *memalign(size_t, size_t);
-extern void hap_printf(const char *fmt, ...);
 
 typedef unsigned int qurt_thread_t;
 /*
@@ -330,7 +328,6 @@ WEAK void halide_cond_broadcast(struct halide_cond *cond) {
 WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
     qurt_cond_wait((qurt_cond_t *)cond, (qurt_mutex_t *)mutex);
 }
-#define QURT_print 1
 
 #include "thread_pool_common.h"
 
@@ -363,7 +360,6 @@ WEAK int halide_do_par_for(void *user_context,
         // safe to assume that the first call to halide_do_par_for is
         // done by the main thread, so there's no race condition on
         // initializing this mutex.
-        log_printf("initializing mutex\n");
         qurt_mutex_init(mutex);
     }
 
@@ -423,7 +419,6 @@ WEAK int halide_do_task(void *user_context, halide_task_t f,
 namespace {
 __attribute__((destructor))
 WEAK void halide_thread_pool_cleanup() {
-    hap_printf("In halide_thread_pool_cleanup\n");
     halide_shutdown_thread_pool();
 }
 }
