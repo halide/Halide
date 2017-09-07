@@ -19,15 +19,16 @@
 #include <string>
 #include <cstring>
 
-// by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
-#if defined(_WIN32) && defined(Halide_SHARED)
+#ifndef EXPORT
+#if defined(_MSC_VER)
 #ifdef Halide_EXPORTS
 #define EXPORT __declspec(dllexport)
 #else
 #define EXPORT __declspec(dllimport)
 #endif
 #else
-#define EXPORT
+#define EXPORT __attribute__((visibility("default")))
+#endif
 #endif
 
 // If we're in user code, we don't want certain functions to be inlined.

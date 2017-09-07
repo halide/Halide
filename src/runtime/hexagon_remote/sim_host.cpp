@@ -342,18 +342,19 @@ std::mutex mutex;
 extern "C" {
 
 DLLEXPORT
-int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int codeLen, handle_t *module_ptr) {
+int halide_hexagon_remote_load_library(const char *soname, int sonameLen, const unsigned char *code, int codeLen, handle_t *module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
     int ret = init_sim();
     if (ret != 0) return -1;
 
     // Copy the pointer arguments to the simulator.
+    remote_buffer remote_soname(soname, sonameLen);
     remote_buffer remote_code(code, codeLen);
     remote_buffer remote_module_ptr(module_ptr, 4);
 
     // Run the init kernels command.
-    ret = send_message(Message::InitKernels, {remote_code.data, codeLen, use_dlopenbuf, remote_module_ptr.data});
+    ret = send_message(Message::LoadLibrary, {remote_soname.data, sonameLen, remote_code.data, codeLen, use_dlopenbuf, remote_module_ptr.data});
     if (ret != 0) return ret;
 
     // Get the module ptr.
@@ -435,7 +436,7 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
 }
 
 DLLEXPORT
-int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
+int halide_hexagon_remote_release_library(handle_t module_ptr) {
     std::lock_guard<std::mutex> guard(mutex);
 
     if (!sim) {
@@ -454,7 +455,7 @@ int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
             printf("%s\n", Buf);
         }
     }
-    return send_message(Message::ReleaseKernels, {static_cast<int>(module_ptr), use_dlopenbuf});
+    return send_message(Message::ReleaseLibrary, {static_cast<int>(module_ptr), use_dlopenbuf});
 }
 
 DLLEXPORT

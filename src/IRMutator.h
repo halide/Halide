@@ -23,6 +23,7 @@ namespace Internal {
  */
 class IRMutator : public IRVisitor {
 public:
+    EXPORT virtual ~IRMutator();
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
