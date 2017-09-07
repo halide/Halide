@@ -462,7 +462,6 @@ public:
     }
 
     Buffer() {
-        memset(&buf, 0, sizeof(halide_buffer_t));
         buf.type = static_halide_type();
         make_shape_storage();
     }
@@ -995,6 +994,9 @@ public:
     */
     template<typename T2, int D2>
     void copy_from(const Buffer<T2, D2> &other) {
+        assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
+        assert(!other.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
+
         Buffer<const T, D> src(other);
         Buffer<T, D> dst(*this);
 
@@ -1256,6 +1258,7 @@ public:
     /** Methods for managing any GPU allocation. */
     // @{
     void set_host_dirty(bool v = true) {
+        assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty.");
         buf.set_host_dirty(v);
     }
 
@@ -1268,6 +1271,7 @@ public:
     }
 
     void set_device_dirty(bool v = true) {
+        assert((!v || !host_dirty()) && "Cannot set device dirty when host is already dirty.");
         buf.set_device_dirty(v);
     }
 
@@ -1571,6 +1575,7 @@ public:
     operator()(const int *pos) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        assert(!device_dirty());
         return *((const not_void_T *)(address_of(pos)));
     }
 
@@ -1604,8 +1609,8 @@ public:
     // @}
 
     void fill(not_void_T val) {
-        for_each_value([=](T &v) {v = val;});
         set_host_dirty();
+        for_each_value([=](T &v) {v = val;});
     }
 
 private:
@@ -1970,6 +1975,14 @@ public:
         // We'll go via for_each_element. We need a variadic wrapper lambda.
         FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
         for_each_element(wrapper);
+    }
+
+    /** Check if an input buffer passed extern stage is a querying
+     * bounds. Compared to doing the host pointer check directly,
+     * this both adds clarity to code and will facilitate moving to
+     * another representation for bounds query arguments. */
+    bool is_bounds_query() {
+        return buf.is_bounds_query();
     }
 
 };

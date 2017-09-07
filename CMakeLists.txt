@@ -154,6 +154,16 @@ else()
   endif()
 endif()
 
+# These tools are needed by several subdirectories
+add_executable(build_halide_h tools/build_halide_h.cpp)
+add_executable(binary2cpp tools/binary2cpp.cpp)
+if (MSVC)
+  # disable irrelevant "POSIX name" warnings
+  target_compile_options(build_halide_h PUBLIC /wd4996)
+  target_compile_options(binary2cpp PUBLIC /wd4996)
+endif()
+
+
 # Look for OpenMP
 find_package(OpenMP QUIET)
 if (OPENMP_FOUND)
@@ -183,6 +193,99 @@ foreach (build_config Debug Release RelWithDebInfo MinSizeRel)
     set(${VAR_TO_MODIFY} "${replacement}" CACHE STRING "Default flags for ${build_config} configuration" FORCE)
   endforeach()
 endforeach()
+
+function(define_group GROUP)
+  if(TARGET "${GROUP}")
+    message(FATAL_ERROR "Group ${GROUP} is already defined.")    
+  endif()
+  add_custom_target("${GROUP}")
+  set_target_properties("${GROUP}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endfunction()
+
+# Make a target that aggregates a number of other targets;
+# this can be used to group builds (e.g. "build_tests")
+# or to execute targets (by adding executable custom-commands);
+# the latter is used to execute test targets.
+#
+# Note that the target will be excluded from the "all" target, so it won't
+# be built by "make all" by default.
+#
+# TODO: this is intended to eventually replicate all of the interesting test targets
+# from our Make build, but not all are implemented yet:
+# TODO(srj): add test_aotcpp_generators support
+# TODO(srj): add test_valgrind variant
+# TODO(srj): add test_avx512 variant
+# TODO(srj): add test_bazel variant
+# TODO(srj): add test_python variant
+# TODO(srj): add test_apps variant
+function(add_to_group GROUP TARGET)
+  set(options BUILD EXECUTE)
+  set(oneValueArgs WORKING_DIRECTORY)
+  set(multiValueArgs )
+  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+  if(NOT TARGET "${GROUP}")
+    define_group("${GROUP}")
+  endif()
+  if (${args_EXECUTE})
+    # Execute the target (e.g. for a test_foo target)
+    set(NAME "_execute_${TARGET}")
+    get_target_property(TARGET_TYPE "${TARGET}" TYPE)
+    if("${TARGET_TYPE}" STREQUAL "EXECUTABLE")
+      add_custom_target("${NAME}" 
+                         COMMAND "${TARGET}"
+                         WORKING_DIRECTORY ${args_WORKING_DIRECTORY}
+                         COMMENT "Executing ${TARGET}"
+                         DEPENDS "${TARGET}")
+    elseif("${TARGET_TYPE}" STREQUAL "UTILITY")
+      # It's probably a custom target or a group: just depend on it.
+      add_custom_target("${NAME}" 
+                         DEPENDS "${TARGET}")
+    else()
+      message(FATAL_ERROR "add_to_group(): unsupported type ${TARGET_TYPE} for ${TARGET}")
+    endif()
+  elseif(${args_BUILD})
+    # Just depend on the target (e.g. for a build_foo target)
+    set(NAME "_build_${TARGET}")
+    add_custom_target("${NAME}" 
+                       DEPENDS "${TARGET}")
+  else()
+    message(FATAL_ERROR "add_to_group() requires BUILD or EXECUTE")
+  endif()
+  set_target_properties("${NAME}" PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  add_dependencies("${GROUP}" "${NAME}")
+endfunction()
+
+# Only groups that are defined in *this file* will have projects reliably
+# defined for them in MSVC builds; pre-define the targets we want to be available
+# here to ensure that happens.
+define_group(build_tests)
+define_group(test_auto_schedule)
+define_group(test_correctness)
+define_group(test_error)
+define_group(test_generator)
+define_group(test_internal)
+define_group(test_opengl)
+define_group(test_performance)
+define_group(test_tutorials)
+define_group(test_warning)
+
+define_group(run_tests)
+if(WITH_TESTS)
+  add_to_group(run_tests test_correctness BUILD)
+  add_to_group(run_tests test_error BUILD)
+  add_to_group(run_tests test_generators BUILD)
+  add_to_group(run_tests test_internal BUILD)
+  add_to_group(run_tests test_warning BUILD)
+endif()
+if(WITH_TUTORIALS)
+  add_to_group(run_tests test_tutorials BUILD)
+endif()
+
+# TODO(srj): these need to be run one-at-a-time, without any -j option,
+# otherwise we can get false slowdown failures.
+# add_to_group(run_tests test_performance BUILD)
+# add_to_group(run_tests test_auto_schedule BUILD)
+
 
 add_subdirectory(src)
 add_subdirectory(tools)
@@ -236,3 +339,4 @@ if (WITH_UTILS)
 else()
   message(STATUS "Building utils disabled")
 endif()
+

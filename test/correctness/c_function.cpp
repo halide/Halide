@@ -4,9 +4,9 @@
 using namespace Halide;
 
 // NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
-// This is not supported by the C backend.
-
-// On windows, you need to use declspec to do the same.
+// This is not supported by the C backend.     
+      
+// On windows, you need to use declspec to do the same.       
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else

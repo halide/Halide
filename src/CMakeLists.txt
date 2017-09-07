@@ -1,14 +1,5 @@
 include(CheckCXXCompilerFlag)
 
-add_executable(build_halide_h ../tools/build_halide_h.cpp)
-add_executable(binary2cpp ../tools/binary2cpp.cpp)
-
-if (MSVC)
-  # disable irrelevant warnings
-  target_compile_options(build_halide_h PUBLIC /wd4996)
-  target_compile_options(binary2cpp PUBLIC /wd4996)
-endif()
-
 if (MSVC)
   # -g produces dwarf debugging info, which is not useful on windows
   #  (and fails to compile due to llvm bug 15393)
@@ -36,6 +27,7 @@ set(RUNTIME_CPP
   float16_t
   gcd_thread_pool
   gpu_device_selection
+  hexagon_cpu_features
   hexagon_host
   ios_io
   linux_clock
@@ -150,10 +142,11 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
       set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
       set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
       set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
+      set(CLANG_LL_OPTS -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}")
 
       add_custom_command(OUTPUT "${LL_D}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME ${CLANG_LL_OPTS}  -o "${LL_D}"
                          COMMENT "${SOURCE} -> ${LL_D}"
                          # Make sure that the output of this command also depends
                          # on the header files that ${SOURCE} uses
@@ -162,7 +155,7 @@ function(add_runtime_modules TARGET_RUNTIME_FILES TARGET_RUNTIME_DIR)
                         )
       add_custom_command(OUTPUT "${LL}"
                          DEPENDS "${SOURCE}"
-                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -m${j} -target "${TARGET}" "-I${TARGET_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                         COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${CLANG_LL_OPTS} -o "${LL}"
                          COMMENT "${SOURCE} -> ${LL}")
 
       add_custom_command(OUTPUT "${BC_D}"
@@ -533,6 +526,14 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 )
 # Define Halide_SHARED or Halide_STATIC depending on library type
 target_compile_definitions(Halide PRIVATE "-DHalide_${HALIDE_LIBRARY_TYPE}")
+# Default to not exporting symbols from libHalide
+set_target_properties(Halide PROPERTIES CXX_VISIBILITY_PRESET hidden)
+set_target_properties(Halide PROPERTIES VISIBILITY_INLINES_HIDDEN 1)
+# Ensure that these tools are build first
+add_dependencies(Halide
+  binary2cpp
+  build_halide_h
+)
 
 if (WIN32 AND NOT MSVC)
   set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
@@ -651,8 +652,3 @@ if (NOT MSVC)
   string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
   target_link_libraries(Halide PUBLIC ${EXTRA_LIBS})
 endif()
-
-add_dependencies(Halide
-  binary2cpp
-  build_halide_h
-)
