@@ -88,6 +88,13 @@ WEAK void worker_thread_already_locked(work *owned_job) {
     // do_par_for, and I should only stay in this function until my
     // job is complete. If I'm a lowly worker thread, I should stay in
     // this function as long as the work queue is running.
+#if defined(QURT_print)
+    if (owned_job)
+        hap_printf("MASTER thread %d: in work_queue already_locked()\n", qurt_thread_get_id());
+    else
+        hap_printf("worker thread %d: in work_queue already_locked()\n", qurt_thread_get_id());
+#endif
+
     while (owned_job != NULL ? owned_job->running()
            : work_queue.running()) {
 
@@ -95,20 +102,46 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             if (owned_job) {
                 // There are no jobs pending. Wait for the last worker
                 // to signal that the job is finished.
+#if defined(QURT_print)
+                hap_printf("MASTER thread %d: work done waiting on work_queue.wakeup_owners\n", qurt_thread_get_id());
+#endif
                 halide_cond_wait(&work_queue.wakeup_owners, &work_queue.mutex);
             } else if (work_queue.a_team_size <= work_queue.target_a_team_size) {
                 // There are no jobs pending. Wait until more jobs are enqueued.
+#if defined(QURT_print)
+                hap_printf("worker thread %d: work done, going to sleep, releasing the mutex\n", qurt_thread_get_id());
+                log_printf("worker thread %d: work done, going to sleep, releasing the mutex\n", qurt_thread_get_id());
+#endif
                 halide_cond_wait(&work_queue.wakeup_a_team, &work_queue.mutex);
+#if defined(QURT_print)
+                hap_printf("worker thread %d: waking up from work_queue.wakeup_a_team\n",
+                           qurt_thread_get_id());
+#endif
+
             } else {
                 // There are no jobs pending, and there are too many
                 // threads in the A team. Transition to the B team
                 // until the wakeup_b_team condition is fired.
                 work_queue.a_team_size--;
+#if defined(QURT_print)
+                hap_printf("worker thread %d: too many threads active; no jobs pending, waiting on wakeup_b_team, active a team size =%d\n",
+                           qurt_thread_get_id(), work_queue.a_team_size);
+#endif
+
                 halide_cond_wait(&work_queue.wakeup_b_team, &work_queue.mutex);
+#if defined(QURT_print)
+                hap_printf("worker thread %d: waking up from work_queue.wakeup_b_team\n",
+                           qurt_thread_get_id());
+#endif
+
                 work_queue.a_team_size++;
             }
         } else {
             // Grab the next job.
+
+#if defined(QURT_print)
+                hap_printf("thread %d: grabbing work\n", qurt_thread_get_id());
+#endif
             work *job = work_queue.jobs;
 
             // Claim a task from it.
@@ -127,10 +160,27 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             job->active_workers++;
 
             // Release the lock and do the task.
+#if defined(QURT_print)
+            hap_printf("thread %d: unlocking work_queue.mutex\n", qurt_thread_get_id());
+
+#endif
+
             halide_mutex_unlock(&work_queue.mutex);
+#if defined(QURT_print)
+                hap_printf("thread %d: about to call halide_do_task\n", qurt_thread_get_id());
+#endif
+
             int result = halide_do_task(myjob.user_context, myjob.f, myjob.next,
                                         myjob.closure);
+#if defined(QURT_print)
+                hap_printf("thread %d: done with call to halide_do_task\n", qurt_thread_get_id());
+#endif
             halide_mutex_lock(&work_queue.mutex);
+
+#if defined(QURT_print)
+            hap_printf("thread %d: locked work_queue.mutex\n", qurt_thread_get_id());
+
+#endif
 
             // If this task failed, set the exit status on the job.
             if (result) {
@@ -143,10 +193,19 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             // If the job is done and I'm not the owner of it, wake up
             // the owner.
             if (!job->running() && job != owned_job) {
+#if defined(QURT_print)
+                hap_printf("worker thread %d: waking up the owner\n", qurt_thread_get_id());
+                log_printf("worker thread %d: waking up the owner\n", qurt_thread_get_id());
+#endif
+
                 halide_cond_broadcast(&work_queue.wakeup_owners);
             }
         }
     }
+#if defined(QURT_print)
+    hap_printf("worker thread %d: returning from work_queue_already_locked()\n", qurt_thread_get_id());
+#endif
+
 }
 
 WEAK void worker_thread(void *) {
@@ -178,6 +237,9 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     halide_mutex_lock(&work_queue.mutex);
 
     if (!work_queue.initialized) {
+#if defined(QURT_print)
+        log_printf("initilizing work queue in default_do_par_for\n");
+#endif
         work_queue.shutdown = false;
         halide_cond_init(&work_queue.wakeup_owners);
         halide_cond_init(&work_queue.wakeup_a_team);
@@ -187,6 +249,10 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
         // Compute the desired number of threads to use. Other code
         // can also mess with this value, but only when the work queue
         // is locked.
+#if defined(QURT_print)
+        hap_printf("thread %d, desired_num_threads = %d\n", qurt_thread_get_id(), work_queue.desired_num_threads);
+        /* log_printf("thread %d, desired_num_threads = %d\n", qurt_thread_get_id(), work_queue.desired_num_threads); */
+#endif
         if (!work_queue.desired_num_threads) {
             work_queue.desired_num_threads = default_desired_num_threads();
         }
@@ -198,12 +264,22 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
 
         work_queue.initialized = true;
     }
+#if defined(QURT_print)
+    log_printf ("work_queue.desired_num_threads = %d, threads_created = %d\n", work_queue.desired_num_threads, work_queue.threads_created);
+#endif
 
     while (work_queue.threads_created < work_queue.desired_num_threads - 1) {
         // We might need to make some new threads, if work_queue.desired_num_threads has
         // increased.
+#if defined(QURT_print)
+        log_printf("creating a thread\n");
+#endif
         work_queue.threads[work_queue.threads_created++] =
             halide_spawn_thread(worker_thread, NULL);
+#if defined(QURT_print)
+        log_printf("created a thread;  num_threads_created = %d\n", work_queue.threads_created);
+#endif
+
     }
 
     // Make the job.
@@ -221,12 +297,21 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
         // fewer tasks to do than threads, then set the target A team
         // size so that some threads will put themselves to sleep
         // until a larger job arrives.
+
+#if defined(QURT_print)
+        hap_printf("thread %: !workqueue.jobs && (size=%d) < (work_queue.desired_num_threads=%d)\n",
+                   qurt_thread_get_id(), size, work_queue.desired_num_threads);
+#endif
         work_queue.target_a_team_size = size;
     } else {
         // Otherwise the target A team size is
         // desired_num_threads. This may still be less than
         // threads_created if desired_num_threads has been reduced by
         // other code.
+#if defined(QURT_print)
+        hap_printf("thread %d: setting target_a_team_size to %d \n",
+                   qurt_thread_get_id(), work_queue.desired_num_threads);
+#endif
         work_queue.target_a_team_size = work_queue.desired_num_threads;
     }
 
@@ -234,12 +319,19 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.next_job = work_queue.jobs;
     work_queue.jobs = &job;
 
+#if defined(QURT_print)
+    hap_printf("thread %d: waking up the A team\n", qurt_thread_get_id());
+#endif
     // Wake up our A team.
     halide_cond_broadcast(&work_queue.wakeup_a_team);
 
     // If there are fewer threads than we would like on the a team,
     // wake up the b team too.
     if (work_queue.target_a_team_size > work_queue.a_team_size) {
+#if defined(QURT_print)
+        hap_printf("thread %: waking up the B team\n", qurt_thread_get_id());
+#endif
+    // Wake up our A team.
         halide_cond_broadcast(&work_queue.wakeup_b_team);
     }
 
@@ -270,20 +362,41 @@ WEAK int halide_set_num_threads(int n) {
     return old;
 }
 WEAK void halide_shutdown_thread_pool() {
+    // to go home
+#if defined(QURT_print)
+    hap_printf("In halide_shutdown_thread_pool\n");
+#endif
+
     if (!work_queue.initialized) return;
 
     // Wake everyone up and tell them the party's over and it's time
     // to go home
+#if defined(QURT_print)
+    hap_printf("Destructor: Before getting lock\n");
+#endif
+
     halide_mutex_lock(&work_queue.mutex);
     work_queue.shutdown = true;
+#if defined(QURT_print)
+    hap_printf("Destructor: got lock on mutex, shutting down work_queue and send broadcast signals\n");
+#endif
+
     halide_cond_broadcast(&work_queue.wakeup_owners);
     halide_cond_broadcast(&work_queue.wakeup_a_team);
     halide_cond_broadcast(&work_queue.wakeup_b_team);
+#if defined(QURT_print)
+    hap_printf("Destructor: About to unlock on mutex, sent broadcast signals\n");
+#endif
+
     halide_mutex_unlock(&work_queue.mutex);
 
     // Wait until they leave
     for (int i = 0; i < work_queue.threads_created; i++) {
         halide_join_thread(work_queue.threads[i]);
+#if defined(QURT_print)
+        hap_printf("Destructor: Finished waiting on thread %d\n", i);
+#endif
+
     }
 
     // Tidy up
@@ -292,6 +405,10 @@ WEAK void halide_shutdown_thread_pool() {
     halide_cond_destroy(&work_queue.wakeup_a_team);
     halide_cond_destroy(&work_queue.wakeup_b_team);
     work_queue.initialized = false;
+#if defined(QURT_print)
+    hap_printf("exiting destructor\n");
+#endif
+
 }
 
 }
