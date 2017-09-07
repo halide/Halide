@@ -1,5 +1,7 @@
 include ../support/Makefile.inc
 
+# Note: using the -g flag in conjunction with the -debug Feature on OSX may 
+# produce "failed to insert symbol" warnings at link time; this is annoying but harmless.
 CXXFLAGS += -g -O0
 
 all: $(BIN)/opengl_test
