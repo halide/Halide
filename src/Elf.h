@@ -269,6 +269,13 @@ public:
     }
     uint64_t get_alignment() const { return alignment; }
 
+    void fixup_relocations_offset(uint64_t offset_fixup) {
+        for (relocation_iterator ri = relocations_begin(); ri != relocations_end(); ++ri) {
+            Relocation &r = *ri;
+            uint64_t offset = r.get_offset();
+            r.set_offset(offset + offset_fixup);
+        }
+    }
     Section &set_contents(std::vector<char> contents) {
         this->contents = std::move(contents);
         return *this;
@@ -283,7 +290,15 @@ public:
         this->contents.insert(this->contents.end(), begin, end);
         return *this;
     }
-    /** Set or append an object to the contents, assuming T is a
+    template <typename It>
+    Section &prepend_contents(It begin, It end, uint64_t off) {
+        this->contents.insert(this->contents.begin(), begin, end);
+        // When we add data to the start of the section, we need to fix up
+        // the offsets of relocations linked to this section.
+        fixup_relocations_offset(off);
+        return *this;
+    }
+    /** Set, append or prepend an object to the contents, assuming T is a
      * trivially copyable datatype. */
     template <typename T>
     Section &set_contents(const std::vector<T> &contents) {
@@ -293,6 +308,10 @@ public:
     template <typename T>
     Section &append_contents(const T& x) {
         return append_contents((const char *)&x, (const char *)(&x + 1));
+    }
+    template <typename T>
+    Section &prepend_contents(const T& x) {
+        return prepend_contents((const char *)&x, (const char *)(&x + 1), sizeof(T));
     }
     const std::vector<char> &get_contents() const { return contents; }
     contents_iterator contents_begin() { return contents.begin(); }

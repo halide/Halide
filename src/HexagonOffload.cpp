@@ -936,6 +936,11 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         dtors->append_contents((uint32_t) 0);
     }
 
+    auto ctors = obj->find_section(".ctors");
+    if (ctors != obj->sections_end()) {
+        ctors->prepend_contents((uint32_t) 0);
+    }
+
     debug(2) << obj->print_sections();
 
     // Link into a shared object.

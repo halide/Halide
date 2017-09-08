@@ -668,6 +668,18 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         dtor_list_sym.set_binding(Symbol::STB_GLOBAL);
     }
 
+    Object::section_iterator iter_ctors = obj.find_section(".ctors");
+    Symbol ctor_end_sym("__CTOR_END__");
+    if (iter_ctors != obj.sections_end()) {
+        Section *ctors = &(*iter_ctors);
+        internal_assert(ctors->get_size() == ctors->contents_size())
+            << "There should no padding at the end of the .ctors section\n";
+        ctor_end_sym.define(ctors, ctors->get_size(), 0);
+        ctor_end_sym.set_type(Symbol::STT_NOTYPE);
+        ctor_end_sym.set_visibility(Symbol::STV_DEFAULT);
+        ctor_end_sym.set_binding(Symbol::STB_GLOBAL);
+    }
+
     for (const Symbol &i : obj.symbols()) {
         if (i.get_name() == "_GLOBAL_OFFSET_TABLE_") {
             symbols[&i] = &got_sym;
@@ -676,7 +688,10 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             // symbol shouldn't be present already.
             internal_assert(!i.is_defined()) << "__DTOR_LIST__ already defined\n";
             symbols[&i] = &dtor_list_sym;
-        }else {
+        } else if (i.get_name() == "__CTOR_END__") {
+            internal_assert(!i.is_defined()) << "__CTOR_END__ already defined\n";
+            symbols[&i] = &ctor_end_sym;
+        } else {
             symbols[&i] = &i;
         }
     }
@@ -971,10 +986,17 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     dyn.push_back(make_dyn(DT_RELAENT, sizeof(Rela<T>)));
 
     // DT_FINI
-    Object::section_iterator iter_fini = obj.find_section(".fini");
+    Object::section_iterator iter_fini = obj.find_section(".fini.halide");
     if (iter_fini != obj.sections_end()) {
         Section &fini = *iter_fini;
         dyn.push_back(make_dyn(DT_FINI, get_section_offset(fini)));
+    }
+
+    // DT_INIT
+    Object::section_iterator iter_init = obj.find_section(".init.halide");
+    if (iter_init != obj.sections_end()) {
+        Section &init = *iter_init;
+        dyn.push_back(make_dyn(DT_INIT, get_section_offset(init)));
     }
 
     dynamic.set_contents(dyn);

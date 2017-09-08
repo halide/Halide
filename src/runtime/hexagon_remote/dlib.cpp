@@ -193,6 +193,7 @@ struct dlib_t {
     const Sym *symtab;
     typedef void (*init_fini_t)(void);
     init_fini_t fini;
+    init_fini_t init;
 
     hash_table hash;
 
@@ -267,6 +268,7 @@ struct dlib_t {
         symtab = NULL;
         hash.table = NULL;
         fini = NULL;
+        init = NULL;
 
         const Rela *jmprel = NULL;
         int jmprel_count = 0;
@@ -313,6 +315,9 @@ struct dlib_t {
             case DT_RELASZ:
                 rel_count = d.value / sizeof(Rela);
                 break;
+            case DT_INIT:
+                init = (init_fini_t) (base_vaddr + d.value);
+                break;
             case DT_FINI:
                 fini = (init_fini_t) (base_vaddr + d.value);
                 break;
@@ -351,6 +356,10 @@ struct dlib_t {
         if (!fini) {
             // This is not an error.
             log_printf("DT_FINI not defined\n");
+        }
+        if (!init) {
+            // This is not an error.
+            log_printf("DT_INIT not defined\n");
         }
         return true;
     }
@@ -446,6 +455,11 @@ struct dlib_t {
             fini();
         }
     }
+    void run_ctors() {
+        if (init) {
+            init();
+        }
+    }
     void deinit() {
         typedef int (*munmap_fn)(void *, size_t);
         munmap_fn munmap = (munmap_fn)halide_get_symbol("munmap");
@@ -495,12 +509,10 @@ void *mmap_dlopen(const void *code, size_t size) {
         free(dlib);
         return NULL;
     }
-
+    dlib->run_ctors();
     // Add this library to the list of loaded libs.
     dlib->next = loaded_libs;
     loaded_libs = dlib;
-
-    // TODO: Should we run .ctors?
 
     return dlib;
 }
