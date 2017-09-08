@@ -3,12 +3,12 @@ halide_add_generator(camera_pipe.generator
                      SRCS camera_pipe_generator.cpp)
 halide_add_aot_library(camera_pipe
                        GENERATOR_TARGET camera_pipe.generator
-                       GENERATOR_ARGS target=host auto_scheduler=false
+                       GENERATOR_ARGS target=host auto_schedule=false
                        GENERATED_FUNCTION camera_pipe)                       
 halide_add_aot_library(camera_pipe_auto_schedule
                        GENERATOR_NAME camera_pipe
                        GENERATOR_TARGET camera_pipe.generator
-                       GENERATOR_ARGS target=host auto_scheduler=true
+                       GENERATOR_ARGS target=host auto_schedule=true
                        GENERATED_FUNCTION camera_pipe_auto_schedule)
 
 # fcam
