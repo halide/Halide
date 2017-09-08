@@ -853,6 +853,10 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
                         Module &containing_module) {
     // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
+    // There are two ways of offloading, on device and on host.
+    // In the former we have true QuRT available, while on the
+    // latter we simulate the Hexagon side code with a barebones
+    // Shim layer, ie. NO QURT!
     if (host_target.arch == Target::ARM) {
         target.os = Target::QuRT;
     }
@@ -918,6 +922,12 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     auto bss = obj->find_section(".bss");
     if (bss != obj->sections_end()) {
         bss->set_alignment(128);
+        // TODO: We should set the type to SHT_NOBITS
+        // This will cause a difference in MemSize and FileSize like so:
+        //        FileSize = (MemSize - size_of_bss)
+        // When the Hexagon loader is used on 8998 and later targets,
+        // the difference is filled with zeroes thereby initializing the .bss
+        // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
         debug(4) << "bss size = " << bss->get_size() << "\n";
         Elf::Section::contents_iterator s = bss->contents_begin();
