@@ -269,6 +269,7 @@ WEAK int halide_set_num_threads(int n) {
     halide_mutex_unlock(&work_queue.mutex);
     return old;
 }
+
 WEAK void halide_shutdown_thread_pool() {
     if (!work_queue.initialized) return;
 
