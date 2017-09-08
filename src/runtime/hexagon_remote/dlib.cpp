@@ -35,19 +35,7 @@ struct Ehdr {
     uint16_t e_shstrndx;
 };
 
-// Section header.
-struct Shdr {
-  uint32_t sh_name;      // Section name (index into string table)
-  uint32_t sh_type;      // Section type (SHT_*)
-  uint32_t sh_flags;     // Section flags (SHF_*)
-  elfaddr_t sh_addr;      // Address where section is to be loaded
-  uint32_t sh_offset;     // File offset of section data, in bytes
-  uint32_t sh_size;      // Size of section, in bytes
-  uint32_t sh_link;      // Section type-specific header table index link
-  uint32_t sh_info;      // Section type-specific extra information
-  uint32_t sh_addralign; // Section address alignment
-  uint32_t sh_entsize;   // Size of records contained within the section
-};
+
 enum {
     PT_NULL = 0,
     PT_LOAD = 1,
