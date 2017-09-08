@@ -201,7 +201,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Unpacking buffer arguments...\n";
     s = unpack_buffers(s);
-    debug(2) << "Lowering after unpacking buffer arguments...\n";
+    debug(2) << "Lowering after unpacking buffer arguments...\n" << s << "\n\n";
 
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
