@@ -97,4 +97,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(Blur, "blur");
+HALIDE_REGISTER_GENERATOR(Blur, blur)

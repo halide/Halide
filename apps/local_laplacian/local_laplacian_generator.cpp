@@ -5,6 +5,7 @@ namespace {
 constexpr int maxJ = 20;
 
 struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
+    GeneratorParam<bool>        auto_schedule{"auto_schedule", false};
     GeneratorParam<int>         pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
     Input<Buffer<uint16_t>>     input{"input", 3};
@@ -81,10 +82,26 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 
     void schedule() {
         /* THE SCHEDULE */
-        remap.compute_root();
 
-        if (get_target().has_gpu_feature()) {
+        if (auto_schedule) {
+            // Provide estimates on the input image
+            input.dim(0).set_bounds_estimate(0, 1536);
+            input.dim(1).set_bounds_estimate(0, 2560);
+            input.dim(2).set_bounds_estimate(0, 3);
+            // Provide estimates on the parameters
+            levels.set_estimate(8);
+            alpha.set_estimate(1);
+            beta.set_estimate(1);
+            // Provide estimates on the pipeline output
+            output.estimate(x, 0, 1536)
+                .estimate(y, 0, 2560)
+                .estimate(c, 0, 3);
+            // Auto schedule the pipeline
+            Pipeline p(output);
+            p.auto_schedule(get_target());
+        } else if (get_target().has_gpu_feature()) {
             // gpu schedule
+            remap.compute_root();
             Var xi, yi;
             output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
             for (int j = 0; j < pyramid_levels; j++) {
@@ -101,6 +118,7 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
             }
         } else {
             // cpu schedule
+            remap.compute_root();
             Var yo;
             output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
             gray.compute_root().parallel(y, 32).vectorize(x, 8);
@@ -111,7 +129,7 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
                     .compute_root().reorder_storage(x, k, y)
                     .reorder(k, y).parallel(y, 8).vectorize(x, 8);
                 outGPyramid[j]
-                    .store_at(output, yo).compute_at(output, y)
+                    .store_at(output, yo).compute_at(output, y).fold_storage(y, 8)
                     .vectorize(x, 8);
             }
             outGPyramid[0]
@@ -148,6 +166,6 @@ private:
 
 };
 
-HALIDE_REGISTER_GENERATOR(LocalLaplacian, "local_laplacian")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(LocalLaplacian, local_laplacian)

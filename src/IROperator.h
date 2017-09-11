@@ -76,6 +76,12 @@ EXPORT bool is_two(const Expr &e);
  * undefined Stmt, or as an Evaluate node of a constant) */
 EXPORT bool is_no_op(const Stmt &s);
 
+/** Does the expression
+ * 1) Take on the same value no matter where it appears in a Stmt, and
+ * 2) Evaluating it has no side-effects
+ */
+bool is_pure(const Expr &e);
+
 /** Construct an immediate of the given type from any numeric C++ type. */
 // @{
 EXPORT Expr make_const(Type t, int64_t val);
@@ -811,10 +817,14 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
         << "clamp of undefined Expr\n";
     Expr n_min_val = lossless_cast(a.type(), min_val);
     user_assert(n_min_val.defined())
-        << "clamp with possibly out of range minimum bound: " << min_val << "\n";
+        << "Type mismatch in call to clamp. First argument ("
+        << a << ") has type " << a.type() << ", but second argument ("
+        << min_val << ") has type " << min_val.type() << ". Use an explicit cast.\n";
     Expr n_max_val = lossless_cast(a.type(), max_val);
     user_assert(n_max_val.defined())
-        << "clamp with possibly out of range maximum bound: " << max_val << "\n";
+        << "Type mismatch in call to clamp. First argument ("
+        << a << ") has type " << a.type() << ", but third argument ("
+        << max_val << ") has type " << max_val.type() << ". Use an explicit cast.\n";
     return Internal::Max::make(Internal::Min::make(std::move(a), std::move(n_max_val)), std::move(n_min_val));
 }
 
@@ -1767,7 +1777,8 @@ inline NO_INLINE Expr print_when(Expr condition, Expr a, Args&&... args) {
  * Note that this essentially *always* inserts a runtime check into the
  * generated code (except when the condition can be proven at compile time);
  * as such, it should be avoided inside inner loops, except for debugging
- * or testing purposes.
+ * or testing purposes. Note also that it does not vectorize cleanly (vector
+ * values will be scalarized for the check).
  *
  * However, using this to make assertions about (say) input values
  * can be useful, both in terms of correctness and (potentially) in terms

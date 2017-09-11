@@ -70,6 +70,6 @@ private:
     Func brightened{"brightened"};
 };
 
-HALIDE_REGISTER_GENERATOR(TiledBlur, "tiled_blur")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(TiledBlur, tiled_blur)

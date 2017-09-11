@@ -22,28 +22,12 @@ DECL_SOT(double);
 
 template <typename T>
 bool is_type_supported(int vec_width, const Target &target) {
-    return target.supports_type(type_of<T>().with_lanes(vec_width));
-}
+    DeviceAPI device = DeviceAPI::Default_GPU;
 
-template <>
-bool is_type_supported<float>(int vec_width, const Target &target) {
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        return vec_width == 1;
-    } else {
-        return true;
+        device = DeviceAPI::Hexagon;
     }
-}
-
-template <>
-bool is_type_supported<double>(int vec_width, const Target &target) {
-    if (target.has_feature(Target::OpenCL) &&
-        !target.has_feature(Target::CLDoubles)) {
-        return false;
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        return vec_width == 1;
-    } else {
-        return true;
-    }
+    return target.supports_type(type_of<T>().with_lanes(vec_width), device);
 }
 
 template<typename A, typename B>

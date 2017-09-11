@@ -535,7 +535,7 @@ Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
-                IntrusivePtr<FunctionContents> func, int value_index,
+                FunctionPtr func, int value_index,
                 Buffer<> image, Parameter param) {
     if (name == Call::prefetch && call_type == Call::Intrinsic) {
         internal_assert(args.size() % 2 == 0)
@@ -733,48 +733,48 @@ bool Shuffle::is_extract_element() const {
 }
 
 
-template<> void ExprNode<IntImm>::accept(IRVisitor *v) const { v->visit((const IntImm *)this); }
-template<> void ExprNode<UIntImm>::accept(IRVisitor *v) const { v->visit((const UIntImm *)this); }
-template<> void ExprNode<FloatImm>::accept(IRVisitor *v) const { v->visit((const FloatImm *)this); }
-template<> void ExprNode<StringImm>::accept(IRVisitor *v) const { v->visit((const StringImm *)this); }
-template<> void ExprNode<Cast>::accept(IRVisitor *v) const { v->visit((const Cast *)this); }
-template<> void ExprNode<Variable>::accept(IRVisitor *v) const { v->visit((const Variable *)this); }
-template<> void ExprNode<Add>::accept(IRVisitor *v) const { v->visit((const Add *)this); }
-template<> void ExprNode<Sub>::accept(IRVisitor *v) const { v->visit((const Sub *)this); }
-template<> void ExprNode<Mul>::accept(IRVisitor *v) const { v->visit((const Mul *)this); }
-template<> void ExprNode<Div>::accept(IRVisitor *v) const { v->visit((const Div *)this); }
-template<> void ExprNode<Mod>::accept(IRVisitor *v) const { v->visit((const Mod *)this); }
-template<> void ExprNode<Min>::accept(IRVisitor *v) const { v->visit((const Min *)this); }
-template<> void ExprNode<Max>::accept(IRVisitor *v) const { v->visit((const Max *)this); }
-template<> void ExprNode<EQ>::accept(IRVisitor *v) const { v->visit((const EQ *)this); }
-template<> void ExprNode<NE>::accept(IRVisitor *v) const { v->visit((const NE *)this); }
-template<> void ExprNode<LT>::accept(IRVisitor *v) const { v->visit((const LT *)this); }
-template<> void ExprNode<LE>::accept(IRVisitor *v) const { v->visit((const LE *)this); }
-template<> void ExprNode<GT>::accept(IRVisitor *v) const { v->visit((const GT *)this); }
-template<> void ExprNode<GE>::accept(IRVisitor *v) const { v->visit((const GE *)this); }
-template<> void ExprNode<And>::accept(IRVisitor *v) const { v->visit((const And *)this); }
-template<> void ExprNode<Or>::accept(IRVisitor *v) const { v->visit((const Or *)this); }
-template<> void ExprNode<Not>::accept(IRVisitor *v) const { v->visit((const Not *)this); }
-template<> void ExprNode<Select>::accept(IRVisitor *v) const { v->visit((const Select *)this); }
-template<> void ExprNode<Load>::accept(IRVisitor *v) const { v->visit((const Load *)this); }
-template<> void ExprNode<Ramp>::accept(IRVisitor *v) const { v->visit((const Ramp *)this); }
-template<> void ExprNode<Broadcast>::accept(IRVisitor *v) const { v->visit((const Broadcast *)this); }
-template<> void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Call *)this); }
-template<> void ExprNode<Shuffle>::accept(IRVisitor *v) const { v->visit((const Shuffle *)this); }
-template<> void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
-template<> void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
-template<> void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
-template<> void StmtNode<ProducerConsumer>::accept(IRVisitor *v) const { v->visit((const ProducerConsumer *)this); }
-template<> void StmtNode<For>::accept(IRVisitor *v) const { v->visit((const For *)this); }
-template<> void StmtNode<Store>::accept(IRVisitor *v) const { v->visit((const Store *)this); }
-template<> void StmtNode<Provide>::accept(IRVisitor *v) const { v->visit((const Provide *)this); }
-template<> void StmtNode<Allocate>::accept(IRVisitor *v) const { v->visit((const Allocate *)this); }
-template<> void StmtNode<Free>::accept(IRVisitor *v) const { v->visit((const Free *)this); }
-template<> void StmtNode<Realize>::accept(IRVisitor *v) const { v->visit((const Realize *)this); }
-template<> void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Block *)this); }
-template<> void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
-template<> void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
-template<> void StmtNode<Prefetch>::accept(IRVisitor *v) const { v->visit((const Prefetch *)this); }
+template<> EXPORT void ExprNode<IntImm>::accept(IRVisitor *v) const { v->visit((const IntImm *)this); }
+template<> EXPORT void ExprNode<UIntImm>::accept(IRVisitor *v) const { v->visit((const UIntImm *)this); }
+template<> EXPORT void ExprNode<FloatImm>::accept(IRVisitor *v) const { v->visit((const FloatImm *)this); }
+template<> EXPORT void ExprNode<StringImm>::accept(IRVisitor *v) const { v->visit((const StringImm *)this); }
+template<> EXPORT void ExprNode<Cast>::accept(IRVisitor *v) const { v->visit((const Cast *)this); }
+template<> EXPORT void ExprNode<Variable>::accept(IRVisitor *v) const { v->visit((const Variable *)this); }
+template<> EXPORT void ExprNode<Add>::accept(IRVisitor *v) const { v->visit((const Add *)this); }
+template<> EXPORT void ExprNode<Sub>::accept(IRVisitor *v) const { v->visit((const Sub *)this); }
+template<> EXPORT void ExprNode<Mul>::accept(IRVisitor *v) const { v->visit((const Mul *)this); }
+template<> EXPORT void ExprNode<Div>::accept(IRVisitor *v) const { v->visit((const Div *)this); }
+template<> EXPORT void ExprNode<Mod>::accept(IRVisitor *v) const { v->visit((const Mod *)this); }
+template<> EXPORT void ExprNode<Min>::accept(IRVisitor *v) const { v->visit((const Min *)this); }
+template<> EXPORT void ExprNode<Max>::accept(IRVisitor *v) const { v->visit((const Max *)this); }
+template<> EXPORT void ExprNode<EQ>::accept(IRVisitor *v) const { v->visit((const EQ *)this); }
+template<> EXPORT void ExprNode<NE>::accept(IRVisitor *v) const { v->visit((const NE *)this); }
+template<> EXPORT void ExprNode<LT>::accept(IRVisitor *v) const { v->visit((const LT *)this); }
+template<> EXPORT void ExprNode<LE>::accept(IRVisitor *v) const { v->visit((const LE *)this); }
+template<> EXPORT void ExprNode<GT>::accept(IRVisitor *v) const { v->visit((const GT *)this); }
+template<> EXPORT void ExprNode<GE>::accept(IRVisitor *v) const { v->visit((const GE *)this); }
+template<> EXPORT void ExprNode<And>::accept(IRVisitor *v) const { v->visit((const And *)this); }
+template<> EXPORT void ExprNode<Or>::accept(IRVisitor *v) const { v->visit((const Or *)this); }
+template<> EXPORT void ExprNode<Not>::accept(IRVisitor *v) const { v->visit((const Not *)this); }
+template<> EXPORT void ExprNode<Select>::accept(IRVisitor *v) const { v->visit((const Select *)this); }
+template<> EXPORT void ExprNode<Load>::accept(IRVisitor *v) const { v->visit((const Load *)this); }
+template<> EXPORT void ExprNode<Ramp>::accept(IRVisitor *v) const { v->visit((const Ramp *)this); }
+template<> EXPORT void ExprNode<Broadcast>::accept(IRVisitor *v) const { v->visit((const Broadcast *)this); }
+template<> EXPORT void ExprNode<Call>::accept(IRVisitor *v) const { v->visit((const Call *)this); }
+template<> EXPORT void ExprNode<Shuffle>::accept(IRVisitor *v) const { v->visit((const Shuffle *)this); }
+template<> EXPORT void ExprNode<Let>::accept(IRVisitor *v) const { v->visit((const Let *)this); }
+template<> EXPORT void StmtNode<LetStmt>::accept(IRVisitor *v) const { v->visit((const LetStmt *)this); }
+template<> EXPORT void StmtNode<AssertStmt>::accept(IRVisitor *v) const { v->visit((const AssertStmt *)this); }
+template<> EXPORT void StmtNode<ProducerConsumer>::accept(IRVisitor *v) const { v->visit((const ProducerConsumer *)this); }
+template<> EXPORT void StmtNode<For>::accept(IRVisitor *v) const { v->visit((const For *)this); }
+template<> EXPORT void StmtNode<Store>::accept(IRVisitor *v) const { v->visit((const Store *)this); }
+template<> EXPORT void StmtNode<Provide>::accept(IRVisitor *v) const { v->visit((const Provide *)this); }
+template<> EXPORT void StmtNode<Allocate>::accept(IRVisitor *v) const { v->visit((const Allocate *)this); }
+template<> EXPORT void StmtNode<Free>::accept(IRVisitor *v) const { v->visit((const Free *)this); }
+template<> EXPORT void StmtNode<Realize>::accept(IRVisitor *v) const { v->visit((const Realize *)this); }
+template<> EXPORT void StmtNode<Block>::accept(IRVisitor *v) const { v->visit((const Block *)this); }
+template<> EXPORT void StmtNode<IfThenElse>::accept(IRVisitor *v) const { v->visit((const IfThenElse *)this); }
+template<> EXPORT void StmtNode<Evaluate>::accept(IRVisitor *v) const { v->visit((const Evaluate *)this); }
+template<> EXPORT void StmtNode<Prefetch>::accept(IRVisitor *v) const { v->visit((const Prefetch *)this); }
 
 Call::ConstString Call::debug_to_file = "debug_to_file";
 Call::ConstString Call::reinterpret = "reinterpret";
@@ -816,6 +816,7 @@ Call::ConstString Call::bool_to_mask = "bool_to_mask";
 Call::ConstString Call::cast_mask = "cast_mask";
 Call::ConstString Call::select_mask = "select_mask";
 Call::ConstString Call::extract_mask_element = "extract_mask_element";
+Call::ConstString Call::require = "require";
 Call::ConstString Call::size_of_halide_buffer_t = "size_of_halide_buffer_t";
 
 Call::ConstString Call::buffer_get_min = "_halide_buffer_get_min";
@@ -837,6 +838,7 @@ Call::ConstString Call::buffer_is_bounds_query = "_halide_buffer_is_bounds_query
 Call::ConstString Call::buffer_init = "_halide_buffer_init";
 Call::ConstString Call::buffer_init_from_buffer = "_halide_buffer_init_from_buffer";
 Call::ConstString Call::buffer_crop = "_halide_buffer_crop";
+Call::ConstString Call::buffer_set_bounds = "_halide_buffer_set_bounds";
 Call::ConstString Call::trace = "halide_trace_helper";
 
 }

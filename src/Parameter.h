@@ -122,16 +122,20 @@ public:
     /** Tests if this handle is non-nullptr */
     EXPORT bool defined() const;
 
-    /** Get and set constraints for the min, extent, and stride (see
-     * ImageParam::set_extent) */
+    /** Get and set constraints for the min, extent, stride, and estimates on
+     * the min/extent. */
     //@{
     EXPORT void set_min_constraint(int dim, Expr e);
     EXPORT void set_extent_constraint(int dim, Expr e);
     EXPORT void set_stride_constraint(int dim, Expr e);
+    EXPORT void set_min_constraint_estimate(int dim, Expr min);
+    EXPORT void set_extent_constraint_estimate(int dim, Expr extent);
     EXPORT void set_host_alignment(int bytes);
     EXPORT Expr min_constraint(int dim) const;
     EXPORT Expr extent_constraint(int dim) const;
     EXPORT Expr stride_constraint(int dim) const;
+    EXPORT Expr min_constraint_estimate(int dim) const;
+    EXPORT Expr extent_constraint_estimate(int dim) const;
     EXPORT int host_alignment() const;
     //@}
 
@@ -142,6 +146,8 @@ public:
     EXPORT Expr get_min_value() const;
     EXPORT void set_max_value(Expr e);
     EXPORT Expr get_max_value() const;
+    EXPORT void set_estimate(Expr e);
+    EXPORT Expr get_estimate() const;
     // @}
 };
 
@@ -162,6 +168,15 @@ public:
     /** Get an expression representing the stride of this image in the
      * given dimension */
     EXPORT Expr stride() const;
+
+    /** Get the estimate of the minimum coordinate of this image parameter
+     * in the given dimension. Return an undefined expr if the estimate is
+     * never specified. */
+    EXPORT Expr min_estimate() const;
+
+    /** Get the estimate of the extent of this image parameter in the given
+     * dimension. Return an undefined expr if the estimate is never specified. */
+    EXPORT Expr extent_estimate() const;
 
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
@@ -199,6 +214,18 @@ public:
 
     /** Set the min and extent in one call. */
     EXPORT Dimension set_bounds(Expr min, Expr extent);
+
+    /** Set the estimate of the min in a given dimension to equal the given
+     * expression. This value is only used by the auto-scheduler. */
+    EXPORT Dimension set_min_estimate(Expr e);
+
+    /** Set the estimate of the extent in a given dimension to equal the given
+     * expression. This value is only used by the auto-scheduler. */
+    EXPORT Dimension set_extent_estimate(Expr e);
+
+    /** Set the min and extent estimates in one call. These values are only
+     * used by the auto-scheduler. */
+    EXPORT Dimension set_bounds_estimate(Expr min, Expr extent);
 
     /** Get a different dimension of the same buffer */
     // @{

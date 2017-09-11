@@ -163,5 +163,11 @@ Expr inline_function(Expr e, Function f) {
     return e;
 }
 
+// Inline all calls to 'f' inside 'caller'
+void inline_function(Function caller, Function f) {
+    Inliner i(f);
+    caller.mutate(&i);
+}
+
 }
 }

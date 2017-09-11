@@ -51,5 +51,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<MatMul> register_me{"mat_mul"};
-}
+}  // namespace
+
+HALIDE_REGISTER_GENERATOR(MatMul, mat_mul)
