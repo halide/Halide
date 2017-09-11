@@ -75,7 +75,6 @@ extern int floor;
 extern int ceilf;
 extern int ceil;
 extern int write;
-    //extern void log_printf(const char *fmt, ...);
 
 }  // extern "C"
 
