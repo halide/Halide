@@ -103,6 +103,9 @@ ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
 
 namespace Internal {
 
+IRPrinter::~IRPrinter() {
+}
+
 void IRPrinter::test() {
     Type i32 = Int(32);
     Type f32 = Float(32);
