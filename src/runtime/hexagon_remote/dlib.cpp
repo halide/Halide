@@ -219,6 +219,7 @@ struct dlib_t {
 
                 if (sym->st_value == 0) {
                     if (!sym_name) {
+                        log_printf("Symbol name not defined");
                         return false;
                     }
                     S = (const char *)halide_get_symbol(sym_name);
@@ -340,14 +341,6 @@ struct dlib_t {
             if (!do_relocations(rel, rel_count)) {
                 return false;
             }
-        }
-        if (!fini) {
-            // This is not an error.
-            log_printf("DT_FINI not defined\n");
-        }
-        if (!init) {
-            // This is not an error.
-            log_printf("DT_INIT not defined\n");
         }
         return true;
     }

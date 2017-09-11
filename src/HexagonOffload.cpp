@@ -190,6 +190,40 @@ std::string hex(uint32_t x) {
     return buffer;
 }
 
+std::string section_type_string(Section::Type type) {
+    switch(type) {
+    case Section::SHT_NULL: return "SHT_NULL";
+    case Section::SHT_PROGBITS: return "SHT_PROGBITS";
+    case Section::SHT_SYMTAB: return "SHT_SYMTAB";
+    case Section::SHT_STRTAB: return "SHT_STRTAB";
+    case Section::SHT_RELA: return "SHT_RELA";
+    case Section::SHT_HASH: return "SHT_HASH";
+    case Section::SHT_DYNAMIC: return "SHT_DYNAMIC";
+    case Section::SHT_NOTE: return "SHT_NOTE";
+    case Section::SHT_NOBITS: return "SHT_NOBITS";
+    case Section::SHT_REL: return "SHT_REL";
+    case Section::SHT_SHLIB: return "SHT_SHLIB";
+    case Section::SHT_DYNSYM: return "SHT_DYNSYM";
+    case Section::SHT_LOPROC: return "SHT_LOPROC";
+    case Section::SHT_HIPROC: return "SHT_HIPROC";
+    case Section::SHT_LOUSER: return "SHT_LOUSER";
+    case Section::SHT_HIUSER: return "SHT_HIUSER";
+    default:
+        return "UNKNOWN TYPE";
+    }
+}
+std::string print_sections(Object &obj) {
+    std::ostringstream oss;
+    if (obj.sections_size() == 0) {
+        oss << "No sections in object\n";
+        return oss.str();
+    }
+    for (Object::const_section_iterator i = obj.sections_begin(); i != obj.sections_end(); ++i) {
+        oss << i->get_name() << ", Type = " << section_type_string(i->get_type()) << ", Size = " << hex(i->get_size()) << ", Alignment = " << i->get_alignment() << "\n";
+    }
+    return oss.str();
+}
+
 void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
     uint32_t inst = *((uint32_t *)addr);
     debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
@@ -945,7 +979,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         ctors->prepend_contents((uint32_t) 0);
     }
 
-    debug(2) << obj->print_sections();
+    debug(2) << print_sections(*obj);
 
     // Link into a shared object.
     std::string soname = "lib" + device_code.name() + ".so";
@@ -1000,7 +1034,6 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
 
     Halide::Buffer<uint8_t> result_buf(shared_object.size(), device_code.name());
     memcpy(result_buf.data(), shared_object.data(), shared_object.size());
-    debug(4) << "Finished with "  << soname << ". Writing to disk\n";
 
     return result_buf;
 }

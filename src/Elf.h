@@ -269,13 +269,6 @@ public:
     }
     uint64_t get_alignment() const { return alignment; }
 
-    void fixup_relocations_offset(uint64_t offset_fixup) {
-        for (relocation_iterator ri = relocations_begin(); ri != relocations_end(); ++ri) {
-            Relocation &r = *ri;
-            uint64_t offset = r.get_offset();
-            r.set_offset(offset + offset_fixup);
-        }
-    }
     Section &set_contents(std::vector<char> contents) {
         this->contents = std::move(contents);
         return *this;
@@ -295,7 +288,10 @@ public:
         this->contents.insert(this->contents.begin(), begin, end);
         // When we add data to the start of the section, we need to fix up
         // the offsets of relocations linked to this section.
-        fixup_relocations_offset(off);
+        for (auto ri = relocations_begin(); ri != relocations_end(); ++ri) {
+            Relocation &r = *ri;
+            r.set_offset(r.get_offset() + off);
+        }
         return *this;
     }
     /** Set, append or prepend an object to the contents, assuming T is a
@@ -339,7 +335,6 @@ public:
     const_relocation_iterator relocations_end() const { return relocs.end(); }
     iterator_range<const_relocation_iterator> relocations() const { return {relocs.begin(), relocs.end()}; }
     size_t relocations_size() const { return relocs.size(); }
-    std::string section_type_string() const;
 };
 
 /** Base class for a target architecture to implement the target
@@ -460,7 +455,6 @@ public:
     section_iterator add_section(const std::string &name, Section::Type type);
     section_iterator add_relocation_section(const Section &for_section);
     section_iterator erase_section(section_iterator i) { return secs.erase(i); }
-    std::string print_sections() const;
 
     section_iterator merge_sections(const std::vector<section_iterator> &sections);
     section_iterator merge_text_sections();
