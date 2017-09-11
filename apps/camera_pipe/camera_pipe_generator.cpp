@@ -323,7 +323,10 @@ Func CameraPipe::build() {
 
     Func denoised = hot_pixel_suppression(shifted);
     Func deinterleaved = deinterleave(denoised);
-    auto demosaiced = apply<Demosaic>(deinterleaved);
+    auto demosaiced = create<Demosaic>()
+        // TODO: uncomment this when auto_schedule is added
+        // .set_generator_param("auto_schedule", auto_schedule)
+        .apply(deinterleaved);
     Func corrected = color_correct(demosaiced->output);
     Func processed = apply_curve(corrected);
 

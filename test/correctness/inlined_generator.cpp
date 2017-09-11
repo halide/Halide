@@ -65,15 +65,10 @@ int main(int argc, char **argv) {
         // If you need to set GeneratorParams, it's a bit trickier: 
         // you must first create the Generator, then set the GeneratorParam(s),
         // than call apply().
-        auto gen = context.create<Example>();  // gen's type is std::unique_ptr<Example>
-
-        // GeneratorParams must be set before calling apply()
-        // (you'll assert-fail if you set them later).
-        gen->compiletime_factor.set(2.5f);
-        // ScheduleParams can be set before or after the call to apply().
-        gen->vectorize.set(false);
-
-        gen->apply(kRuntimeFactor, kRuntimeOffset);
+        auto gen = context.create<Example>()
+            .set_generator_param("compiletime_factor", 2.5f)
+            .set_schedule_param("vectorize", false)
+            .apply(kRuntimeFactor, kRuntimeOffset);
 
 
         Buffer<int32_t> img = gen->realize(kSize, kSize, 3);

@@ -225,6 +225,7 @@
 namespace Halide {
 
 template<typename T> class Buffer;
+class GeneratorContext;
 
 namespace Internal {
 
@@ -2171,6 +2172,43 @@ private:
 
 class GeneratorStub;
 
+template<class T>
+class GeneratorBuilder {
+public:
+    template<typename V>
+    GeneratorBuilder<T> &set_generator_param(const std::string &name, const V &value) {
+        generator->set_generator_param(name, value);
+        return *this;
+    }
+
+    template<typename V>
+    GeneratorBuilder<T> &set_schedule_param(const std::string &name, const V &value) {
+        generator->set_schedule_param(name, value);
+        return *this;
+    }
+
+    template <typename... Args>
+    std::unique_ptr<T> apply(const Args &...args) {
+        generator->apply(args...);
+        std::unique_ptr<T> result(std::move(generator));
+        generator.reset();
+        return std::move(result);
+    }
+
+private:
+    std::unique_ptr<T> generator;
+
+    friend class ::Halide::GeneratorContext;
+    GeneratorBuilder(const GeneratorContext &context) : generator(T::create(context)) {}
+
+    // Move is OK
+    GeneratorBuilder(GeneratorBuilder&& that) = default;
+    GeneratorBuilder &operator=(GeneratorBuilder&& that) = default;
+    // Copy is not OK
+    GeneratorBuilder(const GeneratorBuilder &) = delete;
+    GeneratorBuilder &operator=(const GeneratorBuilder &) = delete;
+};
+
 }  // namespace Internal
 
 /** GeneratorContext is an abstract base class that is used when constructing a Generator Stub;
@@ -2203,15 +2241,13 @@ public:
     virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
 
     template <typename T>
-    std::unique_ptr<T> create() const {
-        return T::create(*this);
+    Internal::GeneratorBuilder<T> create() const {
+        return Internal::GeneratorBuilder<T>(*this);
     }
 
     template <typename T, typename... Args>
     std::unique_ptr<T> apply(const Args &...args) const {
-        auto t = this->create<T>();
-        t->apply(args...);
-        return t;
+        return this->create<T>().apply(args...);
     }
 
 protected:
@@ -2730,6 +2766,7 @@ public:
     }
 
     using Internal::GeneratorBase::apply;
+    using Internal::GeneratorBase::create;
 
     template <typename... Args>
     void apply(const Args &...args) {
