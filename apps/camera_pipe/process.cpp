@@ -75,8 +75,8 @@ int main(int argc, char **argv) {
 
     best = benchmark(timing_iterations, 1, [&]() {
         camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
-                    color_temp, gamma, contrast, blackLevel, whiteLevel,
-                    output);
+            color_temp, gamma, contrast, blackLevel, whiteLevel,
+            output);
     });
     fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
     fprintf(stderr, "output: %s\n", argv[6]);

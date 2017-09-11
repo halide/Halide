@@ -347,7 +347,26 @@ Func CameraPipe::build() {
     Pipeline p(processed);
 
     // Schedule
-    if (!auto_schedule) {
+    if (auto_schedule) {
+        Pipeline p(processed);
+
+        matrix_3200.dim(0).set_bounds_estimate(0, 4);
+        matrix_3200.dim(1).set_bounds_estimate(0, 3);
+        matrix_7000.dim(0).set_bounds_estimate(0, 4);
+        matrix_7000.dim(1).set_bounds_estimate(0, 3);
+
+        input.dim(0).set_bounds_estimate(0, 2592);
+        input.dim(1).set_bounds_estimate(0, 1968);
+
+        processed
+            .estimate(c, 0, 3)
+            .estimate(x, 0, 2592)
+            .estimate(y, 0, 1968); 
+
+        p.auto_schedule(get_target());
+
+    } else {
+
         Expr out_width = processed.output_buffer().width();
         Expr out_height = processed.output_buffer().height();
         // In HVX 128, we need 2 threads to saturate HVX with work,
@@ -410,32 +429,7 @@ Func CameraPipe::build() {
             .bound(c, 0, 3)
             .bound(x, 0, ((out_width)/(2*vec))*(2*vec))
             .bound(y, 0, (out_height/strip_size)*strip_size);
-    } else {
-        Pipeline p(processed);
-
-        matrix_3200.dim(0).set_bounds_estimate(0, 4);
-        matrix_3200.dim(1).set_bounds_estimate(0, 3);
-        matrix_7000.dim(0).set_bounds_estimate(0, 4);
-        matrix_7000.dim(1).set_bounds_estimate(0, 3);
-
-        input.dim(0).set_bounds_estimate(0, 2592);
-        input.dim(1).set_bounds_estimate(0, 1968);
-
-#if 0
-        color_temp.set_estimate();
-        gamma.set_estimate();
-        contrast.set_estimate();
-        blackLevel.set_estimate(1);
-        whiteLevel.set_estimate(1);
-#endif
-
-        processed
-            .estimate(c, 0, 3)
-            .estimate(x, 0, 2592)
-            .estimate(y, 0, 1968); 
-
-        p.auto_schedule(get_target());
-    }
+    } 
 
     return processed;
 };
