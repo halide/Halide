@@ -149,7 +149,9 @@ public:
     void schedule() {
         Pipeline p(output); 
 
-        if (!auto_schedule) {
+        if (auto_schedule) {
+            p.auto_schedule(get_target());
+        } else {
             int vec = get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
@@ -174,8 +176,6 @@ public:
                     f.align_storage(x, vec);
                 }
             }
-        } else {
-            p.auto_schedule(get_target());
         }
     }
 
