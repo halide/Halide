@@ -212,14 +212,14 @@ std::string section_type_string(Section::Type type) {
         return "UNKNOWN TYPE";
     }
 }
-std::string print_sections(Object &obj) {
+std::string print_sections(const Object &obj) {
     std::ostringstream oss;
     if (obj.sections_size() == 0) {
         oss << "No sections in object\n";
         return oss.str();
     }
-    for (Object::const_section_iterator i = obj.sections_begin(); i != obj.sections_end(); ++i) {
-        oss << i->get_name() << ", Type = " << section_type_string(i->get_type()) << ", Size = " << hex(i->get_size()) << ", Alignment = " << i->get_alignment() << "\n";
+    for (const Section &s: obj.sections()) {
+        oss << s.get_name() << ", Type = " << section_type_string(s.get_type()) << ", Size = " << hex(s.get_size()) << ", Alignment = " << s.get_alignment() << "\n";
     }
     return oss.str();
 }

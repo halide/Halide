@@ -284,14 +284,17 @@ public:
         return *this;
     }
     template <typename It>
-    Section &prepend_contents(It begin, It end, uint64_t off) {
+    Section &prepend_contents(It begin, It end) {
+        typedef typename std::iterator_traits<It>::value_type T;
+        uint64_t size_bytes = std::distance(begin, end) * sizeof(T);
         this->contents.insert(this->contents.begin(), begin, end);
+
         // When we add data to the start of the section, we need to fix up
-        // the offsets of relocations linked to this section.
-        for (auto ri = relocations_begin(); ri != relocations_end(); ++ri) {
-            Relocation &r = *ri;
-            r.set_offset(r.get_offset() + off);
+        // the offsets of the relocations linked to this section.
+        for (Relocation &r : relocations()) {
+            r.set_offset(r.get_offset() + size_bytes);
         }
+
         return *this;
     }
     /** Set, append or prepend an object to the contents, assuming T is a
@@ -307,7 +310,7 @@ public:
     }
     template <typename T>
     Section &prepend_contents(const T& x) {
-        return prepend_contents((const char *)&x, (const char *)(&x + 1), sizeof(T));
+        return prepend_contents((const char *)&x, (const char *)(&x + 1));
     }
     const std::vector<char> &get_contents() const { return contents; }
     contents_iterator contents_begin() { return contents.begin(); }
