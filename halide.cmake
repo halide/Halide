@@ -331,7 +331,10 @@ endfunction()
 # Given the target of a static library, return the path to the actual .a file
 function(_halide_get_static_library_actual_path TARGET OUTVAR)
   get_target_property(DIR ${TARGET} LIBRARY_OUTPUT_DIRECTORY)
-  if (NOT "${DIR}" STREQUAL "")
+  if (NOT "${DIR}")
+    # Set to empty string since it could be "DIR-NOTFOUND"
+    set(DIR "")
+  else()
     set(DIR "${DIR}/")
   endif()
   set(${OUTVAR} "${DIR}${CMAKE_CFG_INTDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${TARGET}${CMAKE_STATIC_LIBRARY_SUFFIX}" PARENT_SCOPE)
