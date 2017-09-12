@@ -6,6 +6,9 @@ namespace Internal {
 using std::pair;
 using std::vector;
 
+IRMutator::~IRMutator() {
+}
+
 Expr IRMutator::mutate(const Expr &e) {
     if (e.defined()) {
         e.accept(this);
