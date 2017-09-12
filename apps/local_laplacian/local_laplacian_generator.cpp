@@ -16,6 +16,8 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
     Output<Buffer<uint16_t>>    output{"output", 3};
 
     void generate() {
+        const int J = pyramid_levels;
+        
         /* THE ALGORITHM */
         // Make the remapping function as a lookup table.
         Expr fx = cast<float>(x) / 256.0f;
@@ -37,26 +39,26 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
         Expr idx = gray(x, y)*cast<float>(levels-1)*256.0f;
         idx = clamp(cast<int>(idx), 0, (levels-1)*256);
         gPyramid[0](x, y, k) = beta*(gray(x, y) - level) + level + remap(idx - 256*k);
-        for (int j = 1; j < pyramid_levels; j++) {
+        for (int j = 1; j < J; j++) {
             gPyramid[j](x, y, k) = downsample(gPyramid[j-1])(x, y, k);
         }
 
         // Get its laplacian pyramid
         Func lPyramid[maxJ];
-        lPyramid[pyramid_levels-1](x, y, k) = gPyramid[pyramid_levels-1](x, y, k);
-        for (int j = pyramid_levels-2; j >= 0; j--) {
+        lPyramid[J-1](x, y, k) = gPyramid[J-1](x, y, k);
+        for (int j = J-2; j >= 0; j--) {
             lPyramid[j](x, y, k) = gPyramid[j](x, y, k) - upsample(gPyramid[j+1])(x, y, k);
         }
 
         // Make the Gaussian pyramid of the input
         inGPyramid[0](x, y) = gray(x, y);
-        for (int j = 1; j < pyramid_levels; j++) {
+        for (int j = 1; j < J; j++) {
             inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
         }
 
         // Make the laplacian pyramid of the output
         Func outLPyramid[maxJ];
-        for (int j = 0; j < pyramid_levels; j++) {
+        for (int j = 0; j < J; j++) {
             // Split input pyramid value into integer and floating parts
             Expr level = inGPyramid[j](x, y) * cast<float>(levels-1);
             Expr li = clamp(cast<int>(level), 0, levels-2);
@@ -66,8 +68,8 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
         }
 
         // Make the Gaussian pyramid of the output
-        outGPyramid[pyramid_levels-1](x, y) = outLPyramid[pyramid_levels-1](x, y);
-        for (int j = pyramid_levels-2; j >= 0; j--) {
+        outGPyramid[J-1](x, y) = outLPyramid[J-1](x, y);
+        for (int j = J-2; j >= 0; j--) {
             outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
         }
 
@@ -82,6 +84,7 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 
     void schedule() {
         /* THE SCHEDULE */
+        const int J = pyramid_levels;
 
         if (auto_schedule) {
             // Provide estimates on the input image
@@ -104,7 +107,7 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
             remap.compute_root();
             Var xi, yi;
             output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
-            for (int j = 0; j < pyramid_levels; j++) {
+            for (int j = 0; j < J; j++) {
                 int blockw = 16, blockh = 8;
                 if (j > 3) {
                     blockw = 2;
@@ -132,9 +135,8 @@ struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
                     .store_at(output, yo).compute_at(output, y).fold_storage(y, 8)
                     .vectorize(x, 8);
             }
-            outGPyramid[0]
-                .compute_at(output, y).vectorize(x, 8);
-            for (int j = 5; j < pyramid_levels; j++) {
+            outGPyramid[0].compute_at(output, y).vectorize(x, 8);
+            for (int j = 5; j < J; j++) {
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);
                 outGPyramid[j].compute_root();
