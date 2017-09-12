@@ -246,6 +246,10 @@ void CodeGen_X86::visit(const Cast *op) {
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
+// TODO: recent builds of LLVM removed these intrinsics; in theory LLVM IR 
+// will natively support them, but in practice they aren't being generated.
+// Disabling temporarily to get buildbots unstuck.
+// See https://github.com/halide/Halide/issues/2342
 #if LLVM_VERSION < 60
         {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.pavg.b",
          u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
