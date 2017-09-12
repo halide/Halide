@@ -30,7 +30,7 @@ Func interleave_y(Func a, Func b) {
 
 class Demosaic : public Halide::Generator<Demosaic> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
+    bool auto_schedule = false;
 
     ScheduleParam<LoopLevel> intermed_compute_at{"intermed_compute_at"};
     ScheduleParam<LoopLevel> intermed_store_at{"intermed_store_at"};
@@ -147,7 +147,6 @@ public:
     }
 
     void schedule() {
-#if 0
         Pipeline p(output); 
 
         if (!auto_schedule) {
@@ -178,7 +177,6 @@ public:
         } else {
             p.auto_schedule(get_target());
         }
-#endif
     }
 
 private:
@@ -340,7 +338,9 @@ Func CameraPipe::build() {
 
     Func denoised = hot_pixel_suppression(shifted);
     Func deinterleaved = deinterleave(denoised);
-    auto demosaiced = apply<Demosaic>(deinterleaved);
+    auto demosaiced = create<Demosaic>();
+    demosaiced->auto_schedule.set(auto_schedule);
+    demosaiced->apply(deinterleaved);
     Func corrected = color_correct(demosaiced->output);
     Func processed = apply_curve(corrected);
 
