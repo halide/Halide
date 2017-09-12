@@ -28,11 +28,11 @@ const Definition &get_stage_definition(const Function &f, int stage_num) {
 }
 
 // Collect the bounds of all the externally referenced buffers in a stmt.
-class CollectExternalBufferBounds : public IRGraphVisitor {
+class CollectExternalBufferBounds : public IRVisitor {
 public:
     map<string, Box> buffers;
 
-    using IRGraphVisitor::visit;
+    using IRVisitor::visit;
 
     void add_buffer_bounds(const string &name, Buffer<> image, Parameter param, int dims) {
         Box b;
@@ -49,14 +49,13 @@ public:
     }
 
     void visit(const Call *op) {
-        IRGraphVisitor::visit(op);
+        IRVisitor::visit(op);
         add_buffer_bounds(op->name, op->image, op->param, (int)op->args.size());
     }
 
     void visit(const Variable *op) {
         if (op->param.defined() &&
-            op->param.is_buffer() &&
-            buffers.find(op->param.name()) == buffers.end()) {
+            op->param.is_buffer()) {
             add_buffer_bounds(op->name, Buffer<>(), op->param, op->param.dimensions());
         }
     }
