@@ -30,7 +30,7 @@ Func interleave_y(Func a, Func b) {
 
 class Demosaic : public Halide::Generator<Demosaic> {
 public:
-    bool auto_schedule = false;
+    GeneratorParam<bool> auto_schedule{"auto_schedule", false};
 
     ScheduleParam<LoopLevel> intermed_compute_at{"intermed_compute_at"};
     ScheduleParam<LoopLevel> intermed_store_at{"intermed_store_at"};
@@ -150,6 +150,11 @@ public:
         Pipeline p(output); 
 
         if (auto_schedule) {
+            output
+                .estimate(c, 0, 3)
+                .estimate(x, 0, 2592)
+                .estimate(y, 0, 1968); 
+
             p.auto_schedule(get_target());
         } else {
             int vec = get_target().natural_vector_size(UInt(16));
@@ -340,6 +345,13 @@ Func CameraPipe::build() {
     Func deinterleaved = deinterleave(denoised);
     auto demosaiced = create<Demosaic>();
     demosaiced->auto_schedule.set(auto_schedule);
+
+    // Need to set input estimates before demosaiced is auto-scheduled
+    if (auto_schedule) {
+        input.dim(0).set_bounds_estimate(0, 2592);
+        input.dim(1).set_bounds_estimate(0, 1968);
+    }
+
     demosaiced->apply(deinterleaved);
     Func corrected = color_correct(demosaiced->output);
     Func processed = apply_curve(corrected);
@@ -354,9 +366,6 @@ Func CameraPipe::build() {
         matrix_3200.dim(1).set_bounds_estimate(0, 3);
         matrix_7000.dim(0).set_bounds_estimate(0, 4);
         matrix_7000.dim(1).set_bounds_estimate(0, 3);
-
-        input.dim(0).set_bounds_estimate(0, 2592);
-        input.dim(1).set_bounds_estimate(0, 1968);
 
         processed
             .estimate(c, 0, 3)
