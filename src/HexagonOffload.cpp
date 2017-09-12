@@ -963,10 +963,7 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         // the difference is filled with zeroes thereby initializing the .bss
         // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
-        debug(4) << "bss size = " << bss->get_size() << "\n";
-        Elf::Section::contents_iterator s = bss->contents_begin();
-        Elf::Section::contents_iterator e = bss->contents_end();
-        std::fill(s, e, 0);
+        std::fill(bss->contents_begin(), bss->contents_end(), 0);
     }
 
     auto dtors = obj->find_section(".dtors");
@@ -974,6 +971,9 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
         dtors->append_contents((uint32_t) 0);
     }
 
+    // We call the constructors in ctors backwards starting from special
+    // symbol __CTOR_END__ until we reach a 0 (NULL pointer value). So,
+    // prepend the .ctors section with 0.
     auto ctors = obj->find_section(".ctors");
     if (ctors != obj->sections_end()) {
         ctors->prepend_contents((uint32_t) 0);
