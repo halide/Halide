@@ -2730,6 +2730,7 @@ public:
     }
 
     using Internal::GeneratorBase::apply;
+    using Internal::GeneratorBase::create;
 
     template <typename... Args>
     void apply(const Args &...args) {
