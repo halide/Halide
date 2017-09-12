@@ -54,8 +54,7 @@ public:
     }
 
     void visit(const Variable *op) {
-        if (op->param.defined() &&
-            op->param.is_buffer()) {
+        if (op->param.defined() && op->param.is_buffer()) {
             add_buffer_bounds(op->name, Buffer<>(), op->param, op->param.dimensions());
         }
     }
