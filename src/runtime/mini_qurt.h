@@ -6,6 +6,9 @@ namespace Halide { namespace Runtime { namespace Internal { namespace Qurt {
 
 enum { QURT_EOK = 0 };
 
+}}}} // namespace Halide::Runtime::Internal::Qurt
+
+extern "C" {
 typedef unsigned int qurt_thread_t;
 /*
    Macros for QuRT thread attributes.
@@ -249,4 +252,4 @@ extern int qurt_hvx_lock(qurt_hvx_mode_t lock_mode);
 extern int qurt_hvx_unlock(void);
 extern int qurt_hvx_get_mode(void);
 
-}}}} // namespace Halide::Runtime::Internal::Qurt
+}
