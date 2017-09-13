@@ -103,10 +103,9 @@ extern "C" {
 // context lock. To ensure there's no way anything could ever
 // deadlock, we never attempt to acquire one while holding the
 // other.
-    // void (*dtor_pdb)() = &halide_thread_pool_cleanup;
 WEAK int halide_do_par_for(void *user_context,
-                      halide_task_t task,
-                      int min, int size, uint8_t *closure) {
+                           halide_task_t task,
+                           int min, int size, uint8_t *closure) {
     // Get the work queue mutex. We need to do a handful of hexagon-specific things.
     qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
     if (!work_queue.initialized) {
@@ -124,7 +123,7 @@ WEAK int halide_do_par_for(void *user_context,
     // Set the desired number of threads based on the current HVX
     // mode.
     int old_num_threads =
-        halide_set_num_threads((c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 2);
+        halide_set_num_threads((c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 4);
     // We're about to acquire the thread-pool lock, so we must drop
     // the hvx context lock, even though we'll likely reacquire it
     // immediately to do some work on this thread.
