@@ -143,4 +143,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(MatMul, "matmul");
+HALIDE_REGISTER_GENERATOR(MatMul, matmul)

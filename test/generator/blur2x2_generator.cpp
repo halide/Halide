@@ -63,6 +63,6 @@ private:
     Var x{"x"}, y{"y"}, c{"c"};
 };
 
-HALIDE_REGISTER_GENERATOR(Blur2x2, "blur2x2")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(Blur2x2, blur2x2)

@@ -17,18 +17,6 @@
 
 #include "HalideRuntime.h"
 
-#ifndef EXPORT
-#if defined(_WIN32) && defined(Halide_SHARED)
-#ifdef Halide_EXPORTS
-#define EXPORT __declspec(dllexport)
-#else
-#define EXPORT __declspec(dllimport)
-#endif
-#else
-#define EXPORT
-#endif
-#endif
-
 #ifdef _MSC_VER
 #define HALIDE_ALLOCA _alloca
 #else
@@ -80,6 +68,7 @@ enum struct BufferDeviceOwnership : int {
     Allocated,     ///> halide_device_free will be called when device ref count goes to zero
     WrappedNative, ///> halide_device_detach_native will be called when device ref count goes to zero
     Unmanaged,     ///> No free routine will be called when device ref count goes to zero
+    AllocatedDeviceAndHost, ///> Call device_and_host_free when DeveRefCount goes to zero.
 };
 
 /** A similar struct for managing device allocations. */
@@ -191,6 +180,7 @@ private:
             }
             buf.host = nullptr;
             alloc = nullptr;
+            set_host_dirty(false);
         }
         decref_dev();
     }
@@ -209,6 +199,8 @@ private:
                        "before the device allocation is freed.");
                 if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
                     buf.device_interface->detach_native(nullptr, &buf);
+                } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
+                    buf.device_interface->device_and_host_free(nullptr, &buf);
                 } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
                     buf.device_interface->device_free(nullptr, &buf);
                 }
@@ -470,7 +462,6 @@ public:
     }
 
     Buffer() {
-        memset(&buf, 0, sizeof(halide_buffer_t));
         buf.type = static_halide_type();
         make_shape_storage();
     }
@@ -1003,6 +994,9 @@ public:
     */
     template<typename T2, int D2>
     void copy_from(const Buffer<T2, D2> &other) {
+        assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
+        assert(!other.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
+
         Buffer<const T, D> src(other);
         Buffer<T, D> dst(*this);
 
@@ -1264,6 +1258,7 @@ public:
     /** Methods for managing any GPU allocation. */
     // @{
     void set_host_dirty(bool v = true) {
+        assert((!v || !device_dirty()) && "Cannot set host dirty when device is already dirty.");
         buf.set_host_dirty(v);
     }
 
@@ -1276,6 +1271,7 @@ public:
     }
 
     void set_device_dirty(bool v = true) {
+        assert((!v || !host_dirty()) && "Cannot set device dirty when host is already dirty.");
         buf.set_device_dirty(v);
     }
 
@@ -1350,6 +1346,33 @@ public:
         return ret;
     }
 
+    int device_and_host_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
+        return device_interface->device_and_host_malloc(ctx, &buf, device_interface);
+    }
+
+    int device_and_host_free(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
+        if (dev_ref_count) {
+            assert(dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost &&
+                   "Can't call device_and_host_free on a device handle not allocated with device_and_host_malloc. "
+                   "Free the source allocation or call device_detach_native instead.");
+            // Multiple people may be holding onto this dev field
+            assert(dev_ref_count->count == 1 &&
+                   "Multiple Halide::Runtime::Buffer objects share this device "
+                   "allocation. Freeing it would create dangling references. "
+                   "Don't call device_and_host_free on Halide buffers that you have copied or "
+                   "passed by value.");
+        }
+        int ret = 0;
+        if (buf.device_interface) {
+            ret = buf.device_interface->device_and_host_free(ctx, &buf);
+        }
+        if (dev_ref_count) {
+            delete dev_ref_count;
+            dev_ref_count = nullptr;
+        }
+        return ret;
+    }
+
     int device_sync(void *ctx = nullptr) {
         if (buf.device_interface) {
             return buf.device_interface->device_sync(ctx, &buf);
@@ -1360,6 +1383,14 @@ public:
 
     bool has_device_allocation() const {
         return buf.device != 0;
+    }
+
+    /** Return the method by which the device field is managed. */
+    BufferDeviceOwnership device_ownership() const {
+        if (dev_ref_count == nullptr) {
+            return BufferDeviceOwnership::Allocated;
+        }
+        return dev_ref_count->ownership;
     }
     // @}
 
@@ -1544,6 +1575,7 @@ public:
     operator()(const int *pos) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        assert(!device_dirty());
         return *((const not_void_T *)(address_of(pos)));
     }
 
@@ -1577,8 +1609,8 @@ public:
     // @}
 
     void fill(not_void_T val) {
-        for_each_value([=](T &v) {v = val;});
         set_host_dirty();
+        for_each_value([=](T &v) {v = val;});
     }
 
 private:
@@ -1943,6 +1975,14 @@ public:
         // We'll go via for_each_element. We need a variadic wrapper lambda.
         FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
         for_each_element(wrapper);
+    }
+
+    /** Check if an input buffer passed extern stage is a querying
+     * bounds. Compared to doing the host pointer check directly,
+     * this both adds clarity to code and will facilitate moving to
+     * another representation for bounds query arguments. */
+    bool is_bounds_query() {
+        return buf.is_bounds_query();
     }
 
 };

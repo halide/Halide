@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         // consumer(x, y) = (sin(x * y) +
         //                   sin(x * (y + 1)) +
         //                   sin((x + 1) * y) +
-        //                   sin((x + 1) * (y + 1)));
+        //                   sin((x + 1) * (y + 1))/4);
 
         // All calls to 'producer' have been replaced with the body of
         // 'producer', with the arguments substituted in for the

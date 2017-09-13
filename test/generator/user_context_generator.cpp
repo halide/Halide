@@ -27,6 +27,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<UserContext> register_my_gen{"user_context"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(UserContext, user_context)

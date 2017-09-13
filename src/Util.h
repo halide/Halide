@@ -19,15 +19,16 @@
 #include <string>
 #include <cstring>
 
-// by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
-#if defined(_WIN32) && defined(Halide_SHARED)
+#ifndef EXPORT
+#if defined(_MSC_VER)
 #ifdef Halide_EXPORTS
 #define EXPORT __declspec(dllexport)
 #else
 #define EXPORT __declspec(dllimport)
 #endif
 #else
-#define EXPORT
+#define EXPORT __attribute__((visibility("default")))
+#endif
 #endif
 
 // If we're in user code, we don't want certain functions to be inlined.
@@ -267,30 +268,30 @@ using std::make_index_sequence;
 #else
 
 // C++11: std::integer_sequence (etc) is standard in C++14 but not C++11, but
-// is easily written in C++11. This is a simple version that could 
+// is easily written in C++11. This is a simple version that could
 // probably be improved.
 
-template<typename T, T... Ints> 
+template<typename T, T... Ints>
 struct integer_sequence {
     static constexpr size_t size() { return sizeof...(Ints); }
 };
 
-template<typename T> 
+template<typename T>
 struct next_integer_sequence;
 
-template<typename T, T... Ints> 
+template<typename T, T... Ints>
 struct next_integer_sequence<integer_sequence<T, Ints...>> {
     using type = integer_sequence<T, Ints..., sizeof...(Ints)>;
 };
 
-template<typename T, T I, T N> 
+template<typename T, T I, T N>
 struct make_integer_sequence_helper {
     using type = typename next_integer_sequence<
         typename make_integer_sequence_helper<T, I+1, N>::type
     >::type;
 };
 
-template<typename T, T N> 
+template<typename T, T N>
 struct make_integer_sequence_helper<T, N, N> {
     using type = integer_sequence<T>;
 };

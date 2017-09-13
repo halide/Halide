@@ -1,7 +1,7 @@
 load("@halide//:halide.bzl", "halide_library")
 
 halide_library(
-  name="bazeldemo", 
+  name="bazeldemo",
   srcs=["bazeldemo_generator.cpp"]
 )
 

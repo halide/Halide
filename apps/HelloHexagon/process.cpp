@@ -79,6 +79,10 @@ int main(int argc, char **argv) {
     halide_hexagon_power_hvx_off(NULL);
     halide_hexagon_set_performance_mode(NULL, halide_hexagon_power_default);
 
+    // Copy the output back to the host. If the buffer is zero-copy (as
+    // it should be on a real device), this will be a no-op.
+    out.copy_to_host();
+
     // Validate that the algorithm did what we expect.
     const uint16_t gaussian5[] = { 1, 4, 6, 4, 1 };
     out.for_each_element([&](int x, int y, int c) {

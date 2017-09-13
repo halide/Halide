@@ -16,6 +16,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<VariableNumThreads> register_my_gen{"variable_num_threads"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(VariableNumThreads, variable_num_threads)

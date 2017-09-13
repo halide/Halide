@@ -22,6 +22,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<inverse_daubechies_x> register_my_gen{"inverse_daubechies_x"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(inverse_daubechies_x, inverse_daubechies_x)
