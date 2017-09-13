@@ -156,7 +156,7 @@ WEAK int halide_do_par_for(void *user_context,
 }
 
 WEAK int halide_do_task(void *user_context, halide_task_t f,
-                   int idx, uint8_t *closure) {
+                        int idx, uint8_t *closure) {
     // Dig the appropriate hvx mode out of the wrapped closure and lock it.
     wrapped_closure *c = (wrapped_closure *)closure;
     // We don't own the thread-pool lock here, so we can safely
