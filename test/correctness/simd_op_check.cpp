@@ -219,7 +219,7 @@ struct Test {
             bool found_it = false;
 
             std::ostringstream msg;
-            msg << op << " did not generate. Instead we got:\n";
+            msg << op << " did not generate for target=" << target.to_string() << ". Instead we got:\n";
 
             string line;
             while (getline(asm_file, line)) {
