@@ -1509,9 +1509,9 @@ public:
         return ExternFuncArgument(this->exprs().at(0));
     }
 
-    void set_estimate(Expr value) {
+    void set_estimate(const T &value) {
         for (Parameter &p : this->parameters_) {
-            p.set_estimate(value);
+            p.set_estimate(Expr(value));
         }
     }
 };
@@ -2746,7 +2746,7 @@ public:
 
     // This is public but intended only for use by the HALIDE_REGISTER_GENERATOR() macro.
     static std::unique_ptr<T> create(const Halide::GeneratorContext &context,
-                                     const std::string &registered_name, 
+                                     const std::string &registered_name,
                                      const std::string &stub_name) {
         auto g = create(context);
         g->set_generator_names(registered_name, stub_name);
@@ -2754,6 +2754,7 @@ public:
     }
 
     using Internal::GeneratorBase::apply;
+    using Internal::GeneratorBase::create;
 
     template <typename... Args>
     void apply(const Args &...args) {
