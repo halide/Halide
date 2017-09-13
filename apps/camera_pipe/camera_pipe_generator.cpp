@@ -149,14 +149,7 @@ public:
     void schedule() {
         Pipeline p(output); 
 
-        if (auto_schedule) {
-            output
-                .estimate(c, 0, 3)
-                .estimate(x, 0, 2592)
-                .estimate(y, 0, 1968); 
-
-            p.auto_schedule(get_target());
-        } else {
+        if (!auto_schedule) {
             int vec = get_target().natural_vector_size(UInt(16));
             bool use_hexagon = get_target().features_any_of({Target::HVX_64, Target::HVX_128});
             if (get_target().has_feature(Target::HVX_64)) {
@@ -345,13 +338,6 @@ Func CameraPipe::build() {
     Func deinterleaved = deinterleave(denoised);
     auto demosaiced = create<Demosaic>();
     demosaiced->auto_schedule.set(auto_schedule);
-
-    // Need to set input estimates before demosaiced is auto-scheduled
-    if (auto_schedule) {
-        input.dim(0).set_bounds_estimate(0, 2592);
-        input.dim(1).set_bounds_estimate(0, 1968);
-    }
-
     demosaiced->apply(deinterleaved);
     Func corrected = color_correct(demosaiced->output);
     Func processed = apply_curve(corrected);
@@ -361,6 +347,9 @@ Func CameraPipe::build() {
     // Schedule
     if (auto_schedule) {
         Pipeline p(processed);
+
+        input.dim(0).set_bounds_estimate(0, 2592);
+        input.dim(1).set_bounds_estimate(0, 1968);
 
         matrix_3200.dim(0).set_bounds_estimate(0, 4);
         matrix_3200.dim(1).set_bounds_estimate(0, 3);
