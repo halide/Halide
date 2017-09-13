@@ -20,6 +20,7 @@ public:
     }
 };
 
-Halide::RegisterGenerator<ErrorCodes> register_my_gen{"error_codes"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(ErrorCodes, error_codes)
+

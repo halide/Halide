@@ -1,4 +1,4 @@
-load("@halide//:halide_config.bzl", "halide_config_linkopts")
+load("@halide//:halide_config.bzl", "halide_system_libs")
 
 def halide_language_copts():
   _common_opts = [
@@ -56,7 +56,7 @@ def halide_language_linkopts():
           _osx_opts,
       "//conditions:default":
           _linux_opts,
-  }) + halide_config_linkopts().split(" ")
+  }) + halide_system_libs().split(" ")
 
 
 def halide_runtime_linkopts():
@@ -443,7 +443,7 @@ def _add_target_features(target, features):
 
 
 def _has_dupes(some_list):
-  clean = list(set(some_list))
+  clean = list(depset(some_list))
   return sorted(some_list) != sorted(clean)
 
 
@@ -501,8 +501,8 @@ _gengen_closure = rule(
 
 def _discard_useless_features(halide_target_features = []):
   # Discard target features which do not affect the contents of the runtime.
-  useless_features = set(["user_context", "no_asserts", "no_bounds_query", "profile"])
-  return sorted(list(set([f for f in halide_target_features if f not in useless_features])))
+  useless_features = depset(["user_context", "no_asserts", "no_bounds_query", "profile"])
+  return sorted(list(depset([f for f in halide_target_features if f not in useless_features])))
 
 def _halide_library_runtime_target_name(halide_target_features = []):
   return "_".join(["halide_library_runtime"] + _discard_useless_features(halide_target_features))
@@ -570,7 +570,7 @@ def _standard_library_runtime_features():
   return [f for f in standard_features] + [f + ["debug"] for f in standard_features]
 
 def _standard_library_runtime_names():
-  return set([_halide_library_runtime_target_name(f) for f in _standard_library_runtime_features()])
+  return depset([_halide_library_runtime_target_name(f) for f in _standard_library_runtime_features()])
 
 def halide_library_runtimes():
   runtime_package = ""
@@ -599,7 +599,7 @@ def halide_generator(name,
       srcs=srcs,
       alwayslink=1,
       copts=copts + halide_language_copts(),
-      deps=set([
+      deps=depset([
           "@halide//:language"
       ] + deps),
       tags=["manual"] + tags,
@@ -685,8 +685,8 @@ def halide_library_from_generator(name,
   if _has_dupes(extra_outputs):
     fail("Duplicate values in extra_outputs: %s" % str(extra_outputs))
 
-  full_halide_target_features = sorted(list(set(halide_target_features + ["c_plus_plus_name_mangling", "no_runtime"])))
-  user_halide_target_features = sorted(list(set(halide_target_features)))
+  full_halide_target_features = sorted(list(depset(halide_target_features + ["c_plus_plus_name_mangling", "no_runtime"])))
+  user_halide_target_features = sorted(list(depset(halide_target_features)))
 
   if "cpp" in extra_outputs:
     fail("halide_library('%s') doesn't support 'cpp' in extra_outputs; please depend on '%s_cc' instead." % (name, name))

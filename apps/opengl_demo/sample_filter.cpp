@@ -27,4 +27,4 @@ class SampleFilter: public Halide::Generator<SampleFilter>
     }
 };
 
-Halide::RegisterGenerator<SampleFilter> sample_filter_generator{"sample_filter"};
+HALIDE_REGISTER_GENERATOR(SampleFilter, sample_filter)

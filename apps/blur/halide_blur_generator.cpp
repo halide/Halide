@@ -85,6 +85,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<HalideBlur> register_me{"halide_blur"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(HalideBlur, halide_blur)

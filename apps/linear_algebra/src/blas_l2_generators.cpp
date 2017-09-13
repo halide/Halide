@@ -235,9 +235,9 @@ class GERGenerator :
 };
 
 
-RegisterGenerator<GEMVGenerator<float>>   register_sgemv("sgemv");
-RegisterGenerator<GEMVGenerator<double>>  register_dgemv("dgemv");
-RegisterGenerator<GERGenerator<float>>    register_sger("sger");
-RegisterGenerator<GERGenerator<double>>   register_dger("dger");
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(GEMVGenerator<float>, sgemv)
+HALIDE_REGISTER_GENERATOR(GEMVGenerator<double>, dgemv)
+HALIDE_REGISTER_GENERATOR(GERGenerator<float>, sger)
+HALIDE_REGISTER_GENERATOR(GERGenerator<double>, dger)

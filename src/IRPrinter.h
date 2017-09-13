@@ -69,6 +69,8 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const NameMangling &);
  */
 class IRPrinter : public IRVisitor {
 public:
+    EXPORT virtual ~IRPrinter();
+
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
     EXPORT IRPrinter(std::ostream &);

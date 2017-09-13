@@ -219,11 +219,12 @@ class AbsSumGenerator :
     }
 };
 
-RegisterGenerator<AXPYGenerator<float>>    register_saxpy("saxpy");
-RegisterGenerator<AXPYGenerator<double>>   register_daxpy("daxpy");
-RegisterGenerator<DotGenerator<float>>     register_sdot("sdot");
-RegisterGenerator<DotGenerator<double>>    register_ddot("ddot");
-RegisterGenerator<AbsSumGenerator<float>>  register_sasum("sasum");
-RegisterGenerator<AbsSumGenerator<double>> register_dasum("dasum");
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(AXPYGenerator<float>, saxpy)
+HALIDE_REGISTER_GENERATOR(AXPYGenerator<double>, daxpy)
+HALIDE_REGISTER_GENERATOR(DotGenerator<float>, sdot)
+HALIDE_REGISTER_GENERATOR(DotGenerator<double>, ddot)
+HALIDE_REGISTER_GENERATOR(AbsSumGenerator<float>, sasum)
+HALIDE_REGISTER_GENERATOR(AbsSumGenerator<double>, dasum)
+

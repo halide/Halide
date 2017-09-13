@@ -22,6 +22,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<haar_x> register_my_gen{"haar_x"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(haar_x, haar_x)

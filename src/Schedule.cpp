@@ -123,6 +123,7 @@ struct FuncScheduleContents {
     LoopLevel store_level, compute_level;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
+    std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     bool memoized;
 
@@ -133,6 +134,20 @@ struct FuncScheduleContents {
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {
         for (Bound &b : bounds) {
+            if (b.min.defined()) {
+                b.min = mutator->mutate(b.min);
+            }
+            if (b.extent.defined()) {
+                b.extent = mutator->mutate(b.extent);
+            }
+            if (b.modulus.defined()) {
+                b.modulus = mutator->mutate(b.modulus);
+            }
+            if (b.remainder.defined()) {
+                b.remainder = mutator->mutate(b.remainder);
+            }
+        }
+        for (Bound &b : estimates) {
             if (b.min.defined()) {
                 b.min = mutator->mutate(b.min);
             }
@@ -219,6 +234,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->compute_level = contents->compute_level;
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
+    copy.contents->estimates = contents->estimates;
     copy.contents->memoized = contents->memoized;
 
     // Deep-copy wrapper functions.
@@ -253,6 +269,14 @@ std::vector<Bound> &FuncSchedule::bounds() {
 
 const std::vector<Bound> &FuncSchedule::bounds() const {
     return contents->bounds;
+}
+
+std::vector<Bound> &FuncSchedule::estimates() {
+    return contents->estimates;
+}
+
+const std::vector<Bound> &FuncSchedule::estimates() const {
+    return contents->estimates;
 }
 
 std::map<std::string, Internal::FunctionPtr> &FuncSchedule::wrappers() {
@@ -294,6 +318,20 @@ const LoopLevel &FuncSchedule::compute_level() const {
 
 void FuncSchedule::accept(IRVisitor *visitor) const {
     for (const Bound &b : bounds()) {
+        if (b.min.defined()) {
+            b.min.accept(visitor);
+        }
+        if (b.extent.defined()) {
+            b.extent.accept(visitor);
+        }
+        if (b.modulus.defined()) {
+            b.modulus.accept(visitor);
+        }
+        if (b.remainder.defined()) {
+            b.remainder.accept(visitor);
+        }
+    }
+    for (const Bound &b : estimates()) {
         if (b.min.defined()) {
             b.min.accept(visitor);
         }

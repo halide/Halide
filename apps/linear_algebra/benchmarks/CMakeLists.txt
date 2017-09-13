@@ -23,9 +23,9 @@ if (LINEAR_ALGEBRA_USE_MATH_FLAGS)
     # this definition affects macros.h
 		set(MISC_DEFINITIONS -DENABLE_FTZ_DAZ)
 	endif()
-	message(STATUS "Setting FTZ/DAZ math flags in linear_algebra benchmarks")
 else()
-	message(STATUS "Not setting FTZ/DAZ math flags in linear_algebra benchmarks")
+  # Due to slowdowns, this merits a warning rather than merely a status
+	message(WARNING "linear_algebra: Not setting FTZ/DAZ math flags in benchmarks")
 endif()
 
 add_executable(halide_benchmarks halide_benchmarks.cpp)
@@ -34,10 +34,10 @@ target_compile_definitions(halide_benchmarks PRIVATE -DUSE_HALIDE ${MISC_DEFINIT
 target_link_libraries(halide_benchmarks PRIVATE halide_blas)
 list(APPEND BLAS_NAMES halide)
 
-message(STATUS "Checking for Eigen")
-find_package(Eigen3)
-if (Eigen3_FOUND)
-  message(STATUS " Found")
+find_package(Eigen3 QUIET)
+if (NOT Eigen3_FOUND)
+  message(STATUS "linear_algebra: Eigen3 Missing, skipping Eigen3 benchmarks")
+else()
   add_executable(eigen_benchmarks
     eigen_benchmarks.cpp
   )
@@ -51,7 +51,7 @@ if (Eigen3_FOUND)
 endif()
 
 if (NOT CBLAS_FOUND)
-  message(WARNING "No CBLAS header, skipping BLAS benchmarks")
+  message(STATUS "linear_algebra: No CBLAS header, skipping BLAS benchmarks")
 else()
   foreach(BLAS_VENDOR ${BLAS_VENDORS})
     string(TOLOWER ${BLAS_VENDOR} NAME)
@@ -74,11 +74,6 @@ else()
     list(APPEND BLAS_NAMES ${NAME})
   endforeach()
 endif()
-
-message(STATUS "Building Benchmarks")
-foreach(BLAS ${BLAS_NAMES})
-  message(STATUS " ${BLAS}")
-endforeach()
 
 # Large powers of two are a pathological case for the cache, so avoid
 # them for the benchmarks.
