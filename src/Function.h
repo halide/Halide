@@ -59,6 +59,8 @@ enum class NameMangling {
 
 namespace Internal {
 
+struct Call;
+
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
@@ -211,6 +213,17 @@ public:
      * buffer_t type. */
     EXPORT bool extern_definition_uses_old_buffer_t() const;
 
+    /** Get the proxy Expr for the extern stage. This is an expression
+     * known to have the same data access pattern as the extern
+     * stage. It must touch at least all of the memory that the extern
+     * stage does, though it is permissible for it to be conservative
+     * and touch a superset. For most Functions, including those with
+     * extern definitions, this will be an undefined Expr. */
+    // @{
+    EXPORT Expr extern_definition_proxy_expr() const;
+    EXPORT Expr &extern_definition_proxy_expr();
+    // @}
+
     /** Add an external definition of this Func. */
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
@@ -221,7 +234,10 @@ public:
                               bool uses_old_buffer_t);
 
     /** Retrive the arguments of the extern definition. */
+    // @{
     EXPORT const std::vector<ExternFuncArgument> &extern_arguments() const;
+    EXPORT std::vector<ExternFuncArgument> &extern_arguments();
+    // @}
 
     /** Get the name of the extern function called for an extern
      * definition. */
@@ -281,6 +297,12 @@ public:
     EXPORT void add_wrapper(const std::string &f, Function &wrapper);
     EXPORT const std::map<std::string, FunctionPtr> &wrappers() const;
     // @}
+
+    /** Check if a Function is a trivial wrapper around another
+     * Function, Buffer, or Parameter. Returns the Call node if it
+     * is. Otherwise returns null.
+     */
+    EXPORT const Call *is_wrapper() const;
 
     /** Replace every call to Functions in 'substitutions' keys by all Exprs
      * referenced in this Function to call to their substitute Functions (i.e.

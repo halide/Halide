@@ -20,11 +20,11 @@ extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, hali
         // bounds inference mode, and should mutate those input
         // buffers that have a null host pointer.
         printf("Doing flip_x bounds inference over [%d %d]\n", min, max);
-        if (in1->host == nullptr) {
+        if (in1->is_bounds_query()) {
             in1->dim[0].min = flipped_min;
             in1->dim[0].extent = extent;
         }
-        if (in2->host == nullptr) {
+        if (in2->is_bounds_query()) {
             in2->dim[0].min = flipped_min;
             in2->dim[0].extent = extent;
         }

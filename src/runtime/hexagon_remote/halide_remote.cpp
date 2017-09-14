@@ -15,6 +15,7 @@ extern "C" {
 #include "dlib.h"
 #include "pipeline_context.h"
 #include "log.h"
+#include "known_symbols.h"
 
 const int stack_alignment = 128;
 const int stack_size = 1024 * 1024;
@@ -60,6 +61,34 @@ char mem_buf[num_buffers][buffer_size]
 
 }
 
+void *halide_get_symbol(const char *name) {
+    // Try dlsym first. We need to try both RTLD_SELF and
+    // RTLD_DEFAULT. Sometimes, RTLD_SELF finds a symbol when
+    // RTLD_DEFAULT does not. This is surprising, I *think* RLTD_SELF
+    // should search a subset of the symbols searched by
+    // RTLD_DEFAULT...
+    void *def = dlsym(RTLD_SELF, name);
+    if (def) {
+        return def;
+    }
+    def = dlsym(RTLD_DEFAULT, name);
+    if (def) {
+        return def;
+    }
+
+    // dlsym has some very unpredictable behavior that makes
+    // it randomly unable to find symbols. To mitigate this, check our known symbols mapping.
+    return get_known_symbol(name);
+}
+
+void *halide_load_library(const char *name) {
+    return dlopen(name, RTLD_LAZY);
+}
+
+void *halide_get_library_symbol(void *lib, const char *name) {
+    return dlsym(lib, name);
+}
+
 void *halide_malloc(void *user_context, size_t x) {
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
@@ -81,26 +110,6 @@ void halide_free(void *user_context, void *ptr) {
     free(ptr);
 }
 
-void *halide_get_symbol(const char *name) {
-    // We need to try both RTLD_SELF and RTLD_DEFAULT. Sometimes,
-    // RTLD_SELF finds a symbol when RTLD_DEFAULT does not. This is
-    // surprising, I *think* RLTD_SELF should search a subset of the
-    // symbols searched by RTLD_DEFAULT...
-    void *def = dlsym(RTLD_SELF, name);
-    if (def) {
-        return def;
-    }
-    return dlsym(RTLD_DEFAULT, name);
-}
-
-void *halide_load_library(const char *name) {
-    return dlopen(name, RTLD_LAZY);
-}
-
-void *halide_get_library_symbol(void *lib, const char *name) {
-    return dlsym(lib, name);
-}
-
 PipelineContext run_context(stack_alignment, stack_size);
 
 __attribute__((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
@@ -109,18 +118,14 @@ static bool use_dlopenbuf() {
     return dlopenbuf != NULL;
 }
 
-int halide_hexagon_remote_initialize_kernels_v3(const unsigned char *code, int codeLen, handle_t *module_ptr) {
+int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
+                                       const unsigned char *code, int codeLen,
+                                       handle_t *module_ptr) {
     void *lib = NULL;
     if (use_dlopenbuf()) {
-        // We need a unique soname, or dlopenbuf will return a
-        // previously opened library.
-        static int unique_id = 0;
-        char soname[256];
-        sprintf(soname, "libhalide_kernels%04d.so", __sync_fetch_and_add(&unique_id, 1));
-
         // We need to use RTLD_NOW, the libraries we build for Hexagon
         // offloading do not support lazy binding.
-        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_LOCAL | RTLD_NOW);
+        lib = dlopenbuf(soname, (const char*)code, codeLen, RTLD_GLOBAL | RTLD_NOW);
         if (!lib) {
             log_printf("dlopenbuf failed: %s\n", dlerror());
             return -1;
@@ -364,7 +369,7 @@ int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
     return result;
 }
 
-int halide_hexagon_remote_release_kernels_v2(handle_t module_ptr) {
+int halide_hexagon_remote_release_library(handle_t module_ptr) {
     if (use_dlopenbuf()) {
         dlclose(reinterpret_cast<void*>(module_ptr));
     } else {

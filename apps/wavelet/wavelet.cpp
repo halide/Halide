@@ -15,10 +15,9 @@ namespace {
 
 void _assert(bool condition, const char* fmt, ...) {
     if (!condition) {
-        char buffer[1024];
         va_list args;
         va_start(args, fmt);
-        vsnprintf(buffer, sizeof(buffer), fmt, args);
+        vfprintf(stderr, fmt, args);
         va_end(args);
         exit(-1);
     }
