@@ -27,13 +27,47 @@ const Definition &get_stage_definition(const Function &f, int stage_num) {
     return f.update(stage_num - 1);
 }
 
+// Collect the bounds of all the externally referenced buffers in a stmt.
+class CollectExternalBufferBounds : public IRVisitor {
+public:
+    map<string, Box> buffers;
+
+    using IRVisitor::visit;
+
+    void add_buffer_bounds(const string &name, Buffer<> image, Parameter param, int dims) {
+        Box b;
+        for (int i = 0; i < dims; ++i) {
+            string dim_name = std::to_string(i);
+            Expr buf_min_i = Variable::make(Int(32), name + ".min." + dim_name,
+                                            image, param, ReductionDomain());
+            Expr buf_extent_i = Variable::make(Int(32), name + ".extent." + dim_name,
+                                               image, param, ReductionDomain());
+            Expr buf_max_i = buf_min_i + buf_extent_i - 1;
+            b.push_back(Interval(buf_min_i, buf_max_i));
+        }
+        buffers.emplace(name, b);
+    }
+
+    void visit(const Call *op) {
+        IRVisitor::visit(op);
+        add_buffer_bounds(op->name, op->image, op->param, (int)op->args.size());
+    }
+
+    void visit(const Variable *op) {
+        if (op->param.defined() && op->param.is_buffer()) {
+            add_buffer_bounds(op->name, Buffer<>(), op->param, op->param.dimensions());
+        }
+    }
+};
+
 class InjectPrefetch : public IRMutator {
 public:
-    InjectPrefetch(const map<string, Function> &e)
-        : env(e), current_func(nullptr), stage(-1) { }
+    InjectPrefetch(const map<string, Function> &e, const map<string, Box> &buffers)
+        : env(e), external_buffers(buffers), current_func(nullptr), stage(-1) { }
 
 private:
     const map<string, Function> &env;
+    const map<string, Box> &external_buffers;
     const Function *current_func;
     int stage;
     Scope<Interval> scope;
@@ -53,7 +87,7 @@ private:
             internal_assert(v[1].substr(0, 1) == "s");
             {
                 string str = v[1].substr(1, v[1].size() - 1);
-                bool has_only_digits = (str.find_first_not_of( "0123456789" ) == string::npos);
+                bool has_only_digits = (str.find_first_not_of("0123456789") == string::npos);
                 internal_assert(has_only_digits);
                 stage = atoi(str.c_str());
             }
@@ -77,18 +111,13 @@ private:
             return b;
         }
 
-        // It is an image
+        // It is an external buffer.
         user_assert(env.find(name) == env.end())
             << "Prefetch to buffer \"" << name << "\" which has not been allocated\n" ;
-        Box b;
-        for (int i = 0; i < dims; i++) {
-            string dim_name = std::to_string(i);
-            Expr buf_min_i = Variable::make(Int(32), name + ".min." + dim_name);
-            Expr buf_extent_i = Variable::make(Int(32), name + ".extent." + dim_name);
-            Expr buf_max_i = buf_min_i + buf_extent_i - 1;
-            b.push_back(Interval(buf_min_i, buf_max_i));
-        }
-        return b;
+
+        const auto &iter = external_buffers.find(name);
+        internal_assert(iter != external_buffers.end());
+        return iter->second;
     }
 
     void visit(const Realize *op) {
@@ -376,7 +405,9 @@ public:
 } // anonymous namespace
 
 Stmt inject_prefetch(Stmt s, const map<string, Function> &env) {
-    return InjectPrefetch(env).mutate(s);
+    CollectExternalBufferBounds finder;
+    s.accept(&finder);
+    return InjectPrefetch(env, finder.buffers).mutate(s);
 }
 
 Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
