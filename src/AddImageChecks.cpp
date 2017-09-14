@@ -211,7 +211,8 @@ Stmt add_image_checks(Stmt s,
             vector<string> extern_users;
             for (size_t i = 0; i < order.size(); i++) {
                 Function f = env.find(order[i])->second;
-                if (f.has_extern_definition()) {
+                if (f.has_extern_definition() &&
+                    !f.extern_definition_proxy_expr().defined()) {
                     const vector<ExternFuncArgument> &args = f.extern_arguments();
                     for (size_t j = 0; j < args.size(); j++) {
                         if ((args[j].image_param.defined() &&

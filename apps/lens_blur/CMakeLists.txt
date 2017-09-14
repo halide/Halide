@@ -1,20 +1,15 @@
-# Generator
-halide_add_generator(lens_blur.generator
-                     SRCS lens_blur_generator.cpp)
-halide_add_aot_library(lens_blur
-                       GENERATOR_NAME lens_blur
-                       GENERATOR_TARGET lens_blur.generator
-                       GENERATOR_ARGS target=host auto_schedule=false
-                       GENERATED_FUNCTION lens_blur)
-halide_add_aot_library(lens_blur_auto_schedule
-                       GENERATOR_NAME lens_blur
-                       GENERATOR_TARGET lens_blur.generator
-                       GENERATOR_ARGS target=host auto_schedule=true
-                       GENERATED_FUNCTION lens_blur_auto_schedule)
+add_executable(lens_blur_process process.cpp)
+halide_use_image_io(lens_blur_process)
 
-# Final executable
-add_executable(lensblur_process process.cpp)
-halide_add_aot_library_dependency(lensblur_process lens_blur)
-halide_add_aot_library_dependency(lensblur_process lens_blur_auto_schedule)
-halide_use_image_io(lensblur_process)
-target_compile_options(lensblur_process PRIVATE "-std=c++11")
+halide_generator(lens_blur.generator SRCS lens_blur_generator.cpp)
+foreach(AUTO_SCHEDULE false true)
+    if(${AUTO_SCHEDULE})
+        set(LIB lens_blur_auto_schedule)
+    else()
+        set(LIB lens_blur)
+    endif()
+    halide_library_from_generator(${LIB}
+                                  GENERATOR lens_blur.generator
+                                  GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE})
+    target_link_libraries(lens_blur_process PRIVATE ${LIB})
+endforeach()
