@@ -9,6 +9,7 @@
 #include "Var.h"
 #include "Lerp.h"
 #include "Simplify.h"
+#include "Deinterleave.h"
 
 namespace Halide {
 namespace Internal {
@@ -102,22 +103,25 @@ inline float neg_inf_f32() {return -INFINITY;}
 inline float inf_f32() {return INFINITY;}
 inline bool is_nan_f32(float x) {return x != x;}
 inline bool is_nan_f64(double x) {return x != x;}
-template<typename A, typename B> 
-A reinterpret(const B &b) { 
+
+template<typename A, typename B>
+inline A reinterpret(const B &b) {
     #if __cplusplus >= 201103L
     static_assert(sizeof(A) == sizeof(B), "type size mismatch");
     #endif
-    A a; 
-    memcpy(&a, &b, sizeof(a)); 
+    A a;
+    memcpy(&a, &b, sizeof(a));
     return a;
 }
-inline float float_from_bits(uint32_t bits) {return reinterpret<float, uint32_t>(bits);}
+inline float float_from_bits(uint32_t bits) {
+    return reinterpret<float, uint32_t>(bits);
+}
 
-template<typename T> 
-inline T max(const T &a, const T &b) {return (a > b) ? a : b;}
+template<typename T>
+inline T halide_cpp_max(const T &a, const T &b) {return (a > b) ? a : b;}
 
-template<typename T> 
-inline T min(const T &a, const T &b) {return (a < b) ? a : b;}
+template<typename T>
+inline T halide_cpp_min(const T &a, const T &b) {return (a < b) ? a : b;}
 
 template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
@@ -165,7 +169,11 @@ public:
                 // a bitwidth that matches the other vectors in use; EliminateBoolVectors
                 // could be used for this with a bit of work.
                 vector_types_used.insert(UInt(8).with_lanes(e.type().lanes()));
-            } else {
+            } else if (!e.type().is_handle()) {
+                // Vector-handle types can be seen when processing (e.g.)
+                // require() statements that are vectorized, but they
+                // will all be scalarized away prior to use, so don't emit
+                // them.
                 vector_types_used.insert(e.type());
             }
         }
@@ -405,11 +413,11 @@ void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
         const char *cpp_vector_decl = R"INLINE_CODE(
 #if !defined(__has_attribute)
     #define __has_attribute(x) 0
-#endif 
+#endif
 
 #if !defined(__has_builtin)
     #define __has_builtin(x) 0
-#endif 
+#endif
 
 template <typename ElementType_, size_t Lanes_>
 class CppVector {
@@ -502,17 +510,17 @@ public:
         return r;
     }
 
-    Vec replace(size_t i, const ElementType &b) const { 
+    Vec replace(size_t i, const ElementType &b) const {
         Vec r = *this;
         r.elements[i] = b;
-        return r; 
+        return r;
     }
 
-    ElementType operator[](size_t i) const { 
-        return elements[i]; 
+    ElementType operator[](size_t i) const {
+        return elements[i];
     }
 
-    Vec operator~() const { 
+    Vec operator~() const {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
             r.elements[i] = ~elements[i];
@@ -783,7 +791,7 @@ public:
     static Vec max(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ::max(a[i], b[i]);
+            r.elements[i] = ::halide_cpp_max(a[i], b[i]);
         }
         return r;
     }
@@ -791,7 +799,7 @@ public:
     static Vec min(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.elements[i] = ::min(a[i], b[i]);
+            r.elements[i] = ::halide_cpp_min(a[i], b[i]);
         }
         return r;
     }
@@ -839,7 +847,8 @@ public:
     }
 
     static Vec broadcast(const ElementType &v) {
-        return Vec(from_native_vector, splat(v));
+        Vec zero; // Zero-initialized native vector.
+        return zero + v;
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
@@ -904,14 +913,14 @@ public:
     }
 
     // TODO: this should be improved by taking advantage of native operator support.
-    Vec replace(size_t i, const ElementType &b) const { 
+    Vec replace(size_t i, const ElementType &b) const {
         Vec r = *this;
         r.native_vector[i] = b;
-        return r; 
+        return r;
     }
 
-    ElementType operator[](size_t i) const { 
-        return native_vector[i]; 
+    ElementType operator[](size_t i) const {
+        return native_vector[i];
     }
 
     Vec operator~() const {
@@ -1089,7 +1098,7 @@ public:
     static Vec max(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ::max(a[i], b[i]);
+            r.native_vector[i] = ::halide_cpp_max(a[i], b[i]);
         }
         return r;
     }
@@ -1098,7 +1107,7 @@ public:
     static Vec min(const Vec &a, const Vec &b) {
         Vec r(empty);
         for (size_t i = 0; i < Lanes; i++) {
-            r.native_vector[i] = ::min(a[i], b[i]);
+            r.native_vector[i] = ::halide_cpp_min(a[i], b[i]);
         }
         return r;
     }
@@ -1116,13 +1125,6 @@ private:
     enum FromNativeVector { from_native_vector };
     inline NativeVector(FromNativeVector, const NativeVectorType &src) {
         native_vector = src;
-    }
-
-    inline static NativeVectorType splat(const ElementType &v) {
-        // This is a trick: there's no "splat" operation,
-        // so we do a scalar-minus-vector-of-zero operation,
-        // and hope the compiler will optimize appropriately.
-        return v - (NativeVectorType){};
     }
 };
 #endif  // __has_attribute(ext_vector_type) || __has_attribute(vector_size)
@@ -1234,6 +1236,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
     std::map<string, const Call *> c_externs;
     std::set<std::string> processed;
     std::set<std::string> internal_linkage;
+    std::set<std::string> destructors;
 
     using IRGraphVisitor::visit;
 
@@ -1254,6 +1257,20 @@ class ExternCallPrototypes : public IRGraphVisitor {
                 namespace_map->insert({name, NamespaceOrCall(op)});
             }
             processed.insert(op->name);
+        }
+
+        if (op->is_intrinsic(Call::register_destructor)) {
+            internal_assert(op->args.size() == 2);
+            const StringImm *fn = op->args[0].as<StringImm>();
+            internal_assert(fn);
+            destructors.insert(fn->value);
+        }
+    }
+
+    void visit(const Allocate *op) {
+        IRGraphVisitor::visit(op);
+        if (!op->free_function.empty()) {
+            destructors.insert(op->free_function);
         }
     }
 
@@ -1337,6 +1354,9 @@ public:
     void emit_c_declarations(ostream &stream) const {
         for (const auto &call : c_externs) {
             emit_function_decl(stream, call.second, call.first);
+        }
+        for (const auto &d : destructors) {
+            stream << "void " << d << "(void *, void *);\n";
         }
         stream << "\n";
     }
@@ -1481,12 +1501,10 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     }
 
     if (!namespaces.empty()) {
-        const char *separator = "";
         for (const auto &ns : namespaces) {
-            stream << separator << "namespace " << ns << " {";
-            separator = " ";
+            stream << "namespace " << ns << " {\n";
         }
-        stream << "\n\n";
+        stream << "\n";
     }
 
     // Emit the function prototype
@@ -1554,17 +1572,34 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
     if (!namespaces.empty()) {
         stream << "\n";
-        for (size_t i = 0; i < namespaces.size(); i++) {
-            stream << "}";
+        for (size_t i = namespaces.size(); i > 0; i--) {
+            stream << "}  // namespace " << namespaces[i-1] << "\n";
         }
-        stream << " // Close namespaces ";
-        const char *separator = "";
-        for (const auto &ns : namespaces) {
-            stream << separator << ns;
-            separator = "::";
-        }
+        stream << "\n";
+    }
 
-        stream << "\n\n";
+    if (is_header() && f.linkage == LoweredFunc::ExternalPlusMetadata) {
+        // C syntax for function-that-returns-function-pointer is fun.
+        const string getter = R"INLINE_CODE(
+
+// This allows the includer of this file to get the argv/metadata entry points
+// for this file without needing to know the specific function names;
+// if HALIDE_GET_STANDARD_ARGV_FUNCTION is defined before this file is
+// included, an inline function with that name is provided that return
+// a function pointer to the _argv() entry point (similarly,
+// HALIDE_GET_STANDARD_METADATA_FUNCTION -> _metadata() entry point).
+#ifdef HALIDE_GET_STANDARD_ARGV_FUNCTION
+inline int (*HALIDE_GET_STANDARD_ARGV_FUNCTION())(void**) {
+    return $NAME$_argv;
+}
+#endif
+#ifdef HALIDE_GET_STANDARD_METADATA_FUNCTION
+inline const struct halide_filter_metadata_t* (*HALIDE_GET_STANDARD_METADATA_FUNCTION())() {
+    return $NAME$_metadata;
+}
+#endif
+)INLINE_CODE";
+        stream << replace_all(getter, "$NAME$", f.name) << "\n\n";
     }
 }
 
@@ -1624,9 +1659,9 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     Type t = buffer.type();
 
     // Emit the buffer struct. Note that although our shape and (usually) our host
-    // data is const, the buffer itself isn't: embedded buffers in one pipeline 
+    // data is const, the buffer itself isn't: embedded buffers in one pipeline
     // can be passed to another pipeline (e.g. for an extern stage), in which
-    // case the buffer objects need to be non-const, because the constness 
+    // case the buffer objects need to be non-const, because the constness
     // (from the POV of the extern stage) is a runtime property.
     stream << "static halide_buffer_t " << name << "_buffer_ = {"
            << "0, "             // device
@@ -1650,7 +1685,7 @@ string CodeGen_C::print_expr(Expr e) {
 string CodeGen_C::print_cast_expr(const Type &t, Expr e) {
     string value = print_expr(e);
     string type = print_type(t);
-    if (t.is_vector() && 
+    if (t.is_vector() &&
         t.lanes() == e.type().lanes() &&
         t != e.type()) {
         return print_assignment(t, type + "::convert_from<" + print_type(e.type()) + ">(" + value + ")");
@@ -1723,9 +1758,7 @@ void CodeGen_C::visit(const Mul *op) {
 void CodeGen_C::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " >> " << bits;
-        print_assignment(op->type, oss.str());
+        visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_div(op->a, op->b));
     } else {
@@ -1736,9 +1769,7 @@ void CodeGen_C::visit(const Div *op) {
 void CodeGen_C::visit(const Mod *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
-        print_assignment(op->type, oss.str());
+        visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits)-1), "&");
     } else if (op->type.is_int()) {
         print_expr(lower_euclidean_mod(op->a, op->b));
     } else {
@@ -1750,7 +1781,7 @@ void CodeGen_C::visit(const Max *op) {
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->type.is_scalar()) {
-        print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "::halide_cpp_max", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
         rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -1762,7 +1793,7 @@ void CodeGen_C::visit(const Min *op) {
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->type.is_scalar()) {
-        print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "::halide_cpp_min", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
         rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -1856,11 +1887,11 @@ void CodeGen_C::visit(const FloatImm *op) {
         u.as_float = op->value;
 
         ostringstream oss;
+        if (op->type.bits() == 64) {
+            oss << "(double) ";
+        }
         oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
-        id = oss.str();
-    }
-    if (op->type.bits() == 64) {
-        id = "((double)" + id + ")";
+        print_assignment(op->type, oss.str());
     }
 }
 
@@ -1962,6 +1993,14 @@ void CodeGen_C::visit(const Call *op) {
         close_scope("if " + cond_id + " else");
 
         rhs << result_id;
+    } else if (op->is_intrinsic(Call::require)) {
+        internal_assert(op->args.size() == 3);
+        if (op->args[0].type().is_vector()) {
+            rhs << print_scalarized_expr(op);
+        } else {
+            create_assertion(op->args[0], op->args[2]);
+            rhs << print_expr(op->args[1]);
+        }
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
         Expr a0 = op->args[0];
@@ -2114,7 +2153,28 @@ void CodeGen_C::visit(const Call *op) {
     print_assignment(op->type, rhs.str());
 }
 
+string CodeGen_C::print_scalarized_expr(Expr e) {
+    Type t = e.type();
+    internal_assert(t.is_vector());
+    string v = unique_name('_');
+    do_indent();
+    stream << print_type(t, AppendSpace) << v << ";\n";
+    for (int lane = 0; lane < t.lanes(); lane++) {
+        Expr e2 = extract_lane(e, lane);
+        string elem = print_expr(e2);
+        ostringstream rhs;
+        rhs << v << ".replace(" << lane << ", " << elem << ")";
+        v = print_assignment(t, rhs.str());
+    }
+    return v;
+}
+
 string CodeGen_C::print_extern_call(const Call *op) {
+    if (op->type.is_vector()) {
+        // Need to split into multiple scalar calls.
+        return print_scalarized_expr(op);
+    }
+    ostringstream rhs;
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
         args[i] = print_expr(op->args[i]);
@@ -2123,36 +2183,10 @@ string CodeGen_C::print_extern_call(const Call *op) {
             args[i] = "_ucon";
         }
     }
-    ostringstream rhs;
-    if (op->type.is_vector()) {
-        // Need to split into multiple scalar calls.
-        string vname = unique_name('_');
-        do_indent();
-        stream << print_type(op->type, AppendSpace) << vname << ";\n";
-        const size_t lanes = op->type.lanes();
-        for (size_t lane = 0; lane < lanes; lane++) {
-            vector<string> argsn = args;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                if (op->args[i].type().is_vector()) {
-                    argsn[i] += "[" + std::to_string(lane) + "]";
-                }
-            }
-            rhs.str("");
-            if (function_takes_user_context(op->name)) {
-                argsn.insert(argsn.begin(), "_ucon");
-            }
-            rhs << vname << ".replace(" << lane << ", " << op->name << "(" << with_commas(argsn) << "))";
-            if (lane < lanes - 1) {
-                vname = print_assignment(op->type, rhs.str());
-            } 
-            // else fall thru and return the last rhs
-        }
-    } else {
-        if (function_takes_user_context(op->name)) {
-            args.insert(args.begin(), "_ucon");
-        }
-        rhs << op->name << "(" << with_commas(args) << ")";
+    if (function_takes_user_context(op->name)) {
+        args.insert(args.begin(), "_ucon");
     }
+    rhs << op->name << "(" << with_commas(args) << ")";
     return rhs.str();
 }
 
@@ -2555,8 +2589,9 @@ void CodeGen_C::visit(const Shuffle *op) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
     }
     internal_assert(op->type.lanes() == (int) op->indices.size());
+    const int max_index = (int) (op->vectors[0].type().lanes() * op->vectors.size());
     for (int i : op->indices) {
-        internal_assert(i >= -1 && i < (int) op->indices.size());
+        internal_assert(i >= -1 && i < max_index);
     }
 
     std::vector<string> vecs;
@@ -2573,12 +2608,15 @@ void CodeGen_C::visit(const Shuffle *op) {
         rhs << print_type(op->type) << "::concat(" << op->vectors.size() << ", " << storage_name << ")";
         src = print_assignment(op->type, rhs.str());
     }
-    string indices_name = unique_name('_');
-    do_indent();
-    stream << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
-
     ostringstream rhs;
-    rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
+    if (op->type.is_scalar()) {
+        rhs << src << "[" << op->indices[0] << "]";
+    } else {
+        string indices_name = unique_name('_');
+        do_indent();
+        stream << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";
+        rhs << print_type(op->type) << "::shuffle(" << src << ", " << indices_name << ")";
+    }
     print_assignment(op->type, rhs.str());
 }
 
@@ -2664,9 +2702,10 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
     _5 = 3;
    } // if _6 else
    int32_t _10 = _5;
-   bool _11 = _alpha > float_from_bits(1082130432 /* 4 */);
-   int32_t _12 = (int32_t)(_11 ? _10 : 2);
-   ((int32_t *)_buf)[_4] = _12;
+   float _11 = float_from_bits(1082130432 /* 4 */);
+   bool _12 = _alpha > _11;
+   int32_t _13 = (int32_t)(_12 ? _10 : 2);
+   ((int32_t *)_buf)[_4] = _13;
   } // alloc _tmp_stack
   _tmp_heap_free.free();
  } // alloc _tmp_heap

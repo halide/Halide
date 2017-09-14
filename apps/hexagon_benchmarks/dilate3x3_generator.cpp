@@ -54,4 +54,4 @@ private:
     Func bounded_input{"bounded_input"};
 };
 
-HALIDE_REGISTER_GENERATOR(Dilate3x3, "dilate3x3");
+HALIDE_REGISTER_GENERATOR(Dilate3x3, dilate3x3)

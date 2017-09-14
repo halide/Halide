@@ -22,6 +22,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<ArgvCall> register_argvcall{"argvcall"};
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(ArgvCall, argvcall)

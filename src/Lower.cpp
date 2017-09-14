@@ -15,7 +15,6 @@
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
-#include "DeepCopy.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
@@ -26,7 +25,6 @@
 #include "HexagonOffload.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
-#include "InjectImageIntrinsics.h"
 #include "InjectOpenGLIntrinsics.h"
 #include "Inline.h"
 #include "IRMutator.h"
@@ -83,8 +81,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // Compute an environment
     map<string, Function> env;
     for (Function f : output_funcs) {
-        map<string, Function> more_funcs = find_transitive_calls(f);
-        env.insert(more_funcs.begin(), more_funcs.end());
+        populate_environment(f, env);
     }
 
     // Create a deep-copy of the entire graph of Funcs.
@@ -111,9 +108,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // specializations' conditions
     simplify_specializations(env);
 
-    bool any_memoized = false;
-
     debug(1) << "Creating initial loop nests...\n";
+    bool any_memoized = false;
     Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
@@ -198,12 +194,6 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     s = split_tuples(s, env);
     debug(2) << "Lowering after destructuring tuple-valued realizations:\n" << s << "\n\n";
 
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Injecting image intrinsics...\n";
-        s = inject_image_intrinsics(s, env);
-        debug(2) << "Lowering after image intrinsics:\n" << s << "\n\n";
-    }
-
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
@@ -231,6 +221,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
+
+        debug(1) << "Selecting a GPU API for extern stages...\n";
+        s = select_gpu_api(s, t);
+        debug(2) << "Lowering after selecting a GPU API for extern stages:\n" << s << "\n\n";
     }
 
     if (t.has_feature(Target::OpenGL)) {
@@ -378,6 +372,26 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
             user_error << err.str();
         }
     }
+
+    // We're about to drop the environment and outputs vector, which
+    // contain the only strong refs to Functions that may still be
+    // pointed to by the IR. So make those refs strong.
+    class StrengthenRefs : public IRMutator {
+        using IRMutator::visit;
+        void visit(const Call *c) {
+            IRMutator::visit(c);
+            c = expr.as<Call>();
+            internal_assert(c);
+            if (c->func.defined()) {
+                FunctionPtr ptr = c->func;
+                ptr.strengthen();
+                expr = Call::make(c->type, c->name, c->args, c->call_type,
+                                  ptr, c->value_index,
+                                  c->image, c->param);
+            }
+        }
+    };
+    s = StrengthenRefs().mutate(s);
 
     LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
 

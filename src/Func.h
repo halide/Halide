@@ -410,6 +410,14 @@ public:
     EXPORT Internal::Function function() const {return func;}
 };
 
+/** Explicit overloads of min and max for FuncRef. These exist to
+ * disambiguate calls to min on FuncRefs when a user has pulled both
+ * Halide::min and std::min into their namespace. */
+// @{
+inline Expr min(FuncRef a, FuncRef b) {return min(Expr(std::move(a)), Expr(std::move(b)));}
+inline Expr max(FuncRef a, FuncRef b) {return max(Expr(std::move(a)), Expr(std::move(b)));}
+// @}
+
 /** A fragment of front-end syntax of the form f(x, y, z)[index], where x, y,
  * z are Vars or Exprs. If could be the left hand side of an update
  * definition, or it could be a call to a function. We don't know
@@ -1123,6 +1131,30 @@ public:
      */
     EXPORT Func in();
 
+    /** Declare that this function should be implemented by a call to
+     * halide_buffer_copy with the given target device API. Asserts
+     * that the Func has a pure definition which is a simple call to a
+     * single input, and no update definitions. The wrapper Funcs
+     * returned by in() are suitable candidates. Consumes all pure
+     * variables, and rewrites the Func to have an extern definition
+     * that calls halide_buffer_copy. */
+    EXPORT Func copy_to_device(DeviceAPI d = DeviceAPI::Default_GPU);
+
+    /** Declare that this function should be implemented by a call to
+     * halide_buffer_copy with a NULL target device API. Equivalent to
+     * copy_to_device(DeviceAPI::Host). Asserts that the Func has a
+     * pure definition which is a simple call to a single input, and
+     * no update definitions. The wrapper Funcs returned by in() are
+     * suitable candidates. Consumes all pure variables, and rewrites
+     * the Func to have an extern definition that calls
+     * halide_buffer_copy.
+     *
+     * Note that if the source Func is already valid in host memory,
+     * this compiles to code that does the minimum number of calls to
+     * memcpy.
+     */
+    EXPORT Func copy_to_host();
+
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to
      * factor-1. The inner and outer subdimensions can then be dealt
@@ -1187,6 +1219,14 @@ public:
      * more of this function than the bounds you have stated, a
      * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Statically declare the range over which the function will be
+     * evaluated in the general case. This provides a basis for the auto
+     * scheduler to make trade-offs and scheduling decisions. The auto
+     * generated schedules might break when the sizes of the dimensions are
+     * very different from the estimates specified. These estimates are used
+     * only by the auto scheduler if the function is a pipeline output. */
+    EXPORT Func &estimate(Var var, Expr min, Expr extent);
 
     /** Expand the region computed so that the min coordinates is
      * congruent to 'remainder' modulo 'modulus', and the extent is a

@@ -25,20 +25,20 @@ BIN ?= bin
 all: $(BIN)/process-host $(BIN)/process-arm-64-android $(BIN)/process-arm-32-android $(BIN)/process-arm-64-profile-android $(BIN)/process-arm-32-profile-android
 
 $(BIN)/pipeline: pipeline.cpp $(GENERATOR_DEPS)
-	@-mkdir -p $(BIN)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LDFLAGS)
 
 $(BIN)/%/pipeline_cpu.o: $(BIN)/pipeline
-	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f pipeline_cpu target=$*
+	@mkdir -p $(@D)
+	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_cpu target=$*
 
 $(BIN)/%/pipeline_hvx64.o: $(BIN)/pipeline
-	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
+	@mkdir -p $(@D)
+	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_hvx64 target=$*-hvx_64
 
 $(BIN)/%/pipeline_hvx128.o: $(BIN)/pipeline
-	@-mkdir -p $(BIN)/$*
-	$^ -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
+	@mkdir -p $(@D)
+	$^ -g matmul -o $(BIN)/$* -e o,h -f pipeline_hvx128 target=$*-hvx_128
 
 $(BIN)/process-%: process.cpp $(BIN)/%/pipeline_cpu.o $(BIN)/%/pipeline_hvx64.o $(BIN)/%/pipeline_hvx128.o
 	$(CXX-$*) $(CXXFLAGS) $(CXXFLAGS-$*) -I $(BIN)/$* -Wall -O3 process.cpp $(BIN)/$*/pipeline_cpu.o $(BIN)/$*/pipeline_hvx64.o $(BIN)/$*/pipeline_hvx128.o -o $(BIN)/process-$* $(LDFLAGS-$*)
@@ -51,6 +51,7 @@ run-%-android: $(BIN)/process-%-android
 	adb push $(BIN)/process-$*-android $(DEVICE_PATH)
 	adb push $(HEXAGON_RUNTIME_PATH)/bin/$*-android/libhalide_hexagon_host.so $(DEVICE_PATH)
 	adb push $(HEXAGON_RUNTIME_PATH)/bin/v60/signed_by_debug/libhalide_hexagon_remote_skel.so $(DEVICE_PATH)
+	adb shell cp /system/lib/rfsa/adsp/testsig* $(DEVICE_PATH) > /dev/null || true
 	adb shell chmod +x $(DEVICE_PATH)/process-$*-android
 	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process-$*-android cpu 10 1024 1024 1024
 	adb shell $(DEVICE_ENV) $(DEVICE_PATH)/process-$*-android hvx64 10 1024 1024 1024

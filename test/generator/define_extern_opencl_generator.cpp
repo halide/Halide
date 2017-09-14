@@ -24,13 +24,14 @@ public:
     void schedule() {
         make_a_root.compute_root();
         gpu_input.compute_root();
-#if defined(TEST_OPENCL)
-        Var block_x, thread_x;
-        output.gpu_tile(x, block_x, thread_x, Expr(16), TailStrategy::Auto, Halide::DeviceAPI::OpenCL);
-#endif
+        if (get_target().has_feature(Target::OpenCL)) {
+            Var block_x, thread_x;
+            output.gpu_tile(x, block_x, thread_x, Expr(16),
+                            TailStrategy::Auto, Halide::DeviceAPI::OpenCL);
+        }
     }
 };
 
 }
 
-HALIDE_REGISTER_GENERATOR(DefineExternOpenCLOutput, "define_extern_opencl")
+HALIDE_REGISTER_GENERATOR(DefineExternOpenCLOutput, define_extern_opencl)

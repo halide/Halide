@@ -3,6 +3,7 @@
 namespace {
 
 struct BilateralGrid : public Halide::Generator<BilateralGrid> {
+    GeneratorParam<bool>    auto_schedule{"auto_schedule", false};
     GeneratorParam<int>     s_sigma{"s_sigma", 8};
 
     Input<Buffer<float>>    input{"input", 2};
@@ -62,7 +63,22 @@ struct BilateralGrid : public Halide::Generator<BilateralGrid> {
     }
 
     void schedule() {
-        if (get_target().has_gpu_feature()) {
+        if (auto_schedule) {
+            // Provide estimates on the input image
+            input.dim(0).set_bounds_estimate(0, 1536);
+            input.dim(1).set_bounds_estimate(0, 2560);
+            // Provide estimates on the parameters
+            r_sigma.set_estimate(0.1f);
+            // TODO: Compute estimates from the parameter values
+            histogram.estimate(z, -2, 16);
+            blurz.estimate(z, 0, 12);
+            blurx.estimate(z, 0, 12);
+            blury.estimate(z, 0, 12);
+            output.estimate(x, 0, 1536).estimate(y, 0, 2560);
+            // Auto schedule the pipeline
+            Pipeline p(output);
+            p.auto_schedule(get_target());
+        } else if (get_target().has_gpu_feature()) {
             Var xi("xi"), yi("yi"), zi("zi");
 
             // Schedule blurz in 8x8 tiles. This is a tile in
@@ -106,6 +122,6 @@ private:
     Func blurx{"blurx"}, blury{"blury"}, blurz{"blurz"};
 };
 
-HALIDE_REGISTER_GENERATOR(BilateralGrid, "bilateral_grid")
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(BilateralGrid, bilateral_grid)

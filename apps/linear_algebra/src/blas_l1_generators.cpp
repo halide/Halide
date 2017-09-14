@@ -76,10 +76,10 @@ class AXPYGenerator :
         }
 
         result.bound(i, 0, x_.width());
-        result.output_buffer().set_bounds(0, 0, x_.width());
+        result.output_buffer().dim(0).set_bounds(0, x_.width());
 
-        x_.set_min(0, 0);
-        y_.set_bounds(0, 0, x_.width());
+        x_.dim(0).set_min(0);
+        y_.dim(0).set_bounds(0, x_.width());
 
         return result;
     }
@@ -146,8 +146,8 @@ class DotGenerator :
             result(0) = sum(x_(k) * y_(k));
         }
 
-        x_.set_min(0, 0);
-        y_.set_bounds(0, 0, size);
+        x_.dim(0).set_min(0);
+        y_.dim(0).set_bounds(0, size);
 
         return result;
     }
@@ -213,17 +213,18 @@ class AbsSumGenerator :
             result(0) = sum(abs(x_(k)));
         }
 
-        x_.set_min(0, 0);
+        x_.dim(0).set_min(0);
 
         return result;
     }
 };
 
-RegisterGenerator<AXPYGenerator<float>>    register_saxpy("saxpy");
-RegisterGenerator<AXPYGenerator<double>>   register_daxpy("daxpy");
-RegisterGenerator<DotGenerator<float>>     register_sdot("sdot");
-RegisterGenerator<DotGenerator<double>>    register_ddot("ddot");
-RegisterGenerator<AbsSumGenerator<float>>  register_sasum("sasum");
-RegisterGenerator<AbsSumGenerator<double>> register_dasum("dasum");
-
 }  // namespace
+
+HALIDE_REGISTER_GENERATOR(AXPYGenerator<float>, saxpy)
+HALIDE_REGISTER_GENERATOR(AXPYGenerator<double>, daxpy)
+HALIDE_REGISTER_GENERATOR(DotGenerator<float>, sdot)
+HALIDE_REGISTER_GENERATOR(DotGenerator<double>, ddot)
+HALIDE_REGISTER_GENERATOR(AbsSumGenerator<float>, sasum)
+HALIDE_REGISTER_GENERATOR(AbsSumGenerator<double>, dasum)
+

@@ -2,6 +2,7 @@
 
 #include "Pipeline.h"
 #include "Argument.h"
+#include "FindCalls.h"
 #include "Func.h"
 #include "InferArguments.h"
 #include "IRVisitor.h"
@@ -10,6 +11,7 @@
 #include "Lower.h"
 #include "Outputs.h"
 #include "PrintLoopNest.h"
+#include "RealizationOrder.h"
 
 using namespace Halide::Internal;
 
@@ -148,17 +150,42 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+string Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS)
+        << "Automatic scheduling is currently supported only on these architectures.";
+    return generate_schedules(contents->outputs, target, arch_params);
+}
+
+string Pipeline::auto_schedule(const Target &target) {
+    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
+                target.arch == Target::POWERPC || target.arch == Target::MIPS)
+        << "Automatic scheduling is currently supported only on these architectures.";
+    // Default machine parameters for generic CPU architecture.
+    MachineParams arch_params(16, 16 * 1024 * 1024, 40);
+    return generate_schedules(contents->outputs, target, arch_params);
+}
+
+Func Pipeline::get_func(size_t index) {
+    // Compute an environment
+    std::map<string, Function> env;
+    for (Function f : contents->outputs) {
+        std::map<string, Function> more_funcs = find_transitive_calls(f);
+        env.insert(more_funcs.begin(), more_funcs.end());
+    }
+    // Compute a realization order
+    vector<string> order = realization_order(contents->outputs, env);
+
+    user_assert(index < order.size())
+        << "Index value passed is " << index << "; however, there are only "
+        << order.size() << " functions in the pipeline.\n";
+    return Func(env.find(order[index])->second);
+}
+
 void Pipeline::compile_to(const Outputs &output_files,
                           const vector<Argument> &args,
                           const string &fn_name,
                           const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Pipeline.\n";
-
-    for (Function f : contents->outputs) {
-        user_assert(f.has_pure_definition() || f.has_extern_definition())
-            << "Can't compile undefined Func.\n";
-    }
-
     compile_to_module(args, fn_name, target).compile(output_files);
 }
 
@@ -305,7 +332,13 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const string &fn_name,
                                    const Target &target,
                                    const Internal::LoweredFunc::LinkageType linkage_type) {
-    user_assert(defined()) << "Can't compile undefined Pipeline\n";
+    user_assert(defined()) << "Can't compile undefined Pipeline.\n";
+
+    for (Function f : contents->outputs) {
+        user_assert(f.has_pure_definition() || f.has_extern_definition())
+            << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
+    }
+
     string new_fn_name(fn_name);
     if (new_fn_name.empty()) {
         new_fn_name = generate_function_name();
@@ -508,6 +541,8 @@ Realization Pipeline::realize(vector<int32_t> sizes,
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto & out : contents->outputs) {
+        user_assert(out.has_pure_definition() || out.has_extern_definition()) <<
+            "Can't realize Pipeline with undefined output Func: " << out.name() << ".\n";
         for (Type t : out.output_types()) {
             bufs.emplace_back(t, sizes);
         }

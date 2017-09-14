@@ -15,6 +15,7 @@
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
+    (void *)&halide_buffer_copy,
     (void *)&halide_buffer_to_string,
     (void *)&halide_can_use_target_features,
     (void *)&halide_cond_broadcast,
@@ -55,6 +56,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
     (void *)&halide_error_bad_fold,
+    (void *)&halide_error_bad_extern_fold,
     (void *)&halide_error_bad_type,
     (void *)&halide_error_bounds_inference_call_failed,
     (void *)&halide_error_buffer_allocation_too_large,
@@ -67,6 +69,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_explicit_bounds_too_small,
     (void *)&halide_error_extern_stage_failed,
     (void *)&halide_error_fold_factor_too_small,
+    (void *)&halide_error_host_is_null,
     (void *)&halide_error_out_of_memory,
     (void *)&halide_error_param_too_large_f64,
     (void *)&halide_error_param_too_large_i64,
