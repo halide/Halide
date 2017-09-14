@@ -28,46 +28,8 @@ Stmt call_extern_and_assert(const string& name, const vector<Expr>& args) {
 
 namespace {
 
-Expr make_device_interface_call(DeviceAPI device_api) {
-    std::string interface_name;
-    switch (device_api) {
-    case DeviceAPI::CUDA:
-        interface_name = "halide_cuda_device_interface";
-        break;
-    case DeviceAPI::OpenCL:
-        interface_name = "halide_opencl_device_interface";
-        break;
-    case DeviceAPI::Metal:
-        interface_name = "halide_metal_device_interface";
-        break;
-    case DeviceAPI::GLSL:
-        interface_name = "halide_opengl_device_interface";
-        break;
-    case DeviceAPI::OpenGLCompute:
-        interface_name = "halide_openglcompute_device_interface";
-        break;
-    case DeviceAPI::Hexagon:
-        interface_name = "halide_hexagon_device_interface";
-        break;
-    default:
-        internal_error << "Bad DeviceAPI " << static_cast<int>(device_api) << "\n";
-        break;
-    }
-    return Call::make(type_of<const char *>(), interface_name, {}, Call::Extern);
-}
-
-
 class FindBufferUsage : public IRVisitor {
     using IRVisitor::visit;
-
-    void visit(const Variable *op) {
-        if (is_buffer_var(op)) {
-            // Passing the buffer variable out of Halide counts
-            // as a read/write.
-            devices_touched.insert(current_device_api);
-            devices_writing.insert(current_device_api);
-        }
-    }
 
     void visit(const Load *op) {
         IRVisitor::visit(op);
@@ -108,6 +70,12 @@ class FindBufferUsage : public IRVisitor {
             for (size_t i = 0; i < op->args.size(); i++) {
                 if (i == 1) continue;
                 op->args[i].accept(this);
+            }
+        } else if (op->is_intrinsic(Call::debug_to_file)) {
+            internal_assert(op->args.size() == 3);
+            if (is_buffer_var(op->args[2])) {
+                devices_touched.insert(current_device_api);
+                devices_writing.insert(current_device_api);
             }
         } else if (op->call_type == Call::Extern && op->func.defined()) {
             // This is a call to an extern stage
@@ -171,6 +139,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     // The buffer being managed
     string buffer;
 
+    bool is_external;
+
     enum FlagState {
         Unknown,
         False,
@@ -230,6 +200,10 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
                                          {buffer_var(), const_true()}, Call::Extern));
     }
 
+    Stmt make_device_free() {
+        return call_extern_and_assert("halide_device_free", {buffer_var()});
+    }
+
     Stmt do_copies(Stmt s) {
         // Sniff what happens to the buffer inside the stmt
         FindBufferUsage finder(buffer, DeviceAPI::Host);
@@ -253,22 +227,28 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         }
 
         // Then figure out what to do
-        bool needs_device_malloc = (written_on_device &&
+        bool needs_device_malloc = (touched_on_device &&
                                     (state.device_allocation_exists != True));
+
+        bool needs_device_flip = (state.device_allocation_exists != False &&
+                                  state.current_device != touching_device &&
+                                  state.current_device != DeviceAPI::None &&
+                                  touching_device != DeviceAPI::None &&
+                                  !is_external);
 
         // TODO: If only written on device, and entirely clobbered on
         // device, a copy-to-device is not actually necessary.
         bool needs_copy_to_device = (touched_on_device &&
                                      ((state.host_dirty != False) ||
-                                      (state.device_allocation_exists != False &&
-                                       state.current_device != touching_device)));
+                                      needs_device_flip));
 
         if (needs_copy_to_device) {
             // halide_copy_to_device already does a halide_device_malloc if necessary.
             needs_device_malloc = false;
         }
 
-        bool needs_copy_to_host = (touched_on_host &&
+        // Device flips go via host memory
+        bool needs_copy_to_host = ((touched_on_host || needs_device_flip) &&
                                    (state.device_dirty != False));
 
         bool needs_host_dirty = (written_on_host &&
@@ -277,34 +257,49 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
         bool needs_device_dirty = (written_on_device &&
                                    (state.device_dirty != True));
 
+        vector<Stmt> stmts;
+
         // Then do it, updating what we know about the buffer
         if (needs_copy_to_host) {
-            s = Block::make(make_copy_to_host(), s);
+            stmts.push_back(make_copy_to_host());
+            state.device_dirty = False;
+        }
+
+        // When flipping a buffer between devices, we need to free the
+        // old device memory before allocating the new one.
+        if (needs_device_flip) {
+            stmts.push_back(make_host_dirty());
+            stmts.push_back(make_device_free());
+            state.device_allocation_exists = False;
             state.device_dirty = False;
         }
 
         if (needs_copy_to_device) {
-            s = Block::make(make_copy_to_device(touching_device), s);
+            stmts.push_back(make_copy_to_device(touching_device));
             state.host_dirty = False;
             state.device_allocation_exists = True;
             state.current_device = touching_device;
         }
 
+        if (needs_device_malloc) {
+            stmts.push_back(make_device_malloc(touching_device));
+            state.device_allocation_exists = True;
+            state.current_device = touching_device;
+        }
+
+        stmts.push_back(s);
+
         if (needs_host_dirty) {
-            s = Block::make(s, make_host_dirty());
+            stmts.push_back(make_host_dirty());
             state.host_dirty = True;
         }
 
         if (needs_device_dirty) {
-            s = Block::make(s, make_device_dirty());
+            stmts.push_back(make_device_dirty());
             state.device_dirty = True;
         }
 
-        if (needs_device_malloc) {
-            s = Block::make(make_device_malloc(touching_device), s);
-            state.device_allocation_exists = True;
-            state.current_device = touching_device;
-        }
+        s = Block::make(stmts);
 
         if (finder.touched_by_extern) {
             // This buffer was passed to an extern stage. Unless we
@@ -400,7 +395,8 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     }
 
 public:
-    InjectBufferCopiesForSingleBuffer(const std::string &b, bool is_external) : buffer(b) {
+    InjectBufferCopiesForSingleBuffer(const std::string &b, bool e) :
+        buffer(b), is_external(e) {
         if (is_external) {
             // The state of the buffer is totally unknown, which is
             // the default constructor for this->state
