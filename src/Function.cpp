@@ -10,6 +10,7 @@
 #include "CSE.h"
 #include "Random.h"
 #include "Introspection.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ParallelRVar.h"
@@ -72,9 +73,11 @@ struct FunctionContents {
 
     std::vector<ExternFuncArgument> extern_arguments;
     std::string extern_function_name;
+
     NameMangling extern_mangling = NameMangling::Default;
     DeviceAPI extern_function_device_api = DeviceAPI::Host;
     bool extern_uses_old_buffer_t = false;
+    Expr extern_proxy_expr;
 
     bool trace_loads = false, trace_stores = false, trace_realizations = false;
 
@@ -97,6 +100,9 @@ struct FunctionContents {
                 } else if (i.is_expr()) {
                     i.expr.accept(visitor);
                 }
+            }
+            if (extern_proxy_expr.defined()) {
+                extern_proxy_expr.accept(visitor);
             }
         }
 
@@ -126,12 +132,11 @@ struct FunctionContents {
 
         if (!extern_function_name.empty()) {
             for (ExternFuncArgument &i : extern_arguments) {
-                if (i.is_func()) {
-                    i.func->mutate(mutator);
-                } else if (i.is_expr()) {
+                if (i.is_expr()) {
                     i.expr = mutator->mutate(i.expr);
                 }
             }
+            extern_proxy_expr = mutator->mutate(extern_proxy_expr);
         }
     }
 };
@@ -317,6 +322,7 @@ void Function::deep_copy(FunctionPtr copy, DeepCopyMap &copied_map) const {
     copy->extern_mangling = contents->extern_mangling;
     copy->extern_function_device_api = contents->extern_function_device_api;
     copy->extern_uses_old_buffer_t = contents->extern_uses_old_buffer_t;
+    copy->extern_proxy_expr = contents->extern_proxy_expr;
     copy->trace_loads = contents->trace_loads;
     copy->trace_stores = contents->trace_stores;
     copy->trace_realizations = contents->trace_realizations;
@@ -686,11 +692,14 @@ void Function::define_extern(const std::string &function_name,
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
     auto &pure_def_args = contents->init_def.args();
-    pure_def_args.resize(dimensionality);
+    while ((int)pure_def_args.size() < dimensionality) {
+        pure_def_args.push_back(Var(unique_name('e')));
+    }
+    // Reset the storage dims to match the pure args
+    vector<string> arg_names = this->args();
+    contents->func_schedule.storage_dims().clear();
     for (int i = 0; i < dimensionality; i++) {
-        string arg = unique_name('e');
-        pure_def_args[i] = Var(arg);
-        StorageDim sd = {arg};
+        StorageDim sd {arg_names[i]};
         contents->func_schedule.storage_dims().push_back(sd);
     }
 }
@@ -814,7 +823,19 @@ bool Function::extern_definition_uses_old_buffer_t() const {
     return contents->extern_uses_old_buffer_t;
 }
 
+Expr Function::extern_definition_proxy_expr() const {
+    return contents->extern_proxy_expr;
+}
+
+Expr &Function::extern_definition_proxy_expr() {
+    return contents->extern_proxy_expr;
+}
+
 const std::vector<ExternFuncArgument> &Function::extern_arguments() const {
+    return contents->extern_arguments;
+}
+
+std::vector<ExternFuncArgument> &Function::extern_arguments() {
     return contents->extern_arguments;
 }
 
@@ -886,6 +907,29 @@ void Function::add_wrapper(const std::string &f, Function &wrapper) {
     // Weaken the pointer from the wrapper back to the function.
     WeakenFunctionPtrs weakener(contents.get());
     wrapper.mutate(&weakener);
+}
+
+const Call *Function::is_wrapper() const {
+    const vector<Expr> &rhs = values();
+    if (rhs.size() != 1) {
+        return nullptr;
+    }
+    const Call *call = rhs[0].as<Call>();
+    if (!call) {
+        return nullptr;
+    }
+    vector<Expr> expected_args;
+    for (const string &v : args()) {
+        expected_args.push_back(Variable::make(Int(32), v));
+    }
+    Expr expected_rhs =
+        Call::make(call->type, call->name, expected_args, call->call_type,
+                   call->func, call->value_index, call->image, call->param);
+    if (equal(rhs[0], expected_rhs)) {
+        return call;
+    } else {
+        return nullptr;
+    }
 }
 
 namespace {
