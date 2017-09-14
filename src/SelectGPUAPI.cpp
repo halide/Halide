@@ -12,6 +12,14 @@ class SelectGPUAPI : public IRMutator {
 
     DeviceAPI default_api, parent_api;
 
+    void visit(const Call *op) {
+        if (op->name == "halide_default_device_interface") {
+            expr = make_device_interface_call(default_api);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const For *op) {
         DeviceAPI selected_api = op->device_api;
         if (op->device_api == DeviceAPI::Default_GPU) {
