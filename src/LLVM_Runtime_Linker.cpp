@@ -118,6 +118,8 @@ DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(qurt_hvx)
+DECLARE_CPP_INITMOD(qurt_init_fini)
+DECLARE_CPP_INITMOD(qurt_thread_pool)
 DECLARE_CPP_INITMOD(runtime_api)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(thread_pool)
@@ -690,18 +692,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-                // TODO: Replace fake thread pool with a real implementation.
-                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_qurt_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_qurt_init_fini(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
                 // above are expected to be provided by the containing
                 // process instead at link time. Less aggressive than
                 // NoRuntime, as OS-agnostic modules like tracing are
                 // still included below.
+                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             }
         }
 
@@ -745,7 +744,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
-            if (t.arch != Target::MIPS && t.os != Target::NoOS) {
+            if (t.arch != Target::MIPS && t.os != Target::NoOS &&
+                t.os != Target::QuRT) {
                 // MIPS doesn't support the atomics the profiler requires.
                 modules.push_back(get_initmod_profiler(c, bits_64, debug));
             }

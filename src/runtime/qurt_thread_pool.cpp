@@ -1,7 +1,14 @@
-#include <HalideRuntime.h>
-#include <qurt.h>
-#include <stdlib.h>
+#include "HalideRuntime.h"
+#include "mini_qurt.h"
 
+using namespace Halide::Runtime::Internal::Qurt;
+
+
+extern "C" {
+extern void *memalign(size_t, size_t);
+
+
+} // extern C
 struct halide_thread {
     qurt_thread_t val;
 };
@@ -26,7 +33,7 @@ void spawn_thread_helper(void *arg) {
 
 #define STACK_SIZE 256*1024
 
-struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
+WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
@@ -41,7 +48,7 @@ struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     return (halide_thread *)t;
 }
 
-void halide_join_thread(struct halide_thread *thread_arg) {
+WEAK void halide_join_thread(struct halide_thread *thread_arg) {
     spawned_thread *t = (spawned_thread *)thread_arg;
     int ret = 0;
     qurt_thread_join(t->handle.val, &ret);
@@ -49,42 +56,36 @@ void halide_join_thread(struct halide_thread *thread_arg) {
     free(t);
 }
 
-void halide_mutex_lock(halide_mutex *mutex) {
+WEAK void halide_mutex_lock(halide_mutex *mutex) {
     qurt_mutex_lock((qurt_mutex_t *)mutex);
 }
 
-void halide_mutex_unlock(halide_mutex *mutex) {
+WEAK void halide_mutex_unlock(halide_mutex *mutex) {
     qurt_mutex_unlock((qurt_mutex_t *)mutex);
 }
 
-void halide_mutex_destroy(halide_mutex *mutex) {
+WEAK void halide_mutex_destroy(halide_mutex *mutex) {
     qurt_mutex_destroy((qurt_mutex_t *)mutex);
     memset(mutex, 0, sizeof(halide_mutex));
 }
 
-struct halide_cond {
-    uint64_t _private[8];
-};
-
-void halide_cond_init(struct halide_cond *cond) {
+WEAK void halide_cond_init(struct halide_cond *cond) {
     qurt_cond_init((qurt_cond_t *)cond);
 }
 
-void halide_cond_destroy(struct halide_cond *cond) {
+WEAK void halide_cond_destroy(struct halide_cond *cond) {
     qurt_cond_destroy((qurt_cond_t *)cond);
 }
 
-void halide_cond_broadcast(struct halide_cond *cond) {
+WEAK void halide_cond_broadcast(struct halide_cond *cond) {
     qurt_cond_broadcast((qurt_cond_t *)cond);
 }
 
-void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
+WEAK void halide_cond_wait(struct halide_cond *cond, struct halide_mutex *mutex) {
     qurt_cond_wait((qurt_cond_t *)cond, (qurt_mutex_t *)mutex);
 }
 
-
-#define WEAK
-#include "../thread_pool_common.h"
+#include "thread_pool_common.h"
 
 namespace {
 // We wrap the closure passed to jobs with extra info we
@@ -97,17 +98,16 @@ struct wrapped_closure {
 
 extern "C" {
 
+
 // There are two locks at play: the thread pool lock and the hvx
 // context lock. To ensure there's no way anything could ever
 // deadlock, we never attempt to acquire one while holding the
 // other.
-
-int halide_do_par_for(void *user_context,
-                      halide_task_t task,
-                      int min, int size, uint8_t *closure) {
+WEAK int halide_do_par_for(void *user_context,
+                           halide_task_t task,
+                           int min, int size, uint8_t *closure) {
     // Get the work queue mutex. We need to do a handful of hexagon-specific things.
     qurt_mutex_t *mutex = (qurt_mutex_t *)(&work_queue.mutex);
-
     if (!work_queue.initialized) {
         // The thread pool asssumes that a zero-initialized mutex can
         // be locked. Not true on hexagon, and there doesn't seem to
@@ -117,13 +117,13 @@ int halide_do_par_for(void *user_context,
         // initializing this mutex.
         qurt_mutex_init(mutex);
     }
+
     wrapped_closure c = {closure, qurt_hvx_get_mode()};
 
     // Set the desired number of threads based on the current HVX
     // mode.
     int old_num_threads =
         halide_set_num_threads((c.hvx_mode == QURT_HVX_MODE_128B) ? 2 : 4);
-
     // We're about to acquire the thread-pool lock, so we must drop
     // the hvx context lock, even though we'll likely reacquire it
     // immediately to do some work on this thread.
@@ -144,6 +144,7 @@ int halide_do_par_for(void *user_context,
         }
     }
     int ret = halide_default_do_par_for(user_context, task, min, size, (uint8_t *)&c);
+
     if (c.hvx_mode != -1) {
         qurt_hvx_lock((qurt_hvx_mode_t)c.hvx_mode);
     }
@@ -154,12 +155,13 @@ int halide_do_par_for(void *user_context,
     return ret;
 }
 
-int halide_do_task(void *user_context, halide_task_t f,
-                   int idx, uint8_t *closure) {
+WEAK int halide_do_task(void *user_context, halide_task_t f,
+                        int idx, uint8_t *closure) {
     // Dig the appropriate hvx mode out of the wrapped closure and lock it.
     wrapped_closure *c = (wrapped_closure *)closure;
     // We don't own the thread-pool lock here, so we can safely
     // acquire the hvx context lock (if needed) to run some code.
+
     if (c->hvx_mode != -1) {
         qurt_hvx_lock((qurt_hvx_mode_t)c->hvx_mode);
         int ret = f(user_context, idx, c->closure);
@@ -169,5 +171,10 @@ int halide_do_task(void *user_context, halide_task_t f,
         return f(user_context, idx, c->closure);
     }
 }
-
+namespace {
+__attribute__((destructor))
+WEAK void halide_thread_pool_cleanup() {
+    halide_shutdown_thread_pool();
+}
+}
 }
