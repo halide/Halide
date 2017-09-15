@@ -211,6 +211,21 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
 
     SetCwd set_cwd(src_dir);
 
+    // This is a band-aid: MS COFF Lib format is almost-but-not-quite compatible with
+    // GNU ar format; amazingly, just generating the latter worked for quite a long
+    // time, but can intermittently fail. Shelling out to the 'lib' tool is a
+    // temporary fix to get the Halide buildbots unstuck; it would be much
+    // preferable to write the necessary code directly.
+    if (Internal::get_triple_for_target(target).isWindowsMSVCEnvironment()) {
+        std::string command = "lib /nologo /out:" + dst_file;
+        for (auto &src : src_files) {
+            command += " " + src;
+        }
+        int lib_result = system(command.c_str());
+        internal_assert(lib_result == 0) << "shelling out to lib failed: (" << command << ")\n";
+        return;
+    }
+
 #if LLVM_VERSION >= 39
     std::vector<llvm::NewArchiveMember> new_members;
     for (auto &src : src_files) {
