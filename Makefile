@@ -603,6 +603,8 @@ RUNTIME_CPP_COMPONENTS = \
   profiler_inlined \
   qurt_allocator \
   qurt_hvx \
+  qurt_init_fini \
+  qurt_thread_pool \
   runtime_api \
   ssp \
   thread_pool \

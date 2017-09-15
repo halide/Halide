@@ -35,6 +35,7 @@ struct Ehdr {
     uint16_t e_shstrndx;
 };
 
+
 enum {
     PT_NULL = 0,
     PT_LOAD = 1,
@@ -178,6 +179,9 @@ struct dlib_t {
     // Information about the symbols.
     const char *strtab;
     const Sym *symtab;
+    typedef void (*init_fini_t)(void);
+    init_fini_t fini;
+    init_fini_t init;
 
     hash_table hash;
 
@@ -252,6 +256,8 @@ struct dlib_t {
         strtab = NULL;
         symtab = NULL;
         hash.table = NULL;
+        fini = NULL;
+        init = NULL;
 
         const Rela *jmprel = NULL;
         int jmprel_count = 0;
@@ -298,6 +304,12 @@ struct dlib_t {
             case DT_RELASZ:
                 rel_count = d.value / sizeof(Rela);
                 break;
+            case DT_INIT:
+                init = (init_fini_t) (base_vaddr + d.value);
+                break;
+            case DT_FINI:
+                fini = (init_fini_t) (base_vaddr + d.value);
+                break;
             case DT_RELAENT:
                 if (d.value != sizeof(Rela)) {
                     log_printf("DT_RELAENT was not 12 bytes.\n");
@@ -330,7 +342,6 @@ struct dlib_t {
                 return false;
             }
         }
-
         return true;
     }
 
@@ -418,10 +429,18 @@ struct dlib_t {
         if (!parse_dynamic(dynamic)) {
             return false;
         }
-
         return true;
     }
-
+    void run_dtors() {
+        if (fini) {
+            fini();
+        }
+    }
+    void run_ctors() {
+        if (init) {
+            init();
+        }
+    }
     void deinit() {
         typedef int (*munmap_fn)(void *, size_t);
         munmap_fn munmap = (munmap_fn)halide_get_symbol("munmap");
@@ -471,12 +490,10 @@ void *mmap_dlopen(const void *code, size_t size) {
         free(dlib);
         return NULL;
     }
-
+    dlib->run_ctors();
     // Add this library to the list of loaded libs.
     dlib->next = loaded_libs;
     loaded_libs = dlib;
-
-    // TODO: Should we run .ctors?
 
     return dlib;
 }
@@ -505,10 +522,9 @@ int mmap_dlclose(void *dlib) {
             prev->next = new_next;
         }
     }
-
-    // TODO: Should we run .dtors?
-
-    ((dlib_t*)dlib)->deinit();
-    free(dlib);
+    dlib_t *d = (dlib_t *)dlib;
+    d->run_dtors();
+    d->deinit();
+    free(d);
     return 0;
 }
