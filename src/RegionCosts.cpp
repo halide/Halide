@@ -149,8 +149,7 @@ class ExprCost : public IRVisitor {
             } else {
                 detailed_byte_loads.emplace(call->name, make_const(Int(64), call->type.bytes()));
             }
-        } else if (call->call_type == Call::Extern || call->call_type == Call::PureExtern ||
-                   call->call_type == Call::ExternCPlusPlus) {
+        } else if (call->is_extern()) {
             // TODO: Suffix based matching is kind of sketchy; but going ahead with
             // it for now. Also not all the PureExtern's are accounted for yet.
             if (ends_with(call->name, "_f64")) {
@@ -165,7 +164,7 @@ class ExprCost : public IRVisitor {
                 // cost of an extern stage requires profiling or user annotation.
                 user_warning << "Unknown extern call " << call->name << '\n';
             }
-        } else if (call->call_type == Call::Intrinsic || call->call_type == Call::PureIntrinsic) {
+        } else if (call->is_intrinsic()) {
             // TODO: Improve the cost model. In some architectures (e.g. ARM or
             // NEON), count_leading_zeros should be as cheap as bitwise ops.
             // div_round_to_zero and mod_round_to_zero can also get fairly expensive.

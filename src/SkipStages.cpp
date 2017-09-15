@@ -20,8 +20,7 @@ using std::map;
 namespace {
 
 bool extern_call_uses_buffer(const Call *op, const std::string &func) {
-    if (op->call_type == Call::Extern ||
-        op->call_type == Call::ExternCPlusPlus) {
+    if (op->is_extern()) {
         if (starts_with(op->name, "halide_memoization")) {
             return false;
         }
