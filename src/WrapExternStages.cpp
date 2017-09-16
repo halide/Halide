@@ -119,9 +119,7 @@ class WrapExternStages : public IRMutator {
     }
 
     void visit(const Call *op) {
-        if ((op->call_type == Call::Extern ||
-             op->call_type == Call::ExternCPlusPlus) &&
-            op->func.defined()) {
+        if (op->is_extern() && op->func.defined()) {
             Function f(op->func);
             internal_assert(f.has_extern_definition());
             if (f.extern_definition_uses_old_buffer_t()) {
