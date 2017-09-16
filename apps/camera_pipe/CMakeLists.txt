@@ -1,15 +1,19 @@
-# Generator
-halide_add_generator(camera_pipe.generator
-                     SRCS camera_pipe_generator.cpp)
-halide_add_aot_library(camera_pipe
-                       GENERATOR_TARGET camera_pipe.generator
-                       GENERATOR_ARGS target=host auto_schedule=false
-                       GENERATED_FUNCTION camera_pipe)                       
-halide_add_aot_library(camera_pipe_auto_schedule
-                       GENERATOR_NAME camera_pipe
-                       GENERATOR_TARGET camera_pipe.generator
-                       GENERATOR_ARGS target=host auto_schedule=true
-                       GENERATED_FUNCTION camera_pipe_auto_schedule)
+add_executable(camera_pipe_process process.cpp)
+halide_use_image_io(camera_pipe_process)
+
+halide_generator(camera_pipe.generator SRCS camera_pipe_generator.cpp)
+
+foreach(AUTO_SCHEDULE false true)
+    if(${AUTO_SCHEDULE})
+        set(LIB camera_pipe_auto_schedule)
+    else()
+        set(LIB camera_pipe)
+    endif()
+    halide_library_from_generator(${LIB}
+                                  GENERATOR camera_pipe.generator
+                                  GENERATOR_ARGS auto_schedule=${AUTO_SCHEDULE})
+    target_link_libraries(camera_pipe_process PRIVATE ${LIB} ${curved_lib} fcam)
+endforeach()
 
 # fcam
 # FIXME: Set -O3 here
@@ -18,13 +22,6 @@ FIND_PACKAGE(OpenMP QUIET)
 if (OPENMP_FOUND)
   target_compile_options(fcam PUBLIC "-fopenmp")
 endif()
-
-# Final executable
-add_executable(process process.cpp)
-halide_add_aot_library_dependency(process camera_pipe)
-halide_add_aot_library_dependency(process camera_pipe_auto_schedule)
-target_link_libraries(process PRIVATE ${curved_lib} fcam)
-halide_use_image_io(process)
 
 if (NOT MSVC)
   target_compile_options(process PRIVATE "-O2" "-msse2")
