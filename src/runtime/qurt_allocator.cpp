@@ -45,6 +45,13 @@ static const int buffer_size = 1024 * 64;
 WEAK int buf_is_used[num_buffers];
 WEAK void *mem_buf[num_buffers] = { NULL, };
 
+__attribute__((destructor))
+WEAK void halide_allocator_cleanup() {
+    for (int i = 0; i < num_buffers; ++i) {
+        aligned_free(mem_buf[i]);
+    }
+}
+
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Hexagon needs up to 128 byte alignment.
     const size_t alignment = 128;
