@@ -361,7 +361,10 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
             section->set_flags(sh->sh_flags)
                 .set_size(sh->sh_size)
                 .set_alignment(sh->sh_addralign);
-            if (sh->sh_type != Section::SHT_NULL) {
+            if (sh->sh_type == Section::SHT_NOBITS) {
+                // This section doesn't have any data to load.
+            } else if (sh->sh_type == Section::SHT_NULL) {
+            } else {
                 const char *sh_data = data + sh->sh_offset;
                 internal_assert(data <= sh_data && sh_data + sh->sh_size <= data + size);
                 section->set_contents(sh_data, sh_data + sh->sh_size);
