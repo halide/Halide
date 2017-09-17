@@ -24,11 +24,14 @@ if (OPENMP_FOUND)
 endif()
 
 if (NOT MSVC)
-  target_compile_options(process PRIVATE "-O2" "-msse2")
+  target_compile_options(camera_pipe_process PRIVATE "-O2" "-msse2")
   if (OPENMP_FOUND)
-    target_compile_options(process PRIVATE ${OpenMP_CXX_FLAGS})
-    target_link_libraries(process PRIVATE ${OpenMP_CXX_FLAGS})
+    target_compile_options(camera_pipe_process PRIVATE 
+    ${OpenMP_CXX_FLAGS})
+    target_link_libraries(camera_pipe_process PRIVATE 
+  ${OpenMP_CXX_FLAGS})
   else()
-    target_compile_options(process PRIVATE "-Wno-unknown-pragmas")
+    target_compile_options(camera_pipe_process PRIVATE 
+  "-Wno-unknown-pragmas")
   endif()
 endif()
