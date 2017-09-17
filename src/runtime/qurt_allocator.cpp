@@ -9,6 +9,26 @@ extern void free(void *);
 
 namespace Halide { namespace Runtime { namespace Internal {
 
+WEAK void *aligned_malloc(size_t size, size_t alignment) {
+    // We also need to align the size of the buffer.
+    size = (size + alignment - 1) & ~(alignment - 1);
+
+    // Allocate enough space for aligning the pointer we return.
+    void *orig = malloc(size + alignment);
+    if (orig == NULL) {
+        // Will result in a failed assertion and a call to halide_error
+        return NULL;
+    }
+    // We want to store the original pointer prior to the pointer we return.
+    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
+    ((void **)ptr)[-1] = orig;
+    return ptr;
+}
+
+WEAK void aligned_free(void *ptr) {
+    free(((void**)ptr)[-1]);
+}
+
 // We keep a small pool of small pre-allocated buffers for use by Halide
 // code; some kernels end up doing per-scanline allocations and frees,
 // which can cause a noticable performance impact on some workloads.
@@ -20,34 +40,25 @@ namespace Halide { namespace Runtime { namespace Internal {
 static const int num_buffers = 10;
 static const int buffer_size = 1024 * 64;
 
-// Hexagon needs up to 128 byte alignment.
-static const size_t alignment = 128;
-
 WEAK int buf_is_used[num_buffers];
-WEAK char mem_buf[num_buffers][buffer_size] __attribute__((aligned(alignment)));
+WEAK void *mem_buf[num_buffers] = { NULL, };
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
+    // Hexagon needs up to 128 byte alignment.
+    const size_t alignment = 128;
+
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
-            if (__sync_val_compare_and_swap(buf_is_used+i, 0, 1) == 0) {
+            if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
+                if (mem_buf[i] == NULL) {
+                    mem_buf[i] = aligned_malloc(buffer_size, alignment);
+                }
                 return mem_buf[i];
             }
         }
     }
 
-    // We also need to align the size of the buffer.
-    x = (x + alignment - 1) & ~(alignment - 1);
-
-    // Allocate enough space for aligning the pointer we return.
-    void *orig = malloc(x + alignment);
-    if (orig == NULL) {
-        // Will result in a failed assertion and a call to halide_error
-        return NULL;
-    }
-    // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void*) - 1) & ~(alignment - 1));
-    ((void **)ptr)[-1] = orig;
-    return ptr;
+    return aligned_malloc(x, alignment);
 }
 
 WEAK void halide_default_free(void *user_context, void *ptr) {
@@ -58,7 +69,7 @@ WEAK void halide_default_free(void *user_context, void *ptr) {
         }
     }
 
-    free(((void**)ptr)[-1]);
+    aligned_free(ptr);
 }
 
 WEAK halide_malloc_t custom_malloc = halide_default_malloc;
