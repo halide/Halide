@@ -2,6 +2,7 @@
 #include "HalideRuntimeCuda.h"
 #include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
+#include "HalideRuntimeHexagonDma.h"
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeHexagonHost.h"
@@ -187,4 +188,5 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_uint64_to_string,
     (void *)&halide_upgrade_buffer_t,
     (void *)&halide_use_jit_module,
+    (void *)&halide_hexagon_dmaapp_create_context,
 };
