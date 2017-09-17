@@ -9,7 +9,7 @@ extern void free(void *);
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-WEAK void *aligned_malloc(size_t size, size_t alignment) {
+WEAK void *aligned_malloc(size_t alignment, size_t size) {
     // We also need to align the size of the buffer.
     size = (size + alignment - 1) & ~(alignment - 1);
 
@@ -26,7 +26,9 @@ WEAK void *aligned_malloc(size_t size, size_t alignment) {
 }
 
 WEAK void aligned_free(void *ptr) {
-    free(((void**)ptr)[-1]);
+    if (ptr) {
+        free(((void**)ptr)[-1]);
+    }
 }
 
 // We keep a small pool of small pre-allocated buffers for use by Halide
@@ -51,14 +53,14 @@ WEAK void *halide_default_malloc(void *user_context, size_t x) {
         for (int i = 0; i < num_buffers; ++i) {
             if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
                 if (mem_buf[i] == NULL) {
-                    mem_buf[i] = aligned_malloc(buffer_size, alignment);
+                    mem_buf[i] = aligned_malloc(alignment, buffer_size);
                 }
                 return mem_buf[i];
             }
         }
     }
 
-    return aligned_malloc(x, alignment);
+    return aligned_malloc(alignment, x);
 }
 
 WEAK void halide_default_free(void *user_context, void *ptr) {
