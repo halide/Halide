@@ -322,7 +322,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // 0100 0011 100s ssss PP0t tiii iiid dddd
             mask = 0x000007e0;
         } else {
-          internal_error << "Unhandled instruction type! Instruction = " << inst << "\n";
+            internal_error << "Unhandled instruction type! Instruction = " << inst << "\n";
         }
     }
 
