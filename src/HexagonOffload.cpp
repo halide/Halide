@@ -229,15 +229,15 @@ std::string print_sections(const Object &obj) {
 extern const char *hexagon_instructions[];
 
 // Given an instruction and an encoding from hexagon_instructions,
-// check if the instruction inst is one of these encoded instructions,
-// and if so, return the mask for relocation.
-uint32_t get_mask_for_instruction(uint32_t inst, const char *encoding) {
+// check if the instruction is one of these encoded instructions,
+// and if so, return the mask for relocation. Returns 0 otherwise.
+uint32_t get_mask_for_instruction(uint32_t instruction, const char *encoding) {
     uint32_t mask = 0;
     int instruction_bits = strlen(encoding);
-    internal_assert(instruction_bits <= 32);
+    internal_assert(instruction_bits == 32);
     for (int i = 0; i < instruction_bits; i++) {
         char encoding_i = encoding[instruction_bits - i - 1];
-        int inst_i = (inst >> i) & 1;
+        int inst_i = (instruction >> i) & 1;
         switch (encoding_i) {
         case '0':
             if (inst_i != 0) return 0;
