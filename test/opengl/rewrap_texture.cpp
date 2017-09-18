@@ -55,12 +55,12 @@ int main() {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
     // wrapping a texture should work
-    out2.device_wrap_native(DeviceAPI::GLSL, texture_id);
+    out2.device_wrap_native(DeviceAPI::GLSL, texture_id, target);
     g.realize(out2, target);
     out2.device_detach_native();
 
     // re-wrapping the texture should not abort
-    out3.device_wrap_native(DeviceAPI::GLSL, texture_id);
+    out3.device_wrap_native(DeviceAPI::GLSL, texture_id, target);
     g.realize(out3, target);
     out3.device_detach_native();
 
