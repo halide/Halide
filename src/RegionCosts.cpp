@@ -114,26 +114,40 @@ class ExprCost : public IRVisitor {
 
     void visit(const Call *call) {
         if (call->is_intrinsic(Call::if_then_else)) {
-            // For if_then_else intrinsic, the cost is the max of true and
-            // false branch costs plus the predicate cost.
-            assert(call->args.size() == 3);
-            Expr arith = cost.arith;
-            Expr memory = cost.memory;
-
-            cost = Cost(0, 0);
-            call->args[0].accept(this);
-            Cost pred_cost = cost;
-
-            cost = Cost(0, 0);
-            call->args[1].accept(this);
-            Cost true_cost = cost;
-
+            internal_assert(call->args.size() == 3);
             cost = Cost(0, 0);
             call->args[2].accept(this);
-            Cost false_cost = cost;
 
-            cost = Cost(pred_cost.arith + max(true_cost.arith, false_cost.arith),
-                        pred_cost.memory + max(true_cost.memory, false_cost.memory));
+            // Check if this if_then_else is because of tracing or print_when.
+            // If it is, we should only take into account the cost of computing
+            // the false expr since the true expr is debugging/tracing code.
+            const Call *true_value_call = call->args[1].as<Call>();
+            if (!true_value_call || !true_value_call->is_intrinsic(Call::return_second)) {
+                Cost false_cost = cost;
+
+                // For if_then_else intrinsic, the cost is the max of true and
+                // false branch costs plus the predicate cost.
+                Expr arith = cost.arith;
+                Expr memory = cost.memory;
+
+                cost = Cost(0, 0);
+                call->args[0].accept(this);
+                Cost pred_cost = cost;
+
+                cost = Cost(0, 0);
+                call->args[1].accept(this);
+                Cost true_cost = cost;
+
+                cost = Cost(pred_cost.arith + max(true_cost.arith, false_cost.arith),
+                            pred_cost.memory + max(true_cost.memory, false_cost.memory));
+            }
+            return;
+        } else if (call->is_intrinsic(Call::return_second)) {
+            // For return_second, since the first expr would usually either be a
+            // print_when or tracing, we should only take into account the cost
+            // of computing the second expr.
+            internal_assert(call->args.size() == 2);
+            call->args[1].accept(this);
             return;
         }
 
@@ -179,10 +193,13 @@ class ExprCost : public IRVisitor {
                        call->is_intrinsic(Call::count_leading_zeros) ||
                        call->is_intrinsic(Call::count_trailing_zeros)) {
                 cost.arith += 5;
-            } else if (call->is_intrinsic(Call::likely)) {
+            } else if (call->is_intrinsic(Call::likely) ||
+                       call->is_intrinsic(Call::likely_if_innermost)) {
                 // Likely does not result in actual operations.
             } else {
-                internal_error << "Unknown intrinsic call " << call->name << '\n';
+                // For other intrinsics, use 1 for the arithmetic cost.
+                cost.arith += 1;
+                user_warning << "Unhandled intrinsic call " << call->name << '\n';
             }
         }
 
