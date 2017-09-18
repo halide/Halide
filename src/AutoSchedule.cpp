@@ -126,6 +126,14 @@ struct DependenceAnalysis {
     const vector<string> &order;
     const FuncValueBounds &func_val_bounds;
 
+    // NOTE: Originally DimBounds (which is a map of dimension name to its
+    // interval) was part of RegionsRequiredQuery; however, this caused a bug
+    // when RegionsRequiredQuery used as a key in 'regions_required_cache',
+    // where two RegionsRequiredQuerys with identical fields except 'bounds'
+    // (both 'bounds' sizes and keys were the same but with different interval
+    // values) pointed to the same cache value. That's why, we decided to
+    // make 'bounds' as part of the cache value (RegionsRequired) and do the
+    // equality comparison to get the corresponding regions required.
     struct RegionsRequiredQuery {
         string f;
         int stage;
