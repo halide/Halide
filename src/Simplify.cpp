@@ -4591,10 +4591,20 @@ private:
             }
         } else if (op->is_intrinsic(Call::require)) {
             Expr cond = mutate(op->args[0]);
-            if (can_prove(cond)) {
+            // likely(const-bool) is deliberately not reduced
+            // by the simplify(), but for our purposes here, we want
+            // to ignore the likely() wrapper. (Note that this is 
+            // equivalent to calling can_prove() without needing to
+            // create a new Simplifier instance.)
+            if (const Call *c = cond.as<Call>()) {
+                if (c->is_intrinsic(Call::likely)) {
+                    cond = c->args[0];
+                }
+            }
+            if (is_one(cond)) {
                 expr = mutate(op->args[1]);
             } else {
-                if (can_prove(!cond)) {
+                if (is_zero(cond)) {
                     // (We could simplify this to avoid evaluating the provably-false
                     // expression, but since this is a degenerate condition, don't bother.)
                     user_warning << "This pipeline is guaranteed to fail a require() expression at runtime: \n"
