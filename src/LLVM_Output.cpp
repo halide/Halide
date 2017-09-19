@@ -21,6 +21,8 @@
 
 namespace Halide {
 
+#if LLVM_VERSION >= 39
+
 namespace Internal {
 namespace Archive {
 
@@ -287,6 +289,8 @@ void write_coff_archive(std::ostream &out,
 
 }  // namespace Archive
 }  // namespace Internal
+
+#endif  // LLVM_VERSION >= 39
 
 std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename) {
     std::string error_string;
