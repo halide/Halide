@@ -285,11 +285,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     TargetMachine *tm = engine_builder.selectTarget();
     internal_assert(tm) << error_string << "\n";
-    #if LLVM_VERSION == 37
-    DataLayout target_data_layout(*(tm->getDataLayout()));
-    #else
     DataLayout target_data_layout(tm->createDataLayout());
-    #endif
     if (initial_module_data_layout != target_data_layout) {
         internal_error << "Warning: data layout mismatch between module ("
                        << initial_module_data_layout.getStringRepresentation()
