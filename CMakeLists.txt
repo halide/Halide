@@ -12,12 +12,18 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+  set(CMAKE_OBJECT_PATH_MAX 260)
+  message("Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
+endif()
+
 # Require C++11 for everything.
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_MACOSX_RPATH ON)
+
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
@@ -28,6 +34,19 @@ set(LLVM_VERSION "${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}")
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
 file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
+file(TO_NATIVE_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-config${CMAKE_EXECUTABLE_SUFFIX}" LLVM_CONFIG)
+
+# LLVM doesn't appear to expose --system-libs via its CMake interface, 
+# so we must shell out to llvm-config to find this info
+execute_process(COMMAND ${LLVM_CONFIG} --system-libs OUTPUT_VARIABLE HALIDE_SYSTEM_LIBS)
+string(STRIP "${HALIDE_SYSTEM_LIBS}" HALIDE_SYSTEM_LIBS)  # strip whitespace from start & end
+string(REPLACE " " ";" HALIDE_SYSTEM_LIBS "${HALIDE_SYSTEM_LIBS}")  # convert into a list
+if("${HALIDE_SYSTEM_LIBS}" STREQUAL "")
+  # It's theoretically possible that this could be legitimately empty,
+  # but in practice that doesn't really happen, so we'll assume it means we
+  # aren't configured correctly.
+  message(FATAL_ERROR "'llvm-config --system-libs' is empty; this is probably wrong.")
+endif()
 
 # Check LLVM
 function(check_dir VARNAME PATH)
@@ -117,12 +136,6 @@ function(halide_project name folder)
   target_include_directories("${name}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (MSVC)
-    # 4006: "already defined, second definition ignored"
-    # 4088: "/FORCE used, image may not work"
-    # (Note that MSVC apparently considers 4088 too important to allow us to ignore it;
-    # I'm nevertheless leaving this here to document that we don't care about it.)
-    set_target_properties(${name} PROPERTIES LINK_FLAGS "/ignore:4006 /ignore:4088")
-    target_compile_definitions("${name}" PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_link_libraries("${name}" PRIVATE Kernel32)
   endif()
 endfunction(halide_project)
@@ -170,8 +183,13 @@ if (OPENMP_FOUND)
   message(STATUS "Found OpenMP")
 endif()
 
-# Include the rules for Generator, ImageIO, etc
-include(HalideGenerator.cmake)
+# For in-tree builds, we need to set the input variables for halide.cmake
+# to specific values, rather than relying on HALIDE_DISTRIB_DIR to be set correctly.
+set(HALIDE_INCLUDE_DIR "${CMAKE_BINARY_DIR}/include")
+set(HALIDE_TOOLS_DIR "${CMAKE_SOURCE_DIR}/tools")
+set(HALIDE_COMPILER_LIB Halide)
+set(HALIDE_DISTRIB_DIR "/bad-path")
+include(halide.cmake)
 
 # -----------------------------------------------------------------------------
 # Option to enable/disable assertions
@@ -288,7 +306,6 @@ endif()
 
 
 add_subdirectory(src)
-add_subdirectory(tools)
 option(WITH_TESTS "Build tests" ON)
 if (WITH_TESTS)
   message(STATUS "Building tests enabled")
@@ -339,4 +356,3 @@ if (WITH_UTILS)
 else()
   message(STATUS "Building utils disabled")
 endif()
-

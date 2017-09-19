@@ -125,6 +125,31 @@ class Inliner : public IRMutator {
         }
     }
 
+    void visit(const Variable *op) {
+        if (op->name == func.name() + ".buffer") {
+            const Call *call = func.is_wrapper();
+            internal_assert(call);
+            // Do a whole-image inline. Substitute the .buffer symbol
+            // for the wrapped object's .buffer symbol.
+            string buf_name;
+            if (call->call_type == Call::Halide) {
+                buf_name = call->name;
+                if (Function(call->func).outputs() > 1) {
+                    buf_name += "." + std::to_string(call->value_index);
+                }
+                buf_name += ".buffer";
+                expr = Variable::make(type_of<halide_buffer_t *>(), buf_name);
+            } else if (call->param.defined()) {
+                expr = Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->param);
+            } else {
+                internal_assert(call->image.defined());
+                expr = Variable::make(type_of<halide_buffer_t *>(), call->name + ".buffer", call->image);
+            }
+        } else {
+            expr = op;
+        }
+    }
+
     void visit(const Provide *op) {
         bool old_found = found;
 
@@ -167,6 +192,15 @@ Expr inline_function(Expr e, Function f) {
 void inline_function(Function caller, Function f) {
     Inliner i(f);
     caller.mutate(&i);
+    if (caller.has_extern_definition()) {
+        for (ExternFuncArgument &arg : caller.extern_arguments()) {
+            if (arg.is_func() && arg.func.same_as(f.get_contents())) {
+                const Call *call = f.is_wrapper();
+                internal_assert(call);
+                arg.func = call->func;
+            }
+        }
+    }
 }
 
 }

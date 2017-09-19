@@ -66,6 +66,8 @@ set(RUNTIME_CPP
   profiler_inlined
   qurt_allocator
   qurt_hvx
+  qurt_init_fini
+  qurt_thread_pool
   runtime_api
   ssp
   thread_pool
@@ -533,10 +535,6 @@ add_dependencies(Halide
   binary2cpp
   build_halide_h
 )
-
-if (WIN32 AND NOT MSVC)
-  set_target_properties(Halide PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
-endif()
 
 # List of LLVM Components required
 # This list will be appended to depending on the targets we need to support

@@ -1363,6 +1363,18 @@ public:
         this->estimate_impl(var, min, extent);
         return *this;
     }
+
+    Func in() {
+        return Func(*this).in();
+    }
+
+    Func in(Func other) {
+        return Func(*this).in(other);
+    }
+
+    Func in(const std::vector<Func> &others) {
+        return Func(*this).in(others);
+    }
 };
 
 
@@ -1437,6 +1449,18 @@ public:
     GeneratorInput_Func<T> &estimate(Var var, Expr min, Expr extent) {
         this->estimate_impl(var, min, extent);
         return *this;
+    }
+
+    Func in() {
+        return Func(*this).in();
+    }
+
+    Func in(Func other) {
+        return Func(*this).in(other);
+    }
+
+    Func in(const std::vector<Func> &others) {
+        return Func(*this).in(others);
     }
 };
 

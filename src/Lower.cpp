@@ -108,9 +108,8 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
     // specializations' conditions
     simplify_specializations(env);
 
-    bool any_memoized = false;
-
     debug(1) << "Creating initial loop nests...\n";
+    bool any_memoized = false;
     Stmt s = schedule_functions(outputs, order, env, t, any_memoized);
     debug(2) << "Lowering after creating initial loop nests:\n" << s << '\n';
 
@@ -201,7 +200,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Unpacking buffer arguments...\n";
     s = unpack_buffers(s);
-    debug(2) << "Lowering after unpacking buffer arguments...\n";
+    debug(2) << "Lowering after unpacking buffer arguments...\n" << s << "\n\n";
 
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
@@ -222,6 +221,10 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
+
+        debug(1) << "Selecting a GPU API for extern stages...\n";
+        s = select_gpu_api(s, t);
+        debug(2) << "Lowering after selecting a GPU API for extern stages:\n" << s << "\n\n";
     }
 
     if (t.has_feature(Target::OpenGL)) {

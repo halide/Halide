@@ -515,6 +515,11 @@ struct halide_device_interface_t {
     int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf,
                                   const struct halide_device_interface_t *device_interface);
     int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+    int (*buffer_copy)(void *user_context, struct halide_buffer_t *src,
+                       const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
+    int (*device_crop)(void *user_context, const struct halide_buffer_t *src,
+                       struct halide_buffer_t *dst);
+    int (*device_release_crop)(void *user_context, struct halide_buffer_t *buf);
     int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
                        const struct halide_device_interface_t *device_interface);
     int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
@@ -540,6 +545,42 @@ extern int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
  * error is returned. */
 extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                  const struct halide_device_interface_t *device_interface);
+
+/** Copy data from one buffer to another. The buffers may have
+ * different shapes and sizes, but the destination buffer's shape must
+ * be contained within the source buffer's shape. That is, for each
+ * dimension, the min on the destination buffer must be greater than
+ * or equal to the min on the source buffer, and min+extent on the
+ * destination buffer must be less that or equal to min+extent on the
+ * source buffer. The source data is pulled from either device or
+ * host memory on the source, depending on the dirty flags. host is
+ * preferred if both are valid. The dst_device_interface parameter
+ * controls the destination memory space. NULL means host memory. */
+extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                              const struct halide_device_interface_t *dst_device_interface,
+                              struct halide_buffer_t *dst);
+
+/** Give the destination buffer a device allocation which is an alias
+ * for the same coordinate range in the source buffer. Modifies the
+ * device, device_interface, and the device_dirty flag only. Only
+ * supported by some device APIs (others will return
+ * halide_error_code_device_crop_unsupported). Call
+ * halide_device_release_crop instead of halide_device_free to clean
+ * up resources associated with the cropped view. Do not free the
+ * device allocation on the source buffer while the destination buffer
+ * still lives. Note that the two buffers do not share dirty flags, so
+ * care must be taken to update them together as needed. Note also
+ * that device interfaces which support cropping may still not support
+ * cropping a crop. Instead, create a new crop of the parent
+ * buffer. */
+extern int halide_device_crop(void *user_context,
+                              const struct halide_buffer_t *src,
+                              struct halide_buffer_t *dst);
+
+/** Release any resources associated with a cropped view of another
+ * buffer. */
+extern int halide_device_release_crop(void *user_context,
+                                      struct halide_buffer_t *buf);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
@@ -854,6 +895,25 @@ enum halide_error_code_t {
     /** The halide_buffer_t * passed to a halide runtime routine is
      * nullptr and this is not allowed. */
     halide_error_code_buffer_is_null = -38,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from one buffer to another. Turn on -debug in your target
+     * string to see more details. */
+    halide_error_code_device_buffer_copy_failed = -39,
+
+    /** Attempted to make cropped alias of a buffer with a device
+     * field, but the device_interface does not support cropping. */
+    halide_error_code_device_crop_unsupported = -40,
+
+    /** Cropping a buffer failed for some other reason. Turn on -debug
+     * in your target string. */
+    halide_error_code_device_crop_failed = -41,
+
+    /** An operation on a buffer required an allocation on a
+     * particular device interface, but a device allocation already
+     * existed on a different device interface. Free the old one
+     * first. */
+    halide_error_code_incompatible_device_interface = -42,
 };
 
 /** Halide calls the functions below on various error conditions. The
