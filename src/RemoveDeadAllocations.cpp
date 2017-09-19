@@ -48,7 +48,7 @@ class RemoveDeadAllocations : public IRMutator {
         allocs.push(op->name, 1);
         Stmt body = mutate(op->body);
 
-        if (allocs.contains(op->name)) {
+        if (allocs.contains(op->name) && op->free_function.empty()) {
             stmt = body;
             allocs.pop(op->name);
         } else if (body.same_as(op->body)) {

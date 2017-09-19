@@ -1131,6 +1131,30 @@ public:
      */
     EXPORT Func in();
 
+    /** Declare that this function should be implemented by a call to
+     * halide_buffer_copy with the given target device API. Asserts
+     * that the Func has a pure definition which is a simple call to a
+     * single input, and no update definitions. The wrapper Funcs
+     * returned by in() are suitable candidates. Consumes all pure
+     * variables, and rewrites the Func to have an extern definition
+     * that calls halide_buffer_copy. */
+    EXPORT Func copy_to_device(DeviceAPI d = DeviceAPI::Default_GPU);
+
+    /** Declare that this function should be implemented by a call to
+     * halide_buffer_copy with a NULL target device API. Equivalent to
+     * copy_to_device(DeviceAPI::Host). Asserts that the Func has a
+     * pure definition which is a simple call to a single input, and
+     * no update definitions. The wrapper Funcs returned by in() are
+     * suitable candidates. Consumes all pure variables, and rewrites
+     * the Func to have an extern definition that calls
+     * halide_buffer_copy.
+     *
+     * Note that if the source Func is already valid in host memory,
+     * this compiles to code that does the minimum number of calls to
+     * memcpy.
+     */
+    EXPORT Func copy_to_host();
+
     /** Split a dimension into inner and outer subdimensions with the
      * given names, where the inner dimension iterates from 0 to
      * factor-1. The inner and outer subdimensions can then be dealt

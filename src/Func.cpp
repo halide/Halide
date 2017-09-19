@@ -1839,6 +1839,57 @@ Func Func::in() {
     return Func(wrapper);
 }
 
+Func Func::copy_to_device(DeviceAPI d) {
+    user_assert(defined())
+        << "copy_to_device on Func " << name() << " with no definition\n";
+    user_assert(outputs() == 1)
+        << "copy_to_device on a Tuple-valued Func " << name() << " not yet supported\n";
+    user_assert(!has_update_definition())
+        << "copy_to_device on Func " << name() << " with update definition\n";
+    user_assert(!is_extern())
+        << "copy_to_device on Func " << name() << " with extern definition\n";
+
+    const Call *call = func.is_wrapper();
+    user_assert(call)
+        << "Func " << name() << " is scheduled as copy_to_host/device, "
+        << "but has value: " << value() << "\n"
+        << "Expected a single call to another Func with matching "
+        << "dimensionality and argument order.\n";
+
+    // We'll preserve the pure vars
+    Expr rhs = value();
+    func.definition().values().clear();
+    func.extern_definition_proxy_expr() = rhs;
+
+    ExternFuncArgument buffer;
+    if (call->call_type == Call::Halide) {
+        buffer = call->func;
+    } else if (call->image.defined()) {
+        buffer = call->image;
+    } else {
+        internal_assert(call->param.defined());
+        buffer = call->param;
+    }
+
+    ExternFuncArgument device_interface = make_device_interface_call(d);
+    func.define_extern("halide_buffer_copy", {buffer, device_interface},
+                       {call->type}, (int)call->args.size(),
+                       NameMangling::C, d, false);
+    return *this;
+}
+
+Func Func::copy_to_host() {
+    user_assert(defined())
+        << "copy_to_host on Func " << name() << " with no definition\n";
+    user_assert(outputs() == 1)
+        << "copy_to_host on a Tuple-valued Func " << name() << " not yet supported\n";
+    user_assert(!has_update_definition())
+        << "copy_to_host on Func " << name() << " with update definition\n";
+    user_assert(!is_extern())
+        << "copy_to_host on Func " << name() << " with extern definition\n";
+    return copy_to_device(DeviceAPI::Host);
+}
+
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
     invalidate_cache();
     Stage(func.definition(), name(), args(), func.schedule()).split(old, outer, inner, factor, tail);

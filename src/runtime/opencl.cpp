@@ -272,6 +272,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
             char platform_name[max_platform_name];
             err = clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, max_platform_name, platform_name, NULL );
             if (err != CL_SUCCESS) continue;
+            debug(user_context) << "CL: platform " << i << " " << platform_name << "\n";
 
             // A platform matches the request if it is a substring of the platform name.
             if (strstr(platform_name, name)) {
@@ -752,74 +753,52 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t* buf) {
 }
 
 namespace {
-WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
-                             const device_copy &c,
-                             uint64_t off, int d, bool d_to_h) {
+WEAK int do_multidimensional_copy(void *user_context, ClContext &ctx,
+                                  const device_copy &c,
+                                  int64_t src_idx, int64_t dst_idx,
+                                  int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
     } else if (d == 0) {
         cl_int err = 0;
-        const char *copy_name = d_to_h ? "clEnqueueReadBuffer" : "clEnqueueWriteBuffer";
-        debug(user_context) << "    " << copy_name << " "
-                            << (void *)c.src << " -> " << (void *)c.dst << ", " << c.chunk_size << " bytes\n";
-        if (d_to_h) {
-            err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
-                                      CL_FALSE, off, c.chunk_size, (void *)c.dst,
-                                      0, NULL, NULL);
-        } else {
-            err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
-                                       CL_FALSE, off, c.chunk_size, (void *)c.src,
-                                       0, NULL, NULL);
-        }
-        if (err) {
-            error(user_context) << "CL: " << copy_name << " failed: " << get_opencl_error_name(err);
-            return (int)err;
-        }
-    }
-#ifdef ENABLE_OPENCL_11
-    else if (d == 2) {
-        // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
-        // can deal with the 2 innermost strides with OpenCL.
 
-        cl_int err = 0;
-
-        size_t offset[3] = { (size_t) off, 0, 0 };
-        size_t region[3] = { (size_t) c.chunk_size, (size_t) c.extent[0], (size_t) c.extent[1] };
-
-        const char *copy_name = d_to_h ? "clEnqueueReadBufferRect" : "clEnqueueWriteBufferRect";
-        debug(user_context) << "    " << copy_name << " "
-                            << (void *)c.src << " -> " << (void *)c.dst
+        debug(user_context) << "    from " << (from_host ? "host" : "device")
+                            << " to " << (to_host ? "host" : "device") << ", "
+                            << (void *)c.src << " + " << src_idx
+                            << " -> " << (void *)c.dst << " + " << dst_idx
                             << ", " << c.chunk_size << " bytes\n";
-
-        if (d_to_h) {
-            err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
-                                          offset, offset, region,
-                                          c.stride_bytes[0], c.stride_bytes[1],
-                                          c.stride_bytes[0], c.stride_bytes[1],
-                                          (void *)c.dst,
-                                          0, NULL, NULL);
-        } else {
-
-            err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
-                                           offset, offset, region,
-                                           c.stride_bytes[0], c.stride_bytes[1],
-                                           c.stride_bytes[0], c.stride_bytes[1],
-                                           (void *)c.src,
-                                           0, NULL, NULL);
-
-
+        if (!from_host && to_host) {
+            err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
+                                      CL_FALSE, src_idx, c.chunk_size, (void *)(c.dst + dst_idx),
+                                      0, NULL, NULL);
+        } else if (from_host && !to_host) {
+            err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
+                                       CL_FALSE, dst_idx, c.chunk_size, (void *)(c.src + src_idx),
+                                       0, NULL, NULL);
+        } else if (!from_host && !to_host) {
+            err = clEnqueueCopyBuffer(ctx.cmd_queue, (cl_mem)c.src, (cl_mem)c.dst,
+                                      src_idx, dst_idx, c.chunk_size,
+                                      0, NULL, NULL);
+        } else if (c.dst != c.src) {
+            // Could reach here if a user called directly into the
+            // opencl API for a device->host copy on a source buffer
+            // with device_dirty = false.
+            memcpy((void *)c.dst, (void *)c.src, c.chunk_size);
         }
+
         if (err) {
-            error(user_context) << "CL: " << copy_name << " failed: " << get_opencl_error_name(err);
+            error(user_context) << "CL: buffer copy failed: " << get_opencl_error_name(err);
             return (int)err;
         }
-    }
-#endif
-    else {
+    } else {
+        ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d-1]; i++) {
-            int err = do_multidimensional_copy(user_context, ctx, c, off, d-1, d_to_h);
-            off += c.stride_bytes[d-1];
+            int err = do_multidimensional_copy(user_context, ctx, c,
+                                               src_idx + src_off, dst_idx + dst_off,
+                                               d - 1, from_host, to_host);
+            dst_off += c.dst_stride_bytes[d-1];
+            src_off += c.src_stride_bytes[d-1];
             if (err) {
                 return err;
             }
@@ -829,83 +808,75 @@ WEAK int do_multidimensional_copy(void *user_context, const ClContext &ctx,
 }
 }
 
+WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                   const struct halide_device_interface_t *dst_device_interface,
+                                   struct halide_buffer_t *dst) {
+    // We only handle copies to opencl or to host
+    halide_assert(user_context, dst_device_interface == NULL ||
+                  dst_device_interface == &opencl_device_interface);
+
+    if (src->device_dirty() &&
+        src->device_interface != &opencl_device_interface) {
+        halide_assert(user_context, dst_device_interface == &opencl_device_interface);
+        // If the source is not opencl or host memory, ask the source
+        // device interface to copy to dst host memory first.
+        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
+        if (err) return err;
+        // Now just copy from src to host
+        src = dst;
+    }
+
+    bool from_host = !src->device_dirty();
+    bool to_host = !dst_device_interface;
+
+    halide_assert(user_context, from_host || src->device);
+    halide_assert(user_context, to_host || dst->device);
+
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+
+    int err = 0;
+    {
+        ClContext ctx(user_context);
+        if (ctx.error != CL_SUCCESS) {
+            return ctx.error;
+        }
+
+        debug(user_context)
+            << "CUDA: halide_opencl_buffer_copy (user_context: " << user_context
+            << ", src: " << src << ", dst: " << dst << ")\n";
+
+        #ifdef DEBUG_RUNTIME
+        uint64_t t_before = halide_current_time_ns(user_context);
+        if (!from_host) {
+            halide_assert(user_context, validate_device_pointer(user_context, src));
+        }
+        if (!to_host) {
+            halide_assert(user_context, validate_device_pointer(user_context, dst));
+        }
+        #endif
+
+        err = do_multidimensional_copy(user_context, ctx, c, c.src_begin, 0, dst->dimensions, from_host, to_host);
+
+        // The reads/writes above are all non-blocking, so empty the command
+        // queue before we proceed so that other host code won't write
+        // to the buffer while the above writes are still running.
+        clFinish(ctx.cmd_queue);
+
+        #ifdef DEBUG_RUNTIME
+        uint64_t t_after = halide_current_time_ns(user_context);
+        debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+        #endif
+    }
+
+    return err;
+}
+
 WEAK int halide_opencl_copy_to_device(void *user_context, halide_buffer_t* buf) {
-    int err = halide_opencl_device_malloc(user_context, buf);
-    if (err) {
-        return err;
-    }
-
-    debug(user_context)
-        << "CL: halide_opencl_copy_to_device (user_context: " << user_context
-        << ", buf: " << buf << ")\n";
-
-    // Acquire the context so we can use the command queue. This also avoids multiple
-    // redundant calls to clEnqueueWriteBuffer when multiple threads are trying to copy
-    // the same buffer.
-    ClContext ctx(user_context);
-    if (ctx.error != CL_SUCCESS) {
-        return ctx.error;
-    }
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
-
-    halide_assert(user_context, buf->host && buf->device);
-    halide_assert(user_context, validate_device_pointer(user_context, buf));
-
-    device_copy c = make_host_to_device_copy(buf);
-
-    do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, false);
-
-    // The writes above are all non-blocking, so empty the command
-    // queue before we proceed so that other host code won't write
-    // to the buffer while the above writes are still running.
-    clFinish(ctx.cmd_queue);
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
-
-    return 0;
+    return halide_opencl_buffer_copy(user_context, buf, &opencl_device_interface, buf);
 }
 
 WEAK int halide_opencl_copy_to_host(void *user_context, halide_buffer_t* buf) {
-    debug(user_context)
-        << "CL: halide_copy_to_host (user_context: " << user_context
-        << ", buf: " << buf << ")\n";
-
-    // Acquire the context so we can use the command queue. This also avoids multiple
-    // redundant calls to clEnqueueReadBuffer when multiple threads are trying to copy
-    // the same buffer.
-    ClContext ctx(user_context);
-    if (ctx.error != CL_SUCCESS) {
-        return ctx.error;
-    }
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
-
-    halide_assert(user_context, buf->host && buf->device);
-    halide_assert(user_context, validate_device_pointer(user_context, buf));
-
-    device_copy c = make_device_to_host_copy(buf);
-
-    do_multidimensional_copy(user_context, ctx, c, 0, buf->dimensions, true);
-
-    // The reads above are all non-blocking, so empty the command
-    // queue before we proceed so that other host code won't read
-    // bad data.
-    clFinish(ctx.cmd_queue);
-
-    #ifdef DEBUG_RUNTIME
-    uint64_t t_after = halide_current_time_ns(user_context);
-    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-    #endif
-
-    return 0;
+    return halide_opencl_buffer_copy(user_context, buf, NULL, buf);
 }
 
 WEAK int halide_opencl_run(void *user_context,
@@ -1082,6 +1053,40 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, halide_buffer_t *buf
     return (uintptr_t)buf->device;
 }
 
+WEAK int halide_opencl_device_crop(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    struct halide_buffer_t *dst) {
+    dst->device_interface = src->device_interface;
+    int err = 0;
+    int64_t offset = 0;
+    for (int i = 0; i < src->dimensions; i++) {
+        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
+    }
+    offset *= src->type.bytes();
+    cl_buffer_region region = {offset, dst->size_in_bytes()};
+    // The sub-buffer encompasses the linear range of addresses that
+    // span the crop.
+    dst->device = (uint64_t)clCreateSubBuffer((cl_mem)(src->device),
+                                              CL_MEM_READ_WRITE,
+                                              CL_BUFFER_CREATE_TYPE_REGION,
+                                              &region,
+                                              &err);
+
+    if (err) {
+        error(user_context) << "CL: Crop failed with error code " << get_opencl_error_name(err);
+        return halide_error_code_device_crop_failed;
+    }
+
+    return 0;
+}
+
+WEAK int halide_opencl_device_release_crop(void *user_context,
+                                            struct halide_buffer_t *buf) {
+    // Sub-buffers are released with clReleaseMemObject
+    halide_opencl_device_free(user_context, buf);
+    return 0;
+}
+
 WEAK const struct halide_device_interface_t *halide_opencl_device_interface() {
     return &opencl_device_interface;
 }
@@ -1160,6 +1165,9 @@ WEAK halide_device_interface_impl_t opencl_device_interface_impl = {
     halide_opencl_copy_to_device,
     halide_opencl_device_and_host_malloc,
     halide_opencl_device_and_host_free,
+    halide_opencl_buffer_copy,
+    halide_opencl_device_crop,
+    halide_opencl_device_release_crop,
     halide_opencl_wrap_cl_mem,
     halide_opencl_detach_cl_mem,
 };
@@ -1173,6 +1181,9 @@ WEAK halide_device_interface_t opencl_device_interface = {
     halide_copy_to_device,
     halide_device_and_host_malloc,
     halide_device_and_host_free,
+    halide_buffer_copy,
+    halide_device_crop,
+    halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
     &opencl_device_interface_impl

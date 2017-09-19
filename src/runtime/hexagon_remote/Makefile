@@ -127,7 +127,7 @@ bin/%/log.o: log.cpp
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c log.cpp -o $@
 
 # Build rules for the hexagon implementation.
-bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/thread_pool.o bin/%/nearbyint.o bin/%/c11_stubs.o bin/%/log.o bin/%/dlib.o bin/%/known_symbols.o
+bin/%/libhalide_hexagon_remote_skel.so: bin/%/halide_remote.o bin/%/halide_hexagon_remote_skel.o bin/%/nearbyint.o bin/%/c11_stubs.o bin/%/log.o bin/%/dlib.o bin/%/known_symbols.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -Wl,--no-threads -o $@ \
 	-Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \

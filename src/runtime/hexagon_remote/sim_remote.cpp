@@ -109,26 +109,6 @@ void halide_free(void *user_context, void *ptr) {
     aligned_free(ptr);
 }
 
-int halide_do_task(void *user_context, halide_task_t f, int idx,
-                   uint8_t *closure) {
-    return f(user_context, idx, closure);
-}
-
-int halide_do_par_for(void *user_context, halide_task_t f,
-                      int min, int size, uint8_t *closure) {
-    for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
-        if (result) {
-            return result;
-        }
-    }
-    return 0;
-}
-
-void halide_mutex_lock(halide_mutex *) {}
-void halide_mutex_unlock(halide_mutex *) {}
-void halide_mutex_destroy(halide_mutex *) {}
-
 }  // extern "C"
 
 typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
