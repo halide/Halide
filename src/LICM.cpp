@@ -11,6 +11,36 @@ namespace Internal {
 using std::string;
 using std::map;
 
+// Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
+class CanLift : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (!op->is_pure()) {
+            result = false;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        result = false;
+    }
+
+    void visit(const Variable *op) {
+        if (varying.contains(op->name)) {
+            result = false;
+        }
+    }
+
+    const Scope<int> &varying;
+
+public:
+    bool result {true};
+
+    CanLift(const Scope<int> &v) : varying(v) {}
+};
+
 // Lift pure loop invariants to the top level. Applied independently
 // to each loop.
 class LiftLoopInvariants : public IRMutator {
@@ -19,7 +49,9 @@ class LiftLoopInvariants : public IRMutator {
     Scope<int> varying;
 
     bool can_lift(const Expr &e) {
-        return is_pure(e) && !expr_uses_vars(e, varying);
+        CanLift check(varying);
+        e.accept(&check);
+        return check.result;
     }
 
     bool should_lift(const Expr &e) {
