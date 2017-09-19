@@ -506,10 +506,14 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     // LLVM can't write MS PE/COFF Lib format, which is almost-but-not-quite
     // the same as GNU ar format.
     if (Internal::get_triple_for_target(target).isWindowsMSVCEnvironment()) {
+#if LLVM_VERSION >= 39
         std::ofstream f(dst_file, std::ios_base::trunc | std::ios_base::binary);
         Internal::Archive::write_coff_archive(f, new_members);
         f.flush();
         f.close();
+#else
+        internal_error << "create_static_library() does not support Windows .lib output for LLVM versions prior to 3.9.\n";
+#endif
         return;
     }
 
