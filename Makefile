@@ -342,6 +342,7 @@ SOURCE_FILES = \
   IRVisitor.cpp \
   JITModule.cpp \
   Lerp.cpp \
+  LICM.cpp \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
   LoopCarry.cpp \
@@ -481,6 +482,7 @@ HEADER_FILES = \
   JITModule.h \
   Lambda.h \
   Lerp.h \
+  LICM.h \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
@@ -1606,7 +1608,7 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
 
-# We need to capture the system libraries that we'll need to link 
+# We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
 # have to guess what's necessary on their system; call
 # llvm-config and capture the result in config files that
