@@ -11,17 +11,9 @@ namespace llvm {
 class Value;
 class Module;
 class Function;
-#if LLVM_VERSION >= 39
 class IRBuilderDefaultInserter;
-#else
-template<bool> class IRBuilderDefaultInserter;
-#endif
 class ConstantFolder;
-#if LLVM_VERSION >= 39
 template<typename, typename> class IRBuilder;
-#else
-template<bool, typename, typename> class IRBuilder;
-#endif
 class LLVMContext;
 class Type;
 class StructType;
@@ -132,11 +124,7 @@ protected:
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
-#if LLVM_VERSION >= 39
     llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
-#else
-    llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true>> *builder;
-#endif
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     std::vector<LoweredArgument> current_function_args;
