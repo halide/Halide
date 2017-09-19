@@ -732,6 +732,7 @@ class RenormalizeGPULoops : public IRMutator {
 
 
         if (ends_with(op->name, "__thread_id_x")) {
+            internal_assert(!in_thread_loop);
             in_thread_loop = true;
             IRMutator::visit(op);
             in_thread_loop = false;
