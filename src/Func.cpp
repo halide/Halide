@@ -1737,6 +1737,8 @@ void Func::invalidate_cache() {
     }
 }
 
+namespace {
+
 void validate_wrapper(const string &name, const map<string, FunctionPtr> &wrappers,
                       const vector<Func> &fs, const FunctionPtr &wrapper) {
     if (!wrappers.empty() && !fs.empty()) {
@@ -1814,6 +1816,8 @@ Func get_wrapper(Function wrapped_fn, string wrapper_name, const vector<Func> &f
     return Func(wrapper);
 }
 
+} // anonymous namespace
+
 Func Func::in(const Func &f) {
     invalidate_cache();
     vector<Func> fs = {f};
@@ -1825,7 +1829,7 @@ Func Func::in(const vector<Func> &fs) {
         user_error << "Could not create a in wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_in_wrapper", fs, false);
+    return get_wrapper(func, name() + "_wrapper", fs, false);
 }
 
 Func Func::in() {
@@ -1844,7 +1848,7 @@ Func Func::clone_in(const vector<Func> &fs) {
         user_error << "Could not create a clone wrapper for an empty list of Funcs\n";
     }
     invalidate_cache();
-    return get_wrapper(func, name() + "_clone_wrapper", fs, true);
+    return get_wrapper(func, name() + "_clone", fs, true);
 }
 
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor, TailStrategy tail) {
