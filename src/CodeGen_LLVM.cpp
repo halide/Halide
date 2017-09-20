@@ -2073,11 +2073,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
 }
 
 void CodeGen_LLVM::visit(const Call *op) {
-    internal_assert(op->call_type == Call::Extern ||
-                    op->call_type == Call::ExternCPlusPlus ||
-                    op->call_type == Call::Intrinsic ||
-                    op->call_type == Call::PureExtern ||
-                    op->call_type == Call::PureIntrinsic)
+    internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
     // Some call nodes are actually injected at various stages as a
@@ -2657,8 +2653,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(buffer_t_type));
-    } else if (op->call_type == Call::Intrinsic ||
-               op->call_type == Call::PureIntrinsic) {
+    } else if (op->is_intrinsic()) {
         internal_error << "Unknown intrinsic: " << op->name << "\n";
     } else if (op->call_type == Call::PureExtern && op->name == "pow_f32") {
         internal_assert(op->args.size() == 2);

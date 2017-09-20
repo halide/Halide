@@ -58,11 +58,7 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 # value.
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 39 40 50 60))
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
-else
-WITH_HEXAGON ?=
-endif
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
@@ -1554,7 +1550,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 37 38 39 40 50 60))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 39 40 50 60))
 LLVM_OK=yes
 endif
 
