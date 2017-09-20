@@ -1,4 +1,5 @@
 #include "WrapCalls.h"
+#include "FindCalls.h"
 
 #include <set>
 
@@ -47,6 +48,13 @@ void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers
         }
     }
     wrappers_map[wrapped_func] = wrapper;
+}
+
+void validate_custom_wrapper(const string &wrapped_func, const Function &in_func) {
+    map<string, Function> callees = find_direct_calls(in_func);
+    user_assert(callees.count(wrapped_func))
+        << wrapped_func << ".in(" << in_func.name() << ") was called but "
+        << wrapped_func << " is never used in " << in_func.name() << "\n";
 }
 
 } // anonymous namespace
@@ -124,6 +132,7 @@ map<string, Function> wrap_func_calls(const map<string, Function> &env) {
                              << " -> " << Function(wrapper).name() << "] since it's not in the pipeline\n";
                     continue;
                 }
+                validate_custom_wrapper(wrapped_fname, env.find(in_func)->second);
                 insert_func_wrapper_helper(func_wrappers_map,
                                            wrapped_env[in_func].get_contents(),
                                            wrapped_func,
