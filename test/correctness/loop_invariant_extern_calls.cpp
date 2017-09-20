@@ -58,8 +58,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Note that things don't get lifted out of parallel loops - Each
-    // thread will independently call your extern function.
+    // Note that things also get lifted out of parallel loops.
     Func g;
     g(x, y) = my_func(3, Expr(0));
     g.parallel(y);
@@ -67,7 +66,7 @@ int main(int argc, char **argv) {
     g.set_custom_do_par_for(&not_really_parallel_for);
     g.realize(32, 32);
 
-    if (call_counter[3] != 32) {
+    if (call_counter[3] != 1) {
         printf("Call counter for parallel call was %d instead of %d\n",
                call_counter[3], 32);
         return -1;
