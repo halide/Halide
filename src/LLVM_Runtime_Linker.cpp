@@ -700,6 +700,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // process instead at link time. Less aggressive than
                 // NoRuntime, as OS-agnostic modules like tracing are
                 // still included below.
+                if (t.arch == Target::Hexagon) {
+                    modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             }
         }
