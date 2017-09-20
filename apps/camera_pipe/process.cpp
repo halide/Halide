@@ -2,7 +2,10 @@
 #include "fcam/Demosaic_ARM.h"
 
 #include "halide_benchmark.h"
+
 #include "camera_pipe.h"
+#include "camera_pipe_auto_schedule.h"
+
 #include "HalideBuffer.h"
 #include "halide_image_io.h"
 #include "halide_malloc_trace.h"
@@ -68,10 +71,18 @@ int main(int argc, char **argv) {
                     color_temp, gamma, contrast, blackLevel, whiteLevel,
                     output);
     });
-    fprintf(stderr, "Halide:\t%gus\n", best * 1e6);
+    fprintf(stderr, "Halide (manual):\t%gus\n", best * 1e6);
+
+    best = benchmark(timing_iterations, 1, [&]() {
+        camera_pipe_auto_schedule(input, matrix_3200, matrix_7000,
+            color_temp, gamma, contrast, blackLevel, whiteLevel,
+            output);
+    });
+    fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
     fprintf(stderr, "output: %s\n", argv[6]);
     convert_and_save_image(output, argv[6]);
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
+
 
     Buffer<uint8_t> output_c(output.width(), output.height(), output.channels());
     best = benchmark(timing_iterations, 1, [&]() {
