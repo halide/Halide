@@ -5,15 +5,16 @@ extern "C" {
 extern void *malloc(size_t);
 extern void free(void *);
 
-WEAK void *halide_default_malloc(void *user_context, size_t x) {
-    // Hexagon needs up to 128 byte alignment.
-    const size_t alignment = 128;
+}
 
+namespace Halide { namespace Runtime { namespace Internal {
+
+WEAK void *aligned_malloc(size_t alignment, size_t size) {
     // We also need to align the size of the buffer.
-    x = (x + alignment - 1) & ~(alignment - 1);
+    size = (size + alignment - 1) & ~(alignment - 1);
 
     // Allocate enough space for aligning the pointer we return.
-    void *orig = malloc(x + alignment);
+    void *orig = malloc(size + alignment);
     if (orig == NULL) {
         // Will result in a failed assertion and a call to halide_error
         return NULL;
@@ -24,13 +25,61 @@ WEAK void *halide_default_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
+WEAK void aligned_free(void *ptr) {
+    if (ptr) {
+        free(((void**)ptr)[-1]);
+    }
+}
+
+// We keep a small pool of small pre-allocated buffers for use by Halide
+// code; some kernels end up doing per-scanline allocations and frees,
+// which can cause a noticable performance impact on some workloads.
+// 'num_buffers' is the number of pre-allocated buffers and 'buffer_size' is
+// the size of each buffer. The pre-allocated buffers are shared among threads
+// and we use __sync_val_compare_and_swap primitive to synchronize the buffer
+// allocation.
+// TODO(psuriana): make num_buffers configurable by user
+static const int num_buffers = 10;
+static const int buffer_size = 1024 * 64;
+
+WEAK int buf_is_used[num_buffers];
+WEAK void *mem_buf[num_buffers] = { NULL, };
+
+__attribute__((destructor))
+WEAK void halide_allocator_cleanup() {
+    for (int i = 0; i < num_buffers; ++i) {
+        aligned_free(mem_buf[i]);
+    }
+}
+
+WEAK void *halide_default_malloc(void *user_context, size_t x) {
+    // Hexagon needs up to 128 byte alignment.
+    const size_t alignment = 128;
+
+    if (x <= buffer_size) {
+        for (int i = 0; i < num_buffers; ++i) {
+            if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
+                if (mem_buf[i] == NULL) {
+                    mem_buf[i] = aligned_malloc(alignment, buffer_size);
+                }
+                return mem_buf[i];
+            }
+        }
+    }
+
+    return aligned_malloc(alignment, x);
+}
+
 WEAK void halide_default_free(void *user_context, void *ptr) {
-    free(((void**)ptr)[-1]);
-}
+    for (int i = 0; i < num_buffers; ++i) {
+        if (mem_buf[i] == ptr) {
+            buf_is_used[i] = 0;
+            return;
+        }
+    }
 
+    aligned_free(ptr);
 }
-
-namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK halide_malloc_t custom_malloc = halide_default_malloc;
 WEAK halide_free_t custom_free = halide_default_free;

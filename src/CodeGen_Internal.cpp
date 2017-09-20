@@ -451,7 +451,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     const llvm::Target *target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!target) {
         std::cout << error_string << std::endl;
-#if LLVM_VERSION < 50
+#if LLVM_VERSION < 60
         llvm::TargetRegistry::printRegisteredTargetsForVersion();
 #else
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
