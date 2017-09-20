@@ -129,39 +129,48 @@ struct DependenceAnalysis {
     struct RegionsRequiredQuery {
         string f;
         int stage;
-        DimBounds bounds;
         set<string> prods;
         bool only_regions_computed;
 
-        RegionsRequiredQuery(const string &f, int stage, const DimBounds &bounds,
-                             const set<string> &prods, bool only_regions_computed)
-            : f(f), stage(stage), bounds(bounds), prods(prods),
+        RegionsRequiredQuery(const string &f, int stage, const set<string> &prods,
+                             bool only_regions_computed)
+            : f(f), stage(stage), prods(prods),
               only_regions_computed(only_regions_computed) {}
 
         bool operator==(const RegionsRequiredQuery &other) const {
-            return (f == other.f) && (stage == other.stage) &&
-                   (bounds == other.bounds) && (prods == other.prods) &&
+            return (f == other.f) && (stage == other.stage) && (prods == other.prods) &&
                    (only_regions_computed == other.only_regions_computed);
         }
         bool operator<(const RegionsRequiredQuery &other) const {
             if (f < other.f) {
                 return true;
+            } else if (f > other.f) {
+                return false;
             }
             if (stage < other.stage) {
                 return true;
-            }
-            if (prods.size() < other.prods.size()) {
-                return true;
+            } else if (stage > other.stage) {
+                return false;
             }
             if (only_regions_computed < other.only_regions_computed) {
                 return true;
+            } else if (only_regions_computed > other.only_regions_computed) {
+                return false;
             }
-            return bounds.size() < other.bounds.size();
+            return prods < other.prods;
         }
+    };
+    struct RegionsRequired {
+        DimBounds bounds;
+        // Regions required to compute 'bounds' given a particular
+        // RegionsRequiredQuery.
+        map<string, Box> regions;
+        RegionsRequired(const DimBounds &b, const map<string, Box> &r)
+            : bounds(b), regions(r) {}
     };
     // Cache for bounds queries (bound queries with the same parameters are
     // common during the grouping process).
-    map<RegionsRequiredQuery, map<string, Box>> regions_required_cache;
+    map<RegionsRequiredQuery, vector<RegionsRequired>> regions_required_cache;
 
     DependenceAnalysis(const map<string, Function> &env, const vector<string> &order,
                        const FuncValueBounds &func_val_bounds)
@@ -240,10 +249,8 @@ struct StageBounds {
         return (f_stage == other.f_stage) && (bounds == other.bounds);
     }
     bool operator<(const StageBounds &other) const {
-        if (f_stage < other.f_stage) {
-            return true;
-        }
-        return bounds.size() < other.bounds.size();
+        return (f_stage < other.f_stage) ||
+               ((f_stage == other.f_stage) && (bounds.size() < other.bounds.size()));
     }
     friend std::ostream& operator<<(std::ostream &stream, const StageBounds &s) {
         stream << "Stage: " << s.f_stage << "\n";
@@ -363,11 +370,16 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
     // Iteratively compute the required regions by traversing the chain
     // of dependencies.
 
-    // Check the cache if we've already computed this previously
-    RegionsRequiredQuery query(f.name(), stage_num, bounds, prods, only_regions_computed);
-    auto iter = regions_required_cache.find(query);
+    // Check the cache if we've already computed this previously.
+    RegionsRequiredQuery query(f.name(), stage_num, prods, only_regions_computed);
+    const auto &iter = regions_required_cache.find(query);
     if (iter != regions_required_cache.end()) {
-        return iter->second;
+        const auto &it = std::find_if(iter->second.begin(), iter->second.end(),
+            [&bounds](const RegionsRequired &r) { return (r.bounds == bounds); });
+        if (it != iter->second.end()) {
+            internal_assert((iter->first == query) && (it->bounds == bounds));
+            return it->regions;
+        }
     }
 
     // Map of all the required regions.
@@ -375,7 +387,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
     map<FStage, DimBounds> fs_bounds;
     set<StageBounds> visited;
 
-    // Add the query function and its region to the queue
+    // Add the query function and its region to the queue.
     fs_bounds.emplace(FStage(f, stage_num), bounds);
 
     while (!fs_bounds.empty()) {
@@ -547,7 +559,7 @@ DependenceAnalysis::regions_required(Function f, int stage_num,
         concrete_regions[f_reg.first] = concrete_box;
     }
 
-    regions_required_cache.emplace(query, concrete_regions);
+    regions_required_cache[query].push_back(RegionsRequired(bounds, concrete_regions));
     return concrete_regions;
 }
 

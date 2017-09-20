@@ -311,11 +311,7 @@ void emit_file(llvm::Module &module, Internal::LLVMOStream& out, llvm::TargetMac
     auto target_machine = Internal::make_target_machine(module);
     internal_assert(target_machine.get()) << "Could not allocate target machine!\n";
 
-    #if LLVM_VERSION == 37
-    llvm::DataLayout target_data_layout(*(target_machine->getDataLayout()));
-    #else
     llvm::DataLayout target_data_layout(target_machine->createDataLayout());
-    #endif
     if (!(target_data_layout == module.getDataLayout())) {
         internal_error << "Warning: module's data layout does not match target machine's\n"
                        << target_data_layout.getStringRepresentation() << "\n"
@@ -482,7 +478,6 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
 
     SetCwd set_cwd(src_dir);
 
-#if LLVM_VERSION >= 39
     std::vector<llvm::NewArchiveMember> new_members;
     for (auto &src : src_files) {
         llvm::Expected<llvm::NewArchiveMember> new_member =
@@ -495,17 +490,6 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
         }
         new_members.push_back(std::move(*new_member));
     }
-#elif LLVM_VERSION == 38
-    std::vector<llvm::NewArchiveIterator> new_members;
-    for (auto &src : src_files) {
-        new_members.push_back(llvm::NewArchiveIterator(src));
-    }
-#else
-    std::vector<llvm::NewArchiveIterator> new_members;
-    for (auto &src : src_files) {
-        new_members.push_back(llvm::NewArchiveIterator(src, src));
-    }
-#endif
 
     // LLVM can't write MS PE/COFF Lib format, which is almost-but-not-quite
     // the same as GNU ar format.
@@ -525,21 +509,10 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     const auto kind = Internal::get_triple_for_target(target).isOSDarwin()
         ? llvm::object::Archive::K_BSD
         : llvm::object::Archive::K_GNU;
-#if LLVM_VERSION == 37
-    auto result = llvm::writeArchive(dst_file, new_members,
-                       write_symtab, kind,
-                       deterministic);
-#elif LLVM_VERSION == 38
-    const bool thin = false;
-    auto result = llvm::writeArchive(dst_file, new_members,
-                       write_symtab, kind,
-                       deterministic, thin);
-#else
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
                        write_symtab, kind,
                        deterministic, thin, nullptr);
-#endif
 #if LLVM_VERSION >= 60
     internal_assert(!result) << "Failed to write archive: " << dst_file
         << ", reason: " << result << "\n";
