@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
     // Check that something we can't compute on the GPU gets lifted
     // out of the GPU loop. This code would fail to link if we didn't
     // do loop invariant code motion.
-    if (get_target_from_environment().has_gpu_feature()) {
+    if (get_jit_target_from_environment().has_gpu_feature()) {
         Func h;
         h(x, y) = my_func(5, Expr(0));
 
