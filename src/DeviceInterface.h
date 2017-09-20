@@ -27,6 +27,11 @@ EXPORT const halide_device_interface_t *get_device_interface_for_device_api(cons
  * is enabled in the target, returns DeviceAPI::Host. */
 EXPORT DeviceAPI get_default_device_api_for_target(const Target &t);
 
+namespace Internal {
+/** Get an Expr which evaluates to the device interface for the given device api at runtime. */
+Expr make_device_interface_call(DeviceAPI device_api);
+}
+
 }
 
 #endif

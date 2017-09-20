@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
           &resize_lanczos_uint16_down}}
     };
 
-    int interpolation_idx;
+    int interpolation_idx = 0;
     if (interpolation_type == "box") {
         interpolation_idx = 0;
     } else if (interpolation_type == "cubic") {
@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
     // Instead of just adapting to the actual type of the input, we'll
     // convert it to the requested type to make it easier to benchmark
     // lots of different types.
-    int type_idx;
+    int type_idx = 0;
     if (input_type == "float32") {
         in = Halide::Tools::ImageTypeConversion::convert_image(in, halide_type_of<float>());
         type_idx = 0;

@@ -246,10 +246,19 @@ void CodeGen_X86::visit(const Cast *op) {
          i16((wild_i32x_ * wild_i32x_) / 65536)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
          u16((wild_u32x_ * wild_u32x_) / 65536)},
+#if LLVM_VERSION < 60
+        // Older LLVM versions support this as an intrinsic
         {Target::FeatureEnd, true, UInt(8, 16), 0, "llvm.x86.sse2.pavg.b",
          u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
         {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pavg.w",
          u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+#else
+        // LLVM 6.0+ require using helpers from x86.ll
+        {Target::FeatureEnd, true, UInt(8, 16), 0, "pavgb",
+         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
+        {Target::FeatureEnd, true, UInt(16, 8), 0, "pavgw",
+         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
+#endif
         {Target::FeatureEnd, false, Int(16, 8), 0, "packssdwx8",
          i16_sat(wild_i32x_)},
         {Target::FeatureEnd, false, Int(8, 16), 0, "packsswbx16",

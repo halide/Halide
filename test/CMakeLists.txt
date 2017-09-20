@@ -79,206 +79,132 @@ if (WITH_TEST_OPENGL)
   endif()
 endif()
 
-function(add_test_generator NAME)
-  set(options WITH_STUB)
-  set(oneValueArgs GENERATOR_NAME)
-  set(multiValueArgs STUB_DEPS)
-  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-  # convert TRUE|FALSE -> WITH_STUB|emptystring
-  if (${args_WITH_STUB})
-    set(args_WITH_STUB WITH_STUB)
-  else()
-    set(args_WITH_STUB )
-  endif()
-  if (NOT args_GENERATOR_NAME)
-    set(args_GENERATOR_NAME ${NAME})
-  endif()
-  halide_add_generator("${NAME}.generator"
-                       STUB_GENERATOR_NAME "${args_GENERATOR_NAME}"
-                       SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_generator.cpp"
-                       STUB_DEPS ${args_STUB_DEPS}
-                       ${args_WITH_STUB})
-  # TODO(srj): not all of the rungen targets will build;
-  # we need to blacklist the ones known & expected to be nonfunctional.
-  # Leaving this here now to show where it needs to go.
-  # add_to_group(test_generators "${NAME}.rungen")
-endfunction(add_test_generator)
-
-function(halide_define_jit_test NAME)
-  set(options )
-  set(oneValueArgs )
-  set(multiValueArgs STUB_DEPS)
-  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-  set(ALLSTUBS )
-  foreach(STUB ${args_STUB_DEPS})
-    list(APPEND ALLSTUBS $<TARGET_OBJECTS:${STUB}.objlib>)
-  endforeach()
-
-  halide_project("generator_jit_${NAME}"
-                 "generator"
-                 "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_jittest.cpp"
-                 ${ALLSTUBS})
-  foreach(STUB_DEP ${args_STUB_DEPS})
-    halide_add_generator_stub_dependency(TARGET "generator_jit_${NAME}"
-                                         STUB_GENERATOR_TARGET ${STUB_DEP})
-  endforeach()
-  add_to_group(build_tests "generator_jit_${NAME}" BUILD)
-  add_to_group(test_generators "generator_jit_${NAME}" EXECUTE)
-endfunction(halide_define_jit_test)
-
-# Usage:
-#   halide_define_aot_test(NAME <basename>
-#                       [GENERATED_FUNCTION <function name, including namespace]
-#                       [GENERATOR_HALIDE_TARGET Halide target, if not "host"]
-#                       [GENERATOR_ARGS extra generator args]
-#                       [FILTER_DEPS extra libraries to be linked with AOT output])
-function(halide_define_aot_test NAME)
-  set(options OMIT_DEFAULT_GENERATOR)
-  set(oneValueArgs GENERATED_FUNCTION GENERATOR_NAME GENERATOR_HALIDE_TARGET)
-  set(multiValueArgs GENERATOR_ARGS STUB_DEPS FILTER_DEPS)
-  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-  set(TARGET "generator_aot_${NAME}")
-
-  add_executable("${TARGET}" "${CMAKE_CURRENT_SOURCE_DIR}/generator/${NAME}_aottest.cpp")
-  add_to_group(build_tests "${TARGET}" BUILD)
-  add_to_group(test_generators "${TARGET}" EXECUTE)
-  target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/tools")
-  target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}/src/runtime")
-  target_include_directories("${TARGET}" PRIVATE "${CMAKE_SOURCE_DIR}")
-  set_target_properties("${TARGET}" PROPERTIES FOLDER "generator")
-  foreach(STUB_DEP ${args_STUB_DEPS})
-    halide_add_generator_stub_dependency(TARGET "${TARGET}"
-                                         STUB_GENERATOR_TARGET ${STUB_DEP})
-  endforeach()
-  if (MSVC)
-    # 4088: "/FORCE used, image may not work"
-    set_target_properties("${TARGET}" PROPERTIES LINK_FLAGS "/ignore:4088")
-  endif()
-
-  if (NOT ${args_OMIT_DEFAULT_GENERATOR})
-    if (NOT args_GENERATED_FUNCTION)
-      set(args_GENERATED_FUNCTION "${NAME}")
-    endif()
-    if (NOT args_GENERATOR_HALIDE_TARGET)
-      set(args_GENERATOR_HALIDE_TARGET "host")
-    endif()
-    if (NOT args_GENERATOR_NAME)
-      set(args_GENERATOR_NAME ${NAME})
-    endif()
-
-    set(AOT_LIBRARY_TARGET "${NAME}")
-    halide_add_aot_library("${AOT_LIBRARY_TARGET}"
-                           GENERATOR_TARGET "${NAME}.generator"
-                           GENERATOR_NAME "${args_GENERATOR_NAME}"
-                           GENERATED_FUNCTION "${args_GENERATED_FUNCTION}"
-                           GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}"
-                           FILTER_DEPS "${args_FILTER_DEPS}")
-    halide_add_aot_library_dependency("${TARGET}" "${AOT_LIBRARY_TARGET}")
-  endif()
-
-  target_link_libraries("${TARGET}" PRIVATE ${args_FILTER_DEPS})
-
-endfunction(halide_define_aot_test)
-
-function(halide_add_aot_test_dependency NAME)
-  set(options )
-  set(oneValueArgs AOT_LIBRARY_TARGET GENERATED_FUNCTION GENERATOR_NAME GENERATOR_TARGET GENERATOR_HALIDE_TARGET)
-  set(multiValueArgs GENERATOR_ARGS)
-  cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-  set(TARGET "generator_aot_${NAME}")
-
-  if (NOT args_GENERATOR_TARGET)
-    set(args_GENERATOR_TARGET "${NAME}")
-  endif()
-  if (NOT args_GENERATED_FUNCTION)
-    set(args_GENERATED_FUNCTION "${args_AOT_LIBRARY_TARGET}")
-  endif()
-    if (NOT args_GENERATOR_HALIDE_TARGET)
-      set(args_GENERATOR_HALIDE_TARGET "host")
-    endif()
-
-  halide_add_aot_library("${args_AOT_LIBRARY_TARGET}"
-                         GENERATOR_TARGET "${args_GENERATOR_TARGET}.generator"
-                         GENERATOR_NAME "${args_GENERATOR_NAME}"
-                         GENERATED_FUNCTION "${args_GENERATED_FUNCTION}"
-                         GENERATOR_ARGS "target=${args_GENERATOR_HALIDE_TARGET}" "${args_GENERATOR_ARGS}")
-  halide_add_aot_library_dependency("${TARGET}" "${args_AOT_LIBRARY_TARGET}")
-endfunction(halide_add_aot_test_dependency)
-
 if (WITH_TEST_GENERATORS)
 
-  # Explicitly define the generator targets; each has a build target
-  # of the form "name.generator"
-  add_test_generator(acquire_release)
-  add_test_generator(argvcall)
-  add_test_generator(can_use_target)
-  add_test_generator(cleanup_on_error)
-  add_test_generator(cxx_mangling_define_extern)
-  add_test_generator(cxx_mangling)
-  add_test_generator(define_extern_opencl)
-  add_test_generator(embed_image)
-  add_test_generator(error_codes)
-  add_test_generator(example WITH_STUB)
-  add_test_generator(float16_t)
-  add_test_generator(gpu_object_lifetime)
-  add_test_generator(gpu_only)
-  add_test_generator(image_from_array)
-  add_test_generator(mandelbrot)
-  add_test_generator(matlab)
-  add_test_generator(memory_profiler_mandelbrot)
-  add_test_generator(metadata_tester)
-  add_test_generator(msan)
-  add_test_generator(multitarget)
-  add_test_generator(pyramid)
-  add_test_generator(stubtest WITH_STUB)
-  # the stubuser generator needs the stub from stubtest
-  add_test_generator(stubuser
-                     GENERATOR_NAME stubuser
-                     STUB_DEPS stubtest.generator)
-  add_test_generator(blur2x2)
-  add_test_generator(tiled_blur)
-  add_test_generator(user_context)
-  add_test_generator(user_context_insanity)
-  add_test_generator(variable_num_threads)
-  add_test_generator(old_buffer_t)
-  add_test_generator(output_assign)
-  add_test_generator(external_code)
+  set(GEN_TEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generator")
+
+  function(halide_define_aot_test NAME)
+    set(options OMIT_DEFAULT_GENERATOR)
+    set(oneValueArgs FUNCTION_NAME HALIDE_TARGET)
+    set(multiValueArgs GENERATOR_ARGS DEPS FILTER_DEPS HALIDE_TARGET_FEATURES)
+    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    set(TARGET "generator_aot_${NAME}")
+
+    add_executable("${TARGET}" "${GEN_TEST_DIR}/${NAME}_aottest.cpp")
+    add_to_group(build_tests "${TARGET}" BUILD)
+    add_to_group(test_generators "${TARGET}" EXECUTE)
+    target_include_directories("${TARGET}" PRIVATE 
+                               "${CMAKE_SOURCE_DIR}/tools" 
+                               "${CMAKE_SOURCE_DIR}" 
+                               "${CMAKE_SOURCE_DIR}/src/runtime")
+
+    if (NOT ${args_OMIT_DEFAULT_GENERATOR})
+      halide_library_from_generator("${NAME}"
+                             GENERATOR "${NAME}.generator"
+                             FUNCTION_NAME "${args_FUNCTION_NAME}"
+                             HALIDE_TARGET "${args_HALIDE_TARGET}"
+                             HALIDE_TARGET_FEATURES "${args_HALIDE_TARGET_FEATURES}"
+                             GENERATOR_ARGS "${args_GENERATOR_ARGS}"
+                             FILTER_DEPS "${args_FILTER_DEPS}")
+      target_link_libraries("${TARGET}" PUBLIC "${NAME}")
+    endif()
+  endfunction(halide_define_aot_test)
+
+  # Find all the files of form "foo_generator.cpp" in test/generator
+  # and declare a halide_generator() rule for them. Note that a few
+  # have special-cases.
+  file(GLOB GENERATOR_SRCS RELATIVE "${GEN_TEST_DIR}" "${GEN_TEST_DIR}/*_generator.cpp")
+  foreach(FILE ${GENERATOR_SRCS})
+    string(REPLACE "_generator.cpp" "" NAME "${FILE}")
+
+    # Most generators have no extra deps...
+    set(DEPS )
+    # ...but a few do. We'll special-case them.
+    if("${NAME}" STREQUAL "stubuser")
+      set(DEPS "stubtest.generator")
+    elseif("${NAME}" STREQUAL "external_code")
+      set(DEPS "external_code_generator_deps")
+    endif()
+
+    # Most of our Generators are one-per-file...
+    set(NAMES "${NAME}")
+    # ...but some have multiple-per-file
+    if("${NAME}" STREQUAL "nested_externs")
+      set(NAMES nested_externs_root nested_externs_inner nested_externs_combine nested_externs_leaf)
+    endif()
+    foreach(N ${NAMES})
+      halide_generator("${N}.generator"
+                       GENERATOR_NAME "${N}"
+                       SRCS "${GEN_TEST_DIR}/${NAME}_generator.cpp"
+                       DEPS ${DEPS})
+    endforeach()
+  endforeach()
 
   # Define a nontrivial depedency for external_code.generator
   set(EC32 "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/external_code_extern_bitcode_32")
   add_custom_command(OUTPUT "${EC32}.bc"
-                     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp"
-                     COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp" -o "${EC32}.bc")
+                     DEPENDS "${GEN_TEST_DIR}/external_code_extern.cpp"
+                     COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "${GEN_TEST_DIR}/external_code_extern.cpp" -o "${EC32}.bc")
   add_custom_command(OUTPUT "${EC32}.cpp"
                      DEPENDS "${EC32}.bc"
                      COMMAND binary2cpp external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp")
 
   set(EC64 "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/external_code_extern_bitcode_64")
   add_custom_command(OUTPUT "${EC64}.bc"
-                     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp"
-                     COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp" -o "${EC64}.bc")
+                     DEPENDS "${GEN_TEST_DIR}/external_code_extern.cpp"
+                     COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "${GEN_TEST_DIR}/external_code_extern.cpp" -o "${EC64}.bc")
   add_custom_command(OUTPUT "${EC64}.cpp"
                      DEPENDS "${EC64}.bc"
                      COMMAND binary2cpp external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp")
 
   set(ECCPP "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/external_code_extern_cpp_source")
   add_custom_command(OUTPUT "${ECCPP}.cpp"
-                     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp"
-                     COMMAND binary2cpp external_code_extern_cpp_source < "${CMAKE_CURRENT_SOURCE_DIR}/generator/external_code_extern.cpp" > "${ECCPP}.cpp")
+                     DEPENDS "${GEN_TEST_DIR}/external_code_extern.cpp"
+                     COMMAND binary2cpp external_code_extern_cpp_source < "${GEN_TEST_DIR}/external_code_extern.cpp" > "${ECCPP}.cpp")
 
   add_library(external_code_generator_deps "${EC32}.cpp" "${EC64}.cpp" "${ECCPP}.cpp")
-  target_link_libraries(external_code.generator PRIVATE external_code_generator_deps)
 
   # ------ Generator tests for just-in-time mode: ------
-  halide_define_jit_test(example
-                         STUB_DEPS example.generator)
-  halide_define_jit_test(stubtest
-                         STUB_DEPS stubtest.generator)
+  # Find all the files of form "foo_jittest.cpp" in test/generator
+  # and declare a rule for them, each of which depends on foo.generator.
+  file(GLOB JITTEST_SRCS RELATIVE "${GEN_TEST_DIR}" "${GEN_TEST_DIR}/*_jittest.cpp")
+  foreach(FILE ${JITTEST_SRCS})
+    string(REPLACE "_jittest.cpp" "" NAME "${FILE}")
+    halide_project("generator_jit_${NAME}"
+                   "generator"
+                   "${GEN_TEST_DIR}/${FILE}")
+    target_link_libraries("generator_jit_${NAME}" PRIVATE "${NAME}.generator")
+    add_to_group(build_tests "generator_jit_${NAME}" BUILD)
+    add_to_group(test_generators "generator_jit_${NAME}" EXECUTE)
+  endforeach()
 
   # ------ Generator tests for ahead-of-time mode: ------
+  # Find all the files of form "foo_aottest.cpp" in test/generator
+  # and declare a rule for them, each of which depends on foo.generator.
+  # Note that there are many special cases.
+  # TODO(srj)
+  # file(GLOB JITTEST_SRCS RELATIVE "${GEN_TEST_DIR}" "${GEN_TEST_DIR}/*_aottest.cpp")
+  # foreach(FILE ${JITTEST_SRCS})
+  #   string(REPLACE "_aottest.cpp" "" NAME "${FILE}")
+  #   set(TARGET )
+
+  #   add_executable("generator_aot_${NAME}" "${GEN_TEST_DIR}/${FILE}")
+  #   target_include_directories("generator_aot_${NAME}" PRIVATE 
+  #                              "${CMAKE_SOURCE_DIR}" 
+  #                              "${CMAKE_SOURCE_DIR}/tools" 
+  #                              "${CMAKE_SOURCE_DIR}/src/runtime")
+
+  #   if (NOT ${args_OMIT_DEFAULT_GENERATOR})
+  #     halide_library_from_generator("${NAME}"
+  #                            GENERATOR "${NAME}.generator"
+  #                            FUNCTION_NAME "${args_FUNCTION_NAME}"
+  #                            HALIDE_TARGET "${args_GENERATOR_HALIDE_TARGET}"
+  #                            GENERATOR_ARGS "${args_GENERATOR_ARGS}"
+  #                            FILTER_DEPS "${args_FILTER_DEPS}")
+  #     target_link_libraries("generator_aot_${NAME}" PUBLIC "${NAME}")
+  #   endif()
+  # endforeach()
 
   # Create tests for ahead of-time-compiled generators. This will produce two
   # executables, one containing the generator itself
@@ -307,32 +233,33 @@ if (WITH_TEST_GENERATORS)
 
   # Tests that require nonstandard targets, namespaces, args, etc.
   halide_define_aot_test(matlab
-                         GENERATOR_HALIDE_TARGET host-matlab)
+                         HALIDE_TARGET_FEATURES matlab)
 
   halide_define_aot_test(multitarget
-                         GENERATOR_HALIDE_TARGET host-debug-c_plus_plus_name_mangling,host-c_plus_plus_name_mangling
-                         GENERATED_FUNCTION HalideTest::multitarget)
+                         HALIDE_TARGET host,host-debug
+                         HALIDE_TARGET_FEATURES c_plus_plus_name_mangling
+                         FUNCTION_NAME HalideTest::multitarget)
 
   halide_define_aot_test(user_context
-                         GENERATOR_HALIDE_TARGET host-user_context)
+                         HALIDE_TARGET_FEATURES user_context)
 
   halide_define_aot_test(user_context_insanity
-                         GENERATOR_HALIDE_TARGET host-user_context)
+                         HALIDE_TARGET_FEATURES user_context)
 
   add_library(cxx_mangling_externs 
-              "${CMAKE_CURRENT_SOURCE_DIR}/generator/cxx_mangling_externs.cpp")
+              "${GEN_TEST_DIR}/cxx_mangling_externs.cpp")
 
   halide_define_aot_test(cxx_mangling
-                         GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling
-                         GENERATED_FUNCTION HalideTest::AnotherNamespace::cxx_mangling
+                         HALIDE_TARGET_FEATURES c_plus_plus_name_mangling
+                         FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
                          FILTER_DEPS cxx_mangling_externs)
 
   if (TARGET_PTX)
-    halide_add_aot_test_dependency(cxx_mangling
-                                 GENERATOR_NAME cxx_mangling
-                                 AOT_LIBRARY_TARGET cxx_mangling_gpu
-                                 GENERATED_FUNCTION HalideTest::cxx_mangling_gpu
-                                 GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-cuda)
+    halide_library_from_generator(cxx_mangling_gpu
+                                  GENERATOR cxx_mangling.generator
+                                  FUNCTION_NAME HalideTest::cxx_mangling_gpu
+                                  HALIDE_TARGET_FEATURES c_plus_plus_name_mangling cuda)
+    target_link_libraries(generator_aot_cxx_mangling PUBLIC cxx_mangling_gpu)
   endif()
 
   # gpu_object_lifetime can build with a variety of GPU targets (or none).
@@ -340,23 +267,23 @@ if (WITH_TEST_GENERATORS)
   # that don't have these available.
   # if(TARGET_PTX)
   #   halide_define_aot_test(gpu_object_lifetime
-  #                          GENERATOR_HALIDE_TARGET host-cuda-debug)
+  #                          HALIDE_TARGET_FEATURES cuda debug)
   # elseif(TARGET_OPENCL)
   #   halide_define_aot_test(gpu_object_lifetime
-  #                          GENERATOR_HALIDE_TARGET host-opencl-debug)
+  #                          HALIDE_TARGET_FEATURES opencl debug)
   # elseif(TARGET_METAL)
   #   halide_define_aot_test(gpu_object_lifetime
-  #                          GENERATOR_HALIDE_TARGET host-metal-debug)
+  #                          HALIDE_TARGET_FEATURES metal debug)
   # else()
     halide_define_aot_test(gpu_object_lifetime
-                           GENERATOR_HALIDE_TARGET host-debug)
+                           HALIDE_TARGET_FEATURES debug)
   # endif()
 
   halide_define_aot_test(pyramid
                          GENERATOR_ARGS levels=10)
 
   halide_define_aot_test(msan
-                         GENERATOR_HALIDE_TARGET host-msan)
+                         HALIDE_TARGET_FEATURES msan)
 
   # stubtest has input and output funcs with undefined types; this is fine for stub
   # usage (the types can be inferred), but for AOT compilation, we must make the types
@@ -394,41 +321,32 @@ if (WITH_TEST_GENERATORS)
   )
   halide_define_aot_test(metadata_tester
                          GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
-  halide_add_aot_test_dependency(metadata_tester
-                                 GENERATOR_NAME metadata_tester
-                                 AOT_LIBRARY_TARGET metadata_tester_ucon
-                                 GENERATED_FUNCTION metadata_tester_ucon
-                                 GENERATOR_HALIDE_TARGET host-user_context
-                                 GENERATOR_ARGS ${MDTEST_GEN_ARGS})
+  halide_library_from_generator(metadata_tester_ucon
+                                GENERATOR metadata_tester.generator
+                                HALIDE_TARGET_FEATURES user_context
+                                GENERATOR_ARGS "${MDTEST_GEN_ARGS}")
+  target_link_libraries(generator_aot_metadata_tester PUBLIC metadata_tester_ucon)
 
   halide_define_aot_test(tiled_blur)
-  halide_add_aot_test_dependency(tiled_blur
-                                 GENERATOR_NAME blur2x2
-                                 GENERATOR_TARGET blur2x2
-                                 AOT_LIBRARY_TARGET blur2x2)
+  halide_library_from_generator(blur2x2)
+  target_link_libraries(generator_aot_tiled_blur PUBLIC blur2x2)
 
   add_library(cxx_mangling_define_extern_externs 
-              "${CMAKE_CURRENT_SOURCE_DIR}/generator/cxx_mangling_define_extern_externs.cpp")
-  target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_externs)
-  halide_add_aot_library_dependency(cxx_mangling_define_extern_externs cxx_mangling)
+              "${GEN_TEST_DIR}/cxx_mangling_define_extern_externs.cpp")
+  target_link_libraries(cxx_mangling_define_extern_externs PUBLIC cxx_mangling_externs cxx_mangling)
 
   halide_define_aot_test(cxx_mangling_define_extern
-                         GENERATOR_HALIDE_TARGET host-c_plus_plus_name_mangling-user_context
-                         GENERATED_FUNCTION HalideTest::cxx_mangling_define_extern
+                         HALIDE_TARGET_FEATURES c_plus_plus_name_mangling user_context
+                         FUNCTION_NAME HalideTest::cxx_mangling_define_extern
                          FILTER_DEPS cxx_mangling_externs cxx_mangling_define_extern_externs)
   # The cxx_mangling library was already defined implicitly, above,
   # so just add a dependency on it
-  halide_add_aot_library_dependency(generator_aot_cxx_mangling_define_extern cxx_mangling)
+  target_link_libraries(generator_aot_cxx_mangling_define_extern PUBLIC cxx_mangling)
 
   halide_define_aot_test(nested_externs OMIT_DEFAULT_GENERATOR)
-  foreach(GEN root inner combine leaf)
-    halide_add_generator("nested_externs_${GEN}.generator"
-                         STUB_GENERATOR_NAME "nested_externs_${GEN}"
-                         SRCS "${CMAKE_CURRENT_SOURCE_DIR}/generator/nested_externs_generator.cpp")
-    halide_add_aot_test_dependency(nested_externs
-                                   GENERATOR_TARGET nested_externs_${GEN}
-                                   AOT_LIBRARY_TARGET nested_externs_${GEN}
-                                   GENERATOR_NAME nested_externs_${GEN})
+  foreach(G root inner combine leaf)
+    halide_library_from_generator(nested_externs_${G})
+    target_link_libraries(generator_aot_nested_externs PRIVATE nested_externs_${G})
   endforeach()
 
 endif()
