@@ -297,7 +297,6 @@ void CodeGen_X86::visit(const Cast *op) {
     }
 
 
-    #if LLVM_VERSION >= 38
     // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
     // LLVM uses a numerically unstable method for vector
     // uint32->float conversion before AVX.
@@ -319,7 +318,6 @@ void CodeGen_X86::visit(const Cast *op) {
         codegen(top_bits + top_bits + bottom_bit);
         return;
     }
-    #endif
 
 
     CodeGen_Posix::visit(op);
@@ -341,54 +339,6 @@ Expr CodeGen_X86::mulhi_shr(Expr a, Expr b, int shr) {
         return p;
     }
     return CodeGen_Posix::mulhi_shr(a, b, shr);
-}
-
-void CodeGen_X86::visit(const Min *op) {
-    if (LLVM_VERSION >= 39 || op->type.is_scalar()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    bool use_sse_41 = target.has_feature(Target::SSE41);
-    if (op->type.element_of() == UInt(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse2.pminu.b", {op->a, op->b});
-    } else if (use_sse_41 && op->type.element_of() == Int(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse41.pminsb", {op->a, op->b});
-    } else if (op->type.element_of() == Int(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmins.w", {op->a, op->b});
-    } else if (use_sse_41 && op->type.element_of() == UInt(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse41.pminuw", {op->a, op->b});
-    } else if (use_sse_41 && op->type.element_of() == Int(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminsd", {op->a, op->b});
-    } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminud", {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_X86::visit(const Max *op) {
-    if (LLVM_VERSION >= 39 || op->type.is_scalar()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    bool use_sse_41 = target.has_feature(Target::SSE41);
-    if (op->type.element_of() == UInt(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse2.pmaxu.b", {op->a, op->b});
-    } else if (use_sse_41 && op->type.element_of() == Int(8)) {
-        value = call_intrin(op->type, 16, "llvm.x86.sse41.pmaxsb", {op->a, op->b});
-    } else if (op->type.element_of() == Int(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmaxs.w", {op->a, op->b});
-    } else if (use_sse_41 && op->type.element_of() == UInt(16)) {
-        value = call_intrin(op->type, 8, "llvm.x86.sse41.pmaxuw", {op->a, op->b});
-    } else if (use_sse_41 && op->type.element_of() == Int(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxsd", {op->a, op->b});
-    } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
-        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxud", {op->a, op->b});
-    } else {
-        CodeGen_Posix::visit(op);
-    }
 }
 
 void CodeGen_X86::visit(const Call *op) {
