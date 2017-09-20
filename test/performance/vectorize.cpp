@@ -58,12 +58,12 @@ bool test(int vec_width) {
     Buffer<A> outputg = g.realize(W, H);
     Buffer<A> outputf = f.realize(W, H);
 
-    double t_g = benchmark(10, 10, [&]() {
+    double t_g = benchmark([&]() {
         g.realize(outputg);
-    });
-    double t_f = benchmark(10, 10, [&]() {
+    }).wall_time;
+    double t_f = benchmark([&]() {
         f.realize(outputf);
-    });
+    }).wall_time;
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
