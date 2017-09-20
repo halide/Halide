@@ -417,10 +417,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.UseInitArray = false;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-    #if LLVM_VERSION >= 39
-    // Not supported by older linkers
     options.RelaxELFRelocations = false;
-    #endif
 }
 
 

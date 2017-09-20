@@ -710,9 +710,7 @@ void CodeGen_ARM::visit(const Store *op) {
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-#if LLVM_VERSION > 37
-                   << ".p0i8"
-#endif
+                  << ".p0i8"
                   << ".v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
