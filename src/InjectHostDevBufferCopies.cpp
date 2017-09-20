@@ -77,7 +77,7 @@ class FindBufferUsage : public IRVisitor {
                 devices_touched.insert(current_device_api);
                 devices_writing.insert(current_device_api);
             }
-        } else if (op->call_type == Call::Extern && op->func.defined()) {
+        } else if (op->is_extern() && op->func.defined()) {
             // This is a call to an extern stage
             Function f(op->func);
 

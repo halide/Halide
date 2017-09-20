@@ -316,10 +316,19 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // 0111 1110 0uu1 iiii PP1i iiii iiid dddd
             mask = 0x000f1fe0;
         } else if ((inst >> 24) == 65 || (inst >> 24) == 77) {
+            // 0100 0001 000s ssss PP0t tiii iiid dddd
             // 0100 0001 001s ssss PP0t tiii iiid dddd
+            // 0100 0001 010s ssss PP0t tiii iiid dddd
+            // 0100 0001 011s ssss PP0t tiii iiid dddd
+            // 0100 0001 100s ssss PP0t tiii iiid dddd
+            // 0100 0001 110s ssss PP0t tiii iiid dddd
+            // TODO: Add instructions to comment for mask 77.
+            mask = 0x000007e0;
+        } else if ((inst >> 21) == 540) {
+            // 0100 0011 100s ssss PP0t tiii iiid dddd
             mask = 0x000007e0;
         } else {
-            internal_error << "Unhandled instruction type!\n";
+            internal_error << "Unhandled instruction type! Instruction = " << inst << "\n";
         }
     }
 
