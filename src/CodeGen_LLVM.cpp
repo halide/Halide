@@ -784,6 +784,7 @@ void CodeGen_LLVM::trigger_destructor(llvm::Function *destructor_fn, Value *stac
     llvm::Function *call_destructor = module->getFunction("call_destructor");
     internal_assert(call_destructor);
     internal_assert(destructor_fn);
+    stack_slot = builder->CreatePointerCast(stack_slot, i8_t->getPointerTo()->getPointerTo());
     Value *should_call = ConstantInt::get(i1_t, 1);
     Value *args[] = {get_user_context(), destructor_fn, stack_slot, should_call};
     builder->CreateCall(call_destructor, args);
@@ -2097,7 +2098,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         vector<Value *> args = {user_context, char_ptr, codegen(op->args[1])};
 
         Value *buffer = codegen(op->args[2]);
-        buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
+        buffer = builder->CreatePointerCast(buffer, debug_to_file->getFunctionType()->getParamType(3));
         args.push_back(buffer);
 
         value = builder->CreateCall(debug_to_file, args);
@@ -2434,7 +2435,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     call_args.push_back(ConstantInt::get(i32_t, t.bits() == 64 ? 1 : 0));
                     dst = builder->CreateCall(append_double, call_args);
                 } else if (t == type_of<halide_buffer_t *>()) {
-                    call_args.push_back(codegen(op->args[i]));
+                    Value *buf = codegen(op->args[i]);
+                    buf = builder->CreatePointerCast(buf, append_buffer->getFunctionType()->getParamType(2));
+                    call_args.push_back(buf);
                     dst = builder->CreateCall(append_buffer, call_args);
                 } else {
                     internal_assert(t.is_handle());
@@ -2476,8 +2479,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
         internal_assert(fn);
-        Expr arg = op->args[1];
-        internal_assert(arg.type().is_handle());
         llvm::Function *f = module->getFunction(fn->value);
         if (!f) {
             llvm::Type *arg_types[] = {i8_t->getPointerTo(), i8_t->getPointerTo()};
@@ -2485,7 +2486,9 @@ void CodeGen_LLVM::visit(const Call *op) {
             f = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, fn->value, module.get());
             f->setCallingConv(CallingConv::C);
         }
-        register_destructor(f, codegen(arg), Always);
+        internal_assert(op->args[1].type().is_handle());
+        Value *arg = codegen(op->args[1]);
+        value = register_destructor(f, arg, Always);
     } else if (op->is_intrinsic(Call::call_cached_indirect_function)) {
         // Arguments to call_cached_indirect_function are of the form
         //

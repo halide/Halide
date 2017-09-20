@@ -121,12 +121,10 @@ WEAK int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf) {
 
 /** Copy image data from host memory to device memory. This should not be
  * called directly; Halide handles copying to the device automatically. */
-WEAK int halide_copy_to_device(void *user_context,
-                               struct halide_buffer_t *buf,
-                               const halide_device_interface_t *device_interface) {
+WEAK int copy_to_device_already_locked(void *user_context,
+                                       struct halide_buffer_t *buf,
+                                       const halide_device_interface_t *device_interface) {
     int result = 0;
-
-    ScopedMutexLock lock(&device_copy_mutex);
 
     result = debug_log_and_validate_buf(user_context, buf, "halide_copy_to_device");
     if (result != 0) {
@@ -142,21 +140,8 @@ WEAK int halide_copy_to_device(void *user_context,
     }
 
     if (buf->device && buf->device_interface != device_interface) {
-        debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer to new device\n";
-        if (buf->device_interface != NULL && buf->device_dirty()) {
-            halide_assert(user_context, !buf->host_dirty());
-            result = copy_to_host_already_locked(user_context, buf);
-            if (result != 0) {
-                debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer halide_copy_to_host failed\n";
-                return result;
-            }
-        }
-        result = halide_device_free(user_context, buf);
-        if (result != 0) {
-            debug(user_context) << "halide_copy_to_device " << buf << " flipping buffer halide_device_free failed\n";
-            return result;
-        }
-        buf->set_host_dirty(true); // force copy back to new device below.
+        halide_error(user_context, "halide_copy_to_device does not support switching interfaces\n");
+        return halide_error_code_incompatible_device_interface;
     }
 
     if (buf->device == 0) {
@@ -186,6 +171,13 @@ WEAK int halide_copy_to_device(void *user_context,
     }
 
     return 0;
+}
+
+WEAK int halide_copy_to_device(void *user_context,
+                               struct halide_buffer_t *buf,
+                               const halide_device_interface_t *device_interface) {
+    ScopedMutexLock lock(&device_copy_mutex);
+    return copy_to_device_already_locked(user_context, buf, device_interface);
 }
 
 /** Wait for current GPU operations to complete. Calling this explicitly
@@ -221,8 +213,8 @@ WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
 
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != device_interface) {
-        error(user_context) << "halide_device_malloc doesn't support switching interfaces\n";
-        return halide_error_code_device_malloc_failed;
+        halide_error(user_context, "halide_device_malloc doesn't support switching interfaces\n");
+        return halide_error_code_incompatible_device_interface;
     }
 
     // Ensure code is not freed prematurely.
@@ -291,7 +283,7 @@ WEAK int halide_device_and_host_malloc(void *user_context, struct halide_buffer_
     // halide_device_malloc does not support switching interfaces.
     if (current_interface != NULL && current_interface != device_interface) {
         halide_error(user_context, "halide_device_and_host_malloc doesn't support switching interfaces\n");
-        return halide_error_code_device_malloc_failed;
+        return halide_error_code_incompatible_device_interface;
     }
 
     // Ensure code is not freed prematurely.
@@ -383,8 +375,8 @@ WEAK int halide_device_wrap_native(void *user_context, struct halide_buffer_t *b
     const halide_device_interface_t *current_interface = buf->device_interface;
 
     if (current_interface != NULL && current_interface != device_interface) {
-        error(user_context) << "halide_device_wrap_native doesn't support switching interfaces\n";
-        return halide_error_code_device_wrap_native_failed;
+        halide_error(user_context, "halide_device_wrap_native doesn't support switching interfaces\n");
+        return halide_error_code_incompatible_device_interface;
     }
 
     device_interface->impl->use_module();
@@ -449,6 +441,183 @@ WEAK void halide_device_and_host_free_as_destructor(void *user_context, void *ob
 
 /** TODO: Find a way to elide host free without this hack. */
 WEAK void halide_device_host_nop_free(void *user_context, void *obj) {
+}
+
+WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                    const struct halide_device_interface_t *dst_device_interface,
+                                    struct halide_buffer_t *dst) {
+
+    const bool from_device = src->device && (src->device_dirty() || !src->host);
+    const bool to_device = dst_device_interface;
+    const bool from_host = !from_device;
+    const bool to_host = !to_device;
+
+    debug(user_context)
+        << "halide_default_buffer_copy\n"
+        << " source: " << *src << "\n"
+        << " dst: " << *dst << "\n";
+
+    // We consider four cases, and decompose each into simpler cases
+    // using intermediate host memory in the src or dst buffers.
+    int err = 0;
+    if (from_device && to_device) {
+        // dev -> dev via dst host memory
+        debug(user_context) << " dev -> src via src host memory\n";
+        err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
+        if (!err) {
+            err = copy_to_device_already_locked(user_context, dst, dst_device_interface);
+        }
+    } else if (from_device && to_host) {
+        // dev -> host via src host memory
+        debug(user_context) << " dev -> host via src host memory\n";
+        err = copy_to_host_already_locked(user_context, src);
+        if (!err) {
+            err = halide_default_buffer_copy(user_context, src, NULL, dst);
+        }
+    } else if (from_host && to_device) {
+        // host -> dev via dst host memory
+        debug(user_context) << " host -> dev via dst host memory\n";
+        err = halide_default_buffer_copy(user_context, src, NULL, dst);
+        if (!err) {
+            err = copy_to_device_already_locked(user_context, dst, dst_device_interface);
+        }
+    } else {
+        // host -> host
+        debug(user_context) << " host -> host\n";
+        device_copy copy = make_buffer_copy(src, true, dst, true);
+        copy_memory(copy, user_context);
+        dst->set_host_dirty();
+    }
+
+    return err;
+}
+
+WEAK int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                            const struct halide_device_interface_t *dst_device_interface,
+                            struct halide_buffer_t *dst) {
+    ScopedMutexLock lock(&device_copy_mutex);
+
+    debug(user_context) << "halide_buffer_copy:\n"
+                        << " src " << *src << "\n"
+                        << " interface " << dst_device_interface << "\n"
+                        << " dst " << *dst << "\n";
+
+    const struct halide_device_interface_t *src_device_interface = src->device_interface;
+
+    int err = 0;
+
+    if (dst->device_interface &&
+        dst_device_interface != dst->device_interface) {
+        halide_error(user_context, "halide_buffer_copy does not support switching device interfaces");
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    if (dst_device_interface && !dst->device) {
+        err = halide_device_malloc(user_context, dst, dst_device_interface);
+        if (err) {
+            return err;
+        }
+    }
+
+    if (dst_device_interface) {
+        dst_device_interface->impl->use_module();
+    }
+    if (src_device_interface) {
+        src_device_interface->impl->use_module();
+    }
+
+    if (dst_device_interface) {
+        // Make the dst interface handle arbitrary src device
+        // interfaces (e.g. CUDA might know how to copy out of an
+        // OpenGL texture). If the dst device interface doesn't
+        // recognize the src device interface, it should ask the src
+        // device interface to copy to host memory in the *dst* buffer
+        // first (so that only the subset required is copied), and
+        // then do a copy_to_device from there.
+        err = dst_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
+    } else if (src_device_interface) {
+        // The src device interface can handle copies to host
+        err = src_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
+    } else {
+        // This is a host->host copy. The default implementation can
+        // handle this.
+        err = halide_default_buffer_copy(user_context, src, dst_device_interface, dst);
+    }
+
+    if (dst != src) {
+        if (dst_device_interface) {
+            dst->set_device_dirty(true);
+        } else {
+            dst->set_host_dirty(true);
+        }
+    }
+
+    if (err) {
+        err = halide_error_code_device_buffer_copy_failed;
+    }
+
+    if (dst_device_interface) {
+        dst_device_interface->impl->release_module();
+    }
+    if (src_device_interface) {
+        src_device_interface->impl->release_module();
+    }
+
+    return err;
+}
+
+
+WEAK int halide_default_device_crop(void *user_context,
+                                    const struct halide_buffer_t *src,
+                                    struct halide_buffer_t *dst) {
+    halide_error(user_context, "device_interface does not support cropping\n");
+    return halide_error_code_device_crop_unsupported;
+}
+
+WEAK int halide_device_crop(void *user_context,
+                            const struct halide_buffer_t *src,
+                            struct halide_buffer_t *dst) {
+    ScopedMutexLock lock(&device_copy_mutex);
+
+    if (!src->device) {
+        return 0;
+    }
+
+    if (dst->device) {
+        halide_error(user_context, "destination buffer already has a device allocation\n");
+        return halide_error_code_device_crop_failed;
+    }
+
+    src->device_interface->impl->use_module();
+    int err = src->device_interface->impl->device_crop(user_context, src, dst);
+
+    debug(user_context) << "halide_device_crop " << "\n"
+                        << " src: " << *src << "\n"
+                        << " dst: " << *dst << "\n";
+
+    return err;
+}
+
+WEAK int halide_default_device_release_crop(void *user_context,
+                                            struct halide_buffer_t *buf) {
+    if (!buf->device) {
+        return 0;
+    }
+    halide_error(user_context, "device_interface does not support cropping\n");
+    return halide_error_code_device_crop_unsupported;
+}
+
+
+WEAK int halide_device_release_crop(void *user_context,
+                                    struct halide_buffer_t *buf) {
+    if (buf->device) {
+        ScopedMutexLock lock(&device_copy_mutex);
+        const struct halide_device_interface_t *interface = buf->device_interface;
+        int result = interface->impl->device_release_crop(user_context, buf);
+        interface->impl->release_module();
+        return result;
+    }
+    return 0;
 }
 
 } // extern "C" linkage
