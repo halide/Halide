@@ -470,20 +470,6 @@ void CodeGen_ARM::visit(const Sub *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_ARM::visit(const Mod *op) {
-     int bits;
-     if (op->type.is_int() &&
-         op->type.is_vector() &&
-         target.bits == 32 &&
-         !is_const_power_of_two_integer(op->b, &bits)) {
-         // 32-bit arm has no vectorized integer modulo, and attempting
-         // to codegen one seems to tickle an llvm bug in some cases.
-         scalarize(op);
-     } else {
-         CodeGen_Posix::visit(op);
-     }
-}
-
 void CodeGen_ARM::visit(const Min *op) {
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
