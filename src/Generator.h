@@ -1089,6 +1089,15 @@ public:
         parameter().set_host_alignment(alignment);
         return *this;
     }
+
+    const Expr left() const { return dim(0).min(); }
+    const Expr right() const { return dim(0).max(); }
+    const Expr top() const { return dim(1).min(); }
+    const Expr bottom() const { return dim(1).max(); }
+
+    const Expr width() const { return dim(0).extent(); }
+    const Expr height() const { return dim(1).extent(); }
+    const Expr channels() const { return dim(2).extent(); }
 };
 
 /** GIOBase is the base class for all GeneratorInput<> and GeneratorOutput<>
