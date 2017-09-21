@@ -1150,11 +1150,6 @@ GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size)
         user_error << "Output<> may not be used with Param<> or ImageParam in Generators.\n";
     }
 
-    if (filter_inputs.size() > 0 && filter_outputs.size() == 0) {
-        // This doesn't catch *every* possibility (since a Generator can have zero Inputs).
-        user_error << "Output<> must be used with Input<> in Generators.\n";
-    }
-
     std::vector<void *> vg = ObjectInstanceRegistry::instances_in_range(
         generator, size, ObjectInstanceRegistry::GeneratorParam);
     for (auto v : vg) {
@@ -1379,8 +1374,13 @@ void GeneratorBase::pre_build() {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
     ParamInfo &pi = param_info();
-    user_assert(pi.filter_inputs.size() == 0) << "May not use build() method with Input<>.";
     user_assert(pi.filter_outputs.size() == 0) << "May not use build() method with Output<>.";
+    if (!inputs_set) {
+        for (auto input : pi.filter_inputs) {
+            input->init_internals();
+        }
+        inputs_set = true;
+    }
     track_parameter_values(false);
 }
 
@@ -1917,7 +1917,7 @@ void generator_test() {
             ScheduleParam<float> sp1{"sp1", 101.f};
             ScheduleParam<uint64_t> sp2{"sp2", 102};
 
-            Param<int> input{"input"};
+            Input<int> input{"input"};
 
             Func build() {
                 internal_assert(gp0 == 1);

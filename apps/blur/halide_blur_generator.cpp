@@ -29,7 +29,7 @@ public:
     GeneratorParam<int> tile_x{"tile_x", 32}; // X tile.
     GeneratorParam<int> tile_y{"tile_y", 8};  // Y tile.
 
-    ImageParam input{UInt(16), 2, "input"};
+    Input<Buffer<uint16_t>> input{"input", 2};
 
     Func build() {
         Func blur_x("blur_x"), blur_y("blur_y");

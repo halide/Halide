@@ -189,14 +189,14 @@ public:
     GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
-    ImageParam input{UInt(16), 2, "input"};
-    ImageParam matrix_3200{Float(32), 2, "matrix_3200"};
-    ImageParam matrix_7000{Float(32), 2, "matrix_7000"};
-    Param<float> color_temp{"color_temp"};
-    Param<float> gamma{"gamma"};
-    Param<float> contrast{"contrast"};
-    Param<int> blackLevel{"blackLevel"};
-    Param<int> whiteLevel{"whiteLevel"};
+    Input<Buffer<uint16_t>> input{"input", 2};
+    Input<Buffer<float>> matrix_3200{"matrix_3200", 2};
+    Input<Buffer<float>> matrix_7000{"matrix_7000", 2};
+    Input<float> color_temp{"color_temp"};
+    Input<float> gamma{"gamma"};
+    Input<float> contrast{"contrast"};
+    Input<int> blackLevel{"blackLevel"};
+    Input<int> whiteLevel{"whiteLevel"};
 
     Func build();
 
