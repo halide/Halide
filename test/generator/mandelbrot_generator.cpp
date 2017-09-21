@@ -33,15 +33,15 @@ Expr magnitude(Complex a) { return (a * conjugate(a)).real(); }
 
 class Mandelbrot : public Generator<Mandelbrot> {
 public:
-    Param<float> x_min{"x_min"};
-    Param<float> x_max{"x_max"};
-    Param<float> y_min{"y_min"};
-    Param<float> y_max{"y_max"};
-    Param<float> c_real{"c_real"};
-    Param<float> c_imag{"c_imag"};
-    Param<int> iters{"iters"};
-    Param<int> w{"w"};
-    Param<int> h{"h"};
+    Input<float> x_min{"x_min"};
+    Input<float> x_max{"x_max"};
+    Input<float> y_min{"y_min"};
+    Input<float> y_max{"y_max"};
+    Input<float> c_real{"c_real"};
+    Input<float> c_imag{"c_imag"};
+    Input<int>   iters{"iters"};
+    Input<int>   w{"w"};
+    Input<int>   h{"h"};
 
     Func build() {
         Var x, y, z;

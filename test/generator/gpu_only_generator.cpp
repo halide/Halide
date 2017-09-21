@@ -4,7 +4,7 @@ namespace {
 
 class GpuOnly : public Halide::Generator<GpuOnly> {
 public:
-    ImageParam input{ Int(32), 2, "input" };
+    Input<Buffer<int32_t>> input{"input", 2};
 
     Func build() {
         Var x("x"), y("y");

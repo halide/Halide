@@ -8,10 +8,10 @@ class NonLocalMeans : public Halide::Generator<NonLocalMeans> {
 public:
     GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
 
-    ImageParam            input{Float(32), 3, "input"};
-    Param<int>            patch_size{"patch_size"};
-    Param<int>            search_area{"search_area"};
-    Param<float>          sigma{"sigma"};
+    Input<Buffer<float>>  input{"input", 3};
+    Input<int>            patch_size{"patch_size"};
+    Input<int>            search_area{"search_area"};
+    Input<float>          sigma{"sigma"};
 
     Func build() {
         /* THE ALGORITHM */
