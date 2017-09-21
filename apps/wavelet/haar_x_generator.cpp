@@ -8,7 +8,7 @@ Halide::Var x("x"), y("y"), c("c");
 
 class haar_x : public Halide::Generator<haar_x> {
 public:
-    ImageParam in_{ Float(32), 2, "in" };
+    Input<Buffer<float>> in_{"in" , 2};
 
     Func build() {
         Func in = Halide::BoundaryConditions::repeat_edge(in_);
