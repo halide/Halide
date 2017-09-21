@@ -4,7 +4,7 @@ namespace {
 
 class EdgeDetect : public Halide::Generator<EdgeDetect> {
 public:
-    ImageParam input{ UInt(8), 2, "input" };
+    Input<Buffer<uint8_t>> input{"input" , 2};
 
     Func build() {
         Var x, y;

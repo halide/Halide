@@ -8,8 +8,8 @@ class MatMul : public Halide::Generator<MatMul> {
 public:
 
     GeneratorParam<int>   size {"size", 1024};
-    ImageParam            A {Float(32), 2, "A"};
-    ImageParam            B {Float(32), 2, "B"};
+    Input<Buffer<float>>  A{"A", 2};
+    Input<Buffer<float>>  B{"B", 2};
 
     Func build() {
         Var x("x"), y("y");
