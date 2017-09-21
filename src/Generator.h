@@ -1073,6 +1073,10 @@ public:
 
     virtual Parameter parameter() const = 0;
 
+    int dimensions() const {
+        return parameter().dimensions();
+    }
+
     Dimension dim(int i) {
         return Dimension(parameter(), i);
     }
