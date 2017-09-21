@@ -4,7 +4,7 @@ namespace {
 
 class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
-    ImageParam input{ Float(32), 3, "input" };
+    Input<Buffer<float>> input{"input", 3};
 
     Func build() {
         Buffer<float> matrix(3, 3);
