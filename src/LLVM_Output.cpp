@@ -84,12 +84,20 @@ size_t finish_member_header(std::ostream &out, size_t size) {
     return pos;
 }
 
+std::string member_name(const llvm::NewArchiveMember &m) {
+#if LLVM_VERSION < 50
+    return llvm::sys::path::filename(m.Buf->getBufferIdentifier()).str();
+#else
+    return m.MemberName.str();
+#endif
+}
+
 std::map<std::string, size_t> write_string_table(std::ostream &out,
                                                  const std::vector<llvm::NewArchiveMember> &members) {
     std::map<std::string, size_t> string_to_offset_map;
     size_t start_offset = 0;
     for (const llvm::NewArchiveMember &m : members) {
-        std::string name = m.MemberName;
+        std::string name = member_name(m);
         internal_assert(string_to_offset_map.count(name) == 0);
         if (name.size() < 16 && name.find('/') == std::string::npos) {
             // small strings that don't contain '/' can be inlined
@@ -137,12 +145,18 @@ void write_symbol_table(std::ostream &out,
 
     std::map<std::string, size_t> name_to_member_index;
 
+#if LLVM_VERSION < 50
+    const auto kFileMagicUnknown = llvm::sys::fs::file_magic::unknown;
+#else
+    const auto kFileMagicUnknown = llvm::file_magic::unknown;
+#endif
+
     llvm::LLVMContext context;
     for (size_t i = 0, n = members.size(); i < n; ++i) {
         llvm::MemoryBufferRef member_buffer = members[i].Buf->getMemBufferRef();
         llvm::Expected<std::unique_ptr<llvm::object::SymbolicFile>> obj_or_err =
                 llvm::object::SymbolicFile::createSymbolicFile(
-                        member_buffer, llvm::file_magic::unknown, &context);
+                        member_buffer, kFileMagicUnknown, &context);
         if (!obj_or_err) {
             // Don't use internal_assert: the call to new_member.takeError() will be
             // evaluated even if the assert does not fail, leaving new_member in an
@@ -258,7 +272,7 @@ void write_coff_archive(std::ostream &out,
         size_t pos = out.tellp();
         member_offset.push_back(pos);
 
-        std::string name = m.MemberName.str();
+        std::string name = member_name(m);
         auto it = string_to_offset_map.find(name);
         if (it != string_to_offset_map.end()) {
             out << '/';
