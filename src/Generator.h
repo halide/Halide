@@ -2505,7 +2505,7 @@ private:
         // Ordered-list of non-null ptrs to ScheduleParam<> fields.
         std::vector<Internal::ScheduleParamBase *> schedule_params;
 
-        // Ordered-list of non-null ptrs to Input<> fields. 
+        // Ordered-list of non-null ptrs to Input<> fields.
         // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
 
@@ -2747,14 +2747,14 @@ protected:
     class Param : public ::Halide::Param<T2> {
     public:
         template <typename... Args>
-        //HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
+        HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
         explicit Param(const Args &...args) : ::Halide::Param<T2>(args...) { }
     };
 
     class ImageParam : public ::Halide::ImageParam {
     public:
         template <typename... Args>
-        //HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
+        HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
         explicit ImageParam(const Args &...args) : ::Halide::ImageParam(args...) { }
     };
 
