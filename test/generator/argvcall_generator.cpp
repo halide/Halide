@@ -4,8 +4,8 @@ namespace {
 
 class ArgvCall : public Halide::Generator<ArgvCall> {
 public:
-    Param<float> f1{ "f1", 1.0 };
-    Param<float> f2{ "f2", 1.0 };
+    Input<float> f1{ "f1", 1.0 };
+    Input<float> f2{ "f2", 1.0 };
 
     Func build() {
         Var x, y, c;

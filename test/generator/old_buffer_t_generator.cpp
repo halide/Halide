@@ -5,9 +5,9 @@
 // bounds inference does something, and with an extern definition.
 class OldBufferT : public Halide::Generator<OldBufferT> {
 public:
-    ImageParam in1 {Int(32), 2, "in1"};
-    ImageParam in2 {Int(32), 2, "in2"};
-    Param<int> scalar_param {"scalar_param", 1, 0, 64};
+    Input<Buffer<int32_t>> in1{"in1", 2};
+    Input<Buffer<int32_t>> in2{"in2", 2};
+    Input<int>             scalar_param{"scalar_param", 1, 0, 64};
 
     Func build() {
         Func f, g;
