@@ -50,7 +50,7 @@ HalideExtern_2(int, an_extern_c_func, int, float);
 
 class PipelineCpp : public Halide::Generator<PipelineCpp> {
 public:
-    ImageParam input{UInt(16), 2, "input"};
+    Input<Buffer<uint16_t>> input{"input", 2};
 
     Func build() {
         Func f;

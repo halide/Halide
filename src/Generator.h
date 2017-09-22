@@ -217,6 +217,7 @@
 
 #include "Func.h"
 #include "ExternalCode.h"
+#include "ImageParam.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
 #include "ScheduleParam.h"
@@ -1088,6 +1089,15 @@ public:
         parameter().set_host_alignment(alignment);
         return *this;
     }
+
+    const Expr left() const { return dim(0).min(); }
+    const Expr right() const { return dim(0).max(); }
+    const Expr top() const { return dim(1).min(); }
+    const Expr bottom() const { return dim(1).max(); }
+
+    const Expr width() const { return dim(0).extent(); }
+    const Expr height() const { return dim(1).extent(); }
+    const Expr channels() const { return dim(2).extent(); }
 };
 
 /** GIOBase is the base class for all GeneratorInput<> and GeneratorOutput<>
@@ -2504,12 +2514,17 @@ private:
         // Ordered-list of non-null ptrs to ScheduleParam<> fields.
         std::vector<Internal::ScheduleParamBase *> schedule_params;
 
-        // Ordered-list of non-null ptrs to Input<>/Output<> fields; empty if old-style Generator.
+        // Ordered-list of non-null ptrs to Input<> fields.
+        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
-        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
 
-        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
+        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
+        // Must be empty if the Generator has a build() method rather than generate()/schedule().
+        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::Parameter *> filter_params;
+
+        // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
+        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
 
         // Convenience structure to look up GP by name.
         std::map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
@@ -2730,6 +2745,28 @@ private:
 
 template <class T>
 class Generator : public Internal::GeneratorBase {
+protected:
+
+    // Add wrapper types here that exists just to allow us to tag
+    // ImageParam/Param-used-inside-Generator with HALIDE_ATTRIBUTE_DEPRECATED.
+    // (This won't catch code that uses "Halide::Param" or "Halide::ImageParam"
+    // but those are somewhat uncommon cases.)
+
+    template<typename T2>
+    class Param : public ::Halide::Param<T2> {
+    public:
+        template <typename... Args>
+        HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
+        explicit Param(const Args &...args) : ::Halide::Param<T2>(args...) { }
+    };
+
+    class ImageParam : public ::Halide::ImageParam {
+    public:
+        template <typename... Args>
+        HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
+        explicit ImageParam(const Args &...args) : ::Halide::ImageParam(args...) { }
+    };
+
 protected:
     Generator() :
         Internal::GeneratorBase(sizeof(T),

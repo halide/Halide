@@ -4,7 +4,7 @@ namespace {
 
 class Deinterleave : public Halide::Generator<Deinterleave> {
 public:
-    ImageParam uvInterleaved{ UInt(8), 2, "uvInterleaved" };
+    Input<Buffer<uint8_t>> uvInterleaved{"uvInterleaved" , 2};
 
     Func build() {
         Var x, y;
