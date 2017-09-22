@@ -35,6 +35,9 @@
 #endif
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/LegacyPassManager.h>
+#if LLVM_VERSION < 50
+#include <llvm/Support/Path.h>
+#endif
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/FormattedStream.h>
