@@ -53,8 +53,8 @@ void insert_func_wrapper_helper(map<FunctionPtr, SubstitutionMap> &func_wrappers
 void validate_custom_wrapper(Function in_func, Function wrapped, Function wrapper) {
     map<string, Function> callees = find_direct_calls(in_func);
     user_assert(callees.count(wrapper.name()))
-        << wrapped.name() << ".in(" << in_func.name() << ") was called but \""
-        << wrapped.name() << "\" is never used in \"" << in_func.name() << "\"\n";
+        << "Wrapper for \"" << wrapped.name() << "\" in \"" << in_func.name()
+        << "\" was created but is never used inside \"" << in_func.name() << "\"\n";
 }
 
 } // anonymous namespace
