@@ -1073,6 +1073,10 @@ public:
 
     virtual Parameter parameter() const = 0;
 
+    int dimensions() const {
+        return parameter().dimensions();
+    }
+
     Dimension dim(int i) {
         return Dimension(parameter(), i);
     }
@@ -1131,8 +1135,8 @@ public:
     EXPORT const std::vector<Type> &types() const;
     EXPORT Type type() const;
 
-    EXPORT bool dimensions_defined() const;
-    EXPORT int dimensions() const;
+    EXPORT bool dims_defined() const;
+    EXPORT int dims() const;
 
     EXPORT const std::vector<Func> &funcs() const;
     EXPORT const std::vector<Expr> &exprs() const;
@@ -1142,7 +1146,7 @@ protected:
                    const std::string &name,
                    IOKind kind,
                    const std::vector<Type> &types,
-                   int dimensions);
+                   int dims);
     EXPORT virtual ~GIOBase();
 
     friend class GeneratorBase;
@@ -1153,7 +1157,7 @@ protected:
     const std::string name_;
     const IOKind kind_;
     std::vector<Type> types_;  // empty if type is unspecified
-    int dimensions_;           // -1 if dim is unspecified
+    int dims_;           // -1 if dim is unspecified
 
     // Exactly one of these will have nonzero length
     std::vector<Func> funcs_;
@@ -1930,9 +1934,9 @@ public:
             user_assert(Type(buffer.type()) == this->type())
                 << "Output should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
-        if (this->dimensions_defined()) {
-            user_assert(buffer.dimensions() == this->dimensions())
-                << "Output should have dim=" << this->dimensions() << " but saw dim=" << buffer.dimensions() << "\n";
+        if (this->dims_defined()) {
+            user_assert(buffer.dimensions() == this->dims())
+                << "Output should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -1965,9 +1969,9 @@ public:
             user_assert(output_types.at(0) == this->type())
                 << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
         }
-        if (this->dimensions_defined()) {
-            user_assert(f.dimensions() == this->dimensions())
-                << "Output should have dim=" << this->dimensions() << " but saw dim=" << f.dimensions() << "\n";
+        if (this->dims_defined()) {
+            user_assert(f.dimensions() == this->dims())
+                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -2190,7 +2194,7 @@ private:
     template <typename T2 = T, typename std::enable_if<std::is_integral<T2>::value>::type * = nullptr>
     void set_from_string_impl(const std::string &new_value_string) {
         if (which == Dim) {
-            gio.dimensions_ = parse_scalar<T2>(new_value_string);
+            gio.dims_ = parse_scalar<T2>(new_value_string);
         } else if (which == ArraySize) {
             gio.array_size_ = parse_scalar<T2>(new_value_string);
         } else {
