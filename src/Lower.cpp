@@ -30,6 +30,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "LICM.h"
 #include "LoopCarry.h"
 #include "Memoization.h"
 #include "PartitionLoops.h"
@@ -292,6 +293,7 @@ Module lower(const vector<Function> &output_funcs, const string &pipeline_name, 
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
+    s = loop_invariant_code_motion(s);
 
     if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Detecting varying attributes...\n";

@@ -33,7 +33,7 @@ public:
     // We declare a three-dimensional input image. The first two
     // dimensions will be x, and y, and the third dimension will be
     // the color channel.
-    ImageParam input{UInt(8), 3, "input"};
+    Input<Buffer<uint8_t>> input{"input", 3};
 
     // We will compile this generator in several ways to accept
     // several different memory layouts for the input and output. This
@@ -48,9 +48,9 @@ public:
                  { "either",        Layout::Either },
                  { "specialized",   Layout::Specialized }}};
 
-    // We also declare a scalar parameter to control the amount of
+    // We also declare a scalar input to control the amount of
     // brightening.
-    Param<uint8_t> offset{"offset"};
+    Input<uint8_t> offset{"offset"};
 
     // Declare our Vars
     Var x, y, c;
