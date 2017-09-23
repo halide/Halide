@@ -28,12 +28,11 @@ using namespace Halide;
 // define a class that inherits from Halide::Generator.
 class MyFirstGenerator : public Halide::Generator<MyFirstGenerator> {
 public:
-    // We declare the parameters to the Halide pipeline as public
-    // member variables. We'll give the parameters explicit names this
-    // time. They'll appear in the signature of our generated function
-    // in the same order as we declare them.
-    Param<uint8_t> offset{"offset"};
-    ImageParam input{UInt(8), 2, "input"};
+    // We declare the Inputs to the Halide pipeline as public
+    // member variables. They'll appear in the signature of our generated 
+    // function in the same order as we declare them.
+    Input<uint8_t> offset{"offset"};
+    Input<Buffer<uint8_t>> input{"input", 2};
 
     // Typically you declare your Vars at this scope as well, so that
     // they can be used in any helper methods you add later.
@@ -100,9 +99,9 @@ public:
     // params.
     GeneratorParam<Halide::Type> output_type{"output_type", Int(32)};
 
-    // We'll use the same Param and ImageParam as before:
-    Param<uint8_t> offset{"offset"};
-    ImageParam input{UInt(8), 2, "input"};
+    // We'll use the same Inputs as before:
+    Input<uint8_t> offset{"offset"};
+    Input<Buffer<uint8_t>> input{"input", 2};
 
     // And we'll declare our Vars here as before.
     Var x, y;
