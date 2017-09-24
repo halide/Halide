@@ -955,6 +955,10 @@ int main(int argc, char **argv) {
                 if (!parse_scalar(flag_value, &benchmark_min_time)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
+            } else if (flag_name == "benchmark_accuracy") {
+                if (!parse_scalar(flag_value, &benchmark_accuracy)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }                
             } else if (flag_name == "benchmark_min_iters") {
                 if (!parse_scalar(flag_value, &benchmark_min_iters)) {
                     fail() << "Invalid value for flag: " << flag_name;
