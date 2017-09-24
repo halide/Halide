@@ -52,6 +52,8 @@ WEAK void halide_allocator_cleanup() {
     }
 }
 
+}}} // namespace Halide::Runtime::Internal
+
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Hexagon needs up to 128 byte alignment.
     const size_t alignment = 128;
@@ -81,6 +83,8 @@ WEAK void halide_default_free(void *user_context, void *ptr) {
     aligned_free(ptr);
 }
 
+namespace Halide { namespace Runtime { namespace Internal {
+
 WEAK halide_malloc_t custom_malloc = halide_default_malloc;
 WEAK halide_free_t custom_free = halide_default_free;
 
@@ -89,23 +93,30 @@ WEAK halide_free_t custom_free = halide_default_free;
 extern "C" {
 
 WEAK halide_malloc_t halide_set_custom_malloc(halide_malloc_t user_malloc) {
+    // See TODO below.
+    halide_print(NULL, "custom allocators not supported on Hexagon.\n");
     halide_malloc_t result = custom_malloc;
     custom_malloc = user_malloc;
     return result;
 }
 
 WEAK halide_free_t halide_set_custom_free(halide_free_t user_free) {
+    // See TODO below.
+    halide_print(NULL, "custom allocators not supported on Hexagon.\n");
     halide_free_t result = custom_free;
     custom_free = user_free;
     return result;
 }
 
+// TODO: These should be calling custom_malloc/custom_free, but globals are not
+// initialized correctly when using mmap_dlopen. We need to fix this, then we
+// can enable the custom allocators.
 WEAK void *halide_malloc(void *user_context, size_t x) {
-    return custom_malloc(user_context, x);
+    return halide_default_malloc(user_context, x);
 }
 
 WEAK void halide_free(void *user_context, void *ptr) {
-    custom_free(user_context, ptr);
+    halide_default_free(user_context, ptr);
 }
 
 }

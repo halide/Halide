@@ -8,9 +8,9 @@ class ConvolutionLayer : public Halide::Generator<ConvolutionLayer> {
 public:
     GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
 
-    ImageParam            input{Float(32), 4, "input"};
-    ImageParam            filter{Float(32), 4, "filter"};
-    ImageParam            bias{Float(32), 1, "bias"};
+    Input<Buffer<float>>  input{"input", 4};
+    Input<Buffer<float>>  filter{"filter", 4};
+    Input<Buffer<float>>  bias{"bias", 1};
 
     Func build() {
         /* THE ALGORITHM */
