@@ -56,7 +56,7 @@ Buffer<uint16_t> test_transpose(int mode) {
 
     double t = benchmark([&]() {
         output.realize(result);
-    }).wall_time;
+    });
 
     std::cout << "Dummy Func version: "  << algorithm << " bandwidth " << 1024*1024 / t << " byte/s.\n";
     return result;
@@ -106,7 +106,7 @@ Buffer<uint16_t> test_transpose_wrap(int mode) {
 
     double t = benchmark([&]() {
         output.realize(result);
-    }).wall_time;
+    });
 
     std::cout << "Wrapper version: "  << algorithm << " bandwidth " << 1024*1024 / t << " byte/s.\n";
     return result;

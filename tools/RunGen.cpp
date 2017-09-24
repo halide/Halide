@@ -788,20 +788,23 @@ Flags:
         Don't log calls to halide_print() to stdout.
 
     --benchmarks=all:    
-        Run the filter with the given arguments many times to 
-        produce an estimate of average execution time; this currently
-        runs "samples" sets of "iterations" each, and chooses the fastest
-        sample set.
+        Run the filter with the given arguments many times to produce
+        an estimate of execution time. See tools/halide_benchmark.h
+        for the methodology.
 
-    --benchmark_min_time=DURATION_SECONDS [default = 0.5]:
+    --benchmark_min_time=DURATION_SECONDS [default = 0.005]:
         Override the default minimum desired benchmarking time; ignored if 
         --benchmarks is not also specified.
+
+    --benchmark_accuracy=NUM [default = 0.03]:
+        Override the default benchmarking accuracy requested; ignored if
+        --benchmarks is not also specified
 
     --benchmark_min_iters=NUM [default = 1]: 
         Override the default minimum number of benchmarking iterations; ignored 
         if --benchmarks is not also specified.
 
-    --benchmark_max_iters=NUM [default = 1000000000]: 
+    --benchmark_max_iters=NUM [default = 1000]: 
         Override the default maximum number of benchmarking iterations; ignored 
         if --benchmarks is not also specified.
 
@@ -899,9 +902,10 @@ int main(int argc, char **argv) {
     bool benchmark = false;
     bool track_memory = false;
     bool describe = false;
-    double benchmark_min_time = 0.5;
+    double benchmark_min_time = 0.005;
+    double benchmark_accuracy = 0.03;
     int benchmark_min_iters = 1;
-    int benchmark_max_iters = 1000000000;
+    int benchmark_max_iters = 1000;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1; // skip -
@@ -1110,7 +1114,10 @@ int main(int argc, char **argv) {
         if (benchmark) {
             info() << "Benchmarking filter...";
 
-            Halide::Tools::BenchmarkConfig config(benchmark_min_time, benchmark_min_iters, benchmark_max_iters);
+            Halide::Tools::BenchmarkConfig config;
+            config.min_time = benchmark_min_time;
+            config.min_iters = benchmark_min_iters;
+            config.max_iters = benchmark_max_iters;
             auto result = Halide::Tools::benchmark([&filter_argv, &args]() {
                 // Ignore result since our halide_error() should catch everything.
                 (void) halide_rungen_redirect_argv(&filter_argv[0]);

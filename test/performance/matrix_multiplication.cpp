@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
     double t = benchmark([&]() {
         matrix_mul.realize(output);
-    }).wall_time;
+    });
 
     // check results
     Buffer<float> output_ref(matrix_size, matrix_size);

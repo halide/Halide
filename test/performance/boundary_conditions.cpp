@@ -33,7 +33,7 @@ struct Test {
         time = benchmark([&]() {
                 g.realize(out);
                 out.device_sync();
-        }).wall_time;
+        });
 
         printf("%-20s: %f us\n", name, time * 1e6);
     }
@@ -58,7 +58,7 @@ struct Test {
         time = benchmark([&]() {
                 g.realize(out);
                 out.device_sync();
-        }).wall_time;
+        });
 
         printf("%-20s: %f us\n", name, time * 1e6);
     }
