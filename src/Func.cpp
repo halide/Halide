@@ -223,7 +223,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         }
     }
 
-    if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
+    if (defined() && args.size() != (size_t)dimensions()) {
         user_error << "Func \"" << name() << "\" was called with "
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
@@ -253,7 +253,7 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         }
     }
 
-    if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
+    if (defined() && args.size() != (size_t)dimensions()) {
         user_error << "Func \"" << name() << "\" was called with "
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
