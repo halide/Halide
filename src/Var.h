@@ -176,6 +176,14 @@ EXPORT extern Var _;
 EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
 // @}
 
+namespace Internal {
+
+/** Make a list of unique arguments for definitions with unnamed
+    arguments. */
+EXPORT std::vector<Var> make_argument_list(int dimensionality);
+
+}
+
 }
 
 #endif

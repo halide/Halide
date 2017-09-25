@@ -162,11 +162,11 @@ EXPORT bool Func::is_extern() const {
 void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
                          const std::vector<Type> &types,
-                         int dimensionality,
+                         const std::vector<Var> &arguments,
                          NameMangling mangling,
                          DeviceAPI device_api,
                          bool uses_old_buffer_t) {
-    func.define_extern(function_name, args, types, dimensionality,
+    func.define_extern(function_name, args, types, arguments,
                        mangling, device_api, uses_old_buffer_t);
 }
 
@@ -1873,7 +1873,7 @@ Func Func::copy_to_device(DeviceAPI d) {
 
     ExternFuncArgument device_interface = make_device_interface_call(d);
     func.define_extern("halide_buffer_copy", {buffer, device_interface},
-                       {call->type}, (int)call->args.size(),
+                       {call->type}, make_argument_list(call->args.size()),
                        NameMangling::C, d, false);
     return *this;
 }

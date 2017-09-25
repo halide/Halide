@@ -661,7 +661,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 void Function::define_extern(const std::string &function_name,
                              const std::vector<ExternFuncArgument> &args,
                              const std::vector<Type> &types,
-                             int dimensionality,
+                             const std::vector<Var> &dimensions,
                              NameMangling mangling,
                              DeviceAPI device_api,
                              bool use_old_buffer_t) {
@@ -673,6 +673,21 @@ void Function::define_extern(const std::string &function_name,
     user_assert(!has_extern_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func already has an extern definition.\n";
+
+    // Make sure all the vars in the dimensions have unique non-empty names
+    for (size_t i = 0; i < dimensions.size(); i++) {
+        user_assert(!dimensions[i].name().empty())
+            << "In extern definition \"" << function_name << "\" of Func \"" << name() << "\":\n"
+            << "Dimension " << i << " has an empty name.\n";
+        for (size_t j = 0; j < i; j++) {
+            user_assert(dimensions[i].name() != dimensions[j].name())
+                << "In extern definition \"" << function_name << "\" of Func \"" << name() << "\":\n"
+                << "Dimensions " << i << " and " << j
+                << " both have the name \"" + dimensions[i].name() + "\"\n";
+        }
+    }
+
+    int dimensionality = dimensions.size();
 
     contents->extern_function_name = function_name;
     contents->extern_arguments = args;
@@ -692,9 +707,10 @@ void Function::define_extern(const std::string &function_name,
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).
     auto &pure_def_args = contents->init_def.args();
-    while ((int)pure_def_args.size() < dimensionality) {
-        pure_def_args.push_back(Var(unique_name('e')));
+    for (int i = 0; i < dimensionality; i++) {
+        pure_def_args.push_back(dimensions[i]);
     }
+
     // Reset the storage dims to match the pure args
     vector<string> arg_names = this->args();
     contents->func_schedule.storage_dims().clear();
@@ -1053,7 +1069,6 @@ pair<vector<Function>, map<string, Function>> deep_copy(
 
     return { copy_outputs, copy_env };
 }
-
 
 }
 }

@@ -19,6 +19,8 @@
 
 namespace Halide {
 
+class Var;
+
 /** An argument to an extern-defined Func. May be a Function, Buffer,
  * ImageParam or Expr. */
 struct ExternFuncArgument {
@@ -228,7 +230,7 @@ public:
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &args,
                               const std::vector<Type> &types,
-                              int dimensionality,
+                              const std::vector<Var> &dimensions,
                               NameMangling mangling,
                               DeviceAPI device_api,
                               bool uses_old_buffer_t);
