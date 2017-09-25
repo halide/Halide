@@ -5,6 +5,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
+#include "Generator.h"
 
 namespace Halide {
 
@@ -12,6 +13,27 @@ using namespace Internal;
 
 using std::string;
 using std::vector;
+
+namespace {
+
+static const char * const dom_var_names[] = {"$x", "$y", "$z", "$w"};
+
+// T is an ImageParam, Buffer<>, Input<Buffer<>>
+template<typename T>
+Internal::ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
+    std::vector<Internal::ReductionVariable> vars;
+    for (int i = 0; i < t.dimensions(); i++) {
+        vars.push_back({
+            name + dom_var_names[i],
+            t.dim(i).min(),
+            t.dim(i).extent()
+        });
+    }
+
+    return Internal::ReductionDomain(vars);
+}
+
+}  // namespace
 
 RVar::operator Expr() const {
     if (!min().defined() || !extent().defined()) {
@@ -54,9 +76,7 @@ ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
 }
 
 // This just initializes the predefined x, y, z, w members of RDom.
-void RDom::init_vars(string name) {
-    static string var_names[] = { "x", "y", "z", "w" };
-
+void RDom::init_vars(const string &name) {
     const std::vector<ReductionVariable> &dom_vars = dom.domain();
     RVar *vars[] = { &x, &y, &z, &w };
 
@@ -64,7 +84,7 @@ void RDom::init_vars(string name) {
         if (i < dom_vars.size()) {
             *(vars[i]) = RVar(dom, i);
         } else {
-            *(vars[i]) = RVar(name + "$" + var_names[i]);
+            *(vars[i]) = RVar(name + dom_var_names[i]);
         }
     }
 }
@@ -142,38 +162,22 @@ void RDom::initialize_from_ranges(const std::vector<std::pair<Expr, Expr>> &rang
 }
 
 RDom::RDom(const Buffer<> &b) {
-    string name = unique_name('r');
-    static string var_names[] = {"x", "y", "z", "w"};
-    std::vector<ReductionVariable> vars;
-    for (int i = 0; i < b.dimensions(); i++) {
-        ReductionVariable var = {
-            name + "$" + var_names[i],
-            b.dim(i).min(),
-            b.dim(i).extent()
-        };
-        vars.push_back(var);
-    }
-
-    dom = ReductionDomain(vars);
+    std::string name = unique_name('r');
+    dom = make_dom_from_dimensions(b, name);
     init_vars(name);
 }
 
 RDom::RDom(ImageParam p) {
-    static string var_names[] = {"x", "y", "z", "w"};
-    std::vector<ReductionVariable> vars;
-    for (int i = 0; i < p.dimensions(); i++) {
-        ReductionVariable var = {
-            p.name() + "$" + var_names[i],
-            p.dim(i).min(),
-            p.dim(i).extent()
-        };
-        vars.push_back(var);
-    }
-
-    dom = ReductionDomain(vars);
-    init_vars(p.name());
+    std::string name = p.name();
+    dom = make_dom_from_dimensions(p, name);
+    init_vars(name);
 }
 
+RDom::RDom(const Halide::Internal::Constrainable &c) {
+    std::string name = unique_name('r');
+    dom = make_dom_from_dimensions(c, name);
+    init_vars(name);
+}
 
 int RDom::dimensions() const {
     return (int)dom.domain().size();
