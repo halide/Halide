@@ -90,7 +90,7 @@ If you wish to use cmake to build Halide, the build procedure is:
 
     % mkdir cmake_build
     % cd cmake_build
-    % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_VERSION=39 /path/to/halide
+    % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release /path/to/halide
     % make -j8
 
 LLVM_DIR should be the folder in the LLVM installation or build tree that contains LLVMConfig.cmake.
@@ -121,7 +121,7 @@ To configure and build Halide:
 
     % mkdir C:\Code\halide-build
     % cd C:\Code\halide-build
-    % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DLLVM_VERSION=39 -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
+    % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
     % MSBuild.exe /m /t:Build /p:Configuration=Release .\ALL_BUILD.vcxproj
 
 #### Building Halide and LLVM on Windows using mingw
