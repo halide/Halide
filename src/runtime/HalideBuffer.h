@@ -1559,6 +1559,7 @@ public:
     const not_void_T &operator()(int first, Args... rest) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        assert(!device_dirty());
         return *((const not_void_T *)(address_of(first, rest...)));
     }
 
@@ -1567,6 +1568,7 @@ public:
     operator()() const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        assert(!device_dirty());
         return *((const not_void_T *)(data()));
     }
 
