@@ -6,9 +6,9 @@ namespace {
 
 class Matlab : public Halide::Generator<Matlab> {
 public:
-    ImageParam input{Float(32), 2, "input"};
-    Param<float> scale{"scale"};
-    Param<bool> negate{"negate"};
+    Input<Buffer<float>> input{"input", 2};
+    Input<float>         scale{"scale"};
+    Input<bool>          negate{"negate"};
 
     Func build() {
         Var x, y;
