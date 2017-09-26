@@ -4,8 +4,9 @@ namespace {
 
 class Deinterleave : public Halide::Generator<Deinterleave> {
 public:
-    Input<Buffer<uint8_t>> uvInterleaved{"uvInterleaved" , 2};
-    Output<Buffer<uint8_t>> result{"result", 2};
+    Input<Buffer<uint8_t>> uvInterleaved{"uvInterleaved", 2};
+    // There is no way to declare a Buffer<Tuple>, so we must use Output<Func> instead
+    Output<Func> result{"result", { UInt(8), UInt(8) }, 2};
 
     void generate() {
         Var x, y;
