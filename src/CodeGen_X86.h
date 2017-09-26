@@ -39,8 +39,6 @@ protected:
     void visit(const Add *);
     void visit(const Sub *);
     void visit(const Cast *);
-    void visit(const Min *);
-    void visit(const Max *);
     void visit(const GT *);
     void visit(const LT *);
     void visit(const LE *);

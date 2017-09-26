@@ -58,11 +58,7 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 # value.
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 39 40 50 60))
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
-else
-WITH_HEXAGON ?=
-endif
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
@@ -342,6 +338,7 @@ SOURCE_FILES = \
   IRVisitor.cpp \
   JITModule.cpp \
   Lerp.cpp \
+  LICM.cpp \
   LLVM_Output.cpp \
   LLVM_Runtime_Linker.cpp \
   LoopCarry.cpp \
@@ -481,6 +478,7 @@ HEADER_FILES = \
   JITModule.h \
   Lambda.h \
   Lerp.h \
+  LICM.h \
   LLVM_Output.h \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
@@ -1554,7 +1552,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 37 38 39 40 50 60))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 39 40 50 60))
 LLVM_OK=yes
 endif
 
@@ -1606,7 +1604,7 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
 
-# We need to capture the system libraries that we'll need to link 
+# We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
 # have to guess what's necessary on their system; call
 # llvm-config and capture the result in config files that
