@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         f.realize(c);
         expected += 17;
         assert(c(0) == expected);
-    }).wall_time;
+    });
 
     printf("%g ms per jit compilation\n", t * 1e3);
 

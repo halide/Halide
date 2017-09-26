@@ -26,11 +26,11 @@ int main(int argc, char **argv) {
 
     double t1 = benchmark([&]() {
         dst.realize(output);
-    }).wall_time;
+    });
 
     double t2 = benchmark([&]() {
         memcpy(output.data(), input.data(), input.width());
-    }).wall_time;
+    });
 
     printf("system memcpy: %.3e byte/s\n", buffer_size / t2);
     printf("halide memcpy: %.3e byte/s\n", buffer_size / t1);

@@ -21,13 +21,13 @@ int main(int argc, char **argv) {
 
     Buffer<float> imf = f.realize(W, H);
 
-    double parallelTime = benchmark([&]() { f.realize(imf); }).wall_time;
+    double parallelTime = benchmark([&]() { f.realize(imf); });
 
     printf("Realizing g\n");
     Buffer<float> img = g.realize(W, H);
     printf("Done realizing g\n");
 
-    double serialTime = benchmark([&]() { g.realize(img); }).wall_time;
+    double serialTime = benchmark([&]() { g.realize(img); });
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {

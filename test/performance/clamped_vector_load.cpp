@@ -32,7 +32,7 @@ double test(Func f, bool test_correctness = true) {
         }
     }
 
-    return benchmark([&]() { f.realize(output); }).wall_time;
+    return benchmark([&]() { f.realize(output); });
 }
 
 int main(int argc, char **argv) {
