@@ -47,9 +47,9 @@ int main(int argc, char **argv) {
     // All profiling runs are done into the same buffer, to avoid
     // cache weirdness.
     Buffer<float> timing_scratch(256, 256);
-    double t1 = 1e3 * benchmark([&]() { f.realize(timing_scratch); }).wall_time;
-    double t2 = 1e3 * benchmark([&]() { g.realize(timing_scratch); }).wall_time;
-    double t3 = 1e3 * benchmark([&]() { h.realize(timing_scratch); }).wall_time;
+    double t1 = 1e3 * benchmark([&]() { f.realize(timing_scratch); });
+    double t2 = 1e3 * benchmark([&]() { g.realize(timing_scratch); });
+    double t3 = 1e3 * benchmark([&]() { h.realize(timing_scratch); });
 
     RDom r(correct_result);
     Func fast_error, faster_error;

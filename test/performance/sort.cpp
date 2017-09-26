@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
     f.realize(bitonic_sorted);
     double t_bitonic = benchmark([&]() {
         f.realize(bitonic_sorted);
-    }).wall_time;
+    });
 
     printf("Merge sort...\n");
     f = merge_sort(input, N);
@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
     f.realize(merge_sorted);
     double t_merge = benchmark([&]() {
         f.realize(merge_sorted);
-    }).wall_time;
+    });
 
     Buffer<int> correct(N);
     for (int i = 0; i < N; i++) {
@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
     printf("std::sort...\n");
     double t_std = benchmark([&]() {
         std::sort(&correct(0), &correct(N));
-    }).wall_time;
+    });
 
     printf("Times:\n"
            "bitonic sort: %fms \n"

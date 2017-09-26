@@ -10,24 +10,6 @@
 namespace Halide {
 namespace Tools {
 
-// TODO(srj): mark this as deprecated once existing usages are converted.
-// HALIDE_ATTRIBUTE_DEPRECATED("benchmark() with explicit samples-and-iterations is deprecated.") 
-double benchmark(int samples, int iterations, std::function<void()> op) {
-    double best = std::numeric_limits<double>::infinity();
-    for (int i = 0; i < samples; i++) {
-        auto t1 = std::chrono::high_resolution_clock::now();
-        for (int j = 0; j < iterations; j++) {
-            op();
-        }
-        auto t2 = std::chrono::high_resolution_clock::now();
-        double dt = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1e6;
-        if (dt < best) best = dt;
-    }
-    return best / iterations;
-}
-
-
-
 // Prefer high_resolution_clock, but only if it's steady...
 template <bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
 struct SteadyClock {
@@ -40,11 +22,46 @@ struct SteadyClock<false> {
   using type = std::chrono::steady_clock;
 };
 
+// Benchmark the operation 'op'. The number of iterations refers to
+// how many times the operation is run for each time measurement, the
+// result is the minimum over a number of samples runs. The result is the
+// amount of time in seconds for one iteration.
+//
+// NOTE: it is usually simpler and more accurate to use the adaptive
+// version of benchmark() later in this file; this function is provided
+// for legacy code.
+//
+// IMPORTANT NOTE: Using this tool for timing GPU code may be misleading,
+// as it does not account for time needed to synchronize to/from the GPU;
+// if the callback doesn't include calls to device_sync(), the reported
+// time may only be that to queue the requests; if the callback *does*
+// include calls to device_sync(), it might exaggerate the sync overhead
+// for real-world use. For now, callers using this to benchmark GPU
+// code should measure with extreme caution.
+
+double benchmark(int samples, int iterations, std::function<void()> op) {
+  using BenchmarkClock = SteadyClock<>::type;
+  double best = std::numeric_limits<double>::infinity();
+  for (int i = 0; i < samples; i++) {
+    auto start = BenchmarkClock::now();
+    for (int j = 0; j < iterations; j++) {
+      op();
+    }
+    auto end = BenchmarkClock::now();
+    double elapsed_seconds =
+        std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
+    best = std::min(best, elapsed_seconds);
+  }
+  return best / iterations;
+}
+
 // Benchmark the operation 'op': run the operation until at least min_time
 // has elapsed, with the constraint of at least min_iters and no more than
 // max_iters times; the number of iterations is expanded as we
-// progress (based on initial runs of 'op') to minimize overhead. Most
-// callers should be able to get good results without needing to specify
+// progress (based on initial runs of 'op') to minimize overhead. The time
+// reported will be that of the best single iteration.
+//
+// Most callers should be able to get good results without needing to specify
 // custom BenchmarkConfig values. 
 //
 // IMPORTANT NOTE: Using this tool for timing GPU code may be misleading,
@@ -58,60 +75,93 @@ struct SteadyClock<false> {
 constexpr uint64_t kBenchmarkMaxIterations = 1000000000;
 
 struct BenchmarkConfig {
-    // Attempt to run a benchmark for at least this long (seconds).
-    double min_time;
-    
-    // Run at least this many iterations.
-    uint64_t min_iters;
+  // Attempt to use this much time (in seconds) for the meaningful samples
+  // taken; initial iterations will be done to find an iterations-per-sample
+  // count that puts the total runtime in this ballpark.
+  double min_time{0.5};
 
-    // Run at most this many iterations.
-    uint64_t max_iters;
+  // Run at least this many iterations per sample.
+  uint64_t min_iters{1};
 
-    BenchmarkConfig() : min_time(0.5), min_iters(1), max_iters(kBenchmarkMaxIterations) {}
-    explicit BenchmarkConfig(double min_time) : min_time(min_time), min_iters(1), max_iters(kBenchmarkMaxIterations) {}
-    BenchmarkConfig(double min_time, uint64_t min_iters, uint64_t max_iters) : min_time(min_time), min_iters(min_iters), max_iters(max_iters) {}
+  // Run at most this many iterations over all samples.
+  uint64_t max_iters{kBenchmarkMaxIterations};
+
+  // Terminate when the relative difference between the best runtime
+  // seen and the third-best runtime seen is no more than
+  // this. Controls accuracy. The closer to zero this gets the more
+  // reliable the answer, but the longer it may take to run.
+  double accuracy{0.03};
 };
 
 struct BenchmarkResult {
-    // Average elapsed wall-clock time per iteration (seconds).
-    double wall_time;
+  // Best elapsed wall-clock time per iteration (seconds).
+  double wall_time;
 
-    // Actual number of iterations.
-    uint64_t iterations;
+  // Number of samples used for measurement.
+  // (There might be additional samples taken that are not used
+  // for measurement.)
+  uint64_t samples;
+
+  // Total number of iterations across all samples.
+  // (There might be additional iterations taken that are not used
+  // for measurement.)
+  uint64_t iterations;
+
+  operator double() const { return wall_time; }
 };
 
-BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig& config = BenchmarkConfig()) {
-    using BenchmarkClock = SteadyClock<>::type;
+BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig& config = {}) {
+  BenchmarkResult result{0, 0, 0};
 
-    const double min_time = std::max(0.01, config.min_time);
-    const uint64_t min_iters = std::min(std::max((uint64_t) 1, config.min_iters), kBenchmarkMaxIterations);
-    const uint64_t max_iters = std::min(std::max(config.min_iters, config.max_iters), kBenchmarkMaxIterations);
+  const double min_time = std::max(10 * 1e-6, config.min_time);
+  const uint64_t min_iters = std::min(std::max((uint64_t)1, config.min_iters),
+                                      kBenchmarkMaxIterations);
+  const uint64_t max_iters = std::min(
+      std::max(config.min_iters, config.max_iters), kBenchmarkMaxIterations);
+  const double accuracy = 1.0 + std::min(std::max(0.001, config.accuracy), 0.1);
 
-    uint64_t iterations_total = 0;
-    double elapsed_total = 0.0;
-    uint64_t iters = min_iters;
-    for (;;) {
-        auto start = BenchmarkClock::now();
-        for (uint64_t i = 0; i < iters; i++) {
-            op();
-        }
-        auto end = BenchmarkClock::now();
-        double elapsed_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
-        iterations_total += iters;
-        elapsed_total += elapsed_seconds;
-        if (elapsed_seconds >= min_time ||
-            iterations_total >= max_iters) {
-            return { elapsed_total / iterations_total, iterations_total };
-        }
+  // We will do (at least) kMinSamples samples; we will do additional
+  // samples until the best the kMinSamples'th results are within the
+  // accuracy tolerance (or we run out of iterations).
+  constexpr int kMinSamples = 3;
+  double times[kMinSamples + 1] = {0};
 
-        // Gradually enlarge iters as we go along.
-        double scale = (min_time * 1.4142) / std::max(elapsed_seconds, 1e-9);
-        double next_iters = std::min(std::max(scale * iters, iters + 1.0), (double) kBenchmarkMaxIterations);
-        iters = (uint64_t) (next_iters + 0.5);
+  double total_time = 0;
+  uint64_t iters_per_sample = min_iters;
+  while (result.iterations < max_iters) {
+    result.samples = 0;
+    result.iterations = 0;
+    total_time = 0;
+    for (int i = 0; i < kMinSamples; i++) {
+      times[i] = benchmark(1, iters_per_sample, op);
+      result.samples++;
+      result.iterations += iters_per_sample;
+      total_time += times[i] * iters_per_sample;
     }
+    std::sort(times, times + kMinSamples);
+    if (times[0] * iters_per_sample * kMinSamples >= min_time) {
+      break;
+    }
+    // Use an estimate based on initial times to converge faster.
+    double next_iters = std::max(min_time / std::max(times[0] * kMinSamples, 1e-9),
+                                 iters_per_sample * 2.0);
+    iters_per_sample = (uint64_t)(next_iters + 0.5);
+  }
 
-    // Should be unreachable.
-    return { 0, 0 };
+  // While we aren't accurate enough (and we have time and iterations remaining)
+  // do additional samples.
+  while (times[0] * accuracy < times[kMinSamples - 1] &&
+         total_time < min_time &&
+         result.iterations < max_iters) {
+    times[kMinSamples] = benchmark(1, iters_per_sample, op);
+    result.samples++;
+    result.iterations += iters_per_sample;
+    total_time += times[kMinSamples] * iters_per_sample;
+    std::sort(times, times + kMinSamples + 1);
+  }
+  result.wall_time = times[0];
+
+  return result;
 }
 
 }   // namespace Tools
