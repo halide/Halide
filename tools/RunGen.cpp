@@ -1108,10 +1108,7 @@ int main(int argc, char **argv) {
         }
 
         if (benchmark) {
-            info() << "Benchmarking filter...";
-
-            Halide::Tools::BenchmarkConfig config(benchmark_min_time, benchmark_min_iters, benchmark_max_iters);
-            auto result = Halide::Tools::benchmark([&filter_argv, &args]() {
+            const auto benchmark_inner = [&filter_argv, &args]() {
                 // Ignore result since our halide_error() should catch everything.
                 (void) halide_rungen_redirect_argv(&filter_argv[0]);
                 // Ensure that all outputs are finished, otherwise we may just be
@@ -1123,11 +1120,19 @@ int main(int argc, char **argv) {
                         b.device_sync();
                     }
                 }
-              }, config);
+            };
 
-            std::cout << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
-                << result.iterations << " iterations).\n";
-            std::cout << "Average output throughput is " << (megapixels / result.wall_time) << " mpix/sec.\n";
+            info() << "Benchmarking filter...";
+
+            Halide::Tools::BenchmarkConfig config;
+            config.min_time = benchmark_min_time;
+            config.min_iters = benchmark_min_iters;
+            config.max_iters = benchmark_max_iters;
+            auto result = Halide::Tools::benchmark(benchmark_inner, config);
+
+            std::cout << "Benchmark2 for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
+                << result.samples << " samples, " << result.iterations << " iterations).\n";
+            std::cout << "Best output throughput is " << (megapixels / result.wall_time) << " mpix/sec.\n";
 
         } else {
             info() << "Running filter...";
