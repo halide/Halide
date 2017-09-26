@@ -118,6 +118,8 @@ DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(qurt_hvx)
+DECLARE_CPP_INITMOD(qurt_init_fini)
+DECLARE_CPP_INITMOD(qurt_thread_pool)
 DECLARE_CPP_INITMOD(runtime_api)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(thread_pool)
@@ -259,11 +261,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-i64:64-i128:128-n32:64-S128");
             } else {
-                #if LLVM_VERSION < 39
-                return llvm::DataLayout("e-m:e-i64:64-i128:128-n32:64-S128");
-                #else
                 return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
-                #endif
             }
         }
     } else if (target.arch == Target::MIPS) {
@@ -421,14 +419,8 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t)
 
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
-        #if LLVM_VERSION >= 38
         bool failed = llvm::Linker::linkModules(*modules[0],
                                                 std::move(modules[i]));
-        #else
-        bool failed = llvm::Linker::LinkModules(modules[0].get(),
-                                                modules[i].release());
-        #endif
-
         if (failed) {
             internal_error << "Failure linking initial modules\n";
         }
@@ -690,18 +682,18 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
-                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-                // TODO: Replace fake thread pool with a real implementation.
-                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_qurt_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_qurt_init_fini(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
                 // above are expected to be provided by the containing
                 // process instead at link time. Less aggressive than
                 // NoRuntime, as OS-agnostic modules like tracing are
                 // still included below.
+                if (t.arch == Target::Hexagon) {
+                    modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
+                }
+                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             }
         }
 
@@ -745,7 +737,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_old_buffer_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
-            if (t.arch != Target::MIPS && t.os != Target::NoOS) {
+            if (t.arch != Target::MIPS && t.os != Target::NoOS &&
+                t.os != Target::QuRT) {
                 // MIPS doesn't support the atomics the profiler requires.
                 modules.push_back(get_initmod_profiler(c, bits_64, debug));
             }
@@ -979,12 +972,7 @@ void add_bitcode_to_module(llvm::LLVMContext *context, llvm::Module &module,
     llvm::StringRef sb = llvm::StringRef((const char *)&bitcode[0], bitcode.size());
     std::unique_ptr<llvm::Module> add_in = parse_bitcode_file(sb, context, name.c_str());
 
-    #if LLVM_VERSION >= 38
     bool failed = llvm::Linker::linkModules(module, std::move(add_in));
-    #else
-    bool failed = llvm::Linker::LinkModules(&module, add_in.release());
-    #endif
-
     if (failed) {
         internal_error << "Failure linking in additional module: " << name << "\n";
     }

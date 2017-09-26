@@ -66,6 +66,8 @@ set(RUNTIME_CPP
   profiler_inlined
   qurt_allocator
   qurt_hvx
+  qurt_init_fini
+  qurt_thread_pool
   runtime_api
   ssp
   thread_pool
@@ -316,6 +318,7 @@ set(HEADER_FILES
   LLVM_Runtime_Linker.h
   Lambda.h
   Lerp.h
+  LICM.h
   LoopCarry.h
   Lower.h
   MainPage.h
@@ -465,6 +468,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Output.cpp
   LLVM_Runtime_Linker.cpp
   Lerp.cpp
+  LICM.cpp
   LoopCarry.cpp
   Lower.cpp
   MatlabWrapper.cpp
