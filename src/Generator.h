@@ -217,6 +217,7 @@
 
 #include "Func.h"
 #include "ExternalCode.h"
+#include "ImageParam.h"
 #include "Introspection.h"
 #include "ObjectInstanceRegistry.h"
 #include "ScheduleParam.h"
@@ -1072,6 +1073,10 @@ public:
 
     virtual Parameter parameter() const = 0;
 
+    int dimensions() const {
+        return parameter().dimensions();
+    }
+
     Dimension dim(int i) {
         return Dimension(parameter(), i);
     }
@@ -1088,6 +1093,15 @@ public:
         parameter().set_host_alignment(alignment);
         return *this;
     }
+
+    const Expr left() const { return dim(0).min(); }
+    const Expr right() const { return dim(0).max(); }
+    const Expr top() const { return dim(1).min(); }
+    const Expr bottom() const { return dim(1).max(); }
+
+    const Expr width() const { return dim(0).extent(); }
+    const Expr height() const { return dim(1).extent(); }
+    const Expr channels() const { return dim(2).extent(); }
 };
 
 /** GIOBase is the base class for all GeneratorInput<> and GeneratorOutput<>
@@ -1121,8 +1135,8 @@ public:
     EXPORT const std::vector<Type> &types() const;
     EXPORT Type type() const;
 
-    EXPORT bool dimensions_defined() const;
-    EXPORT int dimensions() const;
+    EXPORT bool dims_defined() const;
+    EXPORT int dims() const;
 
     EXPORT const std::vector<Func> &funcs() const;
     EXPORT const std::vector<Expr> &exprs() const;
@@ -1132,7 +1146,7 @@ protected:
                    const std::string &name,
                    IOKind kind,
                    const std::vector<Type> &types,
-                   int dimensions);
+                   int dims);
     EXPORT virtual ~GIOBase();
 
     friend class GeneratorBase;
@@ -1143,7 +1157,7 @@ protected:
     const std::string name_;
     const IOKind kind_;
     std::vector<Type> types_;  // empty if type is unspecified
-    int dimensions_;           // -1 if dim is unspecified
+    int dims_;           // -1 if dim is unspecified
 
     // Exactly one of these will have nonzero length
     std::vector<Func> funcs_;
@@ -1920,9 +1934,9 @@ public:
             user_assert(Type(buffer.type()) == this->type())
                 << "Output should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
-        if (this->dimensions_defined()) {
-            user_assert(buffer.dimensions() == this->dimensions())
-                << "Output should have dim=" << this->dimensions() << " but saw dim=" << buffer.dimensions() << "\n";
+        if (this->dims_defined()) {
+            user_assert(buffer.dimensions() == this->dims())
+                << "Output should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -1955,9 +1969,9 @@ public:
             user_assert(output_types.at(0) == this->type())
                 << "Output should have type=" << this->type() << " but saw type=" << output_types.at(0) << "\n";
         }
-        if (this->dimensions_defined()) {
-            user_assert(f.dimensions() == this->dimensions())
-                << "Output should have dim=" << this->dimensions() << " but saw dim=" << f.dimensions() << "\n";
+        if (this->dims_defined()) {
+            user_assert(f.dimensions() == this->dims())
+                << "Output should have dim=" << this->dims() << " but saw dim=" << f.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -2180,7 +2194,7 @@ private:
     template <typename T2 = T, typename std::enable_if<std::is_integral<T2>::value>::type * = nullptr>
     void set_from_string_impl(const std::string &new_value_string) {
         if (which == Dim) {
-            gio.dimensions_ = parse_scalar<T2>(new_value_string);
+            gio.dims_ = parse_scalar<T2>(new_value_string);
         } else if (which == ArraySize) {
             gio.array_size_ = parse_scalar<T2>(new_value_string);
         } else {
@@ -2504,12 +2518,17 @@ private:
         // Ordered-list of non-null ptrs to ScheduleParam<> fields.
         std::vector<Internal::ScheduleParamBase *> schedule_params;
 
-        // Ordered-list of non-null ptrs to Input<>/Output<> fields; empty if old-style Generator.
+        // Ordered-list of non-null ptrs to Input<> fields.
+        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::GeneratorInputBase *> filter_inputs;
-        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
 
-        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields; empty if new-style Generator.
+        // Ordered-list of non-null ptrs to Param<> or ImageParam<> fields.
+        // Must be empty if the Generator has a build() method rather than generate()/schedule().
+        // Only one of filter_inputs and filter_params may be nonempty.
         std::vector<Internal::Parameter *> filter_params;
+
+        // Ordered-list of non-null ptrs to Output<> fields; empty if old-style Generator.
+        std::vector<Internal::GeneratorOutputBase *> filter_outputs;
 
         // Convenience structure to look up GP by name.
         std::map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
@@ -2730,6 +2749,28 @@ private:
 
 template <class T>
 class Generator : public Internal::GeneratorBase {
+protected:
+
+    // Add wrapper types here that exists just to allow us to tag
+    // ImageParam/Param-used-inside-Generator with HALIDE_ATTRIBUTE_DEPRECATED.
+    // (This won't catch code that uses "Halide::Param" or "Halide::ImageParam"
+    // but those are somewhat uncommon cases.)
+
+    template<typename T2>
+    class Param : public ::Halide::Param<T2> {
+    public:
+        template <typename... Args>
+        HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
+        explicit Param(const Args &...args) : ::Halide::Param<T2>(args...) { }
+    };
+
+    class ImageParam : public ::Halide::ImageParam {
+    public:
+        template <typename... Args>
+        HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
+        explicit ImageParam(const Args &...args) : ::Halide::ImageParam(args...) { }
+    };
+
 protected:
     Generator() :
         Internal::GeneratorBase(sizeof(T),

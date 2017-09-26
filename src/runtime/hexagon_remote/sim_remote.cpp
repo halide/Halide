@@ -101,45 +101,8 @@ void *halide_get_library_symbol(void *lib, const char *name) {
     return dlsym(lib, name);
 }
 
-void *halide_malloc(void *user_context, size_t x) {
-    return aligned_malloc(hvx_alignment, x);
-}
-
-void halide_free(void *user_context, void *ptr) {
-    aligned_free(ptr);
-}
-
-int halide_do_task(void *user_context, halide_task_t f, int idx,
-                   uint8_t *closure) {
-    return f(user_context, idx, closure);
-}
-
-int halide_do_par_for(void *user_context, halide_task_t f,
-                      int min, int size, uint8_t *closure) {
-    for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
-        if (result) {
-            return result;
-        }
-    }
-    return 0;
-}
-
-void halide_mutex_lock(halide_mutex *) {}
-void halide_mutex_unlock(halide_mutex *) {}
-void halide_mutex_destroy(halide_mutex *) {}
-
 }  // extern "C"
 
-typedef int (*set_runtime_t)(halide_malloc_t user_malloc,
-                             halide_free_t custom_free,
-                             halide_print_t print,
-                             halide_error_handler_t error_handler,
-                             halide_do_par_for_t do_par_for,
-                             halide_do_task_t do_task,
-                             void *(*)(const char *),
-                             void *(*)(const char *),
-                             void *(*)(void *, const char *));
 __attribute__ ((weak)) void* dlopenbuf(const char*filename, const char* data, int size, int perms);
 
 static void dllib_init() {

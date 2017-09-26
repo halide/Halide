@@ -6,13 +6,13 @@ constexpr int maxJ = 20;
 
 class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 public:
-    GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
-    GeneratorParam<int>   pyramid_levels{"pyramid_levels", 8, 1, maxJ};
+    GeneratorParam<bool>    auto_schedule{"auto_schedule", false};
+    GeneratorParam<int>     pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
-    ImageParam            input{UInt(16), 3, "input"};
-    Param<int>            levels{"levels"};
-    Param<float>          alpha{"alpha"};
-    Param<float>          beta{"beta"};
+    Input<Buffer<uint16_t>> input{"input", 3};
+    Input<int>              levels{"levels"};
+    Input<float>            alpha{"alpha"};
+    Input<float>            beta{"beta"};
 
     Func build() {
         /* THE ALGORITHM */

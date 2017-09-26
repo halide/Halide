@@ -3964,6 +3964,7 @@ private:
             return;
         }
 
+        const Call *c;
         if (is_one(a)) {
             expr = make_zero(a.type());
         } else if (is_zero(a)) {
@@ -3985,6 +3986,9 @@ private:
             expr = NE::make(n->a, n->b);
         } else if (const Broadcast *n = a.as<Broadcast>()) {
             expr = mutate(Broadcast::make(!n->value, n->lanes));
+        } else if ((c = a.as<Call>()) != nullptr && c->is_intrinsic(Call::likely)) {
+            // !likely(e) -> likely(!e)
+            expr = likely(mutate(Not::make(c->args[0])));
         } else if (a.same_as(op->a)) {
             expr = op;
         } else {
@@ -4585,7 +4589,29 @@ private:
             } else {
                 expr = op;
             }
-
+        } else if (op->is_intrinsic(Call::require)) {
+            Expr cond = mutate(op->args[0]);
+            // likely(const-bool) is deliberately not reduced
+            // by the simplify(), but for our purposes here, we want
+            // to ignore the likely() wrapper. (Note that this is 
+            // equivalent to calling can_prove() without needing to
+            // create a new Simplifier instance.)
+            if (const Call *c = cond.as<Call>()) {
+                if (c->is_intrinsic(Call::likely)) {
+                    cond = c->args[0];
+                }
+            }
+            if (is_one(cond)) {
+                expr = mutate(op->args[1]);
+            } else {
+                if (is_zero(cond)) {
+                    // (We could simplify this to avoid evaluating the provably-false
+                    // expression, but since this is a degenerate condition, don't bother.)
+                    user_warning << "This pipeline is guaranteed to fail a require() expression at runtime: \n"
+                                 << Expr(op) << "\n";
+                }
+                IRMutator::visit(op);
+            }
         } else {
             IRMutator::visit(op);
         }
@@ -5302,7 +5328,16 @@ Stmt simplify_exprs(Stmt s) {
 bool can_prove(Expr e) {
     internal_assert(e.type().is_bool())
         << "Argument to can_prove is not a boolean Expr: " << e << "\n";
-    return is_one(simplify(e));
+    e = simplify(e);
+    // likely(const-bool) is deliberately left unsimplified, because
+    // things like max(likely(1), x) are meaningful, but we do want to
+    // have can_prove(likely(1)) return true.
+    if (const Call *c = e.as<Call>()) {
+        if (c->is_intrinsic(Call::likely)) {
+            e = c->args[0];
+        }
+    }
+    return is_one(e);
 }
 
 namespace {
@@ -6380,6 +6415,27 @@ void check_boolean() {
         Expr nasty = ((((((((((((((((((((((((((((((((((((((((((((b[0] && b[1]) || (b[2] && b[1])) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[6]) || (b[2] && b[6]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[3]) || (b[2] && b[3]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[7]) || (b[2] && b[7]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[4]) || (b[2] && b[4]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[8]) || (b[2] && b[8]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[5]) || (b[2] && b[5]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[10]) || (b[2] && b[10]))) || b[0]) || b[2]) || b[0]) || b[2]) && ((b[0] && b[9]) || (b[2] && b[9]))) || b[0]) || b[2]);
         check(nasty, b[0] || b[2]);
     }
+
+    {
+        // verify that likely(const-bool) is *not* simplified.
+        check(likely(t), likely(t));
+        check(likely(f), likely(f));
+
+        // verify that !likely(e) -> likely(!e)
+        check(!likely(t), likely(f));
+        check(!likely(f), likely(t));
+        check(!likely(x == 2), likely(x != 2));
+
+        // can_prove(likely(const-true)) = true
+        // can_prove(!likely(const-false)) = true
+        internal_assert(can_prove(likely(t)));
+        internal_assert(can_prove(!likely(f)));
+
+        // unprovable cases
+        internal_assert(!can_prove(likely(f)));
+        internal_assert(!can_prove(!likely(t)));
+        internal_assert(!can_prove(!likely(x == 2)));
+    }
 }
 
 void check_math() {
@@ -6832,6 +6888,14 @@ void simplify_test() {
     check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4 + (-3), 0, 60) + (-63));
     check(max(x * 4 + 63, y) - max(y - 3, x * 4), 3 - clamp(y - x * 4 + (-63), -60, 0));
     check(max(y - 3, x * 4) - max(y, x * 4 + 63), -63 - clamp(x * 4 - y + 3, -60, 0));
+
+    // Check that provably-true require() expressions are simplified away
+    {
+        Expr result(42);
+
+        check(require(Expr(1) > Expr(0), result, "error"), result);
+        check(require(x == x, result, "error"), result);
+    }
 
     std::cout << "Simplify test passed" << std::endl;
 }

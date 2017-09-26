@@ -4,8 +4,8 @@ namespace {
 
 class ErrorCodes : public Halide::Generator<ErrorCodes> {
 public:
-    ImageParam input { Int(32), 2, "input" };
-    Param<int> f_explicit_bound {"f_explicit_bound", 1, 0, 64};
+    Input<Buffer<int32_t>> input{ "input", 2};
+    Input<int>             f_explicit_bound{"f_explicit_bound", 1, 0, 64};
 
 
     Func build() {

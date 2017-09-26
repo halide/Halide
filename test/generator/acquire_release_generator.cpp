@@ -4,7 +4,7 @@ namespace {
 
 class AcquireRelease : public Halide::Generator<AcquireRelease> {
 public:
-    ImageParam input{ Float(32), 2, "input" };
+    Input<Buffer<float>> input{"input", 2};
 
     Func build() {
         Var x("x"), y("y");
