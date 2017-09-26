@@ -13,7 +13,9 @@ public:
     Input<int>            search_area{"search_area"};
     Input<float>          sigma{"sigma"};
 
-    Func build() {
+    Output<Buffer<float>> non_local_means{"non_local_means", 3};
+
+    void generate() {
         /* THE ALGORITHM */
 
         // This implements the basic description of non-local means found at
@@ -62,14 +64,13 @@ public:
         Func non_local_means_sum("non_local_means_sum");
         non_local_means_sum(x, y, c) += w(x, y, s_dom.x, s_dom.y) * clamped_with_alpha(x + s_dom.x, y + s_dom.y, c);
 
-        Func non_local_means("non_local_means");
         non_local_means(x, y, c) =
             clamp(non_local_means_sum(x, y, c) / non_local_means_sum(x, y, 3), 0.0f, 1.0f);
 
         /* THE SCHEDULE */
 
         // Require 3 channels for output
-        non_local_means.output_buffer().dim(2).set_bounds(0, 3);
+        non_local_means.dim(2).set_bounds(0, 3);
 
         Var tx("tx"), ty("ty"), xi("xi"), yi("yi");
 
@@ -133,8 +134,6 @@ public:
             blur_d.compute_at(non_local_means_sum, x)
                 .vectorize(x, 8);
         }
-
-        return non_local_means;
     }
 };
 

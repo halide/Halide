@@ -4,10 +4,10 @@ namespace {
 
 class RgbToYcc : public Halide::Generator<RgbToYcc> {
 public:
-    Input<Buffer<uint8_t>> input8{"input8", 3};
-    Func build() {
+    Input<Buffer<uint8_t>>  input8{"input8", 3};
+    Output<Buffer<uint8_t>> out{"out", 3};
+    void generate() {
         assert(get_target().has_feature(Target::OpenGL));
-        Func out("out");
         Var x("x"), y("y"), c("c");
 
         // The algorithm
@@ -33,8 +33,6 @@ public:
         input8.dim(2).set_bounds(0, 3);
         out.bound(c, 0, 3);
         out.glsl(x, y, c);
-
-        return out;
     }
 };
 

@@ -5,11 +5,11 @@ namespace {
 class Deinterleave : public Halide::Generator<Deinterleave> {
 public:
     Input<Buffer<uint8_t>> uvInterleaved{"uvInterleaved" , 2};
+    Output<Buffer<uint8_t>> result{"result", 2};
 
-    Func build() {
+    void generate() {
         Var x, y;
 
-        Func result("result");
         result(x, y) = { uvInterleaved(2 * x, y), uvInterleaved(2 * x + 1, y) };
 
         // CPU schedule:
@@ -23,8 +23,6 @@ public:
         uvInterleaved.dim(0).set_stride(Expr());
         result.specialize(uvInterleaved.dim(0).stride() == 1);
         result.specialize(uvInterleaved.dim(0).stride() == -1);
-
-        return result;
     }
 };
 

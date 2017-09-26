@@ -4,6 +4,13 @@ using namespace Halide;
 
 namespace {
 
+template<typename T>
+void set_alignment_and_bounds(T *t, int size) {
+    (*t).set_host_alignment(16)
+        .dim(0).set_bounds(0, size)
+        .dim(1).set_stride(size);
+}
+
 class MatMul : public Halide::Generator<MatMul> {
 public:
 
@@ -11,7 +18,9 @@ public:
     Input<Buffer<float>>  A{"A", 2};
     Input<Buffer<float>>  B{"B", 2};
 
-    Func build() {
+    Output<Buffer<float>> out{"out", 2};
+
+    void generate() {
         Var x("x"), y("y");
 
         Func prod("prod");
@@ -19,7 +28,7 @@ public:
         prod(x, y) += A(x, r) * B(r, y);
 
         Var xi, yi, xio, xii, yii, xo;
-        Func out = prod.in();
+        out(x, y) = prod.in()(x, y);
         out.bound(x, 0, size)
             .bound(y, 0, size)
             .tile(x, y, xi, yi, 8*32, 8)
@@ -40,14 +49,9 @@ public:
             .compute_at(prod, y)
             .vectorize(B.in().args()[0]);
 
-        OutputImageParam bufs[] = {A, B, prod.output_buffer()};
-        for (auto &buf : bufs) {
-            buf.set_host_alignment(16)
-                .dim(0).set_bounds(0, size)
-                .dim(1).set_stride(size);
-        }
-
-        return out;
+        set_alignment_and_bounds(&A, size);
+        set_alignment_and_bounds(&B, size);
+        set_alignment_and_bounds(&out, size);
     }
 };
 
