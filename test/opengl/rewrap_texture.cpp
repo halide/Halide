@@ -28,6 +28,7 @@ int main() {
 
     // This test must be run with an OpenGL target.
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+    setenv("HL_JIT_TARGET", target.to_string().c_str(), true); // Buffer::device_wrap_native gets the target from environment
 
     const int width = 255;
     const int height = 10;
