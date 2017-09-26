@@ -1130,7 +1130,7 @@ int main(int argc, char **argv) {
             config.max_iters = benchmark_max_iters;
             auto result = Halide::Tools::benchmark(benchmark_inner, config);
 
-            std::cout << "Benchmark2 for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
+            std::cout << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
                 << result.samples << " samples, " << result.iterations << " iterations).\n";
             std::cout << "Best output throughput is " << (megapixels / result.wall_time) << " mpix/sec.\n";
 
