@@ -52,10 +52,10 @@ int one_d_max() {
 
     double t_ref = benchmark([&]() {
         max_ref.realize(ref_output);
-    }).wall_time;
+    });
     double t = benchmark([&]() {
         maxf.realize(output);
-    }).wall_time;
+    });
 
     float gbits = 32.0f * size / 1e9f; // bits per seconds
 
@@ -105,10 +105,10 @@ int two_d_histogram() {
     Buffer<int> result(256);
     double t_ref = benchmark([&]() {
         ref.realize(result);
-    }).wall_time;
+    });
     double t = benchmark([&]() {
         hist.realize(result);
-    }).wall_time;
+    });
 
     double gbits = in.type().bits() * W * H / 1e9; // bits per seconds
 
@@ -174,10 +174,10 @@ int four_d_argmin() {
 
     double t_ref = benchmark([&]() {
         ref.realize();
-    }).wall_time;
+    });
     double t = benchmark([&]() {
         amin.realize();
-    }).wall_time;
+    });
 
     float gbits = input.type().bits() * vec.number_of_elements() / 1e9; // bits per seconds
 
@@ -240,10 +240,10 @@ int complex_multiply() {
 
     double t_ref = benchmark([&]() {
         ref.realize();
-    }).wall_time;
+    });
     double t = benchmark([&]() {
         mult.realize();
-    }).wall_time;
+    });
 
     float gbits = input0.type().bits() * size * 2 / 1e9; // bits per seconds
 
@@ -303,10 +303,10 @@ int dot_product() {
 
     double t_ref = benchmark([&]() {
         dot_ref.realize(ref_output);
-    }).wall_time;
+    });
     double t = benchmark([&]() {
         dot.realize(output);
-    }).wall_time;
+    });
 
     // Note that LLVM autovectorizes the reference!
 
@@ -377,10 +377,10 @@ int kitchen_sink() {
 
     double t_ref = benchmark([&]() {
         sink_ref.realize();
-    }).wall_time;
+    });
     double t = benchmark([&]() {
         sink.realize();
-    }).wall_time;
+    });
 
     float gbits = 8 * size * (2 / 1e9f); // bits per seconds
 

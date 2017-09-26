@@ -49,7 +49,7 @@ void test_deinterleave() {
 
     double t1 = benchmark([&]() {
         dst.realize(dst_image);
-    }).wall_time;
+    });
 
     printf("Interleaved to planar bandwidth %.3e byte/s.\n",
            dst_image.number_of_elements() / t1);
@@ -67,7 +67,7 @@ void test_deinterleave() {
 
     double t2 = benchmark([&]() {
         dst.realize(dst_image);
-    }).wall_time;
+    });
 
     dst_image.for_each_element([&](int x, int y) {
             assert(dst_image(x, y, 0) == 0);
@@ -128,7 +128,7 @@ void test_interleave(bool fast) {
 
     double t = benchmark([&]() {
         dst.realize(dst_image);
-    }).wall_time;
+    });
 
     printf("Planar to interleaved bandwidth %.3e byte/s.\n",
            dst_image.number_of_elements() / t);
