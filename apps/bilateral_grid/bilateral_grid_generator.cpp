@@ -7,8 +7,8 @@ public:
     GeneratorParam<bool>  auto_schedule{"auto_schedule", false};
     GeneratorParam<int>   s_sigma{"s_sigma", 8};
 
-    ImageParam            input{Float(32), 2, "input"};
-    Param<float>          r_sigma{"r_sigma"};
+    Input<Buffer<float>>  input{"input", 2};
+    Input<float>          r_sigma{"r_sigma"};
 
     Func build() {
         Var x("x"), y("y"), z("z"), c("c");

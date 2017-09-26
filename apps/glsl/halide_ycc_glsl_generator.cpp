@@ -4,7 +4,7 @@ namespace {
 
 class RgbToYcc : public Halide::Generator<RgbToYcc> {
 public:
-    ImageParam input8{UInt(8), 3, "input8"};
+    Input<Buffer<uint8_t>> input8{"input8", 3};
     Func build() {
         assert(get_target().has_feature(Target::OpenGL));
         Func out("out");

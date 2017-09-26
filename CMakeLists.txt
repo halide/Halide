@@ -74,10 +74,10 @@ check_tool_exists(clang "${CLANG}")
 
 # Check reported LLVM version
 if (NOT "${LLVM_VERSION}" MATCHES "^[0-9][0-9]$")
-  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 3.7 is \"37\"")
+  message(FATAL_ERROR "LLVM_VERSION not specified correctly. Must be <major><minor> E.g. LLVM 3.9 is \"39\"")
 endif()
-if (LLVM_VERSION LESS 37)
-  message(FATAL_ERROR "LLVM version must be 3.7 or newer")
+if (LLVM_VERSION LESS 39)
+  message(FATAL_ERROR "LLVM version must be 3.9 or newer")
 endif()
 
 function(check_llvm_target TARGET HAS_TARGET)
