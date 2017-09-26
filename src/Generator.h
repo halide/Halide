@@ -8,7 +8,7 @@
  * either purpose, but is especially convenient to use for AOT compilation.
  *
  * A Generator explicitly declares the Inputs and Outputs associated for a given
- * pipeline, and separates the code for constructing the outputs from the code from
+ * pipeline, and (optionally) separates the code for constructing the outputs from the code from
  * scheduling them. For instance:
  *
  * \code
@@ -34,12 +34,11 @@
  * Halide can compile a Generator into the correct pipeline by introspecting these
  * values and constructing an appropriate signature based on them.
  *
- * A Generator must provide implementations of two methods:
+ * A Generator provides implementations of two methods:
  *
- *   - generate(), which must fill in all Output Func(s), but should not do any
- * scheduling
- *   - schedule(), which should do scheduling for any intermediate and
- * output Funcs
+ *   - generate(), which must fill in all Output Func(s); it may optionally also do scheduling
+ *   if no schedule() method is present.
+ *   - schedule(), which (if present) should contain all scheduling code.
  *
  * Inputs can be any C++ scalar type:
  *
@@ -150,11 +149,7 @@
  * \endcode
  *
  * A Generator can also be customized via compile-time parameters (GeneratorParams
- * or ScheduleParams), which affect code generation. While a GeneratorParam can
- * be used from anywhere inside a Generator (either the generate() or
- * schedule() method), ScheduleParam should be accessed only within the
- * schedule() method. (This is not currently a compile-time error but may become
- * one in the future.)
+ * or ScheduleParams), which affect code generation. 
  *
  * GeneratorParams, ScheduleParams, Inputs, and Outputs are (by convention) always
  * public and always declared at the top of the Generator class, in the order
@@ -1733,6 +1728,7 @@ public:
     HALIDE_OUTPUT_FORWARD(store_at)
     HALIDE_OUTPUT_FORWARD(store_root)
     HALIDE_OUTPUT_FORWARD(tile)
+    HALIDE_OUTPUT_FORWARD(trace_stores)
     HALIDE_OUTPUT_FORWARD(unroll)
     HALIDE_OUTPUT_FORWARD(update)
     HALIDE_OUTPUT_FORWARD_CONST(update_args)
@@ -2492,7 +2488,7 @@ protected:
         // and will advance directly to ScheduleCalled.)
         GenerateCalled,
 
-        // Generator has had its schedule() method called.
+        // Generator has had its schedule() method (if any) called.
         ScheduleCalled,
     } phase{Created};
 
@@ -2867,13 +2863,21 @@ private:
     // have build() or generate()/schedule() methods.
 
     template <typename T2 = T,
-              typename std::enable_if<!has_schedule_method<T2>::value>::type * = nullptr>
+              typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
     void call_schedule_impl() {
         user_error << "Unimplemented";
     }
 
     template <typename T2 = T,
-              typename std::enable_if<has_schedule_method<T2>::value>::type * = nullptr>
+              typename std::enable_if<has_generate_method<T2>::value && !has_schedule_method<T2>::value>::type * = nullptr>
+    void call_schedule_impl() {
+        // Generator has a generate() method but no schedule() method. This is ok. Just advance the phase.
+        pre_schedule();
+        post_schedule();
+    }
+
+    template <typename T2 = T,
+              typename std::enable_if<has_generate_method<T2>::value && has_schedule_method<T2>::value>::type * = nullptr>
     void call_schedule_impl() {
         T *t = (T*)this;
         static_assert(std::is_void<decltype(t->schedule())>::value, "schedule() must return void");
