@@ -4,14 +4,15 @@ namespace {
 
 constexpr int maxJ = 20;
 
-struct LocalLaplacian : public Halide::Generator<LocalLaplacian> {
-    GeneratorParam<bool>        auto_schedule{"auto_schedule", false};
-    GeneratorParam<int>         pyramid_levels{"pyramid_levels", 8, 1, maxJ};
+class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
+public:
+    GeneratorParam<bool>    auto_schedule{"auto_schedule", false};
+    GeneratorParam<int>     pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
-    Input<Buffer<uint16_t>>     input{"input", 3};
-    Input<int>                  levels{"levels"};
-    Input<float>                alpha{"alpha"};
-    Input<float>                beta{"beta"};
+    Input<Buffer<uint16_t>> input{"input", 3};
+    Input<int>              levels{"levels"};
+    Input<float>            alpha{"alpha"};
+    Input<float>            beta{"beta"};
 
     Output<Buffer<uint16_t>>    output{"output", 3};
 

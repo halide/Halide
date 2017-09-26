@@ -33,26 +33,26 @@ Building Halide
 
 #### TL;DR
 
-Have llvm-3.7 or greater installed and run 'make' in the root
+Have llvm-3.9 or greater installed and run 'make' in the root
 directory of the repository (where this README is).
 
 #### Acquiring LLVM
 
-Building halide requires at least llvm 3.7, along with the matching
+Building halide requires at least llvm 3.9, along with the matching
 version of clang. llvm-config and clang must be somewhere in the
-path. If your OS does not have packages for llvm-3.7, you can find
+path. If your OS does not have packages for llvm-3.9, you can find
 binaries for it at http://llvm.org/releases/download.html. Download an
 appropriate package and then either install it, or at least put the
 bin subdirectory in your path. (This works well on OS X and Ubuntu.)
 
 If you want to build it yourself, first check it out from subversion:
 
-    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_37 llvm3.7
-    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_37 llvm3.7/tools/clang
+    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_39 llvm3.9
+    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_39 llvm3.9/tools/clang
 
 Then build it like so:
 
-    % cd llvm3.7
+    % cd llvm3.9
     % mkdir build
     % cd build
     % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -90,7 +90,7 @@ If you wish to use cmake to build Halide, the build procedure is:
 
     % mkdir cmake_build
     % cd cmake_build
-    % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_VERSION=37 /path/to/halide
+    % cmake -DLLVM_DIR=/path-to-llvm-build/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release /path/to/halide
     % make -j8
 
 LLVM_DIR should be the folder in the LLVM installation or build tree that contains LLVMConfig.cmake.
@@ -121,7 +121,7 @@ To configure and build Halide:
 
     % mkdir C:\Code\halide-build
     % cd C:\Code\halide-build
-    % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DLLVM_VERSION=37 -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
+    % cmake -DLLVM_DIR=../llvm-install/lib/cmake/llvm -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 14 Win64" ../halide
     % MSBuild.exe /m /t:Build /p:Configuration=Release .\ALL_BUILD.vcxproj
 
 #### Building Halide and LLVM on Windows using mingw
@@ -337,8 +337,9 @@ To build and run an example app using the Hexagon target,
   3. Build and run an example for Hexagon HVX
 
 #### 1. Obtain and build LLVM and clang v3.9 or later from llvm.org
-LLVM 3.9 is currently under development. These are the same instructions as above for
-building Clang/LLVM, but for trunk Clang/LLVM instead of 3.7.
+The Hexagon backend is currently under development. So it's best to use trunk llvm. 
+These are the same instructions as above for building Clang/LLVM, but for trunk 
+Clang/LLVM instead of 3.9.
 
     cd <path to llvm>
     svn co http://llvm.org/svn/llvm-project/llvm/trunk .

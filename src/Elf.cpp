@@ -361,7 +361,10 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
             section->set_flags(sh->sh_flags)
                 .set_size(sh->sh_size)
                 .set_alignment(sh->sh_addralign);
-            if (sh->sh_type != Section::SHT_NULL) {
+            if (sh->sh_type == Section::SHT_NOBITS) {
+                // This section doesn't have any data to load.
+            } else if (sh->sh_type == Section::SHT_NULL) {
+            } else {
                 const char *sh_data = data + sh->sh_offset;
                 internal_assert(data <= sh_data && sh_data + sh->sh_size <= data + size);
                 section->set_contents(sh_data, sh_data + sh->sh_size);
@@ -419,7 +422,6 @@ std::unique_ptr<Object> parse_object_internal(const char *data, size_t size) {
 
     return obj;
 }
-
 }  // namespace
 
 std::unique_ptr<Object> Object::parse_object(const char *data, size_t size) {
@@ -620,14 +622,44 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     // key in this map, we use the mapped value instead.
     std::map<const Symbol *, const Symbol *> symbols;
     symbols[&dynamic_sym] = &dynamic_sym;
+
+    Object::section_iterator iter_dtors = obj.find_section(".dtors");
+    Symbol dtor_list_sym("__DTOR_LIST__");
+    if (iter_dtors != obj.sections_end()) {
+        Section *dtors = &(*iter_dtors);
+        dtor_list_sym.define(dtors, 0, 0);
+        dtor_list_sym.set_type(Symbol::STT_NOTYPE);
+        dtor_list_sym.set_visibility(Symbol::STV_DEFAULT);
+        dtor_list_sym.set_binding(Symbol::STB_GLOBAL);
+    }
+
+    Object::section_iterator iter_ctors = obj.find_section(".ctors");
+    Symbol ctor_end_sym("__CTOR_END__");
+    if (iter_ctors != obj.sections_end()) {
+        Section *ctors = &(*iter_ctors);
+        internal_assert(ctors->get_size() == ctors->contents_size())
+            << "There should no padding at the end of the .ctors section\n";
+        ctor_end_sym.define(ctors, ctors->get_size(), 0);
+        ctor_end_sym.set_type(Symbol::STT_NOTYPE);
+        ctor_end_sym.set_visibility(Symbol::STV_DEFAULT);
+        ctor_end_sym.set_binding(Symbol::STB_GLOBAL);
+    }
+
     for (const Symbol &i : obj.symbols()) {
         if (i.get_name() == "_GLOBAL_OFFSET_TABLE_") {
             symbols[&i] = &got_sym;
+        } else if (i.get_name() == "__DTOR_LIST__") {
+            // It is our job to create this symbol. So, a defined __DTOR_LIST__
+            // symbol shouldn't be present already.
+            internal_assert(!i.is_defined()) << "__DTOR_LIST__ already defined\n";
+            symbols[&i] = &dtor_list_sym;
+        } else if (i.get_name() == "__CTOR_END__") {
+            internal_assert(!i.is_defined()) << "__CTOR_END__ already defined\n";
+            symbols[&i] = &ctor_end_sym;
         } else {
             symbols[&i] = &i;
         }
     }
-
     // Get a symbol from a relocation, accounting for the symbol map
     // above.
     auto get_symbol = [&](const Relocation &r) {
@@ -917,6 +949,20 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     dyn.push_back(make_dyn(DT_RELA, shdrs[rela_got_idx].sh_offset + pltrelsz));
     dyn.push_back(make_dyn(DT_RELASZ, shdrs[rela_got_idx].sh_size - pltrelsz));
     dyn.push_back(make_dyn(DT_RELAENT, sizeof(Rela<T>)));
+
+    // DT_FINI
+    Object::section_iterator iter_fini = obj.find_section(".fini.halide");
+    if (iter_fini != obj.sections_end()) {
+        Section &fini = *iter_fini;
+        dyn.push_back(make_dyn(DT_FINI, get_section_offset(fini)));
+    }
+
+    // DT_INIT
+    Object::section_iterator iter_init = obj.find_section(".init.halide");
+    if (iter_init != obj.sections_end()) {
+        Section &init = *iter_init;
+        dyn.push_back(make_dyn(DT_INIT, get_section_offset(init)));
+    }
 
     dynamic.set_contents(dyn);
 

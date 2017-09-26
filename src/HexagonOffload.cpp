@@ -190,6 +190,40 @@ std::string hex(uint32_t x) {
     return buffer;
 }
 
+std::string section_type_string(Section::Type type) {
+    switch(type) {
+    case Section::SHT_NULL: return "SHT_NULL";
+    case Section::SHT_PROGBITS: return "SHT_PROGBITS";
+    case Section::SHT_SYMTAB: return "SHT_SYMTAB";
+    case Section::SHT_STRTAB: return "SHT_STRTAB";
+    case Section::SHT_RELA: return "SHT_RELA";
+    case Section::SHT_HASH: return "SHT_HASH";
+    case Section::SHT_DYNAMIC: return "SHT_DYNAMIC";
+    case Section::SHT_NOTE: return "SHT_NOTE";
+    case Section::SHT_NOBITS: return "SHT_NOBITS";
+    case Section::SHT_REL: return "SHT_REL";
+    case Section::SHT_SHLIB: return "SHT_SHLIB";
+    case Section::SHT_DYNSYM: return "SHT_DYNSYM";
+    case Section::SHT_LOPROC: return "SHT_LOPROC";
+    case Section::SHT_HIPROC: return "SHT_HIPROC";
+    case Section::SHT_LOUSER: return "SHT_LOUSER";
+    case Section::SHT_HIUSER: return "SHT_HIUSER";
+    default:
+        return "UNKNOWN TYPE";
+    }
+}
+std::string print_sections(const Object &obj) {
+    std::ostringstream oss;
+    if (obj.sections_size() == 0) {
+        oss << "No sections in object\n";
+        return oss.str();
+    }
+    for (const Section &s: obj.sections()) {
+        oss << s.get_name() << ", Type = " << section_type_string(s.get_type()) << ", Size = " << hex(s.get_size()) << ", Alignment = " << s.get_alignment() << "\n";
+    }
+    return oss.str();
+}
+
 void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool verify) {
     uint32_t inst = *((uint32_t *)addr);
     debug(4) << "Relocation in instruction: " << hex(inst) << "\n";
@@ -275,8 +309,26 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // 0111 0011 -11sssss PP1iiiii iiiddddd
             mask = 0x00001fe0;
 
+        } else if ((inst >> 24) == 126) {
+            // 0111 1110 0uu0 iiii PP0i iiii iiid dddd
+            // 0111 1110 0uu0 iiii PP1i iiii iiid dddd
+            // 0111 1110 0uu1 iiii PP0i iiii iiid dddd
+            // 0111 1110 0uu1 iiii PP1i iiii iiid dddd
+            mask = 0x000f1fe0;
+        } else if ((inst >> 24) == 65 || (inst >> 24) == 77) {
+            // 0100 0001 000s ssss PP0t tiii iiid dddd
+            // 0100 0001 001s ssss PP0t tiii iiid dddd
+            // 0100 0001 010s ssss PP0t tiii iiid dddd
+            // 0100 0001 011s ssss PP0t tiii iiid dddd
+            // 0100 0001 100s ssss PP0t tiii iiid dddd
+            // 0100 0001 110s ssss PP0t tiii iiid dddd
+            // TODO: Add instructions to comment for mask 77.
+            mask = 0x000007e0;
+        } else if ((inst >> 21) == 540) {
+            // 0100 0011 100s ssss PP0t tiii iiid dddd
+            mask = 0x000007e0;
         } else {
-            internal_error << "Unhandled instruction type!\n";
+            internal_error << "Unhandled instruction type! Instruction = " << inst << "\n";
         }
     }
 
@@ -847,6 +899,13 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
                         Module &containing_module) {
     // Make a new target for the device module.
     Target target(Target::NoOS, Target::Hexagon, 32);
+    // There are two ways of offloading, on device and on host.
+    // In the former we have true QuRT available, while on the
+    // latter we simulate the Hexagon side code with a barebones
+    // Shim layer, ie. NO QURT!
+    if (host_target.arch == Target::ARM) {
+        target.os = Target::QuRT;
+    }
 
     // These feature flags are propagated from the host target to the
     // device module.
@@ -909,8 +968,30 @@ Buffer<uint8_t> compile_module_to_hexagon_shared_object(const Module &device_cod
     auto bss = obj->find_section(".bss");
     if (bss != obj->sections_end()) {
         bss->set_alignment(128);
+        // TODO: We should set the type to SHT_NOBITS
+        // This will cause a difference in MemSize and FileSize like so:
+        //        FileSize = (MemSize - size_of_bss)
+        // When the Hexagon loader is used on 8998 and later targets,
+        // the difference is filled with zeroes thereby initializing the .bss
+        // section.
         bss->set_type(Elf::Section::SHT_PROGBITS);
+        std::fill(bss->contents_begin(), bss->contents_end(), 0);
     }
+
+    auto dtors = obj->find_section(".dtors");
+    if (dtors != obj->sections_end()) {
+        dtors->append_contents((uint32_t) 0);
+    }
+
+    // We call the constructors in ctors backwards starting from special
+    // symbol __CTOR_END__ until we reach a 0 (NULL pointer value). So,
+    // prepend the .ctors section with 0.
+    auto ctors = obj->find_section(".ctors");
+    if (ctors != obj->sections_end()) {
+        ctors->prepend_contents((uint32_t) 0);
+    }
+
+    debug(2) << print_sections(*obj);
 
     // Link into a shared object.
     std::string soname = "lib" + device_code.name() + ".so";
