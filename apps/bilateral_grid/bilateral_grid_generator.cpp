@@ -10,7 +10,9 @@ public:
     Input<Buffer<float>>  input{"input", 2};
     Input<float>          r_sigma{"r_sigma"};
 
-    Func build() {
+    Output<Buffer<float>> bilateral_grid{"bilateral_grid", 2};
+
+    void generate() {
         Var x("x"), y("y"), z("z"), c("c");
 
         // Add a boundary condition
@@ -62,7 +64,6 @@ public:
                       lerp(blury(xi, yi+1, zi+1, c), blury(xi+1, yi+1, zi+1, c), xf), yf), zf);
 
         // Normalize
-        Func bilateral_grid("bilateral_grid");
         bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
         if (auto_schedule) {
@@ -114,8 +115,6 @@ public:
             blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 8).unroll(c);
             bilateral_grid.compute_root().parallel(y).vectorize(x, 8);
         }
-
-        return bilateral_grid;
     }
 };
 

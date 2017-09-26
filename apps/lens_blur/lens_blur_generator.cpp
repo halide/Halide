@@ -21,7 +21,9 @@ public:
     // The number of samples of the aperture to use
     Input<int>              aperture_samples{"aperture_samples", 32, 1, 64};
 
-    Func build() {
+    Output<Buffer<float>>   final{"final", 3};
+
+    void generate() {
         /* THE ALGORITHM */
         Expr maximum_blur_radius =
             cast<int>(max(slices - focus_depth, focus_depth) * blur_radius_scale);
@@ -149,7 +151,6 @@ public:
         output(x, y, c) += sample_weight(x, y, s) * input_with_alpha(sample_x, sample_y, c);
 
         // Normalize
-        Func final;
         final(x, y, c) = output(x, y, c) / output(x, y, 3);
 
         /* THE SCHEDULE */
@@ -266,8 +267,6 @@ public:
             sample_weight.compute_at(output, x).unroll(x);
             sample_locations.compute_at(output, x).vectorize(x);
         }
-
-        return final;
     }
 private:
     Var x, y, z, c;
