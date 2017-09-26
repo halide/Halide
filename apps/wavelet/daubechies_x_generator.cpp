@@ -8,7 +8,7 @@ Halide::Var x("x"), y("y"), c("c");
 
 class daubechies_x : public Halide::Generator<daubechies_x> {
 public:
-    ImageParam in_{ Float(32), 2, "in" };
+    Input<Buffer<float>> in_{"in" , 2};
 
     Func build() {
         Func in = Halide::BoundaryConditions::repeat_edge(in_);

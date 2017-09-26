@@ -1,8 +1,8 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION < 37
-#error "Compiling Halide requires LLVM 3.7 or newer"
+#if LLVM_VERSION < 39
+#error "Compiling Halide requires LLVM 3.9 or newer"
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
@@ -35,6 +35,9 @@
 #endif
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/LegacyPassManager.h>
+#if LLVM_VERSION < 50
+#include <llvm/Support/Path.h>
+#endif
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Support/FormattedStream.h>
@@ -55,9 +58,7 @@
 #include <llvm/Object/ArchiveWriter.h>
 #include <llvm/Object/ObjectFile.h>
 
-#if LLVM_VERSION >= 39
 #include <llvm/Transforms/Scalar/GVN.h>
-#endif
 
 #if LLVM_VERSION >= 40
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
