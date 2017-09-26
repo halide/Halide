@@ -1131,7 +1131,9 @@ int main(int argc, char **argv) {
             auto result = Halide::Tools::benchmark(benchmark_inner, config);
 
             std::cout << "Benchmark for " << md->name << " produces best case of " << result.wall_time << " sec/iter (over "
-                << result.samples << " samples, " << result.iterations << " iterations).\n";
+                << result.samples << " samples, " 
+                << result.iterations << " iterations, "
+                << "accuracy " << std::setprecision(2) << (result.accuracy * 100.0) << "%).\n";
             std::cout << "Best output throughput is " << (megapixels / result.wall_time) << " mpix/sec.\n";
 
         } else {

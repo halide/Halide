@@ -39,7 +39,7 @@ struct SteadyClock<false> {
 // for real-world use. For now, callers using this to benchmark GPU
 // code should measure with extreme caution.
 
-double benchmark(int samples, int iterations, std::function<void()> op) {
+inline double benchmark(int samples, int iterations, std::function<void()> op) {
   using BenchmarkClock = SteadyClock<>::type;
   double best = std::numeric_limits<double>::infinity();
   for (int i = 0; i < samples; i++) {
@@ -107,10 +107,14 @@ struct BenchmarkResult {
   // for measurement.)
   uint64_t iterations;
 
+  // Measured accuracy between the best and third-best result. 
+  // Will be <= config.accuracy unless max_iters is exceeded.
+  double accuracy;
+
   operator double() const { return wall_time; }
 };
 
-BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig& config = {}) {
+inline BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig& config = {}) {
   BenchmarkResult result{0, 0, 0};
 
   const double min_time = std::max(10 * 1e-6, config.min_time);
@@ -119,6 +123,9 @@ BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig& confi
   const uint64_t max_iters = std::min(
       std::max(config.min_iters, config.max_iters), kBenchmarkMaxIterations);
   const double accuracy = 1.0 + std::min(std::max(0.001, config.accuracy), 0.1);
+
+  // Set an upper time limit based on min_time. This is a bit arbitrary.
+  const double max_time = min_time * 4;
 
   // We will do (at least) kMinSamples samples; we will do additional
   // samples until the best the kMinSamples'th results are within the
@@ -148,10 +155,13 @@ BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig& confi
     iters_per_sample = (uint64_t)(next_iters + 0.5);
   }
 
-  // While we aren't accurate enough (and we have time and iterations remaining)
-  // do additional samples.
-  while (times[0] * accuracy < times[kMinSamples - 1] &&
-         total_time < min_time &&
+  // - Keep taking samples until we are accurate enough (even if we run over min_time).
+  // - If we are already accurate enough but have time remaining, keep taking samples.
+  // - No matter what, don't go over max_iters or max_time; this is important, in case
+  // we happen to get faster results for the first samples, then happen to transition
+  // to throttled-down CPU state.
+  while ((times[0] * accuracy < times[kMinSamples - 1] || total_time < min_time) &&
+         total_time < max_time &&
          result.iterations < max_iters) {
     times[kMinSamples] = benchmark(1, iters_per_sample, op);
     result.samples++;
@@ -160,6 +170,7 @@ BenchmarkResult benchmark(std::function<void()> op, const BenchmarkConfig& confi
     std::sort(times, times + kMinSamples + 1);
   }
   result.wall_time = times[0];
+  result.accuracy = (times[kMinSamples - 1] / times[0]) - 1.0;
 
   return result;
 }
