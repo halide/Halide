@@ -12,7 +12,9 @@ public:
     Input<Buffer<float>>  filter{"filter", 4};
     Input<Buffer<float>>  bias{"bias", 1};
 
-    Func build() {
+    Output<Buffer<float>> output{"output", 4};
+
+    void generate() {
         /* THE ALGORITHM */
 
         Var x("x"), y("y"), z("z"), n("n");
@@ -26,8 +28,7 @@ public:
 
         f_conv(x, y, z, n) += filter(r.x, r.y, r.z, z) * input(x + r.x, y + r.y, r.z, n);
 
-        Func f_ReLU("ReLU");
-        f_ReLU(x, y, z, n) = max(0, f_conv(x, y, z, n));
+        output(x, y, z, n) = max(0, f_conv(x, y, z, n));
 
         /* THE SCHEDULE */
 
@@ -46,13 +47,13 @@ public:
             bias.dim(0).set_bounds_estimate(0, 64);
 
             // Provide estimates on the pipeline output
-            f_ReLU.estimate(x, 0, 128)
+            output.estimate(x, 0, 128)
                 .estimate(y, 0, 128)
                 .estimate(z, 0, 64)
                 .estimate(n, 0, 4);
 
             // Auto-schedule the pipeline
-            Pipeline p(f_ReLU);
+            Pipeline p(output);
             p.auto_schedule(target);
 
         } /*else if (get_target().has_gpu_feature()) {
@@ -60,7 +61,7 @@ public:
             // For some reasons, it sometimes triggers the (err == CL_SUCCESS)
             // assertion on mingw.
             Var ni, no, xi, xo, yi, yo, zi, zo;
-            f_ReLU.compute_root()
+            output.compute_root()
                 .split(x, xo, xi, 4)
                 .split(y, yo, yi, 4)
                 .split(z, zo, zi, 4)
@@ -68,7 +69,7 @@ public:
                 .gpu_threads(xi, yi, zi)
                 .gpu_blocks(xo, yo, zo);
 
-            f_conv.compute_at(f_ReLU, n)
+            f_conv.compute_at(output, n)
                 .gpu_threads(x, y, z)
                 .update()
                 .unroll(r.x, 3)
@@ -92,11 +93,9 @@ public:
                 .unroll(r.y, 3)
                 .fuse(z, n, par)
                 .parallel(par);
-            f_ReLU.reorder(n, z).parallel(z).vectorize(x, 8);
+            output.reorder(n, z).parallel(z).vectorize(x, 8);
         }
-
-        return f_ReLU;
-    }
+   }
 };
 
 }  // namespace

@@ -29,10 +29,11 @@ public:
     GeneratorParam<int> tile_x{"tile_x", 32}; // X tile.
     GeneratorParam<int> tile_y{"tile_y", 8};  // Y tile.
 
-    Input<Buffer<uint16_t>> input{"input", 2};
+    Input<Buffer<uint16_t>>  input{"input", 2};
+    Output<Buffer<uint16_t>> blur_y{"blur_y", 2};
 
-    Func build() {
-        Func blur_x("blur_x"), blur_y("blur_y");
+    void generate() {
+        Func blur_x("blur_x");
         Var x("x"), y("y"), xi("xi"), yi("yi");
 
         // The algorithm
@@ -80,8 +81,6 @@ public:
             blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
             blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, 8);
         }
-
-        return blur_y;
     }
 };
 
