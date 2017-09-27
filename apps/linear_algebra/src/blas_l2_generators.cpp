@@ -14,6 +14,7 @@ class GEMVGenerator :
     using Base::target;
     using Base::get_target;
     using Base::natural_vector_size;
+    template<typename T2> using Input = typename Base::template Input<T2>;
 
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
@@ -22,11 +23,11 @@ class GEMVGenerator :
     GeneratorParam<bool> transpose_ = {"transpose", false};
 
     // Standard ordering of parameters in GEMV functions.
-    Param<T>   a_ = {"a", 1.0};
-    ImageParam A_ = {type_of<T>(), 2, "A"};
-    ImageParam x_ = {type_of<T>(), 1, "x"};
-    Param<T>   b_ = {"b", 1.0};
-    ImageParam y_ = {type_of<T>(), 1, "y"};
+    Input<T>         a_ = {"a", 1};
+    Input<Buffer<T>> A_ = {"A", 2};
+    Input<Buffer<T>> x_ = {"x", 1};
+    Input<T>         b_ = {"b", 1};
+    Input<Buffer<T>> y_ = {"y", 1};
 
     void SetupTarget() {
         if (!assertions_enabled_) {
@@ -182,6 +183,7 @@ class GERGenerator :
     using Base::target;
     using Base::get_target;
     using Base::natural_vector_size;
+    template<typename T2> using Input = typename Base::template Input<T2>;
 
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
@@ -189,10 +191,10 @@ class GERGenerator :
     GeneratorParam<int>  block_size_ = {"block_size", 1 << 5};
 
     // Standard ordering of parameters in GEMV functions.
-    Param<T>   a_ = {"a", 1.0};
-    ImageParam x_ = {type_of<T>(), 1, "x"};
-    ImageParam y_ = {type_of<T>(), 1, "y"};
-    ImageParam A_ = {type_of<T>(), 2, "A"};
+    Input<T>         a_ = {"a", 1};
+    Input<Buffer<T>> x_ = {"x", 1};
+    Input<Buffer<T>> y_ = {"y", 1};
+    Input<Buffer<T>> A_ = {"A", 2};
 
     void SetupTarget() {
         if (!assertions_enabled_) {
