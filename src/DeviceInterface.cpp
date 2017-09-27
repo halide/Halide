@@ -41,7 +41,7 @@ const halide_device_interface_t *get_device_interface_for_device_api(const Devic
 
     const struct halide_device_interface_t *(*fn)();
 
-    Target gpu_runtime_target;
+    Target gpu_runtime_target = get_host_target();
     std::string name;
     if (d == DeviceAPI::Metal) {
         name = "metal";
@@ -62,6 +62,10 @@ const halide_device_interface_t *get_device_interface_for_device_api(const Devic
         return nullptr;
     }
 
+    // Note that the debug feature is only used the first time
+    // this routine is called as there can only only be one
+    // version of the runtime at once. (I.e. the GPU runtimes
+    // are cached globally inside JITModule.cpp.)
     if (t.has_feature(Target::Debug)) {
         gpu_runtime_target.set_feature(Target::Debug);
     }
