@@ -10,6 +10,16 @@ namespace Halide {
 
 namespace {
 
+// Defines the precedence for which DeviceAPI will be used when
+// DeviceAPI::Default_GPU is requested.
+const std::vector<DeviceAPI> default_device_api_order = {
+    DeviceAPI::Metal,
+    DeviceAPI::OpenCL,
+    DeviceAPI::CUDA,
+    DeviceAPI::OpenGLCompute,
+    DeviceAPI::GLSL
+};
+
 template <typename fn_type>
 bool lookup_runtime_routine(const std::string &name,
                             const Target &target,
@@ -62,21 +72,27 @@ const halide_device_interface_t *get_device_interface_for_device_api(const Devic
     }
 }
 
-DeviceAPI get_default_device_api_for_target(const Target &target) {
-    if (target.has_feature(Target::Metal)) {
-        return DeviceAPI::Metal;
-    } else if (target.has_feature(Target::OpenCL)) {
-        return DeviceAPI::OpenCL;
-    } else if (target.has_feature(Target::CUDA)) {
-        return DeviceAPI::CUDA;
-    } else if (target.has_feature(Target::OpenGLCompute)) {
-        return DeviceAPI::OpenGLCompute;
-    } else if (target.has_feature(Target::OpenGL)) {
-        return DeviceAPI::GLSL;
-    } else {
-        return DeviceAPI::Host;
+bool target_supports_device_api(const Target &target, const DeviceAPI &d)
+{
+    switch (d) {
+        case DeviceAPI::Metal:         return target.has_feature(Target::Metal);
+        case DeviceAPI::OpenCL:        return target.has_feature(Target::OpenCL);
+        case DeviceAPI::CUDA:          return target.has_feature(Target::CUDA);
+        case DeviceAPI::OpenGLCompute: return target.has_feature(Target::OpenGLCompute);
+        case DeviceAPI::GLSL:          return target.has_feature(Target::OpenGL);
+        default:                       return false;
     }
 }
+
+DeviceAPI get_default_device_api_for_target(const Target &target) {
+    for (DeviceAPI d : default_device_api_order) {
+        if (target_supports_device_api(target, d)) {
+            return d;
+        }
+    }
+    return DeviceAPI::Host;
+}
+
 
 namespace Internal {
 Expr make_device_interface_call(DeviceAPI device_api) {

@@ -473,6 +473,8 @@ public:
 
     /** Wrap a native handle, using the given device API. */
     int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
+        user_assert(d != DeviceAPI::Default_GPU) << "Cannot pass DeviceAPI::Default_GPU to device_wrap_native.\n";
+        user_assert(target_supports_device_api(t, d)) << "DeviceAPI " << d << " not supported by target " << t.to_string() << "\n";
         return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t), handle);
     }
 

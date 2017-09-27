@@ -22,6 +22,10 @@ EXPORT const halide_device_interface_t *get_default_device_interface_for_target(
 EXPORT const halide_device_interface_t *get_device_interface_for_device_api(const DeviceAPI &d,
                                                                             const Target &t = get_jit_target_from_environment());
 
+/** Returns true if the given target supports the given given device api.
+ * Returns false for DefaultAPI::Default_GPU, None, or Host. */
+EXPORT bool target_supports_device_api(const Target &t, const DeviceAPI &d);
+
 /** Get the specific DeviceAPI that Halide would select when presented
  * with DeviceAPI::Default_GPU for a given target. If no suitable api
  * is enabled in the target, returns DeviceAPI::Host. */
