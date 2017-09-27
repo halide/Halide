@@ -5,7 +5,7 @@ BIN ?= bin
 # If HL_TARGET isn't set, use host
 HL_TARGET ?= host
 
-all: $(BIN)/wavelet
+all: test
 
 clean:
 	@rm -rf $(BIN)
