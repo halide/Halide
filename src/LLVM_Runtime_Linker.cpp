@@ -611,7 +611,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
     //    Halide::Internal::debug(0) << "Getting initial module type " << (int)module_type << "\n";
 
-    internal_assert(t.bits == 32 || t.bits == 64);
+    internal_assert(t.bits == 32 || t.bits == 64)
+        << "Bad target: " << t.to_string();
     bool bits_64 = (t.bits == 64);
     bool debug = t.has_feature(Target::Debug);
 
