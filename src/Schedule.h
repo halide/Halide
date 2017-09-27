@@ -351,7 +351,7 @@ public:
 
     /** RVars of reduction domain associated with this schedule if there is any. */
     // @{
-    const std::vector<ReductionVariable> &rvars() const;
+    EXPORT const std::vector<ReductionVariable> &rvars() const;
     std::vector<ReductionVariable> &rvars();
     // @}
 
