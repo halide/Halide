@@ -14,6 +14,7 @@ class AXPYGenerator :
     using Base::target;
     using Base::get_target;
     using Base::natural_vector_size;
+    template<typename T2> using Input = typename Base::template Input<T2>;
 
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> use_fma_ = {"use_fma", false};
@@ -23,9 +24,9 @@ class AXPYGenerator :
     GeneratorParam<bool> add_to_y_ = {"add_to_y", true};
 
     // Standard ordering of parameters in AXPY functions.
-    Param<T>   a_ = {"a", 1.0};
-    ImageParam x_ = {type_of<T>(), 1, "x"};
-    ImageParam y_ = {type_of<T>(), 1, "y"};
+    Input<T>         a_ = {"a", 1};
+    Input<Buffer<T>> x_ = {"x", 1};
+    Input<Buffer<T>> y_ = {"y", 1};
 
     void SetupTarget() {
         if (!assertions_enabled_) {
@@ -94,6 +95,7 @@ class DotGenerator :
     using Base::target;
     using Base::get_target;
     using Base::natural_vector_size;
+    template<typename T2> using Input = typename Base::template Input<T2>;
 
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> use_fma_ = {"use_fma", false};
@@ -101,8 +103,8 @@ class DotGenerator :
     GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1024};
 
-    ImageParam x_ = {type_of<T>(), 1, "x"};
-    ImageParam y_ = {type_of<T>(), 1, "y"};
+    Input<Buffer<T>> x_ = {"x", 1};
+    Input<Buffer<T>> y_ = {"y", 1};
 
     void SetupTarget() {
         if (!assertions_enabled_) {
@@ -162,6 +164,7 @@ class AbsSumGenerator :
     using Base::target;
     using Base::get_target;
     using Base::natural_vector_size;
+    template<typename T2> using Input = typename Base::template Input<T2>;
 
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> use_fma_ = {"use_fma", false};
@@ -169,7 +172,7 @@ class AbsSumGenerator :
     GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1024};
 
-    ImageParam x_ = {type_of<T>(), 1, "x"};
+    Input<Buffer<T>> x_ = {"x", 1};
 
     void SetupTarget() {
         if (!assertions_enabled_) {
