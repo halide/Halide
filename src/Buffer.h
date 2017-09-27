@@ -476,6 +476,17 @@ public:
         return contents->buf.device_wrap_native(get_device_interface_for_device_api(d), handle);
     }
 
+    /** Wrap a native handle, using the device API that is the default for the given Target. */
+    int device_wrap_native(const Target &t, uint64_t handle) {
+        return contents->buf.device_wrap_native(get_default_device_interface_for_target(t), handle);
+    }
+
+    /** Wrap a native handle, using the device API that is the default from the environment. */
+    int device_wrap_native(uint64_t handle) {
+        const Target &t = get_jit_target_from_environment();
+        return contents->buf.device_wrap_native(get_default_device_interface_for_target(t), handle);
+    }
+
 };
 
 }
