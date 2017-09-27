@@ -4,7 +4,9 @@ namespace {
 
 class CleanupOnError : public Halide::Generator<CleanupOnError> {
 public:
-    Func build() {
+    Output<Buffer<int32_t>> output{"output", 1};
+
+    void generate() {
         Var x;
 
         // This allocation is going to succeed
@@ -29,10 +31,7 @@ public:
 
         g.compute_root();
 
-        Func h;
-        h(x) = g(x) + 1;
-
-        return h;
+        output(x) = g(x) + 1;
     }
 };
 
