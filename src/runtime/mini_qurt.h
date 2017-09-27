@@ -54,7 +54,7 @@ typedef struct _qurt_thread_attr {
 } qurt_thread_attr_t;
 
 /*=============================================================================
-												FUNCTIONS
+                                                                                                FUNCTIONS
 =============================================================================*/
 /**@ingroup func_qurt_thread_attr_init
   Initializes the structure used to set the thread attributes when a thread is created.

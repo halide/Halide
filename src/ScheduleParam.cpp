@@ -33,6 +33,8 @@ ScheduleParamBase &ScheduleParamBase::operator=(const ScheduleParamBase &that) {
     if (this != &that) {
         // You can only assign SP's of the same type.
         internal_assert(type == that.type);
+        // You can only assign SP's of the same name.
+        internal_assert(sp_name == that.sp_name);
         sp_name = that.sp_name;
         type = that.type;
         scalar_parameter = that.scalar_parameter;
