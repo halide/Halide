@@ -12,7 +12,9 @@ public:
     Input<Buffer<float>>  filter{"filter", 4};
     Input<Buffer<float>>  bias{"bias", 1};
 
-    Func build() {
+    Output<Buffer<float>> f_ReLU{"ReLU", 4};
+
+    void generate() {
         /* THE ALGORITHM */
 
         Var x("x"), y("y"), z("z"), n("n");
@@ -26,7 +28,6 @@ public:
 
         f_conv(x, y, z, n) += filter(r.x, r.y, r.z, z) * input(x + r.x, y + r.y, r.z, n);
 
-        Func f_ReLU("ReLU");
         f_ReLU(x, y, z, n) = max(0, f_conv(x, y, z, n));
 
         /* THE SCHEDULE */
@@ -45,7 +46,7 @@ public:
 
             bias.dim(0).set_bounds_estimate(0, 64);
 
-            // Provide estimates on the pipeline output
+            // Provide estimates on the pipeline f_ReLU
             f_ReLU.estimate(x, 0, 128)
                 .estimate(y, 0, 128)
                 .estimate(z, 0, 64)
@@ -94,9 +95,7 @@ public:
                 .parallel(par);
             f_ReLU.reorder(n, z).parallel(z).vectorize(x, 8);
         }
-
-        return f_ReLU;
-    }
+   }
 };
 
 }  // namespace
