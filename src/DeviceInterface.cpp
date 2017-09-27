@@ -40,22 +40,33 @@ const halide_device_interface_t *get_device_interface_for_device_api(const Devic
     }
 
     const struct halide_device_interface_t *(*fn)();
+
+    Target gpu_runtime_target;
     std::string name;
     if (d == DeviceAPI::Metal) {
         name = "metal";
+        gpu_runtime_target.set_feature(Target::Metal);
     } else if (d == DeviceAPI::OpenCL) {
         name = "opencl";
+        gpu_runtime_target.set_feature(Target::OpenCL);
     } else if (d == DeviceAPI::CUDA) {
         name = "cuda";
+        gpu_runtime_target.set_feature(Target::CUDA);
     } else if (d == DeviceAPI::OpenGLCompute) {
         name = "openglcompute";
+        gpu_runtime_target.set_feature(Target::OpenGLCompute);
     } else if (d == DeviceAPI::GLSL) {
         name = "opengl";
+        gpu_runtime_target.set_feature(Target::OpenGL);
     } else {
         return nullptr;
     }
 
-    if (lookup_runtime_routine("halide_" + name + "_device_interface", t, fn)) {
+    if (t.has_feature(Target::Debug)) {
+        gpu_runtime_target.set_feature(Target::Debug);
+    }
+
+      if (lookup_runtime_routine("halide_" + name + "_device_interface", gpu_runtime_target, fn)) {
         return (*fn)();
     } else {
         return nullptr;

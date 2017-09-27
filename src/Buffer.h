@@ -473,6 +473,7 @@ public:
 
     /** Wrap a native handle, using the given device API. */
     int device_wrap_native(const DeviceAPI &d, uint64_t handle) {
+        user_assert(d != DeviceAPI::Default_GPU) << "Cannot pass DeviceAPI::Default_GPU to device_wrap_native.\n";
         return contents->buf.device_wrap_native(get_device_interface_for_device_api(d), handle);
     }
 
