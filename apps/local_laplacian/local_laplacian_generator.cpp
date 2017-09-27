@@ -14,12 +14,13 @@ public:
     Input<float>            alpha{"alpha"};
     Input<float>            beta{"beta"};
 
-    Func build() {
-        /* THE ALGORITHM */
-        const int J = pyramid_levels;
+    Output<Buffer<uint16_t>>    output{"output", 3};
 
+    void generate() {
+        const int J = pyramid_levels;
+        
+        /* THE ALGORITHM */
         // Make the remapping function as a lookup table.
-        Func remap;
         Expr fx = cast<float>(x) / 256.0f;
         remap(x) = alpha*fx*exp(-fx*fx/2.0f);
 
@@ -31,11 +32,9 @@ public:
         floating(x, y, c) = clamped(x, y, c) / 65535.0f;
 
         // Get the luminance channel
-        Func gray;
         gray(x, y) = 0.299f * floating(x, y, 0) + 0.587f * floating(x, y, 1) + 0.114f * floating(x, y, 2);
 
         // Make the processed Gaussian pyramid.
-        Func gPyramid[maxJ];
         // Do a lookup into a lut with 256 entires per intensity level
         Expr level = k * (1.0f / (levels - 1));
         Expr idx = gray(x, y)*cast<float>(levels-1)*256.0f;
@@ -53,7 +52,6 @@ public:
         }
 
         // Make the Gaussian pyramid of the input
-        Func inGPyramid[maxJ];
         inGPyramid[0](x, y) = gray(x, y);
         for (int j = 1; j < J; j++) {
             inGPyramid[j](x, y) = downsample(inGPyramid[j-1])(x, y);
@@ -71,7 +69,6 @@ public:
         }
 
         // Make the Gaussian pyramid of the output
-        Func outGPyramid[maxJ];
         outGPyramid[J-1](x, y) = outLPyramid[J-1](x, y);
         for (int j = J-2; j >= 0; j--) {
             outGPyramid[j](x, y) = upsample(outGPyramid[j+1])(x, y) + outLPyramid[j](x, y);
@@ -82,11 +79,13 @@ public:
         float eps = 0.01f;
         color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c)+eps) / (gray(x, y)+eps);
 
-        Func output("local_laplacian");
         // Convert back to 16-bit
         output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
+    }
 
+    void schedule() {
         /* THE SCHEDULE */
+        const int J = pyramid_levels;
 
         if (auto_schedule) {
             // Provide estimates on the input image
@@ -144,10 +143,10 @@ public:
                 outGPyramid[j].compute_root();
             }
         }
-        return output;
     }
 private:
     Var x, y, c, k;
+    Func remap, gray, inGPyramid[maxJ], gPyramid[maxJ], outGPyramid[maxJ];
 
     // Downsample with a 1 3 3 1 filter
     Func downsample(Func f) {
