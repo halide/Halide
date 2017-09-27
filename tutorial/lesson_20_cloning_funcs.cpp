@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
 
         // Let's schedule 'f' to be computed at root.
         f.compute_root();
-        // Since both 'g' and 'h' consumes 'f', the region required of 'f'
+        // Since both 'g' and 'h' consume 'f', the region required of 'f'
         // in the x-dimension is [0, 99]. The equivalent loop nests are:
         // for x = 0 to 99
         //   f(x) = x
@@ -157,8 +157,8 @@ int main(int argc, char **argv) {
         // for x:
         //   h(x) = f(99) + 10
 
-        // If 'f' had been very expensive to compute, we might be beter off
-        // with having two copies of 'f' for each consumer, 'g' and 'h', to
+        // If 'f' is very expensive to compute, we might be better off with
+        // having distinct copies of 'f' for each consumer, 'g' and 'h', to
         // avoid unnecessary computations. To create separate copies of 'f'
         // for each consumer, we can do the following:
         f.clone_in(g).compute_root();
