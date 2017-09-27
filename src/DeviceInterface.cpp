@@ -72,7 +72,7 @@ const halide_device_interface_t *get_device_interface_for_device_api(const Devic
     }
 }
 
-bool target_supports_device_api(const Target &target, const DeviceAPI &d)
+bool device_api_enabled_in_target(const DeviceAPI &d, const Target &target)
 {
     switch (d) {
         case DeviceAPI::Metal:         return target.has_feature(Target::Metal);
@@ -86,7 +86,7 @@ bool target_supports_device_api(const Target &target, const DeviceAPI &d)
 
 DeviceAPI get_default_device_api_for_target(const Target &target) {
     for (DeviceAPI d : default_device_api_order) {
-        if (target_supports_device_api(target, d)) {
+        if (device_api_enabled_in_target(d, target)) {
             return d;
         }
     }
