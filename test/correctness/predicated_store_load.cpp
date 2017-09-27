@@ -199,8 +199,7 @@ int scalar_load_test() {
 
     Target target = get_jit_target_from_environment();
     if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        printf("Skipping scalar_load_test due to https://github.com/halide/Halide/issues/2364\n");
-        //f.update(0).hexagon().vectorize(r.x, 32);
+        f.update(0).hexagon().vectorize(r.x, 32);
     } else if (target.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(true, true));
@@ -390,6 +389,12 @@ int vectorized_predicated_load_const_index_test() {
 }
 
 int main(int argc, char **argv) {
+
+    if (get_jit_target_from_environment().features_any_of({Target::HVX_64, Target::HVX_128})) {
+        printf("Skipping test due to https://github.com/halide/Halide/issues/2364\n");
+        return 0;
+    }
+    
     printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test() != 0) {
         return -1;
