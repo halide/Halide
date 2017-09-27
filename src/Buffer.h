@@ -453,29 +453,40 @@ public:
 
     /** Copy to the GPU, using the device API that is the default for the given Target. */
     int copy_to_device(const Target &t = get_jit_target_from_environment()) {
+        assert_device_api_and_target_correctness(DeviceAPI::Default_GPU, t);
         return contents->buf.copy_to_device(get_default_device_interface_for_target(t));
     }
 
     /** Copy to the GPU, using the given device API */
     int copy_to_device(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
+        assert_device_api_and_target_correctness(d, t);
         return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t));
     }
 
     /** Allocate on the GPU, using the device API that is the default for the given Target. */
     int device_malloc(const Target &t = get_jit_target_from_environment()) {
+        assert_device_api_and_target_correctness(DeviceAPI::Default_GPU, t);
         return contents->buf.device_malloc(get_default_device_interface_for_target(t));
     }
 
     /** Allocate storage on the GPU, using the given device API */
     int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
+        assert_device_api_and_target_correctness(d, t);
         return contents->buf.device_malloc(get_device_interface_for_device_api(d, t));
     }
 
     /** Wrap a native handle, using the given device API. */
     int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
         user_assert(d != DeviceAPI::Default_GPU) << "Cannot pass DeviceAPI::Default_GPU to device_wrap_native.\n";
-        user_assert(target_supports_device_api(t, d)) << "DeviceAPI " << d << " not supported by target " << t.to_string() << "\n";
+        assert_device_api_and_target_correctness(d, t);
         return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t), handle);
+    }
+
+    private:
+
+    void assert_device_api_and_target_correctness(const DeviceAPI &d, const Target &t) {
+        user_assert(device_api_enabled_in_target(d, t)) << "DeviceAPI " << d << " not enabled in target " << t.to_string() << "\n";
+        user_assert(device_api_available(d, t)) << ((d == DeviceAPI::Default_GPU) ? "Default " : "") << "DeviceAPI " << d << " (target " << t.to_string() << ") not available in compiled Halide library\n";
     }
 
 };
