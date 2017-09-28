@@ -2439,6 +2439,12 @@ public:
     // calling from generate() as long as all Outputs have been defined.)
     EXPORT Pipeline get_pipeline();
 
+    /** Generate a schedule for the Generator's pipeline. */
+    //@{
+    EXPORT std::string auto_schedule_outputs(const MachineParams &arch_params);
+    EXPORT std::string auto_schedule_outputs();
+    //@}
+
     // Return a map in which to register external code this Generator requires
     // at link time.
     EXPORT std::shared_ptr<ExternsMap> get_externs_map() const override;
