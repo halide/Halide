@@ -2214,10 +2214,14 @@ class GeneratorStub;
  * the outer Target to the inner Generator. */
 class GeneratorContext {
 public:
-    virtual ~GeneratorContext() {};
-    virtual Target get_target() const = 0;
-
     using ExternsMap = std::map<std::string, ExternalCode>;
+
+    GeneratorContext() : 
+        externs_map(std::make_shared<ExternsMap>())
+        , value_tracker(std::make_shared<Internal::ValueTracker>()) {}
+    virtual ~GeneratorContext() {}
+
+    virtual Target get_target() const = 0;
 
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
@@ -2234,33 +2238,51 @@ public:
      *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
      *
      * See test/generator/external_code_generator.cpp for example use. */
-    virtual std::shared_ptr<ExternsMap> get_externs_map() const = 0;
+    inline std::shared_ptr<ExternsMap> get_externs_map() const {
+        return externs_map;
+    }
 
     template <typename T>
-    std::unique_ptr<T> create() const {
+    inline std::unique_ptr<T> create() const {
         return T::create(*this);
     }
 
     template <typename T, typename... Args>
-    std::unique_ptr<T> apply(const Args &...args) const {
+    inline std::unique_ptr<T> apply(const Args &...args) const {
         auto t = this->create<T>();
         t->apply(args...);
         return t;
     }
 
 protected:
-    friend class Internal::GeneratorBase;
-    virtual std::shared_ptr<Internal::ValueTracker> get_value_tracker() const = 0;
+    std::shared_ptr<ExternsMap> externs_map;
+    std::shared_ptr<Internal::ValueTracker> value_tracker;
+
+    virtual void init_from_context(const Halide::GeneratorContext &context) {
+        value_tracker = context.get_value_tracker();
+        externs_map = context.get_externs_map();
+    }
+
+    inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
+        return value_tracker;        
+    }
+
+    // No copy
+    GeneratorContext(const GeneratorContext &) = delete;
+    void operator=(const GeneratorContext &) = delete;
+    // No move
+    GeneratorContext(GeneratorContext&&) = delete;
+    void operator=(GeneratorContext&&) = delete;
 };
 
-/** JITGeneratorContext is a utility implementation of GeneratorContext that
- * is intended for use when using Generator Stubs with the JIT; it simply
+/** GeneratorTarget is a trivial implementation of GeneratorContext that
+ * is intended for use when using Generators (or Stubs) directly; it simply
  * allows you to wrap a specific Target in a GeneratorContext for use with a stub,
  * often in conjunction with the Halide::get_target_from_environment() call:
  *
  * \code
  *   auto my_stub = MyStub(
- *       JITGeneratorContext(get_target_from_environment()),
+ *       GeneratorTarget(get_target_from_environment()),
  *       // inputs
  *       { ... },
  *       // generator params
@@ -2268,22 +2290,16 @@ protected:
  *   );
  * \endcode
  */
-class JITGeneratorContext : public GeneratorContext {
+class GeneratorTarget : public GeneratorContext {
 public:
-    explicit JITGeneratorContext(const Target &t)
-        : target(t)
-        , externs_map(std::make_shared<ExternsMap>())
-        , value_tracker(std::make_shared<Internal::ValueTracker>()) {}
+    explicit GeneratorTarget(const Target &t) : target(t) {}
     Target get_target() const override { return target; }
-    // Note that JITGeneratorContext is always "top-level", so it will never take
-    // an ExternsMap from a parent (since it has no parents).
-    std::shared_ptr<ExternsMap> get_externs_map() const override { return externs_map; }
 protected:
-    std::shared_ptr<Internal::ValueTracker> get_value_tracker() const override { return value_tracker; }
+    void init_from_context(const Halide::GeneratorContext &context) override {
+        target = context.get_target();
+    }
 private:
-    const Target target;
-    const std::shared_ptr<ExternsMap> externs_map;
-    const std::shared_ptr<Internal::ValueTracker> value_tracker;
+    Target target;
 };
 
 class NamesInterface {
@@ -2445,20 +2461,14 @@ public:
     EXPORT std::string auto_schedule_outputs();
     //@}
 
-    // Return a map in which to register external code this Generator requires
-    // at link time.
-    EXPORT std::shared_ptr<ExternsMap> get_externs_map() const override;
-
 protected:
     EXPORT GeneratorBase(size_t size, const void *introspection_helper);
-    EXPORT void init_from_context(const Halide::GeneratorContext &context);
+    EXPORT void init_from_context(const Halide::GeneratorContext &context) override;
     EXPORT void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
     EXPORT virtual Pipeline build_pipeline() = 0;
     EXPORT virtual void call_generate() = 0;
     EXPORT virtual void call_schedule() = 0;
-
-    std::shared_ptr<ValueTracker> get_value_tracker() const override { return value_tracker; }
 
     EXPORT void track_parameter_values(bool include_outputs);
 
@@ -2549,8 +2559,6 @@ private:
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter to lazy-init.
     std::unique_ptr<ParamInfo> param_info_ptr;
-
-    std::shared_ptr<Internal::ValueTracker> value_tracker;
 
     mutable std::shared_ptr<ExternsMap> externs_map;
 

@@ -949,8 +949,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (emit_options.emit_cpp_stub) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
-            // (Note that "JITGeneratorContext" is misleading, since we're actually doing AOT here, but it does exactly what we need)
-            auto gen = GeneratorRegistry::create(generator_name, JITGeneratorContext(Target()));
+            auto gen = GeneratorRegistry::create(generator_name, GeneratorTarget(Target()));
             auto stub_file_path = base_path + get_extension(".stub.h", emit_options);
             gen->emit_cpp_stub(stub_file_path);
         }
@@ -963,8 +962,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
                     auto sub_generator_args = generator_args;
                     sub_generator_args.erase("target");
                     // Must re-create each time since each instance will have a different Target.
-                    // (Note that "JITGeneratorContext" is misleading, since we're actually doing AOT here, but it does exactly what we need)
-                    auto gen = GeneratorRegistry::create(generator_name, JITGeneratorContext(target));
+                    auto gen = GeneratorRegistry::create(generator_name, GeneratorTarget(target));
                     gen->set_generator_and_schedule_param_values(sub_generator_args);
                     return gen->build_module(name);
                 };
@@ -1068,19 +1066,12 @@ GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
+    Halide::GeneratorContext::init_from_context(context);
     target.set(context.get_target());
-    value_tracker = context.get_value_tracker();
-    externs_map = context.get_externs_map();
 }
 
 GeneratorBase::~GeneratorBase() {
     ObjectInstanceRegistry::unregister_instance(this);
-}
-
-std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::get_externs_map() const {
-    // externs_map should always come from a GeneratorContext.
-    internal_assert(externs_map != nullptr);
-    return externs_map;
 }
 
 GeneratorBase::ParamInfo::ParamInfo(GeneratorBase *generator, const size_t size) {
@@ -1289,14 +1280,12 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
 }
 
 void GeneratorBase::track_parameter_values(bool include_outputs) {
-    // value_tracker should always come from a GeneratorContext.
-    internal_assert(value_tracker != nullptr);
     ParamInfo &pi = param_info();
     for (auto input : pi.filter_inputs) {
         if (input->kind() == IOKind::Buffer) {
             Parameter p = input->parameter();
             // This must use p.name(), *not* input->name()
-            value_tracker->track_values(p.name(), parameter_constraints(p));
+            get_value_tracker()->track_values(p.name(), parameter_constraints(p));
         }
     }
     if (include_outputs) {
@@ -1304,7 +1293,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
             if (output->kind() == IOKind::Buffer) {
                 Parameter p = output->parameter();
                 // This must use p.name(), *not* output->name()
-                value_tracker->track_values(p.name(), parameter_constraints(p));
+                get_value_tracker()->track_values(p.name(), parameter_constraints(p));
             }
         }
     }
@@ -1797,7 +1786,7 @@ Target StubOutputBufferBase::get_target() const {
 }
 
 void generator_test() {
-    JITGeneratorContext context(get_host_target());
+    GeneratorTarget context(get_host_target());
 
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations.

@@ -16,7 +16,7 @@ void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_
 }
 
 int main(int argc, char **argv) {
-    Halide::JITGeneratorContext context(Halide::get_target_from_environment());
+    Halide::GeneratorTarget context(Halide::get_target_from_environment());
 
     {
         // Create a Generator and set its Inputs and GeneratorParams.
