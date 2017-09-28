@@ -1422,6 +1422,14 @@ Pipeline GeneratorBase::get_pipeline() {
     return pipeline;
 }
 
+std::string GeneratorBase::auto_schedule_outputs(const MachineParams &arch_params) {
+    return get_pipeline().auto_schedule(get_target(), arch_params);
+}
+
+std::string GeneratorBase::auto_schedule_outputs() {
+    return get_pipeline().auto_schedule(get_target());
+}
+
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LoweredFunc::LinkageType linkage_type) {
     Pipeline pipeline = build_pipeline();
