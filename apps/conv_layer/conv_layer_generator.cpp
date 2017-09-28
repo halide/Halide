@@ -52,9 +52,9 @@ public:
                 .estimate(z, 0, 64)
                 .estimate(n, 0, 4);
 
-            // Auto-schedule the pipeline
-            Pipeline p(f_ReLU);
-            p.auto_schedule(target);
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
 
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: Turn off the manual GPU schedule for now.
