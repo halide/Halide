@@ -87,9 +87,9 @@ public:
             non_local_means.estimate(x, 0, 614)
                 .estimate(y, 0, 1024)
                 .estimate(c, 0, 3);
-            // Auto-schedule the pipeline
-            Pipeline p(non_local_means);
-            p.auto_schedule(get_target());
+            // Auto schedule the pipeline: this calls auto_schedule() for
+            // all of the Outputs in this Generator
+            auto_schedule_outputs();
         } /*else if (get_target().has_gpu_feature()) {
             // TODO: the GPU schedule is currently using to much shared memory
             // because the simplifier can't simplify the expr (it can't cancel
