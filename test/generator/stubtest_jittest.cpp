@@ -6,7 +6,7 @@ using Halide::Argument;
 using Halide::Expr;
 using Halide::Func;
 using Halide::Buffer;
-using Halide::JITGeneratorContext;
+using Halide::GeneratorTarget;
 using Halide::LoopLevel;
 using Halide::Var;
 using StubNS1::StubNS2::StubTest;
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     std::vector<Expr> int_args_expr(int_args.begin(), int_args.end());
 
     auto gen = StubTest(
-        JITGeneratorContext(Halide::get_target_from_environment()),
+        GeneratorTarget(Halide::get_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
         {
             buffer_input,  // typed_buffer_input

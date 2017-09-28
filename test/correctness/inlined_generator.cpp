@@ -41,7 +41,7 @@ private:
 };
 
 int main(int argc, char **argv) {
-    JITGeneratorContext context(get_jit_target_from_environment());
+    GeneratorTarget context(get_jit_target_from_environment());
 
     const int kSize = 32;
     const float kRuntimeFactor = 2.f;
