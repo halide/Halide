@@ -108,7 +108,7 @@ public:
         // been applied to the pipeline; otherwise, the auto-scheduler will
         // throw an error. The current auto-scheduler does not work with
         // partially-scheduled pipeline.
-        std::string schedule = get_pipeline().auto_schedule(target, machine_params);
+        std::string schedule = auto_schedule_outputs(machine_params);
         std::cout << "\nSchedule:\n\n" << schedule << "\n";
 
         // Calling auto_schedule_outputs() will apply the generated schedule
