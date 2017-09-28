@@ -159,7 +159,8 @@ class GEMVGenerator :
             y_.dim(0).set_bounds(0, A_.width());
         }
 
-        // TODO: is this necessary? Doesn't result already have the necessary specializations? 
+        // TODO: delete this pointless memcpy, as we probably have the tools to deal with this now.
+        // see https://github.com/halide/Halide/commit/cf999bf71939261bdcbb92d87fc4d07db5770732
         output_(i) = result(i);
         result.compute_root();
 
