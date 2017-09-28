@@ -2753,25 +2753,32 @@ template <class T>
 class Generator : public Internal::GeneratorBase {
 protected:
 
-    // Add wrapper types here that exists just to allow us to tag
-    // ImageParam/Param-used-inside-Generator with HALIDE_ATTRIBUTE_DEPRECATED.
-    // (This won't catch code that uses "Halide::Param" or "Halide::ImageParam"
-    // but those are somewhat uncommon cases.)
+    // TODO: This causes problems for existing code that declares helper
+    // methods (that use ImageParam, etc as arguments) outside the class body, 
+    // as there is an ambiguity between Halide::ImageParam and Generator<T>::ImageParam.
+    //
+    // Consider re-enabling this at some point in the future when the likelihood of 
+    // collision with existing code is much smaller.
+    //
+    // // Add wrapper types here that exists just to allow us to tag
+    // // ImageParam/Param-used-inside-Generator with HALIDE_ATTRIBUTE_DEPRECATED.
+    // // (This won't catch code that uses "Halide::Param" or "Halide::ImageParam"
+    // // but those are somewhat uncommon cases.)
 
-    template<typename T2>
-    class Param : public ::Halide::Param<T2> {
-    public:
-        template <typename... Args>
-        HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
-        explicit Param(const Args &...args) : ::Halide::Param<T2>(args...) { }
-    };
+    // template<typename T2>
+    // class Param : public ::Halide::Param<T2> {
+    // public:
+    //     template <typename... Args>
+    //     HALIDE_ATTRIBUTE_DEPRECATED("Using Param<> in Generators is deprecated; please use Input<> instead.")
+    //     explicit Param(const Args &...args) : ::Halide::Param<T2>(args...) { }
+    // };
 
-    class ImageParam : public ::Halide::ImageParam {
-    public:
-        template <typename... Args>
-        HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
-        explicit ImageParam(const Args &...args) : ::Halide::ImageParam(args...) { }
-    };
+    // class ImageParam : public ::Halide::ImageParam {
+    // public:
+    //     template <typename... Args>
+    //     HALIDE_ATTRIBUTE_DEPRECATED("Using ImageParam<> in Generators is deprecated; please use Input<Buffer<>> instead.")
+    //     explicit ImageParam(const Args &...args) : ::Halide::ImageParam(args...) { }
+    // };
 
 protected:
     Generator() :
