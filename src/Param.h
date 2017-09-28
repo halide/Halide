@@ -167,6 +167,21 @@ public:
     }
 };
 
+/** A DimensionedParam is a concrete implementation of Internal::DimensionedParameter,
+ * and exists as a convenient way to have a common API available for ImageParam,
+ * Input<Buffer<>>, and Output<Buffer<>>. */
+class DimensionedParam : public Internal::DimensionedParameter {
+public:
+    Internal::Parameter parameter() const override { return p; }
+
+private:
+    friend class Internal::DimensionedParameter;
+
+    Internal::Parameter p;
+
+    explicit DimensionedParam(const Internal::Parameter &p) : p(p) {}
+};
+
 /** Returns an Expr corresponding to the user context passed to
  * the function (if any). It is rare that this function is necessary
  * (e.g. to pass the user context to an extern function written in C). */

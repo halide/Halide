@@ -3,6 +3,7 @@
 #include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
 #include "Simplify.h"
+#include "Param.h"
 
 namespace Halide {
 namespace Internal {
@@ -411,6 +412,70 @@ Dimension Dimension::dim(int i) {
 
 const Dimension Dimension::dim(int i) const {
     return Dimension(param, i);
+}
+
+Dimension DimensionedParameter::dim(int i) {
+    return Dimension(parameter(), i);
+}
+
+const Dimension DimensionedParameter::dim(int i) const {
+    return Dimension(parameter(), i);
+}
+
+int DimensionedParameter::host_alignment() const {
+    return parameter().host_alignment();
+}
+
+DimensionedParameter &DimensionedParameter::set_host_alignment(int bytes) {
+    parameter().set_host_alignment(bytes);
+    return *this;
+}
+
+int DimensionedParameter::dimensions() const {
+    return parameter().dimensions();
+}
+
+Expr DimensionedParameter::left() const {
+    user_assert(dimensions() > 0) << "Can't ask for the left of a zero-dimensional image\n";
+    return dim(0).min();
+}
+
+Expr DimensionedParameter::right() const {
+    user_assert(dimensions() > 0) << "Can't ask for the right of a zero-dimensional image\n";
+    return dim(0).max();
+}
+
+Expr DimensionedParameter::top() const {
+    user_assert(dimensions() > 1) << "Can't ask for the top of a zero- or one-dimensional image\n";
+    return dim(1).min();
+}
+
+Expr DimensionedParameter::bottom() const {
+    user_assert(dimensions() > 1) << "Can't ask for the bottom of a zero- or one-dimensional image\n";
+    return dim(1).max();
+}
+
+Expr DimensionedParameter::width() const {
+    user_assert(dimensions() > 0) << "Can't ask for the width of a zero-dimensional image\n";
+    return dim(0).extent();
+}
+
+Expr DimensionedParameter::height() const {
+    user_assert(dimensions() > 1) << "Can't ask for the height of a zero or one-dimensional image\n";
+    return dim(1).extent();
+}
+
+Expr DimensionedParameter::channels() const {
+    user_assert(dimensions() > 2) << "Can't ask for the channels of an image with fewer than three dimensions\n";
+    return dim(2).extent();
+}
+
+DimensionedParameter::operator ExternFuncArgument() const {
+    return parameter();
+}
+
+DimensionedParameter::operator DimensionedParam() const {
+    return DimensionedParam(parameter());
 }
 
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {

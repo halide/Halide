@@ -12,6 +12,7 @@
 
 namespace Halide {
 
+class DimensionedParam;
 class ImageParam;
 
 /** A reduction variable represents a single dimension of a reduction
@@ -214,8 +215,7 @@ public:
      * the argument. */
     // @{
     EXPORT RDom(const Buffer<> &);
-    EXPORT RDom(ImageParam);
-    EXPORT RDom(const Halide::Internal::Constrainable &);  // Allows Input<Buffer<>>
+    EXPORT RDom(const DimensionedParam &);  // Allows ImageParam, Input<Buffer<>>, Ouptut<Buffer<>>
     template<typename T>
     NO_INLINE RDom(const Buffer<T> &im) : RDom(Buffer<>(im)) {}
     // @}

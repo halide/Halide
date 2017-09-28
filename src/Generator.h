@@ -1062,43 +1062,6 @@ private:
     }
 };
 
-class Constrainable {
-public:
-    virtual ~Constrainable() {}
-
-    virtual Parameter parameter() const = 0;
-
-    int dimensions() const {
-        return parameter().dimensions();
-    }
-
-    Dimension dim(int i) {
-        return Dimension(parameter(), i);
-    }
-
-    const Dimension dim(int i) const {
-        return Dimension(parameter(), i);
-    }
-
-    int host_alignment() const {
-        return parameter().host_alignment();
-    }
-
-    Constrainable &set_host_alignment(int alignment) {
-        parameter().set_host_alignment(alignment);
-        return *this;
-    }
-
-    const Expr left() const { return dim(0).min(); }
-    const Expr right() const { return dim(0).max(); }
-    const Expr top() const { return dim(1).min(); }
-    const Expr bottom() const { return dim(1).max(); }
-
-    const Expr width() const { return dim(0).extent(); }
-    const Expr height() const { return dim(1).extent(); }
-    const Expr channels() const { return dim(2).extent(); }
-};
-
 /** GIOBase is the base class for all GeneratorInput<> and GeneratorOutput<>
  * instantiations; it is not part of the public API and should never be
  * used directly by user code.
@@ -1300,7 +1263,7 @@ public:
 };
 
 template<typename T>
-class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func>, public Constrainable {
+class GeneratorInput_Buffer : public GeneratorInputImpl<T, Func>, public Internal::DimensionedParameter {
 private:
     using Super = GeneratorInputImpl<T, Func>;
 
@@ -1865,7 +1828,7 @@ public:
 };
 
 template<typename T>
-class GeneratorOutput_Buffer : public GeneratorOutputImpl<T>, public Constrainable {
+class GeneratorOutput_Buffer : public GeneratorOutputImpl<T>, public Internal::DimensionedParameter {
 private:
     using Super = GeneratorOutputImpl<T>;
 
@@ -2291,6 +2254,7 @@ class NamesInterface {
 protected:
     // Import a consistent list of Halide names that can be used in
     // Halide generators without qualification.
+    using DimensionedParam = Halide::DimensionedParam;
     using Expr = Halide::Expr;
     using ExternFuncArgument = Halide::ExternFuncArgument;
     using Func = Halide::Func;
