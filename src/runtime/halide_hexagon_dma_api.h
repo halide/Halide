@@ -54,9 +54,6 @@ int nhalide_pipeline(void *user_context, unsigned char *inframe, unsigned char *
 
 /**
  * halide_hexagon_dmaapp_wrap_buffer
- * in: halide_buffer_t*
- * in: unsigned char
- * out: int
  * desc: Wraps inframe buf into the device handle
  */
 extern int halide_hexagon_dmaapp_wrap_buffer(void *user_context, halide_buffer_t* buf, unsigned char *inframe,
@@ -64,26 +61,20 @@ extern int halide_hexagon_dmaapp_wrap_buffer(void *user_context, halide_buffer_t
 
 /**
  * halide_hexagon_dmaapp_release_wrapper
- * in: halide_buffer_t*
- * out: int
  * desc: Release the buf from the device handle
  */
 extern int halide_hexagon_dmaapp_release_wrapper(void *user_context, halide_buffer_t* buf);
 
 /**
  * halide_hexagon_dmart_get_memory
- * in: halide_buffer
  * desc: Allocates L2 buf
  */
 extern void* halide_hexagon_dmaapp_get_memory(void* user_context, halide_buffer_t *roi_buf);
 
 /**
  * halide_buffer_copy
- * in:void* user_Context
- * out:halide_buffer_t src
- * out:halide_buffer_t dest
  * desc: copes from src to dest
- * void* ptr */
+ **/
 extern int halide_buffer_copy(void *user_context, halide_buffer_t *src_buf, void *ptr, halide_buffer_t *dst_buf);
 
 #ifdef __cplusplus

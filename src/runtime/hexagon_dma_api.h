@@ -61,15 +61,14 @@ const float type_size[6]={1, 1, 1, 0.6667, 1, 1};
 
 /**
  * halide_hexagon_dma_comp_get
- * in: roi_buf
- * out: component (luma, chroma or both)
+ * get the component tobe transferreed from roi buf
  */
 extern int halide_hexagon_dma_comp_get(void *user_context, halide_buffer_t *roi_buf, halide_hexagon_dma_user_component_t &comp);
 
 /**
  * halide_hexagon_dma_memory_alloc
- * in: dma_context
- * in: comp, width, height, stride, num_folds, padding, type
+ * desc: set the comp, width, height, stride, num_folds, padding, type
+ * allocate memory
  */
 extern void* halide_hexagon_dma_memory_alloc(void* user_context, dma_context pdma_context, halide_hexagon_dma_user_component_t comp,
                                                  int w, int h, int s, int num_fold, bool padding, int type);
@@ -78,12 +77,15 @@ extern void* halide_hexagon_dma_memory_alloc(void* user_context, dma_context pdm
  * halide_hexagon_dma_memory_free
  * in: dma_context
  * in: cache mem description
+ * free the memory allocations
  */
 extern int halide_hexagon_dma_wrap_memory_free(void* user_context, dma_context pdma_context, void* vret);
+
 /**
  * halide_hexagon_dma_memroy_get
  * out: l2 buffer
  * in: roi_buf
+ * check if memory is already allocated
  */
 extern void *halide_hexagon_dma_memory_get(void *user_context, halide_buffer_t* roi_buf);
 
@@ -91,6 +93,7 @@ extern void *halide_hexagon_dma_memory_get(void *user_context, halide_buffer_t* 
  * halide_hexagon_dma_update
  * in: inframe buf
  * in: roi buf
+ * prepare the dma for transfer 
  */
 extern int halide_hexagon_dma_update(void *user_context, halide_buffer_t *inframe_buf, halide_buffer_t *roi_buf);
 
