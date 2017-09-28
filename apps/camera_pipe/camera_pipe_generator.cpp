@@ -367,7 +367,9 @@ void CameraPipe::generate() {
             .estimate(x, 0, 2592)
             .estimate(y, 0, 1968); 
 
-        p.auto_schedule(get_target());
+        // Auto schedule the pipeline: this calls auto_schedule() for
+        // all of the Outputs in this Generator
+        auto_schedule_outputs();
 
     } else {
 
